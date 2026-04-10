@@ -1,0 +1,15 @@
+{
+    "name": "derio-net",
+    "description": "Derio.net skills marketplace",
+    "owner": {
+        "name": "Ioannis Dermitzakis"
+    },
+    "plugins": [
+        {
+            "name": "superpowers-for-vk",
+            "description": "VK-aware planning and dispatch skills for Claude Code",
+            "version": "0.1.0",
+            "source": "./"
+        }
+    ]
+}
