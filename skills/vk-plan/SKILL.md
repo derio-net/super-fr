@@ -245,6 +245,39 @@ Every step must contain the actual content. These are **plan failures** — neve
 - Steps that describe what to do without showing how
 - References to types, functions, or methods not defined in any task
 
+## Embedding Full File Content
+
+When a task writes a **complete file** (especially a Markdown or skill file that itself contains code fences), use explicit HTML-comment markers instead of wrapping the content in nested code fences. Agents reading a plan may literally copy the outer fence markers into the target file, producing a corrupt output whose first line is a fence instead of the expected content (e.g., YAML frontmatter's `---`).
+
+### Required pattern
+
+State the target path, open a BEGIN marker, paste the file content verbatim at plan-file indentation, and close with an END marker:
+
+```
+Write the following content to `skills/example/SKILL.md` verbatim. Do not include the BEGIN/END markers themselves in the output file — they are plan-level metadata.
+
+<!-- BEGIN FILE: skills/example/SKILL.md -->
+---
+name: example
+description: example skill
+---
+
+# Example
+
+Body of the skill, including any fenced code blocks, with no nesting concerns.
+<!-- END FILE: skills/example/SKILL.md -->
+```
+
+The BEGIN/END markers are HTML comments — invisible in rendered markdown but unambiguous as boundary tokens for both agents and mechanical extractors.
+
+### Why not nested code fences
+
+The historical pattern was to wrap file content in an outer fence with more backticks than any fence inside it (e.g., 5 backticks outside, 4 for nested examples, 3 for innermost code). This renders correctly but fails in execution: some agents treat the outer fence as content to be written rather than plan-file syntax. The 2026-04-11 incident shipped `skills/vk-plan/SKILL.md` and `skills/vk-progress/SKILL.md` with literal fence markers as their first and last lines. Post-hoc fix: `dd965e6`. Enforcement: `scripts/validate-skills.sh` rejects SKILL.md files whose first non-empty line is not `---`.
+
+### Partial edits are exempt
+
+If a task only *modifies* an existing file via targeted Edit operations (add a section, rename a symbol, bump a version), normal 3-backtick fenced blocks are fine — there is no risk of outer-fence leakage because there is no outer fence. This rule applies only to full file rewrites.
+
 ## Plan Document Header
 
 ```markdown
