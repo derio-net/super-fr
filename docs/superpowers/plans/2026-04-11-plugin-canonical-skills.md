@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `willikins/docs/superpowers/specs/2026-04-10-vk-skills-harmonization-design.md`
-**Status:** Not Started
+**Status:** In Progress
 
 **Goal:** Rewrite the four superpowers-for-vk skills (vk-plan, vk-dispatch, vk-execute, vk-progress) to be profile-aware and standalone, add the canonical validator, install script, and bootstrap the plugin's own plans infrastructure. Ship as v0.2.0.
 
