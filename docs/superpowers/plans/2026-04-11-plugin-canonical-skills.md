@@ -18,6 +18,7 @@
 ---
 
 ## Phase 0: Canonical Skills Rewrite [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/1 -->
 
 Rewrite all four skills. This is the core of the harmonization work.
 
@@ -885,6 +886,7 @@ Plan file must live in the same repo as the workspace."
 ---
 
 ## Phase 1: Plugin Infrastructure [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/2 -->
 
 Bootstrap the plugin's own plan infrastructure, ship the canonical validator, install script, and release v0.2.0.
 
