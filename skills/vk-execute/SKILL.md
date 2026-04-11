@@ -1,9 +1,9 @@
 ---
 name: vk-execute
 description: >
-  Execute an agentic phase from a VK-dispatched plan. Agent-facing skill — not
-  directly invoked by the operator. VK workspace agents use this to implement
-  their assigned phase.
+  Execute an agentic phase from a VK-dispatched plan. Understands Phase > Task > Step
+  hierarchy. Agent-facing skill — not directly invoked by the operator. VK workspace
+  agents use this to implement their assigned phase.
 ---
 
 # VK Execute
@@ -16,7 +16,9 @@ Implements a single agentic phase from a VK-dispatched plan. This skill is agent
 
 ## How It Works
 
-This skill wraps `superpowers:executing-plans` (or `superpowers:subagent-driven-development` if subagents are available) with phase-scoping constraints. The agent executes only its assigned phase — never other phases.
+This skill wraps `superpowers:executing-plans` (or `superpowers:subagent-driven-development` if subagents are available) with phase-scoping constraints. The agent reads its assigned Phase, iterates through Tasks within the Phase, and executes Steps within each Task. Never touches other phases.
+
+The plan file lives in the same repo as the workspace (single-repo plan rule). If the Issue references a plan file that doesn't exist in the workspace, stop and report — the Issue is likely misconfigured or the workspace is cloned from the wrong repo.
 
 ## Procedure
 
@@ -41,9 +43,12 @@ Do not attempt to work around unresolved dependencies. Stop cleanly.
 
 ### Step 3: Read and Scope the Plan
 
-1. Read the plan file at the path from the Issue body
+1. Read the plan file at the path from the Issue body (path is repo-relative)
 2. Locate the assigned phase: `## Phase <N>:`
-3. Extract only the tasks/steps within this phase (between this header and the next `## Phase` or end of file)
+3. Extract only the Tasks within this Phase:
+   - Tasks are `### Task N:` headers
+   - Steps are `- [ ] **Step N:**` checkboxes within each Task
+   - A Phase typically has 1-8 Tasks, each with 3-8 Steps
 4. Ignore all other phases — they belong to other agents or the operator
 
 ### Step 4: Execute the Phase
@@ -59,10 +64,11 @@ Follow all upstream rules: bite-sized steps, run verifications, stop when blocke
 
 ### Step 5: Update Plan Checkboxes
 
-As each task within the phase completes, update the plan file checkboxes:
-- Change `- [ ]` to `- [x]` for completed steps
-- Only update checkboxes within the assigned phase
-- Never touch checkboxes in other phases
+As each Step within each Task completes, update the plan file:
+- Change `- [ ]` to `- [x]` for completed Steps
+- Only update checkboxes within the assigned Phase
+- Never touch checkboxes in other Phases
+- After completing all Steps in a Task, verify the Task is fully checked before moving to the next Task. Tasks that have explicitly ignored/skipped, after confirmation from the operator, need to be marked with `- [-]` and a comment explaining the decision must be added
 
 ### Step 6: Open PR
 
