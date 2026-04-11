@@ -5,9 +5,9 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `willikins/docs/superpowers/specs/2026-04-10-vk-skills-harmonization-design.md`
-**Status:** In Progress
+**Status:** Complete
 
-**Goal:** Rewrite the four superpowers-for-vk skills (vk-plan, vk-dispatch, vk-execute, vk-progress) to be profile-aware and standalone, add the canonical validator, install script, and bootstrap the plugin's own plans infrastructure. Ship as v0.2.0.
+**Goal:** Rewrite the four superpowers-for-vk skills (vk-plan, vk-dispatch, vk-execute, vk-progress) to be profile-aware and standalone, add the canonical validator, install script, and bootstrap the plugin's own plans infrastructure. Ship as v0.2.0. **Phase 2 (retroactive amendment):** harden against the fence-leak bug discovered during Phase 0 execution, ship as v0.2.1.
 
 **Architecture:** vk-plan absorbs writing-plans quality standards and becomes the canonical plan skill. vk-progress absorbs work-lifecycle board queries. All four skills read `docs/superpowers/plan-config.yaml` from the repo they're invoked in. Ships a canonical validator that per-repo wrappers delegate to, an install.sh for user-level installation, and a minimal plans directory for this repo's own meta-work.
 
@@ -1355,6 +1355,212 @@ git commit -m "chore: update README and bump to v0.2.0
 
 Documents profile-driven behavior, install script, validator, spec index
 maintenance, and the one-plan-one-repo + one-phase-one-PR model."
+```
+
+---
+
+## Phase 2: Plan-file safety hardening [agentic]
+
+**Retroactive amendment (2026-04-11).** During Phase 0 execution, the two agents that fully rewrote `skills/vk-plan/SKILL.md` (Task 1) and `skills/vk-progress/SKILL.md` (Task 3) literally copied the plan's outer code-fence markers (5-backtick and 4-backtick respectively) into the target files. The shipped v0.2.0 SKILL.md files started with a literal fence line preceding their YAML frontmatter. Any strict skill loader that expects `---` on line 1 would reject them. A post-merge fix stripped the markers (`dd965e6`), but the underlying cause — embedding full file content inside nested code fences in a plan — remains a footgun. This phase hardens both the plan authoring guidance and the validator.
+
+Retroactive because the incident is small and there are no downstream consumers yet; amending Plan A and bumping to v0.2.1 is cheaper than opening a new spec/plan for a tiny hardening patch.
+
+### Task 1: Add "Embedding Full File Content" section to vk-plan SKILL.md
+
+**Files:**
+- Modify: `skills/vk-plan/SKILL.md`
+
+- [x] **Step 1: Insert the new section between "No Placeholders" and "Plan Document Header"**
+
+Use the Edit tool to add a new `## Embedding Full File Content` section. The section must document the explicit HTML-comment marker pattern (`<!-- BEGIN FILE: <path> -->` / `<!-- END FILE: <path> -->`) as the required way to embed full file contents, and warn against nested code fences with the concrete 2026-04-11 incident as justification.
+
+Section content:
+
+```markdown
+## Embedding Full File Content
+
+When a task writes a **complete file** (especially a Markdown or skill file that itself contains code fences), use explicit HTML-comment markers instead of wrapping the content in nested code fences. Agents reading a plan may literally copy the outer fence markers into the target file, producing a corrupt output whose first line is a fence instead of the expected content (e.g., YAML frontmatter's `---`).
+
+### Required pattern
+
+State the target path, open a BEGIN marker, paste the file content verbatim at plan-file indentation, and close with an END marker:
+
+```
+Write the following content to `skills/example/SKILL.md` verbatim. Do not include the BEGIN/END markers themselves in the output file — they are plan-level metadata.
+
+<!-- BEGIN FILE: skills/example/SKILL.md -->
+---
+name: example
+description: example skill
+---
+
+# Example
+
+Body of the skill, including any ``` code fences ``` with no nesting concerns.
+<!-- END FILE: skills/example/SKILL.md -->
+```
+
+The BEGIN/END markers are HTML comments — invisible in rendered markdown but unambiguous as boundary tokens for both agents and mechanical extractors.
+
+### Why not nested code fences
+
+The historical pattern was to wrap the file content in an outer fence with more backticks than any fence inside it (e.g., 5 backticks outside, 4 backticks for inner examples, 3 backticks for innermost code). This works for rendering but fails in execution: some agents treat the outer fence as content to be written rather than as plan-file syntax. The 2026-04-11 incident (Phase 0 of this plan) shipped `skills/vk-plan/SKILL.md` and `skills/vk-progress/SKILL.md` with literal fence markers as their first and last lines. Post-hoc fix: `dd965e6`. Enforcement: the new `scripts/validate-skills.sh` check rejects SKILL.md files whose first non-empty line is not `---`.
+
+### Partial edits are exempt
+
+If a task only *modifies* an existing file via targeted Edit operations (add a section, rename a symbol, bump a version), normal 3-backtick fenced blocks are fine — there is no risk of outer-fence leakage because there is no outer fence. This rule applies only to full file rewrites.
+```
+
+- [x] **Step 2: Verify the section is in place**
+
+```bash
+grep -q "Embedding Full File Content" skills/vk-plan/SKILL.md && echo "OK: section added"
+grep -q "BEGIN FILE:" skills/vk-plan/SKILL.md && echo "OK: marker pattern documented"
+grep -q "2026-04-11 incident" skills/vk-plan/SKILL.md && echo "OK: incident referenced"
+grep -q "validate-skills.sh" skills/vk-plan/SKILL.md && echo "OK: enforcement referenced"
+```
+
+- [x] **Step 3: Commit**
+
+```bash
+git add skills/vk-plan/SKILL.md
+git commit -m "feat: add Embedding Full File Content guidance to vk-plan
+
+Documents the explicit <!-- BEGIN FILE --> / <!-- END FILE --> marker
+pattern as the required way to embed full file content in a plan, to
+prevent the outer-fence-leak bug that shipped in v0.2.0 (dd965e6).
+References the 2026-04-11 incident as justification."
+```
+
+### Task 2: Create validate-skills.sh
+
+**Files:**
+- Create: `scripts/validate-skills.sh`
+
+- [x] **Step 1: Write the validator**
+
+Create `scripts/validate-skills.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Validate SKILL.md files start with clean YAML frontmatter.
+#
+# Catches the "outer code fence leaked into skill content" class of bug
+# (2026-04-11 incident, fixed in dd965e6). A SKILL.md must begin with
+# '---' as its first non-empty line — anything else (notably a code fence
+# like '```markdown' or '````markdown') indicates the plan's outer wrapper
+# was copied into the target file during a full file rewrite.
+#
+# Usage:
+#   validate-skills.sh                          # validate all skills/*/SKILL.md
+#   validate-skills.sh path/to/SKILL.md ...     # validate specific files
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+ERRORS=()
+
+if [ $# -eq 0 ]; then
+  mapfile -t FILES < <(find "$REPO_ROOT/skills" -maxdepth 3 -name SKILL.md 2>/dev/null)
+else
+  FILES=("$@")
+fi
+
+for f in "${FILES[@]}"; do
+  [ -f "$f" ] || continue
+  local_first=$(awk 'NF {print; exit}' "$f")
+  rel="${f#$REPO_ROOT/}"
+  if [[ "$local_first" != "---" ]]; then
+    ERRORS+=("$rel: first non-empty line is not '---' (got: '$local_first'). Possible fence-leak from plan source.")
+  fi
+done
+
+if [ ${#ERRORS[@]} -gt 0 ]; then
+  echo "Skill validation failed:" >&2
+  for e in "${ERRORS[@]}"; do echo "  - $e" >&2; done
+  exit 1
+fi
+
+echo "Validated ${#FILES[@]} skill file(s) — all clean."
+```
+
+- [x] **Step 2: Make executable and test**
+
+```bash
+chmod +x scripts/validate-skills.sh
+
+# Should pass against the current (post-dd965e6) repo state
+./scripts/validate-skills.sh && echo "PASS: all skills clean"
+
+# Should catch a synthetic broken file
+cat > /tmp/bad-skill.md << 'EOF'
+`````markdown
+---
+name: bad
+description: has a leaked outer fence
+---
+EOF
+./scripts/validate-skills.sh /tmp/bad-skill.md && echo "FAIL: should have errored" || echo "PASS: caught fence-leak"
+rm /tmp/bad-skill.md
+```
+
+- [x] **Step 3: Commit**
+
+```bash
+git add scripts/validate-skills.sh
+git commit -m "feat: add validate-skills.sh for fence-leak detection
+
+Checks SKILL.md files begin with '---' as the first non-empty line.
+Post-hoc catch for the fence-leak class of bug (2026-04-11 incident).
+Pairs with the Embedding Full File Content guidance in vk-plan."
+```
+
+### Task 3: Bump version to 0.2.1
+
+**Files:**
+- Modify: `package.json`
+- Modify: `.claude-plugin/plugin.json`
+- Modify: `.claude-plugin/marketplace.json`
+
+- [x] **Step 1: Edit all three version fields**
+
+```bash
+python3 -c "
+import json
+for path in ['package.json', '.claude-plugin/plugin.json']:
+    with open(path) as f:
+        d = json.load(f)
+    d['version'] = '0.2.1'
+    with open(path, 'w') as f:
+        json.dump(d, f, indent=2)
+        f.write('\n')
+
+with open('.claude-plugin/marketplace.json') as f:
+    d = json.load(f)
+for p in d['plugins']:
+    if p['name'] == 'superpowers-for-vk':
+        p['version'] = '0.2.1'
+with open('.claude-plugin/marketplace.json', 'w') as f:
+    json.dump(d, f, indent=2)
+    f.write('\n')
+"
+```
+
+- [x] **Step 2: Verify all three match**
+
+```bash
+grep '"version"' package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json
+# All three should show 0.2.1
+```
+
+- [x] **Step 3: Commit**
+
+```bash
+git add package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json
+git commit -m "chore: bump to v0.2.1
+
+Hardening release: embedding-file-content guidance in vk-plan +
+validate-skills.sh enforcement. Retroactive Phase 2 of the plugin
+canonical skills plan."
 ```
 
 ---
