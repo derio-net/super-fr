@@ -1,19 +1,21 @@
 # superpowers-for-vk
 
-VK-aware planning and dispatch skills for Claude Code. Wraps the upstream
-[superpowers](https://github.com/obra/superpowers) plugin with VibeKanban
-integration — phase-based plans, automated dispatch, and agentic execution.
+Canonical planning and work lifecycle skills for derio-net repos. Wraps the upstream
+[superpowers](https://github.com/obra/superpowers) plugin with phase-based plans,
+profile-driven per-repo behavior, and work lifecycle tracking.
 
 ## Skills
 
 | Skill | Description |
 |-------|-------------|
-| `vk-plan` | Write phase-structured plans with `[manual]`/`[agentic]` phases |
-| `vk-dispatch` | Dispatch plan phases to GitHub Issues + VK workspaces |
-| `vk-execute` | Execute an agentic phase (agent-facing) |
-| `vk-progress` | Sync VK card + GitHub Issue state back to plan |
+| `vk-plan` | Canonical plan skill — phase-structured plans with profile-driven behavior and spec index maintenance |
+| `vk-dispatch` | Dispatch plan phases to GitHub Issues with profile-aware config |
+| `vk-execute` | Execute an agentic phase (agent-facing, Phase > Task > Step) |
+| `vk-progress` | Work lifecycle — plan sync, status board, create/transition, health, audit |
 
 ## Installation
+
+### Option 1: Plugin (recommended)
 
 Add to `~/.claude/settings.json`:
 
@@ -25,8 +27,33 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
+### Option 2: User-level install
+
+```bash
+git clone https://github.com/derio-net/superpowers-for-vk
+cd superpowers-for-vk
+./scripts/install.sh
+```
+
+## Per-Repo Profile
+
+Each repo can define `docs/superpowers/plan-config.yaml` to control:
+- Filename patterns, required headers, status values
+- Post-deploy phases (auto-appended by vk-plan)
+- Dispatch config (project board, labels, target repo)
+
+## Plan Model
+
+- **One plan = one repo's worth of work.** Plans live in the repo they modify.
+- **One phase = one GitHub Issue = one PR.** Phases are scoped for reviewability.
+- **Cross-repo features use multiple plans**, coordinated via the spec's "Implementation Plans" section (maintained automatically by vk-plan).
+
 ## Requirements
 
 - [superpowers](https://github.com/obra/superpowers) plugin installed
-- VK MCP server available (`npx vibe-kanban@latest --mcp`)
 - GitHub CLI (`gh`) authenticated
+- VK MCP server (optional): `npx vibe-kanban@latest --mcp`
+
+## Validator
+
+`scripts/validate-plans.sh` — canonical, profile-driven plan validator. Per-repo thin wrappers delegate here.
