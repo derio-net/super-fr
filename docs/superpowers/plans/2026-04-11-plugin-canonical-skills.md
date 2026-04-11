@@ -895,7 +895,7 @@ Bootstrap the plugin's own plan infrastructure, ship the canonical validator, in
 **Files:**
 - Create: `docs/superpowers/plan-config.yaml`
 
-- [ ] **Step 1: Write the minimal profile**
+- [x] **Step 1: Write the minimal profile**
 
 ```yaml
 plan:
@@ -923,13 +923,13 @@ dispatch:
 
 **Note:** No `structure:` section — the `## Phase` / `### Task` / `- [ ] **Step` markers are invariants across all profiles, hardcoded in vk-plan and vk-execute. `dispatch.owner` is new (previously hardcoded as `derio-net`).
 
-- [ ] **Step 2: Verify YAML**
+- [x] **Step 2: Verify YAML**
 
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('docs/superpowers/plan-config.yaml'))" && echo "Valid YAML"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/plan-config.yaml
@@ -944,7 +944,7 @@ Bootstraps the plugin repo's own plan infrastructure."
 **Files:**
 - Create: `scripts/validate-plans.sh`
 
-- [ ] **Step 1: Write the validator**
+- [x] **Step 1: Write the validator**
 
 ```bash
 mkdir -p scripts
@@ -1089,7 +1089,7 @@ if [ ${#ERRORS[@]} -gt 0 ]; then
 fi
 ```
 
-- [ ] **Step 2: Make executable and test**
+- [x] **Step 2: Make executable and test**
 
 ```bash
 chmod +x scripts/validate-plans.sh
@@ -1106,7 +1106,7 @@ EOF
 rm /tmp/bad-plan.md
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/validate-plans.sh
@@ -1123,7 +1123,7 @@ Per-repo thin wrappers call this script."
 - Create: `rules/vk-plan-override.md`
 - Create: `scripts/install.sh`
 
-- [ ] **Step 1: Create the rule**
+- [x] **Step 1: Create the rule**
 
 ```bash
 mkdir -p rules
@@ -1138,7 +1138,7 @@ When the brainstorming skill says to invoke `writing-plans`, invoke `vk-plan` in
 When any skill references `superpowers:writing-plans`, use `vk-plan`.
 ```
 
-- [ ] **Step 2: Write the install script**
+- [x] **Step 2: Write the install script**
 
 Write `scripts/install.sh`:
 
@@ -1209,14 +1209,14 @@ echo "  ls ~/.claude/skills/vk-*/"
 echo "  cat ~/.claude/rules/vk-plan-override.md"
 ```
 
-- [ ] **Step 3: Make executable and verify**
+- [x] **Step 3: Make executable and verify**
 
 ```bash
 chmod +x scripts/install.sh
 bash -n scripts/install.sh && echo "Syntax OK"
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add rules/vk-plan-override.md scripts/install.sh
@@ -1232,7 +1232,7 @@ brainstorming→vk-plan redirect rule, and documents the PostToolUse hook."
 - Modify: `README.md`
 - Modify: `package.json`
 
-- [ ] **Step 1: Replace README.md**
+- [x] **Step 1: Replace README.md**
 
 ```markdown
 # superpowers-for-vk
@@ -1296,7 +1296,7 @@ Each repo can define `docs/superpowers/plan-config.yaml` to control:
 `scripts/validate-plans.sh` — canonical, profile-driven plan validator. Per-repo thin wrappers delegate here.
 ```
 
-- [ ] **Step 2: Bump version**
+- [x] **Step 2: Bump version**
 
 Update `package.json`:
 
@@ -1338,7 +1338,7 @@ with open('.claude-plugin/marketplace.json', 'w') as f:
 "
 ```
 
-- [ ] **Step 3: Verify versions match**
+- [x] **Step 3: Verify versions match**
 
 ```bash
 grep '"version"' package.json
@@ -1347,7 +1347,7 @@ grep '"version"' .claude-plugin/marketplace.json
 # All three should show 0.2.0
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json
