@@ -1,9 +1,10 @@
 ---
 name: vk-dispatch
 description: >
-  Dispatch a phase-structured plan to GitHub Issues with VK integration.
-  Use when the user wants to create Issues from a plan, dispatch phases,
-  or says "dispatch this plan", "send to VK", "create issues from plan",
+  Dispatch a phase-structured plan to GitHub Issues with profile-driven config.
+  Reads dispatch settings from plan-config.yaml (project board, labels, target repo).
+  Enforces single-repo plan scope — reject if plan references cross-repo phases.
+  Use when: "dispatch this plan", "send to VK", "create issues from plan",
   "dispatch phases", "break this plan into issues".
 ---
 
@@ -14,6 +15,43 @@ description: >
 Reads a phase-structured plan file (created by `vk-plan`), creates one GitHub Issue per phase with sequential dependencies, adds each to the Derio Ops project board, and inserts tracking links back into the plan file.
 
 **Announce at start:** "I'm using the vk-dispatch skill to dispatch this plan."
+
+## Profile Reading
+
+Before dispatching, read the target repo's dispatch config:
+
+1. Look for `docs/superpowers/plan-config.yaml` in the repo root
+2. Extract dispatch settings:
+   - `dispatch.owner` — GitHub owner/org (default: `derio-net`)
+   - `dispatch.project_board` — project name (default: `"Derio Ops"`)
+   - `dispatch.default_repo` — fallback repo slug `<owner>/<repo>` (default: plan's home repo)
+   - `dispatch.labels.agentic` — label for agentic phases (default: `"vk-ready"`)
+   - `dispatch.labels.manual` — label for manual phases (default: `"manual"`)
+3. If `dispatch: false` in profile, **refuse to dispatch**: report "Dispatch disabled for this repo in plan-config.yaml" and stop
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+PROFILE="$REPO_ROOT/docs/superpowers/plan-config.yaml"
+if [ -f "$PROFILE" ]; then
+  DISPATCH_DISABLED=$(sed -n '/^dispatch:/,/^[^ ]/p' "$PROFILE" | grep -c "^dispatch: false" || true)
+  if [ "$DISPATCH_DISABLED" -gt 0 ]; then
+    echo "Dispatch disabled for this repo"
+    exit 0
+  fi
+  OWNER=$(sed -n '/^dispatch:/,/^[^ ]/{s/^  owner: *//p}' "$PROFILE" | head -1)
+  PROJECT_BOARD=$(sed -n '/^dispatch:/,/^[^ ]/{s/^  project_board: *"\(.*\)"/\1/p}' "$PROFILE" | head -1)
+  DEFAULT_REPO=$(sed -n '/^dispatch:/,/^[^ ]/{s/^  default_repo: *//p}' "$PROFILE" | head -1)
+  AGENTIC_LABEL=$(sed -n '/labels:/,/^[^ ]/{s/^    agentic: *//p}' "$PROFILE" | head -1)
+  MANUAL_LABEL=$(sed -n '/labels:/,/^[^ ]/{s/^    manual: *//p}' "$PROFILE" | head -1)
+fi
+
+OWNER="${OWNER:-derio-net}"
+PROJECT_BOARD="${PROJECT_BOARD:-Derio Ops}"
+AGENTIC_LABEL="${AGENTIC_LABEL:-vk-ready}"
+MANUAL_LABEL="${MANUAL_LABEL:-manual}"
+```
+
+**Single-repo rule:** all phases of a plan dispatch to the same repo (the plan's home repo, or the profile's `default_repo`). If the operator passes a different repo as input, warn and confirm. A plan spanning multiple repos should have been split into multiple plans per spec.
 
 ## Input
 
@@ -132,39 +170,39 @@ ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oP '\d+$')
 # Record mapping
 PHASE_TO_ISSUE[$PHASE_NUM]=$ISSUE_NUM
 
-# Add vk-ready label for agentic phases (after body is set)
+# Add agentic label for agentic phases (after body is set)
 if [[ "$PHASE_TYPE" == "agentic" ]]; then
-  gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "vk-ready"
+  gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "$AGENTIC_LABEL"
 fi
 
 # Add manual label for manual phases
 if [[ "$PHASE_TYPE" == "manual" ]]; then
-  gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "manual"
+  gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "$MANUAL_LABEL"
 fi
 ```
 
 ### Step 4: Add Issues to Project Board
 
 ```bash
-PROJECT_NUM=$(gh project list --owner derio-net --format json | \
-  jq -r '.projects[] | select(.title == "Derio Ops") | .number')
+PROJECT_NUM=$(gh project list --owner "$OWNER" --format json | \
+  jq -r ".projects[] | select(.title == \"$PROJECT_BOARD\") | .number")
 
-gh project item-add "$PROJECT_NUM" --owner derio-net --url "$ISSUE_URL"
+gh project item-add "$PROJECT_NUM" --owner "$OWNER" --url "$ISSUE_URL"
 ```
 
 ### Step 5: Set Lifecycle State to `plan`
 
 ```bash
-PROJECT_ID=$(gh project list --owner derio-net --format json | \
+PROJECT_ID=$(gh project list --owner "$OWNER" --format json | \
   jq -r ".projects[] | select(.number == $PROJECT_NUM) | .id")
 
-ITEM_ID=$(gh project item-list "$PROJECT_NUM" --owner derio-net --format json | \
+ITEM_ID=$(gh project item-list "$PROJECT_NUM" --owner "$OWNER" --format json | \
   jq -r ".items[] | select(.content.url == \"$ISSUE_URL\") | .id")
 
-FIELD_ID=$(gh project field-list "$PROJECT_NUM" --owner derio-net --format json | \
+FIELD_ID=$(gh project field-list "$PROJECT_NUM" --owner "$OWNER" --format json | \
   jq -r '.fields[] | select(.name == "Lifecycle") | .id')
 
-PLAN_OPTION_ID=$(gh project field-list "$PROJECT_NUM" --owner derio-net --format json | \
+PLAN_OPTION_ID=$(gh project field-list "$PROJECT_NUM" --owner "$OWNER" --format json | \
   jq -r '.fields[] | select(.name == "Lifecycle") | .options[] | select(.name == "plan") | .id')
 
 gh project item-edit \
