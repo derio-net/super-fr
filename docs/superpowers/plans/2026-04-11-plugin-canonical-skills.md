@@ -29,7 +29,7 @@ Rewrite all four skills. This is the core of the harmonization work.
 
 vk-plan becomes standalone (no longer wraps writing-plans), absorbs all quality standards, adds profile reading, adds spec index maintenance, and offers three execution paths.
 
-- [ ] **Step 1: Replace skills/vk-plan/SKILL.md with the new standalone version**
+- [x] **Step 1: Replace skills/vk-plan/SKILL.md with the new standalone version**
 
 Write the full file content. **Outer fence uses 5 backticks** so that the inner 4-backtick Task Structure example (and its 3-backtick code blocks) nest without collision:
 
@@ -350,7 +350,7 @@ Filename: generated from profile's `plan.filename` pattern with today's date and
 - **Tracking:** vk-progress syncs Issue states back to plan checkboxes AND updates spec index status
 `````
 
-- [ ] **Step 2: Verify the new skill**
+- [x] **Step 2: Verify the new skill**
 
 ```bash
 wc -l skills/vk-plan/SKILL.md
@@ -364,7 +364,7 @@ grep -q "Walking Skeleton" skills/vk-plan/SKILL.md && echo "OK: walking skeleton
 grep -q "Test-Driven Development" skills/vk-plan/SKILL.md && echo "OK: TDD section"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/vk-plan/SKILL.md
@@ -383,7 +383,7 @@ references a spec. Replaces writing-plans as the canonical plan skill."
 
 The current vk-dispatch hardcodes "Derio Ops" project and label names. Update it to read these from the profile.
 
-- [ ] **Step 1: Add Profile Reading section**
+- [x] **Step 1: Add Profile Reading section**
 
 Insert a new `## Profile Reading` section immediately after `## Overview`:
 
@@ -426,7 +426,7 @@ MANUAL_LABEL="${MANUAL_LABEL:-manual}"
 **Single-repo rule:** all phases of a plan dispatch to the same repo (the plan's home repo, or the profile's `default_repo`). If the operator passes a different repo as input, warn and confirm. A plan spanning multiple repos should have been split into multiple plans per spec.
 ````
 
-- [ ] **Step 2: Replace hardcoded values with profile variables**
+- [x] **Step 2: Replace hardcoded values with profile variables**
 
 Throughout the rest of `skills/vk-dispatch/SKILL.md`, replace hardcoded literals with the profile variables:
 - Literal `"Derio Ops"` → `"$PROJECT_BOARD"`
@@ -452,7 +452,7 @@ PROJECT_NUM=$(gh project list --owner "$OWNER" --format json | \
   jq -r ".projects[] | select(.title == \"$PROJECT_BOARD\") | .number")
 ```
 
-- [ ] **Step 3: Update frontmatter description**
+- [x] **Step 3: Update frontmatter description**
 
 ```yaml
 ---
@@ -466,7 +466,7 @@ description: >
 ---
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 grep -q "Profile Reading" skills/vk-dispatch/SKILL.md && echo "OK: profile section"
@@ -478,7 +478,7 @@ grep -q '\$OWNER' skills/vk-dispatch/SKILL.md && echo "OK: owner var"
 ! grep -E '(--owner derio-net|"Derio Ops")' skills/vk-dispatch/SKILL.md && echo "OK: no hardcoded literals" || echo "FAIL: hardcoded refs remain"
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/vk-dispatch/SKILL.md
@@ -496,7 +496,7 @@ single-repo plan scope."
 
 The current vk-progress only does plan-to-Issue sync. Absorb all work-lifecycle capabilities: status board, create work item, transition state, health summary, audit.
 
-- [ ] **Step 1: Replace skills/vk-progress/SKILL.md with the expanded version**
+- [x] **Step 1: Replace skills/vk-progress/SKILL.md with the expanded version**
 
 Write the full file:
 
@@ -786,7 +786,7 @@ Drift checks:
 - **Plan:** vk-plan created the plan file and seeded the spec index
 ````
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 ```bash
 wc -l skills/vk-progress/SKILL.md
@@ -800,7 +800,7 @@ grep -q "Transition State" skills/vk-progress/SKILL.md && echo "OK: transition"
 grep -q "Health" skills/vk-progress/SKILL.md && echo "OK: health"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/vk-progress/SKILL.md
@@ -819,7 +819,7 @@ work-lifecycle, progress-sync."
 
 **Note on profile reading:** vk-execute does NOT need to read the profile. The Phase > Task > Step markers (`## Phase`, `### Task`, `- [ ] **Step`) are invariants across all repos — not configurable per-profile. The `structure:` section has been removed from the profile schema to reflect this. If future work introduces per-repo structure variations, vk-execute would need profile reading at that point.
 
-- [ ] **Step 1: Update the description and procedure**
+- [x] **Step 1: Update the description and procedure**
 
 Update the frontmatter:
 ```yaml
@@ -865,7 +865,7 @@ As each Step within each Task completes, update the plan file:
 - After completing all Steps in a Task, verify the Task is fully checked before moving to the next Task. Tasks that have explicitly ignored/skipped, after confirmation from the operator, need to be marked with `- [-]` and a comment explaining the decision must be added
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 ```bash
 grep -q "Phase > Task > Step" skills/vk-execute/SKILL.md && echo "OK: hierarchy"
@@ -873,7 +873,7 @@ grep -q "### Task N:" skills/vk-execute/SKILL.md && echo "OK: task awareness"
 grep -q "single-repo plan rule" skills/vk-execute/SKILL.md && echo "OK: repo rule"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/vk-execute/SKILL.md
