@@ -1,4 +1,3 @@
-`````markdown
 ---
 name: vk-plan
 description: >
@@ -313,4 +312,3 @@ Filename: generated from profile's `plan.filename` pattern with today's date and
 - **Downstream:** vk-dispatch dispatches phases to GitHub Issues
 - **Execution:** vk-execute (agentic phases), subagent-driven-development, executing-plans
 - **Tracking:** vk-progress syncs Issue states back to plan checkboxes AND updates spec index status
-`````

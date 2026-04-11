@@ -1,4 +1,3 @@
-````markdown
 ---
 name: vk-progress
 description: >
@@ -282,4 +281,3 @@ Drift checks:
 - **Upstream:** vk-dispatch created the tracking links
 - **Execution:** vk-execute agents whose progress this tracks
 - **Plan:** vk-plan created the plan file and seeded the spec index
-````
