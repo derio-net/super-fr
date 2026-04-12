@@ -292,7 +292,7 @@ def list_project_items(*, owner: str, project_number: int) -> list[BoardItem]:
                 url=content.get("url", ""),
                 repo=content.get("repository", ""),
                 number=content.get("number", 0),
-                closed=content.get("url", "") in _closed_urls(item),
+                closed=False,  # use is_issue_closed() for live check
                 lifecycle=item.get("lifecycle", "unset") or "unset",
                 status=item.get("status", ""),
                 labels=[lb for lb in item.get("labels", [])],
@@ -300,10 +300,6 @@ def list_project_items(*, owner: str, project_number: int) -> list[BoardItem]:
         )
     return items
 
-
-def _closed_urls(item: dict) -> set[str]:
-    """Helper — not used directly; closed state comes from issue query."""
-    return set()
 
 
 def is_issue_closed(*, repo: str, number: int) -> bool:
