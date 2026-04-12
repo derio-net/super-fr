@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from dataclasses import dataclass
 
 
 class GhError(Exception):
@@ -248,6 +249,79 @@ def get_option_id(*, owner: str, project_number: int, field_name: str, option_na
                     return str(opt["id"])
     msg = f"Option '{option_name}' not found for field '{field_name}'"
     raise GhError(msg)
+
+
+@dataclass
+class BoardItem:
+    """A project board item with lifecycle metadata."""
+
+    title: str
+    url: str
+    repo: str
+    number: int
+    closed: bool
+    lifecycle: str  # "unset" if missing
+    status: str  # board status column
+    labels: list[str]
+
+
+def list_project_items(*, owner: str, project_number: int) -> list[BoardItem]:
+    """List all items on a project board with lifecycle and status fields."""
+    output = _run_gh(
+        [
+            "project",
+            "item-list",
+            str(project_number),
+            "--owner",
+            owner,
+            "--format",
+            "json",
+        ]
+    )
+    import json
+
+    data = json.loads(output)
+    items: list[BoardItem] = []
+    for item in data.get("items", []):
+        content = item.get("content", {})
+        if content.get("type") != "Issue":
+            continue
+        items.append(
+            BoardItem(
+                title=content.get("title", ""),
+                url=content.get("url", ""),
+                repo=content.get("repository", ""),
+                number=content.get("number", 0),
+                closed=content.get("url", "") in _closed_urls(item),
+                lifecycle=item.get("lifecycle", "unset") or "unset",
+                status=item.get("status", ""),
+                labels=[lb for lb in item.get("labels", [])],
+            )
+        )
+    return items
+
+
+def _closed_urls(item: dict) -> set[str]:
+    """Helper — not used directly; closed state comes from issue query."""
+    return set()
+
+
+def is_issue_closed(*, repo: str, number: int) -> bool:
+    """Check if an issue is closed."""
+    output = _run_gh(
+        [
+            "issue",
+            "view",
+            str(number),
+            "--repo",
+            repo,
+            "--json",
+            "closed",
+            "--jq",
+            ".closed",
+        ]
+    )
+    return output.strip().lower() == "true"
 
 
 def auth_status() -> bool:

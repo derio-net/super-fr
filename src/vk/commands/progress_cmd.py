@@ -269,6 +269,123 @@ def transition(
         raise typer.Exit(1)
 
 
+def _extract_tracking_urls(plan_path: Path) -> list[str]:
+    """Extract <!-- Tracking: URL --> comments from a plan file."""
+    urls: list[str] = []
+    text = plan_path.read_text(encoding="utf-8")
+    for match in re.finditer(r"<!-- Tracking:\s*(https://[^\s]+)\s*-->", text):
+        urls.append(match.group(1))
+    return urls
+
+
+def _parse_issue_url(url: str) -> tuple[str, int]:
+    """Parse owner/repo and number from a GitHub Issue URL."""
+    m = re.match(r"https://github\.com/([^/]+/[^/]+)/issues/(\d+)", url)
+    if not m:
+        return ("", 0)
+    return (m.group(1), int(m.group(2)))
+
+
+def _run_dispatch_audit(
+    profile: "Profile",  # noqa: F821
+    plans_dir: Path,
+) -> list[str]:
+    """Run dispatch-mode board audit. Returns list of issue strings."""
+    from vk import gh
+
+    issues: list[str] = []
+    dispatch_cfg = profile.dispatch
+    assert dispatch_cfg is not None
+
+    # Query the project board
+    try:
+        project_num = gh.get_project_number(
+            owner=dispatch_cfg.owner,
+            project_name=dispatch_cfg.project_board,
+        )
+        board_items = gh.list_project_items(
+            owner=dispatch_cfg.owner,
+            project_number=project_num,
+        )
+    except gh.GhError as exc:
+        issues.append(f"Board query failed: {exc}")
+        return issues
+
+    # Check 1: Items missing lifecycle
+    no_lifecycle = [i for i in board_items if i.lifecycle == "unset"]
+    for item in no_lifecycle:
+        issues.append(f"Missing lifecycle: {item.title} ({item.url})")
+
+    # Check 2: Closed issues still in non-terminal lifecycle
+    terminal_states = {"retired", "dead"}
+    done_states = {"deployed", "healthy", "retired", "dead"}
+    for item in board_items:
+        if item.lifecycle in done_states:
+            continue
+        if item.lifecycle == "unset":
+            continue
+        try:
+            repo_slug = item.repo
+            if not repo_slug:
+                continue
+            closed = gh.is_issue_closed(repo=repo_slug, number=item.number)
+            if closed and item.lifecycle not in terminal_states:
+                issues.append(
+                    f"Closed but lifecycle '{item.lifecycle}': "
+                    f"{item.title} ({item.url})"
+                )
+        except gh.GhError:
+            pass  # skip if we can't query
+
+    # Check 3: Completed plan phases marked 'deployed' instead of 'retired'
+    deployed_phases = [
+        i for i in board_items
+        if i.lifecycle == "deployed"
+        and any(
+            kw in i.title
+            for kw in ("-agentic", "-manual")
+        )
+    ]
+    for item in deployed_phases:
+        try:
+            closed = gh.is_issue_closed(repo=item.repo, number=item.number)
+            if closed:
+                issues.append(
+                    f"Completed phase still 'deployed' (should be 'retired'): "
+                    f"{item.title} ({item.url})"
+                )
+        except gh.GhError:
+            pass
+
+    # Check 4: Cross-reference tracking comments in plans with board state
+    plan_files = sorted(plans_dir.glob("*.md"))
+    board_url_map = {i.url: i for i in board_items}
+
+    for pf in plan_files:
+        tracking_urls = _extract_tracking_urls(pf)
+        for url in tracking_urls:
+            if url not in board_url_map:
+                issues.append(
+                    f"Tracked issue not on board: {url} (from {pf.name})"
+                )
+
+    # Check 5: Duplicate items (same title across repos)
+    seen_titles: dict[str, list[str]] = {}
+    for item in board_items:
+        # Normalize: strip phase suffixes for comparison
+        base_title = re.sub(r"-\d+-(?:agentic|manual)$", "", item.title)
+        seen_titles.setdefault(base_title, []).append(item.url)
+    for title, urls in seen_titles.items():
+        # Only flag if same base title appears in different repos
+        repos = {u.split("/issues/")[0] for u in urls}
+        if len(repos) > 1:
+            issues.append(
+                f"Possible duplicate across repos: '{title}' in {', '.join(repos)}"
+            )
+
+    return issues
+
+
 @progress_app.command()
 def audit(
     format_output: str = typer.Option("report", "--format", help="Output: report or json."),
@@ -286,6 +403,7 @@ def audit(
     plan_files = sorted(plans_dir.glob("*.md"))
     issues: list[str] = []
 
+    # Local checks (always run)
     for pf in plan_files:
         try:
             plan = parse_plan(pf)
@@ -313,10 +431,25 @@ def audit(
                             f"spec index says '{entry.status}'"
                         )
 
-    console.print(f"\n[bold]Audit Report[/bold] — {len(plan_files)} plans scanned\n")
+    # Dispatch-mode checks (board query, tracking cross-ref)
+    dispatch_issues: list[str] = []
+    if profile.dispatch_enabled:
+        dispatch_issues = _run_dispatch_audit(profile, plans_dir)
+
+    mode = "dispatch" if profile.dispatch_enabled else "local"
+    total_issues = issues + dispatch_issues
+
+    console.print(f"\n[bold]Audit Report[/bold] — {len(plan_files)} plans scanned (mode: {mode})\n")
+
     if issues:
-        console.print(f"[yellow]{len(issues)} issue(s) found:[/yellow]")
+        console.print(f"[bold]Local checks:[/bold] {len(issues)} issue(s)")
         for issue in issues:
             console.print(f"  - {issue}")
-    else:
+
+    if dispatch_issues:
+        console.print(f"\n[bold]Board checks:[/bold] {len(dispatch_issues)} issue(s)")
+        for issue in dispatch_issues:
+            console.print(f"  - {issue}")
+
+    if not total_issues:
         console.print("[green]No issues found.[/green]")
