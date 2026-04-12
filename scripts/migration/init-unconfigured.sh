@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run vk init for all repos without a plan-config.yaml.
+# Run uv run vk init for all repos without a plan-config.yaml.
 # Usage: init-unconfigured.sh <workspace-dir>
 
 set -euo pipefail
@@ -19,7 +19,7 @@ for dir in "$WORKSPACE"/*/; do
 
   if [ ! -f "$config" ]; then
     echo "--- Initializing: $repo"
-    (cd "$dir" && VK_REPO_ROOT="$dir" vk init)
+    (cd "$dir" && VK_REPO_ROOT="$dir" uv run vk init)
     (cd "$dir" && git add docs/superpowers/ && git commit -m "chore: add plan-config.yaml (local-only, no dispatch)" || true)
     count=$((count + 1))
   fi
