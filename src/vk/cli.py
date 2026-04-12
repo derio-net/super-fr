@@ -4,6 +4,8 @@ import typer
 
 from vk import __version__
 from vk.commands.dispatch_cmd import dispatch
+from vk.commands.execute_cmd import execute_app
+from vk.commands.plan_cmd import plan_app
 from vk.commands.progress_cmd import progress_app
 
 app = typer.Typer(
@@ -11,9 +13,6 @@ app = typer.Typer(
     help="VK toolchain: plans, dispatch, progress, execution.",
     no_args_is_help=True,
 )
-
-plan_app = typer.Typer(help="Write, save, and maintain plan files.")
-execute_app = typer.Typer(help="Helpers for phase/task execution.")
 
 app.add_typer(plan_app, name="plan")
 app.command(name="dispatch")(dispatch)
@@ -59,20 +58,3 @@ def install_skills(
     """Symlink SKILL.md files into ~/.claude/skills/."""
     typer.echo("vk install-skills: not yet implemented")
     raise typer.Exit(1)
-
-
-# Stub subcommands so --help works for each group
-
-
-@plan_app.callback(invoke_without_command=True)
-def plan_callback(ctx: typer.Context) -> None:
-    """Write, save, and maintain plan files."""
-    if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
-
-
-@execute_app.callback(invoke_without_command=True)
-def execute_callback(ctx: typer.Context) -> None:
-    """Helpers for phase/task execution."""
-    if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())

@@ -59,9 +59,12 @@ def test_install_skills_not_implemented():
     assert "not yet implemented" in result.stdout
 
 
-def test_plan_no_subcommand():
-    result = runner.invoke(app, ["plan"])
+def test_plan_shows_help():
+    result = runner.invoke(app, ["plan", "--help"])
     assert result.exit_code == 0
+    assert "new" in result.stdout
+    assert "self-review" in result.stdout
+    assert "convert" in result.stdout
 
 
 def test_dispatch_no_args_shows_usage():
@@ -69,7 +72,7 @@ def test_dispatch_no_args_shows_usage():
     assert result.exit_code == 2  # missing required PLAN_PATH argument
 
 
-def test_progress_help():
+def test_progress_help_detailed():
     result = runner.invoke(app, ["progress", "--help"])
     assert result.exit_code == 0
     assert "sync" in result.stdout
@@ -77,6 +80,9 @@ def test_progress_help():
     assert "audit" in result.stdout
 
 
-def test_execute_no_subcommand():
-    result = runner.invoke(app, ["execute"])
+def test_execute_help_detailed():
+    result = runner.invoke(app, ["execute", "--help"])
     assert result.exit_code == 0
+    assert "check-deps" in result.stdout
+    assert "scope" in result.stdout
+    assert "check-step" in result.stdout
