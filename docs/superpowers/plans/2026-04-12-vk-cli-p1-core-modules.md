@@ -24,7 +24,7 @@
 - Create: `tests/fixtures/configs/empty.yaml`
 - Create: `tests/fixtures/configs/dispatch-minimal.yaml`
 
-- [ ] **Step 1: Create all five config fixture files**
+- [x] **Step 1: Create all five config fixture files**
 
 Create `tests/fixtures/configs/dispatch-enabled.yaml`:
 
@@ -113,7 +113,7 @@ header:
 dispatch: {}
 ```
 
-- [ ] **Step 2: Commit fixture files**
+- [x] **Step 2: Commit fixture files**
 
 ```bash
 git add tests/fixtures/configs/
@@ -126,7 +126,7 @@ git commit -m "test: add config fixture files for dispatch gate truth table"
 - Create: `src/vk/config.py`
 - Create: `tests/unit/test_config.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_config.py`:
 
@@ -277,12 +277,12 @@ def test_empty_file_gives_defaults() -> None:
     assert profile.plan.filename == "YYYY-MM-DD-{name}.md"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_config.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.config'`
 
-- [ ] **Step 3: Implement src/vk/config.py**
+- [x] **Step 3: Implement src/vk/config.py**
 
 ```python
 """Configuration loader — reads plan-config.yaml and builds a Profile.
@@ -424,18 +424,18 @@ def load_profile(config_path: Path) -> Profile:
     )
 ```
 
-- [ ] **Step 4: Create src/vk/plan/__init__.py**
+- [x] **Step 4: Create src/vk/plan/__init__.py**
 
 ```python
 """Plan parsing, writing, and conversion."""
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_config.py -v`
 Expected: PASS — all 13 tests pass (format tests will fail until format.py exists; continue to next task)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/vk/config.py src/vk/plan/__init__.py tests/unit/test_config.py
@@ -448,7 +448,7 @@ git commit -m "feat: add config module with dispatch gate truth table"
 - Create: `src/vk/plan/format.py`
 - Create: `tests/unit/test_format.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_format.py`:
 
@@ -486,7 +486,7 @@ PHASED_MARKDOWN = """\
 
 ### Task 1: Create files
 
-- [ ] **Step 1: Do something**
+- [x] **Step 1: Do something**
 """
 
 FLAT_MARKDOWN = """\
@@ -499,7 +499,7 @@ FLAT_MARKDOWN = """\
 
 ### Task 1: Create files [agentic]
 
-- [ ] **Step 1: Do something**
+- [x] **Step 1: Do something**
 """
 
 NO_PLAN_MARKDOWN = """\
@@ -550,12 +550,12 @@ def test_detect_flat_task_only() -> None:
     assert detect(md) is PlanFormat.FLAT
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_format.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.format'`
 
-- [ ] **Step 3: Implement src/vk/plan/format.py**
+- [x] **Step 3: Implement src/vk/plan/format.py**
 
 ```python
 """Plan format enum and structural detection from markdown content."""
@@ -598,17 +598,17 @@ def detect(markdown: str) -> PlanFormat:
     raise ValueError(msg)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_format.py -v`
 Expected: PASS — all 7 tests pass
 
-- [ ] **Step 5: Re-run config tests to verify format integration**
+- [x] **Step 5: Re-run config tests to verify format integration**
 
 Run: `uv run pytest tests/unit/test_config.py tests/unit/test_format.py -v`
 Expected: PASS — all tests pass including format-derived-from-dispatch tests
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/vk/plan/format.py tests/unit/test_format.py
@@ -621,7 +621,7 @@ git commit -m "feat: add PlanFormat enum with structural detection from markdown
 - Create: `src/vk/plan/models.py`
 - Create: `tests/unit/test_models.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_models.py`:
 
@@ -790,12 +790,12 @@ def test_checkbox_state_values() -> None:
     assert len(states) == 3
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_models.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.models'`
 
-- [ ] **Step 3: Implement src/vk/plan/models.py**
+- [x] **Step 3: Implement src/vk/plan/models.py**
 
 ```python
 """Plan AST — frozen dataclasses for the plan document model.
@@ -873,12 +873,12 @@ class Plan:
         return tuple(t for p in self.phases for t in p.tasks)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_models.py -v`
 Expected: PASS — all 14 tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vk/plan/models.py tests/unit/test_models.py
@@ -891,7 +891,7 @@ git commit -m "feat: add plan AST models — Plan, Phase, Task, Step, CheckboxSt
 - Create: `src/vk/plan/filename.py`
 - Create: `tests/unit/test_filename.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_filename.py`:
 
@@ -959,12 +959,12 @@ def test_lstrip_triple_dash() -> None:
     assert derive_slug(Path("2026-04-12---foo.md")) == "foo"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_filename.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.filename'`
 
-- [ ] **Step 3: Implement src/vk/plan/filename.py**
+- [x] **Step 3: Implement src/vk/plan/filename.py**
 
 ```python
 """Filename slug derivation from plan file paths.
@@ -1000,29 +1000,29 @@ def derive_slug(plan_path: Path) -> str:
     return slug
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_filename.py -v`
 Expected: PASS — all 10 tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vk/plan/filename.py tests/unit/test_filename.py
 git commit -m "feat: add filename slug derivation with lstrip dash handling"
 ```
 
-- [ ] **Step 6: Run full test suite**
+- [x] **Step 6: Run full test suite**
 
 Run: `uv run pytest -v`
 Expected: PASS — all tests pass across config, format, models, filename, and existing tests
 
-- [ ] **Step 7: Run ruff and mypy**
+- [x] **Step 7: Run ruff and mypy**
 
 Run: `uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run mypy src/`
 Expected: PASS — no lint, format, or type errors. Fix any issues before proceeding.
 
-- [ ] **Step 8: Commit any lint/type fixes if needed**
+- [x] **Step 8: Commit any lint/type fixes if needed**
 
 ```bash
 git add -u
@@ -1043,7 +1043,7 @@ git commit -m "fix: resolve lint and type errors in Phase 1 modules"
 - Create: `tests/fixtures/plans/flat-mixed-tags.md`
 - Create: `tests/fixtures/plans/not-a-plan.md`
 
-- [ ] **Step 1: Create phased-small.md fixture**
+- [x] **Step 1: Create phased-small.md fixture**
 
 Create `tests/fixtures/plans/phased-small.md`:
 
@@ -1065,15 +1065,15 @@ Create `tests/fixtures/plans/phased-small.md`:
 - Create: `src/main.py`
 - Test: `tests/test_main.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_main.py` with a basic import test.
 
-- [ ] **Step 2: Implement src/main.py**
+- [x] **Step 2: Implement src/main.py**
 
 Create the main module with a hello function.
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `uv run pytest -v`
 
@@ -1081,7 +1081,7 @@ Run: `uv run pytest -v`
 
 ### Task 1: Write README
 
-- [ ] **Step 1: Create README.md**
+- [x] **Step 1: Create README.md**
 
 Write the project README with usage instructions.
 
@@ -1090,7 +1090,7 @@ Write the project README with usage instructions.
 Verify all sections are complete.
 ```
 
-- [ ] **Step 2: Create phased-large.md fixture**
+- [x] **Step 2: Create phased-large.md fixture**
 
 Create `tests/fixtures/plans/phased-large.md`:
 
@@ -1112,7 +1112,7 @@ Create `tests/fixtures/plans/phased-large.md`:
 - Create: `migrations/001_init.sql`
 - Test: `tests/test_schema.py`
 
-- [ ] **Step 1: Write schema test**
+- [x] **Step 1: Write schema test**
 
 Create `tests/test_schema.py` with table existence checks.
 
@@ -1130,11 +1130,11 @@ Apply and verify.
 - Create: `src/config.py`
 - Test: `tests/test_config.py`
 
-- [ ] **Step 1: Write config tests**
+- [x] **Step 1: Write config tests**
 
 Test YAML loading with defaults.
 
-- [ ] **Step 2: Implement config module**
+- [x] **Step 2: Implement config module**
 
 Build the config loader.
 
@@ -1146,11 +1146,11 @@ Build the config loader.
 - Create: `src/api.py`
 - Test: `tests/test_api.py`
 
-- [ ] **Step 1: Write API tests**
+- [x] **Step 1: Write API tests**
 
 Test endpoint responses.
 
-- [ ] **Step 2: Implement endpoints**
+- [x] **Step 2: Implement endpoints**
 
 Build the REST handlers.
 
@@ -1160,11 +1160,11 @@ Build the REST handlers.
 - Create: `src/auth.py`
 - Test: `tests/test_auth.py`
 
-- [ ] **Step 1: Write auth tests**
+- [x] **Step 1: Write auth tests**
 
 Test token validation.
 
-- [ ] **Step 2: Implement auth middleware**
+- [x] **Step 2: Implement auth middleware**
 
 Build the authentication layer.
 
@@ -1172,16 +1172,16 @@ Build the authentication layer.
 
 ### Task 1: CI/CD pipeline
 
-- [ ] **Step 1: Create workflow file**
+- [x] **Step 1: Create workflow file**
 
 Write `.github/workflows/deploy.yml`.
 
-- [ ] **Step 2: Configure secrets**
+- [x] **Step 2: Configure secrets**
 
 Set up repository secrets for deployment.
 ```
 
-- [ ] **Step 3: Create phased-dispatched.md fixture**
+- [x] **Step 3: Create phased-dispatched.md fixture**
 
 Create `tests/fixtures/plans/phased-dispatched.md`:
 
@@ -1223,11 +1223,11 @@ Stage and commit all files.
 
 ### Task 1: Wire up components
 
-- [ ] **Step 1: Integration tests**
+- [x] **Step 1: Integration tests**
 
 Write integration test suite.
 
-- [ ] **Step 2: Connect modules**
+- [x] **Step 2: Connect modules**
 
 Wire the modules together.
 
@@ -1235,12 +1235,12 @@ Wire the modules together.
 
 ### Task 1: Version bump
 
-- [ ] **Step 1: Update version**
+- [x] **Step 1: Update version**
 
 Bump version in pyproject.toml.
 ```
 
-- [ ] **Step 4: Create flat-small.md fixture**
+- [x] **Step 4: Create flat-small.md fixture**
 
 Create `tests/fixtures/plans/flat-small.md`:
 
@@ -1260,21 +1260,21 @@ Create `tests/fixtures/plans/flat-small.md`:
 - Create: `migrations/001_create_table.sql`
 - Test: `tests/test_schema.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create schema validation tests.
 
-- [ ] **Step 2: Create migration**
+- [x] **Step 2: Create migration**
 
 Write the SQL migration.
 
 ### Task 2: Configure DNS records [manual]
 
-- [ ] **Step 1: Log in to Cloudflare dashboard**
+- [x] **Step 1: Log in to Cloudflare dashboard**
 
 URL: https://dash.cloudflare.com/
 
-- [ ] **Step 2: Add A record**
+- [x] **Step 2: Add A record**
 
 Point domain to server IP.
 
@@ -1284,16 +1284,16 @@ Point domain to server IP.
 - Create: `src/api.py`
 - Test: `tests/test_api.py`
 
-- [ ] **Step 1: Write API tests**
+- [x] **Step 1: Write API tests**
 
 Test the endpoint responses.
 
-- [ ] **Step 2: Implement handler**
+- [x] **Step 2: Implement handler**
 
 Build the request handler.
 ```
 
-- [ ] **Step 5: Create flat-mixed-tags.md fixture**
+- [x] **Step 5: Create flat-mixed-tags.md fixture**
 
 Create `tests/fixtures/plans/flat-mixed-tags.md`:
 
@@ -1314,29 +1314,29 @@ Set up the project layout.
 
 ### Task 2: Order hardware [manual]
 
-- [ ] **Step 1: Submit purchase order**
+- [x] **Step 1: Submit purchase order**
 
 File the PO with procurement.
 
-- [ ] **Step 2: Verify delivery**
+- [x] **Step 2: Verify delivery**
 
 Confirm hardware arrives.
 
 ### Task 3: Write firmware [agentic]
 
-- [ ] **Step 1: Implement bootloader**
+- [x] **Step 1: Implement bootloader**
 
 Write the initial bootloader code.
 
 ### Task 4: Install hardware [manual]
 
-- [ ] **Step 1: Rack the server**
+- [x] **Step 1: Rack the server**
 
 Mount in rack position U12.
 
 ### Task 5: Deploy software [agentic]
 
-- [ ] **Step 1: Build and push image**
+- [x] **Step 1: Build and push image**
 
 Build the container and push to registry.
 
@@ -1345,7 +1345,7 @@ Build the container and push to registry.
 Verify basic functionality.
 ```
 
-- [ ] **Step 6: Create not-a-plan.md fixture**
+- [x] **Step 6: Create not-a-plan.md fixture**
 
 Create `tests/fixtures/plans/not-a-plan.md`:
 
@@ -1367,7 +1367,7 @@ We talked about the architecture.
 - Bob will set up the repo.
 ```
 
-- [ ] **Step 7: Commit all plan fixtures**
+- [x] **Step 7: Commit all plan fixtures**
 
 ```bash
 git add tests/fixtures/plans/
@@ -1380,7 +1380,7 @@ git commit -m "test: add plan fixture files for parser and writer tests"
 - Create: `src/vk/plan/parser.py`
 - Create: `tests/unit/test_plan_parser.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_plan_parser.py`:
 
@@ -1566,12 +1566,12 @@ def test_missing_file_raises() -> None:
         parse_plan(Path("/nonexistent/path/plan.md"))
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_plan_parser.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.parser'`
 
-- [ ] **Step 3: Implement src/vk/plan/parser.py**
+- [x] **Step 3: Implement src/vk/plan/parser.py**
 
 ```python
 """Plan parser — regex-driven, supports both flat and phased formats.
@@ -1749,17 +1749,17 @@ def _parse_files(text: str) -> list[str]:
     return [m.group(1) for m in _RE_FILE_MENTION.finditer(text)]
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_plan_parser.py -v`
 Expected: PASS — all tests pass
 
-- [ ] **Step 5: Run ruff and mypy on new code**
+- [x] **Step 5: Run ruff and mypy on new code**
 
 Run: `uv run ruff check src/vk/plan/parser.py tests/unit/test_plan_parser.py && uv run mypy src/vk/plan/parser.py`
 Expected: PASS — no lint or type errors. Fix any issues.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/vk/plan/parser.py tests/unit/test_plan_parser.py
@@ -1772,7 +1772,7 @@ git commit -m "feat: add regex-driven plan parser for flat and phased formats"
 - Create: `src/vk/plan/writer.py`
 - Create: `tests/unit/test_plan_writer.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_plan_writer.py`:
 
@@ -1865,7 +1865,7 @@ def test_write_flat_plan(tmp_path: Path) -> None:
     assert "**Goal:** Test writing." in text
     assert "### Task 1: Setup [agentic]" in text
     assert "### Task 2: Deploy [manual]" in text
-    assert "- [ ] **Step 1: Write test**" in text
+    assert "- [x] **Step 1: Write test**" in text
     assert "- [x] **Step 2: Implement**" in text
     assert "- Create: `a.py`" in text
 
@@ -1923,12 +1923,12 @@ def test_write_skipped_step(tmp_path: Path) -> None:
     assert "- [-] **Step 1: Skip me**" in text
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_plan_writer.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.writer'`
 
-- [ ] **Step 3: Implement src/vk/plan/writer.py**
+- [x] **Step 3: Implement src/vk/plan/writer.py**
 
 ```python
 """Plan writer — renders a Plan AST back to markdown.
@@ -2011,12 +2011,12 @@ def _write_steps(lines: list[str], steps: tuple[Step, ...]) -> None:
         lines.append("")
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_plan_writer.py -v`
 Expected: PASS — all tests pass. If round-trip tests fail, adjust the writer to match the parser's expectations (e.g., blank line placement, file mention format).
 
-- [ ] **Step 5: Debug and fix round-trip mismatches**
+- [x] **Step 5: Debug and fix round-trip mismatches**
 
 If any round-trip tests fail, compare the written output to the original fixture and adjust the writer. Common issues:
 - Extra or missing blank lines between sections
@@ -2025,7 +2025,7 @@ If any round-trip tests fail, compare the written output to the original fixture
 
 Run: `uv run pytest tests/unit/test_plan_writer.py -v` until all tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/vk/plan/writer.py tests/unit/test_plan_writer.py
@@ -2038,7 +2038,7 @@ git commit -m "feat: add plan writer with round-trip parse-write-parse fidelity"
 - Create: `tests/fixtures/specs/spec-with-index.md`
 - Create: `tests/fixtures/specs/spec-without-index.md`
 
-- [ ] **Step 1: Create spec-with-index.md fixture**
+- [x] **Step 1: Create spec-with-index.md fixture**
 
 Create `tests/fixtures/specs/spec-with-index.md`:
 
@@ -2061,7 +2061,7 @@ Some design content here.
 | P1: Core | superpowers-for-vk | `docs/superpowers/plans/2026-04-12-core.md` | In Progress | P0 |
 ```
 
-- [ ] **Step 2: Create spec-without-index.md fixture**
+- [x] **Step 2: Create spec-without-index.md fixture**
 
 Create `tests/fixtures/specs/spec-without-index.md`:
 
@@ -2081,19 +2081,19 @@ Design details here.
 How to test the feature.
 ```
 
-- [ ] **Step 3: Commit spec fixtures**
+- [x] **Step 3: Commit spec fixtures**
 
 ```bash
 git add tests/fixtures/specs/
 git commit -m "test: add spec fixture files for spec_index tests"
 ```
 
-- [ ] **Step 4: Run full test suite and quality gates**
+- [x] **Step 4: Run full test suite and quality gates**
 
 Run: `uv run pytest -v && uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run mypy src/`
 Expected: PASS — all tests pass, no lint/format/type errors.
 
-- [ ] **Step 5: Commit any fixes**
+- [x] **Step 5: Commit any fixes**
 
 ```bash
 git add -u
@@ -2110,7 +2110,7 @@ git commit -m "fix: resolve lint and type errors in Phase 2 modules"
 - Create: `src/vk/plan/convert.py`
 - Create: `tests/unit/test_plan_convert.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_plan_convert.py`:
 
@@ -2328,12 +2328,12 @@ def test_round_trip_phased_flat_phased() -> None:
         assert len(orig.steps) == len(converted.steps)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_plan_convert.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.convert'`
 
-- [ ] **Step 3: Implement src/vk/plan/convert.py**
+- [x] **Step 3: Implement src/vk/plan/convert.py**
 
 ```python
 """Plan format converter — flat <-> phased conversions.
@@ -2536,12 +2536,12 @@ def _renumber_tasks(tasks: tuple[Task, ...]) -> tuple[Task, ...]:
     )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_plan_convert.py -v`
 Expected: PASS — all tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vk/plan/convert.py tests/unit/test_plan_convert.py
@@ -2554,7 +2554,7 @@ git commit -m "feat: add plan converter with four flat/phased conversion modes"
 - Create: `src/vk/spec_index.py`
 - Create: `tests/unit/test_spec_index.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_spec_index.py`:
 
@@ -2669,12 +2669,12 @@ def test_upsert_idempotent(tmp_path: Path) -> None:
     assert len(entries) == 1
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_spec_index.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.spec_index'`
 
-- [ ] **Step 3: Implement src/vk/spec_index.py**
+- [x] **Step 3: Implement src/vk/spec_index.py**
 
 ```python
 """Spec index — read/create/update the Implementation Plans markdown table.
@@ -2804,12 +2804,12 @@ def _build_table(entries: list[IndexEntry]) -> str:
     return "\n".join(lines)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_spec_index.py -v`
 Expected: PASS — all tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vk/spec_index.py tests/unit/test_spec_index.py
@@ -2822,7 +2822,7 @@ git commit -m "feat: add spec_index module for Implementation Plans table manage
 - Create: `src/vk/git.py`
 - Create: `tests/unit/test_git.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_git.py`:
 
@@ -2888,12 +2888,12 @@ class TestRunGitError:
                 repo_root()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_git.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.git'`
 
-- [ ] **Step 3: Implement src/vk/git.py**
+- [x] **Step 3: Implement src/vk/git.py**
 
 ```python
 """Git subprocess wrappers.
@@ -2941,12 +2941,12 @@ def status(cwd: Path | None = None) -> str:
     return _run_git(["status", "--porcelain"], cwd=cwd)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_git.py -v`
 Expected: PASS — all tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vk/git.py tests/unit/test_git.py
@@ -2959,7 +2959,7 @@ git commit -m "feat: add git subprocess wrappers — repo_root, add, commit, sta
 - Create: `src/vk/gh.py`
 - Create: `tests/unit/test_gh.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_gh.py`:
 
@@ -3089,12 +3089,12 @@ class TestRunGhError:
                 create_issue(repo="org/repo", title="T", body="B", labels=[])
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_gh.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.gh'`
 
-- [ ] **Step 3: Implement src/vk/gh.py**
+- [x] **Step 3: Implement src/vk/gh.py**
 
 ```python
 """GitHub CLI subprocess wrappers.
@@ -3192,12 +3192,12 @@ def auth_status() -> bool:
         return False
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_gh.py -v`
 Expected: PASS — all tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/vk/gh.py tests/unit/test_gh.py
@@ -3209,22 +3209,22 @@ git commit -m "feat: add gh CLI subprocess wrappers — issues, projects, auth"
 **Files:**
 - No new files — validation only
 
-- [ ] **Step 1: Run full test suite with coverage**
+- [x] **Step 1: Run full test suite with coverage**
 
 Run: `uv run pytest -v --cov=vk --cov-report=term-missing`
 Expected: PASS — all tests pass, coverage >=85% on `src/vk/`
 
-- [ ] **Step 2: Run ruff lint and format check**
+- [x] **Step 2: Run ruff lint and format check**
 
 Run: `uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/`
 Expected: PASS — no lint or format errors. If there are errors, fix them.
 
-- [ ] **Step 3: Run mypy strict type checking**
+- [x] **Step 3: Run mypy strict type checking**
 
 Run: `uv run mypy src/`
 Expected: PASS — no type errors. If there are errors, fix them.
 
-- [ ] **Step 4: Fix any lint, format, or type errors**
+- [x] **Step 4: Fix any lint, format, or type errors**
 
 Address all issues found in steps 1-3. Common fixes:
 - Add missing type annotations
@@ -3232,7 +3232,7 @@ Address all issues found in steps 1-3. Common fixes:
 - Add `from __future__ import annotations` where needed
 - Fix line length violations
 
-- [ ] **Step 5: Commit fixes and verify clean**
+- [x] **Step 5: Commit fixes and verify clean**
 
 ```bash
 git add -u
