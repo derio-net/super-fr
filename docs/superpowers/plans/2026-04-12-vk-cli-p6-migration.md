@@ -7,9 +7,15 @@
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
 **Status:** Not Started
 
-**Goal:** Verify every HOMELAB repo has a valid `plan-config.yaml` under the new fail-closed gate, existing plans still parse, and the `vk` CLI is installed and working.
-**Architecture:** Operator runbook — no code, all manual verification and configuration steps.
-**Tech Stack:** vk CLI, gh CLI, git, shell
+**Goal:** Verify every workspace repo has a valid `plan-config.yaml` under the new fail-closed gate, existing plans still parse, and the `vk` CLI is installed and working.
+**Architecture:** Operator runbook backed by parameterized shell scripts in `scripts/migration/`. All scripts take the workspace directory as a required positional argument — no hardcoded paths.
+**Tech Stack:** vk CLI, gh CLI, git, bash
+
+**Scripts:**
+- `scripts/migration/audit-repos.sh <workspace-dir>` — categorize repos by config state
+- `scripts/migration/init-unconfigured.sh <workspace-dir>` — run `vk init` + commit for unconfigured repos
+- `scripts/migration/find-phased-local.sh <workspace-dir>` — find phased plans in local-only repos
+- `scripts/migration/smoke-test.sh <workspace-dir> <dispatch-repo> <local-repo>` — CLI + gate smoke test
 
 ---
 
@@ -17,25 +23,10 @@
 
 ### Task 1: Audit existing repos
 
-- [ ] **Step 1: List all repos with superpowers config**
-
-Run:
+- [ ] **Step 1: Run the audit script**
 
 ```bash
-for dir in ~/Docs/projects/HOMELAB/*/; do
-  repo=$(basename "$dir")
-  config="$dir/docs/superpowers/plan-config.yaml"
-  if [ -f "$config" ]; then
-    has_dispatch=$(grep -c '^dispatch:' "$config" 2>/dev/null || echo 0)
-    if [ "$has_dispatch" -gt 0 ]; then
-      echo "$repo: HAS dispatch block"
-    else
-      echo "$repo: NO dispatch block (local-only)"
-    fi
-  else
-    echo "$repo: NO plan-config.yaml"
-  fi
-done
+./scripts/migration/audit-repos.sh /path/to/workspace
 ```
 
 Expected: A list of repos categorized into three groups:
@@ -52,34 +43,32 @@ Create a checklist of repos and their current state. Note which repos need:
 
 ### Task 2: Configure unconfigured repos
 
-- [ ] **Step 1: Run vk init for each unconfigured repo**
-
-For each repo with NO `plan-config.yaml`:
+- [ ] **Step 1: Run the init script**
 
 ```bash
-cd ~/Docs/projects/HOMELAB/<repo>
-vk init
+./scripts/migration/init-unconfigured.sh /path/to/workspace
 ```
 
-Expected: Creates `docs/superpowers/plan-config.yaml` with no dispatch block (fail-closed), creates `docs/superpowers/{specs,plans,archived-plans}/` directories.
+Expected: For each repo without a `plan-config.yaml`, creates a local-only config, `docs/superpowers/{specs,plans,archived-plans}/` directories, and commits.
 
-Verify: `cat docs/superpowers/plan-config.yaml` — should have `plan:` and `header:` sections, no `dispatch:` block.
+- [ ] **Step 2: Verify the created configs**
 
-- [ ] **Step 2: Commit the new config in each repo**
+Spot-check a few repos:
 
 ```bash
-git add docs/superpowers/
-git commit -m "chore: add plan-config.yaml (local-only, no dispatch)"
+cat /path/to/workspace/<repo>/docs/superpowers/plan-config.yaml
 ```
+
+Should have `plan:` and `header:` sections, no `dispatch:` block.
 
 ### Task 3: Verify dispatch-enabled repos
 
 - [ ] **Step 1: Check dispatch config fields**
 
-For each repo that HAS a `dispatch:` block:
+For each repo that HAS a `dispatch:` block (identified in Task 1):
 
 ```bash
-cd ~/Docs/projects/HOMELAB/<repo>
+cd /path/to/workspace/<repo>
 vk dispatch --dry-run docs/superpowers/plans/<any-existing-plan>.md
 ```
 
@@ -94,21 +83,15 @@ If fields are missing, add them to `plan-config.yaml`:
 
 ### Task 4: Test plan conversion for local-only repos
 
-- [ ] **Step 1: Identify phased plans in local-only repos**
+- [ ] **Step 1: Find phased plans in local-only repos**
 
 ```bash
-for dir in ~/Docs/projects/HOMELAB/*/; do
-  config="$dir/docs/superpowers/plan-config.yaml"
-  if [ -f "$config" ] && ! grep -q '^dispatch:' "$config"; then
-    # Local-only repo — check for phased plans
-    grep -rl '^## Phase ' "$dir/docs/superpowers/plans/" 2>/dev/null | while read plan; do
-      echo "LOCAL-ONLY phased plan: $plan"
-    done
-  fi
-done
+./scripts/migration/find-phased-local.sh /path/to/workspace
 ```
 
-- [ ] **Step 2: Dry-run conversion for each phased plan in local-only repos**
+- [ ] **Step 2: Dry-run conversion for each identified plan**
+
+For each plan listed by the script:
 
 ```bash
 vk plan convert <plan-path> --to flat --dry-run
@@ -146,59 +129,27 @@ Verify:
 
 ```bash
 ls -la ~/.claude/skills/vk-*
-cat ~/.claude/skills/vk-dispatch/SKILL.md | head -5
+head -5 ~/.claude/skills/vk-dispatch/SKILL.md
 ```
 
 Expected: First line is `---` (YAML frontmatter), file is under 80 lines.
 
 ### Task 6: Smoke test
 
-- [ ] **Step 1: Verify CLI basics**
+- [ ] **Step 1: Run the smoke test script**
 
 ```bash
-vk --version
-vk --help
-vk plan --help
-vk dispatch --help
-vk progress --help
-vk execute --help
+./scripts/migration/smoke-test.sh /path/to/workspace superpowers-for-vk kid-laptops
 ```
 
-Expected: All commands print help text, no errors.
+Expected: All CLI help commands pass, dispatch dry-run works in dispatch-enabled repo, progress board works in local repo, dispatch gate refuses in local repo.
 
-- [ ] **Step 2: Smoke test dispatch in a dispatch-enabled repo**
-
-```bash
-cd ~/Docs/projects/HOMELAB/superpowers-for-vk
-vk dispatch docs/superpowers/plans/<existing-plan>.md --dry-run
-```
-
-Expected: Valid dry-run output showing phases, target repo, project board.
-
-- [ ] **Step 3: Smoke test local mode in a local-only repo**
-
-```bash
-cd ~/Docs/projects/HOMELAB/kid-laptops
-vk progress board
-```
-
-Expected: Local plan status table (or "no plans found" if no plans exist).
-
-- [ ] **Step 4: Verify dispatch gate refuses in local-only repo**
-
-```bash
-cd ~/Docs/projects/HOMELAB/kid-laptops
-vk dispatch docs/superpowers/plans/<any-plan>.md --dry-run
-```
-
-Expected: Exit code 1, message: "Dispatch unavailable — no `dispatch:` block in `docs/superpowers/plan-config.yaml` for this repo."
-
-### Task 7: Verify CI
+### Task 7: Verify CI and re-enable dispatch
 
 - [ ] **Step 1: Push and verify CI in superpowers-for-vk**
 
 ```bash
-cd ~/Docs/projects/HOMELAB/superpowers-for-vk
+cd /path/to/workspace/superpowers-for-vk
 git push origin main
 ```
 
