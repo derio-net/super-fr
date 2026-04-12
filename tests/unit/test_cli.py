@@ -69,9 +69,12 @@ def test_dispatch_no_args_shows_usage():
     assert result.exit_code == 2  # missing required PLAN_PATH argument
 
 
-def test_progress_no_subcommand():
-    result = runner.invoke(app, ["progress"])
+def test_progress_help():
+    result = runner.invoke(app, ["progress", "--help"])
     assert result.exit_code == 0
+    assert "sync" in result.stdout
+    assert "board" in result.stdout
+    assert "audit" in result.stdout
 
 
 def test_execute_no_subcommand():

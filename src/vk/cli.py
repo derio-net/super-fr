@@ -4,6 +4,7 @@ import typer
 
 from vk import __version__
 from vk.commands.dispatch_cmd import dispatch
+from vk.commands.progress_cmd import progress_app
 
 app = typer.Typer(
     name="vk",
@@ -12,8 +13,6 @@ app = typer.Typer(
 )
 
 plan_app = typer.Typer(help="Write, save, and maintain plan files.")
-dispatch_app = typer.Typer(help="Dispatch a phased plan to GitHub Issues.")
-progress_app = typer.Typer(help="Track work lifecycle.")
 execute_app = typer.Typer(help="Helpers for phase/task execution.")
 
 app.add_typer(plan_app, name="plan")
@@ -68,13 +67,6 @@ def install_skills(
 @plan_app.callback(invoke_without_command=True)
 def plan_callback(ctx: typer.Context) -> None:
     """Write, save, and maintain plan files."""
-    if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
-
-
-@progress_app.callback(invoke_without_command=True)
-def progress_callback(ctx: typer.Context) -> None:
-    """Track work lifecycle."""
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 

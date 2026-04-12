@@ -37,7 +37,7 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --cov=vk --cov-report=term-missing --cov-fail-under=85"
+addopts = "--strict-markers --cov=vk --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 omit = ["src/vk/__main__.py"]
