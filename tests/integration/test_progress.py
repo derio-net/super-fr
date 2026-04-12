@@ -124,27 +124,39 @@ class TestProgressBoard:
 
 
 class TestProgressCreate:
-    def test_create_refused_in_local_mode(self, local_repo_with_plan: Path) -> None:
-        import os
-
+    def test_create_refused_in_local_mode(
+        self, local_repo_with_plan: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "vk.commands.progress_cmd._find_repo_root", lambda _: local_repo_with_plan
+        )
         result = runner.invoke(
             app,
             ["progress", "create", "New Bug", "--type", "bug"],
-            env={**os.environ, "GIT_DIR": str(local_repo_with_plan / ".git")},
         )
         assert result.exit_code == 1
         assert "dispatch" in result.stdout.lower() or "dispatch" in (result.stderr or "").lower()
 
 
 class TestProgressTransition:
-    def test_transition_local_updates_status(self, local_repo_with_plan: Path) -> None:
+    def test_transition_local_updates_status(
+        self, local_repo_with_plan: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "vk.commands.progress_cmd._find_repo_root", lambda _: local_repo_with_plan
+        )
         plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test-feature.md"
         result = runner.invoke(app, ["progress", "transition", str(plan), "Complete", "--yes"])
         assert result.exit_code == 0
         content = plan.read_text()
         assert "**Status:** Complete" in content
 
-    def test_transition_invalid_status(self, local_repo_with_plan: Path) -> None:
+    def test_transition_invalid_status(
+        self, local_repo_with_plan: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "vk.commands.progress_cmd._find_repo_root", lambda _: local_repo_with_plan
+        )
         plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test-feature.md"
         result = runner.invoke(app, ["progress", "transition", str(plan), "Invalid", "--yes"])
         assert result.exit_code == 2
