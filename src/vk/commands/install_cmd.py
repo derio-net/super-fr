@@ -30,6 +30,20 @@ def _find_skills_dir() -> Path:
     return skills_dir
 
 
+def _clean_marketplace_skills(skills_src: Path) -> None:
+    """Remove vk-* skills from the plugin marketplace to avoid duplicates."""
+    marketplace_dir = Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net" / "skills"
+    if not marketplace_dir.exists():
+        return
+    for skill_dir in sorted(skills_src.iterdir()):
+        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+            continue
+        stale = marketplace_dir / skill_dir.name
+        if stale.exists():
+            shutil.rmtree(stale)
+            typer.echo(f"  removed marketplace duplicate: {stale}")
+
+
 def install_skills(
     copy: bool = typer.Option(False, "--copy", help="Copy instead of symlink."),
 ) -> None:
@@ -37,6 +51,8 @@ def install_skills(
     skills_src = _find_skills_dir()
     claude_skills = Path.home() / ".claude" / "skills"
     claude_skills.mkdir(parents=True, exist_ok=True)
+
+    _clean_marketplace_skills(skills_src)
 
     count = 0
     for skill_dir in sorted(skills_src.iterdir()):

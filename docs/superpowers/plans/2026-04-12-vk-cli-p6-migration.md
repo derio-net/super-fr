@@ -104,13 +104,17 @@ Review the dry-run output. For each plan, decide:
 
 ### Task 5: Replace old SKILL.md files
 
-- [ ] **Step 1: Remove old skill files**
+- [ ] **Step 1: Remove old skill files and marketplace duplicates**
 
 ```bash
 rm -rf ~/.claude/skills/vk-plan
 rm -rf ~/.claude/skills/vk-dispatch
 rm -rf ~/.claude/skills/vk-progress
 rm -rf ~/.claude/skills/vk-execute
+rm -rf ~/.claude/plugins/marketplaces/derio-net/skills/vk-plan
+rm -rf ~/.claude/plugins/marketplaces/derio-net/skills/vk-dispatch
+rm -rf ~/.claude/plugins/marketplaces/derio-net/skills/vk-progress
+rm -rf ~/.claude/plugins/marketplaces/derio-net/skills/vk-execute
 ```
 
 - [ ] **Step 2: Install new skills via CLI**
@@ -118,6 +122,8 @@ rm -rf ~/.claude/skills/vk-execute
 ```bash
 vk install-skills
 ```
+
+This also removes any remaining marketplace duplicates automatically.
 
 Expected: Symlinks created:
 - `~/.claude/skills/vk-plan -> <repo>/skills/vk-plan`
@@ -132,7 +138,7 @@ ls -la ~/.claude/skills/vk-*
 head -5 ~/.claude/skills/vk-dispatch/SKILL.md
 ```
 
-Expected: First line is `---` (YAML frontmatter), file is under 80 lines.
+Expected: First line is `---` (YAML frontmatter), file is under 80 lines. No vk-* entries in `~/.claude/plugins/marketplaces/derio-net/skills/`.
 
 ### Task 6: Smoke test
 
