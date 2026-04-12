@@ -47,16 +47,17 @@ def test_init_help():
     assert result.exit_code == 0
 
 
-def test_init_not_implemented():
-    result = runner.invoke(app, ["init"])
-    assert result.exit_code == 1
-    assert "not yet implemented" in result.stdout
+def test_init_creates_config():
+    result = runner.invoke(app, ["init", "--help"])
+    assert result.exit_code == 0
+    assert "dispatch" in result.stdout
+    assert "force" in result.stdout
 
 
-def test_install_skills_not_implemented():
-    result = runner.invoke(app, ["install-skills"])
-    assert result.exit_code == 1
-    assert "not yet implemented" in result.stdout
+def test_install_skills_help():
+    result = runner.invoke(app, ["install-skills", "--help"])
+    assert result.exit_code == 0
+    assert "copy" in result.stdout
 
 
 def test_plan_shows_help():
