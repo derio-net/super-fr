@@ -117,10 +117,11 @@ rm -rf ~/.claude/plugins/marketplaces/derio-net/skills/vk-progress
 rm -rf ~/.claude/plugins/marketplaces/derio-net/skills/vk-execute
 ```
 
-- [ ] **Step 2: Install new skills via CLI**
+- [ ] **Step 2: Install vk CLI globally and reinstall skills**
 
 ```bash
-vk install-skills
+uv tool install ~/repos/superpowers-for-vk    # global CLI — no repo venv dependency
+vk install-skills                              # symlinks skills + cleans marketplace dupes
 ```
 
 This also removes any remaining marketplace duplicates automatically.
@@ -134,11 +135,12 @@ Expected: Symlinks created:
 Verify:
 
 ```bash
+which vk && vk --version
 ls -la ~/.claude/skills/vk-*
 head -5 ~/.claude/skills/vk-dispatch/SKILL.md
 ```
 
-Expected: First line is `---` (YAML frontmatter), file is under 80 lines. No vk-* entries in `~/.claude/plugins/marketplaces/derio-net/skills/`.
+Expected: `vk` on PATH, first line is `---` (YAML frontmatter), file is under 80 lines. No vk-* entries in `~/.claude/plugins/marketplaces/derio-net/skills/`.
 
 ### Task 6: Smoke test
 

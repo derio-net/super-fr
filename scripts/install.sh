@@ -58,7 +58,30 @@ HOOK
   fi
 fi
 
+# Install vk CLI globally via uv tool
+if command -v uv &>/dev/null; then
+  echo ""
+  echo "Installing vk CLI globally..."
+  uv tool install "$PLUGIN_ROOT" 2>&1 | sed 's/^/  /'
+else
+  echo ""
+  echo "  WARNING: uv not found — install vk CLI manually:"
+  echo "    uv tool install $PLUGIN_ROOT"
+fi
+
+# Clean marketplace duplicates (if plugin was previously installed via marketplace)
+MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/derio-net/skills"
+if [ -d "$MARKETPLACE_DIR" ]; then
+  for skill in "${SKILL_NAMES[@]}"; do
+    if [ -d "$MARKETPLACE_DIR/$skill" ]; then
+      rm -rf "$MARKETPLACE_DIR/$skill"
+      echo "  Removed marketplace duplicate: $MARKETPLACE_DIR/$skill"
+    fi
+  done
+fi
+
 echo ""
 echo "Installation complete. Verify with:"
 echo "  ls ~/.claude/skills/vk-*/"
 echo "  cat ~/.claude/rules/vk-plan-override.md"
+echo "  vk --version"

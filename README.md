@@ -32,7 +32,15 @@ Add to `~/.claude/settings.json`:
 ```bash
 git clone https://github.com/derio-net/superpowers-for-vk
 cd superpowers-for-vk
-./scripts/install.sh
+./scripts/install.sh   # installs skills + rules + vk CLI (via uv tool)
+```
+
+### vk CLI only
+
+If skills are already installed via plugin but you need the CLI:
+
+```bash
+uv tool install path/to/superpowers-for-vk   # or: uv tool install git+https://github.com/derio-net/superpowers-for-vk
 ```
 
 ## Per-Repo Profile
