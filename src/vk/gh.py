@@ -1,24 +1,42 @@
 """GitHub CLI subprocess wrappers.
 
 Thin wrappers around ``gh`` commands used by the vk toolchain.
-All functions (except auth_status) raise subprocess.CalledProcessError
-on failure.  No direct GitHub API usage — we leverage gh's existing auth.
+Functions raise GhError on failure.  No direct GitHub API usage —
+we leverage gh's existing auth.
 """
 
 from __future__ import annotations
 
+import re
 import subprocess
 
 
+class GhError(Exception):
+    """Error from a gh CLI invocation."""
+
+
 def _run_gh(args: list[str]) -> str:
-    """Run a gh command and return stdout."""
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    """Run a gh command and return stdout.  Raises GhError on failure."""
+    try:
+        result = subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
+        raise GhError(msg) from exc
     return result.stdout.strip()
+
+
+def extract_issue_number(url: str) -> int:
+    """Extract the issue number from a GitHub Issue URL."""
+    m = re.search(r"/issues/(\d+)", url)
+    if not m:
+        msg = f"Cannot extract issue number from URL: {url}"
+        raise GhError(msg)
+    return int(m.group(1))
 
 
 def create_issue(
@@ -106,11 +124,137 @@ def set_field(
     )
 
 
+def edit_issue_labels(
+    *,
+    repo: str,
+    issue_number: int,
+    add_labels: list[str],
+) -> None:
+    """Add labels to an existing issue."""
+    args = ["issue", "edit", str(issue_number), "--repo", repo]
+    for label in add_labels:
+        args.extend(["--add-label", label])
+    _run_gh(args)
+
+
+def get_project_number(*, owner: str, project_name: str) -> int:
+    """Look up a project board number by name."""
+    output = _run_gh(
+        [
+            "project",
+            "list",
+            "--owner",
+            owner,
+            "--format",
+            "json",
+        ]
+    )
+    import json
+
+    projects = json.loads(output).get("projects", [])
+    for p in projects:
+        if p.get("title") == project_name:
+            return int(p["number"])
+    msg = f"Project '{project_name}' not found for owner '{owner}'"
+    raise GhError(msg)
+
+
+def get_project_id(*, owner: str, project_number: int) -> str:
+    """Get the internal project ID (PVT_...) from project number."""
+    output = _run_gh(
+        [
+            "project",
+            "view",
+            str(project_number),
+            "--owner",
+            owner,
+            "--format",
+            "json",
+        ]
+    )
+    import json
+
+    data = json.loads(output)
+    return str(data.get("id", ""))
+
+
+def get_item_id(*, owner: str, project_number: int, issue_url: str) -> str:
+    """Get the project item ID for an issue on a project board."""
+    output = _run_gh(
+        [
+            "project",
+            "item-list",
+            str(project_number),
+            "--owner",
+            owner,
+            "--format",
+            "json",
+        ]
+    )
+    import json
+
+    data = json.loads(output)
+    for item in data.get("items", []):
+        content = item.get("content", {})
+        if content.get("url") == issue_url:
+            return str(item["id"])
+    msg = f"Issue {issue_url} not found on project {project_number}"
+    raise GhError(msg)
+
+
+def get_field_id(*, owner: str, project_number: int, field_name: str) -> str:
+    """Get the field ID for a named field on a project board."""
+    output = _run_gh(
+        [
+            "project",
+            "field-list",
+            str(project_number),
+            "--owner",
+            owner,
+            "--format",
+            "json",
+        ]
+    )
+    import json
+
+    data = json.loads(output)
+    for field in data.get("fields", []):
+        if field.get("name") == field_name:
+            return str(field["id"])
+    msg = f"Field '{field_name}' not found on project {project_number}"
+    raise GhError(msg)
+
+
+def get_option_id(*, owner: str, project_number: int, field_name: str, option_name: str) -> str:
+    """Get the option ID for a single-select field value."""
+    output = _run_gh(
+        [
+            "project",
+            "field-list",
+            str(project_number),
+            "--owner",
+            owner,
+            "--format",
+            "json",
+        ]
+    )
+    import json
+
+    data = json.loads(output)
+    for field in data.get("fields", []):
+        if field.get("name") == field_name:
+            for opt in field.get("options", []):
+                if opt.get("name") == option_name:
+                    return str(opt["id"])
+    msg = f"Option '{option_name}' not found for field '{field_name}'"
+    raise GhError(msg)
+
+
 def auth_status() -> bool:
     """Check if gh is authenticated.  Returns True if logged in."""
     try:
         _run_gh(["auth", "status"])
-    except subprocess.CalledProcessError:
+    except GhError:
         return False
     else:
         return True

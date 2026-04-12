@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from vk.gh import add_to_project, auth_status, close_issue, create_issue, set_field
+from vk.gh import GhError, add_to_project, auth_status, close_issue, create_issue, set_field
 
 
 class TestCreateIssue:
@@ -132,17 +132,17 @@ class TestAuthStatus:
     def test_not_authenticated(self) -> None:
         with patch(
             "vk.gh._run_gh",
-            side_effect=subprocess.CalledProcessError(1, "gh"),
+            side_effect=GhError("not logged in"),
         ):
             result = auth_status()
             assert result is False
 
 
 class TestRunGhError:
-    def test_subprocess_error_propagates(self) -> None:
+    def test_subprocess_error_raises_gh_error(self) -> None:
         with patch(
             "subprocess.run",
-            side_effect=subprocess.CalledProcessError(1, "gh"),
+            side_effect=subprocess.CalledProcessError(1, "gh", stderr="fail"),
         ):
-            with pytest.raises(subprocess.CalledProcessError):
+            with pytest.raises(GhError):
                 create_issue(repo="org/repo", title="T", body="B", labels=[])
