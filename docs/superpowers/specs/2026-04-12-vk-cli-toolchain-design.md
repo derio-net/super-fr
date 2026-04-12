@@ -732,7 +732,7 @@ Depends on: P5.
 
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
-| P0 Scaffolding | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-12-vk-cli-p0-scaffold.md` | Not Started | — |
+| P0 Scaffolding | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-12-vk-cli-p0-scaffold.md` | Complete | — |
 | P1 Core modules | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-12-vk-cli-p1-core-modules.md` | Not Started | P0 |
 | P2 Dispatch | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-12-vk-cli-p2-dispatch.md` | Not Started | P1 |
 | P3 Progress | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-12-vk-cli-p3-progress.md` | Not Started | P2 |

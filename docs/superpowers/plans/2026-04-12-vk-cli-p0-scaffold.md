@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Create the walking skeleton — `vk --version` and `vk --help` work, one passing test, CI green.
 **Architecture:** Standard Python `src/` layout with typer CLI, pytest, ruff, mypy. Entry point `vk = "vk.cli:app"`. Stub subcommand groups for all planned commands.
@@ -23,7 +23,7 @@
 - Create: `src/vk/__main__.py`
 - Test: `tests/unit/test_version.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/__init__.py`, `tests/unit/__init__.py`, and `tests/unit/test_version.py`:
 
@@ -53,12 +53,12 @@ def test_version_value():
     assert __version__ == "0.3.0"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_version.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk'`
 
-- [ ] **Step 3: Create pyproject.toml**
+- [x] **Step 3: Create pyproject.toml**
 
 ```toml
 [project]
@@ -106,7 +106,7 @@ strict = true
 python_version = "3.11"
 ```
 
-- [ ] **Step 4: Create src/vk/__init__.py**
+- [x] **Step 4: Create src/vk/__init__.py**
 
 ```python
 """VK CLI toolchain."""
@@ -114,7 +114,7 @@ python_version = "3.11"
 __version__ = "0.3.0"
 ```
 
-- [ ] **Step 5: Create src/vk/__main__.py**
+- [x] **Step 5: Create src/vk/__main__.py**
 
 ```python
 """Allow `python -m vk`."""
@@ -124,12 +124,12 @@ from vk.cli import app
 app()
 ```
 
-- [ ] **Step 6: Run uv sync and verify test passes**
+- [x] **Step 6: Run uv sync and verify test passes**
 
 Run: `uv sync && uv run pytest tests/unit/test_version.py -v`
 Expected: PASS — all 3 tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pyproject.toml src/ tests/
@@ -143,7 +143,7 @@ git commit -m "feat: scaffold Python package with version and pyproject.toml"
 - Create: `src/vk/commands/__init__.py`
 - Test: `tests/unit/test_cli.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_cli.py
@@ -196,12 +196,12 @@ def test_init_help():
     assert result.exit_code == 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_cli.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vk.cli'`
 
-- [ ] **Step 3: Write src/vk/cli.py**
+- [x] **Step 3: Write src/vk/cli.py**
 
 ```python
 """VK CLI — main entry point."""
@@ -298,23 +298,23 @@ def execute_callback(ctx: typer.Context) -> None:
         typer.echo(ctx.get_help())
 ```
 
-- [ ] **Step 4: Create src/vk/commands/__init__.py**
+- [x] **Step 4: Create src/vk/commands/__init__.py**
 
 ```python
 # (empty — package marker)
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `uv run pytest tests/unit/test_cli.py -v`
 Expected: PASS — all 7 tests pass
 
-- [ ] **Step 6: Run full suite with coverage**
+- [x] **Step 6: Run full suite with coverage**
 
 Run: `uv run pytest -v`
 Expected: PASS — all 10 tests pass, coverage ≥85%
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/vk/cli.py src/vk/commands/ tests/unit/test_cli.py
@@ -327,7 +327,7 @@ git commit -m "feat: add typer CLI with stub subcommand groups"
 - Create: `.github/workflows/ci.yml`
 - Create: `tests/conftest.py`
 
-- [ ] **Step 1: Create tests/conftest.py**
+- [x] **Step 1: Create tests/conftest.py**
 
 ```python
 """Shared pytest fixtures."""
@@ -345,7 +345,7 @@ def repo_root() -> Path:
     return REPO_ROOT
 ```
 
-- [ ] **Step 2: Create .github/workflows/ci.yml**
+- [x] **Step 2: Create .github/workflows/ci.yml**
 
 ```yaml
 name: CI
@@ -378,29 +378,29 @@ jobs:
       - run: uv run pytest
 ```
 
-- [ ] **Step 3: Run lint locally**
+- [x] **Step 3: Run lint locally**
 
 Run: `uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/`
 Expected: PASS — no lint errors, no format issues
 
-- [ ] **Step 4: Run mypy locally**
+- [x] **Step 4: Run mypy locally**
 
 Run: `uv run mypy src/`
 Expected: PASS — no type errors (may need minor type annotation fixes)
 
-- [ ] **Step 5: Run full test suite**
+- [x] **Step 5: Run full test suite**
 
 Run: `uv run pytest -v`
 Expected: PASS — all tests pass, coverage ≥85%
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .github/workflows/ci.yml tests/conftest.py
 git commit -m "feat: add CI workflow with lint, typecheck, and test jobs"
 ```
 
-- [ ] **Step 7: Generate uv.lock and final commit**
+- [x] **Step 7: Generate uv.lock and final commit**
 
 Run: `uv sync` (generates/updates `uv.lock`)
 
