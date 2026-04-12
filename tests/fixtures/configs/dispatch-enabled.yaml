@@ -1,0 +1,21 @@
+plan:
+  filename: "YYYY-MM-DD-{name}.md"
+  save_to: docs/superpowers/plans/
+
+header:
+  required:
+    - Spec
+    - Status
+  status_values:
+    - Not Started
+    - In Progress
+    - Complete
+
+dispatch:
+  target: github-issues
+  owner: derio-net
+  project_board: "Derio Ops"
+  default_repo: derio-net/some-repo
+  labels:
+    agentic: vk-ready
+    manual: manual

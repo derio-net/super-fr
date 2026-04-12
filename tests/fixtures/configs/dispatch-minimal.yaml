@@ -1,0 +1,14 @@
+plan:
+  filename: "YYYY-MM-DD-{name}.md"
+  save_to: docs/superpowers/plans/
+
+header:
+  required:
+    - Spec
+    - Status
+  status_values:
+    - Not Started
+    - In Progress
+    - Complete
+
+dispatch: {}
