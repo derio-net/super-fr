@@ -1,6 +1,6 @@
 [project]
 name = "vk"
-version = "1.0.3"
+version = "1.0.4"
 description = "VK toolchain: phase-structured plans, GitHub Issue dispatch, progress tracking"
 requires-python = ">=3.11"
 dependencies = [
