@@ -14,6 +14,7 @@
 ---
 
 ## Phase 0: Add lifecycle transition step to vk-execute skill [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/7 -->
 
 ### Task 1: Update the thin CLI wrapper skill
 
