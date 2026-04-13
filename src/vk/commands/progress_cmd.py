@@ -19,7 +19,7 @@ from vk.commands.common import (
     format_gate_refusal,
     resolve_action,
 )
-from vk.config import load_profile
+from vk.config import Profile, load_profile
 from vk.plan.parser import parse_plan
 from vk.spec_index import IndexEntry, read_index, upsert_entry
 
@@ -287,7 +287,7 @@ def _parse_issue_url(url: str) -> tuple[str, int]:
 
 
 def _run_dispatch_audit(
-    profile: "Profile",  # noqa: F821
+    profile: Profile,
     plans_dir: Path,
 ) -> list[str]:
     """Run dispatch-mode board audit. Returns list of issue strings."""

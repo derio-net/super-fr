@@ -163,14 +163,13 @@ class TestProgressTransition:
 
 
 class TestProgressAudit:
-    def test_audit_detects_status_drift(self, local_repo_with_plan: Path) -> None:
-        import os
-
-        result = runner.invoke(
-            app,
-            ["progress", "audit"],
-            env={**os.environ, "GIT_DIR": str(local_repo_with_plan / ".git")},
+    def test_audit_detects_status_drift(
+        self, local_repo_with_plan: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "vk.commands.progress_cmd._find_repo_root", lambda _: local_repo_with_plan
         )
+        result = runner.invoke(app, ["progress", "audit"])
         assert result.exit_code == 0
         # Plan says "Not Started" but checkboxes show partial → drift
         assert "drift" in result.stdout.lower() or "issue" in result.stdout.lower()
