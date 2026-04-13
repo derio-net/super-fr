@@ -3,6 +3,10 @@
 Each test runs install.sh with a fake $HOME so nothing touches the real
 user directory.  The VK MCP binary requirement is satisfied by a tiny
 stub script.
+
+Skills are delivered by the plugin system (enabledPlugins), not by
+install.sh.  install.sh handles: MCP config, rules, vk CLI, stale
+skill cleanup, and PostToolUse hook hint.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ def fake_home(tmp_path: Path) -> Path:
     vk_bin.write_text("#!/bin/sh\necho stub\n")
     vk_bin.chmod(0o755)
 
-    # Create .claude dir (install.sh expects $HOME/.claude to exist for some paths)
+    # Create .claude dir
     (home / ".claude").mkdir()
 
     return home
@@ -59,19 +63,10 @@ def _run_install(
     return result
 
 
-# ── Install path ─────────────────────────────────────────────────────
+# ── Rules ────────────────────────────────────────────────────────────
 
 
-class TestInstallSkillsAndRules:
-    def test_installs_all_four_skills(self, fake_home: Path) -> None:
-        _run_install(fake_home)
-
-        skills_dir = fake_home / ".claude" / "skills"
-        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
-            skill_file = skills_dir / name / "SKILL.md"
-            assert skill_file.exists(), f"{name}/SKILL.md missing"
-            assert skill_file.stat().st_size > 0
-
+class TestInstallRules:
     def test_installs_rule_file(self, fake_home: Path) -> None:
         _run_install(fake_home)
 
@@ -96,8 +91,7 @@ class TestInstallSkillsAndRules:
         _run_install(fake_home)
         _run_install(fake_home)
 
-        skills_dir = fake_home / ".claude" / "skills"
-        assert (skills_dir / "vk-plan" / "SKILL.md").exists()
+        assert (fake_home / ".claude" / "rules" / "vk-plan-override.md").exists()
 
 
 # ── MCP config ───────────────────────────────────────────────────────
@@ -147,6 +141,41 @@ class TestMcpConfig:
         )
 
 
+# ── Stale skill cleanup ─────────────────────────────────────────────
+
+
+class TestStaleSkillCleanup:
+    def test_removes_user_level_skill_copies(self, fake_home: Path) -> None:
+        """install.sh should clean up skills from older install.sh versions."""
+        skills_dir = fake_home / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
+            d = skills_dir / name
+            d.mkdir()
+            (d / "SKILL.md").write_text("stale")
+
+        _run_install(fake_home)
+
+        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
+            assert not (skills_dir / name).exists()
+
+    def test_preserves_non_vk_skills(self, fake_home: Path) -> None:
+        """Other user-level skills should not be touched."""
+        skills_dir = fake_home / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+        other = skills_dir / "my-custom-skill"
+        other.mkdir()
+        (other / "SKILL.md").write_text("keep me")
+
+        _run_install(fake_home)
+
+        assert other.exists()
+
+    def test_no_error_when_no_stale_skills(self, fake_home: Path) -> None:
+        """Should not fail when there are no stale skills to clean."""
+        _run_install(fake_home)  # no skills dir pre-existing
+
+
 # ── Fail fast ────────────────────────────────────────────────────────
 
 
@@ -156,7 +185,6 @@ class TestFailFast:
         home = tmp_path / "home"
         home.mkdir()
         (home / ".claude").mkdir()
-        # No bin/vibe-kanban-mcp
 
         result = _run_install(home, expect_fail=True)
 
@@ -182,13 +210,9 @@ class TestFailFast:
 
 
 class TestUninstall:
-    def test_removes_skills_and_rules(self, fake_home: Path) -> None:
+    def test_removes_rules(self, fake_home: Path) -> None:
         _run_install(fake_home)
         _run_install(fake_home, "--uninstall")
-
-        skills_dir = fake_home / ".claude" / "skills"
-        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
-            assert not (skills_dir / name).exists()
 
         assert not (fake_home / ".claude" / "rules" / "vk-plan-override.md").exists()
 
@@ -202,7 +226,6 @@ class TestUninstall:
         assert "vibe_kanban" not in data["mcpServers"]
 
     def test_preserves_other_mcp_servers_on_uninstall(self, fake_home: Path) -> None:
-        """Uninstall should only remove vibe_kanban, not other servers."""
         mcp = fake_home / ".claude" / ".mcp.json"
         mcp.write_text(json.dumps({
             "mcpServers": {
@@ -217,40 +240,21 @@ class TestUninstall:
         assert "other-server" in data["mcpServers"]
         assert "vibe_kanban" not in data["mcpServers"]
 
+    def test_cleans_stale_skills_on_uninstall(self, fake_home: Path) -> None:
+        """Uninstall should also remove stale user-level skill copies."""
+        skills_dir = fake_home / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+        for name in ("vk-plan", "vk-dispatch"):
+            d = skills_dir / name
+            d.mkdir()
+            (d / "SKILL.md").write_text("stale")
+
+        _run_install(fake_home, "--uninstall")
+
+        assert not (skills_dir / "vk-plan").exists()
+        assert not (skills_dir / "vk-dispatch").exists()
+
     def test_uninstall_idempotent(self, fake_home: Path) -> None:
         """Uninstalling when nothing is installed should not fail."""
         result = _run_install(fake_home, "--uninstall")
         assert result.returncode == 0
-
-
-# ── Marketplace cleanup ──────────────────────────────────────────────
-
-
-class TestMarketplaceCleanup:
-    def test_removes_marketplace_duplicates(self, fake_home: Path) -> None:
-        mp_dir = (
-            fake_home / ".claude" / "plugins" / "marketplaces" / "derio-net" / "skills"
-        )
-        mp_dir.mkdir(parents=True)
-        for name in ("vk-plan", "vk-dispatch"):
-            d = mp_dir / name
-            d.mkdir()
-            (d / "SKILL.md").write_text("stale")
-
-        _run_install(fake_home)
-
-        assert not (mp_dir / "vk-plan").exists()
-        assert not (mp_dir / "vk-dispatch").exists()
-
-    def test_preserves_unrelated_marketplace_skills(self, fake_home: Path) -> None:
-        mp_dir = (
-            fake_home / ".claude" / "plugins" / "marketplaces" / "derio-net" / "skills"
-        )
-        mp_dir.mkdir(parents=True)
-        other = mp_dir / "some-other-skill"
-        other.mkdir()
-        (other / "SKILL.md").write_text("keep me")
-
-        _run_install(fake_home)
-
-        assert other.exists()
