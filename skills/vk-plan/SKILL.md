@@ -36,6 +36,10 @@ Run `vk plan format .` to check: phased (dispatch enabled) or flat (local-only).
 - No placeholders: every step has actual code, commands, expected output.
 - Bite-sized steps: 2-5 minutes each.
 - Use BEGIN/END markers for full-file embeds, not nested fences.
+- **Cross-repo completeness:** If the spec lists multiple plans across repos,
+  write ALL of them before offering the execution handoff. For each target repo:
+  read its `plan-config.yaml`, write the plan in that repo's `plans/` directory,
+  and update the spec index. Only offer dispatch/execution after all plans exist.
 
 ## Integration
 
