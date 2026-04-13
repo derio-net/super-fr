@@ -45,7 +45,7 @@ def local_repo_with_plan(tmp_path: Path) -> Generator[Path, None, None]:
 
     plans_dir = config_dir / "plans"
     plans_dir.mkdir()
-    (plans_dir / "2026-04-12-test-feature.md").write_text(
+    (plans_dir / "2026-04-12-test.md").write_text(
         textwrap.dedent("""\
         # Test Feature Plan
 
@@ -128,7 +128,7 @@ def repo_with_stale_spec_index(tmp_path: Path) -> Generator[Path, None, None]:
 
         | Plan | Repo | File | Status | Depends on |
         |------|------|------|--------|------------|
-        | Test Feature Plan |  | `docs/superpowers/plans/2026-04-12-test-feature.md` | Not Started | — |
+        | Test Feature Plan |  | `docs/superpowers/plans/2026-04-12-test.md` | Not Started | — |
     """)
     )
 
@@ -136,7 +136,7 @@ def repo_with_stale_spec_index(tmp_path: Path) -> Generator[Path, None, None]:
     plans_dir.mkdir()
     # Plan has all steps checked and status already says "Complete",
     # but the spec index above still says "Not Started".
-    (plans_dir / "2026-04-12-test-feature.md").write_text(
+    (plans_dir / "2026-04-12-test.md").write_text(
         textwrap.dedent("""\
         # Test Feature Plan
 
@@ -170,14 +170,14 @@ def repo_with_stale_spec_index(tmp_path: Path) -> Generator[Path, None, None]:
 
 class TestProgressSync:
     def test_sync_local_updates_status(self, local_repo_with_plan: Path) -> None:
-        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test-feature.md"
+        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test.md"
         result = runner.invoke(app, ["progress", "sync", str(plan), "--yes"])
         assert result.exit_code == 0
         content = plan.read_text()
         assert "**Status:** In Progress" in content
 
     def test_sync_dry_run_no_mutation(self, local_repo_with_plan: Path) -> None:
-        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test-feature.md"
+        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test.md"
         before = plan.read_text()
         result = runner.invoke(app, ["progress", "sync", str(plan), "--dry-run"])
         assert result.exit_code == 0
@@ -188,7 +188,7 @@ class TestProgressSync:
         self, repo_with_stale_spec_index: Path
     ) -> None:
         """When plan status is already correct but spec index is stale, sync fixes the index."""
-        plan = repo_with_stale_spec_index / "docs/superpowers/plans/2026-04-12-test-feature.md"
+        plan = repo_with_stale_spec_index / "docs/superpowers/plans/2026-04-12-test.md"
         spec = repo_with_stale_spec_index / "docs/superpowers/specs/test-spec.md"
 
         # Pre-check: spec index says "Not Started", plan says "Complete"
@@ -245,7 +245,7 @@ class TestProgressTransition:
         monkeypatch.setattr(
             "vk.commands.progress_cmd._find_repo_root", lambda _: local_repo_with_plan
         )
-        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test-feature.md"
+        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test.md"
         result = runner.invoke(app, ["progress", "transition", str(plan), "Complete", "--yes"])
         assert result.exit_code == 0
         content = plan.read_text()
@@ -257,7 +257,7 @@ class TestProgressTransition:
         monkeypatch.setattr(
             "vk.commands.progress_cmd._find_repo_root", lambda _: local_repo_with_plan
         )
-        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test-feature.md"
+        plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test.md"
         result = runner.invoke(app, ["progress", "transition", str(plan), "Invalid", "--yes"])
         assert result.exit_code == 2
 
