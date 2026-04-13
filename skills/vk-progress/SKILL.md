@@ -32,3 +32,10 @@ Five subcommands, auto-detecting dispatch/local mode.
 | Audit | Full drift checks + Grafana | Local drift checks only |
 
 All subcommands use `--dry-run`/`--yes` contract.
+
+## Spec Index Reconciliation
+
+`sync` always reconciles the spec index, even when the plan's Status header is already correct.
+This handles the case where a plan was updated (e.g., by a VK workspace agent) but the spec's
+`## Implementation Plans` table wasn't. Running `vk progress sync` on any plan with a `**Spec:**`
+header will bring the spec index row in line with the plan's current status.

@@ -89,6 +89,35 @@ def _resolve_spec(plan_path: Path) -> Path | None:
     return spec_path if spec_path.exists() else None
 
 
+def _reconcile_spec_index(
+    plan_path: Path, plan_title: str, status: str, repo_root: Path, *, dry_run: bool = False
+) -> bool:
+    """Reconcile spec index with current plan status. Returns True if updated."""
+    spec_path = _resolve_spec(plan_path)
+    if not spec_path:
+        return False
+
+    entries = read_index(spec_path)
+    matching = [e for e in entries if e.plan == plan_title]
+    if matching and matching[0].status == status:
+        return False
+
+    if dry_run:
+        console.print(f"Would update spec index for: {spec_path.name}")
+        return True
+
+    entry = IndexEntry(
+        plan=plan_title,
+        repo="",
+        file=str(plan_path.relative_to(repo_root)),
+        status=status,
+        depends_on="—",
+    )
+    upsert_entry(spec_path, entry)
+    console.print(f"Spec index updated: {spec_path}")
+    return True
+
+
 @progress_app.command()
 def sync(
     plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
@@ -114,13 +143,17 @@ def sync(
     mode = "dispatch" if profile.dispatch_enabled else "local"
 
     if old_status == new_status:
-        console.print(f"Status already {new_status}. Nothing to sync. (mode: {mode})")
+        # Plan status is correct, but spec index may be stale — reconcile it.
+        spec_updated = _reconcile_spec_index(
+            plan_path, plan.title, new_status, repo_root, dry_run=(action is ConfirmAction.DRY_RUN)
+        )
+        if not spec_updated:
+            console.print(f"Status already {new_status}. Nothing to sync. (mode: {mode})")
         raise typer.Exit(0)
 
     if action is ConfirmAction.DRY_RUN:
         console.print(f"Would update Status: {old_status} -> {new_status} (mode: {mode})")
-        if plan.spec:
-            console.print(f"Would update spec index for: {plan.spec}")
+        _reconcile_spec_index(plan_path, plan.title, new_status, repo_root, dry_run=True)
         console.print("Local-only sync (dispatch disabled)" if not profile.dispatch_enabled else "")
         raise typer.Exit(0)
 
@@ -131,17 +164,7 @@ def sync(
     _rewrite_status(plan_path, new_status)
     console.print(f"Status: {old_status} -> {new_status}")
 
-    spec_path = _resolve_spec(plan_path)
-    if spec_path:
-        entry = IndexEntry(
-            plan=plan.title,
-            repo="",
-            file=str(plan_path.relative_to(repo_root)),
-            status=new_status,
-            depends_on="—",
-        )
-        upsert_entry(spec_path, entry)
-        console.print(f"Spec index updated: {spec_path}")
+    _reconcile_spec_index(plan_path, plan.title, new_status, repo_root)
 
     if not profile.dispatch_enabled:
         console.print("Local-only sync (dispatch disabled)")

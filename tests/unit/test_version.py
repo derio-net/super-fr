@@ -14,4 +14,4 @@ def test_version_is_semver():
 def test_version_value():
     from vk import __version__
 
-    assert __version__ == "1.0.2"
+    assert __version__ == "1.0.3"

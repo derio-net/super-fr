@@ -86,6 +86,88 @@ def local_repo_with_plan(tmp_path: Path) -> Generator[Path, None, None]:
     yield tmp_path
 
 
+@pytest.fixture()
+def repo_with_stale_spec_index(tmp_path: Path) -> Generator[Path, None, None]:
+    """Repo where the plan status header is correct but the spec index is stale."""
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "t@t.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.name", "T"],
+        check=True,
+        capture_output=True,
+    )
+
+    config_dir = tmp_path / "docs" / "superpowers"
+    config_dir.mkdir(parents=True)
+    (config_dir / "plan-config.yaml").write_text(
+        textwrap.dedent("""\
+        plan:
+          filename: "YYYY-MM-DD-{name}.md"
+          save_to: docs/superpowers/plans/
+        header:
+          required: [Spec, Status]
+          status_values: [Not Started, In Progress, Complete]
+    """)
+    )
+
+    specs_dir = config_dir / "specs"
+    specs_dir.mkdir()
+    (specs_dir / "test-spec.md").write_text(
+        textwrap.dedent("""\
+        # Test Spec
+
+        ## Summary
+
+        Example spec.
+
+        ## Implementation Plans
+
+        | Plan | Repo | File | Status | Depends on |
+        |------|------|------|--------|------------|
+        | Test Feature Plan |  | `docs/superpowers/plans/2026-04-12-test-feature.md` | Not Started | — |
+    """)
+    )
+
+    plans_dir = config_dir / "plans"
+    plans_dir.mkdir()
+    # Plan has all steps checked and status already says "Complete",
+    # but the spec index above still says "Not Started".
+    (plans_dir / "2026-04-12-test-feature.md").write_text(
+        textwrap.dedent("""\
+        # Test Feature Plan
+
+        **Spec:** `docs/superpowers/specs/test-spec.md`
+        **Status:** Complete
+
+        **Goal:** Test spec index reconciliation.
+
+        ---
+
+        ### Task 1: Setup [agentic]
+
+        - [x] **Step 1: Write test**
+
+        Body of step 1.
+
+        - [x] **Step 2: Implement**
+
+        Body of step 2.
+    """)
+    )
+
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    yield tmp_path
+
+
 class TestProgressSync:
     def test_sync_local_updates_status(self, local_repo_with_plan: Path) -> None:
         plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test-feature.md"
@@ -101,6 +183,24 @@ class TestProgressSync:
         assert result.exit_code == 0
         assert plan.read_text() == before
         assert "Would update" in result.stdout
+
+    def test_sync_reconciles_stale_spec_index(
+        self, repo_with_stale_spec_index: Path
+    ) -> None:
+        """When plan status is already correct but spec index is stale, sync fixes the index."""
+        plan = repo_with_stale_spec_index / "docs/superpowers/plans/2026-04-12-test-feature.md"
+        spec = repo_with_stale_spec_index / "docs/superpowers/specs/test-spec.md"
+
+        # Pre-check: spec index says "Not Started", plan says "Complete"
+        assert "Not Started" in spec.read_text()
+
+        result = runner.invoke(app, ["progress", "sync", str(plan), "--yes"])
+        assert result.exit_code == 0
+
+        # Spec index should now say "Complete"
+        spec_content = spec.read_text()
+        assert "Complete" in spec_content
+        assert "Spec index updated" in result.stdout
 
     def test_sync_mutual_exclusion(self, tmp_path: Path) -> None:
         (tmp_path / "plan.md").write_text("# X\n### Task 1: Y [a]\n- [ ] **Step 1: Z**\n")

@@ -167,6 +167,18 @@ class TestStaleSkillCleanup:
 
         assert other.exists()
 
+    def test_removes_dangling_symlinks(self, fake_home: Path) -> None:
+        """install.sh should clean up dangling symlinks from VK worktree installs."""
+        skills_dir = fake_home / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
+            (skills_dir / name).symlink_to("/nonexistent/vk-worktree/skills/" + name)
+
+        _run_install(fake_home)
+
+        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
+            assert not (skills_dir / name).exists(), f"Dangling symlink {name} was not removed"
+
     def test_no_error_when_no_stale_skills(self, fake_home: Path) -> None:
         """Should not fail when there are no stale skills to clean."""
         _run_install(fake_home)  # no skills dir pre-existing

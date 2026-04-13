@@ -23,9 +23,9 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       echo "  Removed vibe_kanban from $MCP_CONFIG"
     fi
   fi
-  # Clean stale user-level skill copies (from older install.sh versions)
+  # Clean stale user-level skill copies or dangling symlinks
   for skill in vk-plan vk-dispatch vk-execute vk-progress; do
-    if [ -d "$CLAUDE_DIR/skills/$skill" ]; then
+    if [ -d "$CLAUDE_DIR/skills/$skill" ] || [ -L "$CLAUDE_DIR/skills/$skill" ]; then
       rm -rf "$CLAUDE_DIR/skills/$skill"
       echo "  Removed stale $CLAUDE_DIR/skills/$skill"
     fi
@@ -62,9 +62,9 @@ else
   echo "  Add vibe_kanban manually to $MCP_CONFIG" >&2
 fi
 
-# Clean stale user-level skill copies (from older install.sh versions)
+# Clean stale user-level skill copies or dangling symlinks (from older installs or VK worktrees)
 for skill in vk-plan vk-dispatch vk-execute vk-progress; do
-  if [ -d "$CLAUDE_DIR/skills/$skill" ]; then
+  if [ -d "$CLAUDE_DIR/skills/$skill" ] || [ -L "$CLAUDE_DIR/skills/$skill" ]; then
     rm -rf "$CLAUDE_DIR/skills/$skill"
     echo "  Removed stale $CLAUDE_DIR/skills/$skill (now delivered by plugin)"
   fi
