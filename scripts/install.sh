@@ -8,6 +8,8 @@ CLAUDE_DIR="$HOME/.claude"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 RULES_DIR="$CLAUDE_DIR/rules"
 SETTINGS="$CLAUDE_DIR/settings.json"
+MCP_CONFIG="$CLAUDE_DIR/.mcp.json"
+VK_MCP_BINARY="$HOME/bin/vibe-kanban-mcp"
 
 SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
@@ -19,8 +21,22 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   done
   rm -f "$RULES_DIR/vk-plan-override.md"
   echo "  Removed $RULES_DIR/vk-plan-override.md"
+  # Remove vibe_kanban from user-level MCP config
+  if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
+    if jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
+      jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
+      echo "  Removed vibe_kanban from $MCP_CONFIG"
+    fi
+  fi
   echo "Done. Note: PostToolUse hook in settings.json was NOT removed (manual cleanup)."
   exit 0
+fi
+
+# Fail fast: VK MCP binary must exist
+if [ ! -x "$VK_MCP_BINARY" ]; then
+  echo "ERROR: VK MCP binary not found at $VK_MCP_BINARY" >&2
+  echo "Install it first: see https://github.com/derio-net/vibe-kanban" >&2
+  exit 1
 fi
 
 echo "Installing superpowers-for-vk..."
@@ -32,8 +48,22 @@ for skill in "${SKILL_NAMES[@]}"; do
 done
 
 mkdir -p "$RULES_DIR"
+rm -f "$RULES_DIR/vk-plan-override.md"
 cp "$PLUGIN_ROOT/rules/vk-plan-override.md" "$RULES_DIR/vk-plan-override.md"
 echo "  Installed $RULES_DIR/vk-plan-override.md"
+
+# Install vibe_kanban MCP server at user level
+VK_MCP_ENTRY='{"command":"'"$VK_MCP_BINARY"'","args":["--mode","global"],"env":{"VIBE_BACKEND_URL":"http://localhost:8081"}}'
+if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
+  jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
+  echo "  Updated vibe_kanban in $MCP_CONFIG"
+elif command -v jq &>/dev/null; then
+  echo '{"mcpServers":{}}' | jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' > "$MCP_CONFIG"
+  echo "  Created $MCP_CONFIG with vibe_kanban"
+else
+  echo "  WARNING: jq not found — cannot configure MCP server automatically" >&2
+  echo "  Add vibe_kanban manually to $MCP_CONFIG" >&2
+fi
 
 if [ ! -f "$SETTINGS" ]; then
   echo "  WARNING: $SETTINGS not found — skipping hook installation"
@@ -84,4 +114,5 @@ echo ""
 echo "Installation complete. Verify with:"
 echo "  ls ~/.claude/skills/vk-*/"
 echo "  cat ~/.claude/rules/vk-plan-override.md"
+echo "  jq '.mcpServers.vibe_kanban' ~/.claude/.mcp.json"
 echo "  vk --version"
