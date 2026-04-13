@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-13-workspace-lifecycle-automation-design.md`
-**Status:** Not Started
+**Status:** In Progress
 
 **Goal:** Modify the `vk-execute` skill to call VK MCP `update_issue(status: "In Review")` after the agent creates a PR, closing the lifecycle gap between agent completion and operator review.
 **Architecture:** Two files change: the thin CLI wrapper (`skills/vk-execute/SKILL.md`) gets a new Step 7 after PR creation, and the cached plugin skill (`skills/vk-execute/SKILL.md` in the plugin cache) gets the corresponding detailed procedure. The change is purely additive — a new final step that is best-effort and dispatch-mode only.
@@ -21,7 +21,7 @@
 **Files:**
 - Modify: `skills/vk-execute/SKILL.md`
 
-- [ ] **Step 1: Write a failing validation test for the new step**
+- [x] **Step 1: Write a failing validation test for the new step**
 
 Add a test to `tests/unit/test_skill_validation.py` that verifies the `vk-execute` skill mentions the "In Review" transition:
 
@@ -37,7 +37,7 @@ def test_vk_execute_has_lifecycle_transition(self, skill_dir: Path) -> None:
 Run: `cd /home/claude/repos/superpowers-for-vk && uv run pytest tests/unit/test_skill_validation.py::TestSkillValidation::test_vk_execute_has_lifecycle_transition -v`
 Expected: FAIL — "In Review" not found in current skill file.
 
-- [ ] **Step 2: Add Step 7 to the thin CLI wrapper**
+- [x] **Step 2: Add Step 7 to the thin CLI wrapper**
 
 Edit `skills/vk-execute/SKILL.md`. After the existing step 6 ("Delegate to `superpowers:finishing-a-development-branch`."), add a new step 7:
 
@@ -51,12 +51,12 @@ Edit `skills/vk-execute/SKILL.md`. After the existing step 6 ("Delegate to `supe
 
 Verify the file stays under 120 lines (current: 48 lines, adding ~5 lines is well within budget).
 
-- [ ] **Step 3: Run validation tests**
+- [x] **Step 3: Run validation tests**
 
 Run: `cd /home/claude/repos/superpowers-for-vk && uv run pytest tests/unit/test_skill_validation.py -v`
 Expected: ALL PASS, including the new `test_vk_execute_has_lifecycle_transition`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/vk-execute/SKILL.md tests/unit/test_skill_validation.py
@@ -69,12 +69,12 @@ The thin wrapper in `skills/vk-execute/SKILL.md` is the source of truth. The cac
 
 **Files:** (none — verification only)
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `cd /home/claude/repos/superpowers-for-vk && uv run pytest -v`
 Expected: ALL PASS.
 
-- [ ] **Step 2: Run linting and type checks**
+- [x] **Step 2: Run linting and type checks**
 
 Run: `cd /home/claude/repos/superpowers-for-vk && uv run ruff check . && uv run mypy src/`
 Expected: Clean.
@@ -84,7 +84,7 @@ Expected: Clean.
 **Files:**
 - Modify: `pyproject.toml` (version bump)
 
-- [ ] **Step 1: Bump plugin patch version**
+- [x] **Step 1: Bump plugin patch version**
 
 Edit `pyproject.toml` to bump the version (e.g., `0.2.2` → `0.2.3` or whatever the current version is). Check current version first:
 
@@ -92,7 +92,7 @@ Edit `pyproject.toml` to bump the version (e.g., `0.2.2` → `0.2.3` or whatever
 grep 'version' pyproject.toml | head -1
 ```
 
-- [ ] **Step 2: Reinstall skills to update plugin cache**
+- [x] **Step 2: Reinstall skills to update plugin cache**
 
 ```bash
 cd /home/claude/repos/superpowers-for-vk && uv run vk install-skills
@@ -100,7 +100,7 @@ cd /home/claude/repos/superpowers-for-vk && uv run vk install-skills
 
 Verify the cached skill file now contains "In Review".
 
-- [ ] **Step 3: Commit version bump**
+- [x] **Step 3: Commit version bump**
 
 ```bash
 git add pyproject.toml

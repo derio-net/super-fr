@@ -47,3 +47,10 @@ class TestSkillValidation:
         text = (skill_dir / "SKILL.md").read_text()
         line_count = len(text.strip().split("\n"))
         assert line_count <= 120, f"{skill_dir.name}/SKILL.md has {line_count} lines (max 120)"
+
+    def test_vk_execute_has_lifecycle_transition(self, skill_dir: Path) -> None:
+        """vk-execute must include the post-PR lifecycle transition step."""
+        if skill_dir.name != "vk-execute":
+            pytest.skip("Only applies to vk-execute")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "In Review" in text, "vk-execute must reference 'In Review' lifecycle transition"
