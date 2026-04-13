@@ -38,6 +38,11 @@ Implements a single phase (phased) or task (flat) from a plan.
    vk execute pr-body <plan> <phase-or-task> [--issue N]
    ```
 6. Delegate to `superpowers:finishing-a-development-branch`.
+7. Transition VK Issue to "In Review" (dispatch mode only):
+   - Extract the GitHub Issue number from the plan's tracking comment (`<!-- Tracking: ...issues/<N> -->`)
+   - Call VK MCP `list_issues` with `search: "gh#<N>"` to resolve the VK Issue ID
+   - Call VK MCP `update_issue(issue_id: "<id>", status: "In Review")`
+   - If MCP is unavailable or calls fail, skip silently — the server fallback will handle it
 
 ## Constraints
 
