@@ -66,6 +66,52 @@ def _build_issue_title(slug: str, phase: Phase) -> str:
     return f"{slug}-{phase.number}-{phase.tag}"
 
 
+def _build_issue_body(
+    phase: Phase, plan_path: Path, target_repo: str, prev_num: int | None
+) -> str:
+    """Build a structured issue body with Instruction/Workspace/Dependencies sections.
+
+    The body format is consumed by the VK Issue Bridge parser, which expects
+    ``## Instruction``, ``## Workspace``, and ``## Dependencies`` sections.
+    """
+    phase_type = "Agentic" if phase.tag == "agentic" else "Manual"
+
+    # Dependencies description
+    if phase.number == 0:
+        deps = "None — no blocking phases."
+    elif prev_num is not None:
+        deps = f"Phases 0-{phase.number - 1} complete. Blocked by #{prev_num}."
+    else:
+        deps = f"Phases 0-{phase.number - 1} complete."
+
+    return (
+        f"# Phase {phase.number}: {phase.title}\n"
+        f"\n"
+        f"**Type:** {phase_type}\n"
+        f"**Plan:** `{plan_path}`\n"
+        f"**Phase:** {phase.number}\n"
+        f"\n"
+        f"---\n"
+        f"\n"
+        f"## Instruction\n"
+        f"\n"
+        f"Use superpowers-for-vk:vk-execute to implement Phase {phase.number} of this plan.\n"
+        f"\n"
+        f"## Workspace\n"
+        f"\n"
+        f"Repos: {target_repo}\n"
+        f"\n"
+        f"## Dependencies\n"
+        f"\n"
+        f"{deps}\n"
+        f"\n"
+        f"---\n"
+        f"\n"
+        f"**Plan file:** `{plan_path}`\n"
+        f"**Phase:** {phase.number} — {phase.title}\n"
+    )
+
+
 def _print_dry_run(
     title: str, slug: str, repo: str, phases: list[Phase], skipped: set[int]
 ) -> None:
@@ -206,18 +252,13 @@ def dispatch(
         title = _build_issue_title(slug, phase)
         prev_num = phase_to_issue.get(phase.number - 1)
 
-        body_lines = [
-            f"Phase {phase.number}: {phase.title} [{phase.tag}]",
-            f"Plan file: `{plan_path_resolved}`",
-        ]
-        if prev_num is not None:
-            body_lines.append(f"\nBlocked by #{prev_num}")
+        body = _build_issue_body(phase, plan_path_resolved, target_repo, prev_num)
 
         try:
             issue_url = gh.create_issue(
                 repo=target_repo,
                 title=title,
-                body="\n".join(body_lines),
+                body=body,
                 labels=[
                     dispatch_cfg.labels.get("agentic", "vk-ready")
                     if phase.tag == "agentic"

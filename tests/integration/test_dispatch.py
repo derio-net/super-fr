@@ -127,6 +127,27 @@ class TestDispatchApply:
 
         assert mock_gh.create_issue.call_count == 3
 
+        # Verify structured body format for each created issue
+        for call_obj in mock_gh.create_issue.call_args_list:
+            body = call_obj[1]["body"] if "body" in call_obj[1] else call_obj[0][2]
+            assert "## Instruction" in body
+            assert "superpowers-for-vk:vk-execute" in body
+            assert "## Workspace" in body
+            assert "Repos: derio-net/test-repo" in body
+            assert "## Dependencies" in body
+
+        # Phase 1 (first) should have no blocking issue
+        first_body = mock_gh.create_issue.call_args_list[0][1]["body"]
+        assert "Blocked by" not in first_body
+
+        # Phase 2 should reference phase 1's issue number
+        second_body = mock_gh.create_issue.call_args_list[1][1]["body"]
+        assert "Blocked by #100" in second_body
+
+        # Phase 3 should reference phase 2's issue number
+        third_body = mock_gh.create_issue.call_args_list[2][1]["body"]
+        assert "Blocked by #101" in third_body
+
         updated = phased_plan.read_text()
         assert "<!-- Tracking: https://github.com/derio-net/test-repo/issues/100 -->" in updated
         assert "<!-- Tracking: https://github.com/derio-net/test-repo/issues/101 -->" in updated
