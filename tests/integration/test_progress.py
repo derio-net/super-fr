@@ -184,9 +184,7 @@ class TestProgressSync:
         assert plan.read_text() == before
         assert "Would update" in result.stdout
 
-    def test_sync_reconciles_stale_spec_index(
-        self, repo_with_stale_spec_index: Path
-    ) -> None:
+    def test_sync_reconciles_stale_spec_index(self, repo_with_stale_spec_index: Path) -> None:
         """When plan status is already correct but spec index is stale, sync fixes the index."""
         plan = repo_with_stale_spec_index / "docs/superpowers/plans/2026-04-12-test.md"
         spec = repo_with_stale_spec_index / "docs/superpowers/specs/test-spec.md"

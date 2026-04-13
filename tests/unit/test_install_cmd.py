@@ -87,9 +87,7 @@ class TestClearStaleCache:
         mp_dir = fake_home / ".claude" / "plugins" / "marketplaces" / "derio-net" / ".claude-plugin"
         mp_dir.mkdir(parents=True)
         (mp_dir / "marketplace.json").write_text(
-            json.dumps(
-                {"plugins": [{"name": "superpowers-for-vk", "version": "1.0.4"}]}
-            )
+            json.dumps({"plugins": [{"name": "superpowers-for-vk", "version": "1.0.4"}]})
         )
 
         _clear_stale_cache()
