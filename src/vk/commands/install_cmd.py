@@ -1,4 +1,4 @@
-"""vk install-skills — symlink SKILL.md files into ~/.claude/skills/."""
+"""vk install-skills — install skills and rules into ~/.claude/."""
 
 from __future__ import annotations
 
@@ -44,17 +44,67 @@ def _clean_marketplace_skills(skills_src: Path) -> None:
             typer.echo(f"  removed marketplace duplicate: {stale}")
 
 
+def _find_rules_dir() -> Path | None:
+    """Find the rules/ directory relative to the vk package."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        repo_root = Path(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        repo_root = Path(__file__).parent.parent.parent.parent
+
+    rules_dir = repo_root / "rules"
+    return rules_dir if rules_dir.exists() else None
+
+
+def _install_rules(copy: bool) -> int:
+    """Copy or symlink rule files into ~/.claude/rules/."""
+    rules_src = _find_rules_dir()
+    if not rules_src:
+        return 0
+
+    claude_rules = Path.home() / ".claude" / "rules"
+    claude_rules.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    for rule_file in sorted(rules_src.glob("*.md")):
+        target = claude_rules / rule_file.name
+
+        if target.exists() or target.is_symlink():
+            if target.is_symlink():
+                target.unlink()
+            else:
+                target.unlink()
+
+        if copy:
+            shutil.copy2(rule_file, target)
+        else:
+            target.symlink_to(rule_file)
+
+        count += 1
+        mode = "copied" if copy else "symlinked"
+        typer.echo(f"  {mode}: {rule_file.name} -> {target}")
+
+    return count
+
+
 def install_skills(
     copy: bool = typer.Option(False, "--copy", help="Copy instead of symlink."),
 ) -> None:
-    """Symlink SKILL.md files into ~/.claude/skills/."""
+    """Install skills and rules into ~/.claude/."""
     skills_src = _find_skills_dir()
     claude_skills = Path.home() / ".claude" / "skills"
     claude_skills.mkdir(parents=True, exist_ok=True)
 
     _clean_marketplace_skills(skills_src)
 
-    count = 0
+    skill_count = 0
     for skill_dir in sorted(skills_src.iterdir()):
         if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
             continue
@@ -72,8 +122,10 @@ def install_skills(
         else:
             target.symlink_to(skill_dir)
 
-        count += 1
+        skill_count += 1
         mode = "copied" if copy else "symlinked"
         typer.echo(f"  {mode}: {skill_dir.name} -> {target}")
 
-    typer.echo(f"\n{count} skill(s) installed.")
+    rule_count = _install_rules(copy)
+
+    typer.echo(f"\n{skill_count} skill(s) + {rule_count} rule(s) installed.")

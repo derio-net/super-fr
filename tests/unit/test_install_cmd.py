@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from vk.commands.install_cmd import _clean_marketplace_skills, install_skills
+from vk.commands.install_cmd import _clean_marketplace_skills, _install_rules, install_skills
 
 
 @pytest.fixture
@@ -180,3 +180,79 @@ class TestInstallSkills:
         install_skills(copy=False)
 
         assert not dup.exists()
+
+
+class TestInstallRules:
+    @pytest.fixture
+    def rules_src(self, tmp_path: Path) -> Path:
+        """Create a fake rules source directory."""
+        src = tmp_path / "rules"
+        src.mkdir()
+        (src / "vk-plan-override.md").write_text("## Plan Override\nUse vk-plan.")
+        (src / "another-rule.md").write_text("## Another Rule")
+        return src
+
+    def test_creates_symlinks(
+        self, rules_src: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+        monkeypatch.setattr(
+            "vk.commands.install_cmd._find_rules_dir", lambda: rules_src
+        )
+
+        count = _install_rules(copy=False)
+
+        claude_rules = fake_home / ".claude" / "rules"
+        assert count == 2
+        for name in ("vk-plan-override.md", "another-rule.md"):
+            target = claude_rules / name
+            assert target.is_symlink()
+            assert target.resolve() == (rules_src / name).resolve()
+
+    def test_creates_copies(
+        self, rules_src: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+        monkeypatch.setattr(
+            "vk.commands.install_cmd._find_rules_dir", lambda: rules_src
+        )
+
+        count = _install_rules(copy=True)
+
+        claude_rules = fake_home / ".claude" / "rules"
+        assert count == 2
+        target = claude_rules / "vk-plan-override.md"
+        assert not target.is_symlink()
+        assert "Plan Override" in target.read_text()
+
+    def test_replaces_existing_rule(
+        self, rules_src: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        fake_home = tmp_path / "home"
+        claude_rules = fake_home / ".claude" / "rules"
+        claude_rules.mkdir(parents=True)
+        (claude_rules / "vk-plan-override.md").write_text("old content")
+
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+        monkeypatch.setattr(
+            "vk.commands.install_cmd._find_rules_dir", lambda: rules_src
+        )
+
+        _install_rules(copy=False)
+
+        target = claude_rules / "vk-plan-override.md"
+        assert target.is_symlink()
+
+    def test_noop_when_no_rules_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr(
+            "vk.commands.install_cmd._find_rules_dir", lambda: None
+        )
+
+        count = _install_rules(copy=False)
+        assert count == 0
