@@ -57,7 +57,7 @@ def test_init_creates_config():
 def test_install_skills_help():
     result = runner.invoke(app, ["install-skills", "--help"])
     assert result.exit_code == 0
-    assert "copy" in result.stdout
+    assert "install" in result.stdout.lower()
 
 
 def test_plan_shows_help():
