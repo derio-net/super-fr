@@ -112,4 +112,4 @@ def install_skills() -> None:
     rule_count = _install_rules()
 
     typer.echo(f"\nDone. {rule_count} rule(s) installed.")
-    typer.echo("Skills are delivered by the plugin system — restart Claude Code to pick up changes.")
+    typer.echo("Skills are delivered by the plugin system — restart Claude Code to pick up.")
