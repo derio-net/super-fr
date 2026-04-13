@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Replace all four prose SKILL.md files with thin CLI wrappers, add `vk init` and `vk install-skills` utility commands, and replace the bash validation script with pytest.
 **Architecture:** Four SKILL.md files become decision-layer prose (~275 lines total) that delegate mechanical work to `vk` CLI subcommands. Two new command modules (`init_cmd.py`, `install_cmd.py`) implement scaffolding and skill deployment. `test_skill_validation.py` replaces `scripts/validate-skills.sh` with structured assertions.

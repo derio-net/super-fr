@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Implement all five `vk progress` subcommands (sync, board, create, transition, audit) with dual-mode dispatch/local behavior, auto-detected via `profile.dispatch_enabled`.
 **Architecture:** Single `progress_cmd.py` module registers a typer subcommand group. Each subcommand reads the profile, branches on `dispatch_enabled`, and delegates to either gh-backed or local-file-backed logic. Shared `--dry-run`/`--yes` contract from `common.py`. Integration tests cover both modes for every subcommand.

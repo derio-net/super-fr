@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Implement `vk dispatch` -- the first real CLI subcommand. One bash call replaces ~10 tool uses and ~15 operator confirmations. Full flow: gate check, plan parse, format verification, idempotency check, issue creation via gh, project board addition, lifecycle field setting, tracking comment injection, plan commit, spec index update, summary output.
 **Architecture:** `dispatch_cmd.py` orchestrates the flow using P1 core modules (config, plan parser, gh wrapper, git helpers, spec_index). `common.py` provides shared CLI primitives (`--dry-run`/`--yes` tri-state, Rich error formatting, confirmation prompts). Exit codes 0-4 encode distinct failure modes.

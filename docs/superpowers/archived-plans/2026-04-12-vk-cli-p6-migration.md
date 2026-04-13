@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Verify every workspace repo has a valid `plan-config.yaml` under the new fail-closed gate, existing plans still parse, and the `vk` CLI is installed and working.
 **Architecture:** Operator runbook backed by parameterized shell scripts in `scripts/migration/`. All scripts take the workspace directory as a required positional argument — no hardcoded paths.

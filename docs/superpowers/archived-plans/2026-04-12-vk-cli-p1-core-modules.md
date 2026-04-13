@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Implement all shared library modules (`src/vk/` except `commands/`) with full unit test coverage and fixture files. No CLI commands -- just the core brain that every command will depend on.
 **Architecture:** Frozen dataclass AST for plans, regex-driven parser, YAML-backed config with fail-closed dispatch gate, subprocess wrappers for git/gh. All modules are pure library code tested via pytest.

@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Implement `vk plan` subcommands (new, self-review, spec-index, convert, format) and `vk execute` subcommands (check-deps, scope, check-step, pr-body) as mechanical helpers that SKILL.md files invoke.
 **Architecture:** Two command modules (`plan_cmd.py`, `execute_cmd.py`) registered as typer subcommand groups. Both leverage the shared plan parser (both flat and phased formats), writer, and config modules from P1. `check-step` uses step-ID format `P<phase>.T<task>.S<step>` (phased) or `T<task>.S<step>` (flat). All mutating commands follow the `--dry-run`/`--yes` contract from `common.py`.
