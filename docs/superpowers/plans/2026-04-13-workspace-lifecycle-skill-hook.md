@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-13-workspace-lifecycle-automation-design.md`
-**Status:** In Progress
+**Status:** Complete
 
 **Goal:** Modify the `vk-execute` skill to call VK MCP `update_issue(status: "In Review")` after the agent creates a PR, closing the lifecycle gap between agent completion and operator review.
 **Architecture:** Two files change: the thin CLI wrapper (`skills/vk-execute/SKILL.md`) gets a new Step 7 after PR creation, and the cached plugin skill (`skills/vk-execute/SKILL.md` in the plugin cache) gets the corresponding detailed procedure. The change is purely additive — a new final step that is best-effort and dispatch-mode only.
