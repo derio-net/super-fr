@@ -301,7 +301,6 @@ def list_project_items(*, owner: str, project_number: int) -> list[BoardItem]:
     return items
 
 
-
 def is_issue_closed(*, repo: str, number: int) -> bool:
     """Check if an issue is closed."""
     output = _run_gh(

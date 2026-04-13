@@ -330,21 +330,15 @@ def _run_dispatch_audit(
                 continue
             closed = gh.is_issue_closed(repo=repo_slug, number=item.number)
             if closed and item.lifecycle not in terminal_states:
-                issues.append(
-                    f"Closed but lifecycle '{item.lifecycle}': "
-                    f"{item.title} ({item.url})"
-                )
+                issues.append(f"Closed but lifecycle '{item.lifecycle}': {item.title} ({item.url})")
         except gh.GhError:
             pass  # skip if we can't query
 
     # Check 3: Completed plan phases marked 'deployed' instead of 'retired'
     deployed_phases = [
-        i for i in board_items
-        if i.lifecycle == "deployed"
-        and any(
-            kw in i.title
-            for kw in ("-agentic", "-manual")
-        )
+        i
+        for i in board_items
+        if i.lifecycle == "deployed" and any(kw in i.title for kw in ("-agentic", "-manual"))
     ]
     for item in deployed_phases:
         try:
@@ -365,9 +359,7 @@ def _run_dispatch_audit(
         tracking_urls = _extract_tracking_urls(pf)
         for url in tracking_urls:
             if url not in board_url_map:
-                issues.append(
-                    f"Tracked issue not on board: {url} (from {pf.name})"
-                )
+                issues.append(f"Tracked issue not on board: {url} (from {pf.name})")
 
     # Check 5: Duplicate items (same title across repos)
     seen_titles: dict[str, list[str]] = {}
@@ -379,9 +371,7 @@ def _run_dispatch_audit(
         # Only flag if same base title appears in different repos
         repos = {u.split("/issues/")[0] for u in urls}
         if len(repos) > 1:
-            issues.append(
-                f"Possible duplicate across repos: '{title}' in {', '.join(repos)}"
-            )
+            issues.append(f"Possible duplicate across repos: '{title}' in {', '.join(repos)}")
 
     return issues
 

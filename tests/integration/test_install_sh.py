@@ -112,11 +112,9 @@ class TestMcpConfig:
     def test_preserves_existing_mcp_servers(self, fake_home: Path) -> None:
         """Installing should not clobber other MCP servers in .mcp.json."""
         mcp = fake_home / ".claude" / ".mcp.json"
-        mcp.write_text(json.dumps({
-            "mcpServers": {
-                "other-server": {"command": "other", "args": []}
-            }
-        }))
+        mcp.write_text(
+            json.dumps({"mcpServers": {"other-server": {"command": "other", "args": []}}})
+        )
 
         _run_install(fake_home)
 
@@ -127,11 +125,9 @@ class TestMcpConfig:
     def test_updates_existing_vk_entry(self, fake_home: Path) -> None:
         """If vibe_kanban already exists, it gets overwritten with current config."""
         mcp = fake_home / ".claude" / ".mcp.json"
-        mcp.write_text(json.dumps({
-            "mcpServers": {
-                "vibe_kanban": {"command": "/old/path", "args": []}
-            }
-        }))
+        mcp.write_text(
+            json.dumps({"mcpServers": {"vibe_kanban": {"command": "/old/path", "args": []}}})
+        )
 
         _run_install(fake_home)
 
@@ -227,12 +223,16 @@ class TestUninstall:
 
     def test_preserves_other_mcp_servers_on_uninstall(self, fake_home: Path) -> None:
         mcp = fake_home / ".claude" / ".mcp.json"
-        mcp.write_text(json.dumps({
-            "mcpServers": {
-                "other-server": {"command": "other", "args": []},
-                "vibe_kanban": {"command": "/old", "args": []}
-            }
-        }))
+        mcp.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "other-server": {"command": "other", "args": []},
+                        "vibe_kanban": {"command": "/old", "args": []},
+                    }
+                }
+            )
+        )
 
         _run_install(fake_home, "--uninstall")
 

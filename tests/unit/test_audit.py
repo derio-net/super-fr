@@ -90,9 +90,7 @@ class TestRunDispatchAudit:
 
         assert any("Missing lifecycle" in i for i in issues)
 
-    def test_flags_deployed_closed_phases(
-        self, dispatch_profile: Profile, plans_dir: Path
-    ):
+    def test_flags_deployed_closed_phases(self, dispatch_profile: Profile, plans_dir: Path):
         items = [
             BoardItem(
                 title="my-plan-0-agentic",
@@ -114,9 +112,7 @@ class TestRunDispatchAudit:
 
         assert any("should be 'retired'" in i for i in issues)
 
-    def test_flags_tracked_issue_not_on_board(
-        self, dispatch_profile: Profile, plans_dir: Path
-    ):
+    def test_flags_tracked_issue_not_on_board(self, dispatch_profile: Profile, plans_dir: Path):
         plan = plans_dir / "2026-01-01-test.md"
         plan.write_text(
             "# Test Plan\n"
@@ -133,9 +129,7 @@ class TestRunDispatchAudit:
 
         assert any("not on board" in i and "issues/99" in i for i in issues)
 
-    def test_no_issues_when_clean(
-        self, dispatch_profile: Profile, plans_dir: Path
-    ):
+    def test_no_issues_when_clean(self, dispatch_profile: Profile, plans_dir: Path):
         items = [
             BoardItem(
                 title="healthy-service",
@@ -156,9 +150,7 @@ class TestRunDispatchAudit:
 
         assert issues == []
 
-    def test_handles_board_query_failure(
-        self, dispatch_profile: Profile, plans_dir: Path
-    ):
+    def test_handles_board_query_failure(self, dispatch_profile: Profile, plans_dir: Path):
         from vk.gh import GhError
 
         with patch("vk.gh.get_project_number", side_effect=GhError("auth failed")):
@@ -167,9 +159,7 @@ class TestRunDispatchAudit:
         assert len(issues) == 1
         assert "Board query failed" in issues[0]
 
-    def test_flags_cross_repo_duplicates(
-        self, dispatch_profile: Profile, plans_dir: Path
-    ):
+    def test_flags_cross_repo_duplicates(self, dispatch_profile: Profile, plans_dir: Path):
         items = [
             BoardItem(
                 title="Content pipeline foundation",

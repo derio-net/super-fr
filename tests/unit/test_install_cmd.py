@@ -34,9 +34,7 @@ def marketplace_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 class TestCleanMarketplaceSkills:
-    def test_removes_matching_marketplace_copies(
-        self, skills_src: Path, marketplace_dir: Path
-    ):
+    def test_removes_matching_marketplace_copies(self, skills_src: Path, marketplace_dir: Path):
         # Plant marketplace duplicates
         for name in ("vk-plan", "vk-dispatch"):
             d = marketplace_dir / name
@@ -48,9 +46,7 @@ class TestCleanMarketplaceSkills:
         assert not (marketplace_dir / "vk-plan").exists()
         assert not (marketplace_dir / "vk-dispatch").exists()
 
-    def test_ignores_non_matching_marketplace_skills(
-        self, skills_src: Path, marketplace_dir: Path
-    ):
+    def test_ignores_non_matching_marketplace_skills(self, skills_src: Path, marketplace_dir: Path):
         # A marketplace skill that doesn't match any source skill
         other = marketplace_dir / "some-other-skill"
         other.mkdir()
@@ -70,9 +66,7 @@ class TestCleanMarketplaceSkills:
         # Should not raise
         _clean_marketplace_skills(skills_src)
 
-    def test_skips_non_skill_source_dirs(
-        self, skills_src: Path, marketplace_dir: Path
-    ):
+    def test_skips_non_skill_source_dirs(self, skills_src: Path, marketplace_dir: Path):
         # Plant a marketplace dir matching the non-skill source dir
         other = marketplace_dir / "not-a-skill"
         other.mkdir()
@@ -91,9 +85,7 @@ class TestInstallSkills:
         fake_home = tmp_path / "home"
         fake_home.mkdir()
         monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_skills_dir", lambda: skills_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_skills_dir", lambda: skills_src)
 
         install_skills(copy=False)
 
@@ -109,9 +101,7 @@ class TestInstallSkills:
         fake_home = tmp_path / "home"
         fake_home.mkdir()
         monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_skills_dir", lambda: skills_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_skills_dir", lambda: skills_src)
 
         install_skills(copy=True)
 
@@ -134,9 +124,7 @@ class TestInstallSkills:
         (claude_skills / "vk-plan").symlink_to(stale_target)
 
         monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_skills_dir", lambda: skills_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_skills_dir", lambda: skills_src)
 
         install_skills(copy=False)
 
@@ -156,9 +144,7 @@ class TestInstallSkills:
         (old / "SKILL.md").write_text("old")
 
         monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_skills_dir", lambda: skills_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_skills_dir", lambda: skills_src)
 
         install_skills(copy=False)
 
@@ -173,9 +159,7 @@ class TestInstallSkills:
         dup.mkdir()
         (dup / "SKILL.md").write_text("stale")
 
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_skills_dir", lambda: skills_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_skills_dir", lambda: skills_src)
 
         install_skills(copy=False)
 
@@ -198,9 +182,7 @@ class TestInstallRules:
         fake_home = tmp_path / "home"
         fake_home.mkdir()
         monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_rules_dir", lambda: rules_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_rules_dir", lambda: rules_src)
 
         count = _install_rules(copy=False)
 
@@ -211,15 +193,11 @@ class TestInstallRules:
             assert target.is_symlink()
             assert target.resolve() == (rules_src / name).resolve()
 
-    def test_creates_copies(
-        self, rules_src: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_creates_copies(self, rules_src: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         fake_home = tmp_path / "home"
         fake_home.mkdir()
         monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_rules_dir", lambda: rules_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_rules_dir", lambda: rules_src)
 
         count = _install_rules(copy=True)
 
@@ -238,21 +216,15 @@ class TestInstallRules:
         (claude_rules / "vk-plan-override.md").write_text("old content")
 
         monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_rules_dir", lambda: rules_src
-        )
+        monkeypatch.setattr("vk.commands.install_cmd._find_rules_dir", lambda: rules_src)
 
         _install_rules(copy=False)
 
         target = claude_rules / "vk-plan-override.md"
         assert target.is_symlink()
 
-    def test_noop_when_no_rules_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.setattr(
-            "vk.commands.install_cmd._find_rules_dir", lambda: None
-        )
+    def test_noop_when_no_rules_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr("vk.commands.install_cmd._find_rules_dir", lambda: None)
 
         count = _install_rules(copy=False)
         assert count == 0
