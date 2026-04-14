@@ -228,3 +228,9 @@ Each phase is independently revertable. If Phase 3 causes starvation or false fa
 ## Open questions
 
 None at spec time. Phase 0 audit will surface any additional title/label consumers.
+
+## Implementation Plans
+
+| Plan | Repo | File | Status | Depends on |
+|------|------|------|--------|------------|
+| Archive And Unified Descriptions Implementation Plan |  | `docs/superpowers/plans/2026-04-14-archive-and-unified-descriptions.md` | Not Started | — |
