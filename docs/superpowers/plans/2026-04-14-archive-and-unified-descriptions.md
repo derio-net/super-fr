@@ -14,6 +14,7 @@
 ---
 
 ## Phase 0: Impact audit across repos [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/9 -->
 
 ### Task 1: Enumerate title/label/body consumers
 
@@ -98,6 +99,7 @@ git commit -m "docs(audit): unified-descriptions impact audit (phase 0)"
 ---
 
 ## Phase 1: Dispatch output — titles, body, labels, validator [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/10 -->
 
 ### Task 1: Body builder — tracking block and dash-prefixed deps
 
@@ -567,6 +569,7 @@ Run `pytest tests/ 2>&1 | tail -10`; expect pass.
 ---
 
 ## Phase 2: Archive-on-Complete in vk progress sync [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/11 -->
 
 ### Task 1: Add plan.archive_to config key
 
@@ -797,6 +800,7 @@ Run the new test; expect pass.
 ---
 
 ## Phase 3: vk dispatch migrate [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/12 -->
 
 ### Task 1: Scaffold subcommand
 
@@ -1040,6 +1044,7 @@ Run tests; expect pass. Run full suite `pytest tests/ 2>&1 | tail -15`.
 ---
 
 ## Phase 4: Skill and documentation updates [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/13 -->
 
 ### Task 1: Update vk-execute skill
 
@@ -1143,6 +1148,7 @@ to point at the new archived path.
 ---
 
 ## Phase 5: Operational migration [manual]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/14 -->
 
 ### Task 1: Verify bridge changes deployed
 
