@@ -63,14 +63,15 @@ def create_issue(
     return _run_gh(args)
 
 
-def view_issue(repo: str, number: int) -> dict:
+def view_issue(repo: str, number: int) -> dict[str, object]:
     """Fetch an Issue's title, body, labels, state via gh issue view --json."""
     import json
 
     out = _run_gh(
         ["issue", "view", str(number), "--repo", repo, "--json", "title,body,labels,state"]
     )
-    return json.loads(out)
+    result: dict[str, object] = json.loads(out)
+    return result
 
 
 def edit_issue(

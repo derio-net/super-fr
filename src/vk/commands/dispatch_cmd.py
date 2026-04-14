@@ -404,7 +404,7 @@ def migrate(
             _MigrateRewrite(
                 repo=issue_repo,
                 number=number,
-                old_title=info["title"],
+                old_title=str(info.get("title", "")),
                 new_title=new_title,
                 new_body=new_body,
             )
