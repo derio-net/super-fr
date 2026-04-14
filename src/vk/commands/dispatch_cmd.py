@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
+from typing import TypedDict
 
 import typer
 from rich.console import Console
@@ -25,6 +26,16 @@ from vk.plan.parser import parse_plan
 
 console = Console()
 err_console = Console(stderr=True)
+
+dispatch_app = typer.Typer(help="Dispatch plans to GitHub Issues.")
+
+
+class _MigrateRewrite(TypedDict):
+    repo: str
+    number: int
+    old_title: str
+    new_title: str
+    new_body: str
 
 
 def _find_repo_root(plan_path: Path) -> Path:
@@ -66,9 +77,7 @@ def _build_issue_title(slug: str, phase: Phase) -> str:
     return f"{slug}-{phase.number}-{phase.tag}"
 
 
-def _build_issue_body(
-    phase: Phase, plan_path: Path, target_repo: str, prev_num: int | None
-) -> str:
+def _build_issue_body(phase: Phase, plan_path: Path, target_repo: str, prev_num: int | None) -> str:
     """Build a structured issue body with Instruction/Workspace/Dependencies sections.
 
     The body format is consumed by the VK Issue Bridge parser, which expects
@@ -152,7 +161,8 @@ def _print_dry_run(
     console.print(f"\nPhases to create: {pending}")
 
 
-def dispatch(
+@dispatch_app.command("create")
+def dispatch_create(
     plan_path: Path = typer.Argument(
         ...,
         help="Path to the phased plan file.",
@@ -168,7 +178,7 @@ def dispatch(
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutations."),
     yes: bool = typer.Option(False, "--yes", help="Execute without confirmation."),
 ) -> None:
-    """Dispatch a phased plan to GitHub Issues."""
+    """Create GitHub Issues from a phased plan."""
     # Resolve action mode
     try:
         action = resolve_action(dry_run=dry_run, yes=yes)
@@ -317,4 +327,115 @@ def dispatch(
         raise typer.Exit(4)
     elif errors and not results:
         raise typer.Exit(3)
+    raise typer.Exit(0)
+
+
+@dispatch_app.command("migrate")
+def migrate(
+    plan_path: Path = typer.Argument(..., exists=True, help="Path to the phased plan file."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutations."),
+    yes: bool = typer.Option(False, "--yes", help="Execute without confirmation."),
+) -> None:
+    """Retrofit existing open Issues to the new title/body format."""
+    try:
+        action = resolve_action(dry_run=dry_run, yes=yes)
+    except Exception:
+        err_console.print("Error: --dry-run and --yes are mutually exclusive")
+        raise typer.Exit(1)
+
+    plan_path_resolved = Path(plan_path).resolve()
+    repo_root = _find_repo_root(plan_path_resolved)
+
+    config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
+    profile = load_profile(config_path)
+    if not profile.dispatch_enabled:
+        err_console.print(format_gate_refusal())
+        raise typer.Exit(1)
+
+    dispatch_cfg = profile.dispatch
+    assert dispatch_cfg is not None
+
+    try:
+        plan = parse_plan(plan_path_resolved)
+    except (FileNotFoundError, ValueError) as exc:
+        err_console.print(f"Error: {exc}")
+        raise typer.Exit(2)
+
+    if plan.format is not PlanFormat.PHASED:
+        err_console.print("Error: Cannot migrate a flat plan.")
+        raise typer.Exit(2)
+
+    if not plan.phases:
+        err_console.print("Error: No phases found in plan.")
+        raise typer.Exit(2)
+
+    slug = derive_slug(plan_path_resolved)
+    plan_text = plan_path_resolved.read_text()
+    tracked = _get_already_tracked(plan_text)
+
+    missing = [p.number for p in plan.phases if p.number not in tracked]
+    if missing:
+        err_console.print(
+            f"Phase(s) {missing} have no tracking comment in {plan_path}. "
+            f"Run 'vk dispatch create <plan>' to create Issues for pending phases first."
+        )
+        raise typer.Exit(2)
+
+    rewrites: list[_MigrateRewrite] = []
+    for phase in plan.phases:
+        url = tracked[phase.number]
+        number = gh.extract_issue_number(url)
+        issue_repo = url.split("/issues/")[0].replace("https://github.com/", "")
+
+        info = gh.view_issue(issue_repo, number)
+        if info.get("state") == "CLOSED":
+            console.print(f"Skip #{number}: CLOSED")
+            continue
+
+        new_title = _build_issue_title(slug, phase)
+        prev_num = (
+            gh.extract_issue_number(tracked[phase.number - 1])
+            if phase.number > 0 and (phase.number - 1) in tracked
+            else None
+        )
+        new_body = _build_issue_body(phase, plan_path_resolved, issue_repo, prev_num)
+
+        rewrites.append(
+            _MigrateRewrite(
+                repo=issue_repo,
+                number=number,
+                old_title=str(info.get("title", "")),
+                new_title=new_title,
+                new_body=new_body,
+            )
+        )
+
+    if not rewrites:
+        console.print("Nothing to migrate (all issues closed or skipped).")
+        raise typer.Exit(0)
+
+    if action is ConfirmAction.DRY_RUN:
+        for r in rewrites:
+            console.print(f"\n#{r['number']}  {r['old_title']}  →  {r['new_title']}")
+        raise typer.Exit(0)
+
+    if action is ConfirmAction.PROMPT:
+        for r in rewrites:
+            console.print(f"\n#{r['number']}  {r['old_title']}  →  {r['new_title']}")
+        confirm_or_exit("Apply these migrations?")
+
+    for r in rewrites:
+        try:
+            gh.edit_issue(
+                repo=r["repo"],
+                number=r["number"],
+                title=r["new_title"],
+                body=r["new_body"],
+                add_labels=[f"plan:{slug}"],
+            )
+            console.print(f"Migrated #{r['number']}")
+        except gh.GhError as exc:
+            err_console.print(f"Error migrating #{r['number']}: {exc}")
+            raise typer.Exit(3)
+
     raise typer.Exit(0)

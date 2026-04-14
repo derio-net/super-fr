@@ -63,6 +63,32 @@ def create_issue(
     return _run_gh(args)
 
 
+def view_issue(repo: str, number: int) -> dict[str, object]:
+    """Fetch an Issue's title, body, labels, state via gh issue view --json."""
+    import json
+
+    out = _run_gh(
+        ["issue", "view", str(number), "--repo", repo, "--json", "title,body,labels,state"]
+    )
+    result: dict[str, object] = json.loads(out)
+    return result
+
+
+def edit_issue(
+    *,
+    repo: str,
+    number: int,
+    title: str,
+    body: str,
+    add_labels: list[str],
+) -> None:
+    """Edit an Issue's title, body, and add labels in one call."""
+    args = ["issue", "edit", str(number), "--repo", repo, "--title", title, "--body", body]
+    for lbl in add_labels:
+        args.extend(["--add-label", lbl])
+    _run_gh(args)
+
+
 def close_issue(*, repo: str, number: int) -> None:
     """Close a GitHub Issue by number."""
     _run_gh(

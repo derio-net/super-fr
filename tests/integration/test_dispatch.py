@@ -17,7 +17,7 @@ class TestDispatchDryRun:
     def test_dry_run_shows_preview(
         self, dispatch_config: Path, phased_plan: Path, tmp_repo: Path
     ) -> None:
-        result = runner.invoke(app, ["dispatch", str(phased_plan), "--dry-run"])
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--dry-run"])
         assert result.exit_code == 0
         assert "dry run" in result.stdout.lower()
         assert "Phase 1" in result.stdout
@@ -31,7 +31,7 @@ class TestDispatchGateRefusal:
         # Remove config if it exists
         config = tmp_repo / "docs" / "superpowers" / "plan-config.yaml"
         config.unlink(missing_ok=True)
-        result = runner.invoke(app, ["dispatch", str(phased_plan), "--dry-run"])
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--dry-run"])
         assert result.exit_code == 1
 
     def test_dispatch_false(self, tmp_repo: Path, phased_plan: Path) -> None:
@@ -39,7 +39,7 @@ class TestDispatchGateRefusal:
         config_dir.mkdir(parents=True, exist_ok=True)
         config_file = config_dir / "plan-config.yaml"
         config_file.write_text("dispatch: false\n")
-        result = runner.invoke(app, ["dispatch", str(phased_plan), "--dry-run"])
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--dry-run"])
         assert result.exit_code == 1
 
     def test_flat_plan_refused(self, dispatch_config: Path, tmp_repo: Path) -> None:
@@ -62,7 +62,7 @@ class TestDispatchGateRefusal:
             - [ ] **Step 1: Thing**
         """)
         )
-        result = runner.invoke(app, ["dispatch", str(flat_plan), "--dry-run"])
+        result = runner.invoke(app, ["dispatch", "create", str(flat_plan), "--dry-run"])
         assert result.exit_code == 2
         assert "flat" in result.stdout.lower() or "flat" in (result.stderr or "").lower()
 
@@ -91,7 +91,7 @@ class TestDispatchIdempotency:
             - [x] **Step 1: Done**
         """)
         )
-        result = runner.invoke(app, ["dispatch", str(plan_file), "--dry-run"])
+        result = runner.invoke(app, ["dispatch", "create", str(plan_file), "--dry-run"])
         assert result.exit_code == 0
         assert "already dispatched" in result.stdout.lower() or "noop" in result.stdout.lower()
 
@@ -100,7 +100,7 @@ class TestDispatchMutualExclusion:
     def test_both_flags_error(
         self, dispatch_config: Path, phased_plan: Path, tmp_repo: Path
     ) -> None:
-        result = runner.invoke(app, ["dispatch", str(phased_plan), "--dry-run", "--yes"])
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--dry-run", "--yes"])
         assert result.exit_code != 0
 
 
@@ -122,7 +122,7 @@ class TestDispatchApply:
         mock_gh.extract_issue_number.side_effect = [100, 101, 102]
         mock_gh.GhError = type("GhError", (Exception,), {})
 
-        result = runner.invoke(app, ["dispatch", str(phased_plan), "--yes"])
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
         assert result.exit_code == 0
 
         assert mock_gh.create_issue.call_count == 3

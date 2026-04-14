@@ -14,43 +14,31 @@ def _make_phase(number: int, title: str = "Setup", tag: str = "agentic") -> Phas
 
 class TestBuildIssueBody:
     def test_contains_instruction_section(self) -> None:
-        body = _build_issue_body(
-            _make_phase(1), Path("/tmp/plan.md"), "org/repo", prev_num=None
-        )
+        body = _build_issue_body(_make_phase(1), Path("/tmp/plan.md"), "org/repo", prev_num=None)
         assert "## Instruction" in body
         assert "superpowers-for-vk:vk-execute" in body
 
     def test_contains_workspace_section(self) -> None:
-        body = _build_issue_body(
-            _make_phase(1), Path("/tmp/plan.md"), "org/repo", prev_num=None
-        )
+        body = _build_issue_body(_make_phase(1), Path("/tmp/plan.md"), "org/repo", prev_num=None)
         assert "## Workspace" in body
         assert "Repos: org/repo" in body
 
     def test_contains_dependencies_section(self) -> None:
-        body = _build_issue_body(
-            _make_phase(2), Path("/tmp/plan.md"), "org/repo", prev_num=5
-        )
+        body = _build_issue_body(_make_phase(2), Path("/tmp/plan.md"), "org/repo", prev_num=5)
         assert "## Dependencies" in body
         assert "Blocked by #5" in body
 
     def test_phase_zero_no_blocking(self) -> None:
-        body = _build_issue_body(
-            _make_phase(0), Path("/tmp/plan.md"), "org/repo", prev_num=None
-        )
+        body = _build_issue_body(_make_phase(0), Path("/tmp/plan.md"), "org/repo", prev_num=None)
         assert "None — no blocking phases." in body
 
     def test_phase_one_no_prev_issue(self) -> None:
-        body = _build_issue_body(
-            _make_phase(1), Path("/tmp/plan.md"), "org/repo", prev_num=None
-        )
+        body = _build_issue_body(_make_phase(1), Path("/tmp/plan.md"), "org/repo", prev_num=None)
         assert "Phases 0-0 complete." in body
         assert "Blocked by" not in body
 
     def test_phase_with_prev_issue(self) -> None:
-        body = _build_issue_body(
-            _make_phase(3), Path("/tmp/plan.md"), "org/repo", prev_num=42
-        )
+        body = _build_issue_body(_make_phase(3), Path("/tmp/plan.md"), "org/repo", prev_num=42)
         assert "Phases 0-2 complete. Blocked by #42." in body
 
     def test_header_contains_phase_info(self) -> None:
@@ -69,9 +57,7 @@ class TestBuildIssueBody:
 
     def test_plan_path_in_body(self) -> None:
         plan = Path("/home/user/docs/plans/2026-04-12-feature.md")
-        body = _build_issue_body(
-            _make_phase(1), plan, "org/repo", prev_num=None
-        )
+        body = _build_issue_body(_make_phase(1), plan, "org/repo", prev_num=None)
         assert f"**Plan:** `{plan}`" in body
         assert f"**Plan file:** `{plan}`" in body
 
