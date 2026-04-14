@@ -70,7 +70,19 @@ def test_plan_shows_help():
 
 def test_dispatch_no_args_shows_usage():
     result = runner.invoke(app, ["dispatch"])
-    assert result.exit_code == 2  # missing required PLAN_PATH argument
+    assert result.exit_code == 2
+
+
+def test_dispatch_help_lists_subcommands():
+    result = runner.invoke(app, ["dispatch", "--help"])
+    assert result.exit_code == 0
+    assert "create" in result.stdout
+    assert "migrate" in result.stdout
+
+
+def test_dispatch_create_no_args_shows_usage():
+    result = runner.invoke(app, ["dispatch", "create"])
+    assert result.exit_code == 2
 
 
 def test_progress_help_detailed():
@@ -87,3 +99,9 @@ def test_execute_help_detailed():
     assert "check-deps" in result.stdout
     assert "scope" in result.stdout
     assert "check-step" in result.stdout
+
+
+def test_dispatch_migrate_command_exists():
+    result = runner.invoke(app, ["dispatch", "migrate", "--help"])
+    assert result.exit_code == 0
+    assert "migrate" in result.output.lower()

@@ -3,7 +3,7 @@
 import typer
 
 from vk import __version__
-from vk.commands.dispatch_cmd import dispatch
+from vk.commands.dispatch_cmd import dispatch_app
 from vk.commands.execute_cmd import execute_app
 from vk.commands.init_cmd import init as init_command
 from vk.commands.install_cmd import install_skills as install_skills_command
@@ -17,7 +17,7 @@ app = typer.Typer(
 )
 
 app.add_typer(plan_app, name="plan")
-app.command(name="dispatch")(dispatch)
+app.add_typer(dispatch_app, name="dispatch")
 app.add_typer(progress_app, name="progress")
 app.add_typer(execute_app, name="execute")
 app.command(name="init")(init_command)
