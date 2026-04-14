@@ -147,8 +147,9 @@ class TestMigrateApply:
             "labels": [],
         }
         mock_gh.extract_issue_number.side_effect = [1, 2, 1, 2]
-        mock_gh.GhError = type("GhError", (Exception,), {})
-        mock_gh.edit_issue.side_effect = [None, Exception("gh boom")]
+        gh_error_cls = type("GhError", (Exception,), {})
+        mock_gh.GhError = gh_error_cls
+        mock_gh.edit_issue.side_effect = [None, gh_error_cls("gh boom")]
 
         result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
         assert result.exit_code != 0

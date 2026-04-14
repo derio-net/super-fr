@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
+from typing import TypedDict
 
 import typer
 from rich.console import Console
@@ -27,6 +28,14 @@ console = Console()
 err_console = Console(stderr=True)
 
 dispatch_app = typer.Typer(help="Dispatch plans to GitHub Issues.")
+
+
+class _MigrateRewrite(TypedDict):
+    repo: str
+    number: int
+    old_title: str
+    new_title: str
+    new_body: str
 
 
 def _find_repo_root(plan_path: Path) -> Path:
@@ -372,7 +381,7 @@ def migrate(
         )
         raise typer.Exit(2)
 
-    rewrites: list[dict] = []
+    rewrites: list[_MigrateRewrite] = []
     for phase in plan.phases:
         url = tracked[phase.number]
         number = gh.extract_issue_number(url)
@@ -392,15 +401,18 @@ def migrate(
         new_body = _build_issue_body(phase, plan_path_resolved, issue_repo, prev_num)
 
         rewrites.append(
-            {
-                "repo": issue_repo,
-                "number": number,
-                "old_title": info["title"],
-                "new_title": new_title,
-                "new_body": new_body,
-                "phase": phase,
-            }
+            _MigrateRewrite(
+                repo=issue_repo,
+                number=number,
+                old_title=info["title"],
+                new_title=new_title,
+                new_body=new_body,
+            )
         )
+
+    if not rewrites:
+        console.print("Nothing to migrate (all issues closed or skipped).")
+        raise typer.Exit(0)
 
     if action is ConfirmAction.DRY_RUN:
         for r in rewrites:
@@ -410,9 +422,6 @@ def migrate(
     if action is ConfirmAction.PROMPT:
         for r in rewrites:
             console.print(f"\n#{r['number']}  {r['old_title']}  →  {r['new_title']}")
-        if not rewrites:
-            console.print("Nothing to migrate.")
-            raise typer.Exit(0)
         confirm_or_exit("Apply these migrations?")
 
     for r in rewrites:
@@ -425,7 +434,7 @@ def migrate(
                 add_labels=[f"plan:{slug}"],
             )
             console.print(f"Migrated #{r['number']}")
-        except Exception as exc:
+        except gh.GhError as exc:
             err_console.print(f"Error migrating #{r['number']}: {exc}")
             raise typer.Exit(3)
 
