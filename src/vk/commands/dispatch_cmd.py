@@ -66,9 +66,7 @@ def _build_issue_title(slug: str, phase: Phase) -> str:
     return f"{slug}-{phase.number}-{phase.tag}"
 
 
-def _build_issue_body(
-    phase: Phase, plan_path: Path, target_repo: str, prev_num: int | None
-) -> str:
+def _build_issue_body(phase: Phase, plan_path: Path, target_repo: str, prev_num: int | None) -> str:
     """Build a structured issue body with Instruction/Workspace/Dependencies sections.
 
     The body format is consumed by the VK Issue Bridge parser, which expects
