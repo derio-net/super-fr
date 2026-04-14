@@ -68,6 +68,10 @@
 |---|---|---|---|
 | `docs/superpowers/plan-config.yaml` | 44 | `vk-ready` | Dispatch label config for Frank plans |
 
+### Not found
+
+- **`pr-ready`**: No code-level consumers found in any repo. Safe to introduce in later phases without migration.
+
 ---
 
 ## Open Issues to migrate
