@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-14-archive-and-unified-descriptions-design.md`
-**Status:** Not Started
+**Status:** In Progress
 
 **Goal:** Ship archive-on-Complete in `vk progress sync`, unified work-item descriptions across Issue/workspace/PR surfaces, and fail-loud dispatch output whose deps match the VK Issue Bridge's regex — plus a `vk dispatch migrate` command to retrofit in-flight Issues.
 **Architecture:** Changes live in `src/vk/commands/{progress_cmd,dispatch_cmd}.py`, `src/vk/config.py`, and the three `skills/vk-*` SKILL.md files. TDD throughout — unit tests in `tests/unit/` gate each builder/validator change; integration tests in `tests/integration/` cover archive flow and migrate flow against mocked `gh`. Secure-agent-kali bridge changes live in a separate plan.
@@ -21,7 +21,7 @@
 **Files:**
 - Create: `docs/superpowers/2026-04-14-unified-descriptions-audit.md`
 
-- [ ] **Step 1: Grep for slug-phase-tag title regex consumers**
+- [x] **Step 1: Grep for slug-phase-tag title regex consumers**
 
 Run this command from the repo root and append the raw output to a scratchpad in `/tmp/audit-title.txt`:
 
@@ -34,7 +34,7 @@ done > /tmp/audit-title.txt
 
 Expected: at least one hit in `src/vk/commands/progress_cmd.py` (the `seen_titles` regex at line 391) and one in `src/vk/commands/dispatch_cmd.py::_build_issue_title`.
 
-- [ ] **Step 2: Grep for vk-ready / vk-synced / in-progress / pr-ready label consumers**
+- [x] **Step 2: Grep for vk-ready / vk-synced / in-progress / pr-ready label consumers**
 
 ```bash
 for repo in /home/claude/repos/superpowers-for-vk /home/claude/repos/secure-agent-kali /home/claude/repos/frank /home/claude/repos/willikins; do
@@ -45,7 +45,7 @@ done > /tmp/audit-labels.txt
 
 Expected: hits in `secure-agent-kali/scripts/vk-issue-bridge.py` (GH_LABEL_READY/SYNCED) and in `superpowers-for-vk/src/vk/commands/dispatch_cmd.py` (labels map).
 
-- [ ] **Step 3: Enumerate open Issues with old-format titles across derio-net repos**
+- [x] **Step 3: Enumerate open Issues with old-format titles across derio-net repos**
 
 ```bash
 for repo in derio-net/superpowers-for-vk derio-net/secure-agent-kali derio-net/frank derio-net/willikins; do
@@ -56,7 +56,7 @@ done > /tmp/audit-open-issues.tsv
 
 Expected: a TSV with the Frank hextra phases (5 rows for #68–#72) and any other open `vk-ready` Issues.
 
-- [ ] **Step 4: Confirm bridge is singleton**
+- [x] **Step 4: Confirm bridge is singleton**
 
 ```bash
 ls -la /opt/scripts/vk-issue-bridge.py /home/claude/.local/bin/vk-issue-bridge.py /home/claude/repos/secure-agent-kali/scripts/vk-issue-bridge.py 2>&1
@@ -64,7 +64,7 @@ ls -la /opt/scripts/vk-issue-bridge.py /home/claude/.local/bin/vk-issue-bridge.p
 
 All three paths should resolve to the same inode OR the `secure-agent-kali` copy is the source of truth and the others are copies/symlinks. Record which case applies.
 
-- [ ] **Step 5: Check willikins transition script for title parsing**
+- [x] **Step 5: Check willikins transition script for title parsing**
 
 ```bash
 rg -n 'title|Title' /home/claude/repos/willikins/scripts/hooks/vk-lifecycle-transition.sh 2>&1
