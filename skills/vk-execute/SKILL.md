@@ -22,7 +22,7 @@ Implements a single phase (phased) or task (flat) from a plan.
 
 When creating the PR for an agentic phase:
 
-- **Title:** `[{owner}/{repo}] Phase {n}/{total} · {phase_title}` — matches the Issue title shape so VK/GH/PR surfaces align.
+- **Title:** `[{owner}/{repo}] {slug} · Phase {n}/{total} · {phase_title}` — matches the Issue title shape so VK/GH/PR surfaces align.
 - **Body:** first content block is the tracking block copied verbatim from the Issue body (the `📦 Repo:` / `📋 Plan:` / ... lines plus the `**Goal (from plan):**` paragraph). Then proceed with your PR summary.
 
 ## Label lifecycle

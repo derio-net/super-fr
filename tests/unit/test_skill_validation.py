@@ -57,13 +57,13 @@ class TestSkillValidation:
 
     def test_vk_execute_mentions_pr_ready_label(self, skill_dir: Path) -> None:
         if skill_dir.name != "vk-execute":
-            return
+            pytest.skip("Only applies to vk-execute")
         text = (skill_dir / "SKILL.md").read_text()
         assert "pr-ready" in text, "vk-execute must document the pr-ready label swap"
 
     def test_vk_execute_mentions_unified_pr_title(self, skill_dir: Path) -> None:
         if skill_dir.name != "vk-execute":
-            return
+            pytest.skip("Only applies to vk-execute")
         text = (skill_dir / "SKILL.md").read_text()
         assert "[{owner}/{repo}]" in text or "[owner/repo]" in text, \
             "vk-execute must document the unified PR title format"
