@@ -9,7 +9,15 @@ from unittest.mock import patch
 
 import pytest
 
-from vk.gh import GhError, add_to_project, auth_status, close_issue, create_issue, set_field
+from vk.gh import (
+    GhError,
+    add_to_project,
+    auth_status,
+    close_issue,
+    create_issue,
+    edit_issue_body,
+    set_field,
+)
 
 
 class TestCreateIssue:
@@ -68,6 +76,20 @@ class TestCloseIssue:
                     "42",
                 ]
             )
+
+
+class TestEditIssueBody:
+    def test_edit_body_calls_gh(self) -> None:
+        with patch("vk.gh._run_gh") as mock:
+            edit_issue_body(repo="org/repo", number=42, body="New body content.")
+            mock.assert_called_once_with(
+                ["issue", "edit", "42", "--repo", "org/repo", "--body", "New body content."]
+            )
+
+    def test_edit_body_propagates_gh_error(self) -> None:
+        with patch("vk.gh._run_gh", side_effect=GhError("rate limited")):
+            with pytest.raises(GhError, match="rate limited"):
+                edit_issue_body(repo="org/repo", number=42, body="body")
 
 
 class TestAddToProject:

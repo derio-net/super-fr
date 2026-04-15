@@ -191,10 +191,8 @@ class TestDispatchLabels:
 
 class TestDispatchGitCommit:
     @patch("vk.commands.dispatch_cmd.gh")
-    @patch("vk.commands.dispatch_cmd.subprocess")
     def test_git_commit_failure_surfaces(
         self,
-        mock_subprocess: MagicMock,
         mock_gh: MagicMock,
         dispatch_config: Path,
         phased_plan: Path,
@@ -207,21 +205,47 @@ class TestDispatchGitCommit:
         mock_gh.extract_issue_number.return_value = 1
         mock_gh.GhError = type("GhError", (Exception,), {})
 
-        def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd and cmd[0] == "git" and "commit" in cmd:
+        original_run = real_subprocess.run
+
+        def fake_run(cmd: list[str], **kwargs: object) -> real_subprocess.CompletedProcess[str]:
+            if isinstance(cmd, list) and len(cmd) >= 2 and cmd[:2] == ["git", "commit"]:
                 raise real_subprocess.CalledProcessError(
                     1, cmd, stderr="pre-commit hook failed"
                 )
-            result = MagicMock()
-            result.stdout = str(tmp_repo)
-            result.returncode = 0
-            return result
+            return original_run(cmd, **kwargs)  # type: ignore[arg-type]
 
-        mock_subprocess.run.side_effect = fake_run
-        mock_subprocess.CalledProcessError = real_subprocess.CalledProcessError
+        with patch("subprocess.run", side_effect=fake_run):
+            result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code != 0
+
+
+class TestDispatchEditBodyBestEffort:
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_edit_failure_does_not_block_dispatch(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """edit_issue_body failure is cosmetic — dispatch must still succeed."""
+        gh_error_cls = type("GhError", (Exception,), {})
+        mock_gh.GhError = gh_error_cls
+        mock_gh.create_issue.return_value = "https://github.com/org/repo/issues/50"
+        mock_gh.extract_issue_number.return_value = 50
+        mock_gh.edit_issue_body.side_effect = gh_error_cls("rate limited")
 
         result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
-        assert result.exit_code != 0
+        assert result.exit_code == 0, (
+            f"dispatch should succeed despite edit failure: {result.output}"
+        )
+
+        # Verify issues were still created
+        assert mock_gh.create_issue.call_count == 3
+
+        # Tracking comments should still be injected into the plan file
+        updated = phased_plan.read_text()
+        assert "<!-- Tracking:" in updated
 
 
 class TestDispatchIssueUrlInjection:
@@ -240,7 +264,7 @@ class TestDispatchIssueUrlInjection:
             assert "(assigned on create)" in body
             return "https://github.com/org/repo/issues/77"
 
-        def fake_edit_body(repo: str, number: int, body: str) -> None:
+        def fake_edit_body(*, repo: str, number: int, body: str) -> None:
             edits.append((repo, body))
 
         mock_gh.create_issue.side_effect = fake_create
