@@ -42,3 +42,13 @@ idempotency check, create issues, add to board, inject tracking comments, commit
 - Convert flat to phased: `vk plan convert <plan> --to phased --group-by-tag`
 - Sync progress after dispatch: use vk-progress skill
 - Execute a dispatched phase: use vk-execute skill
+- Issue title format: `[owner/repo] slug · Phase N/total · phase_title`
+
+## Retroactive migration
+
+For plans dispatched before the unified-title format, run:
+
+    vk dispatch migrate <plan-path> --dry-run
+    vk dispatch migrate <plan-path> --yes
+
+Rewrites open Issues' titles + bodies to the current format. Closed Issues are skipped.

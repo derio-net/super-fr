@@ -39,3 +39,16 @@ All subcommands use `--dry-run`/`--yes` contract.
 This handles the case where a plan was updated (e.g., by a VK workspace agent) but the spec's
 `## Implementation Plans` table wasn't. Running `vk progress sync` on any plan with a `**Spec:**`
 header will bring the spec index row in line with the plan's current status.
+
+## Archive-on-Complete
+
+When `sync` flips Status to `Complete`, it interactively offers to move the plan
+file to `docs/superpowers/archived-plans/`:
+
+- Interactive: prompts `"Plan is Complete. Archive ... [y/N]"`
+- `--yes`: archives without prompt.
+- `--dry-run`: prints `"Would archive: <src> -> <dest>"`.
+
+The destination is set by `profile.plan.archive_to` in `plan-config.yaml`
+(default `docs/superpowers/archived-plans/`). The spec index row is updated
+to point at the new archived path.
