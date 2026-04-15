@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install superpowers-for-vk extras that the plugin system can't handle.
 # Skills are delivered by the plugin system (enabledPlugins in settings.json).
-# This script handles: marketplace pull, stale cache cleanup, rules, MCP config,
-# vk CLI, stale skill cleanup, and PostToolUse hook hint.
+# This script handles: marketplace + plugin registration, stale cache cleanup,
+# rules, MCP config, vk CLI, stale skill cleanup, and PostToolUse hook hint.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,6 +14,9 @@ MCP_CONFIG="$CLAUDE_DIR/.mcp.json"
 VK_MCP_BINARY="$HOME/bin/vibe-kanban-mcp"
 MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/derio-net"
 CACHE_DIR="$CLAUDE_DIR/plugins/cache/derio-net/superpowers-for-vk"
+PLUGINS_DIR="$CLAUDE_DIR/plugins"
+KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
+INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
 SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
 if [[ "${1:-}" == "--uninstall" ]]; then
@@ -36,30 +39,100 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
-# Fail fast: VK MCP binary must exist
+# VK MCP binary is optional — warn but continue if missing
 if [ ! -x "$VK_MCP_BINARY" ]; then
-  echo "ERROR: VK MCP binary not found at $VK_MCP_BINARY" >&2
-  echo "Install it first: see https://github.com/derio-net/vibe-kanban" >&2
-  exit 1
+  echo "WARNING: VK MCP binary not found at $VK_MCP_BINARY" >&2
+  echo "  MCP server configuration will be skipped." >&2
+  echo "  Install it later: see https://github.com/derio-net/vibe-kanban" >&2
+  SKIP_MCP=true
+else
+  SKIP_MCP=false
 fi
 
 echo "Installing superpowers-for-vk..."
 
-# 1. Pull the marketplace clone so the plugin system sees the latest version
-if [ -d "$MARKETPLACE_DIR/.git" ]; then
+# 1. If marketplace is a real git clone (not a symlink), pull latest first
+if [ ! -L "$MARKETPLACE_DIR" ] && [ -d "$MARKETPLACE_DIR/.git" ]; then
   echo ""
   echo "Pulling marketplace clone..."
-  if git -C "$MARKETPLACE_DIR" pull --ff-only origin main 2>&1 | sed 's/^/  /'; then
-    CURRENT_VERSION=$(jq -r '.plugins[] | select(.name == "superpowers-for-vk") | .version' "$MARKETPLACE_DIR/.claude-plugin/marketplace.json" 2>/dev/null || echo "unknown")
-    echo "  marketplace version: $CURRENT_VERSION"
-  else
-    echo "  WARNING: marketplace pull failed"
-  fi
-else
-  echo "  marketplace clone not found at $MARKETPLACE_DIR — skipping pull"
+  git -C "$MARKETPLACE_DIR" pull --ff-only origin main 2>&1 | sed 's/^/  /' || echo "  WARNING: marketplace pull failed"
 fi
 
-# 2. Clear stale cache versions (keep only the current version)
+# 2. Register derio-net marketplace so the plugin system knows where to find it
+echo ""
+echo "Registering marketplace..."
+if command -v jq &>/dev/null; then
+  # Add to extraKnownMarketplaces in settings.json
+  if [ -f "$SETTINGS" ]; then
+    if ! jq -e '.extraKnownMarketplaces["derio-net"]' "$SETTINGS" &>/dev/null; then
+      jq '.extraKnownMarketplaces["derio-net"] = {"source":{"source":"github","repo":"derio-net/superpowers-for-vk"}}' \
+        "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+      echo "  Added derio-net to extraKnownMarketplaces"
+    else
+      echo "  derio-net already in extraKnownMarketplaces"
+    fi
+  fi
+
+  # Add to known_marketplaces.json
+  if [ -f "$KNOWN_MARKETPLACES" ]; then
+    if ! jq -e '.["derio-net"]' "$KNOWN_MARKETPLACES" &>/dev/null; then
+      jq '."derio-net" = {"source":{"source":"github","repo":"derio-net/superpowers-for-vk"},"installLocation":"'"$MARKETPLACE_DIR"'"}' \
+        "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
+      echo "  Added derio-net to known_marketplaces.json"
+    else
+      echo "  derio-net already in known_marketplaces.json"
+    fi
+  fi
+
+  # Enable the plugin in settings.json
+  if [ -f "$SETTINGS" ]; then
+    if ! jq -e '.enabledPlugins["superpowers-for-vk@derio-net"]' "$SETTINGS" &>/dev/null; then
+      jq '.enabledPlugins["superpowers-for-vk@derio-net"] = true' \
+        "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+      echo "  Enabled superpowers-for-vk@derio-net in settings.json"
+    else
+      echo "  superpowers-for-vk@derio-net already enabled"
+    fi
+  fi
+else
+  echo "  WARNING: jq not found — cannot register marketplace automatically" >&2
+fi
+
+# 3. Copy plugin into marketplace directory (decoupled from source repo)
+echo ""
+echo "Setting up marketplace directory..."
+mkdir -p "$MARKETPLACE_DIR"
+# Remove stale symlinks from older installs
+if [ -L "$MARKETPLACE_DIR" ]; then
+  rm "$MARKETPLACE_DIR"
+  mkdir -p "$MARKETPLACE_DIR"
+  echo "  Replaced stale symlink with standalone copy"
+fi
+rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
+  "$PLUGIN_ROOT/" "$MARKETPLACE_DIR/"
+echo "  Copied plugin into $MARKETPLACE_DIR"
+
+# 4. Register in installed_plugins.json so Claude Code loads the cached plugin
+echo ""
+echo "Registering plugin..."
+CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
+if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
+  CACHE_VERSION_DIR="$CACHE_DIR/$CURRENT_VERSION"
+  mkdir -p "$CACHE_VERSION_DIR"
+  # Sync plugin files into cache
+  rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
+    "$PLUGIN_ROOT/" "$CACHE_VERSION_DIR/"
+  echo "  Synced plugin v$CURRENT_VERSION to cache"
+
+  INSTALL_ENTRY='[{"scope":"user","installPath":"'"$CACHE_VERSION_DIR"'","version":"'"$CURRENT_VERSION"'","installedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'","lastUpdated":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'"}]'
+  jq --argjson entry "$INSTALL_ENTRY" '.plugins["superpowers-for-vk@derio-net"] = $entry' \
+    "$INSTALLED_PLUGINS" > "${INSTALLED_PLUGINS}.tmp" && mv "${INSTALLED_PLUGINS}.tmp" "$INSTALLED_PLUGINS"
+  echo "  Registered superpowers-for-vk@derio-net v$CURRENT_VERSION in installed_plugins.json"
+else
+  echo "  WARNING: cannot register plugin — jq or installed_plugins.json missing" >&2
+fi
+
+# 5. Clear stale cache versions (keep only the current version)
 if [ -d "$CACHE_DIR" ]; then
   echo ""
   echo "Checking plugin cache..."
@@ -76,7 +149,7 @@ if [ -d "$CACHE_DIR" ]; then
   done
 fi
 
-# 3. Clean stale user-level skill copies (from older installs)
+# 6. Clean stale user-level skill copies (from older installs)
 for skill in "${SKILL_NAMES[@]}"; do
   if [ -d "$CLAUDE_DIR/skills/$skill" ] || [ -L "$CLAUDE_DIR/skills/$skill" ]; then
     rm -rf "$CLAUDE_DIR/skills/$skill"
@@ -84,7 +157,7 @@ for skill in "${SKILL_NAMES[@]}"; do
   fi
 done
 
-# 4. Rules
+# 7. Rules
 echo ""
 echo "Installing rules..."
 mkdir -p "$RULES_DIR"
@@ -92,22 +165,27 @@ rm -f "$RULES_DIR/vk-plan-override.md"
 cp "$PLUGIN_ROOT/rules/vk-plan-override.md" "$RULES_DIR/vk-plan-override.md"
 echo "  Installed $RULES_DIR/vk-plan-override.md"
 
-# 5. VK MCP server at user level
-echo ""
-echo "Configuring MCP..."
-VK_MCP_ENTRY='{"command":"'"$VK_MCP_BINARY"'","args":["--mode","global"],"env":{"VIBE_BACKEND_URL":"http://localhost:8081"}}'
-if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
-  jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
-  echo "  Updated vibe_kanban in $MCP_CONFIG"
-elif command -v jq &>/dev/null; then
-  echo '{"mcpServers":{}}' | jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' > "$MCP_CONFIG"
-  echo "  Created $MCP_CONFIG with vibe_kanban"
+# 8. VK MCP server at user level
+if [ "$SKIP_MCP" = true ]; then
+  echo ""
+  echo "Skipping MCP configuration (binary not found)."
 else
-  echo "  WARNING: jq not found — cannot configure MCP server automatically" >&2
-  echo "  Add vibe_kanban manually to $MCP_CONFIG" >&2
+  echo ""
+  echo "Configuring MCP..."
+  VK_MCP_ENTRY='{"command":"'"$VK_MCP_BINARY"'","args":["--mode","global"],"env":{"VIBE_BACKEND_URL":"http://localhost:8081"}}'
+  if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
+    jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
+    echo "  Updated vibe_kanban in $MCP_CONFIG"
+  elif command -v jq &>/dev/null; then
+    echo '{"mcpServers":{}}' | jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' > "$MCP_CONFIG"
+    echo "  Created $MCP_CONFIG with vibe_kanban"
+  else
+    echo "  WARNING: jq not found — cannot configure MCP server automatically" >&2
+    echo "  Add vibe_kanban manually to $MCP_CONFIG" >&2
+  fi
 fi
 
-# 6. PostToolUse hook hint
+# 9. PostToolUse hook hint
 if [ ! -f "$SETTINGS" ]; then
   echo "  WARNING: $SETTINGS not found — skipping hook check"
 else
@@ -131,7 +209,7 @@ HOOK
   fi
 fi
 
-# 7. vk CLI
+# 10. vk CLI
 if command -v uv &>/dev/null; then
   echo ""
   echo "Installing vk CLI globally..."
