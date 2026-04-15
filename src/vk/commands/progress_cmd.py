@@ -7,6 +7,7 @@ Each auto-detects dispatch/local mode via profile.dispatch_enabled.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -98,8 +99,9 @@ def _reconcile_spec_index(
         return False
 
     entries = read_index(spec_path)
+    rel_file = str(plan_path.relative_to(repo_root))
     matching = [e for e in entries if e.plan == plan_title]
-    if matching and matching[0].status == status:
+    if matching and matching[0].status == status and matching[0].file == rel_file:
         return False
 
     if dry_run:
@@ -116,6 +118,51 @@ def _reconcile_spec_index(
     upsert_entry(spec_path, entry)
     console.print(f"Spec index updated: {spec_path}")
     return True
+
+
+def _archive_plan(
+    plan_path: Path, profile: Profile, repo_root: Path, action: ConfirmAction
+) -> Path | None:
+    """Move a Complete plan to the archive directory. Returns new path or None."""
+    dest_dir = repo_root / profile.plan.archive_to
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / plan_path.name
+
+    if dest.exists():
+        err_console.print(f"Archive destination already exists: {dest}. Refusing to overwrite.")
+        raise typer.Exit(2)
+
+    if action is ConfirmAction.DRY_RUN:
+        console.print(f"Would archive: {plan_path} -> {dest}")
+        return None
+    if action is ConfirmAction.PROMPT:
+        if not typer.confirm(
+            f"Plan is Complete. Archive to {profile.plan.archive_to}?",
+            default=False,
+        ):
+            return None
+
+    try:
+        subprocess.run(
+            ["git", "mv", str(plan_path), str(dest)],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        shutil.move(str(plan_path), str(dest))
+        subprocess.run(["git", "add", str(dest)], check=False, capture_output=True, cwd=repo_root)
+
+    subprocess.run(
+        ["git", "commit", "-m", f"chore(plan): archive {plan_path.stem} on completion"],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    console.print(f"Archived: {plan_path.name} -> {profile.plan.archive_to}")
+    return dest
 
 
 @progress_app.command()
@@ -154,6 +201,14 @@ def sync(
     if action is ConfirmAction.DRY_RUN:
         console.print(f"Would update Status: {old_status} -> {new_status} (mode: {mode})")
         _reconcile_spec_index(plan_path, plan.title, new_status, repo_root, dry_run=True)
+        if new_status == "Complete":
+            save_to = Path(profile.plan.save_to)
+            try:
+                plan_path.relative_to(repo_root / save_to)
+            except ValueError:
+                pass
+            else:
+                _archive_plan(plan_path, profile, repo_root, action)
         console.print("Local-only sync (dispatch disabled)" if not profile.dispatch_enabled else "")
         raise typer.Exit(0)
 
@@ -165,6 +220,17 @@ def sync(
     console.print(f"Status: {old_status} -> {new_status}")
 
     _reconcile_spec_index(plan_path, plan.title, new_status, repo_root)
+
+    if new_status == "Complete":
+        save_to = Path(profile.plan.save_to)
+        try:
+            plan_path.relative_to(repo_root / save_to)
+        except ValueError:
+            pass
+        else:
+            archived_path = _archive_plan(plan_path, profile, repo_root, action)
+            if archived_path:
+                _reconcile_spec_index(archived_path, plan.title, new_status, repo_root)
 
     if not profile.dispatch_enabled:
         console.print("Local-only sync (dispatch disabled)")
