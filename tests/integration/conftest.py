@@ -86,21 +86,21 @@ def phased_plan(tmp_repo: Path) -> Path:
 
         ---
 
-        ## Phase 1: Setup [agentic]
+        ## Phase 0: Setup [agentic]
 
         ### Task 1: Create schema
 
         - [ ] **Step 1: Write the test**
         - [ ] **Step 2: Implement**
 
-        ## Phase 2: Integration [manual]
+        ## Phase 1: Integration [manual]
 
         ### Task 1: Configure DNS
 
         - [ ] **Step 1: Log in to dashboard**
         - [ ] **Step 2: Add records**
 
-        ## Phase 3: Finalize [agentic]
+        ## Phase 2: Finalize [agentic]
 
         ### Task 1: Write docs
 

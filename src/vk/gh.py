@@ -89,6 +89,11 @@ def edit_issue(
     _run_gh(args)
 
 
+def edit_issue_body(*, repo: str, number: int, body: str) -> None:
+    """Update the body of an existing Issue via `gh issue edit`."""
+    _run_gh(["issue", "edit", str(number), "--repo", repo, "--body", body])
+
+
 def close_issue(*, repo: str, number: int) -> None:
     """Close a GitHub Issue by number."""
     _run_gh(
