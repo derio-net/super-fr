@@ -18,6 +18,22 @@ Implements a single phase (phased) or task (flat) from a plan.
 | Issue URL/number (dispatch repo) | Dispatched: read assignment from Issue body |
 | (plan_path, phase/task number) | Local: direct arguments |
 
+## PR format (unified)
+
+When creating the PR for an agentic phase:
+
+- **Title:** `[{owner}/{repo}] {slug} · Phase {n}/{total} · {phase_title}` — matches the Issue title shape so VK/GH/PR surfaces align.
+- **Body:** first content block is the tracking block copied verbatim from the Issue body (the `📦 Repo:` / `📋 Plan:` / ... lines plus the `**Goal (from plan):**` paragraph). Then proceed with your PR summary.
+
+## Label lifecycle
+
+After `gh pr create` succeeds:
+
+    gh issue edit <issue_number> --repo <owner/repo> \
+       --add-label pr-ready --remove-label in-progress
+
+Best-effort: failure does not block PR creation.
+
 ## Procedure
 
 1. Check dependencies:
