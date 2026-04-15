@@ -65,5 +65,6 @@ class TestSkillValidation:
         if skill_dir.name != "vk-execute":
             pytest.skip("Only applies to vk-execute")
         text = (skill_dir / "SKILL.md").read_text()
-        assert "[{owner}/{repo}]" in text or "[owner/repo]" in text, \
+        assert "[{owner}/{repo}]" in text or "[owner/repo]" in text, (
             "vk-execute must document the unified PR title format"
+        )
