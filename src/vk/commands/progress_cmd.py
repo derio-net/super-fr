@@ -111,7 +111,7 @@ def _reconcile_spec_index(
     entry = IndexEntry(
         plan=plan_title,
         repo="",
-        file=str(plan_path.relative_to(repo_root)),
+        file=rel_file,
         status=status,
         depends_on="—",
     )
@@ -120,10 +120,24 @@ def _reconcile_spec_index(
     return True
 
 
+def _plan_is_under_save_to(plan_path: Path, profile: Profile, repo_root: Path) -> bool:
+    """Return True if plan_path resides under profile.plan.save_to."""
+    try:
+        plan_path.relative_to(repo_root / profile.plan.save_to)
+        return True
+    except ValueError:
+        return False
+
+
 def _archive_plan(
     plan_path: Path, profile: Profile, repo_root: Path, action: ConfirmAction
 ) -> Path | None:
-    """Move a Complete plan to the archive directory. Returns new path or None."""
+    """Move a Complete plan to the archive directory. Returns new path or None.
+
+    Interactive: prompt first (default No).
+    --yes:       auto-archive.
+    --dry-run:   print preview, no move.
+    """
     dest_dir = repo_root / profile.plan.archive_to
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / plan_path.name
@@ -201,14 +215,8 @@ def sync(
     if action is ConfirmAction.DRY_RUN:
         console.print(f"Would update Status: {old_status} -> {new_status} (mode: {mode})")
         _reconcile_spec_index(plan_path, plan.title, new_status, repo_root, dry_run=True)
-        if new_status == "Complete":
-            save_to = Path(profile.plan.save_to)
-            try:
-                plan_path.relative_to(repo_root / save_to)
-            except ValueError:
-                pass
-            else:
-                _archive_plan(plan_path, profile, repo_root, action)
+        if new_status == "Complete" and _plan_is_under_save_to(plan_path, profile, repo_root):
+            _archive_plan(plan_path, profile, repo_root, action)
         console.print("Local-only sync (dispatch disabled)" if not profile.dispatch_enabled else "")
         raise typer.Exit(0)
 
@@ -221,16 +229,10 @@ def sync(
 
     _reconcile_spec_index(plan_path, plan.title, new_status, repo_root)
 
-    if new_status == "Complete":
-        save_to = Path(profile.plan.save_to)
-        try:
-            plan_path.relative_to(repo_root / save_to)
-        except ValueError:
-            pass
-        else:
-            archived_path = _archive_plan(plan_path, profile, repo_root, action)
-            if archived_path:
-                _reconcile_spec_index(archived_path, plan.title, new_status, repo_root)
+    if new_status == "Complete" and _plan_is_under_save_to(plan_path, profile, repo_root):
+        archived_path = _archive_plan(plan_path, profile, repo_root, action)
+        if archived_path:
+            _reconcile_spec_index(archived_path, plan.title, new_status, repo_root)
 
     if not profile.dispatch_enabled:
         console.print("Local-only sync (dispatch disabled)")
