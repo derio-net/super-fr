@@ -20,9 +20,9 @@ class TestDispatchDryRun:
         result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--dry-run"])
         assert result.exit_code == 0
         assert "dry run" in result.stdout.lower()
+        assert "Phase 0" in result.stdout
         assert "Phase 1" in result.stdout
         assert "Phase 2" in result.stdout
-        assert "Phase 3" in result.stdout
         assert "test-feature" in result.stdout
 
 
@@ -83,7 +83,7 @@ class TestDispatchIdempotency:
 
             ---
 
-            ## Phase 1: Done [agentic]
+            ## Phase 0: Done [agentic]
             <!-- Tracking: https://github.com/derio-net/test-repo/issues/10 -->
 
             ### Task 1: Done
@@ -136,19 +136,113 @@ class TestDispatchApply:
             assert "Repos: derio-net/test-repo" in body
             assert "## Dependencies" in body
 
-        # Phase 1 (first) should have no blocking issue
+        # Phase 0 (first) should have no blocking issue
         first_body = mock_gh.create_issue.call_args_list[0][1]["body"]
         assert "Blocked by" not in first_body
 
-        # Phase 2 should reference phase 1's issue number
+        # Phase 1 should reference phase 0's issue number
         second_body = mock_gh.create_issue.call_args_list[1][1]["body"]
-        assert "Blocked by #100" in second_body
+        assert "- Blocked by #100" in second_body
 
-        # Phase 3 should reference phase 2's issue number
+        # Phase 2 should reference phase 1's issue number
         third_body = mock_gh.create_issue.call_args_list[2][1]["body"]
-        assert "Blocked by #101" in third_body
+        assert "- Blocked by #101" in third_body
 
         updated = phased_plan.read_text()
         assert "<!-- Tracking: https://github.com/derio-net/test-repo/issues/100 -->" in updated
         assert "<!-- Tracking: https://github.com/derio-net/test-repo/issues/101 -->" in updated
         assert "<!-- Tracking: https://github.com/derio-net/test-repo/issues/102 -->" in updated
+
+
+class TestDispatchLabels:
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_dispatch_adds_plan_and_phase_labels(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """Each created Issue must carry plan:<slug> and phase:<n> labels."""
+        captured_labels: list[list[str]] = []
+
+        def fake_create_issue(*, repo: str, title: str, body: str, labels: list[str]) -> str:
+            captured_labels.append(list(labels))
+            return "https://github.com/org/repo/issues/100"
+
+        mock_gh.create_issue.side_effect = fake_create_issue
+        mock_gh.extract_issue_number.return_value = 100
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0
+
+        for labs in captured_labels:
+            assert any(lab.startswith("plan:") for lab in labs), f"Missing plan: label in {labs}"
+            assert any(lab.startswith("phase:") for lab in labs), f"Missing phase: label in {labs}"
+
+
+class TestDispatchGitCommit:
+    @patch("vk.commands.dispatch_cmd.gh")
+    @patch("vk.commands.dispatch_cmd.subprocess")
+    def test_git_commit_failure_surfaces(
+        self,
+        mock_subprocess: MagicMock,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """A failing git commit must surface, not be silently swallowed."""
+        import subprocess as real_subprocess
+
+        mock_gh.create_issue.return_value = "https://github.com/org/repo/issues/1"
+        mock_gh.extract_issue_number.return_value = 1
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
+            if cmd and cmd[0] == "git" and "commit" in cmd:
+                raise real_subprocess.CalledProcessError(
+                    1, cmd, stderr="pre-commit hook failed"
+                )
+            result = MagicMock()
+            result.stdout = str(tmp_repo)
+            result.returncode = 0
+            return result
+
+        mock_subprocess.run.side_effect = fake_run
+        mock_subprocess.CalledProcessError = real_subprocess.CalledProcessError
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code != 0
+
+
+class TestDispatchIssueUrlInjection:
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_dispatch_updates_body_with_issue_url(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """After Issue creation, the body's '🔗 Issue:' line gets the real URL."""
+        edits: list[tuple[str, str]] = []
+
+        def fake_create(*, repo: str, title: str, body: str, labels: list[str]) -> str:
+            assert "(assigned on create)" in body
+            return "https://github.com/org/repo/issues/77"
+
+        def fake_edit_body(repo: str, number: int, body: str) -> None:
+            edits.append((repo, body))
+
+        mock_gh.create_issue.side_effect = fake_create
+        mock_gh.extract_issue_number.return_value = 77
+        mock_gh.edit_issue_body.side_effect = fake_edit_body
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0
+        assert edits, "expected at least one edit_issue_body call"
+        for _, body in edits:
+            assert "🔗 Issue:  https://github.com/org/repo/issues/77" in body

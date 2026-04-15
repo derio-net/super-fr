@@ -18,6 +18,7 @@ from vk.commands.common import (
     format_gate_refusal,
     resolve_action,
 )
+from vk.commands.dispatch_body_validator import validate_issue_body
 from vk.config import load_profile
 from vk.plan.filename import derive_slug
 from vk.plan.format import PlanFormat
@@ -72,57 +73,60 @@ def _inject_tracking_comment(plan_text: str, phase_number: int, issue_url: str) 
     return re.sub(pattern, rf"\1\n{tracking}", plan_text, count=1, flags=re.MULTILINE)
 
 
-def _build_issue_title(slug: str, phase: Phase) -> str:
-    """Build the issue title: {slug}-{phase_num}-{tag}."""
-    return f"{slug}-{phase.number}-{phase.tag}"
+def _build_issue_title(slug: str, phase: Phase, target_repo: str, total: int) -> str:
+    """Human-readable title: [{repo}] {slug} · Phase {n}/{total} · {phase_title}."""
+    return f"[{target_repo}] {slug} · Phase {phase.number}/{total} · {phase.title}"
 
 
-def _build_issue_body(phase: Phase, plan_path: Path, target_repo: str, prev_num: int | None) -> str:
-    """Build a structured issue body with Instruction/Workspace/Dependencies sections.
+def _build_issue_body(
+    phase: Phase,
+    plan_path: Path,
+    target_repo: str,
+    prev_num: int | None,
+    total_phases: int,
+    spec: str,
+    goal: str,
+) -> str:
+    """Build an Issue body: tracking block + Instruction/Workspace/Dependencies.
 
-    The body format is consumed by the VK Issue Bridge parser, which expects
-    ``## Instruction``, ``## Workspace``, and ``## Dependencies`` sections.
+    The body is consumed by the VK Issue Bridge, which requires the
+    ``- Blocked by #N`` dash prefix in ``## Dependencies`` for gating.
     """
-    phase_type = "Agentic" if phase.tag == "agentic" else "Manual"
-
-    # Dependencies description
     if phase.number == 0:
-        deps = "None — no blocking phases."
+        deps_block = "None — no blocking phases."
     elif prev_num is not None:
-        deps = f"Phases 0-{phase.number - 1} complete. Blocked by #{prev_num}."
+        deps_block = f"- Blocked by #{prev_num}"
     else:
-        deps = f"Phases 0-{phase.number - 1} complete."
+        raise ValueError(
+            f"Phase {phase.number} has no prev_num but is not phase 0. "
+            "Cannot emit parseable dependency line. "
+            "Fix: ensure earlier phases were dispatched first."
+        )
+
+    tracking_block = (
+        f"📦 Repo:   {target_repo}\n"
+        f"📋 Plan:   {plan_path}\n"
+        f"📐 Spec:   {spec}\n"
+        f"🎯 Phase:  {phase.number}/{total_phases} — {phase.title} [{phase.tag}]\n"
+        f"🔗 Issue:  (assigned on create)\n"
+        f"\n"
+        f"**Goal (from plan):** {goal}\n"
+    )
 
     return (
-        f"# Phase {phase.number}: {phase.title}\n"
-        f"\n"
-        f"**Type:** {phase_type}\n"
-        f"**Plan:** `{plan_path}`\n"
-        f"**Phase:** {phase.number}\n"
-        f"\n"
-        f"---\n"
-        f"\n"
-        f"## Instruction\n"
-        f"\n"
-        f"Use superpowers-for-vk:vk-execute to implement Phase {phase.number} of this plan.\n"
-        f"\n"
-        f"## Workspace\n"
-        f"\n"
-        f"Repos: {target_repo}\n"
-        f"\n"
-        f"## Dependencies\n"
-        f"\n"
-        f"{deps}\n"
-        f"\n"
-        f"---\n"
-        f"\n"
-        f"**Plan file:** `{plan_path}`\n"
-        f"**Phase:** {phase.number} — {phase.title}\n"
+        f"{tracking_block}"
+        f"\n---\n\n"
+        f"## Instruction\n\n"
+        f"Use superpowers-for-vk:vk-execute to implement Phase {phase.number} of this plan.\n\n"
+        f"## Workspace\n\n"
+        f"Repos: {target_repo}\n\n"
+        f"## Dependencies\n\n"
+        f"{deps_block}\n"
     )
 
 
 def _print_dry_run(
-    title: str, slug: str, repo: str, phases: list[Phase], skipped: set[int]
+    title: str, slug: str, repo: str, phases: list[Phase], skipped: set[int], total: int
 ) -> None:
     """Print dry-run preview table."""
     console.print()
@@ -144,7 +148,7 @@ def _print_dry_run(
     table.add_column("Action")
 
     for phase in phases:
-        issue_title = _build_issue_title(slug, phase)
+        issue_title = _build_issue_title(slug, phase, target_repo=repo, total=total)
         if phase.number in skipped:
             action = "[dim]skip (already tracked)[/dim]"
         else:
@@ -224,14 +228,16 @@ def dispatch_create(
     already_tracked = _get_already_tracked(plan_text)
     skipped = set(already_tracked.keys())
 
+    total = len(plan.phases)
+
     # Dry-run mode
     if action is ConfirmAction.DRY_RUN:
-        _print_dry_run(plan.title, slug, target_repo, list(plan.phases), skipped)
+        _print_dry_run(plan.title, slug, target_repo, list(plan.phases), skipped, total=total)
         raise typer.Exit(0)
 
     # Prompt mode
     if action is ConfirmAction.PROMPT:
-        _print_dry_run(plan.title, slug, target_repo, list(plan.phases), skipped)
+        _print_dry_run(plan.title, slug, target_repo, list(plan.phases), skipped, total=total)
         pending = [p for p in plan.phases if p.number not in skipped]
         if not pending:
             console.print("All phases already dispatched (noop).")
@@ -259,25 +265,39 @@ def dispatch_create(
         if phase.number in skipped:
             continue
 
-        title = _build_issue_title(slug, phase)
+        title = _build_issue_title(slug, phase, target_repo=target_repo, total=len(plan.phases))
         prev_num = phase_to_issue.get(phase.number - 1)
 
-        body = _build_issue_body(phase, plan_path_resolved, target_repo, prev_num)
+        body = _build_issue_body(
+            phase,
+            plan_path_resolved,
+            target_repo,
+            prev_num,
+            total_phases=len(plan.phases),
+            spec=plan.spec or "",
+            goal=plan.goal,
+        )
+
+        validate_issue_body(body, phase.number)
 
         try:
+            tag_label = (
+                dispatch_cfg.labels.get("agentic", "vk-ready")
+                if phase.tag == "agentic"
+                else dispatch_cfg.labels.get("manual", "manual")
+            )
             issue_url = gh.create_issue(
                 repo=target_repo,
                 title=title,
                 body=body,
-                labels=[
-                    dispatch_cfg.labels.get("agentic", "vk-ready")
-                    if phase.tag == "agentic"
-                    else dispatch_cfg.labels.get("manual", "manual")
-                ],
+                labels=[tag_label, f"plan:{slug}", f"phase:{phase.number}"],
             )
             issue_num = gh.extract_issue_number(issue_url)
             phase_to_issue[phase.number] = issue_num
             results[phase.number] = issue_url
+
+            updated_body = body.replace("(assigned on create)", issue_url)
+            gh.edit_issue_body(target_repo, issue_num, updated_body)
 
             plan_text = _inject_tracking_comment(plan_text, phase.number, issue_url)
 
@@ -289,21 +309,14 @@ def dispatch_create(
     plan_path_resolved.write_text(plan_text)
 
     # Commit
-    try:
-        subprocess.run(
-            ["git", "add", str(plan_path_resolved)],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", "chore: link plan phases to GitHub Issues (vk dispatch)"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-        )
-    except Exception:
-        pass
+    subprocess.run(
+        ["git", "add", str(plan_path_resolved)],
+        check=True, capture_output=True, text=True, cwd=repo_root,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "chore: link plan phases to GitHub Issues (vk dispatch)"],
+        check=True, capture_output=True, text=True, cwd=repo_root,
+    )
 
     # Print summary
     console.print()
@@ -392,13 +405,16 @@ def migrate(
             console.print(f"Skip #{number}: CLOSED")
             continue
 
-        new_title = _build_issue_title(slug, phase)
+        new_title = _build_issue_title(slug, phase, target_repo=issue_repo, total=len(plan.phases))
         prev_num = (
             gh.extract_issue_number(tracked[phase.number - 1])
             if phase.number > 0 and (phase.number - 1) in tracked
             else None
         )
-        new_body = _build_issue_body(phase, plan_path_resolved, issue_repo, prev_num)
+        new_body = _build_issue_body(
+            phase, plan_path_resolved, issue_repo, prev_num,
+            total_phases=len(plan.phases), spec=plan.spec or "", goal=plan.goal,
+        )
 
         rewrites.append(
             _MigrateRewrite(
