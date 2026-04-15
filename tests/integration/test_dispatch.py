@@ -209,9 +209,7 @@ class TestDispatchGitCommit:
 
         def fake_run(cmd: list[str], **kwargs: object) -> real_subprocess.CompletedProcess[str]:
             if isinstance(cmd, list) and len(cmd) >= 2 and cmd[:2] == ["git", "commit"]:
-                raise real_subprocess.CalledProcessError(
-                    1, cmd, stderr="pre-commit hook failed"
-                )
+                raise real_subprocess.CalledProcessError(1, cmd, stderr="pre-commit hook failed")
             return original_run(cmd, **kwargs)  # type: ignore[arg-type]
 
         with patch("subprocess.run", side_effect=fake_run):

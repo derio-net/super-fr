@@ -308,9 +308,7 @@ def dispatch_create(
             updated_body = body.replace("(assigned on create)", issue_url)
             gh.edit_issue_body(repo=target_repo, number=issue_num, body=updated_body)
         except gh.GhError:
-            err_console.print(
-                f"Warning: could not update Issue #{issue_num} body with its URL"
-            )
+            err_console.print(f"Warning: could not update Issue #{issue_num} body with its URL")
 
     # Write updated plan file
     plan_path_resolved.write_text(plan_text)
@@ -318,11 +316,17 @@ def dispatch_create(
     # Commit
     subprocess.run(
         ["git", "add", str(plan_path_resolved)],
-        check=True, capture_output=True, text=True, cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
     )
     subprocess.run(
         ["git", "commit", "-m", "chore: link plan phases to GitHub Issues (vk dispatch)"],
-        check=True, capture_output=True, text=True, cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
     )
 
     # Print summary
@@ -419,8 +423,13 @@ def migrate(
             else None
         )
         new_body = _build_issue_body(
-            phase, plan_path_resolved, issue_repo, prev_num,
-            total_phases=len(plan.phases), spec=plan.spec or "", goal=plan.goal,
+            phase,
+            plan_path_resolved,
+            issue_repo,
+            prev_num,
+            total_phases=len(plan.phases),
+            spec=plan.spec or "",
+            goal=plan.goal,
         )
 
         rewrites.append(

@@ -3,6 +3,7 @@
 Fail-loud: any missing required section or wrong dependency format
 raises BodyValidationError with an actionable message.
 """
+
 from __future__ import annotations
 
 

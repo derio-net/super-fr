@@ -1,4 +1,5 @@
 """Tests for validate_issue_body."""
+
 from __future__ import annotations
 
 import pytest
