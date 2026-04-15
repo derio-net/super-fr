@@ -23,6 +23,7 @@ class PlanConfig:
 
     filename: str = "YYYY-MM-DD-{name}.md"
     save_to: str = "docs/superpowers/plans/"
+    archive_to: str = "docs/superpowers/archived-plans/"
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ def _parse_plan(raw: dict[str, object] | None) -> PlanConfig:
     return PlanConfig(
         filename=str(raw.get("filename", PlanConfig.filename)),
         save_to=str(raw.get("save_to", PlanConfig.save_to)),
+        archive_to=str(raw.get("archive_to", PlanConfig.archive_to)),
     )
 
 

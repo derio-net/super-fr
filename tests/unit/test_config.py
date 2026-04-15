@@ -134,6 +134,20 @@ def test_profile_is_frozen() -> None:
         profile.dispatch = None  # type: ignore[misc]
 
 
+def test_plan_archive_to_default(tmp_path: Path) -> None:
+    p = tmp_path / "plan-config.yaml"
+    p.write_text("plan:\n  save_to: docs/plans/\n")
+    profile = load_profile(p)
+    assert profile.plan.archive_to == "docs/superpowers/archived-plans/"
+
+
+def test_plan_archive_to_override(tmp_path: Path) -> None:
+    p = tmp_path / "plan-config.yaml"
+    p.write_text("plan:\n  archive_to: custom/archive/\n")
+    profile = load_profile(p)
+    assert profile.plan.archive_to == "custom/archive/"
+
+
 def test_empty_file_gives_defaults() -> None:
     """Empty YAML file gives all-default profile."""
     profile = load_profile(FIXTURES / "empty.yaml")

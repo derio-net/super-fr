@@ -184,23 +184,27 @@ class TestStaleSkillCleanup:
         _run_install(fake_home)  # no skills dir pre-existing
 
 
-# ── Fail fast ────────────────────────────────────────────────────────
+# ── Missing binary graceful degradation ──────────────────────────────
 
 
-class TestFailFast:
-    def test_fails_without_mcp_binary(self, tmp_path: Path) -> None:
-        """Install must fail if vibe-kanban-mcp binary is missing."""
+class TestMissingBinary:
+    def test_warns_without_mcp_binary(self, tmp_path: Path) -> None:
+        """Missing binary emits a WARNING (not ERROR) and doesn't abort early."""
         home = tmp_path / "home"
         home.mkdir()
         (home / ".claude").mkdir()
 
         result = _run_install(home, expect_fail=True)
 
-        assert result.returncode != 0
-        assert "ERROR" in result.stderr or "not found" in result.stderr
+        assert "WARNING" in result.stderr, (
+            f"Expected WARNING in stderr:\n  stderr={result.stderr!r}"
+        )
+        assert "vibe-kanban-mcp" in result.stderr
+        # Script should continue past the binary check (installing rules, etc.)
+        assert "Installing superpowers-for-vk" in result.stdout
 
-    def test_fails_if_binary_not_executable(self, tmp_path: Path) -> None:
-        """A non-executable binary should also trigger the fail-fast."""
+    def test_warns_if_binary_not_executable(self, tmp_path: Path) -> None:
+        """A non-executable binary triggers a WARNING, not a fatal error."""
         home = tmp_path / "home"
         home.mkdir()
         (home / ".claude").mkdir()
@@ -211,7 +215,11 @@ class TestFailFast:
 
         result = _run_install(home, expect_fail=True)
 
-        assert result.returncode != 0
+        assert "WARNING" in result.stderr, (
+            f"Expected WARNING in stderr:\n  stderr={result.stderr!r}"
+        )
+        # Script should continue past the binary check
+        assert "Installing superpowers-for-vk" in result.stdout
 
 
 # ── Uninstall path ───────────────────────────────────────────────────

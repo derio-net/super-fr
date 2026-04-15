@@ -168,6 +168,63 @@ def repo_with_stale_spec_index(tmp_path: Path) -> Generator[Path, None, None]:
     yield tmp_path
 
 
+@pytest.fixture()
+def repo_with_complete_plan(tmp_path: Path) -> Generator[Path, None, None]:
+    """Create a repo with a plan whose checkboxes are all checked (will compute Complete)."""
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "t@t.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.name", "T"],
+        check=True,
+        capture_output=True,
+    )
+
+    config_dir = tmp_path / "docs" / "superpowers"
+    config_dir.mkdir(parents=True)
+    (config_dir / "plan-config.yaml").write_text(
+        textwrap.dedent("""\
+        plan:
+          save_to: docs/superpowers/plans/
+        header:
+          required: [Spec, Status]
+          status_values: [Not Started, In Progress, Complete]
+    """)
+    )
+
+    plans_dir = config_dir / "plans"
+    plans_dir.mkdir()
+    (config_dir / "archived-plans").mkdir()
+    (plans_dir / "p.md").write_text(
+        textwrap.dedent("""\
+        # P
+
+        **Status:** In Progress
+
+        **Goal:** Test archive flow.
+
+        ---
+
+        ## Phase 0: X [agentic]
+
+        ### Task 1: T
+
+        - [x] **Step 1: done**
+    """)
+    )
+
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    yield tmp_path
+
+
 class TestProgressSync:
     def test_sync_local_updates_status(self, local_repo_with_plan: Path) -> None:
         plan = local_repo_with_plan / "docs/superpowers/plans/2026-04-12-test.md"
@@ -199,6 +256,105 @@ class TestProgressSync:
         spec_content = spec.read_text()
         assert "Complete" in spec_content
         assert "Spec index updated" in result.stdout
+
+    def test_sync_to_complete_archives_plan(self, repo_with_complete_plan: Path) -> None:
+        repo = repo_with_complete_plan
+        plan = repo / "docs/superpowers/plans/p.md"
+        result = runner.invoke(app, ["progress", "sync", str(plan), "--yes"])
+        assert result.exit_code == 0
+        assert not plan.exists(), "plan should be moved out of plans/"
+        assert (repo / "docs/superpowers/archived-plans/p.md").exists()
+
+    def test_sync_dry_run_previews_archive(self, repo_with_complete_plan: Path) -> None:
+        repo = repo_with_complete_plan
+        plan = repo / "docs/superpowers/plans/p.md"
+        result = runner.invoke(app, ["progress", "sync", str(plan), "--dry-run"])
+        assert result.exit_code == 0
+        assert "Would archive" in result.output
+        assert plan.exists(), "dry-run must not move the file"
+
+    def test_archive_updates_spec_index_file_column(self, tmp_path: Path) -> None:
+        repo = tmp_path
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        config_dir = repo / "docs" / "superpowers"
+        config_dir.mkdir(parents=True)
+        (config_dir / "plan-config.yaml").write_text(
+            textwrap.dedent("""\
+            plan:
+              save_to: docs/superpowers/plans/
+            header:
+              required: [Spec, Status]
+              status_values: [Not Started, In Progress, Complete]
+        """)
+        )
+        (config_dir / "plans").mkdir()
+        (config_dir / "archived-plans").mkdir()
+        (config_dir / "specs").mkdir()
+        (config_dir / "specs" / "s.md").write_text(
+            textwrap.dedent("""\
+            # S
+
+            ## Implementation Plans
+
+            | Plan | Repo | File | Status | Depends on |
+            |------|------|------|--------|------------|
+            | P |  | `docs/superpowers/plans/p.md` | In Progress | — |
+        """)
+        )
+        (config_dir / "plans" / "p.md").write_text(
+            textwrap.dedent("""\
+            # P
+
+            **Spec:** `docs/superpowers/specs/s.md`
+            **Status:** In Progress
+
+            **Goal:** Test spec index update on archive.
+
+            ---
+
+            ## Phase 0: X [agentic]
+
+            ### Task 1: T
+
+            - [x] **Step 1: done**
+        """)
+        )
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        plan = config_dir / "plans" / "p.md"
+        result = runner.invoke(app, ["progress", "sync", str(plan), "--yes"])
+        assert result.exit_code == 0
+        spec_text = (config_dir / "specs" / "s.md").read_text()
+        assert "docs/superpowers/archived-plans/p.md" in spec_text
+
+    def test_sync_archive_refuses_overwrite(self, repo_with_complete_plan: Path) -> None:
+        repo = repo_with_complete_plan
+        plan = repo / "docs/superpowers/plans/p.md"
+        (repo / "docs/superpowers/archived-plans/p.md").write_text("existing")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "add conflict"],
+            check=True,
+            capture_output=True,
+        )
+        result = runner.invoke(app, ["progress", "sync", str(plan), "--yes"])
+        assert result.exit_code != 0
+        assert "already exists" in result.output
+        assert plan.exists(), "plan must remain in place on refusal"
 
     def test_sync_mutual_exclusion(self, tmp_path: Path) -> None:
         (tmp_path / "plan.md").write_text("# X\n### Task 1: Y [a]\n- [ ] **Step 1: Z**\n")
