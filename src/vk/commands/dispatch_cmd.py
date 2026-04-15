@@ -265,7 +265,7 @@ def dispatch_create(
         if phase.number in skipped:
             continue
 
-        title = _build_issue_title(slug, phase, target_repo=target_repo, total=len(plan.phases))
+        title = _build_issue_title(slug, phase, target_repo=target_repo, total=total)
         prev_num = phase_to_issue.get(phase.number - 1)
 
         body = _build_issue_body(
@@ -273,7 +273,7 @@ def dispatch_create(
             plan_path_resolved,
             target_repo,
             prev_num,
-            total_phases=len(plan.phases),
+            total_phases=total,
             spec=plan.spec or "",
             goal=plan.goal,
         )
@@ -296,14 +296,21 @@ def dispatch_create(
             phase_to_issue[phase.number] = issue_num
             results[phase.number] = issue_url
 
-            updated_body = body.replace("(assigned on create)", issue_url)
-            gh.edit_issue_body(target_repo, issue_num, updated_body)
-
             plan_text = _inject_tracking_comment(plan_text, phase.number, issue_url)
 
         except gh.GhError as exc:
             errors[phase.number] = str(exc)
             continue
+
+        # Best-effort: inject the real Issue URL into the body's placeholder.
+        # Failure here is cosmetic — the Issue was created and tracked above.
+        try:
+            updated_body = body.replace("(assigned on create)", issue_url)
+            gh.edit_issue_body(repo=target_repo, number=issue_num, body=updated_body)
+        except gh.GhError:
+            err_console.print(
+                f"Warning: could not update Issue #{issue_num} body with its URL"
+            )
 
     # Write updated plan file
     plan_path_resolved.write_text(plan_text)

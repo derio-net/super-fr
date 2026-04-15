@@ -135,6 +135,12 @@ class TestDispatchApply:
             assert "## Workspace" in body
             assert "Repos: derio-net/test-repo" in body
             assert "## Dependencies" in body
+            # Tracking block fields
+            assert "📦 Repo:   derio-net/test-repo" in body
+            assert "📋 Plan:" in body
+            assert "🎯 Phase:" in body
+            assert "🔗 Issue:  (assigned on create)" in body
+            assert "**Goal (from plan):**" in body
 
         # Phase 0 (first) should have no blocking issue
         first_body = mock_gh.create_issue.call_args_list[0][1]["body"]
@@ -177,9 +183,10 @@ class TestDispatchLabels:
         result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
         assert result.exit_code == 0
 
-        for labs in captured_labels:
-            assert any(lab.startswith("plan:") for lab in labs), f"Missing plan: label in {labs}"
-            assert any(lab.startswith("phase:") for lab in labs), f"Missing phase: label in {labs}"
+        for i, labs in enumerate(captured_labels):
+            assert "plan:test-feature" in labs, f"Missing plan:test-feature in {labs}"
+            assert f"phase:{i}" in labs, f"Missing phase:{i} in {labs}"
+            assert labs[0] in ("vk-ready", "manual"), f"First label should be tag label: {labs}"
 
 
 class TestDispatchGitCommit:
@@ -243,6 +250,7 @@ class TestDispatchIssueUrlInjection:
 
         result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
         assert result.exit_code == 0
-        assert edits, "expected at least one edit_issue_body call"
+        assert len(edits) == 3, f"expected one edit per phase, got {len(edits)}"
         for _, body in edits:
             assert "🔗 Issue:  https://github.com/org/repo/issues/77" in body
+            assert "(assigned on create)" not in body
