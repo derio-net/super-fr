@@ -7,16 +7,17 @@ description: >
 
 # vk-execute
 
-Implements a single phase (phased) or task (flat) from a plan.
+Implements a single phase from a plan. Flat plans are deprecated — see
+[Migrating flat plans](#migrating-flat-plans) below.
 
-**Announce at start:** "I'm using vk-execute to implement this phase/task."
+**Announce at start:** "I'm using vk-execute to implement this phase."
 
 ## Mode selection
 
 | Input | Mode |
 |---|---|
 | Issue URL/number (dispatch repo) | Dispatched: read assignment from Issue body |
-| (plan_path, phase/task number) | Local: direct arguments |
+| (plan_path, phase number) | Local: direct arguments |
 
 ## PR format (unified)
 
@@ -38,11 +39,11 @@ Best-effort: failure does not block PR creation.
 
 1. Check dependencies:
    ```bash
-   vk execute check-deps <plan> <phase-or-task>
+   vk execute check-deps <plan> <phase>
    ```
 2. Get work scope:
    ```bash
-   vk execute scope <plan> <phase-or-task>
+   vk execute scope <plan> <phase>
    ```
 3. Delegate to `superpowers:executing-plans` or `superpowers:subagent-driven-development`.
 4. After each step completes:
@@ -51,7 +52,7 @@ Best-effort: failure does not block PR creation.
    ```
 5. Generate PR body:
    ```bash
-   vk execute pr-body <plan> <phase-or-task> [--issue N]
+   vk execute pr-body <plan> <phase> [--issue N]
    ```
 6. Delegate to `superpowers:finishing-a-development-branch`.
 7. Transition VK Issue to "In Review" (dispatch mode only):
@@ -62,7 +63,30 @@ Best-effort: failure does not block PR creation.
 
 ## Constraints
 
-- One phase/task = one PR.
-- Don't touch other phases/tasks.
+- One phase = one PR.
+- Don't touch other phases.
 - Stop if blocked — report what's missing.
-- Step IDs: `P<n>.T<n>.S<n>` (phased) or `T<n>.S<n>` (flat).
+- Step IDs: `P<n>.T<n>.S<n>`.
+
+## Migrating flat plans
+
+Flat plans are deprecated. Plan shape should reflect review units (one phase =
+one PR), not routing. Dispatch intent lives in `plan-config.yaml` — structure
+and routing are independent concerns.
+
+If this skill is handed a flat plan, migrate it before execution:
+
+```bash
+# Preview first
+vk plan convert <plan> --to phased --single-phase --dry-run
+
+# If tasks carry `[agentic]` / `[manual]` tags, cluster by them:
+vk plan convert <plan> --to phased --group-by-tag --yes
+
+# Otherwise, wrap everything in one phase (simplest, safest):
+vk plan convert <plan> --to phased --single-phase --yes
+```
+
+Commit the migration as its own PR so the execution PRs that follow are clean
+diffs. The converter renumbers tasks per-phase so step IDs resolve as
+`P<n>.T<n>.S<n>`, and previously-ticked checkboxes are preserved.
