@@ -169,7 +169,10 @@ def pr_body(
     issue: int | None = typer.Option(
         None,
         "--issue",
-        help="GitHub Issue number to close. Auto-discovered from the phase's tracking comment if omitted.",
+        help=(
+            "GitHub Issue number to close. "
+            "Auto-discovered from the phase's tracking comment if omitted."
+        ),
     ),
 ) -> None:
     """Generate a standard PR body for a phase or task."""
