@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-18-deprecate-flat-plans-design.md`
-**Status:** In Progress
+**Status:** Complete
 
 **Goal:** Retire flat plans as a supported shape across skills and CLI. Require migration on encounter; keep library-level parsing support so legacy plans can be read for migration.
 
@@ -203,4 +203,4 @@ Commit `3e4d266` — *style: apply ruff format*.
 - [x] Regression tests cover missing-path and non-plan-file inputs for both `plan format` and all four execute sub-commands.
 - [x] Full suite green: 302 passed, 9 skipped.
 - [x] CI green after ruff format pass.
-- [ ] Plan status flips to **Complete** when PR #21 merges (manual or via `vk progress sync`).
+- [x] Plan status flipped to **Complete** — PR [#21](https://github.com/derio-net/superpowers-for-vk/pull/21) merged as commit `9365abc`.
