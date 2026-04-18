@@ -77,7 +77,7 @@ Expected: no hits (the script takes a URL, not a title). If hits found, note the
 **Files:**
 - Create: `docs/superpowers/2026-04-14-unified-descriptions-audit.md`
 
-- [ ] **Step 1: Write the report**
+- [x] **Step 1: Write the report**
 
 Synthesize the four `/tmp/audit-*.txt` and `.tsv` outputs into a markdown report at `docs/superpowers/2026-04-14-unified-descriptions-audit.md` with these sections:
 
@@ -89,7 +89,7 @@ Synthesize the four `/tmp/audit-*.txt` and `.tsv` outputs into a markdown report
 
 Keep the report under 150 lines. If any consumer requires a plan scope extension, flag it explicitly with "⚠️ scope impact".
 
-- [ ] **Step 2: Commit the audit**
+- [x] **Step 2: Commit the audit**
 
 ```bash
 git add docs/superpowers/2026-04-14-unified-descriptions-audit.md
@@ -107,7 +107,7 @@ git commit -m "docs(audit): unified-descriptions impact audit (phase 0)"
 - Modify: `src/vk/commands/dispatch_cmd.py`
 - Modify: `tests/unit/test_dispatch_body.py`
 
-- [ ] **Step 1: Add failing test for tracking block in body**
+- [x] **Step 1: Add failing test for tracking block in body**
 
 Append to `tests/unit/test_dispatch_body.py` inside `class TestBuildIssueBody`:
 
@@ -131,7 +131,7 @@ Append to `tests/unit/test_dispatch_body.py` inside `class TestBuildIssueBody`:
 
 Run `pytest tests/unit/test_dispatch_body.py -x 2>&1 | tail -20`. Expected: TypeError on unexpected kwargs `total_phases`/`spec`/`goal` — confirming the builder signature must be extended.
 
-- [ ] **Step 2: Add failing test for dash-prefixed Blocked by**
+- [x] **Step 2: Add failing test for dash-prefixed Blocked by**
 
 Append to `TestBuildIssueBody`:
 
@@ -154,7 +154,7 @@ Append to `TestBuildIssueBody`:
 
 Run the test file; both new tests fail.
 
-- [ ] **Step 3: Update _build_issue_body signature and body composition**
+- [x] **Step 3: Update _build_issue_body signature and body composition**
 
 In `src/vk/commands/dispatch_cmd.py`, replace `_build_issue_body` (lines 69–112) with:
 
@@ -206,7 +206,7 @@ def _build_issue_body(
     )
 ```
 
-- [ ] **Step 4: Update all existing tests for new signature**
+- [x] **Step 4: Update all existing tests for new signature**
 
 Existing `TestBuildIssueBody` tests (test_contains_instruction_section, test_contains_workspace_section, test_contains_dependencies_section, test_phase_zero_no_blocking, test_phase_one_no_prev_issue, test_phase_with_prev_issue, test_header_contains_phase_info, test_manual_type, test_plan_path_in_body, test_footer_contains_phase_title, test_instruction_references_phase_number) need `total_phases=3, spec="s.md", goal="G."` added.
 
@@ -216,7 +216,7 @@ Note: `test_footer_contains_phase_title` asserts `"**Phase:** 2 — Integration"
 
 Run `pytest tests/unit/test_dispatch_body.py 2>&1 | tail -10`. Expected: all pass.
 
-- [ ] **Step 5: Update dispatch_cmd.dispatch() call site**
+- [x] **Step 5: Update dispatch_cmd.dispatch() call site**
 
 In `src/vk/commands/dispatch_cmd.py::dispatch`, at the loop `for phase in plan.phases:` (around line 248), the body call (line 255) becomes:
 
@@ -240,7 +240,7 @@ Run `pytest tests/ 2>&1 | tail -15`. Expect test_dispatch.py integration tests n
 - Modify: `src/vk/commands/dispatch_cmd.py`
 - Modify: `tests/unit/test_dispatch_body.py`
 
-- [ ] **Step 1: Add failing test for new title format**
+- [x] **Step 1: Add failing test for new title format**
 
 Append to `tests/unit/test_dispatch_body.py`:
 
@@ -262,7 +262,7 @@ class TestBuildIssueTitle:
 
 Run the test file; both new tests fail because `_build_issue_title` signature differs.
 
-- [ ] **Step 2: Update _build_issue_title signature**
+- [x] **Step 2: Update _build_issue_title signature**
 
 Replace lines 64–66 of `src/vk/commands/dispatch_cmd.py`:
 
@@ -282,7 +282,7 @@ Run `pytest tests/unit/test_dispatch_body.py 2>&1 | tail -10`. Expected: pass.
 - Modify: `src/vk/commands/dispatch_cmd.py`
 - Modify: `tests/integration/test_dispatch.py`
 
-- [ ] **Step 1: Add failing integration test for structured labels**
+- [x] **Step 1: Add failing integration test for structured labels**
 
 Open `tests/integration/test_dispatch.py` and find the existing dispatch success test. Append a new test:
 
@@ -312,7 +312,7 @@ Note: the fixture names (`phased_plan_file`, `dispatch_config`) must match exist
 
 Run `pytest tests/integration/test_dispatch.py::test_dispatch_adds_plan_and_phase_labels -x 2>&1 | tail -10`. Expected: fail (labels don't include plan:/phase: yet).
 
-- [ ] **Step 2: Add structured labels in dispatch loop**
+- [x] **Step 2: Add structured labels in dispatch loop**
 
 In `src/vk/commands/dispatch_cmd.py`, at the `gh.create_issue(...)` call (around line 258), replace the `labels=[...]` argument:
 
@@ -339,7 +339,7 @@ Run the test; expect pass. Then run `pytest tests/ 2>&1 | tail -10`. Fix any fal
 - Create: `tests/unit/test_dispatch_body_validator.py`
 - Modify: `src/vk/commands/dispatch_cmd.py`
 
-- [ ] **Step 1: Write failing tests for validator**
+- [x] **Step 1: Write failing tests for validator**
 
 Create `tests/unit/test_dispatch_body_validator.py`:
 
@@ -397,7 +397,7 @@ class TestValidateIssueBody:
 
 Run: `pytest tests/unit/test_dispatch_body_validator.py 2>&1 | tail -10`. Expected: ImportError (module doesn't exist).
 
-- [ ] **Step 2: Implement the validator**
+- [x] **Step 2: Implement the validator**
 
 Create `src/vk/commands/dispatch_body_validator.py`:
 
@@ -446,7 +446,7 @@ def validate_issue_body(body: str, phase_number: int) -> None:
 
 Run the test file; expect pass.
 
-- [ ] **Step 3: Wire validator into dispatch apply loop**
+- [x] **Step 3: Wire validator into dispatch apply loop**
 
 In `src/vk/commands/dispatch_cmd.py`, after building `body` and before calling `gh.create_issue`, add:
 
@@ -463,7 +463,7 @@ Move the import to the top-of-file imports. Run `pytest tests/ 2>&1 | tail -15`.
 - Modify: `src/vk/commands/dispatch_cmd.py`
 - Modify: `tests/integration/test_dispatch.py`
 
-- [ ] **Step 1: Write failing test for git commit failure propagation**
+- [x] **Step 1: Write failing test for git commit failure propagation**
 
 In `tests/integration/test_dispatch.py`, add:
 
@@ -491,7 +491,7 @@ def test_dispatch_git_commit_failure_surfaces(tmp_path, monkeypatch, phased_plan
 
 Run; expect fail (today: `except Exception: pass` swallows the error and exit is 0).
 
-- [ ] **Step 2: Remove the silent except**
+- [x] **Step 2: Remove the silent except**
 
 In `src/vk/commands/dispatch_cmd.py` lines 282–296, replace the try/except wrapping the git commit with direct subprocess calls:
 
@@ -513,7 +513,7 @@ Run the test; expect pass. Run full suite `pytest tests/ 2>&1 | tail -15`; fix a
 **Files:**
 - Modify: `src/vk/commands/dispatch_cmd.py`
 
-- [ ] **Step 1: Write failing test that Issue body is updated with its own URL**
+- [x] **Step 1: Write failing test that Issue body is updated with its own URL**
 
 In `tests/integration/test_dispatch.py`, add:
 
@@ -543,7 +543,7 @@ def test_dispatch_updates_body_with_issue_url(tmp_path, monkeypatch, phased_plan
 
 Expected: fail — `gh.edit_issue_body` may not exist; dispatch doesn't re-edit the body.
 
-- [ ] **Step 2: Add gh.edit_issue_body helper**
+- [x] **Step 2: Add gh.edit_issue_body helper**
 
 In `src/vk/gh.py`, add:
 
@@ -555,7 +555,7 @@ def edit_issue_body(repo: str, number: int, body: str) -> None:
 
 Use whatever `_run_gh`/equivalent helper already exists in that module. Add a minimal unit test in `tests/unit/test_gh.py` mirroring existing patterns.
 
-- [ ] **Step 3: Call edit_issue_body after create in dispatch loop**
+- [x] **Step 3: Call edit_issue_body after create in dispatch loop**
 
 After `issue_num = gh.extract_issue_number(issue_url)` in the apply loop:
 
@@ -577,7 +577,7 @@ Run `pytest tests/ 2>&1 | tail -10`; expect pass.
 - Modify: `src/vk/config.py`
 - Modify: `tests/unit/test_config.py`
 
-- [ ] **Step 1: Failing test for archive_to default and override**
+- [x] **Step 1: Failing test for archive_to default and override**
 
 In `tests/unit/test_config.py`, add:
 
@@ -600,7 +600,7 @@ def test_plan_archive_to_override(tmp_path):
 
 Run; expect AttributeError.
 
-- [ ] **Step 2: Add archive_to to PlanConfig**
+- [x] **Step 2: Add archive_to to PlanConfig**
 
 In `src/vk/config.py`, update `PlanConfig`:
 
@@ -630,7 +630,7 @@ Run tests; expect pass.
 - Modify: `src/vk/commands/progress_cmd.py`
 - Modify: `tests/integration/test_progress.py`
 
-- [ ] **Step 1: Failing test — sync-to-Complete offers archive prompt**
+- [x] **Step 1: Failing test — sync-to-Complete offers archive prompt**
 
 In `tests/integration/test_progress.py`, add:
 
@@ -665,7 +665,7 @@ def test_sync_to_complete_prompts_archive(tmp_path, monkeypatch):
 
 Run; expect fail (sync today does not archive).
 
-- [ ] **Step 2: Failing test — dry-run shows "Would archive"**
+- [x] **Step 2: Failing test — dry-run shows "Would archive"**
 
 ```python
 def test_sync_dry_run_previews_archive(tmp_path):
@@ -677,7 +677,7 @@ def test_sync_dry_run_previews_archive(tmp_path):
 
 Run; expect fail.
 
-- [ ] **Step 3: Failing test — destination collision refused**
+- [x] **Step 3: Failing test — destination collision refused**
 
 ```python
 def test_sync_archive_refuses_overwrite(tmp_path):
@@ -691,7 +691,7 @@ def test_sync_archive_refuses_overwrite(tmp_path):
 
 Run; expect fail.
 
-- [ ] **Step 4: Implement _archive_plan helper in progress_cmd.py**
+- [x] **Step 4: Implement _archive_plan helper in progress_cmd.py**
 
 Add to `src/vk/commands/progress_cmd.py`:
 
@@ -747,7 +747,7 @@ def _archive_plan(plan_path: Path, profile: Profile, repo_root: Path,
     return dest
 ```
 
-- [ ] **Step 5: Wire into sync() after Status write**
+- [x] **Step 5: Wire into sync() after Status write**
 
 At the end of the `sync` function in `progress_cmd.py`, after `_reconcile_spec_index(...)` when `new_status == "Complete"`:
 
@@ -776,7 +776,7 @@ Run the three new tests; expect pass. Then full suite `pytest tests/ 2>&1 | tail
 - Modify: `src/vk/commands/progress_cmd.py`
 - Modify: `tests/integration/test_progress.py`
 
-- [ ] **Step 1: Failing test — spec index file: column reflects archive path**
+- [x] **Step 1: Failing test — spec index file: column reflects archive path**
 
 ```python
 def test_archive_updates_spec_index_file_column(tmp_path):
@@ -791,7 +791,7 @@ Wire the full fixture (create `docs/superpowers/specs/s.md` with an `## Implemen
 
 Run; expect fail (spec index still shows `docs/superpowers/plans/p.md`).
 
-- [ ] **Step 2: Implementation already handled**
+- [x] **Step 2: Implementation already handled**
 
 The re-reconcile in Task 2 Step 5 already passes `archived_path` to `_reconcile_spec_index`. But verify `_reconcile_spec_index` writes the correct `file:` via `IndexEntry.file`. If not, update it to use `archived_path.relative_to(repo_root)` when archived.
 
@@ -809,7 +809,7 @@ Run the new test; expect pass.
 - Modify: `src/vk/cli.py`
 - Modify: `tests/unit/test_cli.py`
 
-- [ ] **Step 1: Failing test — subcommand registered**
+- [x] **Step 1: Failing test — subcommand registered**
 
 In `tests/unit/test_cli.py`:
 
@@ -824,7 +824,7 @@ def test_dispatch_migrate_command_exists():
 
 Run; expect fail.
 
-- [ ] **Step 2: Convert dispatch to a subcommand group**
+- [x] **Step 2: Convert dispatch to a subcommand group**
 
 In `src/vk/commands/dispatch_cmd.py`, wrap the existing `dispatch` function as the default command of a typer sub-app:
 
@@ -857,7 +857,7 @@ Run the new test; expect pass. Run existing dispatch tests; fix any routing issu
 - Modify: `src/vk/commands/dispatch_cmd.py`
 - Create: `tests/integration/test_dispatch_migrate.py`
 
-- [ ] **Step 1: Failing test — missing tracking comment aborts**
+- [x] **Step 1: Failing test — missing tracking comment aborts**
 
 Create `tests/integration/test_dispatch_migrate.py`:
 
@@ -902,7 +902,7 @@ Note: if the config-lookup path in the codebase doesn't support env override, ei
 
 Run; expect fail.
 
-- [ ] **Step 2: Implement migrate — tracking-comment collection and validation**
+- [x] **Step 2: Implement migrate — tracking-comment collection and validation**
 
 In `dispatch_cmd.py::migrate`, after parsing the plan:
 
@@ -919,7 +919,7 @@ In `dispatch_cmd.py::migrate`, after parsing the plan:
 
 Run the test; expect pass.
 
-- [ ] **Step 3: Failing test — dry-run prints diff**
+- [x] **Step 3: Failing test — dry-run prints diff**
 
 ```python
 def test_migrate_dry_run_prints_diff(tmp_path, monkeypatch):
@@ -941,7 +941,7 @@ def test_migrate_dry_run_prints_diff(tmp_path, monkeypatch):
 
 Run; expect fail.
 
-- [ ] **Step 4: Implement dry-run flow**
+- [x] **Step 4: Implement dry-run flow**
 
 Add `view_issue` to `src/vk/gh.py`:
 
@@ -988,7 +988,7 @@ In `migrate()`:
 
 Run the test; expect pass.
 
-- [ ] **Step 5: Failing test — --yes applies edits and aborts on gh failure**
+- [x] **Step 5: Failing test — --yes applies edits and aborts on gh failure**
 
 ```python
 def test_migrate_yes_applies_edits(tmp_path, monkeypatch):
@@ -1014,7 +1014,7 @@ def test_migrate_aborts_mid_run_on_gh_error(tmp_path, monkeypatch):
 
 Run; expect fail.
 
-- [ ] **Step 6: Implement --yes apply path**
+- [x] **Step 6: Implement --yes apply path**
 
 Add `gh.edit_issue` (title + body + labels in one call):
 
@@ -1052,7 +1052,7 @@ Run tests; expect pass. Run full suite `pytest tests/ 2>&1 | tail -15`.
 - Modify: `skills/vk-execute/SKILL.md`
 - Modify: `tests/unit/test_skill_validation.py`
 
-- [ ] **Step 1: Failing test — skill mentions pr-ready label and unified PR title**
+- [x] **Step 1: Failing test — skill mentions pr-ready label and unified PR title**
 
 In `tests/unit/test_skill_validation.py`, add:
 
@@ -1073,7 +1073,7 @@ def test_vk_execute_mentions_unified_pr_title(self, skill_dir: Path) -> None:
 
 Run; expect fail.
 
-- [ ] **Step 2: Update the skill**
+- [x] **Step 2: Update the skill**
 
 Open `skills/vk-execute/SKILL.md`. Read current contents. Add a new section before the existing lifecycle steps:
 
@@ -1102,7 +1102,7 @@ Run the new tests; expect pass.
 **Files:**
 - Modify: `skills/vk-dispatch/SKILL.md`
 
-- [ ] **Step 1: Document migrate and unified title**
+- [x] **Step 1: Document migrate and unified title**
 
 Edit `skills/vk-dispatch/SKILL.md`. Add under "Integration":
 
@@ -1126,7 +1126,7 @@ No automated test for this prose; a quick re-read is enough.
 **Files:**
 - Modify: `skills/vk-progress/SKILL.md`
 
-- [ ] **Step 1: Document archive-on-Complete**
+- [x] **Step 1: Document archive-on-Complete**
 
 Append to `skills/vk-progress/SKILL.md`:
 

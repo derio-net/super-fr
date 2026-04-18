@@ -184,6 +184,5 @@ start_workspace          agent creates PR          operator reviews         oper
 
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
-| Skill: agent completion hook | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-13-workspace-lifecycle-skill-hook.md` | Not Started | — |
+| Skill: agent completion hook | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-13-workspace-lifecycle-skill-hook.md` | Complete | — |
 | Backend: lifecycle jobs | `derio-net/vibe-kanban` | `docs/superpowers/plans/2026-04-13-workspace-lifecycle-backend-jobs.md` | Not Started | Skill hook (for full feature) |
-| Workspace Lifecycle Skill Hook Implementation Plan |  | `docs/superpowers/plans/2026-04-13-workspace-lifecycle-skill-hook.md` | Complete | — |
