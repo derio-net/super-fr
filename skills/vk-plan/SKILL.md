@@ -15,9 +15,10 @@ stay here; mechanical parts delegate to the `vk plan` CLI.
 ## Format
 
 Plans are always phased. Dispatch intent is an orthogonal concern, expressed by
-the presence (or absence) of a `dispatch:` block in `plan-config.yaml`. Flat
-plans are deprecated — migrate with `vk plan convert <plan> --to phased`
-before continuing.
+the presence (or absence) of a `dispatch:` block in `plan-config.yaml`.
+
+If you encounter a legacy flat plan, migrate it first — see the Migration
+section in `vk-execute`.
 
 ## Procedure
 

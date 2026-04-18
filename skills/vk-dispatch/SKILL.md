@@ -33,13 +33,13 @@ idempotency check, create issues, add to board, inject tracking comments, commit
 |------|---------|--------|
 | 0 | Success or noop | Relay URLs |
 | 1 | Gate disabled / config error | Paste CLI error verbatim |
-| 2 | Plan parse error (flat format) | Suggest `vk plan convert --to phased` |
+| 2 | Plan parse error (legacy flat format) | Run `vk plan convert <plan> --to phased` and retry |
 | 3 | gh error | Check `gh auth status` |
 | 4 | Partial success | CLI shows which failed |
 
 ## Integration
 
-- Convert flat to phased: `vk plan convert <plan> --to phased --group-by-tag`
+- Migrate legacy flat plans: `vk plan convert <plan> --to phased --group-by-tag` (or `--single-phase`)
 - Sync progress after dispatch: use vk-progress skill
 - Execute a dispatched phase: use vk-execute skill
 - Issue title format: `[owner/repo] slug · Phase N/total · phase_title`

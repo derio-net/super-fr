@@ -7,8 +7,7 @@ description: >
 
 # vk-execute
 
-Implements a single phase from a plan. Flat plans are deprecated — see
-[Migrating flat plans](#migrating-flat-plans) below.
+Implements a single phase from a plan.
 
 **Announce at start:** "I'm using vk-execute to implement this phase."
 
@@ -37,6 +36,13 @@ Best-effort: failure does not block PR creation.
 
 ## Procedure
 
+0. **Check plan shape, migrate if needed.** Before anything else:
+   ```bash
+   vk plan format <plan>
+   ```
+   If the output is `phased`, continue to step 1. If it is `flat`, run the
+   [Migration](#migration) flow below and commit the result as its own PR
+   **before** proceeding. There is no path that executes a flat plan directly.
 1. Check dependencies:
    ```bash
    vk execute check-deps <plan> <phase>
@@ -68,25 +74,37 @@ Best-effort: failure does not block PR creation.
 - Stop if blocked — report what's missing.
 - Step IDs: `P<n>.T<n>.S<n>`.
 
-## Migrating flat plans
+## Migration
 
-Flat plans are deprecated. Plan shape should reflect review units (one phase =
-one PR), not routing. Dispatch intent lives in `plan-config.yaml` — structure
-and routing are independent concerns.
+Pick the flow that fits the plan. Either way, migrate as its own PR — separate
+from the phase-execution PRs that follow — so diffs stay clean.
 
-If this skill is handed a flat plan, migrate it before execution:
+**Automatic + review** (default). Use this unless the operator asks for guided.
 
 ```bash
-# Preview first
+# Preview the rewrite
 vk plan convert <plan> --to phased --single-phase --dry-run
 
 # If tasks carry `[agentic]` / `[manual]` tags, cluster by them:
 vk plan convert <plan> --to phased --group-by-tag --yes
 
-# Otherwise, wrap everything in one phase (simplest, safest):
+# Otherwise, wrap everything in one phase:
 vk plan convert <plan> --to phased --single-phase --yes
+
+git add <plan> && git commit -m "plan: migrate to phased"
 ```
 
-Commit the migration as its own PR so the execution PRs that follow are clean
-diffs. The converter renumbers tasks per-phase so step IDs resolve as
-`P<n>.T<n>.S<n>`, and previously-ticked checkboxes are preserved.
+**Guided**. Use when the plan has natural subsystem boundaries worth capturing
+as phases (multiple roles / services / modules):
+
+1. Run `vk plan convert <plan> --to phased --single-phase --yes` to wrap
+   everything into Phase 1.
+2. Show the operator the task list and ask where phase boundaries should go.
+3. Edit the plan: replace the single `## Phase 1:` with N phase headers at the
+   chosen boundaries, and renumber tasks per phase (Task 1 of each phase
+   starts at 1).
+4. Run `vk plan self-review <plan>` to confirm shape.
+5. Commit as its own PR.
+
+The converter preserves previously-ticked checkboxes and renumbers step IDs to
+`P<n>.T<n>.S<n>` per phase.
