@@ -18,13 +18,17 @@ execute_app = typer.Typer(help="Helpers for phase execution.")
 
 
 def _reject_flat(plan_path: Path) -> None:
-    """Abort if ``plan_path`` is a legacy flat plan.
+    """Abort if ``plan_path`` is a legacy flat plan, or if it can't be parsed.
 
     Every execute sub-command runs this guard before doing work. Flat plans
     must be migrated with ``vk plan convert <plan> --to phased`` first —
     there is no path that executes a flat plan directly.
     """
-    plan = parse_plan(plan_path)
+    try:
+        plan = parse_plan(plan_path)
+    except (FileNotFoundError, ValueError) as exc:
+        err_console.print(f"Error: could not parse {plan_path}: {exc}")
+        raise typer.Exit(2)
     if plan.format is PlanFormat.FLAT:
         err_console.print(
             f"Error: {plan_path.name} is a legacy flat plan.\n"

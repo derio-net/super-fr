@@ -391,7 +391,8 @@ def migrate(
     if plan.format is not PlanFormat.PHASED:
         err_console.print(
             "Error: Cannot run Issue migration against a legacy flat plan. "
-            "Migrate the plan file first with `vk plan convert`."
+            "Migrate the plan file first:\n"
+            f"  vk plan convert {plan_path_resolved} --to phased --single-phase --yes"
         )
         raise typer.Exit(2)
 

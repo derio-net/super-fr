@@ -123,6 +123,23 @@ class TestPlanFormat:
         assert result.exit_code == 0
         assert result.stdout.strip() == "phased"
 
+    def test_format_missing_path_errors(self, tmp_path: Path) -> None:
+        """Nonexistent paths must not silently fall through to the flat default."""
+        ghost = tmp_path / "does-not-exist"
+        result = runner.invoke(app, ["plan", "format", str(ghost)])
+        assert result.exit_code == 2
+        combined = result.stdout + (result.stderr or "")
+        assert "does not exist" in combined
+
+    def test_format_non_plan_file_errors(self, tmp_path: Path) -> None:
+        """A file that isn't a valid plan must error, not traceback."""
+        junk = tmp_path / "not-a-plan.md"
+        junk.write_text("# Just a random markdown doc\n\nNo phases or tasks here.\n")
+        result = runner.invoke(app, ["plan", "format", str(junk)])
+        assert result.exit_code == 2
+        combined = result.stdout + (result.stderr or "")
+        assert "could not parse" in combined.lower()
+
 
 class TestPlanSelfReview:
     def test_self_review_passes(self, local_repo: Path) -> None:
@@ -191,6 +208,28 @@ class TestExecuteRejectsFlat:
         combined = result.stdout + (result.stderr or "")
         assert "flat" in combined.lower()
         assert "vk plan convert" in combined
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("check-deps", "1"),
+            ("scope", "1"),
+            ("check-step", "P1.T1.S1"),
+            ("pr-body", "1"),
+        ],
+        ids=["check-deps", "scope", "check-step", "pr-body"],
+    )
+    def test_non_plan_file_errors_cleanly(
+        self, tmp_path: Path, args: tuple[str, str]
+    ) -> None:
+        """The _reject_flat guard must catch parse errors rather than traceback."""
+        junk = tmp_path / "not-a-plan.md"
+        junk.write_text("# Not a plan\n\nJust some markdown.\n")
+        cmd = ["execute", args[0], str(junk), args[1]]
+        result = runner.invoke(app, cmd)
+        assert result.exit_code == 2
+        combined = result.stdout + (result.stderr or "")
+        assert "could not parse" in combined.lower()
 
 
 class TestExecuteCheckDeps:

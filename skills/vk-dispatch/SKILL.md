@@ -33,7 +33,7 @@ idempotency check, create issues, add to board, inject tracking comments, commit
 |------|---------|--------|
 | 0 | Success or noop | Relay URLs |
 | 1 | Gate disabled / config error | Paste CLI error verbatim |
-| 2 | Plan parse error (legacy flat format) | Run `vk plan convert <plan> --to phased` and retry |
+| 2 | Plan parse error (legacy flat format) | Run `vk plan convert <plan> --to phased --single-phase --yes` and retry |
 | 3 | gh error | Check `gh auth status` |
 | 4 | Partial success | CLI shows which failed |
 

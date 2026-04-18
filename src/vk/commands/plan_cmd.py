@@ -42,8 +42,15 @@ def plan_format(
     command will accept it — see ``vk plan convert --to phased``.
     """
     target = target.resolve()
+    if not target.exists():
+        err_console.print(f"Error: {target} does not exist.")
+        raise typer.Exit(2)
     if target.is_file():
-        plan = parse_plan(target)
+        try:
+            plan = parse_plan(target)
+        except ValueError as exc:
+            err_console.print(f"Error: could not parse plan at {target}: {exc}")
+            raise typer.Exit(2)
         console.print(plan.format.value)
         return
     config_path = target / "docs" / "superpowers" / "plan-config.yaml"
@@ -228,7 +235,6 @@ def plan_spec_index(
 def plan_convert(
     plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
     to: str = typer.Option("phased", "--to", help="Target format. Only 'phased' is supported."),
-    force: bool = typer.Option(False, "--force", help="Force conversion (strip tracking)."),
     single_phase: bool = typer.Option(False, "--single-phase", help="Wrap in one phase."),
     one_per_task: bool = typer.Option(False, "--one-per-task", help="One phase per task."),
     group_by_tag: bool = typer.Option(
@@ -240,7 +246,7 @@ def plan_convert(
     """Migrate a legacy flat plan to phased format.
 
     One of --single-phase, --one-per-task, or --group-by-tag selects the
-    migration strategy. --force is accepted but unused (reserved).
+    migration strategy.
     """
     try:
         action = resolve_action(dry_run=dry_run, yes=yes)
@@ -253,8 +259,6 @@ def plan_convert(
             f"Error: --to '{to}' is not supported. The only valid target is 'phased'."
         )
         raise typer.Exit(2)
-
-    _ = force  # reserved for future use; silence the unused-arg lint
 
     plan_path = plan_path.resolve()
     plan = parse_plan(plan_path)

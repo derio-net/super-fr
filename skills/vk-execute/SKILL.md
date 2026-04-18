@@ -1,7 +1,7 @@
 ---
 name: vk-execute
 description: >
-  Execute an agentic phase or task from a plan. Use when implementing
+  Execute an agentic phase from a plan. Use when implementing
   assigned work from a plan file. Agent-facing skill.
 ---
 
@@ -70,6 +70,7 @@ Best-effort: failure does not block PR creation.
 ## Constraints
 
 - One phase = one PR.
+- Migration (if needed) is a separate PR from any phase.
 - Don't touch other phases.
 - Stop if blocked — report what's missing.
 - Step IDs: `P<n>.T<n>.S<n>`.
