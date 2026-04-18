@@ -1,3 +1,5 @@
 """VK CLI toolchain."""
 
-__version__ = "1.0.3"
+from importlib.metadata import version
+
+__version__ = version("vk")
