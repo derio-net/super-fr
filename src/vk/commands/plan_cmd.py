@@ -13,7 +13,6 @@ from vk.commands.common import (
 )
 from vk.config import load_profile
 from vk.plan.convert import (
-    to_flat,
     to_phased_group_by_tag,
     to_phased_one_per_task,
     to_phased_single,
@@ -30,11 +29,31 @@ plan_app = typer.Typer(help="Write, save, and maintain plan files.")
 
 @plan_app.command(name="format")
 def plan_format(
-    repo_root: Path = typer.Argument(".", help="Repository root. Defaults to current directory."),
+    target: Path = typer.Argument(".", help="Plan file path or repository root."),
 ) -> None:
-    """Print the plan format (flat or phased) based on dispatch config."""
-    repo_root = repo_root.resolve()
-    config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
+    """Print the plan's actual format.
+
+    - If ``target`` is a plan file: parse and print the detected shape.
+    - If ``target`` is a directory: fall back to the repo's dispatch config for
+      the expected shape (legacy behavior).
+
+    Output is either ``phased`` or ``flat``. A ``flat`` result means the plan
+    is a legacy artifact and must be migrated before any execute or dispatch
+    command will accept it — see ``vk plan convert --to phased``.
+    """
+    target = target.resolve()
+    if not target.exists():
+        err_console.print(f"Error: {target} does not exist.")
+        raise typer.Exit(2)
+    if target.is_file():
+        try:
+            plan = parse_plan(target)
+        except ValueError as exc:
+            err_console.print(f"Error: could not parse plan at {target}: {exc}")
+            raise typer.Exit(2)
+        console.print(plan.format.value)
+        return
+    config_path = target / "docs" / "superpowers" / "plan-config.yaml"
     profile = load_profile(config_path)
     console.print(profile.format.value)
 
@@ -83,26 +102,16 @@ def plan_new(
         ]
     )
 
-    if profile.format.value == "phased":
-        lines.extend(
-            [
-                "## Phase 1: [Name] [agentic]",
-                "",
-                "### Task 1: [Component]",
-                "",
-                "- [ ] **Step 1: [Action]**",
-                "",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                "### Task 1: [Component] [agentic]",
-                "",
-                "- [ ] **Step 1: [Action]**",
-                "",
-            ]
-        )
+    lines.extend(
+        [
+            "## Phase 1: [Name] [agentic]",
+            "",
+            "### Task 1: [Component]",
+            "",
+            "- [ ] **Step 1: [Action]**",
+            "",
+        ]
+    )
 
     content = "\n".join(lines)
 
@@ -225,8 +234,7 @@ def plan_spec_index(
 @plan_app.command(name="convert")
 def plan_convert(
     plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
-    to: str = typer.Option(..., "--to", help="Target format: flat or phased."),
-    force: bool = typer.Option(False, "--force", help="Force conversion (strip tracking)."),
+    to: str = typer.Option("phased", "--to", help="Target format. Only 'phased' is supported."),
     single_phase: bool = typer.Option(False, "--single-phase", help="Wrap in one phase."),
     one_per_task: bool = typer.Option(False, "--one-per-task", help="One phase per task."),
     group_by_tag: bool = typer.Option(
@@ -235,49 +243,52 @@ def plan_convert(
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutations."),
     yes: bool = typer.Option(False, "--yes", help="Execute without confirmation."),
 ) -> None:
-    """Convert a plan between flat and phased formats."""
+    """Migrate a legacy flat plan to phased format.
+
+    One of --single-phase, --one-per-task, or --group-by-tag selects the
+    migration strategy.
+    """
     try:
         action = resolve_action(dry_run=dry_run, yes=yes)
     except Exception:
         err_console.print("Error: --dry-run and --yes are mutually exclusive")
         raise typer.Exit(1)
 
+    if to != "phased":
+        err_console.print(
+            f"Error: --to '{to}' is not supported. The only valid target is 'phased'."
+        )
+        raise typer.Exit(2)
+
     plan_path = plan_path.resolve()
     plan = parse_plan(plan_path)
 
     try:
-        if to == "flat":
-            converted = to_flat(plan, force=force)
-        elif to == "phased":
-            if single_phase:
-                converted = to_phased_single(plan)
-            elif one_per_task:
-                converted = to_phased_one_per_task(plan)
-            elif group_by_tag:
-                converted = to_phased_group_by_tag(plan)
-            else:
-                err_console.print(
-                    "Error: --to phased requires one of: "
-                    "--single-phase, --one-per-task, --group-by-tag"
-                )
-                raise typer.Exit(2)
+        if single_phase:
+            converted = to_phased_single(plan)
+        elif one_per_task:
+            converted = to_phased_one_per_task(plan)
+        elif group_by_tag:
+            converted = to_phased_group_by_tag(plan)
         else:
-            err_console.print(f"Error: unknown format '{to}'. Use 'flat' or 'phased'.")
+            err_console.print(
+                "Error: --to phased requires one of: --single-phase, --one-per-task, --group-by-tag"
+            )
             raise typer.Exit(2)
     except ValueError as exc:
         err_console.print(f"Error: {exc}")
         raise typer.Exit(2)
 
     if action is ConfirmAction.DRY_RUN:
-        console.print(f"Would convert: {plan.format.value} -> {to}")
+        console.print(f"Would convert: {plan.format.value} -> phased")
         console.print(f"  Tasks: {len(plan.all_tasks)} -> {len(converted.all_tasks)}")
         if converted.phases:
             console.print(f"  Phases: {len(converted.phases)}")
         raise typer.Exit(0)
 
     if action is ConfirmAction.PROMPT:
-        if not typer.confirm(f"Convert {plan.format.value} -> {to}?", default=False):
+        if not typer.confirm(f"Convert {plan.format.value} -> phased?", default=False):
             raise typer.Exit(0)
 
     write_plan(converted, plan_path)
-    console.print(f"Converted: {plan.format.value} -> {to}")
+    console.print(f"Converted: {plan.format.value} -> phased")

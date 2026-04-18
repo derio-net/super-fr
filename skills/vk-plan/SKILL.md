@@ -1,7 +1,7 @@
 ---
 name: vk-plan
 description: >
-  Write phase-structured or flat plans with operator collaboration. Use when:
+  Write phase-structured plans with operator collaboration. Use when:
   "write a plan", "vk plan", "create a plan". Invoked by brainstorming handoff.
 ---
 
@@ -14,7 +14,11 @@ stay here; mechanical parts delegate to the `vk plan` CLI.
 
 ## Format
 
-Run `vk plan format .` to check: phased (dispatch enabled) or flat (local-only).
+Plans are always phased. Dispatch intent is an orthogonal concern, expressed by
+the presence (or absence) of a `dispatch:` block in `plan-config.yaml`.
+
+If you encounter a legacy flat plan, migrate it first — see the Migration
+section in `vk-execute`.
 
 ## Procedure
 
@@ -27,8 +31,9 @@ Run `vk plan format .` to check: phased (dispatch enabled) or flat (local-only).
 7. Run self-review: `vk plan self-review <plan-path>`
 8. Update spec index: `vk plan spec-index <plan-path> --yes`
 9. Present execution handoff:
-   - Phased: Dispatch (vk-dispatch), Subagent-driven, Inline
-   - Flat: Subagent-driven, Inline
+   - Dispatch via `vk-dispatch` — if `plan-config.yaml` has a `dispatch:` block
+   - Subagent-driven via `subagent-driven-development`
+   - Inline via `executing-plans`
 
 ## Rules
 
