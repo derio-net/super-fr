@@ -214,7 +214,10 @@ def dispatch_create(
         raise typer.Exit(2)
 
     if plan.format is not PlanFormat.PHASED:
-        err_console.print("Error: Cannot dispatch a flat plan. Convert to phased first.")
+        err_console.print(
+            "Error: Cannot dispatch a legacy flat plan. Migrate first:\n"
+            f"  vk plan convert {plan_path_resolved} --to phased --single-phase --yes"
+        )
         raise typer.Exit(2)
 
     if not plan.phases:
@@ -386,7 +389,10 @@ def migrate(
         raise typer.Exit(2)
 
     if plan.format is not PlanFormat.PHASED:
-        err_console.print("Error: Cannot migrate a flat plan.")
+        err_console.print(
+            "Error: Cannot run Issue migration against a legacy flat plan. "
+            "Migrate the plan file first with `vk plan convert`."
+        )
         raise typer.Exit(2)
 
     if not plan.phases:
