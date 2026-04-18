@@ -186,6 +186,70 @@ class TestExecuteCheckStep:
         assert result.exit_code == 2
         assert "note" in result.stdout.lower() or "note" in (result.stderr or "").lower()
 
+    def test_check_step_phased_scopes_to_phase_and_task(self, tmp_path: Path) -> None:
+        """Phased step IDs must scope to the target phase/task — not match any
+        step with the same number elsewhere. Regression for a bug where the
+        matcher ignored phase_num and task_num and matched on step_num alone."""
+        subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        plans_dir = tmp_path / "docs" / "superpowers" / "plans"
+        plans_dir.mkdir(parents=True)
+        plan = plans_dir / "phased.md"
+        plan.write_text(
+            textwrap.dedent("""\
+            # Phased Test Plan
+
+            **Spec:** `docs/superpowers/specs/x.md`
+            **Status:** In Progress
+
+            ---
+
+            ## Phase 1: First phase [agentic]
+
+            ### Task 1: Alpha
+
+            - [x] **Step 1: P1.T1.S1 already done**
+
+            Body.
+
+            ### Task 2: Beta
+
+            - [ ] **Step 1: P1.T2.S1 target — flip me**
+
+            Body.
+
+            ## Phase 2: Second phase [agentic]
+
+            ### Task 1: Gamma
+
+            - [ ] **Step 1: P2.T1.S1 sibling — must stay unchecked**
+
+            Body.
+            """)
+        )
+        subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+
+        result = runner.invoke(app, ["execute", "check-step", str(plan), "P1.T2.S1"])
+        assert result.exit_code == 0, result.stdout
+        content = plan.read_text()
+        assert "- [x] **Step 1: P1.T2.S1 target — flip me**" in content
+        assert "- [x] **Step 1: P1.T1.S1 already done**" in content
+        assert "- [ ] **Step 1: P2.T1.S1 sibling — must stay unchecked**" in content
+
 
 class TestExecutePrBody:
     def test_pr_body_local(self, local_repo: Path) -> None:

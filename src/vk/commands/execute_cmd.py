@@ -17,6 +17,36 @@ err_console = Console(stderr=True)
 execute_app = typer.Typer(help="Helpers for phase/task execution.")
 
 
+def _locate_task_slice(
+    text: str, phase_num: int | None, task_num: int
+) -> tuple[int | None, int | None]:
+    """Return the (start, end) offsets in ``text`` for the target task's block.
+
+    For phased plans, the search is narrowed to the target phase first so that
+    `### Task N:` headers in other phases don't collide. For flat plans, the
+    search runs against the whole document.
+    """
+    if phase_num is not None:
+        phase_match = re.search(rf"^## Phase {phase_num}:", text, re.MULTILINE)
+        if not phase_match:
+            return None, None
+        phase_start = phase_match.end()
+        next_phase = re.search(r"^## Phase \d+:", text[phase_start:], re.MULTILINE)
+        phase_end = phase_start + next_phase.start() if next_phase else len(text)
+    else:
+        phase_start, phase_end = 0, len(text)
+
+    task_match = re.search(rf"^### Task {task_num}:", text[phase_start:phase_end], re.MULTILINE)
+    if not task_match:
+        return None, None
+    task_start = phase_start + task_match.end()
+    next_boundary = re.search(
+        r"^(### Task \d+:|## Phase \d+:)", text[task_start:phase_end], re.MULTILINE
+    )
+    task_end = task_start + next_boundary.start() if next_boundary else phase_end
+    return task_start, task_end
+
+
 def _parse_step_id(step_id: str) -> tuple[int | None, int, int]:
     """Parse step ID: P<n>.T<n>.S<n> (phased) or T<n>.S<n> (flat).
 
@@ -123,27 +153,32 @@ def check_step(
 
     text = plan_path.read_text()
 
-    # Find the step checkbox line
+    slice_start, slice_end = _locate_task_slice(text, phase_num, task_num)
+    if slice_start is None:
+        err_console.print(f"Step {step_id} not found (unchecked) in plan.")
+        raise typer.Exit(2)
+    window = text[slice_start:slice_end]
+
     step_pattern = rf"^- \[ \] \*\*Step {step_num}:"
     step_done_pattern = rf"^- \[[x\-]\] \*\*Step {step_num}:"
 
-    # Check if already done (idempotent)
-    if re.search(step_done_pattern, text, re.MULTILINE):
+    if re.search(step_done_pattern, window, re.MULTILINE):
         console.print(f"Step {step_id} already marked. No change (idempotent).")
         raise typer.Exit(0)
 
-    # Find and replace
-    match = re.search(step_pattern, text, re.MULTILINE)
+    match = re.search(step_pattern, window, re.MULTILINE)
     if not match:
         err_console.print(f"Step {step_id} not found (unchecked) in plan.")
         raise typer.Exit(2)
 
-    old_line = text[match.start() : text.index("\n", match.start())]
+    abs_start = slice_start + match.start()
+    line_end = text.index("\n", abs_start)
+    old_line = text[abs_start:line_end]
     new_line = old_line.replace("- [ ]", f"- [{state}]", 1)
     if note:
         new_line += f" <!-- {note} -->"
 
-    text = text[: match.start()] + new_line + text[text.index("\n", match.start()) :]
+    text = text[:abs_start] + new_line + text[line_end:]
     plan_path.write_text(text)
 
     # Stage the change
