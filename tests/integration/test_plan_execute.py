@@ -199,3 +199,27 @@ class TestExecutePrBody:
         result = runner.invoke(app, ["execute", "pr-body", str(plan), "1", "--issue", "42"])
         assert result.exit_code == 0
         assert "Closes #42" in result.stdout
+
+    def test_pr_body_auto_discovers_issue_from_tracking_comment(self, tmp_path: Path) -> None:
+        """Phased plan with a tracking comment should emit Closes #N without --issue."""
+        fixtures = Path(__file__).parent.parent / "fixtures" / "plans"
+        src = fixtures / "phased-dispatched.md"
+        plan = tmp_path / "phased-dispatched.md"
+        plan.write_text(src.read_text())
+
+        result = runner.invoke(app, ["execute", "pr-body", str(plan), "1"])
+        assert result.exit_code == 0
+        # phased-dispatched.md Phase 1 tracking URL is .../issues/42
+        assert "Closes #42" in result.stdout
+
+    def test_pr_body_explicit_issue_overrides_tracking(self, tmp_path: Path) -> None:
+        """--issue should override the auto-discovered tracking comment."""
+        fixtures = Path(__file__).parent.parent / "fixtures" / "plans"
+        src = fixtures / "phased-dispatched.md"
+        plan = tmp_path / "phased-dispatched.md"
+        plan.write_text(src.read_text())
+
+        result = runner.invoke(app, ["execute", "pr-body", str(plan), "1", "--issue", "99"])
+        assert result.exit_code == 0
+        assert "Closes #99" in result.stdout
+        assert "Closes #42" not in result.stdout
