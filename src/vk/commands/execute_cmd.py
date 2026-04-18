@@ -39,9 +39,7 @@ def _reject_flat(plan_path: Path) -> None:
         raise typer.Exit(2)
 
 
-def _locate_task_slice(
-    text: str, phase_num: int, task_num: int
-) -> tuple[int | None, int | None]:
+def _locate_task_slice(text: str, phase_num: int, task_num: int) -> tuple[int | None, int | None]:
     """Return the (start, end) offsets in ``text`` for the target task's block.
 
     The search is narrowed to the target phase first so that `### Task N:`

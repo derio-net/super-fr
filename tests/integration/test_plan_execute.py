@@ -219,9 +219,7 @@ class TestExecuteRejectsFlat:
         ],
         ids=["check-deps", "scope", "check-step", "pr-body"],
     )
-    def test_non_plan_file_errors_cleanly(
-        self, tmp_path: Path, args: tuple[str, str]
-    ) -> None:
+    def test_non_plan_file_errors_cleanly(self, tmp_path: Path, args: tuple[str, str]) -> None:
         """The _reject_flat guard must catch parse errors rather than traceback."""
         junk = tmp_path / "not-a-plan.md"
         junk.write_text("# Not a plan\n\nJust some markdown.\n")

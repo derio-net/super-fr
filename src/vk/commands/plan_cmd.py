@@ -272,8 +272,7 @@ def plan_convert(
             converted = to_phased_group_by_tag(plan)
         else:
             err_console.print(
-                "Error: --to phased requires one of: "
-                "--single-phase, --one-per-task, --group-by-tag"
+                "Error: --to phased requires one of: --single-phase, --one-per-task, --group-by-tag"
             )
             raise typer.Exit(2)
     except ValueError as exc:
