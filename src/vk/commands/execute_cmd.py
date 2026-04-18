@@ -166,7 +166,14 @@ def check_step(
 def pr_body(
     plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
     target: int = typer.Argument(..., help="Phase number (phased) or task number (flat)."),
-    issue: int | None = typer.Option(None, "--issue", help="GitHub Issue number to close."),
+    issue: int | None = typer.Option(
+        None,
+        "--issue",
+        help=(
+            "GitHub Issue number to close. "
+            "Auto-discovered from the phase's tracking comment if omitted."
+        ),
+    ),
 ) -> None:
     """Generate a standard PR body for a phase or task."""
     plan_path = plan_path.resolve()
@@ -179,6 +186,10 @@ def pr_body(
             raise typer.Exit(2)
         phase = matching[0]
         title = f"Phase {phase.number}: {phase.title}"
+        if issue is None and phase.tracking_url:
+            m = re.search(r"/issues/(\d+)", phase.tracking_url)
+            if m:
+                issue = int(m.group(1))
     else:
         matching_tasks = [t for t in plan.tasks if t.number == target]
         if not matching_tasks:

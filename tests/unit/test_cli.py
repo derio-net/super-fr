@@ -6,9 +6,11 @@ runner = CliRunner()
 
 
 def test_version_flag():
+    from vk import __version__
+
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "1.0.3" in result.stdout
+    assert __version__ in result.stdout
 
 
 def test_help_flag():
