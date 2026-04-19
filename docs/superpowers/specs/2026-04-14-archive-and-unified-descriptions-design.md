@@ -2,7 +2,9 @@
 
 **Status:** Draft
 **Date:** 2026-04-14
-**Repos affected:** `derio-net/superpowers-for-vk`, `derio-net/secure-agent-kali`, all `derio-net/*` consumer repos (operational migration)
+**Repos affected:** `derio-net/superpowers-for-vk`, `derio-net/agent-images` (bridge lives here as of 2026-04-19), all `derio-net/*` consumer repos (operational migration)
+
+> **Note (2026-04-19):** This spec was written when `derio-net/secure-agent-kali` was the bridge's home. That repo has since been absorbed into `derio-net/agent-images` (per `frank/docs/superpowers/archived-plans/2026-04-15--agents--agent-images-and-vk-local-sidecar.md`) and archived on GitHub. Bridge script path is now `agent-images/kali/scripts/vk-issue-bridge.py`. All references below have been updated; the Rollout Phase 3 work (bridge hardening) already shipped via the `bridge-fail-loud-and-blocker-preamble` plan, now archived under `agent-images/docs/superpowers/archived-plans/`.
 
 ## Goal
 
@@ -84,7 +86,7 @@ Dispatch emits dash-prefixed list items that match the bridge's existing regex:
 - Blocked by #{prev_num}
 ```
 
-This single change activates the bridge's dependency-aware deferral that is already implemented at `secure-agent-kali/scripts/vk-issue-bridge.py::parse_dependencies` and `::check_blockers`.
+This single change activates the bridge's dependency-aware deferral that is already implemented at `agent-images/kali/scripts/vk-issue-bridge.py::parse_dependencies` and `::check_blockers`.
 
 Phase 0 phases (no dependencies) emit:
 
@@ -149,7 +151,7 @@ Behavior:
 
 Defense-in-depth for the case where the bridge misfires or a human manually labels a blocked Issue `vk-ready`. The bridge, not the Issue body, carries this instruction — it's imperative to the agent at spawn time, and the Issue body stays clean as the durable record.
 
-Change to `secure-agent-kali/scripts/vk-issue-bridge.py::build_prompt`: when `parse_dependencies` returns any entries, prepend a preamble:
+Change to `agent-images/kali/scripts/vk-issue-bridge.py::build_prompt`: when `parse_dependencies` returns any entries, prepend a preamble:
 
 ```
 BEFORE YOU BEGIN: This Issue declares dependencies: {dep_refs}.
@@ -176,9 +178,9 @@ if you see this and blockers are open, report it to the operator.
 - `skills/vk-progress/SKILL.md` — document archive-on-Complete.
 - `tests/` — unit + integration tests (Section 11).
 
-#### `derio-net/secure-agent-kali`
+#### `derio-net/agent-images`
 
-- `scripts/vk-issue-bridge.py` — `check_blockers` fail-loud, `parse_dependencies` fail-loud when phase>0 has no deps, `build_prompt` blocker preamble.
+- `kali/scripts/vk-issue-bridge.py` — `check_blockers` fail-loud, `parse_dependencies` fail-loud when phase>0 has no deps, `build_prompt` blocker preamble.
 - Tests for above.
 
 #### `derio-net/frank` and other consumer repos
@@ -195,7 +197,7 @@ No code change. Operational step: run `vk dispatch migrate <plan>` against each 
    - Verify PR-body format constraints from any review tooling.
 2. **Phase 1 — superpowers-for-vk dispatch changes.** Title builder, tracking block, labels, dash-prefixed deps, body validator, unit tests. Gated behind existing `dispatch_enabled`.
 3. **Phase 2 — superpowers-for-vk archive + migrate.** Archive-on-Complete, `vk dispatch migrate`, their tests.
-4. **Phase 3 — secure-agent-kali bridge hardening.** Fail-loud changes, blocker preamble, tests. Deploy.
+4. **Phase 3 — agent-images bridge hardening.** Fail-loud changes, blocker preamble, tests. Deploy. (Shipped; now archived under `agent-images/docs/superpowers/archived-plans/`.)
 5. **Phase 4 — Operational migration.** Run `vk dispatch migrate` for open plans, starting with Frank hextra. Confirm bridge log shows correct `deferred` lines for blocked phases.
 6. **Phase 5 — Docs.** Update skill SKILL.md files, runbooks, operator announcement.
 
@@ -219,7 +221,7 @@ Each phase is independently revertable. If Phase 3 causes starvation or false fa
 - End-to-end dispatch with mocked `gh`: assert Issue create call has new title, labels, body sections in order.
 - End-to-end migrate with mocked `gh issue view`/`edit`: assert correct rewrite.
 
-**Unit (secure-agent-kali):**
+**Unit (agent-images):**
 
 - `parse_dependencies` — fail-loud when phase>0 body has no deps.
 - `check_blockers` — raises on `gh` errors.

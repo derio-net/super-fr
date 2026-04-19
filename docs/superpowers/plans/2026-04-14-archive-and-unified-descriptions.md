@@ -7,8 +7,10 @@
 **Spec:** `docs/superpowers/specs/2026-04-14-archive-and-unified-descriptions-design.md`
 **Status:** In Progress
 
+> **Note (2026-04-19):** `derio-net/secure-agent-kali` was absorbed into `derio-net/agent-images` and archived. The bridge-hardening plan referenced here (`bridge-fail-loud-and-blocker-preamble`) merged while the repo was still standalone; it and its scripts were ported to `agent-images/kali/` and the plan archived under `agent-images/docs/superpowers/archived-plans/`. All Phase 5 references below have been updated to the new paths. Historical references in Phases 0–4 remain as-is (those phases already ran against the original paths).
+
 **Goal:** Ship archive-on-Complete in `vk progress sync`, unified work-item descriptions across Issue/workspace/PR surfaces, and fail-loud dispatch output whose deps match the VK Issue Bridge's regex — plus a `vk dispatch migrate` command to retrofit in-flight Issues.
-**Architecture:** Changes live in `src/vk/commands/{progress_cmd,dispatch_cmd}.py`, `src/vk/config.py`, and the three `skills/vk-*` SKILL.md files. TDD throughout — unit tests in `tests/unit/` gate each builder/validator change; integration tests in `tests/integration/` cover archive flow and migrate flow against mocked `gh`. Secure-agent-kali bridge changes live in a separate plan.
+**Architecture:** Changes live in `src/vk/commands/{progress_cmd,dispatch_cmd}.py`, `src/vk/config.py`, and the three `skills/vk-*` SKILL.md files. TDD throughout — unit tests in `tests/unit/` gate each builder/validator change; integration tests in `tests/integration/` cover archive flow and migrate flow against mocked `gh`. Bridge changes live in a separate plan (now in `agent-images`).
 **Tech Stack:** Python 3.11+, uv, typer, pyyaml, pytest, ruff, mypy
 
 ---
@@ -1152,21 +1154,29 @@ to point at the new archived path.
 
 ### Task 1: Verify bridge changes deployed
 
-- [ ] **Step 1: Confirm secure-agent-kali plan is Complete**
+The bridge-fail-loud plan was archived on 2026-04-19 when `secure-agent-kali` was absorbed into `agent-images`. The active bridge script now lives at `agent-images/kali/scripts/vk-issue-bridge.py`.
+
+- [ ] **Step 1: Confirm bridge-fail-loud plan is archived**
 
 ```bash
-grep '^**Status:**' /home/claude/repos/secure-agent-kali/docs/superpowers/plans/2026-04-14-bridge-fail-loud-and-blocker-preamble.md
+ls /home/claude/repos/agent-images/docs/superpowers/archived-plans/2026-04-14-bridge-fail-loud-and-blocker-preamble.md
 ```
 
-Expected: `**Status:** Complete` (or the plan has been archived — check `archived-plans/`).
+Expected: file exists at that path. If not, stop and investigate.
 
-- [ ] **Step 2: Confirm bridge script on production host matches source**
+- [ ] **Step 2: Confirm the running bridge script matches the agent-images source**
+
+The pod's supercronic runs the bridge from whatever path the active `~/.crontab` points at. Until the next image rebuild lands, that's the in-repo agent-images clone; afterwards it will be `/opt/scripts/vk-issue-bridge.py` baked into the image.
 
 ```bash
-diff /opt/scripts/vk-issue-bridge.py /home/claude/repos/secure-agent-kali/scripts/vk-issue-bridge.py
+# Identify the path actually invoked from ~/.crontab
+grep -oE '/[^ ]*vk-issue-bridge\.py' /home/claude/.crontab | head -1
+# Diff that path against the agent-images source of truth
+diff "$(grep -oE '/[^ ]*vk-issue-bridge\.py' /home/claude/.crontab | head -1)" \
+     /home/claude/repos/agent-images/kali/scripts/vk-issue-bridge.py
 ```
 
-Expected: no output (files identical). If output shows changes, deployment is incomplete — abort operational migration until resolved.
+Expected: no output (files identical). If output shows changes, either the crontab override is stale or the image hasn't been rebuilt yet — resolve before running the operational migration.
 
 ### Task 2: Migrate Frank hextra plan
 
@@ -1192,7 +1202,7 @@ Expected: 5 `Migrated #N` lines (or fewer, for CLOSED phases).
 Wait for the next bridge cron tick (≤ 2 minutes), then:
 
 ```bash
-ssh secure-agent-pod 'tail -80 /var/log/supercronic/vk-issue-bridge.log'
+tail -80 /home/claude/.willikins-agent/vk-bridge.log
 ```
 
 Expected log contents: `p derio-net/frank#69: blocked by #68` (and similar for #70, #71, #72). Phase 1 (#68) should either be already-synced (has `vk-synced` label) or sync now if it wasn't before. No workspace created for phases 2–5 until phase 1 closes.
@@ -1202,8 +1212,9 @@ Expected log contents: `p derio-net/frank#69: blocked by #68` (and similar for #
 - [ ] **Step 1: Enumerate open plans across repos**
 
 ```bash
-for repo in /home/claude/repos/superpowers-for-vk /home/claude/repos/secure-agent-kali /home/claude/repos/frank /home/claude/repos/willikins; do
+for repo in /home/claude/repos/superpowers-for-vk /home/claude/repos/agent-images /home/claude/repos/frank /home/claude/repos/willikins; do
   for plan in "$repo"/docs/superpowers/plans/*.md; do
+    [ -f "$plan" ] || continue
     status=$(grep -m1 '^**Status:**' "$plan" | sed 's/**Status:**\s*//')
     [ "$status" = "Complete" ] || echo "$plan ($status)"
   done
@@ -1228,7 +1239,7 @@ Spot-check one migrated Issue in the GitHub UI — confirm the new title format 
 - [ ] **Step 1: Confirm dep-gating active across all repos**
 
 ```bash
-ssh secure-agent-pod 'tail -200 /var/log/supercronic/vk-issue-bridge.log' | grep -E '(blocked|deferred|synced)' | tail -30
+tail -200 /home/claude/.willikins-agent/vk-bridge.log | grep -E '(blocked|deferred|synced)' | tail -30
 ```
 
 Expected: `p ... blocked by ...` lines for every migrated multi-phase plan's non-phase-0 Issues whose blockers remain open. Absence of such lines when blockers exist is a regression — abort and open a bug.

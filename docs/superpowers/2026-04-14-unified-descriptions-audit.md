@@ -4,6 +4,8 @@
 **Phase:** 0 of archive-and-unified-descriptions plan
 **Scope:** All derio-net repos — superpowers-for-vk, secure-agent-kali, frank, willikins, vibe-kanban
 
+> **Snapshot from 2026-04-14 — do not treat as current.** On 2026-04-19 `derio-net/secure-agent-kali` was absorbed into `derio-net/agent-images` and archived. The "not a singleton" bridge finding (three drifted copies) was resolved by the absorption — `agent-images/kali/scripts/vk-issue-bridge.py` is now the canonical source, and the old `/opt/scripts/` copy will match it after the next image rebuild. References to `secure-agent-kali` paths below are preserved for historical context.
+
 ---
 
 ## Title consumers found
