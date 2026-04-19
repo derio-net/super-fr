@@ -39,7 +39,10 @@ SKILLS: list[tuple[str, str, typer.Typer, str]] = [
 
 def _subcommands(app: typer.Typer) -> list[tuple[str, str]]:
     """Return (name, first-line-help) for each subcommand of a Typer app."""
+    import click
+
     click_group = typer.main.get_command(app)
+    assert isinstance(click_group, click.Group), "Typer app must compile to a Group"
     rows: list[tuple[str, str]] = []
     for name, cmd in click_group.commands.items():
         help_text = (cmd.help or "").strip().splitlines()[0] if cmd.help else ""

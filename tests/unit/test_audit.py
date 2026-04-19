@@ -124,10 +124,52 @@ class TestRunDispatchAudit:
         with (
             patch("vk.gh.get_project_number", return_value=1),
             patch("vk.gh.list_project_items", return_value=[]),
+            patch("vk.gh.is_issue_closed", return_value=False),
         ):
             issues = _run_dispatch_audit(dispatch_profile, plans_dir)
 
         assert any("not on board" in i and "issues/99" in i for i in issues)
+
+    def test_skips_closed_tracked_issue(self, dispatch_profile: Profile, plans_dir: Path):
+        plan = plans_dir / "2026-01-01-test.md"
+        plan.write_text(
+            "# Test Plan\n"
+            "**Spec:** `none`\n"
+            "**Status:** In Progress\n"
+            "## Phase 0\n"
+            "<!-- Tracking: https://github.com/test-org/repo/issues/99 -->\n"
+        )
+        with (
+            patch("vk.gh.get_project_number", return_value=1),
+            patch("vk.gh.list_project_items", return_value=[]),
+            patch("vk.gh.is_issue_closed", return_value=True),
+        ):
+            issues = _run_dispatch_audit(dispatch_profile, plans_dir)
+
+        assert not any("not on board" in i for i in issues)
+
+    def test_skips_tracked_issue_on_gh_error(self, dispatch_profile: Profile, plans_dir: Path):
+        # Covers archived repos: `gh issue view` raises GhError rather than
+        # returning a boolean, and we want audit to skip silently rather than
+        # nag about an Issue that can't be acted on.
+        from vk.gh import GhError
+
+        plan = plans_dir / "2026-01-01-test.md"
+        plan.write_text(
+            "# Test Plan\n"
+            "**Spec:** `none`\n"
+            "**Status:** In Progress\n"
+            "## Phase 0\n"
+            "<!-- Tracking: https://github.com/test-org/archived-repo/issues/99 -->\n"
+        )
+        with (
+            patch("vk.gh.get_project_number", return_value=1),
+            patch("vk.gh.list_project_items", return_value=[]),
+            patch("vk.gh.is_issue_closed", side_effect=GhError("repo archived")),
+        ):
+            issues = _run_dispatch_audit(dispatch_profile, plans_dir)
+
+        assert not any("not on board" in i for i in issues)
 
     def test_no_issues_when_clean(self, dispatch_profile: Profile, plans_dir: Path):
         items = [

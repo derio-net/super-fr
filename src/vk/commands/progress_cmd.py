@@ -442,15 +442,30 @@ def _run_dispatch_audit(
         except gh.GhError:
             pass
 
-    # Check 4: Cross-reference tracking comments in plans with board state
+    # Check 4: Cross-reference tracking comments in plans with board state.
+    # Board membership only matters for active work — skip closed Issues
+    # and skip when the Issue (or its repo) can't be queried (archived repos
+    # return a GhError from `gh issue view`, which is the right signal here).
     plan_files = sorted(plans_dir.glob("*.md"))
     board_url_map = {i.url: i for i in board_items}
 
     for pf in plan_files:
         tracking_urls = _extract_tracking_urls(pf)
         for url in tracking_urls:
-            if url not in board_url_map:
+            if url in board_url_map:
+                continue
+            repo_slug, number = _parse_issue_url(url)
+            if not repo_slug:
                 issues.append(f"Tracked issue not on board: {url} (from {pf.name})")
+                continue
+            try:
+                if gh.is_issue_closed(repo=repo_slug, number=number):
+                    continue
+            except gh.GhError:
+                # Archived repos, deleted issues, transient gh failures:
+                # skip rather than nag about something we can't act on.
+                continue
+            issues.append(f"Tracked issue not on board: {url} (from {pf.name})")
 
     # Check 5: Duplicate items (same title across repos)
     seen_titles: dict[str, list[str]] = {}
