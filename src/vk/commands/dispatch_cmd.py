@@ -46,9 +46,13 @@ def _plan_path_for_body(plan_path_resolved: Path, repo_root: Path) -> Path:
     The Issue body's ``📋 Plan:`` line is consumed by humans and tooling in
     every clone of the repo; an absolute path leaks the dispatcher's
     local filesystem layout and breaks portability.
+
+    Both operands are resolved so a symlinked repo root (``_find_repo_root``
+    returns the raw ``git rev-parse`` output) still relativizes cleanly
+    against a resolved plan path.
     """
     try:
-        return plan_path_resolved.relative_to(repo_root)
+        return plan_path_resolved.relative_to(repo_root.resolve())
     except ValueError:
         return plan_path_resolved
 

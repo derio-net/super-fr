@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
-from vk.commands.dispatch_cmd import _build_issue_body, _build_issue_title
+import pytest
+
+from vk.commands.dispatch_cmd import (
+    _build_issue_body,
+    _build_issue_title,
+    _plan_path_for_body,
+)
 from vk.plan.models import Phase
 
 
@@ -191,6 +199,45 @@ class TestBuildIssueBody:
         )
         assert "None — no blocking phases." in body
         assert "- Blocked by" not in body
+
+
+class TestPlanPathForBody:
+    def test_relativizes_plan_under_repo(self, tmp_path: Path) -> None:
+        repo_root = tmp_path
+        plan = repo_root / "docs" / "superpowers" / "plans" / "2026-04-14-x.md"
+        plan.parent.mkdir(parents=True)
+        plan.touch()
+        result = _plan_path_for_body(plan.resolve(), repo_root)
+        assert result == Path("docs/superpowers/plans/2026-04-14-x.md")
+
+    def test_falls_back_for_plan_outside_repo(self, tmp_path: Path) -> None:
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        outside = tmp_path / "other" / "plan.md"
+        outside.parent.mkdir()
+        outside.touch()
+        resolved = outside.resolve()
+        assert _plan_path_for_body(resolved, repo_root) == resolved
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="symlink perms differ on Windows")
+    def test_relativizes_when_repo_root_reached_via_symlink(self, tmp_path: Path) -> None:
+        """`_find_repo_root()` does not resolve its return value, so a symlinked
+        repo root combined with a resolved plan path must still relativize
+        cleanly — otherwise the helper falls back to the absolute path and
+        leaks the dispatcher's filesystem layout into the Issue body.
+        """
+        real_repo = tmp_path / "real"
+        real_repo.mkdir()
+        plan_dir = real_repo / "docs" / "plans"
+        plan_dir.mkdir(parents=True)
+        plan = plan_dir / "p.md"
+        plan.touch()
+
+        symlinked_repo = tmp_path / "via-link"
+        os.symlink(real_repo, symlinked_repo)
+
+        result = _plan_path_for_body(plan.resolve(), symlinked_repo)
+        assert result == Path("docs/plans/p.md")
 
 
 class TestBuildIssueTitle:
