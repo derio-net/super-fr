@@ -22,6 +22,16 @@ def test_help_flag():
     assert "execute" in result.stdout
     assert "init" in result.stdout
     assert "install-skills" in result.stdout
+    assert "skills" in result.stdout
+
+
+def test_skills_command():
+    result = runner.invoke(app, ["skills"])
+    assert result.exit_code == 0
+    for skill in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
+        assert skill in result.stdout
+    for sub in ("vk plan new", "vk dispatch create", "vk execute scope", "vk progress sync"):
+        assert sub in result.stdout
 
 
 def test_plan_help():
