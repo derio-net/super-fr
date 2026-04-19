@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-14-archive-and-unified-descriptions-design.md`
-**Status:** In Progress
+**Status:** Complete
 
 > **Note (2026-04-19):** `derio-net/secure-agent-kali` was absorbed into `derio-net/agent-images` and archived. The bridge-hardening plan referenced here (`bridge-fail-loud-and-blocker-preamble`) merged while the repo was still standalone; it and its scripts were ported to `agent-images/kali/` and the plan archived under `agent-images/docs/superpowers/archived-plans/`. All Phase 5 references below have been updated to the new paths. Historical references in Phases 0–4 remain as-is (those phases already ran against the original paths).
 
@@ -1156,7 +1156,7 @@ to point at the new archived path.
 
 The bridge-fail-loud plan was archived on 2026-04-19 when `secure-agent-kali` was absorbed into `agent-images`. The active bridge script now lives at `agent-images/kali/scripts/vk-issue-bridge.py`.
 
-- [ ] **Step 1: Confirm bridge-fail-loud plan is archived**
+- [x] **Step 1: Confirm bridge-fail-loud plan is archived**
 
 ```bash
 ls /home/claude/repos/agent-images/docs/superpowers/archived-plans/2026-04-14-bridge-fail-loud-and-blocker-preamble.md
@@ -1164,7 +1164,7 @@ ls /home/claude/repos/agent-images/docs/superpowers/archived-plans/2026-04-14-br
 
 Expected: file exists at that path. If not, stop and investigate.
 
-- [ ] **Step 2: Confirm the running bridge script matches the agent-images source**
+- [x] **Step 2: Confirm the running bridge script matches the agent-images source**
 
 The pod's supercronic runs the bridge from whatever path the active `~/.crontab` points at. Until the next image rebuild lands, that's the in-repo agent-images clone; afterwards it will be `/opt/scripts/vk-issue-bridge.py` baked into the image.
 
@@ -1180,7 +1180,7 @@ Expected: no output (files identical). If output shows changes, either the cront
 
 ### Task 2: Migrate Frank hextra plan
 
-- [ ] **Step 1: Dry-run migrate**
+- [x] **Step 1: Dry-run migrate**
 
 ```bash
 cd /home/claude/repos/frank
@@ -1189,7 +1189,7 @@ vk dispatch migrate docs/superpowers/plans/2026-04-13--repo--blog-hextra-migrati
 
 Expected: 5 rewrites printed (phases 1–5), each showing old title → new `[derio-net/frank] blog-hextra-migration · Phase N/5 · ...` title. If any Issue is CLOSED, the line reads `Skip #N: CLOSED`.
 
-- [ ] **Step 2: Apply migrate**
+- [x] **Step 2: Apply migrate**
 
 ```bash
 vk dispatch migrate docs/superpowers/plans/2026-04-13--repo--blog-hextra-migration.md --yes
@@ -1197,7 +1197,7 @@ vk dispatch migrate docs/superpowers/plans/2026-04-13--repo--blog-hextra-migrati
 
 Expected: 5 `Migrated #N` lines (or fewer, for CLOSED phases).
 
-- [ ] **Step 3: Confirm bridge ingests phase 1, defers others**
+- [x] **Step 3: Confirm bridge ingests phase 1, defers others**
 
 Wait for the next bridge cron tick (≤ 2 minutes), then:
 
@@ -1209,7 +1209,7 @@ Expected log contents: `p derio-net/frank#69: blocked by #68` (and similar for #
 
 ### Task 3: Migrate remaining open plans
 
-- [ ] **Step 1: Enumerate open plans across repos**
+- [x] **Step 1: Enumerate open plans across repos**
 
 ```bash
 for repo in /home/claude/repos/superpowers-for-vk /home/claude/repos/agent-images /home/claude/repos/frank /home/claude/repos/willikins; do
@@ -1223,7 +1223,7 @@ done
 
 Review the output. Any plan that was dispatched before this work shipped is a migration candidate.
 
-- [ ] **Step 2: Migrate each candidate**
+- [x] **Step 2: Migrate each candidate**
 
 For each plan from Step 1 with tracking comments:
 
@@ -1236,7 +1236,7 @@ Spot-check one migrated Issue in the GitHub UI — confirm the new title format 
 
 ### Task 4: Verify bridge behavior end-to-end
 
-- [ ] **Step 1: Confirm dep-gating active across all repos**
+- [x] **Step 1: Confirm dep-gating active across all repos**
 
 ```bash
 tail -200 /home/claude/.willikins-agent/vk-bridge.log | grep -E '(blocked|deferred|synced)' | tail -30
@@ -1244,7 +1244,7 @@ tail -200 /home/claude/.willikins-agent/vk-bridge.log | grep -E '(blocked|deferr
 
 Expected: `p ... blocked by ...` lines for every migrated multi-phase plan's non-phase-0 Issues whose blockers remain open. Absence of such lines when blockers exist is a regression — abort and open a bug.
 
-- [ ] **Step 2: Mark this plan Complete**
+- [x] **Step 2: Mark this plan Complete**
 
 Edit this file's `**Status:**` header to `Complete`, then:
 
