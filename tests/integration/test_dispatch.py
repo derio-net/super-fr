@@ -160,6 +160,35 @@ class TestDispatchApply:
         assert "<!-- Tracking: https://github.com/derio-net/test-repo/issues/102 -->" in updated
 
 
+class TestDispatchPlanPath:
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_body_uses_relative_plan_path(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """The '📋 Plan:' line must be relative to the repo root, not an absolute path."""
+        mock_gh.create_issue.side_effect = [
+            "https://github.com/derio-net/test-repo/issues/100",
+            "https://github.com/derio-net/test-repo/issues/101",
+            "https://github.com/derio-net/test-repo/issues/102",
+        ]
+        mock_gh.extract_issue_number.side_effect = [100, 101, 102]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        for call_obj in mock_gh.create_issue.call_args_list:
+            body = call_obj[1]["body"]
+            assert "📋 Plan:   docs/superpowers/plans/2026-04-12-test-feature.md" in body, (
+                f"expected relative plan path in body; got:\n{body}"
+            )
+            assert str(tmp_repo) not in body, "absolute tmp_repo path should not leak into body"
+
+
 class TestDispatchLabels:
     @patch("vk.commands.dispatch_cmd.gh")
     def test_dispatch_adds_plan_and_phase_labels(

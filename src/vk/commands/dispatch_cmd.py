@@ -34,9 +34,23 @@ dispatch_app = typer.Typer(help="Dispatch plans to GitHub Issues.")
 class _MigrateRewrite(TypedDict):
     repo: str
     number: int
+    phase_number: int
     old_title: str
     new_title: str
     new_body: str
+
+
+def _plan_path_for_body(plan_path_resolved: Path, repo_root: Path) -> Path:
+    """Relativize the plan path against the repo root.
+
+    The Issue body's ``📋 Plan:`` line is consumed by humans and tooling in
+    every clone of the repo; an absolute path leaks the dispatcher's
+    local filesystem layout and breaks portability.
+    """
+    try:
+        return plan_path_resolved.relative_to(repo_root)
+    except ValueError:
+        return plan_path_resolved
 
 
 def _find_repo_root(plan_path: Path) -> Path:
@@ -273,7 +287,7 @@ def dispatch_create(
 
         body = _build_issue_body(
             phase,
-            plan_path_resolved,
+            _plan_path_for_body(plan_path_resolved, repo_root),
             target_repo,
             prev_num,
             total_phases=total,
@@ -431,18 +445,20 @@ def migrate(
         )
         new_body = _build_issue_body(
             phase,
-            plan_path_resolved,
+            _plan_path_for_body(plan_path_resolved, repo_root),
             issue_repo,
             prev_num,
             total_phases=len(plan.phases),
             spec=plan.spec or "",
             goal=plan.goal,
         )
+        new_body = new_body.replace("(assigned on create)", url)
 
         rewrites.append(
             _MigrateRewrite(
                 repo=issue_repo,
                 number=number,
+                phase_number=phase.number,
                 old_title=str(info.get("title", "")),
                 new_title=new_title,
                 new_body=new_body,
@@ -470,7 +486,7 @@ def migrate(
                 number=r["number"],
                 title=r["new_title"],
                 body=r["new_body"],
-                add_labels=[f"plan:{slug}"],
+                add_labels=[f"plan:{slug}", f"phase:{r['phase_number']}"],
             )
             console.print(f"Migrated #{r['number']}")
         except gh.GhError as exc:
