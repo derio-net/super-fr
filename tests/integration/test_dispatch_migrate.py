@@ -127,6 +127,92 @@ class TestMigrateApply:
         assert "Skip #1: CLOSED" in result.output
 
     @patch("vk.commands.dispatch_cmd.gh")
+    def test_migrate_replaces_assigned_on_create_placeholder(
+        self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
+    ) -> None:
+        """migrate() must substitute the '(assigned on create)' placeholder with the real URL."""
+        plan = tmp_repo / "docs" / "superpowers" / "plans" / "2026-04-14-test-migrate.md"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        _write_plan(plan, [(0, "A", "https://github.com/org/r/issues/77")])
+
+        mock_gh.view_issue.return_value = {
+            "state": "OPEN",
+            "title": "old",
+            "body": "b",
+            "labels": [],
+        }
+        mock_gh.extract_issue_number.return_value = 77
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+        assert result.exit_code == 0, result.output
+        assert mock_gh.edit_issue.call_count == 1
+        body = mock_gh.edit_issue.call_args[1]["body"]
+        assert "(assigned on create)" not in body, "placeholder should be replaced"
+        assert "🔗 Issue:  https://github.com/org/r/issues/77" in body
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_migrate_adds_phase_label(
+        self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
+    ) -> None:
+        """migrate() must add both plan:<slug> and phase:<n> labels."""
+        plan = tmp_repo / "docs" / "superpowers" / "plans" / "2026-04-14-test-migrate.md"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        _write_plan(
+            plan,
+            [
+                (0, "A", "https://github.com/org/r/issues/1"),
+                (1, "B", "https://github.com/org/r/issues/2"),
+            ],
+        )
+
+        mock_gh.view_issue.return_value = {
+            "state": "OPEN",
+            "title": "old",
+            "body": "b",
+            "labels": [],
+        }
+        mock_gh.extract_issue_number.side_effect = [1, 2, 1, 2]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+        assert result.exit_code == 0, result.output
+        assert mock_gh.edit_issue.call_count == 2
+
+        phase0_labels = mock_gh.edit_issue.call_args_list[0][1]["add_labels"]
+        phase1_labels = mock_gh.edit_issue.call_args_list[1][1]["add_labels"]
+        assert "plan:test-migrate" in phase0_labels
+        assert "phase:0" in phase0_labels
+        assert "plan:test-migrate" in phase1_labels
+        assert "phase:1" in phase1_labels
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_migrate_body_uses_relative_plan_path(
+        self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
+    ) -> None:
+        """The '📋 Plan:' line must be relative to the repo root, not an absolute path."""
+        plan = tmp_repo / "docs" / "superpowers" / "plans" / "2026-04-14-test-migrate.md"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        _write_plan(plan, [(0, "A", "https://github.com/org/r/issues/1")])
+
+        mock_gh.view_issue.return_value = {
+            "state": "OPEN",
+            "title": "old",
+            "body": "b",
+            "labels": [],
+        }
+        mock_gh.extract_issue_number.return_value = 1
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+        assert result.exit_code == 0, result.output
+        body = mock_gh.edit_issue.call_args[1]["body"]
+        assert "📋 Plan:   docs/superpowers/plans/2026-04-14-test-migrate.md" in body, (
+            f"expected relative path in body; got:\n{body}"
+        )
+        assert str(tmp_repo) not in body, "absolute tmp_repo path should not leak into body"
+
+    @patch("vk.commands.dispatch_cmd.gh")
     def test_migrate_aborts_on_gh_error(
         self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
     ) -> None:
