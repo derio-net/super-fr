@@ -231,13 +231,16 @@ class TestExecuteRejectsFlat:
 
 
 class TestExecuteCheckDeps:
-    def test_deps_satisfied(self, phased_repo: Path) -> None:
+    def test_deps_missing_phase_errors(self, phased_repo: Path) -> None:
         plan = phased_repo / "docs/superpowers/plans/2026-04-12-test-plan.md"
-        # Plan has a single phase after migration; a second phase doesn't exist,
-        # but check-deps walks earlier phases looking for unchecked steps. Phase 1
-        # has one unchecked step (Task 1 Step 2), so deps for any later phase fail.
+        # Plan has a single phase after migration; Phase 2 doesn't exist.
+        # Under the DAG rewrite, 'check-deps <phase-that-doesnt-exist>' is a
+        # direct lookup error (exit 2), not a fallthrough to scanning earlier
+        # phases for unchecked steps.
         result = runner.invoke(app, ["execute", "check-deps", str(plan), "2"])
-        assert result.exit_code == 1
+        assert result.exit_code == 2
+        combined = result.stdout + (result.stderr or "")
+        assert "Phase 2 not found" in combined
 
     def test_deps_first_phase_always_clear(self, phased_repo: Path) -> None:
         plan = phased_repo / "docs/superpowers/plans/2026-04-12-test-plan.md"
@@ -379,3 +382,54 @@ class TestExecutePrBody:
         assert result.exit_code == 0
         assert "Closes #99" in result.stdout
         assert "Closes #42" not in result.stdout
+
+
+class TestCheckDepsDag:
+    """check-deps reads the declared DAG, not the N-1 chain."""
+
+    def test_checkdeps_on_phase_depending_on_phase_3_ignores_phase_4(self, tmp_path: Path) -> None:
+        """Phase 5 depends on Phase 3 only; Phase 4 unchecked is not a blocker."""
+        plan = tmp_path / "plan.md"
+        plan.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** In Progress\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [x] **Step 1: s**\n\n"
+            "## Phase 2: B [agentic]\n**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [x] **Step 1: s**\n\n"
+            "## Phase 3: C [agentic]\n**Depends on:** Phase 1\n\n"
+            "### Task 1: T\n\n- [x] **Step 1: s**\n\n"
+            "## Phase 4: D [agentic]\n**Depends on:** Phase 2\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n\n"
+            "## Phase 5: E [agentic]\n**Depends on:** Phase 3\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n"
+        )
+        result = runner.invoke(app, ["execute", "check-deps", str(plan), "5"])
+        assert result.exit_code == 0, result.stdout
+        assert "Dependencies satisfied" in result.stdout
+        assert "Phase 3" in result.stdout
+
+    def test_checkdeps_fails_when_declared_dep_incomplete(self, tmp_path: Path) -> None:
+        plan = tmp_path / "plan.md"
+        plan.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** In Progress\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n\n"
+            "## Phase 2: B [agentic]\n**Depends on:** Phase 1\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n"
+        )
+        result = runner.invoke(app, ["execute", "check-deps", str(plan), "2"])
+        assert result.exit_code == 1
+        combined = result.stdout + (result.stderr or "")
+        assert "Phase 1" in combined
+
+    def test_checkdeps_root_phase_passes_with_empty_deps(self, tmp_path: Path) -> None:
+        """A root phase (depends_on == ()) has no deps to check."""
+        plan = tmp_path / "plan.md"
+        plan.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n"
+        )
+        result = runner.invoke(app, ["execute", "check-deps", str(plan), "1"])
+        assert result.exit_code == 0, result.stdout
+        assert "none (root phase)" in result.stdout
