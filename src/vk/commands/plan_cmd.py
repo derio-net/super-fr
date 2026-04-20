@@ -13,6 +13,8 @@ from vk.commands.common import (
 )
 from vk.config import load_profile
 from vk.plan.convert import (
+    MixedPlanError,
+    add_deps,
     to_phased_group_by_tag,
     to_phased_one_per_task,
     to_phased_single,
@@ -254,13 +256,19 @@ def plan_convert(
     group_by_tag: bool = typer.Option(
         False, "--group-by-tag", help="Group consecutive same-tag tasks."
     ),
+    add_deps_flag: bool = typer.Option(
+        False,
+        "--add-deps",
+        help="Migration: add **Depends on:** lines to a legacy phased plan.",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutations."),
     yes: bool = typer.Option(False, "--yes", help="Execute without confirmation."),
 ) -> None:
-    """Migrate a legacy flat plan to phased format.
+    """Migrate a legacy flat plan to phased format, or add deps to a legacy phased plan.
 
-    One of --single-phase, --one-per-task, or --group-by-tag selects the
-    migration strategy.
+    One of --single-phase, --one-per-task, --group-by-tag, or --add-deps selects
+    the migration strategy. --add-deps is mutually exclusive with the other
+    three (it operates on already-phased plans missing dependency declarations).
     """
     try:
         action = resolve_action(dry_run=dry_run, yes=yes)
@@ -268,13 +276,26 @@ def plan_convert(
         err_console.print("Error: --dry-run and --yes are mutually exclusive")
         raise typer.Exit(1)
 
+    # --add-deps is mutually exclusive with the flat->phased conversion flags.
+    if add_deps_flag and (single_phase or one_per_task or group_by_tag):
+        err_console.print(
+            "Error: --add-deps is mutually exclusive with --single-phase, "
+            "--one-per-task, and --group-by-tag."
+        )
+        raise typer.Exit(2)
+
+    plan_path = plan_path.resolve()
+
+    if add_deps_flag:
+        _plan_convert_add_deps(plan_path, action)
+        return
+
     if to != "phased":
         err_console.print(
             f"Error: --to '{to}' is not supported. The only valid target is 'phased'."
         )
         raise typer.Exit(2)
 
-    plan_path = plan_path.resolve()
     plan = parse_plan(plan_path)
 
     try:
@@ -306,3 +327,82 @@ def plan_convert(
 
     write_plan(converted, plan_path)
     console.print(f"Converted: {plan.format.value} -> phased")
+
+
+def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:
+    """Implement the --add-deps migration branch of `vk plan convert`."""
+    import difflib
+    import subprocess
+
+    original = plan_path.read_text()
+
+    if action is ConfirmAction.DRY_RUN:
+        # Run on a copy to compute the diff without touching the real file.
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
+            tmp.write(original)
+            tmp_path = Path(tmp.name)
+        try:
+            try:
+                add_deps(tmp_path)
+            except MixedPlanError as exc:
+                err_console.print(f"Error: {exc}")
+                raise typer.Exit(2)
+            proposed = tmp_path.read_text()
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        diff = "".join(
+            difflib.unified_diff(
+                original.splitlines(keepends=True),
+                proposed.splitlines(keepends=True),
+                fromfile=str(plan_path),
+                tofile=str(plan_path),
+            )
+        )
+        if diff:
+            console.print(diff)
+        else:
+            console.print("No changes — plan already has all **Depends on:** lines.")
+        raise typer.Exit(0)
+
+    try:
+        add_deps(plan_path)
+    except MixedPlanError as exc:
+        err_console.print(f"Error: {exc}")
+        raise typer.Exit(2)
+
+    if action is ConfirmAction.PROMPT:
+        updated = plan_path.read_text()
+        if updated == original:
+            console.print("No changes — plan already has all **Depends on:** lines.")
+            raise typer.Exit(0)
+        console.print(f"Updated: {plan_path}")
+        raise typer.Exit(0)
+
+    # --yes path: commit the change.
+    updated = plan_path.read_text()
+    if updated == original:
+        console.print("No changes — plan already has all **Depends on:** lines.")
+        raise typer.Exit(0)
+
+    try:
+        root_result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=plan_path.parent,
+        )
+        repo_root = Path(root_result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        repo_root = plan_path.parent
+
+    subprocess.run(["git", "add", str(plan_path)], check=True, cwd=repo_root)
+    subprocess.run(
+        ["git", "commit", "-m", "chore(plan): add **Depends on:** lines (migration)"],
+        check=True,
+        cwd=repo_root,
+    )
+    console.print(f"Updated and committed: {plan_path}")

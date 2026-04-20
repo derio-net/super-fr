@@ -1,22 +1,90 @@
 """Plan format converter — flat <-> phased conversions.
 
-Four modes:
+Five modes:
 - to_flat: Phased -> flat (refuses tracking comments without force)
 - to_phased_single: Flat -> single phase
 - to_phased_one_per_task: Flat -> one phase per task
 - to_phased_group_by_tag: Flat -> phases grouped by consecutive tag
+- add_deps: Migrate phased plan by adding **Depends on:** lines
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from itertools import groupby
+from pathlib import Path
 from typing import Literal, cast
 
 from vk.plan.format import PlanFormat
 from vk.plan.models import Phase, Plan, Task
 
 _TagType = Literal["manual", "agentic"]
+
+
+class MixedPlanError(ValueError):
+    """Raised when some phases have **Depends on:** and others do not."""
+
+
+_DEPENDS_LINE_RE = re.compile(r"^\*\*Depends on:\*\*", re.MULTILINE)
+_PHASE_HEADER_RE = re.compile(r"^## Phase (\d+):.*\[(manual|agentic)\][ \t]*$", re.MULTILINE)
+
+
+def add_deps(plan_path: Path) -> None:
+    """Migrate a phased plan by adding **Depends on:** lines.
+
+    Phase 1 gets '—'; phase N (N>=2) gets 'Phase {N-1}'. Idempotent: phases
+    that already have the line are left alone. If some phases have the line
+    and others do not, raise MixedPlanError without writing.
+    """
+    text = plan_path.read_text()
+    headers = list(_PHASE_HEADER_RE.finditer(text))
+    if not headers:
+        return  # nothing to do; not a phased plan
+
+    # Determine which phases already have the line.
+    slices: list[tuple[int, int]] = []
+    for i, match in enumerate(headers):
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+        slices.append((match.end(), end))
+    has_line = [bool(_DEPENDS_LINE_RE.search(text[s:e])) for s, e in slices]
+
+    if any(has_line) and not all(has_line):
+        offenders_with = [
+            str(int(h.group(1))) for h, flag in zip(headers, has_line, strict=True) if flag
+        ]
+        offenders_without = [
+            str(int(h.group(1))) for h, flag in zip(headers, has_line, strict=True) if not flag
+        ]
+        raise MixedPlanError(
+            f"Phases {', '.join(offenders_with)} have **Depends on:** but phases "
+            f"{', '.join(offenders_without)} do not — "
+            f"declare both or neither (auto-inference is disabled)."
+        )
+    if all(has_line):
+        return  # idempotent no-op
+
+    # Insert the line immediately after the header (skipping any tracking comment).
+    new_parts: list[str] = []
+    cursor = 0
+    for i, match in enumerate(headers):
+        phase_num = int(match.group(1))
+        dep_line = (
+            "**Depends on:** —" if phase_num == 1 else f"**Depends on:** Phase {phase_num - 1}"
+        )
+        header_end = match.end()
+        # Look for a tracking comment immediately after the header.
+        tail = text[header_end : slices[i][1]]
+        tail_lines = tail.split("\n")
+        insert_at = header_end
+        if len(tail_lines) >= 2 and tail_lines[1].startswith("<!-- Tracking:"):
+            insert_at = header_end + len("\n" + tail_lines[1])
+
+        new_parts.append(text[cursor:insert_at])
+        new_parts.append(f"\n{dep_line}")
+        cursor = insert_at
+    new_parts.append(text[cursor:])
+    plan_path.write_text("".join(new_parts))
 
 
 def to_flat(plan: Plan, *, force: bool = False) -> Plan:

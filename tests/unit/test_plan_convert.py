@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from vk.plan.convert import (
+    MixedPlanError,
+    add_deps,
     to_flat,
     to_phased_group_by_tag,
     to_phased_one_per_task,
@@ -223,3 +225,37 @@ def test_round_trip_phased_flat_phased() -> None:
     for orig, converted in zip(original.all_tasks, back.all_tasks):
         assert orig.title == converted.title
         assert len(orig.steps) == len(converted.steps)
+
+
+class TestAddDeps:
+    def test_add_deps_on_linear_plan(self, tmp_path: Path) -> None:
+        src = Path(__file__).parent.parent / "fixtures" / "plans" / "phased-no-deps.md"
+        dst = tmp_path / "p.md"
+        dst.write_text(src.read_text())
+        add_deps(dst)
+        text = dst.read_text()
+        assert "## Phase 1: Alpha [agentic]\n**Depends on:** —" in text
+        assert "## Phase 2: Beta [agentic]\n**Depends on:** Phase 1" in text
+        assert "## Phase 3: Gamma [agentic]\n**Depends on:** Phase 2" in text
+
+    def test_add_deps_is_idempotent(self, tmp_path: Path) -> None:
+        src = Path(__file__).parent.parent / "fixtures" / "plans" / "phased-no-deps.md"
+        dst = tmp_path / "p.md"
+        dst.write_text(src.read_text())
+        add_deps(dst)
+        first = dst.read_text()
+        add_deps(dst)
+        second = dst.read_text()
+        assert first == second
+
+    def test_add_deps_refuses_mixed_plan(self, tmp_path: Path) -> None:
+        dst = tmp_path / "p.md"
+        dst.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+            "## Phase 2: B [agentic]\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+        )
+        with pytest.raises(MixedPlanError, match="declare both or neither"):
+            add_deps(dst)
