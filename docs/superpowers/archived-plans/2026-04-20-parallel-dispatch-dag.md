@@ -1,7 +1,7 @@
 # Parallel Dispatch DAG Implementation Plan
 
 **Spec:** `docs/superpowers/specs/2026-04-20-parallel-dispatch-dag-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Replace the implicit "Phase N depends on Phase N-1" chain with an author-declared `**Depends on:**` DAG per plan. Unlock safe parallel phase execution while preserving the fail-loud guarantees that were introduced after the Frank hextra incident.
 
