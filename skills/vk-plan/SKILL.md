@@ -46,6 +46,27 @@ section in `vk-execute`.
   read its `plan-config.yaml`, write the plan in that repo's `plans/` directory,
   and update the spec index. Only offer dispatch/execution after all plans exist.
 
+## Dependency declarations
+
+Every phase declares its blockers on a `**Depends on:**` line directly under
+the phase header (after any `<!-- Tracking: ... -->` comment).
+
+- Root phases: `**Depends on:** —` (em-dash canonical; `None` accepted).
+- Non-root phases: `**Depends on:** Phase 1, Phase 2` (comma-separated Phase refs).
+- Multiple roots are allowed — use for fan-out / diamond shapes.
+- Deps are backward-only: Phase N may only reference phases < N.
+
+Example:
+
+    ## Phase 3: Fan-in [agentic]
+    **Depends on:** Phase 1, Phase 2
+
+`vk plan self-review` refuses non-root phases without the line in live plans
+(phases under `docs/superpowers/plans/`). `docs/superpowers/archived-plans/**`
+is exempt. To migrate an existing linear plan:
+
+    vk plan convert <plan> --add-deps --yes
+
 ## Integration
 
 - Upstream: brainstorming hands off via vk-plan-override
