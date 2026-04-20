@@ -100,7 +100,7 @@ def _build_issue_body(
     phase: Phase,
     plan_path: Path,
     target_repo: str,
-    prev_num: int | None,
+    blocker_nums: tuple[int, ...],
     total_phases: int,
     spec: str,
     goal: str,
@@ -110,16 +110,10 @@ def _build_issue_body(
     The body is consumed by the VK Issue Bridge, which requires the
     ``- Blocked by #N`` dash prefix in ``## Dependencies`` for gating.
     """
-    if phase.number == 0:
+    if not blocker_nums:
         deps_block = "None — no blocking phases."
-    elif prev_num is not None:
-        deps_block = f"- Blocked by #{prev_num}"
     else:
-        raise ValueError(
-            f"Phase {phase.number} has no prev_num but is not phase 0. "
-            "Cannot emit parseable dependency line. "
-            "Fix: ensure earlier phases were dispatched first."
-        )
+        deps_block = "\n".join(f"- Blocked by #{n}" for n in blocker_nums)
 
     tracking_block = (
         f"📦 Repo:   {target_repo}\n"
@@ -287,13 +281,21 @@ def dispatch_create(
             continue
 
         title = _build_issue_title(slug, phase, target_repo=target_repo, total=total)
-        prev_num = phase_to_issue.get(phase.number - 1)
+        try:
+            blocker_nums = tuple(phase_to_issue[dep] for dep in phase.depends_on)
+        except KeyError as exc:
+            err_console.print(
+                f"Error: Phase {phase.number} depends on Phase {exc.args[0]}, "
+                f"but that phase has no dispatched Issue. "
+                f"Run 'vk dispatch create <plan>' again — an earlier phase may have failed."
+            )
+            raise typer.Exit(3)
 
         body = _build_issue_body(
             phase,
             _plan_path_for_body(plan_path_resolved, repo_root),
             target_repo,
-            prev_num,
+            blocker_nums=blocker_nums,
             total_phases=total,
             spec=plan.spec or "",
             goal=plan.goal,
@@ -442,16 +444,19 @@ def migrate(
             continue
 
         new_title = _build_issue_title(slug, phase, target_repo=issue_repo, total=len(plan.phases))
-        prev_num = (
-            gh.extract_issue_number(tracked[phase.number - 1])
-            if phase.number > 0 and (phase.number - 1) in tracked
-            else None
-        )
+        try:
+            blocker_nums = tuple(gh.extract_issue_number(tracked[dep]) for dep in phase.depends_on)
+        except KeyError as exc:
+            err_console.print(
+                f"Error: Phase {phase.number} depends on Phase {exc.args[0]}, "
+                f"but that phase has no tracking comment. Cannot migrate safely."
+            )
+            raise typer.Exit(2)
         new_body = _build_issue_body(
             phase,
             _plan_path_for_body(plan_path_resolved, repo_root),
             issue_repo,
-            prev_num,
+            blocker_nums=blocker_nums,
             total_phases=len(plan.phases),
             spec=plan.spec or "",
             goal=plan.goal,

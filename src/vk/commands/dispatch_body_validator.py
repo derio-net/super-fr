@@ -12,6 +12,7 @@ class BodyValidationError(ValueError):
 
 
 _REQUIRED_SECTIONS = ("## Instruction", "## Workspace", "## Dependencies")
+_NONE_LITERAL = "None — no blocking phases."
 
 
 def validate_issue_body(body: str, phase_number: int) -> None:
@@ -19,7 +20,8 @@ def validate_issue_body(body: str, phase_number: int) -> None:
 
     Checks:
     - All required sections present.
-    - For phase_number > 0, the Dependencies section contains '- Blocked by #N'.
+    - Dependencies section contains either the 'None — no blocking phases.'
+      literal (root phase) or one or more '- Blocked by #N' dash-prefixed lines.
     """
     for section in _REQUIRED_SECTIONS:
         if section not in body:
@@ -29,13 +31,14 @@ def validate_issue_body(body: str, phase_number: int) -> None:
                 f"Fix: investigate _build_issue_body in dispatch_cmd.py."
             )
 
-    if phase_number > 0:
-        deps_idx = body.index("## Dependencies")
-        deps_block = body[deps_idx:]
-        if "- Blocked by #" not in deps_block:
-            raise BodyValidationError(
-                f"Phase {phase_number} body's Dependencies section lacks "
-                f"the required '- Blocked by #N' dash-prefixed line. "
-                f"The bridge's dep-gating regex requires the dash. "
-                f"Fix: investigate _build_issue_body in dispatch_cmd.py."
-            )
+    deps_idx = body.index("## Dependencies")
+    deps_block = body[deps_idx:]
+    if _NONE_LITERAL in deps_block:
+        return
+    if "- Blocked by #" not in deps_block:
+        raise BodyValidationError(
+            f"Phase {phase_number} body's Dependencies section lacks "
+            f"the required '- Blocked by #N' dash-prefixed line. "
+            f"The bridge's dep-gating regex requires the dash. "
+            f"Fix: investigate _build_issue_body in dispatch_cmd.py."
+        )

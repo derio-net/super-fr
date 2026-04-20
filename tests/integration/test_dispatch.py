@@ -275,6 +275,48 @@ class TestDispatchEditBodyBestEffort:
         assert "<!-- Tracking:" in updated
 
 
+class TestDispatchFanIn:
+    """Multi-blocker bodies round-trip via dispatch --yes."""
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_fan_in_body_contains_both_blockers(
+        self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
+    ) -> None:
+        import shutil
+
+        src = Path(__file__).parent.parent / "fixtures" / "plans" / "phased-dag.md"
+        plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+        plans_dir.mkdir(parents=True, exist_ok=True)
+        plan = plans_dir / "2026-04-20-dag.md"
+        shutil.copy(src, plan)
+
+        urls = [
+            "https://github.com/derio-net/test-repo/issues/101",
+            "https://github.com/derio-net/test-repo/issues/102",
+            "https://github.com/derio-net/test-repo/issues/103",
+            "https://github.com/derio-net/test-repo/issues/104",
+            "https://github.com/derio-net/test-repo/issues/105",
+        ]
+        mock_gh.create_issue.side_effect = urls
+        mock_gh.extract_issue_number.side_effect = [101, 102, 103, 104, 105]
+        mock_gh.edit_issue_body.return_value = None
+        mock_gh.GhError = __import__("vk.gh", fromlist=["GhError"]).GhError
+
+        result = runner.invoke(
+            app,
+            ["dispatch", "create", str(plan), "--yes"],
+        )
+        assert result.exit_code == 0, result.stdout
+
+        # Phase 5 was the third create call that produced a multi-dep body.
+        phase5_body = [c.kwargs["body"] for c in mock_gh.create_issue.call_args_list][4]
+        assert "- Blocked by #103" in phase5_body
+        assert "- Blocked by #104" in phase5_body
+        # Phase 1 (root) should emit the None literal.
+        phase1_body = [c.kwargs["body"] for c in mock_gh.create_issue.call_args_list][0]
+        assert "None — no blocking phases." in phase1_body
+
+
 class TestDispatchIssueUrlInjection:
     @patch("vk.commands.dispatch_cmd.gh")
     def test_dispatch_updates_body_with_issue_url(

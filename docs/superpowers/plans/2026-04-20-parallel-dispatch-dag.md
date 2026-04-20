@@ -277,7 +277,7 @@ uv run mypy src/vk/plan/writer.py
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add src/vk/plan/writer.py tests/unit/test_plan_writer.py
@@ -292,7 +292,7 @@ git commit -m "feat(plan): writer emits **Depends on:** for phased plans"
 - Test: `tests/unit/test_dispatch_body.py`
 - Test: `tests/integration/test_dispatch.py`
 
-- [ ] **Step 1: Create the fan-in/fan-out fixture**
+- [x] **Step 1: Create the fan-in/fan-out fixture**
 
 Create `tests/fixtures/plans/phased-dag.md`:
 
@@ -342,7 +342,7 @@ Create `tests/fixtures/plans/phased-dag.md`:
 - [ ] **Step 1:** Nothing
 ```
 
-- [ ] **Step 2: Write failing unit tests for multi-blocker body emission**
+- [x] **Step 2: Write failing unit tests for multi-blocker body emission**
 
 Append to `tests/unit/test_dispatch_body.py`:
 
@@ -388,7 +388,7 @@ class TestMultiBlockerBody:
         assert idx_a < idx_b
 ```
 
-- [ ] **Step 3: Write a failing integration test for a fan-in dispatch**
+- [x] **Step 3: Write a failing integration test for a fan-in dispatch**
 
 Append to `tests/integration/test_dispatch.py`:
 
@@ -434,7 +434,7 @@ class TestDispatchFanIn:
         assert "None — no blocking phases." in phase1_body
 ```
 
-- [ ] **Step 4: Run the tests to confirm they fail**
+- [x] **Step 4: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_dispatch_body.py::TestMultiBlockerBody tests/integration/test_dispatch.py::TestDispatchFanIn -v
@@ -442,7 +442,7 @@ uv run pytest tests/unit/test_dispatch_body.py::TestMultiBlockerBody tests/integ
 
 Expected: FAIL — signature of `_build_issue_body` still takes `prev_num: int | None` and the create-loop still computes `prev_num = phase_to_issue.get(phase.number - 1)`.
 
-- [ ] **Step 5: Refactor `_build_issue_body` to accept `blocker_nums`**
+- [x] **Step 5: Refactor `_build_issue_body` to accept `blocker_nums`**
 
 In `src/vk/commands/dispatch_cmd.py`, replace the `prev_num` parameter with `blocker_nums: tuple[int, ...]`:
 
@@ -483,7 +483,7 @@ def _build_issue_body(
     )
 ```
 
-- [ ] **Step 6: Update `dispatch_create` to compute `blocker_nums` from `depends_on`**
+- [x] **Step 6: Update `dispatch_create` to compute `blocker_nums` from `depends_on`**
 
 In `src/vk/commands/dispatch_cmd.py::dispatch_create`, replace the existing `prev_num = phase_to_issue.get(phase.number - 1)` line with:
 
@@ -501,7 +501,7 @@ except KeyError as exc:
 
 Update the `_build_issue_body(...)` call to pass `blocker_nums=blocker_nums` instead of `prev_num=prev_num`.
 
-- [ ] **Step 7: Update `migrate` to use the same signature**
+- [x] **Step 7: Update `migrate` to use the same signature**
 
 In `src/vk/commands/dispatch_cmd.py::migrate`, the block that computes `prev_num` from `tracked[phase.number - 1]` becomes:
 
@@ -520,7 +520,7 @@ except KeyError as exc:
 
 Update the `_build_issue_body(...)` call in `migrate` to pass `blocker_nums=blocker_nums`.
 
-- [ ] **Step 8: Run the tests to confirm they pass**
+- [x] **Step 8: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py -v
@@ -528,7 +528,7 @@ uv run pytest tests/unit/test_dispatch_body.py tests/integration/test_dispatch.p
 
 Expected: PASS — new tests plus all pre-existing dispatch tests (they construct `Phase` fixtures; check that each one now passes `depends_on=...`).
 
-- [ ] **Step 9: Quality gates**
+- [x] **Step 9: Quality gates**
 
 ```
 uv run ruff check src/vk/commands/dispatch_cmd.py tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py
@@ -538,7 +538,7 @@ uv run mypy src/vk/commands/dispatch_cmd.py
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```
 git add src/vk/commands/dispatch_cmd.py tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py tests/fixtures/plans/phased-dag.md
