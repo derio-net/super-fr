@@ -23,6 +23,11 @@ def _write_plan(path: Path, phases_with_tracking: list[tuple[int, str, str | Non
         body += f"## Phase {n}: {title} [agentic]\n"
         if url:
             body += f"<!-- Tracking: {url} -->\n"
+        # Declare **Depends on:** for every phase so the migrate guard
+        # (which refuses plans without declarations) doesn't short-circuit
+        # these tests. Backward N-1 for non-root; em-dash for root.
+        deps = "—" if n == 0 else f"Phase {n - 1}"
+        body += f"**Depends on:** {deps}\n"
         body += "\n### Task 1: T\n\n- [ ] **Step 1: s**\n\n"
     path.write_text(body)
 
