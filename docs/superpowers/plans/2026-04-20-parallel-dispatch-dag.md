@@ -173,7 +173,7 @@ uv run mypy src/vk/plan/models.py src/vk/plan/parser.py
 
 Expected: PASS on all three.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```
 git add src/vk/plan/models.py src/vk/plan/parser.py tests/unit/test_plan_parser.py
@@ -186,7 +186,7 @@ git commit -m "feat(plan): parse **Depends on:** lines into Phase.depends_on"
 - Modify: `src/vk/plan/writer.py`
 - Test: `tests/unit/test_plan_writer.py`
 
-- [ ] **Step 1: Write a failing round-trip test**
+- [x] **Step 1: Write a failing round-trip test**
 
 Append to `tests/unit/test_plan_writer.py`:
 
@@ -237,7 +237,7 @@ class TestDependsOnRoundTrip:
 
 Ensure the test imports `parse_plan` and `write_plan` at the top.
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_plan_writer.py::TestDependsOnRoundTrip -v
@@ -245,7 +245,7 @@ uv run pytest tests/unit/test_plan_writer.py::TestDependsOnRoundTrip -v
 
 Expected: FAIL — writer does not emit the line yet.
 
-- [ ] **Step 3: Emit `**Depends on:**` in the writer**
+- [x] **Step 3: Emit `**Depends on:**` in the writer**
 
 In `src/vk/plan/writer.py`, after the phase header and any tracking comment are written, emit the `**Depends on:**` line:
 
@@ -259,7 +259,7 @@ def _format_depends_on(phase: Phase) -> str:
 
 Invoke `_format_depends_on(phase)` in the phase-block writer and append it directly after the tracking comment (or directly after the header line if no tracking comment), followed by a blank line and then the task blocks. Preserve existing spacing around task blocks.
 
-- [ ] **Step 4: Run the tests to confirm they pass**
+- [x] **Step 4: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_plan_writer.py -v
@@ -267,7 +267,7 @@ uv run pytest tests/unit/test_plan_writer.py -v
 
 Expected: PASS — both new tests plus all pre-existing writer tests.
 
-- [ ] **Step 5: Quality gates**
+- [x] **Step 5: Quality gates**
 
 ```
 uv run ruff check src/vk/plan/writer.py tests/unit/test_plan_writer.py

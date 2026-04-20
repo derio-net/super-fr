@@ -57,7 +57,22 @@ def _write_phases(lines: list[str], phases: tuple[Phase, ...]) -> None:
         if phase.tracking_url:
             lines.append(f"<!-- Tracking: {phase.tracking_url} -->")
             lines.append("")
+        lines.append(_format_depends_on(phase))
+        lines.append("")
         _write_tasks(lines, phase.tasks)
+
+
+def _format_depends_on(phase: Phase) -> str:
+    """Render the ``**Depends on:**`` line for a phase.
+
+    Roots (no declared deps) render as an em-dash sentinel; phases with
+    dependencies render as a comma-separated ``Phase N`` list matching
+    what ``_parse_depends_on`` reads back.
+    """
+    if not phase.depends_on:
+        return "**Depends on:** —"
+    refs = ", ".join(f"Phase {n}" for n in phase.depends_on)
+    return f"**Depends on:** {refs}"
 
 
 def _write_tasks(lines: list[str], tasks: tuple[Task, ...]) -> None:
