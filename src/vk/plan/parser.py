@@ -69,7 +69,7 @@ def parse_plan(path: Path) -> Plan:
     preamble = _extract_preamble(text)
 
     if fmt is PlanFormat.PHASED:
-        phases = _parse_phases(text)
+        phases, has_depends_line = _parse_phases(text)
         return Plan(
             title=title,
             spec=spec,
@@ -79,6 +79,7 @@ def parse_plan(path: Path) -> Plan:
             phases=tuple(phases),
             tasks=(),
             preamble=preamble,
+            phase_has_depends_line=tuple(has_depends_line),
         )
     else:
         tasks = _parse_tasks(text)
@@ -125,6 +126,35 @@ def _find_header_divider(text: str) -> int | None:
     return None
 
 
+def _strip_fenced_regions(text: str) -> str:
+    """Return ``text`` with fenced-code-block content replaced by spaces.
+
+    Byte offsets are preserved: line lengths are unchanged, only the
+    character content inside fences is blanked. This lets regex scans
+    (``_RE_PHASE``, ``_RE_TASK``, ``_RE_STEP``) skip embedded plan-format
+    examples without disturbing the offsets we later use to slice the
+    ORIGINAL text for content extraction.
+
+    The fence markers (``` lines) themselves are preserved so that nested
+    toggling still works.
+    """
+    in_fence = False
+    out_lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        # Strip just the trailing newline for the fence check; keep the
+        # newline in the output.
+        body = line.rstrip("\n")
+        newline = line[len(body) :]
+        if body.lstrip().startswith("```"):
+            in_fence = not in_fence
+            out_lines.append(line)
+        elif in_fence:
+            out_lines.append(" " * len(body) + newline)
+        else:
+            out_lines.append(line)
+    return "".join(out_lines)
+
+
 def _extract_preamble(text: str) -> str:
     """Capture header content that isn't one of title/spec/status/goal.
 
@@ -163,32 +193,53 @@ def _parse_depends_on(phase_body: str, phase_number: int) -> tuple[int, ...]:
     return tuple(deps)
 
 
-def _parse_phases(text: str) -> list[Phase]:
-    """Parse all phases from phased-format markdown."""
-    phase_matches = list(_RE_PHASE.finditer(text))
+def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
+    """Parse all phases from phased-format markdown.
+
+    Returns ``(phases, has_depends_line)`` where ``has_depends_line[i]`` is
+    True iff the i-th phase declared a ``**Depends on:**`` line (even
+    ``—``/``None``). This lets ``validate_dag`` distinguish "declared root"
+    from "line absent" when enforcing the Phase 2 missing-line rule for
+    live plans.
+
+    Fenced code blocks are blanked out before regex scans so plan-format
+    examples embedded in the document (e.g. ``` ``` ## Phase 1: ... ``` ```)
+    don't get mistaken for real phase headers. Offsets are preserved so
+    slicing into the original ``text`` for content extraction still works.
+    """
+    scan_text = _strip_fenced_regions(text)
+    phase_matches = list(_RE_PHASE.finditer(scan_text))
     phases: list[Phase] = []
+    has_depends_line: list[bool] = []
 
     for i, pm in enumerate(phase_matches):
         start = pm.end()
         end = phase_matches[i + 1].start() if i + 1 < len(phase_matches) else len(text)
+        # Use original ``text`` for content (tracking URL, task bodies).
+        # Use ``scan_text`` slice for boundary regex searches so fenced
+        # examples inside the phase don't confuse task/deps detection.
         section = text[start:end]
+        scan_section = scan_text[start:end]
 
         tracking_match = _RE_TRACKING.search(section)
         tracking_url = tracking_match.group(1) if tracking_match else None
 
         # Scope **Depends on:** lookup to the phase prelude (before first task).
-        first_task = _RE_TASK.search(section)
+        first_task = _RE_TASK.search(scan_section)
         prelude = section[: first_task.start()] if first_task else section
         phase_number = int(pm.group(1))
         depends_on = _parse_depends_on(prelude, phase_number)
+        has_depends_line.append(_DEPENDS_ON_RE.search(prelude) is not None)
 
         # Spec §1.1: **Depends on:** must live directly under the
         # ## Phase header (or its <!-- Tracking: ... --> comment); any
         # other location is a parse error. A misplaced line below the
         # first task header would otherwise be silently ignored, turning
-        # a dependent phase into a root.
+        # a dependent phase into a root. Check the fence-stripped
+        # post-prelude slice so that documentation examples don't
+        # false-positive.
         if first_task is not None:
-            post_prelude = section[first_task.start() :]
+            post_prelude = scan_section[first_task.start() :]
             if _DEPENDS_ON_RE.search(post_prelude):
                 raise ValueError(
                     f"Phase {phase_number}: **Depends on:** line appears "
@@ -210,21 +261,29 @@ def _parse_phases(text: str) -> list[Phase]:
             )
         )
 
-    return phases
+    return phases, has_depends_line
 
 
 def _parse_tasks(text: str) -> list[Task]:
-    """Parse all tasks from a section of markdown."""
-    task_matches = list(_RE_TASK.finditer(text))
+    """Parse all tasks from a section of markdown.
+
+    Like ``_parse_phases``, scans a fence-stripped copy for boundary
+    detection so embedded plan-format examples (fenced ``### Task N:`` or
+    ``## Phase N:`` inside a ``` block) don't get mistaken for real headers.
+    Content slicing uses the original ``text``.
+    """
+    scan_text = _strip_fenced_regions(text)
+    task_matches = list(_RE_TASK.finditer(scan_text))
     tasks: list[Task] = []
 
     for i, tm in enumerate(task_matches):
         start = tm.end()
         end = task_matches[i + 1].start() if i + 1 < len(task_matches) else len(text)
         section = text[start:end]
+        scan_section = scan_text[start:end]
 
         # Don't cross into the next phase
-        next_phase = _RE_PHASE.search(section)
+        next_phase = _RE_PHASE.search(scan_section)
         if next_phase:
             section = section[: next_phase.start()]
 

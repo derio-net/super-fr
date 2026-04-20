@@ -43,7 +43,8 @@ Best-effort: failure does not block PR creation.
    If the output is `phased`, continue to step 1. If it is `flat`, run the
    [Migration](#migration) flow below and commit the result as its own PR
    **before** proceeding. There is no path that executes a flat plan directly.
-1. Check dependencies:
+1. Check dependencies (reads the target phase's declared `**Depends on:**`
+   list — phases not declared as blockers do not gate pickup):
    ```bash
    vk execute check-deps <plan> <phase>
    ```

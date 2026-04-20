@@ -6,6 +6,7 @@ import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from vk.cli import app
@@ -85,6 +86,7 @@ class TestDispatchIdempotency:
 
             ## Phase 0: Done [agentic]
             <!-- Tracking: https://github.com/derio-net/test-repo/issues/10 -->
+            **Depends on:** —
 
             ### Task 1: Done
 
@@ -347,3 +349,53 @@ class TestDispatchIssueUrlInjection:
         for _, body in edits:
             assert "🔗 Issue:  https://github.com/org/repo/issues/77" in body
             assert "(assigned on create)" not in body
+
+
+class TestDispatchMigrateGuard:
+    """migrate refuses legacy dispatched plans that lack **Depends on:** lines."""
+
+    def test_migrate_refuses_pre_dag_plan(self, dispatch_config: Path, tmp_repo: Path) -> None:
+        plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+        plans_dir.mkdir(parents=True, exist_ok=True)
+        plan = plans_dir / "2026-04-20-predag.md"
+        plan.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** In Progress\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n"
+            "<!-- Tracking: https://github.com/derio-net/test-repo/issues/10 -->\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n\n"
+            "## Phase 2: B [agentic]\n"
+            "<!-- Tracking: https://github.com/derio-net/test-repo/issues/11 -->\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n"
+        )
+        result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--dry-run"])
+        assert result.exit_code == 2
+        combined = result.stdout + (result.stderr or "")
+        assert "**Depends on:**" in combined
+        assert "vk plan convert" in combined
+        assert "--add-deps" in combined
+
+    def test_migrate_allows_post_dag_plan(
+        self, dispatch_config: Path, tmp_repo: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A plan WITH **Depends on:** lines proceeds past the guard.
+
+        We stub gh.view_issue so the migrate loop reports closed+skip, which
+        lets us assert the command reaches its natural terminus with exit 0
+        instead of being caught by the new guard.
+        """
+        from vk import gh
+
+        monkeypatch.setattr(gh, "view_issue", lambda repo, number: {"state": "CLOSED"})
+
+        plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+        plans_dir.mkdir(parents=True, exist_ok=True)
+        plan = plans_dir / "2026-04-20-postdag.md"
+        plan.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** In Progress\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n"
+            "<!-- Tracking: https://github.com/derio-net/test-repo/issues/10 -->\n"
+            "**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n"
+        )
+        result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+        assert result.exit_code == 0, result.stdout + (result.stderr or "")

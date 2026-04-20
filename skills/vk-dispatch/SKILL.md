@@ -33,7 +33,9 @@ idempotency check, create issues, add to board, inject tracking comments, commit
 |------|---------|--------|
 | 0 | Success or noop | Relay URLs |
 | 1 | Gate disabled / config error | Paste CLI error verbatim |
-| 2 | Plan parse error (legacy flat format) | Run `vk plan convert <plan> --to phased --single-phase --yes` and retry |
+| 2 | Plan parse error (generic) | Paste CLI error; inspect the plan |
+| 2 | Legacy flat plan | `vk plan convert <plan> --to phased --single-phase --yes`, retry |
+| 2 | Phased plan missing `**Depends on:**` declarations | `vk plan convert <plan> --add-deps --yes`, retry |
 | 3 | gh error | Check `gh auth status` |
 | 4 | Partial success | CLI shows which failed |
 
@@ -52,3 +54,9 @@ For plans dispatched before the unified-title format, run:
     vk dispatch migrate <plan-path> --yes
 
 Rewrites open Issues' titles + bodies to the current format. Closed Issues are skipped.
+
+**Note:** `vk dispatch migrate` refuses plans that have dispatched Issues but
+no `**Depends on:**` declarations — silently inferring the N-1 chain would
+reintroduce the implicit dependency model the DAG grammar replaced. Run
+`vk plan convert <plan> --add-deps --yes` first to declare the DAG on disk,
+then re-run migrate.

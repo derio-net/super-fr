@@ -227,6 +227,54 @@ class TestDependsOnParsing:
         with pytest.raises(ValueError, match="Phase 1"):
             parse_plan(p)
 
+    def test_fenced_phase_headers_are_not_parsed(self, tmp_path: Path) -> None:
+        """``## Phase N:`` inside a fenced code block must not be treated as a
+        real phase (regression for the dog-fooding gap in PR #32 review)."""
+        content = (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: Real [agentic]\n"
+            "**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n\n"
+            "Here's a documentation example embedded as markdown:\n\n"
+            "```markdown\n"
+            "## Phase 42: Fixture inside a fence [agentic]\n"
+            "**Depends on:** Phase 99\n\n"
+            "### Task 1: Fake\n\n- [ ] **Step 1: decoy**\n"
+            "```\n\n"
+            "More real content follows.\n"
+        )
+        p = tmp_path / "plan.md"
+        p.write_text(content)
+        plan = parse_plan(p)
+        # Only Phase 1 (the real one outside the fence) should be parsed.
+        assert len(plan.phases) == 1
+        assert plan.phases[0].number == 1
+        assert plan.phases[0].title == "Real"
+
+    def test_fenced_task_headers_are_not_parsed(self, tmp_path: Path) -> None:
+        """``### Task N:`` inside a fenced code block must not be treated
+        as a real task."""
+        content = (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: P [agentic]\n"
+            "**Depends on:** —\n\n"
+            "### Task 1: Real\n\n- [ ] **Step 1: s**\n\n"
+            "Embedded example:\n\n"
+            "```markdown\n"
+            "### Task 99: Fixture inside a fence\n\n"
+            "- [ ] **Step 1: decoy**\n"
+            "```\n"
+        )
+        p = tmp_path / "plan.md"
+        p.write_text(content)
+        plan = parse_plan(p)
+        assert len(plan.phases) == 1
+        assert len(plan.phases[0].tasks) == 1, (
+            f"expected 1 real task, got {len(plan.phases[0].tasks)}: "
+            f"{[t.number for t in plan.phases[0].tasks]}"
+        )
+        assert plan.phases[0].tasks[0].number == 1
+
     def test_line_after_tracking_comment(self, tmp_path: Path) -> None:
         content = (
             "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"

@@ -240,7 +240,7 @@ def dispatch_create(
     # Structural DAG validation: surface refusal reasons in dependency order
     # (gate -> parse -> DAG validation) before building any Issue body.
     try:
-        validate_dag(plan)
+        validate_dag(plan, plan_path=plan_path_resolved)
     except DagValidationError as exc:
         err_console.print(f"Error: {exc}")
         raise typer.Exit(2)
@@ -432,6 +432,22 @@ def migrate(
     slug = derive_slug(plan_path_resolved)
     plan_text = plan_path_resolved.read_text()
     tracked = _get_already_tracked(plan_text)
+
+    # Refuse to rewrite legacy dispatched plans that lack **Depends on:**
+    # declarations. The new Issue body format builds its Dependencies block
+    # from the plan's declared DAG — silently inferring N-1 would smuggle
+    # the old implicit chain back in at exactly the point where the design
+    # moves it out. The operator runs `convert --add-deps` first (it's one
+    # extra command, not a workflow change).
+    if tracked and not all(plan.phase_has_depends_line):
+        err_console.print(
+            "Error: Plan has dispatched Issues but no **Depends on:** "
+            "declarations.\n"
+            "Migrate the plan file first, then re-run migrate:\n"
+            f"  vk plan convert {plan_path_resolved} --add-deps --yes\n"
+            f"  vk dispatch migrate {plan_path_resolved} --yes"
+        )
+        raise typer.Exit(2)
 
     missing = [p.number for p in plan.phases if p.number not in tracked]
     if missing:

@@ -1,7 +1,7 @@
 # Parallel Dispatch DAG Implementation Plan
 
 **Spec:** `docs/superpowers/specs/2026-04-20-parallel-dispatch-dag-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Replace the implicit "Phase N depends on Phase N-1" chain with an author-declared `**Depends on:**` DAG per plan. Unlock safe parallel phase execution while preserving the fail-loud guarantees that were introduced after the Frank hextra incident.
 
@@ -888,7 +888,7 @@ All must PASS. Open the PR with title `feat: parallel dispatch DAG — grammar, 
 - Test: `tests/unit/test_plan_convert.py`
 - Test: `tests/integration/test_convert.py`
 
-- [ ] **Step 1: Create the no-deps fixture**
+- [x] **Step 1: Create the no-deps fixture**
 
 Create `tests/fixtures/plans/phased-no-deps.md`:
 
@@ -921,7 +921,7 @@ Create `tests/fixtures/plans/phased-no-deps.md`:
 - [ ] **Step 1:** Nothing
 ```
 
-- [ ] **Step 2: Write failing unit tests**
+- [x] **Step 2: Write failing unit tests**
 
 Append to `tests/unit/test_plan_convert.py`:
 
@@ -960,7 +960,7 @@ class TestAddDeps:
             add_deps(dst)
 ```
 
-- [ ] **Step 3: Write a failing integration test**
+- [x] **Step 3: Write a failing integration test**
 
 Append to `tests/integration/test_convert.py`:
 
@@ -987,7 +987,7 @@ class TestAddDepsCli:
         assert "**Depends on:** Phase 1" in text
 ```
 
-- [ ] **Step 4: Run the tests to confirm they fail**
+- [x] **Step 4: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_plan_convert.py::TestAddDeps tests/integration/test_convert.py::TestAddDepsCli -v
@@ -995,7 +995,7 @@ uv run pytest tests/unit/test_plan_convert.py::TestAddDeps tests/integration/tes
 
 Expected: FAIL — `add_deps` and `MixedPlanError` are not defined; `--add-deps` flag is not wired.
 
-- [ ] **Step 5: Implement `add_deps` in `convert.py`**
+- [x] **Step 5: Implement `add_deps` in `convert.py`**
 
 Add to `src/vk/plan/convert.py`:
 
@@ -1059,7 +1059,7 @@ def add_deps(plan_path: Path) -> None:
     plan_path.write_text("".join(new_parts))
 ```
 
-- [ ] **Step 6: Wire the `--add-deps` flag in `plan_cmd.py`**
+- [x] **Step 6: Wire the `--add-deps` flag in `plan_cmd.py`**
 
 In `src/vk/commands/plan_cmd.py`, extend the existing `convert` subcommand with the `--add-deps` option. Make it mutually exclusive with the existing `--single-phase` / `--one-per-task` / `--group-by-tag` flags (so `convert <plan> --add-deps --yes` works standalone). The `--add-deps` branch honours `resolve_action(dry_run, yes)`, calls `add_deps(plan_path)`, and on `--yes` also runs:
 
@@ -1073,7 +1073,7 @@ subprocess.run(
 
 On `--dry-run`, print the diff (use `difflib.unified_diff` on original vs would-be-written text) and exit 0 without writing.
 
-- [ ] **Step 7: Run the tests to confirm they pass**
+- [x] **Step 7: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_plan_convert.py tests/integration/test_convert.py -v
@@ -1081,7 +1081,7 @@ uv run pytest tests/unit/test_plan_convert.py tests/integration/test_convert.py 
 
 Expected: PASS.
 
-- [ ] **Step 8: Quality gates**
+- [x] **Step 8: Quality gates**
 
 ```
 uv run ruff check src/vk/plan/convert.py src/vk/commands/plan_cmd.py tests/unit/test_plan_convert.py tests/integration/test_convert.py
@@ -1091,7 +1091,7 @@ uv run mypy src/vk/plan/convert.py src/vk/commands/plan_cmd.py
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```
 git add src/vk/plan/convert.py src/vk/commands/plan_cmd.py tests/unit/test_plan_convert.py tests/integration/test_convert.py tests/fixtures/plans/phased-no-deps.md

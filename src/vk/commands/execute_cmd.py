@@ -80,23 +80,44 @@ def check_deps(
     plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
     target: int = typer.Argument(..., help="Phase number."),
 ) -> None:
-    """Check if dependencies for a phase are satisfied."""
+    """Check if the target phase's declared dependencies are satisfied.
+
+    Reads ``target_phase.depends_on`` and checks only those phases. Phases
+    not declared as dependencies do not block pickup — this is the parallel
+    DAG unlock that the Phase 1 grammar made possible.
+    """
     plan_path = plan_path.resolve()
     _reject_flat(plan_path)
     plan = parse_plan(plan_path)
 
-    for phase in plan.phases:
-        if phase.number >= target:
-            break
-        unchecked = sum(1 for t in phase.tasks for s in t.steps if s.state == " ")
+    phases_by_num = {p.number: p for p in plan.phases}
+    target_phase = phases_by_num.get(target)
+    if target_phase is None:
+        err_console.print(f"Phase {target} not found in plan.")
+        raise typer.Exit(2)
+
+    for dep_num in target_phase.depends_on:
+        dep_phase = phases_by_num.get(dep_num)
+        if dep_phase is None:
+            err_console.print(
+                f"Phase {target} declares Phase {dep_num} as a dependency, "
+                f"but Phase {dep_num} does not exist."
+            )
+            raise typer.Exit(1)
+        unchecked = sum(1 for t in dep_phase.tasks for s in t.steps if s.state == " ")
         if unchecked > 0:
             err_console.print(
-                f"Phase {target} depends on Phase {phase.number} being complete. "
-                f"Phase {phase.number} has {unchecked} unchecked step(s)."
+                f"Phase {target} depends on Phase {dep_num}, "
+                f"which has {unchecked} unchecked step(s)."
             )
             raise typer.Exit(1)
 
-    console.print(f"Dependencies satisfied for Phase {target}.")
+    dep_list = (
+        ", ".join(f"Phase {n}" for n in target_phase.depends_on)
+        if target_phase.depends_on
+        else "none (root phase)"
+    )
+    console.print(f"Dependencies satisfied for Phase {target} (checked: {dep_list}).")
 
 
 @execute_app.command()
