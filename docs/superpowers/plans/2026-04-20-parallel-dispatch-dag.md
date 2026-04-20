@@ -20,7 +20,7 @@
 - Modify: `src/vk/plan/parser.py`
 - Test: `tests/unit/test_plan_parser.py`
 
-- [ ] **Step 1: Write failing tests for the parser's `**Depends on:**` extraction**
+- [x] **Step 1: Write failing tests for the parser's `**Depends on:**` extraction**
 
 Append to `tests/unit/test_plan_parser.py`:
 
@@ -88,7 +88,7 @@ class TestDependsOnParsing:
         assert plan.phases[0].tracking_url == "https://github.com/o/r/issues/10"
 ```
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
@@ -96,7 +96,7 @@ uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
 
 Expected: all 7 tests FAIL because `depends_on` is not on `Phase` yet and the parser does not extract the line.
 
-- [ ] **Step 3: Add `depends_on` to the `Phase` dataclass**
+- [x] **Step 3: Add `depends_on` to the `Phase` dataclass**
 
 In `src/vk/plan/models.py`, add a `depends_on` field to `Phase`:
 
@@ -113,7 +113,7 @@ class Phase:
 
 Field order matters for `__init__`. Place `depends_on` after `tag` and before `tasks`. Update any constructor callers in the codebase (grep for `Phase(` to find them — likely only `parser.py` and test fixtures).
 
-- [ ] **Step 4: Implement the parser extraction**
+- [x] **Step 4: Implement the parser extraction**
 
 In `src/vk/plan/parser.py`, where phase blocks are parsed, extract the `**Depends on:**` line when present and compute `depends_on`:
 
@@ -149,7 +149,7 @@ Search scope for `_DEPENDS_ON_RE` is the slice between the phase header (plus an
 
 Call `_parse_depends_on(phase_body, phase_number)` during Phase construction and pass the result to the `depends_on=` keyword argument.
 
-- [ ] **Step 5: Run the tests to confirm they pass**
+- [x] **Step 5: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
@@ -163,7 +163,7 @@ uv run pytest tests/unit/test_plan_parser.py -v
 
 Expected: all pre-existing parser tests continue to pass (any fixtures without `**Depends on:**` parse with `depends_on=()`).
 
-- [ ] **Step 6: Quality gates**
+- [x] **Step 6: Quality gates**
 
 ```
 uv run ruff check src/vk/plan/models.py src/vk/plan/parser.py tests/unit/test_plan_parser.py

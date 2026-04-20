@@ -40,6 +40,11 @@ _RE_TRACKING = re.compile(r"^<!-- Tracking:\s*(https?://\S+)\s*-->", re.MULTILIN
 _RE_FILE_MENTION = re.compile(
     r"^- (Create|Edit|Test|Delete|Move|Rename|Modify):\s*`([^`]+)`", re.MULTILINE
 )
+_DEPENDS_ON_RE = re.compile(
+    r"^\*\*Depends on:\*\*\s+(.+?)\s*$",
+    re.MULTILINE,
+)
+_PHASE_REF_RE = re.compile(r"^Phase\s+(\d+)$")
 # Lines the plan header already captures as structured fields — everything
 # else in the header block is retained as ``Plan.preamble``.
 _RE_HEADER_STRUCTURED_LINE = re.compile(
@@ -137,6 +142,27 @@ def _extract_preamble(text: str) -> str:
     return remainder.strip("\n")
 
 
+def _parse_depends_on(phase_body: str, phase_number: int) -> tuple[int, ...]:
+    """Return the tuple of dependency phase numbers, or () if the line is absent."""
+    match = _DEPENDS_ON_RE.search(phase_body)
+    if match is None:
+        return ()
+    raw = match.group(1).strip()
+    if raw in ("—", "None"):
+        return ()
+    parts = [p.strip() for p in raw.split(",")]
+    deps: list[int] = []
+    for part in parts:
+        ref_match = _PHASE_REF_RE.match(part)
+        if ref_match is None:
+            raise ValueError(
+                f"Phase {phase_number}: could not parse dependency list "
+                f"'{raw}'. Expected 'Phase <int>' refs."
+            )
+        deps.append(int(ref_match.group(1)))
+    return tuple(deps)
+
+
 def _parse_phases(text: str) -> list[Phase]:
     """Parse all phases from phased-format markdown."""
     phase_matches = list(_RE_PHASE.finditer(text))
@@ -150,12 +176,19 @@ def _parse_phases(text: str) -> list[Phase]:
         tracking_match = _RE_TRACKING.search(section)
         tracking_url = tracking_match.group(1) if tracking_match else None
 
+        # Scope **Depends on:** lookup to the phase prelude (before first task).
+        first_task = _RE_TASK.search(section)
+        prelude = section[: first_task.start()] if first_task else section
+        phase_number = int(pm.group(1))
+        depends_on = _parse_depends_on(prelude, phase_number)
+
         tasks = _parse_tasks(section)
         phases.append(
             Phase(
-                number=int(pm.group(1)),
+                number=phase_number,
                 title=pm.group(2).strip(),
                 tag=cast(_TagType, pm.group(3) or "agentic"),
+                depends_on=depends_on,
                 tasks=tuple(tasks),
                 tracking_url=tracking_url,
             )

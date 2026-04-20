@@ -95,11 +95,12 @@ def test_write_phased_plan(tmp_path: Path) -> None:
     """Write a phased plan and verify structure."""
     s1 = Step(number=1, title="Do it", body="Just do it.", state=" ")
     t1 = Task(number=1, title="Build", tag=None, steps=(s1,), files_mentioned=())
-    p1 = Phase(number=1, title="Core", tag="agentic", tasks=(t1,), tracking_url=None)
+    p1 = Phase(number=1, title="Core", tag="agentic", depends_on=(), tasks=(t1,), tracking_url=None)
     p2 = Phase(
         number=2,
         title="Release",
         tag="manual",
+        depends_on=(),
         tasks=(),
         tracking_url="https://github.com/org/repo/issues/99",
     )

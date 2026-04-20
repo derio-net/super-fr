@@ -61,7 +61,9 @@ def test_task_is_frozen() -> None:
 def test_phase_with_tasks() -> None:
     s = Step(number=1, title="Do it", body="", state=" ")
     t = Task(number=1, title="Build", tag=None, steps=(s,), files_mentioned=())
-    phase = Phase(number=1, title="Setup", tag="agentic", tasks=(t,), tracking_url=None)
+    phase = Phase(
+        number=1, title="Setup", tag="agentic", depends_on=(), tasks=(t,), tracking_url=None
+    )
     assert phase.number == 1
     assert phase.tag == "agentic"
     assert len(phase.tasks) == 1
@@ -73,6 +75,7 @@ def test_phase_with_tracking_url() -> None:
         number=2,
         title="Deploy",
         tag="manual",
+        depends_on=(),
         tasks=(),
         tracking_url="https://github.com/org/repo/issues/42",
     )
@@ -80,7 +83,7 @@ def test_phase_with_tracking_url() -> None:
 
 
 def test_phase_is_frozen() -> None:
-    phase = Phase(number=1, title="Test", tag="agentic", tasks=(), tracking_url=None)
+    phase = Phase(number=1, title="Test", tag="agentic", depends_on=(), tasks=(), tracking_url=None)
     with pytest.raises(AttributeError):
         phase.tag = "manual"  # type: ignore[misc]
 
@@ -112,8 +115,17 @@ def test_phased_plan_all_tasks() -> None:
     t1 = Task(number=1, title="First", tag=None, steps=(s,), files_mentioned=())
     t2 = Task(number=1, title="Second", tag=None, steps=(s,), files_mentioned=())
     t3 = Task(number=2, title="Third", tag=None, steps=(s,), files_mentioned=())
-    p1 = Phase(number=1, title="Setup", tag="agentic", tasks=(t1,), tracking_url=None)
-    p2 = Phase(number=2, title="Build", tag="agentic", tasks=(t2, t3), tracking_url=None)
+    p1 = Phase(
+        number=1, title="Setup", tag="agentic", depends_on=(), tasks=(t1,), tracking_url=None
+    )
+    p2 = Phase(
+        number=2,
+        title="Build",
+        tag="agentic",
+        depends_on=(),
+        tasks=(t2, t3),
+        tracking_url=None,
+    )
     plan = Plan(
         title="Test Plan",
         spec=None,

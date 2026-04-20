@@ -177,3 +177,66 @@ def test_not_a_plan_raises() -> None:
 def test_missing_file_raises() -> None:
     with pytest.raises(FileNotFoundError):
         parse_plan(Path("/nonexistent/path/plan.md"))
+
+
+class TestDependsOnParsing:
+    """Parser extracts **Depends on:** lines into Phase.depends_on."""
+
+    def _plan_with_phase(self, extra_line: str) -> str:
+        return (
+            "# T\n\n**Spec:** `specs/x.md`\n**Status:** Not Started\n\n"
+            "**Goal:** Test.\n\n---\n\n"
+            "## Phase 1: First [agentic]\n"
+            f"{extra_line}"
+            "\n### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n"
+        )
+
+    def test_emdash_parses_as_empty_tuple(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._plan_with_phase("**Depends on:** —\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].depends_on == ()
+
+    def test_none_alias_parses_as_empty_tuple(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._plan_with_phase("**Depends on:** None\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].depends_on == ()
+
+    def test_single_phase_ref(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._plan_with_phase("**Depends on:** Phase 3\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].depends_on == (3,)
+
+    def test_multiple_phase_refs(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._plan_with_phase("**Depends on:** Phase 1, Phase 2\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].depends_on == (1, 2)
+
+    def test_absent_line_yields_empty_tuple(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._plan_with_phase(""))
+        plan = parse_plan(p)
+        assert plan.phases[0].depends_on == ()
+
+    def test_malformed_value_raises_with_phase_number(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._plan_with_phase("**Depends on:** foo, Phase bar\n"))
+        with pytest.raises(ValueError, match="Phase 1"):
+            parse_plan(p)
+
+    def test_line_after_tracking_comment(self, tmp_path: Path) -> None:
+        content = (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: First [agentic]\n"
+            "<!-- Tracking: https://github.com/o/r/issues/10 -->\n"
+            "**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+        )
+        p = tmp_path / "plan.md"
+        p.write_text(content)
+        plan = parse_plan(p)
+        assert plan.phases[0].depends_on == ()
+        assert plan.phases[0].tracking_url == "https://github.com/o/r/issues/10"

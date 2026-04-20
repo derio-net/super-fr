@@ -84,6 +84,7 @@ def to_phased_single(plan: Plan) -> Plan:
         number=1,
         title=plan.title,
         tag=tag,
+        depends_on=(),
         tasks=renumbered,
         tracking_url=None,
     )
@@ -121,6 +122,7 @@ def to_phased_one_per_task(plan: Plan) -> Plan:
                 number=i + 1,
                 title=task.title,
                 tag=task.tag or "agentic",
+                depends_on=(),
                 tasks=(renumbered_task,),
                 tracking_url=None,
             )
@@ -160,6 +162,7 @@ def to_phased_group_by_tag(plan: Plan) -> Plan:
                 number=phase_num,
                 title=title,
                 tag=cast(_TagType, tag),
+                depends_on=(),
                 tasks=renumbered,
                 tracking_url=None,
             )

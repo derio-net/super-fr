@@ -17,7 +17,7 @@ from vk.plan.models import Phase
 
 
 def _make_phase(number: int, title: str = "Setup", tag: str = "agentic") -> Phase:
-    return Phase(number=number, title=title, tag=tag, tasks=(), tracking_url=None)
+    return Phase(number=number, title=title, tag=tag, depends_on=(), tasks=(), tracking_url=None)
 
 
 class TestBuildIssueBody:
@@ -246,6 +246,7 @@ class TestBuildIssueTitle:
             number=2,
             title="Content Migration",
             tag="agentic",
+            depends_on=(),
             tasks=(),
             tracking_url=None,
         )
@@ -253,6 +254,13 @@ class TestBuildIssueTitle:
         assert title == "[derio-net/frank] blog-hextra · Phase 2/5 · Content Migration"
 
     def test_manual_phase_title(self) -> None:
-        phase = Phase(number=0, title="Operator Review", tag="manual", tasks=(), tracking_url=None)
+        phase = Phase(
+            number=0,
+            title="Operator Review",
+            tag="manual",
+            depends_on=(),
+            tasks=(),
+            tracking_url=None,
+        )
         title = _build_issue_title("my-plan", phase, target_repo="org/repo", total=1)
         assert title == "[org/repo] my-plan · Phase 0/1 · Operator Review"
