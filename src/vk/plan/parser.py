@@ -69,7 +69,7 @@ def parse_plan(path: Path) -> Plan:
     preamble = _extract_preamble(text)
 
     if fmt is PlanFormat.PHASED:
-        phases = _parse_phases(text)
+        phases, has_depends_line = _parse_phases(text)
         return Plan(
             title=title,
             spec=spec,
@@ -79,6 +79,7 @@ def parse_plan(path: Path) -> Plan:
             phases=tuple(phases),
             tasks=(),
             preamble=preamble,
+            phase_has_depends_line=tuple(has_depends_line),
         )
     else:
         tasks = _parse_tasks(text)
@@ -163,10 +164,18 @@ def _parse_depends_on(phase_body: str, phase_number: int) -> tuple[int, ...]:
     return tuple(deps)
 
 
-def _parse_phases(text: str) -> list[Phase]:
-    """Parse all phases from phased-format markdown."""
+def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
+    """Parse all phases from phased-format markdown.
+
+    Returns ``(phases, has_depends_line)`` where ``has_depends_line[i]`` is
+    True iff the i-th phase declared a ``**Depends on:**`` line (even
+    ``—``/``None``). This lets ``validate_dag`` distinguish "declared root"
+    from "line absent" when enforcing the Phase 2 missing-line rule for
+    live plans.
+    """
     phase_matches = list(_RE_PHASE.finditer(text))
     phases: list[Phase] = []
+    has_depends_line: list[bool] = []
 
     for i, pm in enumerate(phase_matches):
         start = pm.end()
@@ -181,6 +190,7 @@ def _parse_phases(text: str) -> list[Phase]:
         prelude = section[: first_task.start()] if first_task else section
         phase_number = int(pm.group(1))
         depends_on = _parse_depends_on(prelude, phase_number)
+        has_depends_line.append(_DEPENDS_ON_RE.search(prelude) is not None)
 
         # Spec §1.1: **Depends on:** must live directly under the
         # ## Phase header (or its <!-- Tracking: ... --> comment); any
@@ -210,7 +220,7 @@ def _parse_phases(text: str) -> list[Phase]:
             )
         )
 
-    return phases
+    return phases, has_depends_line
 
 
 def _parse_tasks(text: str) -> list[Task]:

@@ -82,6 +82,13 @@ class Plan:
     phases: tuple[Phase, ...]  # populated in phased format
     tasks: tuple[Task, ...]  # populated in flat format
     preamble: str = ""
+    # Aligned 1:1 with ``phases``: True iff the phase declared a
+    # ``**Depends on:**`` line (even ``—``). Empty tuple default keeps
+    # pre-Phase-2 test fixtures constructing Plan(...) directly; the
+    # live-plan missing-line check only triggers when both ``plan_path``
+    # is supplied to ``validate_dag`` and this tuple was populated by
+    # the parser.
+    phase_has_depends_line: tuple[bool, ...] = ()
 
     @property
     def all_tasks(self) -> tuple[Task, ...]:

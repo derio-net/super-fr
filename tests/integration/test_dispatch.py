@@ -85,6 +85,7 @@ class TestDispatchIdempotency:
 
             ## Phase 0: Done [agentic]
             <!-- Tracking: https://github.com/derio-net/test-repo/issues/10 -->
+            **Depends on:** —
 
             ### Task 1: Done
 

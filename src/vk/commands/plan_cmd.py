@@ -169,7 +169,7 @@ def plan_self_review(
         return
 
     try:
-        validate_dag(plan)
+        validate_dag(plan, plan_path=plan_path)
     except DagValidationError as exc:
         err_console.print(f"Error: {exc}")
         raise typer.Exit(1)

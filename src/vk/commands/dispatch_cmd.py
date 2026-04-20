@@ -240,7 +240,7 @@ def dispatch_create(
     # Structural DAG validation: surface refusal reasons in dependency order
     # (gate -> parse -> DAG validation) before building any Issue body.
     try:
-        validate_dag(plan)
+        validate_dag(plan, plan_path=plan_path_resolved)
     except DagValidationError as exc:
         err_console.print(f"Error: {exc}")
         raise typer.Exit(2)
