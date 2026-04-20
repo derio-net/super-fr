@@ -182,12 +182,15 @@ dev = [
 # Developer setup
 uv sync && uv run pytest && uv run vk --help
 
-# User install
-uv tool install git+https://github.com/derio-net/superpowers-for-vk
-
-# Skills install (symlinks skills/ into ~/.claude/skills/)
-vk install-skills
+# User install (installs vk CLI, registers plugin/marketplace, installs rules, configures MCP)
+git clone https://github.com/derio-net/superpowers-for-vk && cd superpowers-for-vk
+./scripts/install.sh
 ```
+
+Skills are delivered by the Claude Code plugin system — `scripts/install.sh`
+registers the marketplace and populates `~/.claude/plugins/cache/`, after which
+the plugin system loads the four `vk-*` skills on Claude Code restart. There is
+no separate "skills install" step.
 
 ---
 
@@ -444,7 +447,7 @@ Commands:
   progress        Track work lifecycle
   execute         Helpers for phase/task execution
   init            Scaffold plan-config.yaml in a new repo
-  install-skills  Symlink SKILL.md files into ~/.claude/skills/
+  skills          List the vk-* skills and their CLI entry points
 ```
 
 Every command and subcommand gets auto-generated `--help` via typer.
@@ -516,13 +519,18 @@ vk init [--dispatch OWNER/REPO] [--project "Name"]
 
 Without `--dispatch`: writes a fail-closed local-only config. With `--dispatch`: writes a full dispatch block. Creates `docs/superpowers/{specs,plans,archived-plans}/` if missing. Refuses to overwrite existing config without `--force`.
 
-### `vk install-skills`
+### Installer (non-CLI)
 
-```
-vk install-skills [--copy]
-```
+Installation is handled by `scripts/install.sh`, not a `vk` subcommand. The
+shell script is the sole canonical installer: it registers the marketplace,
+populates the plugin cache, clears stale versions, installs user-level rules,
+configures the VK MCP server, and runs `uv tool install` to deploy the `vk`
+CLI itself.
 
-Default: symlinks `skills/vk-*/` into `~/.claude/skills/vk-*`. `--copy` for cross-filesystem installs.
+An earlier `vk install-skills` subcommand existed but was removed in v1.0.16.
+It was a lightweight subset (pull + cache-clear + rules), and because it ran
+inside the CLI it could not refresh the CLI binary — making it dangerous to
+rely on after a version bump. The full installer is the only supported path.
 
 ---
 
@@ -554,7 +562,7 @@ Dispatch disabled: two options (Subagent-driven, Inline execution) plus note: *"
 
 ## SKILL.md Shape After Pythonization
 
-All four SKILL.md files move into `superpowers-for-vk/skills/` (version-controlled in this repo) and get deployed via `vk install-skills`.
+All four SKILL.md files move into `superpowers-for-vk/skills/` (version-controlled in this repo) and get deployed by the Claude Code plugin system — `scripts/install.sh` registers the marketplace and populates the plugin cache; the skills load on Claude Code restart.
 
 | File | Lines now | Lines after | What moves to code |
 |------|-----------|-------------|-------------------|
@@ -690,6 +698,11 @@ Estimated: ~4 files, ~8 tasks.
 Depends on: P2.
 
 ### P5: SKILL.md rewrites + `vk init` + `vk install-skills` [agentic]
+
+> **Historical note (2026-04-20):** `vk install-skills` was removed in v1.0.16.
+> Skills are now delivered exclusively by the Claude Code plugin system via
+> `scripts/install.sh`. The P5 section below documents the build as it
+> happened; the `install_cmd.py` file it delivered no longer exists.
 
 Replace all four prose SKILL.md files with thin wrappers. Add utility commands.
 

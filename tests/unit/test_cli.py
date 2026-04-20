@@ -21,7 +21,6 @@ def test_help_flag():
     assert "progress" in result.stdout
     assert "execute" in result.stdout
     assert "init" in result.stdout
-    assert "install-skills" in result.stdout
     assert "skills" in result.stdout
 
 
@@ -64,12 +63,6 @@ def test_init_creates_config():
     assert result.exit_code == 0
     assert "dispatch" in result.stdout
     assert "force" in result.stdout
-
-
-def test_install_skills_help():
-    result = runner.invoke(app, ["install-skills", "--help"])
-    assert result.exit_code == 0
-    assert "install" in result.stdout.lower()
 
 
 def test_plan_shows_help():

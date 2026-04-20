@@ -61,7 +61,7 @@ If in doubt, patch.
 
 ### Why this matters
 
-The installer (`scripts/install.sh`, invoked by `vk install-skills`) reads
+The installer (`scripts/install.sh`) reads
 `.claude-plugin/plugin.json::.version` and `.claude-plugin/marketplace.json
 ::.plugins[0].version` to decide whether to clear stale cache. If the version
 hasn't moved, the cached install stays — even though main has newer commits.
