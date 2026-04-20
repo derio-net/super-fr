@@ -18,6 +18,7 @@ from vk.plan.convert import (
     to_phased_single,
 )
 from vk.plan.parser import parse_plan
+from vk.plan.validate import DagValidationError, validate_dag
 from vk.plan.writer import write_plan
 from vk.spec_index import IndexEntry, upsert_entry
 
@@ -157,6 +158,19 @@ def plan_self_review(
         for task in plan.tasks:
             if not task.tag:
                 issues.append(f"Task {task.number} missing [manual]/[agentic] tag")
+
+    # Structural DAG validation (cycle / forward-ref / self-ref / unknown-ref).
+    # Report any previously-collected issues first so basic plan-shape errors
+    # surface before dependency-grammar complaints.
+    if issues:
+        _report_issues(issues)
+        return
+
+    try:
+        validate_dag(plan)
+    except DagValidationError as exc:
+        err_console.print(f"Error: {exc}")
+        raise typer.Exit(1)
 
     _report_issues(issues)
 

@@ -682,7 +682,7 @@ git commit -m "feat(dispatch): body validator accepts None literal or >=1 blocke
 
 Scope: cycle, forward-ref, self-ref, unknown-ref, grammar-via-parser. **Missing-line is deferred to Phase 2** so pre-DAG plans don't break self-review in the Phase 1 window.
 
-- [ ] **Step 1: Write failing tests for `validate_dag`**
+- [x] **Step 1: Write failing tests for `validate_dag`**
 
 Create `tests/unit/test_plan_validate.py`:
 
@@ -769,7 +769,7 @@ class TestSelfReviewDagChecks:
         assert "does not exist" in (result.stdout + (result.stderr or ""))
 ```
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py::TestSelfReviewDagChecks -v
@@ -777,7 +777,7 @@ uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py::TestSelfR
 
 Expected: FAIL — `validate_dag` does not exist and self-review doesn't call it.
 
-- [ ] **Step 3: Implement `validate_dag`**
+- [x] **Step 3: Implement `validate_dag`**
 
 Create `src/vk/plan/validate.py`:
 
@@ -818,7 +818,7 @@ def validate_dag(plan: Plan) -> None:
                 )
 ```
 
-- [ ] **Step 4: Wire `validate_dag` into `vk plan self-review`**
+- [x] **Step 4: Wire `validate_dag` into `vk plan self-review`**
 
 In `src/vk/commands/plan_cmd.py::self_review`, after the plan parses successfully, call `validate_dag(plan)` and map `DagValidationError` to a user-facing error with `typer.Exit(1)`.
 
@@ -833,11 +833,11 @@ except DagValidationError as exc:
     raise typer.Exit(1)
 ```
 
-- [ ] **Step 5: Wire `validate_dag` into `vk dispatch --dry-run`**
+- [x] **Step 5: Wire `validate_dag` into `vk dispatch --dry-run`**
 
 In `src/vk/commands/dispatch_cmd.py::dispatch_create`, after `_parse_and_validate(plan_path)` returns the `plan`, and before building any Issue body, call `validate_dag(plan)` with the same error mapping. Place it under the existing gate check so refusal reasons surface in dependency order: gate → parse → DAG validation.
 
-- [ ] **Step 6: Run the tests to confirm they pass**
+- [x] **Step 6: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py -v
@@ -845,7 +845,7 @@ uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py -v
 
 Expected: PASS — structural validator tests + self-review CLI tests + all pre-existing tests.
 
-- [ ] **Step 7: Quality gates**
+- [x] **Step 7: Quality gates**
 
 ```
 uv run ruff check src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py tests/unit/test_cli.py
@@ -855,7 +855,7 @@ uv run mypy src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```
 git add src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py tests/unit/test_cli.py

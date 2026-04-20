@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 from vk.cli import app
@@ -110,3 +112,33 @@ def test_dispatch_migrate_command_exists():
     result = runner.invoke(app, ["dispatch", "migrate", "--help"])
     assert result.exit_code == 0
     assert "migrate" in result.output.lower()
+
+
+class TestSelfReviewDagChecks:
+    def test_self_review_rejects_cycle(self, tmp_path: Path) -> None:
+        # Cycle can only arise from forward-ref under backward-only rule,
+        # so we construct a forward reference and confirm the specific message.
+        plan = tmp_path / "p.md"
+        plan.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n**Depends on:** Phase 2\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+            "## Phase 2: B [agentic]\n**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+        )
+        result = runner.invoke(app, ["plan", "self-review", str(plan)])
+        assert result.exit_code != 0
+        assert "forward reference" in (result.stdout + (result.stderr or ""))
+
+    def test_self_review_rejects_unknown_ref(self, tmp_path: Path) -> None:
+        plan = tmp_path / "p.md"
+        plan.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+            "## Phase 2: B [agentic]\n**Depends on:** Phase 99\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+        )
+        result = runner.invoke(app, ["plan", "self-review", str(plan)])
+        assert result.exit_code != 0
+        assert "does not exist" in (result.stdout + (result.stderr or ""))

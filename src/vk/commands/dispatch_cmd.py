@@ -24,6 +24,7 @@ from vk.plan.filename import derive_slug
 from vk.plan.format import PlanFormat
 from vk.plan.models import Phase
 from vk.plan.parser import parse_plan
+from vk.plan.validate import DagValidationError, validate_dag
 
 console = Console()
 err_console = Console(stderr=True)
@@ -234,6 +235,14 @@ def dispatch_create(
 
     if not plan.phases:
         err_console.print("Error: No phases found in plan.")
+        raise typer.Exit(2)
+
+    # Structural DAG validation: surface refusal reasons in dependency order
+    # (gate -> parse -> DAG validation) before building any Issue body.
+    try:
+        validate_dag(plan)
+    except DagValidationError as exc:
+        err_console.print(f"Error: {exc}")
         raise typer.Exit(2)
 
     slug = derive_slug(plan_path_resolved)
