@@ -1,6 +1,6 @@
 # Parallel Dispatch via Explicit Phase DAG
 
-**Status:** Draft
+**Status:** Complete
 **Date:** 2026-04-20
 **Repos affected:** `derio-net/superpowers-for-vk`, `derio-net/agent-images` (bridge audit)
 
@@ -367,4 +367,4 @@ None at spec time. Phase A's unit tests will surface any grammar edge cases miss
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
 | Parallel Dispatch DAG Implementation Plan | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag.md` | Complete | — |
-| Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/plans/2026-04-20-parallel-dispatch-dag-bridge-audit.md` | Not Started | Phase 2 of the superpowers-for-vk plan |
+| Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag-bridge-audit.md` | Complete | Phase 2 of the superpowers-for-vk plan |
