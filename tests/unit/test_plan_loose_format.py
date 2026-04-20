@@ -156,8 +156,6 @@ class TestLooseConvertOnePerTask:
         text = out.read_text(encoding="utf-8")
 
         # The code block content from Step 1's body must survive.
-        assert "ansible.builtin.debug" in text, (
-            "converting to phased must not drop step bodies"
-        )
+        assert "ansible.builtin.debug" in text, "converting to phased must not drop step bodies"
         # The commit-style Step 2 must still be present.
         assert "git commit -m" in text
