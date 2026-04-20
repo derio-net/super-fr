@@ -551,7 +551,7 @@ git commit -m "feat(dispatch): emit one '- Blocked by #N' per declared dep"
 - Modify: `src/vk/commands/dispatch_body_validator.py`
 - Test: `tests/unit/test_dispatch_body_validator.py`
 
-- [ ] **Step 1: Write failing tests for the relaxed validator**
+- [x] **Step 1: Write failing tests for the relaxed validator**
 
 Append to `tests/unit/test_dispatch_body_validator.py`:
 
@@ -595,7 +595,7 @@ class TestRelaxedValidator:
             validate_issue_body(body, phase_number=2)
 ```
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_dispatch_body_validator.py::TestRelaxedValidator -v
@@ -603,7 +603,7 @@ uv run pytest tests/unit/test_dispatch_body_validator.py::TestRelaxedValidator -
 
 Expected: FAIL on the `None` literal test (today's validator rejects it for phase > 0).
 
-- [ ] **Step 3: Relax the validator**
+- [x] **Step 3: Relax the validator**
 
 Replace the contents of `src/vk/commands/dispatch_body_validator.py::validate_issue_body` with logic that accepts either form:
 
@@ -646,7 +646,7 @@ def validate_issue_body(body: str, phase_number: int) -> None:
         )
 ```
 
-- [ ] **Step 4: Run the tests to confirm they pass**
+- [x] **Step 4: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_dispatch_body_validator.py -v
@@ -654,7 +654,7 @@ uv run pytest tests/unit/test_dispatch_body_validator.py -v
 
 Expected: PASS — all 6 new tests plus all pre-existing validator tests.
 
-- [ ] **Step 5: Quality gates**
+- [x] **Step 5: Quality gates**
 
 ```
 uv run ruff check src/vk/commands/dispatch_body_validator.py tests/unit/test_dispatch_body_validator.py
@@ -664,7 +664,7 @@ uv run mypy src/vk/commands/dispatch_body_validator.py
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add src/vk/commands/dispatch_body_validator.py tests/unit/test_dispatch_body_validator.py
