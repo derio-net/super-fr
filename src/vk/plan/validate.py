@@ -43,8 +43,12 @@ def validate_dag(plan: Plan, plan_path: Path | None = None) -> None:
     if "archived-plans" in plan_path.parts:
         return
     if not plan.phase_has_depends_line:
-        # Parser populates this only for phased plans; when empty, the plan
-        # has no phases to check (flat format or empty phased).
+        # Guards an in-memory Plan(...) built by a caller that passed
+        # ``phases`` but left ``phase_has_depends_line`` at its default
+        # empty tuple. Without this early return the strict zip below
+        # would raise on a length mismatch. Real parser output always
+        # populates both tuples in lockstep; this path only fires for
+        # test fixtures and the flat-format case (no phases).
         return
 
     for phase, present in zip(plan.phases, plan.phase_has_depends_line, strict=True):

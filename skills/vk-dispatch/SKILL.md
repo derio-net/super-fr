@@ -33,7 +33,9 @@ idempotency check, create issues, add to board, inject tracking comments, commit
 |------|---------|--------|
 | 0 | Success or noop | Relay URLs |
 | 1 | Gate disabled / config error | Paste CLI error verbatim |
-| 2 | Plan parse error, flat plan, or phased plan missing `**Depends on:**` declarations | For flat: `vk plan convert <plan> --to phased --single-phase --yes`. For missing deps: `vk plan convert <plan> --add-deps --yes`. Retry after fixing. |
+| 2 | Plan parse error (generic) | Paste CLI error; inspect the plan |
+| 2 | Legacy flat plan | `vk plan convert <plan> --to phased --single-phase --yes`, retry |
+| 2 | Phased plan missing `**Depends on:**` declarations | `vk plan convert <plan> --add-deps --yes`, retry |
 | 3 | gh error | Check `gh auth status` |
 | 4 | Partial success | CLI shows which failed |
 
