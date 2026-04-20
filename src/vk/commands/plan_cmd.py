@@ -330,62 +330,58 @@ def plan_convert(
 
 
 def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:
-    """Implement the --add-deps migration branch of `vk plan convert`."""
+    """Implement the --add-deps migration branch of `vk plan convert`.
+
+    Flow is uniform across all three action modes: compute the proposed
+    migration on a temporary copy, show the diff, then decide to write.
+    PROMPT mode genuinely prompts (previous implementation wrote first and
+    pretended to prompt — surfaced in the PR #32 review as M-3).
+    """
     import difflib
     import subprocess
+    import tempfile
 
     original = plan_path.read_text()
 
-    if action is ConfirmAction.DRY_RUN:
-        # Run on a copy to compute the diff without touching the real file.
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
-            tmp.write(original)
-            tmp_path = Path(tmp.name)
-        try:
-            try:
-                add_deps(tmp_path)
-            except MixedPlanError as exc:
-                err_console.print(f"Error: {exc}")
-                raise typer.Exit(2)
-            proposed = tmp_path.read_text()
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-        diff = "".join(
-            difflib.unified_diff(
-                original.splitlines(keepends=True),
-                proposed.splitlines(keepends=True),
-                fromfile=str(plan_path),
-                tofile=str(plan_path),
-            )
-        )
-        if diff:
-            console.print(diff)
-        else:
-            console.print("No changes — plan already has all **Depends on:** lines.")
-        raise typer.Exit(0)
-
+    # Compute what the migration WOULD produce on a throwaway copy.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
+        tmp.write(original)
+        tmp_path = Path(tmp.name)
     try:
-        add_deps(plan_path)
-    except MixedPlanError as exc:
-        err_console.print(f"Error: {exc}")
-        raise typer.Exit(2)
+        try:
+            add_deps(tmp_path)
+        except MixedPlanError as exc:
+            err_console.print(f"Error: {exc}")
+            raise typer.Exit(2)
+        proposed = tmp_path.read_text()
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
-    if action is ConfirmAction.PROMPT:
-        updated = plan_path.read_text()
-        if updated == original:
-            console.print("No changes — plan already has all **Depends on:** lines.")
-            raise typer.Exit(0)
-        console.print(f"Updated: {plan_path}")
-        raise typer.Exit(0)
-
-    # --yes path: commit the change.
-    updated = plan_path.read_text()
-    if updated == original:
+    if proposed == original:
         console.print("No changes — plan already has all **Depends on:** lines.")
         raise typer.Exit(0)
+
+    diff = "".join(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            proposed.splitlines(keepends=True),
+            fromfile=str(plan_path),
+            tofile=str(plan_path),
+        )
+    )
+
+    if action is ConfirmAction.DRY_RUN:
+        console.print(diff)
+        raise typer.Exit(0)
+
+    if action is ConfirmAction.PROMPT:
+        console.print(diff)
+        if not typer.confirm("Apply this migration?", default=False):
+            console.print("Aborted — no changes written.")
+            raise typer.Exit(0)
+
+    # APPLY path (either --yes or PROMPT-confirmed): write the file and commit.
+    plan_path.write_text(proposed)
 
     try:
         root_result = subprocess.run(
