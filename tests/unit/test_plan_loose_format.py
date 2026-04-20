@@ -143,6 +143,31 @@ class TestStepBodyIndentation:
         )
 
 
+# --- Bug #6: yaml-fence in preamble truncates the divider search ---
+
+
+class TestPreambleWithFencedDivider:
+    """A ``---`` inside a fenced code block in the preamble must NOT be
+    treated as the plan's header/body divider."""
+
+    @pytest.fixture()
+    def fence_plan(self):
+        return parse_plan(FIXTURES / "flat-preamble-with-fence.md")
+
+    def test_preamble_captures_full_fenced_block(self, fence_plan):
+        assert "```yaml" in fence_plan.preamble
+        assert "key: value" in fence_plan.preamble
+        assert "Operator note" in fence_plan.preamble, (
+            "preamble content AFTER the embedded yaml ``---`` delimiters must "
+            "still be captured — the substring-based divider probe used to cut "
+            "the preamble off at the first ``\\n---``"
+        )
+
+    def test_task_is_still_parsed(self, fence_plan):
+        assert len(fence_plan.tasks) == 1
+        assert len(fence_plan.tasks[0].steps) == 1
+
+
 # --- End-to-end regression: the kid-laptops scenario ---
 
 

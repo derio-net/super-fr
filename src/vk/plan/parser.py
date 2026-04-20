@@ -99,6 +99,27 @@ def _extract_optional(text: str, pattern: re.Pattern[str]) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _find_header_divider(text: str) -> int | None:
+    """Return the byte offset of the first ``---`` line that is NOT inside a
+    fenced code block, or ``None`` if no such divider exists.
+
+    A simple ``text.find("\\n---")`` — or even a line-anchored regex — is wrong
+    here because preambles legitimately embed yaml frontmatter examples whose
+    own ``---`` delimiters sit on lines by themselves.  Track fence state as
+    we walk the text so those interior ``---``s are skipped.
+    """
+    in_fence = False
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.rstrip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and stripped == "---":
+            return pos
+        pos += len(line)
+    return None
+
+
 def _extract_preamble(text: str) -> str:
     """Capture header content that isn't one of title/spec/status/goal.
 
@@ -108,8 +129,8 @@ def _extract_preamble(text: str) -> str:
     out; the remainder is returned verbatim with leading/trailing blank lines
     trimmed.
     """
-    divider_idx = text.find("\n---")
-    header_block = text[:divider_idx] if divider_idx != -1 else text
+    divider_idx = _find_header_divider(text)
+    header_block = text[:divider_idx] if divider_idx is not None else text
     remainder = _RE_HEADER_STRUCTURED_LINE.sub("", header_block)
     # Collapse runs of 3+ blank lines that structured-field removal created.
     remainder = re.sub(r"\n{3,}", "\n\n", remainder)
