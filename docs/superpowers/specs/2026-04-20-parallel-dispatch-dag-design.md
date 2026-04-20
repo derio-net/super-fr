@@ -366,4 +366,5 @@ None at spec time. Phase A's unit tests will surface any grammar edge cases miss
 
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
-| *To be created via `vk-plan`.* | — | — | — | — |
+| Parallel Dispatch DAG Implementation Plan | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-20-parallel-dispatch-dag.md` | Not Started | — |
+| Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/plans/2026-04-20-parallel-dispatch-dag-bridge-audit.md` | Not Started | Phase 2 of the superpowers-for-vk plan |
