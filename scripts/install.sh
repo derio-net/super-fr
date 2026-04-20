@@ -5,6 +5,18 @@
 # rules, MCP config, vk CLI, stale skill cleanup, and PostToolUse hook hint.
 set -euo pipefail
 
+# Clean up any .tmp sidecar files on failure so a rerun starts clean.
+cleanup_tmps() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    rm -f "${SETTINGS:-}.tmp" "${MCP_CONFIG:-}.tmp" \
+          "${KNOWN_MARKETPLACES:-}.tmp" "${INSTALLED_PLUGINS:-}.tmp" 2>/dev/null || true
+    echo "install.sh failed (exit $rc). Rerun after fixing." >&2
+  fi
+  exit "$rc"
+}
+trap cleanup_tmps EXIT
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAUDE_DIR="$HOME/.claude"
@@ -39,7 +51,16 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
-# VK MCP binary is optional — warn but continue if missing
+# Preflight: hard-require jq and uv. Both are used unconditionally downstream;
+# continuing past a missing one yields a half-install that looks successful.
+for cmd in jq uv rsync; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "ERROR: '$cmd' not found in PATH. Install it first." >&2
+    exit 1
+  fi
+done
+
+# VK MCP binary is optional — warn but continue if missing.
 if [ ! -x "$VK_MCP_BINARY" ]; then
   echo "WARNING: VK MCP binary not found at $VK_MCP_BINARY" >&2
   echo "  MCP server configuration will be skipped." >&2
@@ -55,7 +76,8 @@ echo "Installing superpowers-for-vk..."
 if [ ! -L "$MARKETPLACE_DIR" ] && [ -d "$MARKETPLACE_DIR/.git" ]; then
   echo ""
   echo "Pulling marketplace clone..."
-  git -C "$MARKETPLACE_DIR" pull --ff-only origin main 2>&1 | sed 's/^/  /' || echo "  WARNING: marketplace pull failed"
+  # Fail hard: a stale clone silently installs stale files.
+  git -C "$MARKETPLACE_DIR" pull --ff-only origin main 2>&1 | sed 's/^/  /'
 fi
 
 # 2. Register derio-net marketplace so the plugin system knows where to find it
