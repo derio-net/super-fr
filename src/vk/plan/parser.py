@@ -7,6 +7,7 @@ headers is preserved as raw strings for lossless round-trip.
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 from typing import Literal, cast
 
@@ -26,10 +27,24 @@ _RE_GOAL = re.compile(r"^\*\*Goal:\*\*\s*(.+)$", re.MULTILINE)
 
 _RE_PHASE = re.compile(r"^## Phase (\d+):\s*(.+?)(?:\s+\[(agentic|manual)\])?\s*$", re.MULTILINE)
 _RE_TASK = re.compile(r"^### Task (\d+):\s*(.+?)(?:\s+\[(agentic|manual)\])?\s*$", re.MULTILINE)
-_RE_STEP = re.compile(r"^- \[([x \-])\] \*\*Step (\d+):\s*(.+?)\*\*\s*$", re.MULTILINE)
+# Step header: the bold ``**Step N: title**`` may be followed by trailing prose
+# on the same line — common in real-world plans that write
+# ``**Step 1: Create \`foo\`** documenting the role.``  Group 4 captures that
+# trailing text so _parse_steps can merge it into the title instead of
+# silently dropping the whole step.
+_RE_STEP = re.compile(
+    r"^- \[([x \-])\] \*\*Step (\d+(?:\.\d+)*):\s*(.+?)\*\*[ \t]*(.*?)[ \t]*$",
+    re.MULTILINE,
+)
 _RE_TRACKING = re.compile(r"^<!-- Tracking:\s*(https?://\S+)\s*-->", re.MULTILINE)
 _RE_FILE_MENTION = re.compile(
-    r"^- (?:Create|Edit|Test|Delete|Move|Rename|Modify):\s*`([^`]+)`", re.MULTILINE
+    r"^- (Create|Edit|Test|Delete|Move|Rename|Modify):\s*`([^`]+)`", re.MULTILINE
+)
+# Lines the plan header already captures as structured fields — everything
+# else in the header block is retained as ``Plan.preamble``.
+_RE_HEADER_STRUCTURED_LINE = re.compile(
+    r"^(# .+|\*\*Spec:\*\*.+|\*\*Status:\*\*.+|\*\*Goal:\*\*.+)$",
+    re.MULTILINE,
 )
 
 
@@ -46,6 +61,7 @@ def parse_plan(path: Path) -> Plan:
     spec = _extract_optional(text, _RE_SPEC)
     status = _extract(text, _RE_STATUS, "Not Started")
     goal = _extract(text, _RE_GOAL, "")
+    preamble = _extract_preamble(text)
 
     if fmt is PlanFormat.PHASED:
         phases = _parse_phases(text)
@@ -57,6 +73,7 @@ def parse_plan(path: Path) -> Plan:
             format=fmt,
             phases=tuple(phases),
             tasks=(),
+            preamble=preamble,
         )
     else:
         tasks = _parse_tasks(text)
@@ -68,6 +85,7 @@ def parse_plan(path: Path) -> Plan:
             format=fmt,
             phases=(),
             tasks=tuple(tasks),
+            preamble=preamble,
         )
 
 
@@ -79,6 +97,44 @@ def _extract(text: str, pattern: re.Pattern[str], default: str) -> str:
 def _extract_optional(text: str, pattern: re.Pattern[str]) -> str | None:
     m = pattern.search(text)
     return m.group(1).strip() if m else None
+
+
+def _find_header_divider(text: str) -> int | None:
+    """Return the byte offset of the first ``---`` line that is NOT inside a
+    fenced code block, or ``None`` if no such divider exists.
+
+    A simple ``text.find("\\n---")`` — or even a line-anchored regex — is wrong
+    here because preambles legitimately embed yaml frontmatter examples whose
+    own ``---`` delimiters sit on lines by themselves.  Track fence state as
+    we walk the text so those interior ``---``s are skipped.
+    """
+    in_fence = False
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.rstrip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and stripped == "---":
+            return pos
+        pos += len(line)
+    return None
+
+
+def _extract_preamble(text: str) -> str:
+    """Capture header content that isn't one of title/spec/status/goal.
+
+    Everything between the first line and the first ``---`` divider is
+    considered the header block.  The recognized structured fields
+    (``# Title``, ``**Spec:**``, ``**Status:**``, ``**Goal:**``) are filtered
+    out; the remainder is returned verbatim with leading/trailing blank lines
+    trimmed.
+    """
+    divider_idx = _find_header_divider(text)
+    header_block = text[:divider_idx] if divider_idx is not None else text
+    remainder = _RE_HEADER_STRUCTURED_LINE.sub("", header_block)
+    # Collapse runs of 3+ blank lines that structured-field removal created.
+    remainder = re.sub(r"\n{3,}", "\n\n", remainder)
+    return remainder.strip("\n")
 
 
 def _parse_phases(text: str) -> list[Phase]:
@@ -124,14 +180,15 @@ def _parse_tasks(text: str) -> list[Task]:
             section = section[: next_phase.start()]
 
         steps = _parse_steps(section)
-        files = _parse_files(section)
+        file_mentions = _parse_files(section)
         tasks.append(
             Task(
                 number=int(tm.group(1)),
                 title=tm.group(2).strip(),
                 tag=cast(_TagType, tm.group(3)) if tm.group(3) else None,
                 steps=tuple(steps),
-                files_mentioned=tuple(files),
+                files_mentioned=tuple(path for _verb, path in file_mentions),
+                file_mention_verbs=tuple(verb for verb, _path in file_mentions),
             )
         )
 
@@ -139,30 +196,57 @@ def _parse_tasks(text: str) -> list[Task]:
 
 
 def _parse_steps(text: str) -> list[Step]:
-    """Parse all steps from a task section."""
+    """Parse all steps from a task section.
+
+    The step regex also captures any trailing prose on the same line as the
+    bold ``**Step N: title**`` header.  When present, the trailing text is
+    merged into the step title — otherwise every loose-format step would be
+    silently dropped (see ``tests/unit/test_plan_loose_format.py``).
+    """
     step_matches = list(_RE_STEP.finditer(text))
     steps: list[Step] = []
 
     for i, sm in enumerate(step_matches):
         start = sm.end()
         end = step_matches[i + 1].start() if i + 1 < len(step_matches) else len(text)
-        body = text[start:end].strip()
+        # ``textwrap.dedent`` removes the common leading whitespace across
+        # every body line uniformly, which keeps a fenced code block's marker
+        # and its content at the same column.  Plain ``.strip()`` trimmed
+        # only the outer whitespace of the whole string, so the fence ``` went
+        # to column 0 while the fence's content kept its original indent.
+        body = textwrap.dedent(text[start:end]).rstrip()
 
         state_char = sm.group(1)
         state = state_char if state_char in (" ", "x", "-") else " "
 
+        bold_title = sm.group(3).strip()
+        trailing = sm.group(4).strip()
+        title = f"{bold_title} {trailing}".strip() if trailing else bold_title
+
+        raw_label = sm.group(2)
+        # For dotted labels (``"0.1"``), the leading integer is what downstream
+        # callers actually use for ordering; the full token is kept in ``label``.
+        number = int(raw_label.split(".", 1)[0])
+        label = raw_label if "." in raw_label else None
+
         steps.append(
             Step(
-                number=int(sm.group(2)),
-                title=sm.group(3).strip(),
+                number=number,
+                title=title,
                 body=body,
                 state=state,  # type: ignore[arg-type]
+                label=label,
             )
         )
 
     return steps
 
 
-def _parse_files(text: str) -> list[str]:
-    """Extract file mentions from a task section."""
-    return [m.group(1) for m in _RE_FILE_MENTION.finditer(text)]
+def _parse_files(text: str) -> list[tuple[str, str]]:
+    r"""Extract ``(verb, path)`` pairs from the ``**Files:**`` block.
+
+    Preserving the verb (Create/Edit/Test/Delete/Move/Rename/Modify) is what
+    keeps ``- Test: \`cmd\``` round-tripping instead of collapsing to a
+    fake ``- Create: \`cmd\``` on write.
+    """
+    return [(m.group(1), m.group(2)) for m in _RE_FILE_MENTION.finditer(text)]

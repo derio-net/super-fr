@@ -29,7 +29,12 @@ def write_plan(plan: Plan, path: Path) -> None:
 
 
 def _write_header(lines: list[str], plan: Plan) -> None:
-    """Write the plan header block."""
+    """Write the plan header block.
+
+    Emits structured fields in canonical order, then any free-form preamble
+    (``**Architecture:**``, ``**Tech Stack:**``, blockquotes, …) captured
+    by the parser so it survives round-trip.
+    """
     lines.append(f"# {plan.title}")
     lines.append("")
     if plan.spec:
@@ -37,6 +42,9 @@ def _write_header(lines: list[str], plan: Plan) -> None:
     lines.append(f"**Status:** {plan.status}")
     lines.append("")
     lines.append(f"**Goal:** {plan.goal}")
+    if plan.preamble:
+        lines.append("")
+        lines.append(plan.preamble)
 
 
 def _write_phases(lines: list[str], phases: tuple[Phase, ...]) -> None:
@@ -62,8 +70,10 @@ def _write_tasks(lines: list[str], tasks: tuple[Task, ...]) -> None:
         lines.append("")
         if task.files_mentioned:
             lines.append("**Files:**")
-            for f in task.files_mentioned:
-                lines.append(f"- Create: `{f}`")
+            verbs = task.file_mention_verbs
+            for i, f in enumerate(task.files_mentioned):
+                verb = verbs[i] if i < len(verbs) else "Create"
+                lines.append(f"- {verb}: `{f}`")
             lines.append("")
         _write_steps(lines, task.steps)
 
@@ -71,7 +81,8 @@ def _write_tasks(lines: list[str], tasks: tuple[Task, ...]) -> None:
 def _write_steps(lines: list[str], steps: tuple[Step, ...]) -> None:
     """Write all steps within a task."""
     for step in steps:
-        lines.append(f"- [{step.state}] **Step {step.number}: {step.title}**")
+        label = step.label if step.label is not None else str(step.number)
+        lines.append(f"- [{step.state}] **Step {label}: {step.title}**")
         if step.body:
             lines.append("")
             lines.append(step.body)

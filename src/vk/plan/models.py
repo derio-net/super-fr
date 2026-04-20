@@ -15,12 +15,19 @@ CheckboxState = Literal[" ", "x", "-"]  # unchecked, done, skipped
 
 @dataclass(frozen=True)
 class Step:
-    """A single checkbox step within a task."""
+    """A single checkbox step within a task.
+
+    ``number`` is the integer portion (used for ordering/arithmetic).
+    ``label`` is the raw token as written — including dotted forms like
+    ``"0.1"`` or ``"1.10"`` — which some plans use.  When ``label`` is set,
+    the writer emits it verbatim; otherwise it falls back to ``number``.
+    """
 
     number: int
     title: str
     body: str
     state: CheckboxState
+    label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -29,6 +36,11 @@ class Task:
 
     In flat format, tasks are top-level and carry ``[manual]``/``[agentic]`` tags.
     In phased format, tasks are nested under phases and inherit the phase tag.
+
+    ``file_mention_verbs`` is aligned 1:1 with ``files_mentioned`` when
+    populated (e.g. by the parser), so that ``- Edit: path`` and ``- Test: path``
+    round-trip with their verb instead of collapsing to ``Create:``.  Empty
+    tuple = treat every entry as ``Create``.
     """
 
     number: int
@@ -36,6 +48,7 @@ class Task:
     tag: Literal["manual", "agentic"] | None
     steps: tuple[Step, ...]
     files_mentioned: tuple[str, ...]
+    file_mention_verbs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -51,7 +64,14 @@ class Phase:
 
 @dataclass(frozen=True)
 class Plan:
-    """Root AST node for a parsed plan file."""
+    """Root AST node for a parsed plan file.
+
+    ``preamble`` is the block of free-form content between the recognized
+    header fields (title/spec/status/goal) and the first ``---`` divider —
+    typically ``**Architecture:**``, ``**Tech Stack:**``, blockquotes, or
+    operator notes.  It is preserved verbatim so ``vk plan convert`` doesn't
+    silently delete author-written context on round-trip.
+    """
 
     title: str
     spec: str | None
@@ -60,6 +80,7 @@ class Plan:
     format: PlanFormat
     phases: tuple[Phase, ...]  # populated in phased format
     tasks: tuple[Task, ...]  # populated in flat format
+    preamble: str = ""
 
     @property
     def all_tasks(self) -> tuple[Task, ...]:
