@@ -7,6 +7,7 @@ headers is preserved as raw strings for lossless round-trip.
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 from typing import Literal, cast
 
@@ -187,7 +188,12 @@ def _parse_steps(text: str) -> list[Step]:
     for i, sm in enumerate(step_matches):
         start = sm.end()
         end = step_matches[i + 1].start() if i + 1 < len(step_matches) else len(text)
-        body = text[start:end].strip()
+        # ``textwrap.dedent`` removes the common leading whitespace across
+        # every body line uniformly, which keeps a fenced code block's marker
+        # and its content at the same column.  Plain ``.strip()`` trimmed
+        # only the outer whitespace of the whole string, so the fence ``` went
+        # to column 0 while the fence's content kept its original indent.
+        body = textwrap.dedent(text[start:end]).rstrip()
 
         state_char = sm.group(1)
         state = state_char if state_char in (" ", "x", "-") else " "

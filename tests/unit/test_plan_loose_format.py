@@ -121,6 +121,28 @@ class TestDottedStepLabels:
         assert "**Step 0.2:" in text
 
 
+# --- Bug #5: step body indentation is not preserved on parse ---
+
+
+class TestStepBodyIndentation:
+    def test_dedent_preserves_fence_alignment(self, loose_plan):
+        step1 = loose_plan.tasks[0].steps[0]
+        lines = step1.body.splitlines()
+        fence_line = next(
+            (i for i, L in enumerate(lines) if L.lstrip().startswith("```")),
+            None,
+        )
+        assert fence_line is not None, "fixture should contain a fenced block"
+        content_line = lines[fence_line + 1]
+        assert not content_line.startswith(" "), (
+            "step body must be dedented uniformly — fence content is still "
+            f"indented: {content_line!r}"
+        )
+        assert not lines[fence_line].startswith(" "), (
+            f"fence marker must also sit at column 0: {lines[fence_line]!r}"
+        )
+
+
 # --- End-to-end regression: the kid-laptops scenario ---
 
 
