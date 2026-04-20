@@ -240,3 +240,16 @@ class TestDependsOnParsing:
         plan = parse_plan(p)
         assert plan.phases[0].depends_on == ()
         assert plan.phases[0].tracking_url == "https://github.com/o/r/issues/10"
+
+    def test_misplaced_after_task_raises(self, tmp_path: Path) -> None:
+        """**Depends on:** below the first task header must raise, not silently become root."""
+        content = (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: First [agentic]\n\n"
+            "### Task 1: Noop\n\n- [ ] **Step 1:** s\n\n"
+            "**Depends on:** Phase 2\n"  # in the WRONG place
+        )
+        p = tmp_path / "plan.md"
+        p.write_text(content)
+        with pytest.raises(ValueError, match="below the first task header"):
+            parse_plan(p)

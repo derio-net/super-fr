@@ -182,6 +182,22 @@ def _parse_phases(text: str) -> list[Phase]:
         phase_number = int(pm.group(1))
         depends_on = _parse_depends_on(prelude, phase_number)
 
+        # Spec §1.1: **Depends on:** must live directly under the
+        # ## Phase header (or its <!-- Tracking: ... --> comment); any
+        # other location is a parse error. A misplaced line below the
+        # first task header would otherwise be silently ignored, turning
+        # a dependent phase into a root.
+        if first_task is not None:
+            post_prelude = section[first_task.start() :]
+            if _DEPENDS_ON_RE.search(post_prelude):
+                raise ValueError(
+                    f"Phase {phase_number}: **Depends on:** line appears "
+                    f"below the first task header. It must sit directly "
+                    f"under the '## Phase {phase_number}:' header "
+                    f"(or its '<!-- Tracking: ... -->' comment if present). "
+                    f"Move the line up and re-run."
+                )
+
         tasks = _parse_tasks(section)
         phases.append(
             Phase(
