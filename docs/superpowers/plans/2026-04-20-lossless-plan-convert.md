@@ -14,6 +14,7 @@
 ---
 
 ## Phase 1: Loose step-header regex tolerates trailing prose [agentic]
+**Depends on:** —
 
 **Reason to exist:** The original `_RE_STEP` pattern required the checkbox line to END with `**`, which rejected the natural `**Step N: title** trailing prose.` shape authors use. Every such step was silently dropped — in kid-laptops plan 7, 8 of 9 steps per task disappeared.
 
@@ -44,6 +45,7 @@
 ---
 
 ## Phase 2: `**Files:**` verb preservation [agentic]
+**Depends on:** Phase 1
 
 **Reason to exist:** `_RE_FILE_MENTION` captured only the path; the verb (Create / Edit / Test / Delete / Move / Rename / Modify) was discarded. On write, every mention came back as `- Create: \`x\``, which turned lines like `- Test: \`cd roles/foo && molecule test\`` into bogus fake-file `- Create:` entries.
 
@@ -85,6 +87,7 @@
 ---
 
 ## Phase 3: `Plan.preamble` captures free-form header content [agentic]
+**Depends on:** Phase 2
 
 **Reason to exist:** The `Plan` AST only had slots for `title`, `spec`, `status`, `goal`. Anything else in the header (`**Architecture:**`, `**Tech Stack:**`, `> **For agentic workers:** ...` blockquote) was parsed to nothing and silently vanished on write.
 
@@ -151,6 +154,7 @@
 ---
 
 ## Phase 4: Dotted step labels (`Step 0.1`, `Step 1.10`) [agentic]
+**Depends on:** Phase 3
 
 **Reason to exist:** `_RE_STEP` matched only integer step numbers. Plans using dotted labels (kid-laptops plan 8 uses `Step 0.1` through `Step 0.4`, `Step 1.1` through `Step 1.10`, etc.) parsed as zero steps per task, and the writer emitted empty phase stubs.
 
@@ -212,6 +216,7 @@
 ---
 
 ## Phase 5: Preserve step-body indentation on parse [agentic]
+**Depends on:** Phase 4
 
 **Reason to exist:** `_parse_steps` does `body = text[start:end].strip()`. `str.strip()` removes whitespace only from the outer ends of the whole string, so the first body line's 2-space indent (nested inside a `- [ ]` list) is dropped while subsequent lines keep theirs. Result: the opening ```` ``` ```` fence marker ends up at column 0 while the fence's content retains its original indent. The code block still renders, but with a disorienting 2-space prefix on every line of code. The fix: uniformly dedent the body to its minimum common indent using `textwrap.dedent`.
 
