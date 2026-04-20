@@ -44,10 +44,21 @@ def _run_install(
     *extra_args: str,
     expect_fail: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Run install.sh with fake HOME, skipping uv tool install."""
+    """Run install.sh with fake HOME, stubbing uv so step 10 is a no-op."""
+    # install.sh preflights `uv` on PATH. setup-uv@v4 on CI installs it to
+    # $HOME/.local/bin, which isn't in the hermetic PATH below. Drop an
+    # executable stub in $HOME/bin so the preflight passes and step 10's
+    # `uv tool install` no-ops instead of polluting the runner's real uv.
+    bin_dir = fake_home / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    uv_stub = bin_dir / "uv"
+    if not uv_stub.exists():
+        uv_stub.write_text("#!/bin/sh\nexit 0\n")
+        uv_stub.chmod(0o755)
+
     env = {
         "HOME": str(fake_home),
-        "PATH": "/usr/bin:/bin:/usr/local/bin",
+        "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
     }
     result = subprocess.run(
         ["bash", str(INSTALL_SH), *extra_args],
