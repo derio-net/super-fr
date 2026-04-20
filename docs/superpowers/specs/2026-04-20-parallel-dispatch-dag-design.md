@@ -366,4 +366,5 @@ None at spec time. Phase A's unit tests will surface any grammar edge cases miss
 
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
-| *To be created via `vk-plan`.* | — | — | — | — |
+| *To be created via `vk-plan`.* | — | `—` | — | — |
+| Parallel Dispatch DAG Implementation Plan |  | `docs/superpowers/plans/2026-04-20-parallel-dispatch-dag.md` | Not Started | — |
