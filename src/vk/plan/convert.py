@@ -51,6 +51,7 @@ def to_flat(plan: Plan, *, force: bool = False) -> Plan:
                     tag=task.tag or phase.tag,
                     steps=task.steps,
                     files_mentioned=task.files_mentioned,
+                    file_mention_verbs=task.file_mention_verbs,
                 )
             )
             num += 1
@@ -63,6 +64,7 @@ def to_flat(plan: Plan, *, force: bool = False) -> Plan:
         format=PlanFormat.FLAT,
         phases=(),
         tasks=tuple(tasks),
+        preamble=plan.preamble,
     )
 
 
@@ -94,6 +96,7 @@ def to_phased_single(plan: Plan) -> Plan:
         format=PlanFormat.PHASED,
         phases=(phase,),
         tasks=(),
+        preamble=plan.preamble,
     )
 
 
@@ -111,6 +114,7 @@ def to_phased_one_per_task(plan: Plan) -> Plan:
             tag=None,
             steps=task.steps,
             files_mentioned=task.files_mentioned,
+            file_mention_verbs=task.file_mention_verbs,
         )
         phases.append(
             Phase(
@@ -130,6 +134,7 @@ def to_phased_one_per_task(plan: Plan) -> Plan:
         format=PlanFormat.PHASED,
         phases=tuple(phases),
         tasks=(),
+        preamble=plan.preamble,
     )
 
 
@@ -169,6 +174,7 @@ def to_phased_group_by_tag(plan: Plan) -> Plan:
         format=PlanFormat.PHASED,
         phases=tuple(phases),
         tasks=(),
+        preamble=plan.preamble,
     )
 
 
@@ -194,6 +200,7 @@ def _renumber_tasks(tasks: tuple[Task, ...]) -> tuple[Task, ...]:
             tag=t.tag,
             steps=t.steps,
             files_mentioned=t.files_mentioned,
+            file_mention_verbs=t.file_mention_verbs,
         )
         for i, t in enumerate(tasks)
     )
