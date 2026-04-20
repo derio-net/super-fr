@@ -88,3 +88,9 @@ class TestRelaxedValidator:
         body = self._body_with_deps("")
         with pytest.raises(BodyValidationError):
             validate_issue_body(body, phase_number=2)
+
+    def test_rejects_mixed_dashed_and_undashed(self) -> None:
+        """A body with both dashed AND undashed blocker lines must be rejected."""
+        body = self._body_with_deps("- Blocked by #5\nBlocked by #6")
+        with pytest.raises(BodyValidationError, match="non-dash-prefixed"):
+            validate_issue_body(body, phase_number=3)
