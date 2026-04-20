@@ -48,3 +48,49 @@ class TestValidateIssueBody:
         )
         with pytest.raises(BodyValidationError, match="- Blocked by"):
             validate_issue_body(body, phase_number=2)
+
+
+class TestRelaxedValidator:
+    """Validator accepts None literal or >=1 '- Blocked by #N' lines."""
+
+    def _body_with_deps(self, deps_block: str) -> str:
+        return (
+            "📦 Repo: o/r\n\n---\n\n"
+            "## Instruction\n\nDo stuff.\n\n"
+            "## Workspace\n\nRepos: o/r\n\n"
+            "## Dependencies\n\n"
+            f"{deps_block}\n"
+        )
+
+    def test_accepts_none_literal_for_root_phase(self) -> None:
+        validate_issue_body(self._body_with_deps("None — no blocking phases."), phase_number=1)
+
+    def test_accepts_single_blocker_for_non_root(self) -> None:
+        validate_issue_body(self._body_with_deps("- Blocked by #42"), phase_number=2)
+
+    def test_accepts_multiple_blockers(self) -> None:
+        validate_issue_body(
+            self._body_with_deps("- Blocked by #42\n- Blocked by #43"),
+            phase_number=3,
+        )
+
+    def test_rejects_missing_dependencies_section(self) -> None:
+        body = "## Instruction\n\nDo.\n\n## Workspace\n\nRepos: o/r\n\n"
+        with pytest.raises(BodyValidationError, match="Dependencies"):
+            validate_issue_body(body, phase_number=2)
+
+    def test_rejects_undashed_blocker_line(self) -> None:
+        body = self._body_with_deps("Blocked by #42")
+        with pytest.raises(BodyValidationError, match="dash-prefixed"):
+            validate_issue_body(body, phase_number=2)
+
+    def test_rejects_empty_dependencies_section_for_non_root(self) -> None:
+        body = self._body_with_deps("")
+        with pytest.raises(BodyValidationError):
+            validate_issue_body(body, phase_number=2)
+
+    def test_rejects_mixed_dashed_and_undashed(self) -> None:
+        """A body with both dashed AND undashed blocker lines must be rejected."""
+        body = self._body_with_deps("- Blocked by #5\nBlocked by #6")
+        with pytest.raises(BodyValidationError, match="non-dash-prefixed"):
+            validate_issue_body(body, phase_number=3)

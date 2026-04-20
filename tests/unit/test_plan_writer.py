@@ -95,11 +95,12 @@ def test_write_phased_plan(tmp_path: Path) -> None:
     """Write a phased plan and verify structure."""
     s1 = Step(number=1, title="Do it", body="Just do it.", state=" ")
     t1 = Task(number=1, title="Build", tag=None, steps=(s1,), files_mentioned=())
-    p1 = Phase(number=1, title="Core", tag="agentic", tasks=(t1,), tracking_url=None)
+    p1 = Phase(number=1, title="Core", tag="agentic", depends_on=(), tasks=(t1,), tracking_url=None)
     p2 = Phase(
         number=2,
         title="Release",
         tag="manual",
+        depends_on=(),
         tasks=(),
         tracking_url="https://github.com/org/repo/issues/99",
     )
@@ -142,3 +143,47 @@ def test_write_skipped_step(tmp_path: Path) -> None:
     write_plan(plan, path)
     text = path.read_text()
     assert "- [-] **Step 1: Skip me**" in text
+
+
+class TestDependsOnRoundTrip:
+    """Writer emits **Depends on:** so that parse -> write -> parse is lossless."""
+
+    def _build_plan_text(self) -> str:
+        return (
+            "# Fan In Plan\n\n"
+            "**Spec:** `specs/x.md`\n"
+            "**Status:** Not Started\n\n"
+            "**Goal:** Test.\n\n---\n\n"
+            "## Phase 1: Root A [agentic]\n"
+            "**Depends on:** —\n\n"
+            "### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n\n"
+            "## Phase 2: Root B [agentic]\n"
+            "**Depends on:** —\n\n"
+            "### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n\n"
+            "## Phase 3: Fan in [agentic]\n"
+            "**Depends on:** Phase 1, Phase 2\n\n"
+            "### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n"
+        )
+
+    def test_round_trip_preserves_depends_on(self, tmp_path: Path) -> None:
+        src = tmp_path / "src.md"
+        src.write_text(self._build_plan_text())
+        plan = parse_plan(src)
+
+        dst = tmp_path / "dst.md"
+        write_plan(plan, dst)
+
+        reparsed = parse_plan(dst)
+        assert tuple(p.depends_on for p in reparsed.phases) == ((), (), (1, 2))
+
+    def test_write_emits_emdash_for_roots(self, tmp_path: Path) -> None:
+        src = tmp_path / "src.md"
+        src.write_text(self._build_plan_text())
+        plan = parse_plan(src)
+
+        dst = tmp_path / "dst.md"
+        write_plan(plan, dst)
+
+        text = dst.read_text()
+        assert "**Depends on:** —" in text
+        assert "**Depends on:** Phase 1, Phase 2" in text

@@ -20,7 +20,7 @@
 - Modify: `src/vk/plan/parser.py`
 - Test: `tests/unit/test_plan_parser.py`
 
-- [ ] **Step 1: Write failing tests for the parser's `**Depends on:**` extraction**
+- [x] **Step 1: Write failing tests for the parser's `**Depends on:**` extraction**
 
 Append to `tests/unit/test_plan_parser.py`:
 
@@ -88,7 +88,7 @@ class TestDependsOnParsing:
         assert plan.phases[0].tracking_url == "https://github.com/o/r/issues/10"
 ```
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
@@ -96,7 +96,7 @@ uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
 
 Expected: all 7 tests FAIL because `depends_on` is not on `Phase` yet and the parser does not extract the line.
 
-- [ ] **Step 3: Add `depends_on` to the `Phase` dataclass**
+- [x] **Step 3: Add `depends_on` to the `Phase` dataclass**
 
 In `src/vk/plan/models.py`, add a `depends_on` field to `Phase`:
 
@@ -113,7 +113,7 @@ class Phase:
 
 Field order matters for `__init__`. Place `depends_on` after `tag` and before `tasks`. Update any constructor callers in the codebase (grep for `Phase(` to find them — likely only `parser.py` and test fixtures).
 
-- [ ] **Step 4: Implement the parser extraction**
+- [x] **Step 4: Implement the parser extraction**
 
 In `src/vk/plan/parser.py`, where phase blocks are parsed, extract the `**Depends on:**` line when present and compute `depends_on`:
 
@@ -149,7 +149,7 @@ Search scope for `_DEPENDS_ON_RE` is the slice between the phase header (plus an
 
 Call `_parse_depends_on(phase_body, phase_number)` during Phase construction and pass the result to the `depends_on=` keyword argument.
 
-- [ ] **Step 5: Run the tests to confirm they pass**
+- [x] **Step 5: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
@@ -163,7 +163,7 @@ uv run pytest tests/unit/test_plan_parser.py -v
 
 Expected: all pre-existing parser tests continue to pass (any fixtures without `**Depends on:**` parse with `depends_on=()`).
 
-- [ ] **Step 6: Quality gates**
+- [x] **Step 6: Quality gates**
 
 ```
 uv run ruff check src/vk/plan/models.py src/vk/plan/parser.py tests/unit/test_plan_parser.py
@@ -173,7 +173,7 @@ uv run mypy src/vk/plan/models.py src/vk/plan/parser.py
 
 Expected: PASS on all three.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```
 git add src/vk/plan/models.py src/vk/plan/parser.py tests/unit/test_plan_parser.py
@@ -186,7 +186,7 @@ git commit -m "feat(plan): parse **Depends on:** lines into Phase.depends_on"
 - Modify: `src/vk/plan/writer.py`
 - Test: `tests/unit/test_plan_writer.py`
 
-- [ ] **Step 1: Write a failing round-trip test**
+- [x] **Step 1: Write a failing round-trip test**
 
 Append to `tests/unit/test_plan_writer.py`:
 
@@ -237,7 +237,7 @@ class TestDependsOnRoundTrip:
 
 Ensure the test imports `parse_plan` and `write_plan` at the top.
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_plan_writer.py::TestDependsOnRoundTrip -v
@@ -245,7 +245,7 @@ uv run pytest tests/unit/test_plan_writer.py::TestDependsOnRoundTrip -v
 
 Expected: FAIL — writer does not emit the line yet.
 
-- [ ] **Step 3: Emit `**Depends on:**` in the writer**
+- [x] **Step 3: Emit `**Depends on:**` in the writer**
 
 In `src/vk/plan/writer.py`, after the phase header and any tracking comment are written, emit the `**Depends on:**` line:
 
@@ -259,7 +259,7 @@ def _format_depends_on(phase: Phase) -> str:
 
 Invoke `_format_depends_on(phase)` in the phase-block writer and append it directly after the tracking comment (or directly after the header line if no tracking comment), followed by a blank line and then the task blocks. Preserve existing spacing around task blocks.
 
-- [ ] **Step 4: Run the tests to confirm they pass**
+- [x] **Step 4: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_plan_writer.py -v
@@ -267,7 +267,7 @@ uv run pytest tests/unit/test_plan_writer.py -v
 
 Expected: PASS — both new tests plus all pre-existing writer tests.
 
-- [ ] **Step 5: Quality gates**
+- [x] **Step 5: Quality gates**
 
 ```
 uv run ruff check src/vk/plan/writer.py tests/unit/test_plan_writer.py
@@ -277,7 +277,7 @@ uv run mypy src/vk/plan/writer.py
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add src/vk/plan/writer.py tests/unit/test_plan_writer.py
@@ -292,7 +292,7 @@ git commit -m "feat(plan): writer emits **Depends on:** for phased plans"
 - Test: `tests/unit/test_dispatch_body.py`
 - Test: `tests/integration/test_dispatch.py`
 
-- [ ] **Step 1: Create the fan-in/fan-out fixture**
+- [x] **Step 1: Create the fan-in/fan-out fixture**
 
 Create `tests/fixtures/plans/phased-dag.md`:
 
@@ -342,7 +342,7 @@ Create `tests/fixtures/plans/phased-dag.md`:
 - [ ] **Step 1:** Nothing
 ```
 
-- [ ] **Step 2: Write failing unit tests for multi-blocker body emission**
+- [x] **Step 2: Write failing unit tests for multi-blocker body emission**
 
 Append to `tests/unit/test_dispatch_body.py`:
 
@@ -388,7 +388,7 @@ class TestMultiBlockerBody:
         assert idx_a < idx_b
 ```
 
-- [ ] **Step 3: Write a failing integration test for a fan-in dispatch**
+- [x] **Step 3: Write a failing integration test for a fan-in dispatch**
 
 Append to `tests/integration/test_dispatch.py`:
 
@@ -434,7 +434,7 @@ class TestDispatchFanIn:
         assert "None — no blocking phases." in phase1_body
 ```
 
-- [ ] **Step 4: Run the tests to confirm they fail**
+- [x] **Step 4: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_dispatch_body.py::TestMultiBlockerBody tests/integration/test_dispatch.py::TestDispatchFanIn -v
@@ -442,7 +442,7 @@ uv run pytest tests/unit/test_dispatch_body.py::TestMultiBlockerBody tests/integ
 
 Expected: FAIL — signature of `_build_issue_body` still takes `prev_num: int | None` and the create-loop still computes `prev_num = phase_to_issue.get(phase.number - 1)`.
 
-- [ ] **Step 5: Refactor `_build_issue_body` to accept `blocker_nums`**
+- [x] **Step 5: Refactor `_build_issue_body` to accept `blocker_nums`**
 
 In `src/vk/commands/dispatch_cmd.py`, replace the `prev_num` parameter with `blocker_nums: tuple[int, ...]`:
 
@@ -483,7 +483,7 @@ def _build_issue_body(
     )
 ```
 
-- [ ] **Step 6: Update `dispatch_create` to compute `blocker_nums` from `depends_on`**
+- [x] **Step 6: Update `dispatch_create` to compute `blocker_nums` from `depends_on`**
 
 In `src/vk/commands/dispatch_cmd.py::dispatch_create`, replace the existing `prev_num = phase_to_issue.get(phase.number - 1)` line with:
 
@@ -501,7 +501,7 @@ except KeyError as exc:
 
 Update the `_build_issue_body(...)` call to pass `blocker_nums=blocker_nums` instead of `prev_num=prev_num`.
 
-- [ ] **Step 7: Update `migrate` to use the same signature**
+- [x] **Step 7: Update `migrate` to use the same signature**
 
 In `src/vk/commands/dispatch_cmd.py::migrate`, the block that computes `prev_num` from `tracked[phase.number - 1]` becomes:
 
@@ -520,7 +520,7 @@ except KeyError as exc:
 
 Update the `_build_issue_body(...)` call in `migrate` to pass `blocker_nums=blocker_nums`.
 
-- [ ] **Step 8: Run the tests to confirm they pass**
+- [x] **Step 8: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py -v
@@ -528,7 +528,7 @@ uv run pytest tests/unit/test_dispatch_body.py tests/integration/test_dispatch.p
 
 Expected: PASS — new tests plus all pre-existing dispatch tests (they construct `Phase` fixtures; check that each one now passes `depends_on=...`).
 
-- [ ] **Step 9: Quality gates**
+- [x] **Step 9: Quality gates**
 
 ```
 uv run ruff check src/vk/commands/dispatch_cmd.py tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py
@@ -538,7 +538,7 @@ uv run mypy src/vk/commands/dispatch_cmd.py
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```
 git add src/vk/commands/dispatch_cmd.py tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py tests/fixtures/plans/phased-dag.md
@@ -551,7 +551,7 @@ git commit -m "feat(dispatch): emit one '- Blocked by #N' per declared dep"
 - Modify: `src/vk/commands/dispatch_body_validator.py`
 - Test: `tests/unit/test_dispatch_body_validator.py`
 
-- [ ] **Step 1: Write failing tests for the relaxed validator**
+- [x] **Step 1: Write failing tests for the relaxed validator**
 
 Append to `tests/unit/test_dispatch_body_validator.py`:
 
@@ -595,7 +595,7 @@ class TestRelaxedValidator:
             validate_issue_body(body, phase_number=2)
 ```
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_dispatch_body_validator.py::TestRelaxedValidator -v
@@ -603,7 +603,7 @@ uv run pytest tests/unit/test_dispatch_body_validator.py::TestRelaxedValidator -
 
 Expected: FAIL on the `None` literal test (today's validator rejects it for phase > 0).
 
-- [ ] **Step 3: Relax the validator**
+- [x] **Step 3: Relax the validator**
 
 Replace the contents of `src/vk/commands/dispatch_body_validator.py::validate_issue_body` with logic that accepts either form:
 
@@ -646,7 +646,7 @@ def validate_issue_body(body: str, phase_number: int) -> None:
         )
 ```
 
-- [ ] **Step 4: Run the tests to confirm they pass**
+- [x] **Step 4: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_dispatch_body_validator.py -v
@@ -654,7 +654,7 @@ uv run pytest tests/unit/test_dispatch_body_validator.py -v
 
 Expected: PASS — all 6 new tests plus all pre-existing validator tests.
 
-- [ ] **Step 5: Quality gates**
+- [x] **Step 5: Quality gates**
 
 ```
 uv run ruff check src/vk/commands/dispatch_body_validator.py tests/unit/test_dispatch_body_validator.py
@@ -664,7 +664,7 @@ uv run mypy src/vk/commands/dispatch_body_validator.py
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add src/vk/commands/dispatch_body_validator.py tests/unit/test_dispatch_body_validator.py
@@ -682,7 +682,7 @@ git commit -m "feat(dispatch): body validator accepts None literal or >=1 blocke
 
 Scope: cycle, forward-ref, self-ref, unknown-ref, grammar-via-parser. **Missing-line is deferred to Phase 2** so pre-DAG plans don't break self-review in the Phase 1 window.
 
-- [ ] **Step 1: Write failing tests for `validate_dag`**
+- [x] **Step 1: Write failing tests for `validate_dag`**
 
 Create `tests/unit/test_plan_validate.py`:
 
@@ -769,7 +769,7 @@ class TestSelfReviewDagChecks:
         assert "does not exist" in (result.stdout + (result.stderr or ""))
 ```
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [x] **Step 2: Run the tests to confirm they fail**
 
 ```
 uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py::TestSelfReviewDagChecks -v
@@ -777,7 +777,7 @@ uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py::TestSelfR
 
 Expected: FAIL — `validate_dag` does not exist and self-review doesn't call it.
 
-- [ ] **Step 3: Implement `validate_dag`**
+- [x] **Step 3: Implement `validate_dag`**
 
 Create `src/vk/plan/validate.py`:
 
@@ -818,7 +818,7 @@ def validate_dag(plan: Plan) -> None:
                 )
 ```
 
-- [ ] **Step 4: Wire `validate_dag` into `vk plan self-review`**
+- [x] **Step 4: Wire `validate_dag` into `vk plan self-review`**
 
 In `src/vk/commands/plan_cmd.py::self_review`, after the plan parses successfully, call `validate_dag(plan)` and map `DagValidationError` to a user-facing error with `typer.Exit(1)`.
 
@@ -833,11 +833,11 @@ except DagValidationError as exc:
     raise typer.Exit(1)
 ```
 
-- [ ] **Step 5: Wire `validate_dag` into `vk dispatch --dry-run`**
+- [x] **Step 5: Wire `validate_dag` into `vk dispatch --dry-run`**
 
 In `src/vk/commands/dispatch_cmd.py::dispatch_create`, after `_parse_and_validate(plan_path)` returns the `plan`, and before building any Issue body, call `validate_dag(plan)` with the same error mapping. Place it under the existing gate check so refusal reasons surface in dependency order: gate → parse → DAG validation.
 
-- [ ] **Step 6: Run the tests to confirm they pass**
+- [x] **Step 6: Run the tests to confirm they pass**
 
 ```
 uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py -v
@@ -845,7 +845,7 @@ uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py -v
 
 Expected: PASS — structural validator tests + self-review CLI tests + all pre-existing tests.
 
-- [ ] **Step 7: Quality gates**
+- [x] **Step 7: Quality gates**
 
 ```
 uv run ruff check src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py tests/unit/test_cli.py
@@ -855,7 +855,7 @@ uv run mypy src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```
 git add src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py tests/unit/test_cli.py

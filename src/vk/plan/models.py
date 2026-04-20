@@ -58,6 +58,7 @@ class Phase:
     number: int
     title: str
     tag: Literal["manual", "agentic"]
+    depends_on: tuple[int, ...]
     tasks: tuple[Task, ...]
     tracking_url: str | None
 

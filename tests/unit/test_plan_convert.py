@@ -38,8 +38,17 @@ def _make_phased_plan() -> Plan:
     t1 = _make_task(1, "agentic")
     t2 = _make_task(2, "agentic")
     t3 = _make_task(1, "manual")
-    p1 = Phase(number=1, title="Build", tag="agentic", tasks=(t1, t2), tracking_url=None)
-    p2 = Phase(number=2, title="Deploy", tag="manual", tasks=(t3,), tracking_url=None)
+    p1 = Phase(
+        number=1,
+        title="Build",
+        tag="agentic",
+        depends_on=(),
+        tasks=(t1, t2),
+        tracking_url=None,
+    )
+    p2 = Phase(
+        number=2, title="Deploy", tag="manual", depends_on=(), tasks=(t3,), tracking_url=None
+    )
     return Plan(
         title="Test",
         spec="spec.md",

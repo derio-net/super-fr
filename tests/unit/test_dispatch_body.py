@@ -17,7 +17,7 @@ from vk.plan.models import Phase
 
 
 def _make_phase(number: int, title: str = "Setup", tag: str = "agentic") -> Phase:
-    return Phase(number=number, title=title, tag=tag, tasks=(), tracking_url=None)
+    return Phase(number=number, title=title, tag=tag, depends_on=(), tasks=(), tracking_url=None)
 
 
 class TestBuildIssueBody:
@@ -26,7 +26,7 @@ class TestBuildIssueBody:
             _make_phase(0),
             Path("/tmp/plan.md"),
             "org/repo",
-            prev_num=None,
+            blocker_nums=(),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -39,7 +39,7 @@ class TestBuildIssueBody:
             _make_phase(0),
             Path("/tmp/plan.md"),
             "org/repo",
-            prev_num=None,
+            blocker_nums=(),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -52,7 +52,7 @@ class TestBuildIssueBody:
             _make_phase(2),
             Path("/tmp/plan.md"),
             "org/repo",
-            prev_num=5,
+            blocker_nums=(5,),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -65,33 +65,19 @@ class TestBuildIssueBody:
             _make_phase(0),
             Path("/tmp/plan.md"),
             "org/repo",
-            prev_num=None,
+            blocker_nums=(),
             total_phases=3,
             spec="s.md",
             goal="G.",
         )
         assert "None — no blocking phases." in body
 
-    def test_phase_one_no_prev_issue_raises(self) -> None:
-        import pytest
-
-        with pytest.raises(ValueError, match="no prev_num"):
-            _build_issue_body(
-                _make_phase(1),
-                Path("/tmp/plan.md"),
-                "org/repo",
-                prev_num=None,
-                total_phases=3,
-                spec="s.md",
-                goal="G.",
-            )
-
     def test_phase_with_prev_issue(self) -> None:
         body = _build_issue_body(
             _make_phase(3),
             Path("/tmp/plan.md"),
             "org/repo",
-            prev_num=42,
+            blocker_nums=(42,),
             total_phases=4,
             spec="s.md",
             goal="G.",
@@ -103,7 +89,7 @@ class TestBuildIssueBody:
             _make_phase(1, title="Bootstrap"),
             Path("/p.md"),
             "org/repo",
-            prev_num=10,
+            blocker_nums=(10,),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -115,7 +101,7 @@ class TestBuildIssueBody:
             _make_phase(0, tag="manual"),
             Path("/p.md"),
             "org/repo",
-            prev_num=None,
+            blocker_nums=(),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -128,7 +114,7 @@ class TestBuildIssueBody:
             _make_phase(0),
             plan,
             "org/repo",
-            prev_num=None,
+            blocker_nums=(),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -140,7 +126,7 @@ class TestBuildIssueBody:
             _make_phase(2, title="Integration"),
             Path("/p.md"),
             "org/repo",
-            prev_num=10,
+            blocker_nums=(10,),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -152,7 +138,7 @@ class TestBuildIssueBody:
             _make_phase(5, title="Deploy"),
             Path("/p.md"),
             "org/repo",
-            prev_num=10,
+            blocker_nums=(10,),
             total_phases=6,
             spec="s.md",
             goal="G.",
@@ -164,7 +150,7 @@ class TestBuildIssueBody:
             _make_phase(1, title="Bootstrap"),
             Path("docs/superpowers/plans/2026-04-14-feature.md"),
             "org/repo",
-            prev_num=10,
+            blocker_nums=(10,),
             total_phases=3,
             spec="docs/superpowers/specs/2026-04-14-feature-design.md",
             goal="Build a thing that does X.",
@@ -180,7 +166,7 @@ class TestBuildIssueBody:
             _make_phase(2),
             Path("/p.md"),
             "org/repo",
-            prev_num=42,
+            blocker_nums=(42,),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -192,7 +178,7 @@ class TestBuildIssueBody:
             _make_phase(0),
             Path("/p.md"),
             "org/repo",
-            prev_num=None,
+            blocker_nums=(),
             total_phases=3,
             spec="s.md",
             goal="G.",
@@ -240,12 +226,81 @@ class TestPlanPathForBody:
         assert result == Path("docs/plans/p.md")
 
 
+class TestMultiBlockerBody:
+    """_build_issue_body emits one '- Blocked by #N' per declared dep."""
+
+    def test_empty_blocker_nums_emits_none(self) -> None:
+        phase = Phase(
+            number=1,
+            title="Scaffold",
+            tag="agentic",
+            depends_on=(),
+            tasks=(),
+            tracking_url=None,
+        )
+        body = _build_issue_body(
+            phase=phase,
+            plan_path=Path("plans/x.md"),
+            target_repo="o/r",
+            blocker_nums=(),
+            total_phases=3,
+            spec="s.md",
+            goal="g",
+        )
+        assert "None — no blocking phases." in body
+        assert "- Blocked by #" not in body
+
+    def test_single_blocker_emits_one_line(self) -> None:
+        phase = Phase(
+            number=2,
+            title="Second",
+            tag="agentic",
+            depends_on=(1,),
+            tasks=(),
+            tracking_url=None,
+        )
+        body = _build_issue_body(
+            phase=phase,
+            plan_path=Path("plans/x.md"),
+            target_repo="o/r",
+            blocker_nums=(101,),
+            total_phases=3,
+            spec="s.md",
+            goal="g",
+        )
+        assert body.count("- Blocked by #") == 1
+        assert "- Blocked by #101" in body
+
+    def test_multi_blocker_emits_lines_in_declared_order(self) -> None:
+        phase = Phase(
+            number=5,
+            title="Fan in",
+            tag="agentic",
+            depends_on=(3, 4),
+            tasks=(),
+            tracking_url=None,
+        )
+        body = _build_issue_body(
+            phase=phase,
+            plan_path=Path("plans/x.md"),
+            target_repo="o/r",
+            blocker_nums=(203, 204),
+            total_phases=5,
+            spec="s.md",
+            goal="g",
+        )
+        idx_a = body.index("- Blocked by #203")
+        idx_b = body.index("- Blocked by #204")
+        assert idx_a < idx_b
+
+
 class TestBuildIssueTitle:
     def test_title_format(self) -> None:
         phase = Phase(
             number=2,
             title="Content Migration",
             tag="agentic",
+            depends_on=(),
             tasks=(),
             tracking_url=None,
         )
@@ -253,6 +308,13 @@ class TestBuildIssueTitle:
         assert title == "[derio-net/frank] blog-hextra · Phase 2/5 · Content Migration"
 
     def test_manual_phase_title(self) -> None:
-        phase = Phase(number=0, title="Operator Review", tag="manual", tasks=(), tracking_url=None)
+        phase = Phase(
+            number=0,
+            title="Operator Review",
+            tag="manual",
+            depends_on=(),
+            tasks=(),
+            tracking_url=None,
+        )
         title = _build_issue_title("my-plan", phase, target_repo="org/repo", total=1)
         assert title == "[org/repo] my-plan · Phase 0/1 · Operator Review"
