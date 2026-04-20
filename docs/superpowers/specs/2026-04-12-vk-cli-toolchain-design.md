@@ -101,7 +101,6 @@ superpowers-for-vk/
 │           ├── progress_cmd.py
 │           ├── execute_cmd.py
 │           ├── init_cmd.py
-│           ├── install_cmd.py
 │           └── common.py
 ├── tests/
 │   ├── conftest.py
@@ -699,12 +698,13 @@ Depends on: P2.
 
 ### P5: SKILL.md rewrites + `vk init` + `vk install-skills` [agentic]
 
+Replace all four prose SKILL.md files with thin wrappers. Add utility commands.
+
 > **Historical note (2026-04-20):** `vk install-skills` was removed in v1.0.16.
 > Skills are now delivered exclusively by the Claude Code plugin system via
-> `scripts/install.sh`. The P5 section below documents the build as it
-> happened; the `install_cmd.py` file it delivered no longer exists.
-
-Replace all four prose SKILL.md files with thin wrappers. Add utility commands.
+> `scripts/install.sh`. The "Delivers" and "Exit criteria" below document the
+> original P5 build; `install_cmd.py` and the `vk install-skills` subcommand
+> no longer exist.
 
 Delivers: four new SKILL.md files (total ~275 lines), `init_cmd.py`, `install_cmd.py`, skill validation tests. Deletes `scripts/validate-skills.sh`.
 
