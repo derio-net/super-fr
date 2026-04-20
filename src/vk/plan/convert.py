@@ -27,7 +27,11 @@ class MixedPlanError(ValueError):
 
 
 _DEPENDS_LINE_RE = re.compile(r"^\*\*Depends on:\*\*", re.MULTILINE)
-_PHASE_HEADER_RE = re.compile(r"^## Phase (\d+):.*\[(manual|agentic)\][ \t]*$", re.MULTILINE)
+# Tag is optional — matches the parser's ``_RE_PHASE`` so a phased plan
+# with a missing ``[agentic]``/``[manual]`` tag still migrates instead of
+# silently no-op'ing. (The ``vk plan self-review`` check surfaces the
+# missing tag separately.)
+_PHASE_HEADER_RE = re.compile(r"^## Phase (\d+):.*$", re.MULTILINE)
 
 
 def add_deps(plan_path: Path) -> None:
@@ -36,9 +40,16 @@ def add_deps(plan_path: Path) -> None:
     Phase 1 gets '—'; phase N (N>=2) gets 'Phase {N-1}'. Idempotent: phases
     that already have the line are left alone. If some phases have the line
     and others do not, raise MixedPlanError without writing.
+
+    Fenced code blocks in the plan are ignored during phase-header scanning
+    so that plan-format examples embedded in documentation don't get
+    confused with real phases.
     """
+    from vk.plan.parser import _strip_fenced_regions
+
     text = plan_path.read_text()
-    headers = list(_PHASE_HEADER_RE.finditer(text))
+    scan_text = _strip_fenced_regions(text)
+    headers = list(_PHASE_HEADER_RE.finditer(scan_text))
     if not headers:
         return  # nothing to do; not a phased plan
 
@@ -47,7 +58,9 @@ def add_deps(plan_path: Path) -> None:
     for i, match in enumerate(headers):
         end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
         slices.append((match.end(), end))
-    has_line = [bool(_DEPENDS_LINE_RE.search(text[s:e])) for s, e in slices]
+    # Check the fence-stripped text so a **Depends on:** inside a fenced
+    # example doesn't look like a declaration on a real phase.
+    has_line = [bool(_DEPENDS_LINE_RE.search(scan_text[s:e])) for s, e in slices]
 
     if any(has_line) and not all(has_line):
         offenders_with = [

@@ -259,3 +259,45 @@ class TestAddDeps:
         )
         with pytest.raises(MixedPlanError, match="declare both or neither"):
             add_deps(dst)
+
+    def test_add_deps_on_tagless_phased_plan(self, tmp_path: Path) -> None:
+        """A phased plan without ``[agentic]``/``[manual]`` tags is still a
+        phased plan; ``add_deps`` must migrate it, not silently no-op.
+        """
+        dst = tmp_path / "p.md"
+        dst.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: Alpha\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n\n"
+            "## Phase 2: Beta\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n"
+        )
+        add_deps(dst)
+        text = dst.read_text()
+        assert "## Phase 1: Alpha\n**Depends on:** —" in text
+        assert "## Phase 2: Beta\n**Depends on:** Phase 1" in text
+
+    def test_add_deps_ignores_fenced_phase_headers(self, tmp_path: Path) -> None:
+        """``## Phase N:`` inside a fenced code block must not be treated as a
+        real phase header during migration (regression for PR #32 review I-1).
+        """
+        dst = tmp_path / "p.md"
+        dst.write_text(
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: Alpha [agentic]\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n\n"
+            "Here's an embedded example:\n\n"
+            "```markdown\n"
+            "## Phase 42: Fence [agentic]\n"
+            "**Depends on:** Phase 99\n"
+            "```\n\n"
+            "## Phase 2: Beta [agentic]\n\n"
+            "### Task 1: T\n\n- [ ] **Step 1: s**\n"
+        )
+        add_deps(dst)
+        text = dst.read_text()
+        # Real phases got migrated.
+        assert "## Phase 1: Alpha [agentic]\n**Depends on:** —" in text
+        assert "## Phase 2: Beta [agentic]\n**Depends on:** Phase 1" in text
+        # Fenced block is unchanged.
+        assert "## Phase 42: Fence [agentic]\n**Depends on:** Phase 99" in text
