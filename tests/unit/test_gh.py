@@ -16,6 +16,8 @@ from vk.gh import (
     close_issue,
     create_issue,
     edit_issue_body,
+    ensure_label,
+    ensure_labels,
     set_field,
 )
 
@@ -168,3 +170,78 @@ class TestRunGhError:
         ):
             with pytest.raises(GhError):
                 create_issue(repo="org/repo", title="T", body="B", labels=[])
+
+
+class TestEnsureLabel:
+    """`ensure_label` creates a label via `gh label create --force`, which
+    is idempotent: creates if missing, updates color/description if present.
+    Without this, `vk dispatch` fails hard on any repo that doesn't already
+    have `vk-ready`, `manual`, `plan:<slug>`, `phase:<n>` — which was the
+    silent-partial-dispatch failure mode on content-factory and kid-laptops.
+    """
+
+    def test_calls_gh_label_create_with_force(self) -> None:
+        with patch("vk.gh._run_gh") as mock:
+            ensure_label(repo="org/repo", name="vk-ready")
+            mock.assert_called_once()
+            args = mock.call_args[0][0]
+            assert args[:3] == ["label", "create", "vk-ready"]
+            assert "--force" in args
+            assert "--repo" in args
+            assert "org/repo" in args
+            assert "--color" in args  # a default color is always supplied
+
+    def test_includes_description_when_given(self) -> None:
+        with patch("vk.gh._run_gh") as mock:
+            ensure_label(
+                repo="org/repo",
+                name="vk-ready",
+                description="Ready for VK pickup",
+            )
+            args = mock.call_args[0][0]
+            assert "--description" in args
+            assert "Ready for VK pickup" in args
+
+    def test_omits_description_by_default(self) -> None:
+        with patch("vk.gh._run_gh") as mock:
+            ensure_label(repo="org/repo", name="vk-ready")
+            args = mock.call_args[0][0]
+            assert "--description" not in args
+
+    def test_propagates_gh_error(self) -> None:
+        with patch("vk.gh._run_gh", side_effect=GhError("permission denied")):
+            with pytest.raises(GhError, match="permission denied"):
+                ensure_label(repo="org/repo", name="vk-ready")
+
+
+class TestEnsureLabels:
+    def test_calls_once_per_name(self) -> None:
+        with patch("vk.gh._run_gh") as mock:
+            ensure_labels(repo="org/repo", labels=["a", "b", "c"])
+            assert mock.call_count == 3
+            names = [call[0][0][2] for call in mock.call_args_list]
+            assert names == ["a", "b", "c"]
+
+    def test_empty_list_is_noop(self) -> None:
+        with patch("vk.gh._run_gh") as mock:
+            ensure_labels(repo="org/repo", labels=[])
+            mock.assert_not_called()
+
+    def test_error_aborts_remaining(self) -> None:
+        """First failure surfaces — caller decides recovery. Don't
+        silently swallow failures mid-batch (partial label state is
+        worse than no labels at all)."""
+        calls: list[str] = []
+
+        def side_effect(args: list[str]) -> str:
+            name = args[2]
+            calls.append(name)
+            if name == "b":
+                raise GhError("fail on b")
+            return ""
+
+        with patch("vk.gh._run_gh", side_effect=side_effect):
+            with pytest.raises(GhError, match="fail on b"):
+                ensure_labels(repo="org/repo", labels=["a", "b", "c"])
+        # Stopped at b — did not proceed to c
+        assert calls == ["a", "b"]

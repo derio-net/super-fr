@@ -94,6 +94,45 @@ def edit_issue_body(*, repo: str, number: int, body: str) -> None:
     _run_gh(["issue", "edit", str(number), "--repo", repo, "--body", body])
 
 
+def ensure_label(
+    *,
+    repo: str,
+    name: str,
+    color: str = "ededed",
+    description: str = "",
+) -> None:
+    """Create (or update) a label on the target repo.
+
+    Uses ``gh label create --force``, which is idempotent: creates the label
+    if missing, updates its color/description if present. Without this,
+    ``gh issue create --label X`` fails hard on any repo that doesn't
+    already have X — which silently breaks ``vk dispatch`` on new repos.
+    """
+    args = [
+        "label",
+        "create",
+        name,
+        "--repo",
+        repo,
+        "--force",
+        "--color",
+        color,
+    ]
+    if description:
+        args.extend(["--description", description])
+    _run_gh(args)
+
+
+def ensure_labels(*, repo: str, labels: list[str]) -> None:
+    """Ensure every label exists on the repo; first failure propagates.
+
+    Fails loud on the first error so callers can abort before creating
+    Issues that would end up in a partial-label state.
+    """
+    for name in labels:
+        ensure_label(repo=repo, name=name)
+
+
 def close_issue(*, repo: str, number: int) -> None:
     """Close a GitHub Issue by number."""
     _run_gh(

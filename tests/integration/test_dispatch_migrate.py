@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from vk.cli import app
@@ -245,3 +246,63 @@ class TestMigrateApply:
         result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
         assert result.exit_code != 0
         assert "Migrated #1" in result.output
+
+class TestMigrateEnsuresLabels:
+    """vk dispatch migrate must also bootstrap labels — it calls edit_issue
+    with `plan:<slug>` and `phase:<n>` add_labels, which fails hard if the
+    labels do not already exist on the target repo."""
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_migrate_calls_ensure_labels_per_repo(
+        self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
+    ) -> None:
+        plan = tmp_repo / "docs" / "superpowers" / "plans" / "2026-04-14-test-ensure.md"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        _write_plan(
+            plan,
+            [
+                (0, "A", "https://github.com/org/r/issues/1"),
+                (1, "B", "https://github.com/org/r/issues/2"),
+            ],
+        )
+        mock_gh.view_issue.return_value = {
+            "state": "OPEN", "title": "old", "body": "b", "labels": [],
+        }
+        mock_gh.extract_issue_number.side_effect = [1, 2, 1, 2]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        mock_gh.ensure_labels.assert_called_once()
+        kwargs = mock_gh.ensure_labels.call_args.kwargs
+        assert kwargs["repo"] == "org/r"
+        labels = set(kwargs["labels"])
+        assert "plan:test-ensure" in labels
+        assert "phase:0" in labels
+        assert "phase:1" in labels
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_migrate_aborts_when_ensure_labels_fails(
+        self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
+    ) -> None:
+        plan = tmp_repo / "docs" / "superpowers" / "plans" / "2026-04-14-test-ensure-fail.md"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        _write_plan(
+            plan,
+            [
+                (0, "A", "https://github.com/org/r/issues/1"),
+                (1, "B", "https://github.com/org/r/issues/2"),
+            ],
+        )
+        mock_gh.view_issue.return_value = {
+            "state": "OPEN", "title": "old", "body": "b", "labels": [],
+        }
+        mock_gh.extract_issue_number.side_effect = [1, 2, 1, 2]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+        mock_gh.ensure_labels.side_effect = mock_gh.GhError("permission denied")
+
+        result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+        assert result.exit_code != 0
+        mock_gh.edit_issue.assert_not_called()
+
