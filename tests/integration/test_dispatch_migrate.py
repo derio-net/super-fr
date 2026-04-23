@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from vk.cli import app
@@ -247,6 +246,7 @@ class TestMigrateApply:
         assert result.exit_code != 0
         assert "Migrated #1" in result.output
 
+
 class TestMigrateEnsuresLabels:
     """vk dispatch migrate must also bootstrap labels — it calls edit_issue
     with `plan:<slug>` and `phase:<n>` add_labels, which fails hard if the
@@ -266,7 +266,10 @@ class TestMigrateEnsuresLabels:
             ],
         )
         mock_gh.view_issue.return_value = {
-            "state": "OPEN", "title": "old", "body": "b", "labels": [],
+            "state": "OPEN",
+            "title": "old",
+            "body": "b",
+            "labels": [],
         }
         mock_gh.extract_issue_number.side_effect = [1, 2, 1, 2]
         mock_gh.GhError = type("GhError", (Exception,), {})
@@ -296,7 +299,10 @@ class TestMigrateEnsuresLabels:
             ],
         )
         mock_gh.view_issue.return_value = {
-            "state": "OPEN", "title": "old", "body": "b", "labels": [],
+            "state": "OPEN",
+            "title": "old",
+            "body": "b",
+            "labels": [],
         }
         mock_gh.extract_issue_number.side_effect = [1, 2, 1, 2]
         mock_gh.GhError = type("GhError", (Exception,), {})
@@ -305,4 +311,3 @@ class TestMigrateEnsuresLabels:
         result = runner.invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
         assert result.exit_code != 0
         mock_gh.edit_issue.assert_not_called()
-
