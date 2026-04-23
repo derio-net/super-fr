@@ -284,18 +284,18 @@ def dispatch_create(
     # plan:<slug> / phase:<n> don't yet exist.
     agentic_label = dispatch_cfg.labels.get("agentic", "vk-ready")
     manual_label = dispatch_cfg.labels.get("manual", "manual")
-    required_labels = sorted({
-        agentic_label,
-        manual_label,
-        f"plan:{slug}",
-        *(f"phase:{p.number}" for p in plan.phases),
-    })
+    required_labels = sorted(
+        {
+            agentic_label,
+            manual_label,
+            f"plan:{slug}",
+            *(f"phase:{p.number}" for p in plan.phases),
+        }
+    )
     try:
         gh.ensure_labels(repo=target_repo, labels=required_labels)
     except gh.GhError as exc:
-        err_console.print(
-            f"Error: Could not ensure labels on {target_repo}: {exc}"
-        )
+        err_console.print(f"Error: Could not ensure labels on {target_repo}: {exc}")
         raise typer.Exit(4) from exc
 
     for phase_num, url in already_tracked.items():
