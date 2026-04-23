@@ -279,6 +279,25 @@ def dispatch_create(
     errors: dict[int, str] = {}
     phase_to_issue: dict[int, int] = {}
 
+    # Bootstrap labels on the target repo. Idempotent (gh label create --force).
+    # Prevents silent-partial-dispatch on repos where vk-ready / manual /
+    # plan:<slug> / phase:<n> don't yet exist.
+    agentic_label = dispatch_cfg.labels.get("agentic", "vk-ready")
+    manual_label = dispatch_cfg.labels.get("manual", "manual")
+    required_labels = sorted({
+        agentic_label,
+        manual_label,
+        f"plan:{slug}",
+        *(f"phase:{p.number}" for p in plan.phases),
+    })
+    try:
+        gh.ensure_labels(repo=target_repo, labels=required_labels)
+    except gh.GhError as exc:
+        err_console.print(
+            f"Error: Could not ensure labels on {target_repo}: {exc}"
+        )
+        raise typer.Exit(4) from exc
+
     for phase_num, url in already_tracked.items():
         try:
             phase_to_issue[phase_num] = gh.extract_issue_number(url)
@@ -512,6 +531,21 @@ def migrate(
         for r in rewrites:
             console.print(f"\n#{r['number']}  {r['old_title']}  →  {r['new_title']}")
         confirm_or_exit("Apply these migrations?")
+
+    # Ensure plan:<slug> and phase:<n> labels exist on every target repo
+    # before the edit loop. Rewrites may span multiple repos if the plan
+    # dispatched cross-repo Issues, so we group by repo.
+    labels_by_repo: dict[str, set[str]] = {}
+    for r in rewrites:
+        labels_by_repo.setdefault(r["repo"], set()).update(
+            {f"plan:{slug}", f"phase:{r['phase_number']}"}
+        )
+    for repo_name, needed in labels_by_repo.items():
+        try:
+            gh.ensure_labels(repo=repo_name, labels=sorted(needed))
+        except gh.GhError as exc:
+            err_console.print(f"Error ensuring labels on {repo_name}: {exc}")
+            raise typer.Exit(4) from exc
 
     for r in rewrites:
         try:

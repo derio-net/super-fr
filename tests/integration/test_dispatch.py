@@ -220,6 +220,92 @@ class TestDispatchLabels:
             assert labs[0] in ("vk-ready", "manual"), f"First label should be tag label: {labs}"
 
 
+class TestDispatchEnsuresLabels:
+    """vk dispatch must ensure required labels exist on the target repo
+    before creating Issues. Without this, `gh issue create --label X` fails
+    hard on any repo that hasn't had the labels hand-created, which was the
+    silent-partial-dispatch failure mode on content-factory and kid-laptops.
+    """
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_dispatch_calls_ensure_labels_with_full_set(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        mock_gh.create_issue.side_effect = [
+            "https://github.com/derio-net/test-repo/issues/100",
+            "https://github.com/derio-net/test-repo/issues/101",
+            "https://github.com/derio-net/test-repo/issues/102",
+        ]
+        mock_gh.extract_issue_number.side_effect = [100, 101, 102]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        mock_gh.ensure_labels.assert_called_once()
+        kwargs = mock_gh.ensure_labels.call_args.kwargs
+        assert kwargs["repo"] == "derio-net/test-repo"
+        labels = set(kwargs["labels"])
+        # Full expected label set for a 3-phase plan (agentic, manual, agentic)
+        assert "vk-ready" in labels
+        assert "manual" in labels
+        assert "plan:test-feature" in labels
+        assert "phase:0" in labels
+        assert "phase:1" in labels
+        assert "phase:2" in labels
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_ensure_labels_called_before_any_create_issue(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """The label-bootstrap call must run before the first create_issue,
+        so a missing label doesn't tear down a partial dispatch."""
+        call_order: list[str] = []
+
+        def _ensure(repo: str, labels: list[str]) -> None:
+            call_order.append("ensure_labels")
+
+        def _create(*, repo: str, title: str, body: str, labels: list[str]) -> str:
+            call_order.append("create_issue")
+            return "https://github.com/derio-net/test-repo/issues/100"
+
+        mock_gh.ensure_labels.side_effect = _ensure
+        mock_gh.create_issue.side_effect = _create
+        mock_gh.extract_issue_number.return_value = 100
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        assert call_order[0] == "ensure_labels", call_order
+        assert "create_issue" in call_order
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_ensure_labels_failure_aborts_before_any_issue(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """If label bootstrap fails hard, dispatch must abort WITHOUT
+        creating any Issues. Partial state is the whole bug we're fixing."""
+        mock_gh.GhError = type("GhError", (Exception,), {})
+        mock_gh.ensure_labels.side_effect = mock_gh.GhError("permission denied")
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code != 0
+        mock_gh.create_issue.assert_not_called()
+
+
 class TestDispatchGitCommit:
     @patch("vk.commands.dispatch_cmd.gh")
     def test_git_commit_failure_surfaces(
