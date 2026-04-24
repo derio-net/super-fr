@@ -260,7 +260,7 @@ Pure library code under `src/vk/plan/rework.py`. No typer imports, no CLI surfac
 - Create: `src/vk/plan/rework.py`
 - Create: `tests/unit/test_rework.py`
 
-- [ ] **Step 1: Write failing tests for `next_rework_number`**
+- [x] **Step 1: Write failing tests for `next_rework_number`**
 
 Create `tests/unit/test_rework.py`:
 
@@ -324,7 +324,7 @@ class TestNextReworkNumber:
 
 Run: `uv run pytest tests/unit/test_rework.py -x -q` — expect import failure (file doesn't exist yet).
 
-- [ ] **Step 2: Create `src/vk/plan/rework.py` with `next_rework_number`**
+- [x] **Step 2: Create `src/vk/plan/rework.py` with `next_rework_number`**
 
 ```python
 """Rework-plan scaffolding, Origin-table I/O, and numbering helpers.
@@ -394,7 +394,7 @@ Run: `uv run pytest tests/unit/test_rework.py -x -q` — expect green.
 - Modify: `src/vk/plan/rework.py`
 - Modify: `tests/unit/test_rework.py`
 
-- [ ] **Step 1: Write failing tests for `render_scaffold`**
+- [x] **Step 1: Write failing tests for `render_scaffold`**
 
 Append to `tests/unit/test_rework.py`:
 
@@ -461,7 +461,7 @@ class TestRenderScaffold:
 
 Run tests — expect import failure on `render_scaffold`.
 
-- [ ] **Step 2: Add the template literal and `render_scaffold()` to `rework.py`**
+- [x] **Step 2: Add the template literal and `render_scaffold()` to `rework.py`**
 
 Append to `src/vk/plan/rework.py`:
 
@@ -529,7 +529,7 @@ def render_scaffold(
 
 Run `uv run pytest tests/unit/test_rework.py::TestRenderScaffold -x -q` — expect green.
 
-- [ ] **Step 3: Pin the no-H1-fallback title path**
+- [x] **Step 3: Pin the no-H1-fallback title path**
 
 Append to `TestRenderScaffold`:
 
@@ -558,7 +558,7 @@ Run — expect green. This locks the spec §3 fallback-title rule.
 - Create: `tests/fixtures/rework/rework_with_rows.md`
 - Create: `tests/fixtures/rework/rework_malformed_origin.md`
 
-- [ ] **Step 1: Write the three Origin-table fixtures**
+- [x] **Step 1: Write the three Origin-table fixtures**
 
 Create `tests/fixtures/rework/rework_empty.md`:
 
@@ -636,7 +636,7 @@ Create `tests/fixtures/rework/rework_malformed_origin.md`:
 - [ ] TODO.
 ```
 
-- [ ] **Step 2: Write failing tests for `parse_origin_table`**
+- [x] **Step 2: Write failing tests for `parse_origin_table`**
 
 Append to `tests/unit/test_rework.py`:
 
@@ -672,7 +672,7 @@ class TestParseOriginTable:
 
 Run — expect import failure on `OriginRow`, `parse_origin_table`.
 
-- [ ] **Step 3: Implement `OriginRow` and `parse_origin_table`**
+- [x] **Step 3: Implement `OriginRow` and `parse_origin_table`**
 
 Append to `src/vk/plan/rework.py`:
 
@@ -747,7 +747,7 @@ Run `uv run pytest tests/unit/test_rework.py::TestParseOriginTable -x -q` — ex
 - Modify: `src/vk/plan/rework.py`
 - Modify: `tests/unit/test_rework.py`
 
-- [ ] **Step 1: Write failing round-trip tests for `append_origin_row`**
+- [x] **Step 1: Write failing round-trip tests for `append_origin_row`**
 
 Append to `tests/unit/test_rework.py`:
 
@@ -795,7 +795,7 @@ class TestAppendOriginRow:
 
 Run — expect import failure on `append_origin_row`.
 
-- [ ] **Step 2: Implement `append_origin_row`**
+- [x] **Step 2: Implement `append_origin_row`**
 
 Append to `src/vk/plan/rework.py`:
 
@@ -851,7 +851,7 @@ def append_origin_row(path: Path, row: OriginRow) -> None:
 
 Run `uv run pytest tests/unit/test_rework.py::TestAppendOriginRow -x -q` — expect green.
 
-- [ ] **Step 3: Full `test_rework.py` suite + whole-tree regression**
+- [x] **Step 3: Full `test_rework.py` suite + whole-tree regression**
 
 ```bash
 uv run pytest tests/unit/test_rework.py -q
