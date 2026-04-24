@@ -1292,7 +1292,7 @@ All green.
 - Modify: `src/vk/commands/plan_cmd.py`
 - Create: `tests/integration/test_plan_rework_add.py`
 
-- [ ] **Step 1: Write failing happy-path integration test**
+- [x] **Step 1: Write failing happy-path integration test**
 
 ```python
 """Integration tests for ``vk plan rework-add``."""
@@ -1341,7 +1341,7 @@ def test_rework_add_happy_path(tmp_path: Path, monkeypatch) -> None:
 
 Run — expect failure (command missing).
 
-- [ ] **Step 2: Register `vk plan rework-add`**
+- [x] **Step 2: Register `vk plan rework-add`**
 
 In `plan_cmd.py`:
 
@@ -1399,7 +1399,7 @@ Run — expect happy-path green.
 **Files:**
 - Modify: `tests/integration/test_plan_rework_add.py`
 
-- [ ] **Step 1: Test — canonical tracks emit NO warn**
+- [x] **Step 1: Test — canonical tracks emit NO warn**
 
 ```python
 def test_rework_add_canonical_track_no_warn(tmp_path: Path, monkeypatch) -> None:
@@ -1417,7 +1417,7 @@ def test_rework_add_canonical_track_no_warn(tmp_path: Path, monkeypatch) -> None
         assert "not a canonical token" not in result.stderr
 ```
 
-- [ ] **Step 2: Test — non-canonical track warns, still succeeds**
+- [x] **Step 2: Test — non-canonical track warns, still succeeds**
 
 ```python
 def test_rework_add_non_canonical_track_warns(tmp_path: Path, monkeypatch) -> None:
@@ -1434,7 +1434,7 @@ def test_rework_add_non_canonical_track_warns(tmp_path: Path, monkeypatch) -> No
     assert "not a canonical token" in result.stderr
 ```
 
-- [ ] **Step 3: Test — empty flag value exits 2 naming the flag**
+- [x] **Step 3: Test — empty flag value exits 2 naming the flag**
 
 ```python
 import pytest
@@ -1460,7 +1460,7 @@ def test_rework_add_empty_flag_exits_2(
     assert "is required and must be non-empty" in result.stderr
 ```
 
-- [ ] **Step 4: Test — newline in any flag exits 2**
+- [x] **Step 4: Test — newline in any flag exits 2**
 
 ```python
 def test_rework_add_newline_rejected(tmp_path: Path, monkeypatch) -> None:
@@ -1477,7 +1477,7 @@ def test_rework_add_newline_rejected(tmp_path: Path, monkeypatch) -> None:
     assert "must not contain newlines" in result.stderr
 ```
 
-- [ ] **Step 5: Test — pipe escape round-trips**
+- [x] **Step 5: Test — pipe escape round-trips**
 
 ```python
 def test_rework_add_pipe_escape_roundtrip(tmp_path: Path, monkeypatch) -> None:
@@ -1497,7 +1497,7 @@ def test_rework_add_pipe_escape_roundtrip(tmp_path: Path, monkeypatch) -> None:
     assert parse_origin_table(path)[0].item == "wire | pipe"
 ```
 
-- [ ] **Step 6: Test — missing Origin section exits 2**
+- [x] **Step 6: Test — missing Origin section exits 2**
 
 ```python
 def test_rework_add_missing_origin_exits_2(tmp_path: Path, monkeypatch) -> None:
@@ -1516,7 +1516,7 @@ def test_rework_add_missing_origin_exits_2(tmp_path: Path, monkeypatch) -> None:
     assert "no ## Origin section" in result.stderr
 ```
 
-- [ ] **Step 7: Test — malformed Origin header exits 2**
+- [x] **Step 7: Test — malformed Origin header exits 2**
 
 ```python
 def test_rework_add_malformed_origin_exits_2(tmp_path: Path, monkeypatch) -> None:
