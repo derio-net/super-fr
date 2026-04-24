@@ -21,9 +21,12 @@ def next_rework_number(parent_path: Path, *, repo_root: Path) -> int:
 
     Scans ``docs/superpowers/plans/`` and ``docs/superpowers/archived-plans/``
     for files matching ``<date>-<slug>-rework-<N>.md``. Raises ``ValueError``
-    on the same ``N`` appearing in both directories (spec D10 / §4).
+    on the same ``N`` appearing in both directories (spec D10 / §4), or when
+    ``parent_path`` does not exist on disk.
     Tolerates gaps — returns ``max(N) + 1`` over the combined set.
     """
+    if not parent_path.exists():
+        raise ValueError(f"parent plan does not exist: {parent_path}")
     slug = derive_slug(parent_path)
     date_prefix = parent_path.stem[:10]  # YYYY-MM-DD
     prefix = f"{date_prefix}-{slug}"
@@ -123,7 +126,7 @@ _EXPECTED_ORIGIN_HEADER = "| # | Item | Source | Track |"
 _ORIGIN_HEADING_RE = re.compile(r"^## Origin\s*$", re.MULTILINE)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class OriginRow:
     number: int
     item: str
@@ -170,8 +173,8 @@ def parse_origin_table(path: Path) -> list[OriginRow]:
             raise ValueError(f"Origin table row has {len(parts)} cells, expected 4: {line!r}")
         try:
             n = int(parts[0])
-        except ValueError:
-            raise ValueError(f"Origin table row # column is not an int: {line!r}")
+        except ValueError as e:
+            raise ValueError(f"Origin table row # column is not an int: {line!r}") from e
         rows.append(OriginRow(number=n, item=parts[1], source=parts[2], track=parts[3]))
         idx += 1
     return rows
@@ -180,10 +183,15 @@ def parse_origin_table(path: Path) -> list[OriginRow]:
 def append_origin_row(path: Path, row: OriginRow) -> None:
     """Append a single row to the Origin table in ``path``.
 
-    Preserves every byte outside the Origin table. Escapes ``|`` in ``item``
-    and ``source`` by replacing with ``\\|``. Writes the file back atomically
-    via ``path.write_text`` (good enough — single-file scaffolds, no reader
-    concurrency concern in CLI contexts).
+    Preserves every byte outside the Origin table when line endings are LF.
+    (``Path.read_text`` / ``Path.write_text`` apply universal-newline decoding,
+    so a CRLF input would be silently LF-normalised on write. Plan files under
+    ``docs/superpowers/plans/`` are LF-only, so this is acceptable for the
+    scaffold / rework-add flow.)
+
+    Escapes ``|`` in ``item`` and ``source`` by replacing with ``\\|``. Writes
+    the file back via ``path.write_text`` (no temp-file rename — single-file
+    scaffolds, no reader concurrency concern in CLI contexts).
     """
     text = path.read_text(encoding="utf-8")
     heading_match = _ORIGIN_HEADING_RE.search(text)
@@ -219,6 +227,11 @@ def append_origin_row(path: Path, row: OriginRow) -> None:
         return s.replace("|", r"\|")
 
     new_line = f"| {row.number} | {_esc(row.item)} | {_esc(row.source)} | {row.track} |\n"
+    # S1 guard: if the preceding byte isn't a newline (e.g. operator-edited file
+    # whose separator row lacks a trailing ``\n``), prepend one so the new row
+    # doesn't concatenate onto the previous line.
+    if abs_offset > 0 and text[abs_offset - 1] != "\n":
+        new_line = "\n" + new_line
 
     new_text = text[:abs_offset] + new_line + text[abs_offset:]
     path.write_text(new_text, encoding="utf-8")

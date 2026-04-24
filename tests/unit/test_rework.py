@@ -172,7 +172,7 @@ class TestAppendOriginRow:
     def test_append_preserves_dod(self, tmp_path: Path) -> None:
         p = tmp_path / "r.md"
         p.write_text((FIXTURES / "rework_empty.md").read_text())
-        append_origin_row(p, OriginRow(1, "x", "y", "development"))
+        append_origin_row(p, OriginRow(number=1, item="x", source="y", track="development"))
         text = p.read_text()
         assert "## Definition of Done" in text
         assert "- [ ] TODO." in text
@@ -180,7 +180,10 @@ class TestAppendOriginRow:
     def test_append_escapes_pipes(self, tmp_path: Path) -> None:
         p = tmp_path / "r.md"
         p.write_text((FIXTURES / "rework_empty.md").read_text())
-        append_origin_row(p, OriginRow(1, "wire | pipe", "src | with pipe", "development"))
+        append_origin_row(
+            p,
+            OriginRow(number=1, item="wire | pipe", source="src | with pipe", track="development"),
+        )
         text = p.read_text()
         assert r"wire \| pipe" in text
         assert r"src \| with pipe" in text
@@ -192,7 +195,33 @@ class TestAppendOriginRow:
     def test_append_after_existing_rows(self, tmp_path: Path) -> None:
         p = tmp_path / "r.md"
         p.write_text((FIXTURES / "rework_with_rows.md").read_text())
-        append_origin_row(p, OriginRow(4, "new item", "PR #99", "operations"))
+        append_origin_row(
+            p, OriginRow(number=4, item="new item", source="PR #99", track="operations")
+        )
         rows = parse_origin_table(p)
         assert len(rows) == 4
-        assert rows[3] == OriginRow(4, "new item", "PR #99", "operations")
+        assert rows[3] == OriginRow(number=4, item="new item", source="PR #99", track="operations")
+
+    def test_append_handles_missing_trailing_newline_on_separator(self, tmp_path: Path) -> None:
+        """S1 regression: operator-edited file with no trailing newline on the
+        separator row must not concatenate the new row onto the separator."""
+        p = tmp_path / "r.md"
+        # Deliberately strip the trailing newline after the separator.
+        text = (FIXTURES / "rework_empty.md").read_text()
+        broken = text.replace("|---|------|--------|-------|\n\n", "|---|------|--------|-------|")
+        assert broken != text  # guard against fixture drift
+        p.write_text(broken)
+        append_origin_row(p, OriginRow(number=1, item="row", source="src", track="development"))
+        # Round-trip still parses and gives us the row.
+        rows = parse_origin_table(p)
+        assert rows == [OriginRow(number=1, item="row", source="src", track="development")]
+        # The inserted row begins on its own line.
+        assert "|-------|| 1 |" not in p.read_text()
+
+
+class TestNextReworkNumberExistenceGuard:
+    def test_nonexistent_parent_raises(self, tmp_path: Path) -> None:
+        # Parent path that was never created on disk.
+        parent = tmp_path / "docs/superpowers/plans/2026-04-08-foo.md"
+        with pytest.raises(ValueError, match="parent plan does not exist"):
+            next_rework_number(parent, repo_root=tmp_path)
