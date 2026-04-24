@@ -187,3 +187,44 @@ class TestDependsOnRoundTrip:
         text = dst.read_text()
         assert "**Depends on:** —" in text
         assert "**Depends on:** Phase 1, Phase 2" in text
+
+
+class TestTrackWriterEmission:
+    def _one_phase_plan(self, track: str | None) -> Plan:
+        return Plan(
+            title="T",
+            spec="s.md",
+            status="Not Started",
+            goal="g",
+            format=PlanFormat.PHASED,
+            phases=(
+                Phase(
+                    number=1,
+                    title="First",
+                    tag="agentic",
+                    depends_on=(),
+                    tasks=(),
+                    tracking_url=None,
+                    track_label=track,
+                ),
+            ),
+            tasks=(),
+        )
+
+    def test_track_line_absent_when_none(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        write_plan(self._one_phase_plan(None), p)
+        text = p.read_text()
+        assert "**Track:**" not in text
+
+    def test_track_line_emitted_after_depends_on(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        write_plan(self._one_phase_plan("development"), p)
+        text = p.read_text()
+        assert "**Depends on:** —\n**Track:** development" in text
+
+    def test_round_trip_preserves_track_label(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        write_plan(self._one_phase_plan("decision → development"), p)
+        reparsed = parse_plan(p)
+        assert reparsed.phases[0].track_label == "decision → development"

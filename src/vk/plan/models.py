@@ -61,6 +61,7 @@ class Phase:
     depends_on: tuple[int, ...]
     tasks: tuple[Task, ...]
     tracking_url: str | None
+    track_label: str | None = None
 
 
 @dataclass(frozen=True)

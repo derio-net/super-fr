@@ -58,6 +58,8 @@ def _write_phases(lines: list[str], phases: tuple[Phase, ...]) -> None:
             lines.append(f"<!-- Tracking: {phase.tracking_url} -->")
             lines.append("")
         lines.append(_format_depends_on(phase))
+        if phase.track_label is not None:
+            lines.append(f"**Track:** {phase.track_label}")
         lines.append("")
         _write_tasks(lines, phase.tasks)
 

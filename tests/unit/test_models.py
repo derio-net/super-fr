@@ -171,3 +171,34 @@ def test_checkbox_state_values() -> None:
     """CheckboxState type accepts the three valid literals."""
     states: list[CheckboxState] = [" ", "x", "-"]
     assert len(states) == 3
+
+
+def test_phase_track_label_defaults_to_none() -> None:
+    """Positional-constructor callers that predate **Track:** must still
+    build a Phase without supplying the new field."""
+    from vk.plan.models import Phase
+
+    p = Phase(
+        number=1,
+        title="First",
+        tag="agentic",
+        depends_on=(),
+        tasks=(),
+        tracking_url=None,
+    )
+    assert p.track_label is None
+
+
+def test_phase_track_label_accepts_string() -> None:
+    from vk.plan.models import Phase
+
+    p = Phase(
+        number=1,
+        title="First",
+        tag="agentic",
+        depends_on=(),
+        tasks=(),
+        tracking_url=None,
+        track_label="development",
+    )
+    assert p.track_label == "development"
