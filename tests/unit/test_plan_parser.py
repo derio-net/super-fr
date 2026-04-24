@@ -344,3 +344,46 @@ class TestTrackParsing:
         p.write_text(self._phase("**Track:** operations\n**Track:** decision\n"))
         plan = parse_plan(p)
         assert plan.phases[0].track_label == "operations"
+
+    def test_whitespace_only_value_coerced_to_none(self, tmp_path: Path) -> None:
+        """A ``**Track:**`` line with only whitespace after the colon must
+        round-trip as ``None`` — not as an empty string that the writer would
+        then re-emit with a trailing space."""
+        p = tmp_path / "plan.md"
+        p.write_text(self._phase("**Track:**    \n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].track_label is None
+
+    def test_track_inside_fenced_prelude_example_ignored(self, tmp_path: Path) -> None:
+        """A fenced ``**Track:**`` example in the phase prelude must NOT be
+        picked up as the real track label. Mirrors how ``**Depends on:**``
+        is scoped via ``_strip_fenced_regions``."""
+        content = (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: First [agentic]\n"
+            "**Depends on:** —\n\n"
+            "Example of a phase with a track label:\n\n"
+            "```\n"
+            "**Track:** fake-from-fence\n"
+            "```\n\n"
+            "### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n"
+        )
+        p = tmp_path / "plan.md"
+        p.write_text(content)
+        plan = parse_plan(p)
+        assert plan.phases[0].track_label is None
+
+    def test_misplaced_track_after_task_raises(self, tmp_path: Path) -> None:
+        """**Track:** below the first task header must raise, symmetric with
+        the existing **Depends on:** guard — otherwise a mistyped phase would
+        silently drop its track assignment."""
+        content = (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: First [agentic]\n\n"
+            "### Task 1: Noop\n\n- [ ] **Step 1:** s\n\n"
+            "**Track:** development\n"  # in the WRONG place
+        )
+        p = tmp_path / "plan.md"
+        p.write_text(content)
+        with pytest.raises(ValueError, match="below the first task header"):
+            parse_plan(p)

@@ -228,23 +228,33 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
         tracking_match = _RE_TRACKING.search(section)
         tracking_url = tracking_match.group(1) if tracking_match else None
 
-        # Scope **Depends on:** lookup to the phase prelude (before first task).
+        # Scope **Depends on:** / **Track:** lookup to the phase prelude
+        # (before first task). Use the fence-stripped ``scan_section`` slice
+        # so that a ``**Depends on:**`` or ``**Track:**`` line nested inside
+        # a fenced code-block example can't false-positive into the AST.
         first_task = _RE_TASK.search(scan_section)
-        prelude = section[: first_task.start()] if first_task else section
+        prelude_scan = scan_section[: first_task.start()] if first_task else scan_section
         phase_number = int(pm.group(1))
-        depends_on = _parse_depends_on(prelude, phase_number)
-        has_depends_line.append(_DEPENDS_ON_RE.search(prelude) is not None)
+        depends_on = _parse_depends_on(prelude_scan, phase_number)
+        has_depends_line.append(_DEPENDS_ON_RE.search(prelude_scan) is not None)
 
-        track_match = _TRACK_RE.search(prelude)
+        track_match = _TRACK_RE.search(prelude_scan)
+        # A whitespace-only value (e.g. ``**Track:**    ``) can still match
+        # the lazy-capture regex because ``\s+`` backtracks to leave a single
+        # space for ``(.+?)``. Coerce the resulting empty string back to
+        # ``None`` so the AST distinguishes "line absent" from "line blank"
+        # (and the writer never emits ``**Track:** `` with a trailing space).
         track_label = track_match.group(1).strip() if track_match else None
+        if track_label == "":
+            track_label = None
 
-        # Spec §1.1: **Depends on:** must live directly under the
-        # ## Phase header (or its <!-- Tracking: ... --> comment); any
-        # other location is a parse error. A misplaced line below the
-        # first task header would otherwise be silently ignored, turning
-        # a dependent phase into a root. Check the fence-stripped
-        # post-prelude slice so that documentation examples don't
-        # false-positive.
+        # Spec §1.1: **Depends on:** and **Track:** must live directly under
+        # the ## Phase header (or its <!-- Tracking: ... --> comment); any
+        # other location is a parse error. A misplaced line below the first
+        # task header would otherwise be silently ignored, turning a dependent
+        # phase into a root or dropping its track assignment. Check the
+        # fence-stripped post-prelude slice so that documentation examples
+        # don't false-positive.
         if first_task is not None:
             post_prelude = scan_section[first_task.start() :]
             if _DEPENDS_ON_RE.search(post_prelude):
@@ -252,6 +262,14 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
                     f"Phase {phase_number}: **Depends on:** line appears "
                     f"below the first task header. It must sit directly "
                     f"under the '## Phase {phase_number}:' header "
+                    f"(or its '<!-- Tracking: ... -->' comment if present). "
+                    f"Move the line up and re-run."
+                )
+            if _TRACK_RE.search(post_prelude):
+                raise ValueError(
+                    f"Phase {phase_number}: **Track:** line appears below "
+                    f"the first task header. It must sit directly under the "
+                    f"'## Phase {phase_number}:' header "
                     f"(or its '<!-- Tracking: ... -->' comment if present). "
                     f"Move the line up and re-run."
                 )
