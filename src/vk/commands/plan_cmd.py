@@ -32,6 +32,33 @@ _CANONICAL_TRACKS = {"development", "operations", "decision"}
 plan_app = typer.Typer(help="Write, save, and maintain plan files.")
 
 
+def _resolve_repo_root(cwd: Path | None = None) -> Path:
+    """Resolve repo root for a plan command.
+
+    Honors ``$VK_REPO_ROOT`` first (so integration tests can point the
+    command at ``tmp_path`` without spawning a fake git repo), then falls
+    back to ``git rev-parse`` (run from ``cwd`` if given), then to
+    ``Path.cwd()``.
+    """
+    import os
+    import subprocess
+
+    override = os.environ.get("VK_REPO_ROOT")
+    if override:
+        return Path(override)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
+        )
+        return Path(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return cwd or Path.cwd()
+
+
 @plan_app.command(name="format")
 def plan_format(
     target: Path = typer.Argument(".", help="Plan file path or repository root."),
@@ -70,19 +97,9 @@ def plan_new(
     save: bool = typer.Option(False, "--save", help="Write to plans directory."),
 ) -> None:
     """Generate a new plan file skeleton."""
-    import subprocess
     from datetime import date
 
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        repo_root = Path(result.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        repo_root = Path.cwd()
+    repo_root = _resolve_repo_root()
 
     config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
     profile = load_profile(config_path)
@@ -222,19 +239,7 @@ def plan_spec_index(
         console.print("No **Spec:** header in plan. Nothing to update.")
         raise typer.Exit(0)
 
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=plan_path.parent,
-        )
-        repo_root = Path(result.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        repo_root = plan_path.parent
+    repo_root = _resolve_repo_root(cwd=plan_path.parent)
 
     spec_path = repo_root / plan.spec
     if not spec_path.exists():
@@ -342,6 +347,26 @@ def plan_convert(
 
     write_plan(converted, plan_path)
     console.print(f"Converted: {plan.format.value} -> phased")
+
+
+@plan_app.command(name="rework")
+def plan_rework(
+    parent_path: Path = typer.Argument(..., help="Path to the parent plan file."),
+) -> None:
+    """Scaffold a rework plan against a parent."""
+    from vk.plan.rework import scaffold_rework
+
+    repo_root = _resolve_repo_root()
+
+    try:
+        out_path, warnings = scaffold_rework(parent_path, repo_root=repo_root)
+    except ValueError as exc:
+        err_console.print(f"Error: {exc}")
+        raise typer.Exit(2)
+
+    for w in warnings:
+        err_console.print(f"warn: {w}")
+    console.print(f"Created: {out_path}")
 
 
 def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:

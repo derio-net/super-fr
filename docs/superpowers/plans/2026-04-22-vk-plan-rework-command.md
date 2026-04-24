@@ -878,7 +878,7 @@ Thin typer wrapper around `rework.py`. Every exit-code case in spec §7 for this
 - Create: `tests/fixtures/rework/parent_archived.md`
 - Create: `tests/fixtures/rework/parent_no_spec.md`
 
-- [ ] **Step 1: Write the parent fixtures**
+- [x] **Step 1: Write the parent fixtures**
 
 Create `tests/fixtures/rework/parent_archived.md`:
 
@@ -919,7 +919,7 @@ Create `tests/fixtures/rework/parent_no_spec.md`:
 - [x] **Step 1:** Do thing
 ```
 
-- [ ] **Step 2: Write a failing happy-path integration test**
+- [x] **Step 2: Write a failing happy-path integration test**
 
 Create `tests/integration/test_plan_rework.py`:
 
@@ -970,7 +970,7 @@ def test_rework_archived_parent_happy_path(tmp_path: Path) -> None:
 
 Run `uv run pytest tests/integration/test_plan_rework.py -x -q` — expect failure (command not registered).
 
-- [ ] **Step 3: Add `scaffold_rework` orchestrator in `rework.py`**
+- [x] **Step 3: Add `scaffold_rework` orchestrator in `rework.py`**
 
 Append to `src/vk/plan/rework.py`:
 
@@ -1060,7 +1060,7 @@ def _highest_archived_prior(
     return best_path
 ```
 
-- [ ] **Step 4: Register `vk plan rework` in `plan_cmd.py`**
+- [x] **Step 4: Register `vk plan rework` in `plan_cmd.py`**
 
 In `src/vk/commands/plan_cmd.py`, after `plan_convert`, add:
 
@@ -1103,7 +1103,7 @@ Run the happy-path test — expect green.
 > each test either `monkeypatch.chdir(tmp_path)` or invokes via a subprocess
 > that we already use elsewhere. See Step 5.
 
-- [ ] **Step 5: Stabilise repo_root discovery under tmp_path**
+- [x] **Step 5: Stabilise repo_root discovery under tmp_path**
 
 Replace the `git rev-parse` block in `plan_rework` with:
 
@@ -1150,7 +1150,7 @@ Run the test — expect green.
 - Modify: `tests/integration/test_plan_rework.py`
 - Modify: `src/vk/plan/rework.py` (refinements as tests drive them)
 
-- [ ] **Step 1: Test — parent missing returns exit 2**
+- [x] **Step 1: Test — parent missing returns exit 2**
 
 Append to `tests/integration/test_plan_rework.py`:
 
@@ -1169,7 +1169,7 @@ def test_rework_missing_parent_exits_2(tmp_path: Path, monkeypatch) -> None:
 
 Run — expect green if orchestrator raises correctly; otherwise fix.
 
-- [ ] **Step 2: Test — mis-located parent returns exit 2**
+- [x] **Step 2: Test — mis-located parent returns exit 2**
 
 ```python
 def test_rework_parent_outside_plans_dirs_exits_2(tmp_path: Path, monkeypatch) -> None:
@@ -1187,7 +1187,7 @@ def test_rework_parent_outside_plans_dirs_exits_2(tmp_path: Path, monkeypatch) -
 
 Run — expect green.
 
-- [ ] **Step 3: Test — unarchived parent emits warning, proceeds**
+- [x] **Step 3: Test — unarchived parent emits warning, proceeds**
 
 ```python
 def test_rework_unarchived_parent_warns(tmp_path: Path, monkeypatch) -> None:
@@ -1207,7 +1207,7 @@ def test_rework_unarchived_parent_warns(tmp_path: Path, monkeypatch) -> None:
 
 Run — expect green.
 
-- [ ] **Step 4: Test — rework-1 archived, rework-2 gets Prior rework line**
+- [x] **Step 4: Test — rework-1 archived, rework-2 gets Prior rework line**
 
 ```python
 def test_rework_chains_prior_rework(tmp_path: Path, monkeypatch) -> None:
@@ -1230,7 +1230,7 @@ def test_rework_chains_prior_rework(tmp_path: Path, monkeypatch) -> None:
 
 Run — expect green.
 
-- [ ] **Step 5: Test — cross-dir collision exits 2**
+- [x] **Step 5: Test — cross-dir collision exits 2**
 
 ```python
 def test_rework_cross_dir_collision_exits_2(tmp_path: Path, monkeypatch) -> None:
@@ -1249,7 +1249,7 @@ def test_rework_cross_dir_collision_exits_2(tmp_path: Path, monkeypatch) -> None
 
 Run — expect green.
 
-- [ ] **Step 6: Test — no-H1 parent warns, uses fallback title**
+- [x] **Step 6: Test — no-H1 parent warns, uses fallback title**
 
 ```python
 def test_rework_no_h1_title_fallback(tmp_path: Path, monkeypatch) -> None:
@@ -1271,7 +1271,7 @@ def test_rework_no_h1_title_fallback(tmp_path: Path, monkeypatch) -> None:
 
 Run — expect green.
 
-- [ ] **Step 7: Full integration + unit regression**
+- [x] **Step 7: Full integration + unit regression**
 
 ```bash
 uv run pytest -q --no-cov

@@ -14,6 +14,8 @@ from pathlib import Path
 from vk.plan.filename import derive_slug
 
 _REWORK_NUM_RE = re.compile(r"-rework-(\d+)\.md$")
+_TITLE_RE = re.compile(r"^# (.+)$", re.MULTILINE)
+_SPEC_RE = re.compile(r"^\*\*Spec:\*\*\s*`([^`]+)`", re.MULTILINE)
 
 
 def next_rework_number(parent_path: Path, *, repo_root: Path) -> int:
@@ -235,3 +237,87 @@ def append_origin_row(path: Path, row: OriginRow) -> None:
 
     new_text = text[:abs_offset] + new_line + text[abs_offset:]
     path.write_text(new_text, encoding="utf-8")
+
+
+def scaffold_rework(parent_path: Path, *, repo_root: Path) -> tuple[Path, list[str]]:
+    """Scaffold a rework plan for ``parent_path``. Returns (output_path, warnings).
+
+    Raises ValueError on structural refusals (spec §7). Callers translate to
+    typer.Exit(2). Warnings are stderr-destined strings — caller emits them.
+    """
+    parent_path = parent_path.resolve()
+    if not parent_path.exists():
+        raise ValueError(f"parent plan not found: {parent_path}")
+
+    repo_root = repo_root.resolve()
+    plans_dir = (repo_root / "docs/superpowers/plans").resolve()
+    archived_dir = (repo_root / "docs/superpowers/archived-plans").resolve()
+    is_in_plans = parent_path.is_relative_to(plans_dir)
+    is_in_archived = parent_path.is_relative_to(archived_dir)
+    if not (is_in_plans or is_in_archived):
+        raise ValueError(
+            "parent plan must live in docs/superpowers/plans/ or "
+            f"docs/superpowers/archived-plans/. Got: {parent_path}"
+        )
+
+    warnings: list[str] = []
+    # Read title/spec directly: rework scaffolding must work even on minimal
+    # stub parents that the full plan parser would refuse (no Phase headers).
+    parent_text = parent_path.read_text(encoding="utf-8")
+    title_match = _TITLE_RE.search(parent_text)
+    title = title_match.group(1).strip() if title_match else ""
+    spec_match = _SPEC_RE.search(parent_text)
+    spec = spec_match.group(1) if spec_match else None
+    if not title:
+        warnings.append("parent has no H1 title; using slug-derived fallback.")
+
+    n = next_rework_number(parent_path, repo_root=repo_root)
+
+    slug = derive_slug(parent_path)
+    date_prefix = parent_path.stem[:10]
+    parent_slug_date = f"{date_prefix}-{slug}"
+
+    # Prior rework: highest archived N lower than the new N.
+    prior = _highest_archived_prior(repo_root=repo_root, prefix=parent_slug_date, below=n)
+
+    if is_in_plans:
+        warnings.append(
+            "parent is not yet archived; Parent plan header points at plans/. "
+            "Update when parent is moved."
+        )
+
+    rendered = render_scaffold(
+        parent_title=title,
+        parent_slug_date=parent_slug_date,
+        spec=spec,
+        parent_rel_path=str(parent_path.relative_to(repo_root)),
+        parent_archived=is_in_archived,
+        n=n,
+        prior_rework_rel_path=str(prior.relative_to(repo_root)) if prior else None,
+    )
+
+    out_path = plans_dir / f"{parent_slug_date}-rework-{n}.md"
+    if out_path.exists():
+        raise ValueError(f"output path already exists: {out_path}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path, warnings
+
+
+def _highest_archived_prior(*, repo_root: Path, prefix: str, below: int) -> Path | None:
+    archived_dir = repo_root / "docs/superpowers/archived-plans"
+    if not archived_dir.is_dir():
+        return None
+    best_n = -1
+    best_path: Path | None = None
+    for p in archived_dir.iterdir():
+        if not p.is_file() or not p.name.startswith(prefix):
+            continue
+        m = _REWORK_NUM_RE.search(p.name)
+        if not m:
+            continue
+        n = int(m.group(1))
+        if n < below and n > best_n:
+            best_n = n
+            best_path = p
+    return best_path
