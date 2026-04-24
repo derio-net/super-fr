@@ -14,6 +14,7 @@
 ---
 
 ## Phase 1: `**Track:**` parser, model, and writer plumbing [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/37 -->
 
 **Depends on:** —
 
@@ -247,6 +248,7 @@ All green. Every existing round-trip fixture still parses → writes → parses 
 ---
 
 ## Phase 2: `rework.py` core — template, numbering, Origin helpers [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/38 -->
 
 **Depends on:** —
 
@@ -861,6 +863,7 @@ Both green. No existing test touches rework.py, so the regression sweep is cheap
 ---
 
 ## Phase 3: `vk plan rework` scaffold CLI [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/39 -->
 
 **Depends on:** Phase 2
 
@@ -1279,6 +1282,7 @@ All green.
 ---
 
 ## Phase 4: `vk plan rework-add` CLI [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/40 -->
 
 **Depends on:** Phase 2
 
@@ -1534,6 +1538,7 @@ Run: `uv run pytest tests/integration/test_plan_rework_add.py -q` — all green.
 ---
 
 ## Phase 5: `vk plan rework-list` CLI [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/41 -->
 
 **Depends on:** Phase 1, Phase 2
 
@@ -1895,6 +1900,7 @@ Run `uv run pytest tests/integration/test_plan_rework_list.py -q` — all green.
 ---
 
 ## Phase 6: `self-review` canonical-Track-token lint [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/42 -->
 
 **Depends on:** Phase 1
 
@@ -1994,6 +2000,7 @@ Run the three tests — expect green. Run `uv run pytest -q --no-cov` — full g
 ---
 
 ## Phase 7: Version bump, SKILL.md, release prep [manual]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/43 -->
 
 **Depends on:** Phase 3, Phase 4, Phase 5, Phase 6
 
