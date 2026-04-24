@@ -8,3 +8,6 @@ build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Claude Code session lockfile (ScheduleWakeup runtime artifact).
+.claude/scheduled_tasks.lock

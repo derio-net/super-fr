@@ -27,6 +27,8 @@ from vk.spec_index import IndexEntry, upsert_entry
 console = Console()
 err_console = Console(stderr=True)
 
+_CANONICAL_TRACKS = {"development", "operations", "decision"}
+
 plan_app = typer.Typer(help="Write, save, and maintain plan files.")
 
 
@@ -160,6 +162,19 @@ def plan_self_review(
         for task in plan.tasks:
             if not task.tag:
                 issues.append(f"Task {task.number} missing [manual]/[agentic] tag")
+
+    # Canonical **Track:** lint. First word (case-insensitive) must be one of
+    # the canonical labels; transitions like "decision → development" pass on
+    # the first token.
+    for phase in plan.phases:
+        if phase.track_label is None:
+            continue
+        first = phase.track_label.strip().split()[0].lower()
+        if first not in _CANONICAL_TRACKS:
+            issues.append(
+                f"Phase {phase.number} has non-canonical **Track:** value "
+                f"'{phase.track_label}' (expected development / operations / decision)."
+            )
 
     # Structural DAG validation (cycle / forward-ref / self-ref / unknown-ref).
     # Report any previously-collected issues first so basic plan-shape errors
