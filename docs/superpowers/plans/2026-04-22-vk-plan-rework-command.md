@@ -1910,7 +1910,7 @@ Run `uv run pytest tests/integration/test_plan_rework_list.py -q` — all green.
 - Modify: `src/vk/commands/plan_cmd.py`
 - Modify: `tests/unit/test_cli.py` or add `tests/integration/test_plan_self_review_track.py`
 
-- [ ] **Step 1: Write failing tests for the new lint branch**
+- [x] **Step 1: Write failing tests for the new lint branch**
 
 Create `tests/integration/test_plan_self_review_track.py`:
 
@@ -1976,7 +1976,7 @@ def test_transition_syntax_passes_on_first_word(tmp_path: Path) -> None:
 
 Run — expect 2 failures (research case doesn't surface; transition may trip).
 
-- [ ] **Step 2: Insert the lint check inside `plan_self_review`**
+- [x] **Step 2: Insert the lint check inside `plan_self_review`**
 
 In `plan_cmd.py`, inside `plan_self_review`, after the phase-tag loop and before the `validate_dag` call:
 
