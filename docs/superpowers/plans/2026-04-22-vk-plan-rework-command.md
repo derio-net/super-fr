@@ -25,7 +25,7 @@ Generic plan-AST work. No CLI surface yet. Must stay backwards-compatible with e
 - Modify: `src/vk/plan/models.py`
 - Modify: `tests/unit/test_models.py`
 
-- [ ] **Step 1: Write a failing test pinning the default-None behaviour**
+- [x] **Step 1: Write a failing test pinning the default-None behaviour**
 
 Append to `tests/unit/test_models.py`:
 
@@ -61,7 +61,7 @@ def test_phase_track_label_accepts_string() -> None:
 
 Run: `uv run pytest tests/unit/test_models.py -x -q` — expect 2 failures naming `track_label`.
 
-- [ ] **Step 2: Add `track_label` to `Phase` with default `None`**
+- [x] **Step 2: Add `track_label` to `Phase` with default `None`**
 
 In `src/vk/plan/models.py`, inside the `Phase` dataclass, add below `tracking_url`:
 
@@ -73,7 +73,7 @@ Default `None` preserves positional-constructor compatibility per spec D9 / §5.
 
 Run: `uv run pytest tests/unit/test_models.py -x -q` — expect green.
 
-- [ ] **Step 3: Sweep for existing fixtures that build `Phase` positionally**
+- [x] **Step 3: Sweep for existing fixtures that build `Phase` positionally**
 
 ```bash
 uv run rg -n "Phase\(" tests/ src/
@@ -89,7 +89,7 @@ Run: `uv run pytest -q --no-cov` — expect full green suite (baseline preserved
 - Modify: `src/vk/plan/parser.py`
 - Modify: `tests/unit/test_plan_parser.py`
 
-- [ ] **Step 1: Write failing parser tests for `**Track:**`**
+- [x] **Step 1: Write failing parser tests for `**Track:**`**
 
 Append to `tests/unit/test_plan_parser.py`:
 
@@ -139,7 +139,7 @@ class TestTrackParsing:
 
 Run: `uv run pytest tests/unit/test_plan_parser.py::TestTrackParsing -x -q` — expect 5 failures.
 
-- [ ] **Step 2: Add `_TRACK_RE` adjacent to `_DEPENDS_ON_RE`**
+- [x] **Step 2: Add `_TRACK_RE` adjacent to `_DEPENDS_ON_RE`**
 
 In `src/vk/plan/parser.py`, after `_DEPENDS_ON_RE` (line ~43):
 
@@ -150,7 +150,7 @@ _TRACK_RE = re.compile(
 )
 ```
 
-- [ ] **Step 3: Extract track in `_parse_phases` prelude slice**
+- [x] **Step 3: Extract track in `_parse_phases` prelude slice**
 
 In `_parse_phases`, after the `depends_on = _parse_depends_on(prelude, phase_number)` assignment, add:
 
@@ -163,7 +163,7 @@ Pass `track_label=track_label` to the `Phase(...)` constructor call further down
 
 Run: `uv run pytest tests/unit/test_plan_parser.py::TestTrackParsing -x -q` — expect green.
 
-- [ ] **Step 4: Re-run full parser suite to prove no regressions**
+- [x] **Step 4: Re-run full parser suite to prove no regressions**
 
 ```bash
 uv run pytest tests/unit/test_plan_parser.py tests/unit/test_plan_validate.py -q
@@ -177,7 +177,7 @@ Expect all green. The new regex is scoped to the prelude slice, so it cannot lea
 - Modify: `src/vk/plan/writer.py`
 - Modify: `tests/unit/test_plan_writer.py`
 
-- [ ] **Step 1: Write failing writer tests for Track emission**
+- [x] **Step 1: Write failing writer tests for Track emission**
 
 Append to `tests/unit/test_plan_writer.py`:
 
@@ -225,7 +225,7 @@ class TestTrackWriterEmission:
 
 Run: `uv run pytest tests/unit/test_plan_writer.py::TestTrackWriterEmission -x -q` — expect 2 failures (absence test passes trivially).
 
-- [ ] **Step 2: Emit `**Track:**` in `_write_phases`**
+- [x] **Step 2: Emit `**Track:**` in `_write_phases`**
 
 In `src/vk/plan/writer.py`, inside `_write_phases`, after `lines.append(_format_depends_on(phase))` and BEFORE the blank-line append that separates header from tasks:
 
@@ -236,7 +236,7 @@ In `src/vk/plan/writer.py`, inside `_write_phases`, after `lines.append(_format_
 
 Run: `uv run pytest tests/unit/test_plan_writer.py -x -q` — expect green.
 
-- [ ] **Step 3: Full plan suite regression check**
+- [x] **Step 3: Full plan suite regression check**
 
 ```bash
 uv run pytest -q --no-cov

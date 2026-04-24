@@ -44,6 +44,10 @@ _DEPENDS_ON_RE = re.compile(
     r"^\*\*Depends on:\*\*\s+(.+?)\s*$",
     re.MULTILINE,
 )
+_TRACK_RE = re.compile(
+    r"^\*\*Track:\*\*\s+(.+?)\s*$",
+    re.MULTILINE,
+)
 _PHASE_REF_RE = re.compile(r"^Phase\s+(\d+)$")
 # Lines the plan header already captures as structured fields — everything
 # else in the header block is retained as ``Plan.preamble``.
@@ -231,6 +235,9 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
         depends_on = _parse_depends_on(prelude, phase_number)
         has_depends_line.append(_DEPENDS_ON_RE.search(prelude) is not None)
 
+        track_match = _TRACK_RE.search(prelude)
+        track_label = track_match.group(1).strip() if track_match else None
+
         # Spec §1.1: **Depends on:** must live directly under the
         # ## Phase header (or its <!-- Tracking: ... --> comment); any
         # other location is a parse error. A misplaced line below the
@@ -258,6 +265,7 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
                 depends_on=depends_on,
                 tasks=tuple(tasks),
                 tracking_url=tracking_url,
+                track_label=track_label,
             )
         )
 

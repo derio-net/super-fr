@@ -301,3 +301,46 @@ class TestDependsOnParsing:
         p.write_text(content)
         with pytest.raises(ValueError, match="below the first task header"):
             parse_plan(p)
+
+
+class TestTrackParsing:
+    """Parser extracts a phase **Track:** body-line into Phase.track_label."""
+
+    def _phase(self, extra_line: str) -> str:
+        return (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: First \n"
+            "**Depends on:** —\n"
+            f"{extra_line}"
+            "\n### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n"
+        )
+
+    def test_absent_line_yields_none(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._phase(""))
+        plan = parse_plan(p)
+        assert plan.phases[0].track_label is None
+
+    def test_single_canonical_value(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._phase("**Track:** development\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].track_label == "development"
+
+    def test_transition_syntax_preserved(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._phase("**Track:** decision → development\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].track_label == "decision → development"
+
+    def test_compound_syntax_preserved(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._phase("**Track:** development (future-triggered)\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].track_label == "development (future-triggered)"
+
+    def test_multiple_track_lines_first_wins(self, tmp_path: Path) -> None:
+        p = tmp_path / "plan.md"
+        p.write_text(self._phase("**Track:** operations\n**Track:** decision\n"))
+        plan = parse_plan(p)
+        assert plan.phases[0].track_label == "operations"
