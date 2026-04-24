@@ -551,3 +551,9 @@ normalised.
    — this `vk` release does not depend on the kid-laptops PR merging
    first, and kid-laptops plans already function without `**Track:**`
    once their phase tags are normalised to `[agentic]|[manual]`.
+
+## Implementation Plans
+
+| Plan | Repo | File | Status | Depends on |
+|------|------|------|--------|------------|
+| `vk plan rework` Command Surface Implementation Plan |  | `docs/superpowers/plans/2026-04-22-vk-plan-rework-command.md` | Not Started | — |
