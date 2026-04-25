@@ -2008,19 +2008,19 @@ Operator-driven final sweep. No new source logic — just the lockstep bump per 
 - Modify: `.claude-plugin/marketplace.json`
 - Modify: `uv.lock` (auto-generated via `uv sync`)
 
-- [ ] **Step 1: Bump `pyproject.toml`**
+- [x] **Step 1: Bump `pyproject.toml`**
 
 Set `[project].version = "1.2.0"`.
 
-- [ ] **Step 2: Bump `.claude-plugin/plugin.json`**
+- [x] **Step 2: Bump `.claude-plugin/plugin.json`**
 
 Set `.version = "1.2.0"`.
 
-- [ ] **Step 3: Bump `.claude-plugin/marketplace.json`**
+- [x] **Step 3: Bump `.claude-plugin/marketplace.json`**
 
 Set `.plugins[0].version = "1.2.0"`.
 
-- [ ] **Step 4: Run `uv sync` to refresh `uv.lock`**
+- [x] **Step 4: Run `uv sync` to refresh `uv.lock`**
 
 ```bash
 uv sync
@@ -2028,7 +2028,7 @@ uv sync
 
 Expect a single `vk==1.2.0` line changed in `uv.lock`. Commit the lockfile change in the same PR.
 
-- [ ] **Step 5: Confirm `vk --version`**
+- [x] **Step 5: Confirm `vk --version`**
 
 ```bash
 uv run vk --version
@@ -2041,7 +2041,7 @@ Expected stdout: a line containing `1.2.0`. If the CLI has no `--version` flag, 
 **Files:**
 - Modify: `skills/vk-plan/SKILL.md`
 
-- [ ] **Step 1: Add rework-surface mention under "Procedure" or "Integration"**
+- [x] **Step 1: Add rework-surface mention under "Procedure" or "Integration"**
 
 Insert a bullet that names the three commands and when to invoke them. Draft:
 
@@ -2066,7 +2066,7 @@ Placement: insert as a new `## Rework plans` section after the existing procedur
 
 **Files:** (verification only)
 
-- [ ] **Step 1: Run ruff format + check**
+- [x] **Step 1: Run ruff format + check**
 
 ```bash
 uv run ruff format src/ tests/
@@ -2075,7 +2075,7 @@ uv run ruff check src/ tests/
 
 Both clean.
 
-- [ ] **Step 2: Run mypy**
+- [x] **Step 2: Run mypy**
 
 ```bash
 uv run mypy src/
@@ -2083,7 +2083,7 @@ uv run mypy src/
 
 Clean.
 
-- [ ] **Step 3: Run full pytest**
+- [x] **Step 3: Run full pytest**
 
 ```bash
 uv run pytest -q --no-cov
@@ -2091,7 +2091,7 @@ uv run pytest -q --no-cov
 
 All green.
 
-- [ ] **Step 4: Self-review this plan file**
+- [x] **Step 4: Self-review this plan file**
 
 ```bash
 uv run vk plan self-review docs/superpowers/plans/2026-04-22-vk-plan-rework-command.md
@@ -2099,7 +2099,7 @@ uv run vk plan self-review docs/superpowers/plans/2026-04-22-vk-plan-rework-comm
 
 Expect the only surviving issues to be structural-clean or already-addressed placeholders (the Goal bullet in the scaffold template uses "TODO" on purpose for operator handoff).
 
-- [ ] **Step 5: `--help` smoke test**
+- [x] **Step 5: `--help` smoke test**
 
 ```bash
 uv run vk plan rework --help

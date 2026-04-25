@@ -67,6 +67,20 @@ is exempt. To migrate an existing linear plan:
 
     vk plan convert <plan> --add-deps --yes
 
+## Rework plans
+
+After a parent plan ships, defer surfaced-but-unrealised items into a separate
+rework plan — do not reopen the parent.
+
+- `vk plan rework <parent-plan-path>` scaffolds the rework file.
+- `vk plan rework-add <rework-path> --item ... --source ... --track ...`
+  appends a row to the Origin table.
+- `vk plan rework-list [--include-archived] [--status ...] [--track ...]`
+  surfaces open reworks across the repo.
+
+See the spec for the full convention:
+`docs/superpowers/specs/2026-04-22-vk-plan-rework-design.md`.
+
 ## Integration
 
 - Upstream: brainstorming hands off via vk-plan-override
