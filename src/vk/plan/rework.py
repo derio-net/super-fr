@@ -17,6 +17,14 @@ _REWORK_NUM_RE = re.compile(r"-rework-(\d+)\.md$")
 _TITLE_RE = re.compile(r"^# (.+)$", re.MULTILINE)
 _SPEC_RE = re.compile(r"^\*\*Spec:\*\*\s*`([^`]+)`", re.MULTILINE)
 
+# Warning text — substrings of these are part of the CLI contract that
+# Phases 4 (rework-add) and 5 (rework-list) will grep against. Don't rephrase
+# the leading clause without updating downstream consumers and their tests.
+_WARN_NO_H1 = "parent has no H1 title; using slug-derived fallback."
+_WARN_NOT_ARCHIVED = (
+    "parent is not yet archived; Parent plan header points at plans/. Update when parent is moved."
+)
+
 
 def next_rework_number(parent_path: Path, *, repo_root: Path) -> int:
     """Return the next available rework number for ``parent_path``.
@@ -263,13 +271,16 @@ def scaffold_rework(parent_path: Path, *, repo_root: Path) -> tuple[Path, list[s
     warnings: list[str] = []
     # Read title/spec directly: rework scaffolding must work even on minimal
     # stub parents that the full plan parser would refuse (no Phase headers).
-    parent_text = parent_path.read_text(encoding="utf-8")
+    # Normalise CRLF before regexing so Windows-edited parents don't smuggle
+    # a trailing \r into the captured title (which then lands in the H1 of
+    # the rendered scaffold).
+    parent_text = parent_path.read_text(encoding="utf-8").replace("\r\n", "\n")
     title_match = _TITLE_RE.search(parent_text)
     title = title_match.group(1).strip() if title_match else ""
     spec_match = _SPEC_RE.search(parent_text)
     spec = spec_match.group(1) if spec_match else None
     if not title:
-        warnings.append("parent has no H1 title; using slug-derived fallback.")
+        warnings.append(_WARN_NO_H1)
 
     n = next_rework_number(parent_path, repo_root=repo_root)
 
@@ -281,10 +292,7 @@ def scaffold_rework(parent_path: Path, *, repo_root: Path) -> tuple[Path, list[s
     prior = _highest_archived_prior(repo_root=repo_root, prefix=parent_slug_date, below=n)
 
     if is_in_plans:
-        warnings.append(
-            "parent is not yet archived; Parent plan header points at plans/. "
-            "Update when parent is moved."
-        )
+        warnings.append(_WARN_NOT_ARCHIVED)
 
     rendered = render_scaffold(
         parent_title=title,

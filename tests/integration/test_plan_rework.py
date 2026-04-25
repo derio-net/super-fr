@@ -43,6 +43,31 @@ def test_rework_archived_parent_happy_path(tmp_path: Path, monkeypatch) -> None:
     assert "**Spec:** `docs/superpowers/specs/2026-04-07-kid-laptops-design.md`" in text
     assert "(merged + archived)" in text
     assert "## Origin" in text
+    # Happy path emits no warnings — guards the "stable warn-text" contract.
+    assert result.stderr == "", f"unexpected stderr: {result.stderr!r}"
+
+
+def test_rework_crlf_parent_strips_carriage_return(tmp_path: Path, monkeypatch) -> None:
+    """Windows-edited parents with CRLF must not smuggle \\r into the H1."""
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    target_dir = tmp_path / "docs/superpowers/archived-plans"
+    target_dir.mkdir(parents=True)
+    parent = target_dir / "2026-04-08-crlf-parent.md"
+    # Deliberately write CRLF — the parent regex would otherwise capture \r.
+    parent.write_bytes(
+        b"# CRLF Title\r\n"
+        b"**Spec:** `docs/superpowers/specs/x.md`\r\n"
+        b"**Status:** Complete\r\n"
+        b"\r\n"
+        b"**Goal:** g\r\n"
+    )
+    (tmp_path / "docs/superpowers/plans").mkdir(parents=True)
+    runner = CliRunner()
+    result = runner.invoke(app, ["plan", "rework", str(parent)], catch_exceptions=False)
+    assert result.exit_code == 0, result.stdout + result.stderr
+    out_text = (tmp_path / "docs/superpowers/plans/2026-04-08-crlf-parent-rework-1.md").read_text()
+    assert out_text.startswith("# CRLF Title — Rework 1\n")
+    assert "\r" not in out_text.split("\n", 1)[0]
 
 
 def test_rework_missing_parent_exits_2(tmp_path: Path, monkeypatch) -> None:
