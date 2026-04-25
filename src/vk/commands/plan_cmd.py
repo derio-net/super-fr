@@ -20,6 +20,7 @@ from vk.plan.convert import (
     to_phased_single,
 )
 from vk.plan.parser import parse_plan
+from vk.plan.rework import OriginRow, append_origin_row, parse_origin_table
 from vk.plan.validate import DagValidationError, validate_dag
 from vk.plan.writer import write_plan
 from vk.spec_index import IndexEntry, upsert_entry
@@ -270,8 +271,10 @@ def plan_rework_add(
     track: str = typer.Option(..., "--track", help="Work-category label."),
 ) -> None:
     """Append a row to a rework plan's Origin table."""
-    from vk.plan.rework import OriginRow, append_origin_row, parse_origin_table
-
+    # Validation order (spec §2.2): file-existence → flag non-empty / no
+    # newlines → canonical-track warn → Origin parse → append. The warn is
+    # informational and intentionally fires before the parse so a typo in
+    # ``--track`` still surfaces even if the Origin section is malformed.
     if not rework_path.exists():
         err_console.print(f"Error: rework plan not found: {rework_path}")
         raise typer.Exit(2)
