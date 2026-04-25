@@ -22,6 +22,7 @@ from vk.plan.convert import (
     to_phased_single,
 )
 from vk.plan.parser import parse_plan
+from vk.plan.rework import OriginRow, append_origin_row, parse_origin_table
 from vk.plan.validate import DagValidationError, validate_dag
 from vk.plan.writer import write_plan
 from vk.spec_index import IndexEntry, upsert_entry
@@ -273,6 +274,59 @@ def plan_spec_index(
 
     upsert_entry(spec_path, entry)
     console.print(f"Spec index updated: {spec_path}")
+
+
+@plan_app.command(name="rework-add")
+def plan_rework_add(
+    rework_path: Path = typer.Argument(..., help="Path to the rework plan file."),
+    item: str = typer.Option(..., "--item", help="Origin item text."),
+    source: str = typer.Option(..., "--source", help="Where the item came from."),
+    track: str = typer.Option(..., "--track", help="Work-category label."),
+) -> None:
+    """Append a row to a rework plan's Origin table."""
+    # Validation order (spec §2.2): file-existence → flag non-empty / no
+    # newlines → canonical-track warn → Origin parse → append. The warn is
+    # informational and intentionally fires before the parse so a typo in
+    # ``--track`` still surfaces even if the Origin section is malformed.
+    if not rework_path.exists():
+        err_console.print(f"Error: rework plan not found: {rework_path}")
+        raise typer.Exit(2)
+
+    for name, value in (("--item", item), ("--source", source), ("--track", track)):
+        if not value.strip():
+            err_console.print(f"Error: {name} is required and must be non-empty.")
+            raise typer.Exit(2)
+        if "\n" in value or "\r" in value:
+            err_console.print(f"Error: {name} must not contain newlines.")
+            raise typer.Exit(2)
+
+    first_token = track.strip().split()[0].lower()
+    if first_token not in _CANONICAL_TRACKS:
+        err_console.print(
+            f"warn: --track value '{track}' is not a canonical token "
+            "(development / operations / decision). Accepted as free-form."
+        )
+
+    try:
+        existing = parse_origin_table(rework_path)
+    except ValueError as exc:
+        err_console.print(f"Error: {exc}")
+        raise typer.Exit(2)
+    next_n = (max((r.number for r in existing), default=0)) + 1
+    try:
+        append_origin_row(
+            rework_path,
+            OriginRow(
+                number=next_n,
+                item=item.strip(),
+                source=source.strip(),
+                track=track.strip(),
+            ),
+        )
+    except ValueError as exc:
+        err_console.print(f"Error: {exc}")
+        raise typer.Exit(2)
+    console.print(f"Added Origin row #{next_n} to {rework_path}")
 
 
 @plan_app.command(name="convert")

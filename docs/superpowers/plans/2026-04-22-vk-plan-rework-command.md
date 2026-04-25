@@ -1157,7 +1157,7 @@ Append to `tests/integration/test_plan_rework.py`:
 ```python
 def test_rework_missing_parent_exits_2(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app,
         ["plan", "rework", str(tmp_path / "nope.md")],
@@ -1177,7 +1177,7 @@ def test_rework_parent_outside_plans_dirs_exits_2(tmp_path: Path, monkeypatch) -
     rogue = tmp_path / "not-a-plan-dir" / "2026-04-08-foo.md"
     rogue.parent.mkdir(parents=True)
     rogue.write_text("# Foo\n**Status:** Complete\n**Goal:** g\n")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app, ["plan", "rework", str(rogue)], catch_exceptions=False
     )
@@ -1193,7 +1193,7 @@ Run — expect green.
 def test_rework_unarchived_parent_warns(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     parent = _setup_repo(tmp_path, "parent_archived.md", archived=False)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app, ["plan", "rework", str(parent)], catch_exceptions=False
     )
@@ -1217,7 +1217,7 @@ def test_rework_chains_prior_rework(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "docs/superpowers/archived-plans/2026-04-08-kid-laptops-5-parental-controls-rework-1.md").write_text(
         "# Stub — Rework 1\n**Status:** Complete\n**Goal:** done.\n"
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app, ["plan", "rework", str(parent)], catch_exceptions=False
     )
@@ -1239,7 +1239,7 @@ def test_rework_cross_dir_collision_exits_2(tmp_path: Path, monkeypatch) -> None
     slug = "2026-04-08-kid-laptops-5-parental-controls-rework-1.md"
     (tmp_path / "docs/superpowers/plans" / slug).write_text("# x\n")
     (tmp_path / "docs/superpowers/archived-plans" / slug).write_text("# x\n")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app, ["plan", "rework", str(parent)], catch_exceptions=False
     )
@@ -1259,7 +1259,7 @@ def test_rework_no_h1_title_fallback(tmp_path: Path, monkeypatch) -> None:
     parent = target_dir / "2026-04-08-no-title.md"
     parent.write_text("**Status:** Complete\n\n**Goal:** g\n")
     (tmp_path / "docs/superpowers/plans").mkdir(parents=True)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app, ["plan", "rework", str(parent)], catch_exceptions=False
     )
@@ -1292,7 +1292,7 @@ All green.
 - Modify: `src/vk/commands/plan_cmd.py`
 - Create: `tests/integration/test_plan_rework_add.py`
 
-- [ ] **Step 1: Write failing happy-path integration test**
+- [x] **Step 1: Write failing happy-path integration test**
 
 ```python
 """Integration tests for ``vk plan rework-add``."""
@@ -1317,10 +1317,9 @@ def _rework_file(tmp_path: Path, fixture: str = "rework_empty.md") -> Path:
     return target
 
 
-def test_rework_add_happy_path(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+def test_rework_add_happy_path(tmp_path: Path) -> None:
     path = _rework_file(tmp_path)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app,
         [
@@ -1341,7 +1340,7 @@ def test_rework_add_happy_path(tmp_path: Path, monkeypatch) -> None:
 
 Run — expect failure (command missing).
 
-- [ ] **Step 2: Register `vk plan rework-add`**
+- [x] **Step 2: Register `vk plan rework-add`**
 
 In `plan_cmd.py`:
 
@@ -1354,8 +1353,10 @@ def plan_rework_add(
     track: str = typer.Option(..., "--track", help="Work-category label."),
 ) -> None:
     """Append a row to a rework plan's Origin table."""
-    from vk.plan.rework import OriginRow, append_origin_row, parse_origin_table
-
+    # ``OriginRow``, ``append_origin_row``, and ``parse_origin_table`` are
+    # imported at the top of ``plan_cmd.py`` alongside the other
+    # ``vk.plan.*`` helpers (no circular-import concern; rework.py has no
+    # dependency on plan_cmd).
     if not rework_path.exists():
         err_console.print(f"Error: rework plan not found: {rework_path}")
         raise typer.Exit(2)
@@ -1399,13 +1400,12 @@ Run — expect happy-path green.
 **Files:**
 - Modify: `tests/integration/test_plan_rework_add.py`
 
-- [ ] **Step 1: Test — canonical tracks emit NO warn**
+- [x] **Step 1: Test — canonical tracks emit NO warn**
 
 ```python
-def test_rework_add_canonical_track_no_warn(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+def test_rework_add_canonical_track_no_warn(tmp_path: Path) -> None:
     path = _rework_file(tmp_path)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     for tok in ("development", "operations", "decision"):
         result = runner.invoke(
             app,
@@ -1417,13 +1417,12 @@ def test_rework_add_canonical_track_no_warn(tmp_path: Path, monkeypatch) -> None
         assert "not a canonical token" not in result.stderr
 ```
 
-- [ ] **Step 2: Test — non-canonical track warns, still succeeds**
+- [x] **Step 2: Test — non-canonical track warns, still succeeds**
 
 ```python
-def test_rework_add_non_canonical_track_warns(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+def test_rework_add_non_canonical_track_warns(tmp_path: Path) -> None:
     path = _rework_file(tmp_path)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app,
         ["plan", "rework-add", str(path),
@@ -1434,7 +1433,7 @@ def test_rework_add_non_canonical_track_warns(tmp_path: Path, monkeypatch) -> No
     assert "not a canonical token" in result.stderr
 ```
 
-- [ ] **Step 3: Test — empty flag value exits 2 naming the flag**
+- [x] **Step 3: Test — empty flag value exits 2 naming the flag**
 
 ```python
 import pytest
@@ -1446,11 +1445,10 @@ import pytest
     ("x", "y", "   "),
 ])
 def test_rework_add_empty_flag_exits_2(
-    tmp_path: Path, monkeypatch, item, source, track
+    tmp_path: Path, item, source, track
 ) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     path = _rework_file(tmp_path)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app, ["plan", "rework-add", str(path),
               "--item", item, "--source", source, "--track", track],
@@ -1460,13 +1458,12 @@ def test_rework_add_empty_flag_exits_2(
     assert "is required and must be non-empty" in result.stderr
 ```
 
-- [ ] **Step 4: Test — newline in any flag exits 2**
+- [x] **Step 4: Test — newline in any flag exits 2**
 
 ```python
-def test_rework_add_newline_rejected(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+def test_rework_add_newline_rejected(tmp_path: Path) -> None:
     path = _rework_file(tmp_path)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app,
         ["plan", "rework-add", str(path),
@@ -1477,13 +1474,12 @@ def test_rework_add_newline_rejected(tmp_path: Path, monkeypatch) -> None:
     assert "must not contain newlines" in result.stderr
 ```
 
-- [ ] **Step 5: Test — pipe escape round-trips**
+- [x] **Step 5: Test — pipe escape round-trips**
 
 ```python
-def test_rework_add_pipe_escape_roundtrip(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+def test_rework_add_pipe_escape_roundtrip(tmp_path: Path) -> None:
     path = _rework_file(tmp_path)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app,
         ["plan", "rework-add", str(path),
@@ -1497,15 +1493,14 @@ def test_rework_add_pipe_escape_roundtrip(tmp_path: Path, monkeypatch) -> None:
     assert parse_origin_table(path)[0].item == "wire | pipe"
 ```
 
-- [ ] **Step 6: Test — missing Origin section exits 2**
+- [x] **Step 6: Test — missing Origin section exits 2**
 
 ```python
-def test_rework_add_missing_origin_exits_2(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+def test_rework_add_missing_origin_exits_2(tmp_path: Path) -> None:
     path = tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-1.md"
     path.parent.mkdir(parents=True)
     path.write_text("# No Origin here\n\n**Status:** Not Started\n**Goal:** g\n")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app,
         ["plan", "rework-add", str(path),
@@ -1516,13 +1511,12 @@ def test_rework_add_missing_origin_exits_2(tmp_path: Path, monkeypatch) -> None:
     assert "no ## Origin section" in result.stderr
 ```
 
-- [ ] **Step 7: Test — malformed Origin header exits 2**
+- [x] **Step 7: Test — malformed Origin header exits 2**
 
 ```python
-def test_rework_add_malformed_origin_exits_2(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+def test_rework_add_malformed_origin_exits_2(tmp_path: Path) -> None:
     path = _rework_file(tmp_path, "rework_malformed_origin.md")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         app,
         ["plan", "rework-add", str(path),
@@ -1573,7 +1567,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures/rework"
 def test_rework_list_empty_repo(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     (tmp_path / "docs/superpowers/plans").mkdir(parents=True)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
     assert result.exit_code == 0
     # Rich table prints headers but no data rows.
@@ -1804,7 +1798,7 @@ def test_rework_list_two_active_reworks(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")
     _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-bar-rework-2.md")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "foo" in result.stdout
@@ -1817,7 +1811,7 @@ def test_rework_list_two_active_reworks(tmp_path: Path, monkeypatch) -> None:
 def test_rework_list_include_archived(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-foo-rework-1.md", archived=True)
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     without = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
     with_archived = runner.invoke(app, ["plan", "rework-list", "--include-archived"], catch_exceptions=False)
     assert "foo" not in without.stdout
@@ -1831,7 +1825,7 @@ def test_rework_list_status_filter(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")  # In Progress
     _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-bar-rework-2.md")  # Not Started
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list", "--status", "in progress"], catch_exceptions=False)
     assert "foo" in result.stdout
     assert "bar" not in result.stdout
@@ -1843,7 +1837,7 @@ def test_rework_list_status_filter(tmp_path: Path, monkeypatch) -> None:
 def test_rework_list_track_substring_matches_transition(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list", "--track", "decision"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "foo" in result.stdout
@@ -1856,7 +1850,7 @@ def test_rework_list_plan_filter(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")
     _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-bar-rework-2.md")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list", "--plan", "foo"], catch_exceptions=False)
     assert "foo" in result.stdout
     assert "bar" not in result.stdout
@@ -1868,7 +1862,7 @@ def test_rework_list_plan_filter(tmp_path: Path, monkeypatch) -> None:
 def test_rework_list_json_output(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-foo-rework-1.md")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list", "--json"], catch_exceptions=False)
     assert result.exit_code == 0
     data = json.loads(result.stdout)
@@ -1888,7 +1882,7 @@ def test_rework_list_skips_malformed_file(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "docs/superpowers/plans/2026-04-08-bar-rework-1.md").write_text(
         "not a plan at all"
     )
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "foo" in result.stdout
@@ -1952,7 +1946,7 @@ def _write_plan(tmp_path: Path, track: str) -> Path:
 
 def test_canonical_track_is_silent(tmp_path: Path) -> None:
     p = _write_plan(tmp_path, "development")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "self-review", str(p)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "non-canonical" not in result.stderr
@@ -1960,7 +1954,7 @@ def test_canonical_track_is_silent(tmp_path: Path) -> None:
 
 def test_non_canonical_track_surfaces_as_issue(tmp_path: Path) -> None:
     p = _write_plan(tmp_path, "research")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "self-review", str(p)], catch_exceptions=False)
     assert result.exit_code == 1
     assert "non-canonical **Track:** value 'research'" in result.stderr
@@ -1968,7 +1962,7 @@ def test_non_canonical_track_surfaces_as_issue(tmp_path: Path) -> None:
 
 def test_transition_syntax_passes_on_first_word(tmp_path: Path) -> None:
     p = _write_plan(tmp_path, "decision → development")
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(app, ["plan", "self-review", str(p)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "non-canonical" not in result.stderr
