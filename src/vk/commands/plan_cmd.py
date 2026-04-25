@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from rich.console import Console
 from vk.commands.common import (
     ConfirmAction,
     resolve_action,
+    resolve_repo_root,
 )
 from vk.config import load_profile
 from vk.plan.convert import (
@@ -22,7 +22,13 @@ from vk.plan.convert import (
     to_phased_single,
 )
 from vk.plan.parser import parse_plan
-from vk.plan.rework import OriginRow, append_origin_row, parse_origin_table
+from vk.plan.rework import (
+    OriginRow,
+    ReworkRecord,
+    append_origin_row,
+    list_reworks,
+    parse_origin_table,
+)
 from vk.plan.validate import DagValidationError, validate_dag
 from vk.plan.writer import write_plan
 from vk.spec_index import IndexEntry, upsert_entry
@@ -33,39 +39,6 @@ err_console = Console(stderr=True)
 _CANONICAL_TRACKS = {"development", "operations", "decision"}
 
 plan_app = typer.Typer(help="Write, save, and maintain plan files.")
-
-
-def _resolve_repo_root(cwd: Path | None = None) -> Path:
-    """Resolve repo root for a plan command.
-
-    Honors ``$VK_REPO_ROOT`` first (so integration tests can point the
-    command at ``tmp_path`` without spawning a fake git repo), then falls
-    back to ``git rev-parse`` (run from ``cwd`` if given), then to
-    ``Path.cwd()``.
-
-    The returned path is always ``.resolve()``-d so callers can safely use
-    ``Path.is_relative_to`` / ``Path.relative_to`` against other resolved
-    paths, even when the source value (env var, git output, or cwd) traversed
-    a symlink.
-
-    The empty string is treated like an unset env var (we fall through to
-    git) — keeping ``VK_REPO_ROOT=""`` as a way to disable the override
-    without unsetting it.
-    """
-    override = os.environ.get("VK_REPO_ROOT")
-    if override:
-        return Path(override).resolve()
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd,
-        )
-        return Path(result.stdout.strip()).resolve()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return (cwd or Path.cwd()).resolve()
 
 
 @plan_app.command(name="format")
@@ -108,7 +81,7 @@ def plan_new(
     """Generate a new plan file skeleton."""
     from datetime import date
 
-    repo_root = _resolve_repo_root()
+    repo_root = resolve_repo_root()
 
     config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
     profile = load_profile(config_path)
@@ -248,7 +221,7 @@ def plan_spec_index(
         console.print("No **Spec:** header in plan. Nothing to update.")
         raise typer.Exit(0)
 
-    repo_root = _resolve_repo_root(cwd=plan_path.parent)
+    repo_root = resolve_repo_root(cwd=plan_path.parent)
 
     spec_path = repo_root / plan.spec
     if not spec_path.exists():
@@ -418,7 +391,7 @@ def plan_rework(
     """Scaffold a rework plan against a parent."""
     from vk.plan.rework import scaffold_rework
 
-    repo_root = _resolve_repo_root()
+    repo_root = resolve_repo_root()
 
     try:
         out_path, warnings = scaffold_rework(parent_path, repo_root=repo_root)
@@ -503,3 +476,93 @@ def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:
         cwd=repo_root,
     )
     console.print(f"Updated and committed: {plan_path}")
+
+
+_TRACK_ABBREV = {"development": "dev", "operations": "ops", "decision": "dec"}
+
+
+def _format_by_track(d: dict[str, int]) -> str:
+    parts: list[str] = []
+    for label, count in d.items():
+        first = label.split()[0].lower() if label else ""
+        parts.append(f"{count} {_TRACK_ABBREV.get(first, first)}")
+    return " / ".join(parts)
+
+
+def _record_to_json(r: ReworkRecord) -> dict[str, object]:
+    return {
+        "parent_slug": r.parent_slug,
+        "rework_number": r.rework_number,
+        "status": r.status,
+        "open_steps": r.open_steps,
+        "origin_items": r.origin_items,
+        "by_track": r.by_track,
+        "path": r.path,
+        "parent_path": r.parent_path,
+        "spec_path": r.spec_path,
+    }
+
+
+@plan_app.command(name="rework-list")
+def plan_rework_list(
+    status: str | None = typer.Option(
+        None, "--status", help="Filter by plan status (case-insensitive exact match)."
+    ),
+    track: str | None = typer.Option(
+        None,
+        "--track",
+        help=(
+            "Substring match on Origin Track "
+            "(matches transition forms like 'decision → development')."
+        ),
+    ),
+    plan: str | None = typer.Option(None, "--plan", help="Exact parent-slug match."),
+    include_archived: bool = typer.Option(
+        False, "--include-archived", help="Also scan docs/superpowers/archived-plans/."
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Emit JSON on stdout instead of a table."
+    ),
+) -> None:
+    """List open (and optionally archived) rework plans in this repo."""
+    import json as _json
+
+    from rich.table import Table
+
+    repo_root = resolve_repo_root()
+    records, warnings = list_reworks(repo_root=repo_root, include_archived=include_archived)
+    for w in warnings:
+        err_console.print(f"warn: {w}")
+
+    if status:
+        records = [r for r in records if r.status.casefold() == status.casefold()]
+    if track:
+        needle = track.casefold()
+        records = [r for r in records if any(needle in t.casefold() for t in r.by_track.keys())]
+    if plan:
+        records = [r for r in records if r.parent_slug == plan]
+
+    if json_output:
+        console.print(_json.dumps([_record_to_json(r) for r in records]))
+        return
+
+    table = Table()
+    for col in (
+        "parent-slug",
+        "rework-#",
+        "status",
+        "open-steps",
+        "origin-items",
+        "by-track",
+    ):
+        table.add_column(col)
+    for r in records:
+        table.add_row(
+            r.parent_slug,
+            str(r.rework_number),
+            r.status,
+            str(r.open_steps),
+            str(r.origin_items),
+            _format_by_track(r.by_track),
+        )
+    console.print(table)

@@ -2,29 +2,10 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import typer
 import yaml
 
-
-def _resolve_repo_root() -> Path:
-    """Resolve repo root from VK_REPO_ROOT env var or git."""
-    env_root = os.environ.get("VK_REPO_ROOT")
-    if env_root:
-        return Path(env_root)
-
-    import subprocess
-
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        return Path(result.stdout.strip())
-    return Path.cwd()
+from vk.commands.common import resolve_repo_root
 
 
 def init(
@@ -45,7 +26,7 @@ def init(
     ),
 ) -> None:
     """Scaffold plan-config.yaml in a new repo."""
-    repo_root = _resolve_repo_root()
+    repo_root = resolve_repo_root()
     superpowers_dir = repo_root / "docs" / "superpowers"
     config_path = superpowers_dir / "plan-config.yaml"
 

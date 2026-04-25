@@ -12,10 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from vk.plan.filename import derive_slug
+from vk.plan.parser import parse_plan
 
 _REWORK_NUM_RE = re.compile(r"-rework-(\d+)\.md$")
 _TITLE_RE = re.compile(r"^# (.+)$", re.MULTILINE)
 _SPEC_RE = re.compile(r"^\*\*Spec:\*\*\s*`([^`]+)`", re.MULTILINE)
+_STATUS_RE = re.compile(r"^\*\*Status:\*\*\s*(.+)$", re.MULTILINE)
 
 # Warning text — substrings of these are part of the CLI contract that
 # Phases 4 (rework-add) and 5 (rework-list) will grep against. Don't rephrase
@@ -329,3 +331,114 @@ def _highest_archived_prior(*, repo_root: Path, prefix: str, below: int) -> Path
             best_n = n
             best_path = p
     return best_path
+
+
+@dataclass(frozen=True)
+class ReworkRecord:
+    """A single row in ``vk plan rework-list`` output.
+
+    ``parent_path`` is reserved for a future resolver — the list command
+    currently leaves it ``None`` because the parent plan reference is a
+    relative path inside the rework body, not derivable from the rework
+    filename alone. ``spec_path`` mirrors the rework plan's ``**Spec:**``
+    header verbatim when present.
+    """
+
+    parent_slug: str
+    rework_number: int
+    status: str
+    open_steps: int
+    origin_items: int
+    by_track: dict[str, int]
+    path: str
+    parent_path: str | None
+    spec_path: str | None
+
+
+def list_reworks(
+    *,
+    repo_root: Path,
+    include_archived: bool = False,
+) -> tuple[list[ReworkRecord], list[str]]:
+    """Return ``(records, warnings)``.
+
+    ``records`` is the list of rework plans found under
+    ``docs/superpowers/plans/`` (plus ``archived-plans/`` when
+    ``include_archived`` is true). ``warnings`` is one human-readable string
+    per file that was skipped because it matched the ``*-rework-*.md`` glob
+    but could not be parsed as a rework plan — typically a missing or
+    malformed ``## Origin`` section.
+    """
+    dirs = [repo_root / "docs/superpowers/plans"]
+    if include_archived:
+        dirs.append(repo_root / "docs/superpowers/archived-plans")
+
+    records: list[ReworkRecord] = []
+    warnings: list[str] = []
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for p in sorted(d.glob("*-rework-*.md")):
+            try:
+                records.append(_record_for(p, repo_root))
+            except Exception as exc:
+                # Use repo-relative paths so warnings match the table's
+                # ``path`` column convention; fall back to the absolute
+                # path if the file somehow lives outside ``repo_root``.
+                try:
+                    rel = p.relative_to(repo_root)
+                except ValueError:
+                    rel = p
+                warnings.append(f"skipping {rel}: {exc}")
+    return records, warnings
+
+
+def _record_for(path: Path, repo_root: Path) -> ReworkRecord:
+    full_slug = derive_slug(path)
+    m = _REWORK_NUM_RE.search(path.name)
+    if not m:
+        raise ValueError(f"rework file has no -rework-N suffix: {path.name}")
+    n = int(m.group(1))
+    parent_slug = re.sub(r"-rework-\d+$", "", full_slug)
+
+    # ``parse_plan`` requires at least one Phase or Task header, which
+    # scaffold-only rework plans don't yet have. Fall back to scanning the
+    # raw header for Status/Spec in that case so the rework still shows up
+    # in the list before its phases are written.
+    text = path.read_text(encoding="utf-8")
+    status = "Not Started"
+    spec: str | None = None
+    open_steps = 0
+    try:
+        plan = parse_plan(path)
+    except ValueError:
+        status_match = _STATUS_RE.search(text)
+        if status_match:
+            status = status_match.group(1).strip()
+        spec_match = _SPEC_RE.search(text)
+        if spec_match:
+            spec = spec_match.group(1).strip()
+    else:
+        status = plan.status
+        spec = plan.spec
+        open_steps = sum(1 for t in plan.all_tasks for s in t.steps if s.state == " ")
+
+    # Let ``parse_origin_table`` errors propagate to ``list_reworks`` —
+    # a missing or malformed ``## Origin`` section means the file isn't a
+    # rework plan, and it should surface as a skip warning, not a silent
+    # zero-row entry.
+    rows = parse_origin_table(path)
+    by_track: dict[str, int] = {}
+    for r in rows:
+        by_track[r.track] = by_track.get(r.track, 0) + 1
+    return ReworkRecord(
+        parent_slug=parent_slug,
+        rework_number=n,
+        status=status,
+        open_steps=open_steps,
+        origin_items=len(rows),
+        by_track=by_track,
+        path=str(path.relative_to(repo_root)),
+        parent_path=None,
+        spec_path=spec,
+    )

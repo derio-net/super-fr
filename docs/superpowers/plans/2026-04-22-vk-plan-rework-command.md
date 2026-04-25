@@ -1544,7 +1544,7 @@ Reads parsed plans (needs Phase 1 for `track_label`) and Origin tables (needs Ph
 - Modify: `src/vk/commands/plan_cmd.py`
 - Modify: `src/vk/plan/rework.py` (add `list_reworks` collector)
 
-- [ ] **Step 1: Write failing test for empty repo**
+- [x] **Step 1: Write failing test for empty repo**
 
 Create `tests/integration/test_plan_rework_list.py`:
 
@@ -1574,7 +1574,7 @@ def test_rework_list_empty_repo(tmp_path: Path, monkeypatch) -> None:
     assert "parent-slug" in result.stdout or result.stdout.strip() == ""
 ```
 
-- [ ] **Step 2: Implement `list_reworks` in `rework.py`**
+- [x] **Step 2: Implement `list_reworks` in `rework.py`**
 
 Append to `src/vk/plan/rework.py`:
 
@@ -1648,7 +1648,7 @@ def _record_for(path: Path, repo_root: Path) -> ReworkRecord:
     )
 ```
 
-- [ ] **Step 3: Register `vk plan rework-list` CLI**
+- [x] **Step 3: Register `vk plan rework-list` CLI**
 
 In `plan_cmd.py`:
 
@@ -1734,7 +1734,7 @@ Run the empty-repo test — expect green.
 - Modify: `tests/integration/test_plan_rework_list.py`
 - Create: `tests/fixtures/rework/rework_with_phases.md`
 
-- [ ] **Step 1: Create `rework_with_phases.md` fixture**
+- [x] **Step 1: Create `rework_with_phases.md` fixture**
 
 ```markdown
 # Foo — Rework 1
@@ -1783,7 +1783,7 @@ Run the empty-repo test — expect green.
 - [ ] TODO.
 ```
 
-- [ ] **Step 2: Test — two reworks list under default filters**
+- [x] **Step 2: Test — two reworks list under default filters**
 
 ```python
 def _seed_rework(tmp_path: Path, fixture: str, filename: str, archived: bool = False) -> Path:
@@ -1805,7 +1805,7 @@ def test_rework_list_two_active_reworks(tmp_path: Path, monkeypatch) -> None:
     assert "bar" in result.stdout
 ```
 
-- [ ] **Step 3: Test — `--include-archived` picks up archived-plans**
+- [x] **Step 3: Test — `--include-archived` picks up archived-plans**
 
 ```python
 def test_rework_list_include_archived(tmp_path: Path, monkeypatch) -> None:
@@ -1818,7 +1818,7 @@ def test_rework_list_include_archived(tmp_path: Path, monkeypatch) -> None:
     assert "foo" in with_archived.stdout
 ```
 
-- [ ] **Step 4: Test — `--status` filter case-insensitive exact match**
+- [x] **Step 4: Test — `--status` filter case-insensitive exact match**
 
 ```python
 def test_rework_list_status_filter(tmp_path: Path, monkeypatch) -> None:
@@ -1831,7 +1831,7 @@ def test_rework_list_status_filter(tmp_path: Path, monkeypatch) -> None:
     assert "bar" not in result.stdout
 ```
 
-- [ ] **Step 5: Test — `--track decision` substring-matches `decision → development`**
+- [x] **Step 5: Test — `--track decision` substring-matches `decision → development`**
 
 ```python
 def test_rework_list_track_substring_matches_transition(tmp_path: Path, monkeypatch) -> None:
@@ -1843,7 +1843,7 @@ def test_rework_list_track_substring_matches_transition(tmp_path: Path, monkeypa
     assert "foo" in result.stdout
 ```
 
-- [ ] **Step 6: Test — `--plan` exact parent-slug match**
+- [x] **Step 6: Test — `--plan` exact parent-slug match**
 
 ```python
 def test_rework_list_plan_filter(tmp_path: Path, monkeypatch) -> None:
@@ -1856,7 +1856,7 @@ def test_rework_list_plan_filter(tmp_path: Path, monkeypatch) -> None:
     assert "bar" not in result.stdout
 ```
 
-- [ ] **Step 7: Test — `--json` emits valid, non-empty JSON**
+- [x] **Step 7: Test — `--json` emits valid, non-empty JSON**
 
 ```python
 def test_rework_list_json_output(tmp_path: Path, monkeypatch) -> None:
@@ -1873,7 +1873,7 @@ def test_rework_list_json_output(tmp_path: Path, monkeypatch) -> None:
     assert set(data[0]["by_track"].keys()) == {"development", "operations", "decision"}
 ```
 
-- [ ] **Step 8: Test — malformed file skipped with warn, others listed**
+- [x] **Step 8: Test — malformed file skipped with warn, others listed**
 
 ```python
 def test_rework_list_skips_malformed_file(tmp_path: Path, monkeypatch) -> None:
