@@ -19,9 +19,12 @@ _TITLE_RE = re.compile(r"^# (.+)$", re.MULTILINE)
 _SPEC_RE = re.compile(r"^\*\*Spec:\*\*\s*`([^`]+)`", re.MULTILINE)
 _STATUS_RE = re.compile(r"^\*\*Status:\*\*\s*(.+)$", re.MULTILINE)
 
-# Warning text — substrings of these are part of the CLI contract that
-# Phases 4 (rework-add) and 5 (rework-list) will grep against. Don't rephrase
-# the leading clause without updating downstream consumers and their tests.
+# Warning text — emitted by ``vk plan rework`` (Phase 3). Downstream
+# consumers (other vk subcommands or operator scripts) MAY assert on
+# substrings, so don't rephrase the leading clause without sweeping
+# callers first. As of now no other vk command depends on these strings
+# — Phase 4 (rework-add) and Phase 5 (rework-list) emit their own
+# warnings.
 _WARN_NO_H1 = "parent has no H1 title; using slug-derived fallback."
 _WARN_NOT_ARCHIVED = (
     "parent is not yet archived; Parent plan header points at plans/. Update when parent is moved."

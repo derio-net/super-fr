@@ -457,17 +457,7 @@ def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:
     # APPLY path (either --yes or PROMPT-confirmed): write the file and commit.
     plan_path.write_text(proposed)
 
-    try:
-        root_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=plan_path.parent,
-        )
-        repo_root = Path(root_result.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        repo_root = plan_path.parent
+    repo_root = resolve_repo_root(cwd=plan_path.parent)
 
     subprocess.run(["git", "add", str(plan_path)], check=True, cwd=repo_root)
     subprocess.run(
@@ -524,7 +514,11 @@ def plan_rework_list(
         False, "--json", help="Emit JSON on stdout instead of a table."
     ),
 ) -> None:
-    """List open (and optionally archived) rework plans in this repo."""
+    """List open (and optionally archived) rework plans in this repo.
+
+    Filter flags ``--status``, ``--track``, and ``--plan`` compose with AND
+    semantics (each further narrows the result set).
+    """
     import json as _json
 
     from rich.table import Table

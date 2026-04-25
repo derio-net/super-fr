@@ -27,8 +27,8 @@ def test_rework_list_empty_repo(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
     assert result.exit_code == 0
-    # Rich table prints headers but no data rows.
-    assert "parent-slug" in result.stdout or result.stdout.strip() == ""
+    # Rich table always prints column headers, even on zero data rows.
+    assert "parent-slug" in result.stdout
 
 
 def test_rework_list_two_active_reworks(tmp_path: Path, monkeypatch) -> None:
