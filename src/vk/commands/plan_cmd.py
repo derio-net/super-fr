@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 import typer
@@ -30,6 +32,39 @@ err_console = Console(stderr=True)
 _CANONICAL_TRACKS = {"development", "operations", "decision"}
 
 plan_app = typer.Typer(help="Write, save, and maintain plan files.")
+
+
+def _resolve_repo_root(cwd: Path | None = None) -> Path:
+    """Resolve repo root for a plan command.
+
+    Honors ``$VK_REPO_ROOT`` first (so integration tests can point the
+    command at ``tmp_path`` without spawning a fake git repo), then falls
+    back to ``git rev-parse`` (run from ``cwd`` if given), then to
+    ``Path.cwd()``.
+
+    The returned path is always ``.resolve()``-d so callers can safely use
+    ``Path.is_relative_to`` / ``Path.relative_to`` against other resolved
+    paths, even when the source value (env var, git output, or cwd) traversed
+    a symlink.
+
+    The empty string is treated like an unset env var (we fall through to
+    git) — keeping ``VK_REPO_ROOT=""`` as a way to disable the override
+    without unsetting it.
+    """
+    override = os.environ.get("VK_REPO_ROOT")
+    if override:
+        return Path(override).resolve()
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
+        )
+        return Path(result.stdout.strip()).resolve()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return (cwd or Path.cwd()).resolve()
 
 
 @plan_app.command(name="format")
@@ -70,19 +105,9 @@ def plan_new(
     save: bool = typer.Option(False, "--save", help="Write to plans directory."),
 ) -> None:
     """Generate a new plan file skeleton."""
-    import subprocess
     from datetime import date
 
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        repo_root = Path(result.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        repo_root = Path.cwd()
+    repo_root = _resolve_repo_root()
 
     config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
     profile = load_profile(config_path)
@@ -222,19 +247,7 @@ def plan_spec_index(
         console.print("No **Spec:** header in plan. Nothing to update.")
         raise typer.Exit(0)
 
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=plan_path.parent,
-        )
-        repo_root = Path(result.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        repo_root = plan_path.parent
+    repo_root = _resolve_repo_root(cwd=plan_path.parent)
 
     spec_path = repo_root / plan.spec
     if not spec_path.exists():
@@ -344,6 +357,26 @@ def plan_convert(
     console.print(f"Converted: {plan.format.value} -> phased")
 
 
+@plan_app.command(name="rework")
+def plan_rework(
+    parent_path: Path = typer.Argument(..., help="Path to the parent plan file."),
+) -> None:
+    """Scaffold a rework plan against a parent."""
+    from vk.plan.rework import scaffold_rework
+
+    repo_root = _resolve_repo_root()
+
+    try:
+        out_path, warnings = scaffold_rework(parent_path, repo_root=repo_root)
+    except ValueError as exc:
+        err_console.print(f"Error: {exc}")
+        raise typer.Exit(2)
+
+    for w in warnings:
+        err_console.print(f"warn: {w}")
+    console.print(f"Created: {out_path}")
+
+
 def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:
     """Implement the --add-deps migration branch of `vk plan convert`.
 
@@ -353,7 +386,6 @@ def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:
     pretended to prompt — surfaced in the PR #32 review as M-3).
     """
     import difflib
-    import subprocess
     import tempfile
 
     original = plan_path.read_text()
