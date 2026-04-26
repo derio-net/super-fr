@@ -11,3 +11,6 @@ build/
 
 # Claude Code session lockfile (ScheduleWakeup runtime artifact).
 .claude/scheduled_tasks.lock
+
+# Local git worktrees.
+.worktrees/

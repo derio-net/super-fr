@@ -1,7 +1,7 @@
 # `vk plan rework` Command Surface Implementation Plan
 
 **Spec:** `docs/superpowers/specs/2026-04-22-vk-plan-rework-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Ship the `vk plan rework`, `vk plan rework-add`, and `vk plan rework-list` commands — plus the supporting `**Track:**` phase body-field — so agents can defer surfaced-but-unrealised work into durable, vk-execute-compatible rework plans without reopening the parent.
 
