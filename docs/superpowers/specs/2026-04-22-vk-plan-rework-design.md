@@ -556,4 +556,4 @@ normalised.
 
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
-| `vk plan rework` Command Surface Implementation Plan |  | `docs/superpowers/plans/2026-04-22-vk-plan-rework-command.md` | Not Started | — |
+| `vk plan rework` Command Surface Implementation Plan |  | `docs/superpowers/archived-plans/2026-04-22-vk-plan-rework-command.md` | Complete | — |
