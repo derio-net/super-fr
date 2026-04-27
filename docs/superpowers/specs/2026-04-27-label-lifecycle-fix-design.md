@@ -112,23 +112,47 @@ PR_READY    = LabelDef("pr-ready",    "0E8A16", "PR is open; awaiting review")
 VK_SYNCED   = LabelDef("vk-synced",   "6A630D", "Synced to VK board")
 
 # Templated labels — name is dynamic, color/description are canonical
-PLAN_LABEL_COLOR  = "B60205"  # plan:<slug>
+SPEC_LABEL_COLOR  = "B60205"  # spec:<spec-slug>
+PLAN_LABEL_COLOR  = "1D76DB"  # plan:<plan-name>
 PHASE_LABEL_COLOR = "FBCA04"  # phase:<n>
 
 
-def plan_label(slug: str) -> LabelDef:
-    return LabelDef(f"plan:{slug}", PLAN_LABEL_COLOR, f"Part of plan {slug}")
+def spec_label(spec_slug: str) -> LabelDef:
+    return LabelDef(f"spec:{spec_slug}", SPEC_LABEL_COLOR, f"Part of spec {spec_slug}")
+
+
+def plan_label(plan_name: str) -> LabelDef:
+    return LabelDef(f"plan:{plan_name}", PLAN_LABEL_COLOR, f"Plan: {plan_name}")
 
 
 def phase_label(n: int) -> LabelDef:
     return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
 ```
 
+**Identifier hierarchy** (each Issue carries all three for dispatched work):
+
+- `spec:<spec-slug>` — the design spec the work belongs to. Derived from the
+  plan's `**Spec:**` field's filename (date prefix and `-design` suffix
+  stripped). Lets `gh issue list --label spec:<x>` return every Issue across
+  every plan rolling up under one spec.
+- `plan:<plan-name>` — which plan within the spec. Derived from the plan
+  filename's tail after stripping the spec slug and any `phase-N-` infix
+  (e.g. `2026-04-27-label-lifecycle-fix-phase-3-labels-sync.md` →
+  `labels-sync`). Falls back to `phase-N` when the filename has no
+  descriptive tail (e.g. `…-phase-1.md` → `plan:phase-1`).
+- `phase:<n>` — the *internal* phase number within the plan (unchanged from
+  prior behavior).
+
 Color logic — the lifecycle reads visually as a gradient when the operator
 scans a board: blue (queued) → orange (active) → green (review) → closed.
 Yellow stays for `phase:N` because it's an *attribute*, not a *state*.
-`B60205` red stays for `plan:<slug>` because it's already in the wild and
-has no semantic conflict with anything else.
+`B60205` red stays for `spec:<spec-slug>` (the heaviest-weight identifier).
+`1D76DB` blue distinguishes `plan:<plan-name>` from the lifecycle's lighter
+queued-blue and from `phase:N` yellow.
+
+**Backward compatibility:** plans without a `**Spec:**` field fall back to
+the legacy single-label `plan:<full-slug>` scheme — preserves behavior for
+spec-less plans without forcing every dispatched repo to migrate at once.
 
 ### 2. Configurability
 
@@ -158,8 +182,8 @@ want a different scheme send a PR to `src/vk/labels.py`.
 
 ### 3. `vk dispatch create` bootstrap
 
-`src/vk/commands/dispatch_cmd.py:285-294` builds `required_labels`. Extend
-to include the two new lifecycle labels alongside the existing four:
+`src/vk/commands/dispatch_cmd.py` builds `required_labels` from the
+identifier hierarchy plus the lifecycle states:
 
 ```python
 agentic_label     = dispatch_cfg.labels.get("agentic",     "vk-ready")
@@ -167,9 +191,17 @@ manual_label      = dispatch_cfg.labels.get("manual",      "manual")
 in_progress_label = dispatch_cfg.labels.get("in_progress", "in-progress")
 pr_ready_label    = dispatch_cfg.labels.get("pr_ready",    "pr-ready")
 
+if plan.spec:
+    spec_slug = derive_spec_slug(Path(plan.spec))
+    plan_name = derive_plan_name(plan_path, spec_slug)
+    spec_plan_labels = [f"spec:{spec_slug}", f"plan:{plan_name}"]
+else:
+    # Legacy: spec-less plans fall back to single-label scheme.
+    spec_plan_labels = [f"plan:{derive_slug(plan_path)}"]
+
 required_labels = sorted({
     agentic_label, manual_label, in_progress_label, pr_ready_label,
-    f"plan:{slug}",
+    *spec_plan_labels,
     *(f"phase:{p.number}" for p in plan.phases),
 })
 ```
@@ -177,10 +209,10 @@ required_labels = sorted({
 `gh.ensure_labels()` is upgraded to take colors and descriptions from the
 registry (currently it accepts them as parameters but every callsite passes
 the defaults). The dispatch bootstrap looks up each label string in a
-`name_to_def` map built from the registry; for `plan:<slug>` and `phase:<n>`
-it calls the templated helpers. Any label that isn't in the registry (e.g.
-an operator-overridden custom label string) keeps the existing default color
-behavior — no surprise breakage.
+`name_to_def` map built from the registry; for `spec:<spec-slug>`,
+`plan:<plan-name>`, and `phase:<n>` it calls the templated helpers. Any
+label that isn't in the registry (e.g. an operator-overridden custom label
+string) keeps the existing default color behavior — no surprise breakage.
 
 ### 4. Two new `vk execute` subcommands
 

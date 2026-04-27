@@ -20,7 +20,7 @@ from vk.commands.common import (
 )
 from vk.commands.dispatch_body_validator import validate_issue_body
 from vk.config import load_profile
-from vk.plan.filename import derive_slug
+from vk.plan.filename import derive_plan_name, derive_slug, derive_spec_slug
 from vk.plan.format import PlanFormat
 from vk.plan.models import Phase
 from vk.plan.parser import parse_plan
@@ -246,6 +246,15 @@ def dispatch_create(
         raise typer.Exit(2)
 
     slug = derive_slug(plan_path_resolved)
+    # Spec-aware label scheme: spec:<spec-slug> + plan:<plan-name> + phase:<n>.
+    # Falls back to legacy single-label `plan:<full-slug>` when the plan has
+    # no `**Spec:**` field (preserves behavior for spec-less plans).
+    if plan.spec:
+        spec_slug = derive_spec_slug(Path(plan.spec))
+        plan_name = derive_plan_name(plan_path_resolved, spec_slug)
+        spec_plan_labels = [f"spec:{spec_slug}", f"plan:{plan_name}"]
+    else:
+        spec_plan_labels = [f"plan:{slug}"]
 
     # Idempotency check
     plan_text = plan_path_resolved.read_text()
@@ -280,15 +289,15 @@ def dispatch_create(
     phase_to_issue: dict[int, int] = {}
 
     # Bootstrap labels on the target repo. Idempotent (gh label create --force).
-    # Prevents silent-partial-dispatch on repos where vk-ready / manual /
-    # plan:<slug> / phase:<n> don't yet exist.
+    # Prevents silent-partial-dispatch on repos where required labels don't
+    # yet exist.
     agentic_label = dispatch_cfg.labels.get("agentic", "vk-ready")
     manual_label = dispatch_cfg.labels.get("manual", "manual")
     required_labels = sorted(
         {
             agentic_label,
             manual_label,
-            f"plan:{slug}",
+            *spec_plan_labels,
             *(f"phase:{p.number}" for p in plan.phases),
         }
     )
@@ -341,7 +350,7 @@ def dispatch_create(
                 repo=target_repo,
                 title=title,
                 body=body,
-                labels=[tag_label, f"plan:{slug}", f"phase:{phase.number}"],
+                labels=[tag_label, *spec_plan_labels, f"phase:{phase.number}"],
             )
             issue_num = gh.extract_issue_number(issue_url)
             phase_to_issue[phase.number] = issue_num
@@ -449,6 +458,12 @@ def migrate(
         raise typer.Exit(2)
 
     slug = derive_slug(plan_path_resolved)
+    if plan.spec:
+        spec_slug = derive_spec_slug(Path(plan.spec))
+        plan_name = derive_plan_name(plan_path_resolved, spec_slug)
+        spec_plan_labels = [f"spec:{spec_slug}", f"plan:{plan_name}"]
+    else:
+        spec_plan_labels = [f"plan:{slug}"]
     plan_text = plan_path_resolved.read_text()
     tracked = _get_already_tracked(plan_text)
 
@@ -532,13 +547,13 @@ def migrate(
             console.print(f"\n#{r['number']}  {r['old_title']}  →  {r['new_title']}")
         confirm_or_exit("Apply these migrations?")
 
-    # Ensure plan:<slug> and phase:<n> labels exist on every target repo
-    # before the edit loop. Rewrites may span multiple repos if the plan
-    # dispatched cross-repo Issues, so we group by repo.
+    # Ensure spec/plan/phase labels exist on every target repo before the
+    # edit loop. Rewrites may span multiple repos if the plan dispatched
+    # cross-repo Issues, so we group by repo.
     labels_by_repo: dict[str, set[str]] = {}
     for r in rewrites:
         labels_by_repo.setdefault(r["repo"], set()).update(
-            {f"plan:{slug}", f"phase:{r['phase_number']}"}
+            {*spec_plan_labels, f"phase:{r['phase_number']}"}
         )
     for repo_name, needed in labels_by_repo.items():
         try:
@@ -554,7 +569,7 @@ def migrate(
                 number=r["number"],
                 title=r["new_title"],
                 body=r["new_body"],
-                add_labels=[f"plan:{slug}", f"phase:{r['phase_number']}"],
+                add_labels=[*spec_plan_labels, f"phase:{r['phase_number']}"],
             )
             console.print(f"Migrated #{r['number']}")
         except gh.GhError as exc:

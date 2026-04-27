@@ -15,6 +15,11 @@
 
 **PR strategy:** Each phase ships as its own PR via the project's branch + PR workflow. Phase 4 contains the version bump, so it must merge last. Phase 2 and Phase 3 are independent of each other and may dispatch in parallel after Phase 1 lands.
 
+> **Note added during dispatch:** The dispatch label scheme was changed to a three-tier identifier hierarchy: `spec:<spec-slug>` + `plan:<plan-name>` + `phase:<n>`. The derivation helpers `derive_spec_slug` and `derive_plan_name` already live in `src/vk/plan/filename.py`, and `dispatch_cmd.py` already emits the new scheme (see spec §1 "Identifier hierarchy" and §3). Phase 1 below should:
+> - Add `spec_label(spec_slug)`, `plan_label(plan_name)`, and `phase_label(n)` templated helpers in the new `labels.py` registry (was: only `plan_label(slug)` and `phase_label(n)`).
+> - In Phase 2's dispatch test cases, assert all three identifier labels (`spec:<>`, `plan:<>`, `phase:<n>`) appear in `required_labels` — not just `plan:<full-slug>` and `phase:<n>`.
+> - Where this plan's existing tasks reference `plan_label(slug)`, read it as the new `plan_label(plan_name)` semantics, plus a peer `spec_label(spec_slug)` call. The `name_to_def` map in dispatch's bootstrap should look up the new label strings (`spec:<>`, `plan:<>`, `phase:<>`) — the registry's templated helpers know their canonical colors.
+
 ---
 
 ## Phase 1: Label registry and gh helpers [agentic]
