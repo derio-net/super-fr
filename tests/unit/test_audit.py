@@ -58,7 +58,6 @@ class TestRunDispatchAudit:
             header=HeaderConfig(),
             dispatch=DispatchConfig(
                 owner="test-org",
-                project_board="Test Board",
                 default_repo="test-org/test-repo",
             ),
         )

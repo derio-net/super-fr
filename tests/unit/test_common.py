@@ -52,5 +52,5 @@ class TestFormatGateRefusal:
         assert "plan-config.yaml" in result
         assert "target: github-issues" in result
         assert "owner:" in result
-        assert "project_board:" in result
+        assert "project_board:" not in result
         assert "labels:" in result

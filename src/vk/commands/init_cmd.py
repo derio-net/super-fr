@@ -14,11 +14,6 @@ def init(
         "--dispatch",
         help="Enable dispatch with OWNER/REPO.",
     ),
-    project: str | None = typer.Option(
-        None,
-        "--project",
-        help="Project board name.",
-    ),
     force: bool = typer.Option(
         False,
         "--force",
@@ -56,12 +51,10 @@ def init(
             raise typer.Exit(1)
 
         owner = parts[0]
-        project_name = project or "Derio Ops"
 
         config["dispatch"] = {
             "target": "github-issues",
             "owner": owner,
-            "project_board": project_name,
             "default_repo": dispatch,
             "labels": {
                 "agentic": "vk-ready",

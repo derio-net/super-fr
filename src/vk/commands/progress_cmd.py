@@ -392,7 +392,7 @@ def _run_dispatch_audit(
     try:
         project_num = gh.get_project_number(
             owner=dispatch_cfg.owner,
-            project_name=dispatch_cfg.project_board,
+            project_name="Derio Ops",
         )
         board_items = gh.list_project_items(
             owner=dispatch_cfg.owner,
