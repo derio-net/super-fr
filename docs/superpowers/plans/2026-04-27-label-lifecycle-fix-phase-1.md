@@ -515,7 +515,7 @@ uv run pytest -q --no-cov
 
 Expected: green.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git checkout -b phase-1-label-registry-and-gh-helpers
