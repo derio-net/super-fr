@@ -111,3 +111,61 @@ def phased_plan(tmp_repo: Path) -> Path:
     """)
     )
     return plan_file
+
+
+@pytest.fixture()
+def phased_plan_distinct_names(tmp_repo: Path) -> Path:
+    """A phased plan whose spec slug and plan name are *distinct*, so the
+    three-tier label scheme produces visibly different `spec:` and `plan:`
+    label values. The default `phased_plan` fixture uses matching names,
+    which masks derivation bugs."""
+    plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan_file = plans_dir / "2026-04-27-myspec-phase-2-extras.md"
+    plan_file.write_text(
+        textwrap.dedent("""\
+        # Myspec Phase 2 Extras
+
+        **Spec:** `docs/superpowers/specs/2026-04-27-myspec-design.md`
+        **Status:** Not Started
+
+        **Goal:** Exercise the spec/plan label derivation.
+
+        ---
+
+        ## Phase 1: Setup [agentic]
+        **Depends on:** —
+
+        ### Task 1: Do thing
+        - [ ] **Step 1: First step**
+    """)
+    )
+    return plan_file
+
+
+@pytest.fixture()
+def phased_plan_no_spec(tmp_repo: Path) -> Path:
+    """A phased plan with no `**Spec:**` field. Dispatch must fall back to
+    the legacy single-label `plan:<full-slug>` scheme; no `spec:` label
+    should be emitted."""
+    plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan_file = plans_dir / "2026-04-12-spec-less-feature.md"
+    plan_file.write_text(
+        textwrap.dedent("""\
+        # Spec Less Feature
+
+        **Status:** Not Started
+
+        **Goal:** Plan with no Spec field.
+
+        ---
+
+        ## Phase 1: Setup [agentic]
+        **Depends on:** —
+
+        ### Task 1: Do thing
+        - [ ] **Step 1: First step**
+    """)
+    )
+    return plan_file

@@ -51,7 +51,7 @@ def derive_spec_slug(spec_path: Path | str) -> str:
     return rest
 
 
-def derive_plan_name(plan_path: Path, spec_slug: str) -> str:
+def derive_plan_name(plan_path: Path | str, spec_slug: str) -> str:
     """Extract a plan-name identifier from a plan filename, given the
     spec slug it belongs to.
 
@@ -59,7 +59,13 @@ def derive_plan_name(plan_path: Path, spec_slug: str) -> str:
     any leading 'phase-N-' prefix (the conventional plan-within-spec
     numbering). Falls back to 'phase-N' when the filename has no
     descriptive tail beyond the phase number.
+
+    Edge case: when the plan filename equals the spec slug (e.g. a
+    spec with a single plan that shares its name), plan name and spec
+    slug coincide. The Issue carries both `spec:<slug>` and
+    `plan:<slug>` labels — redundant but consistent for query roll-up.
     """
+    plan_path = Path(plan_path) if isinstance(plan_path, str) else plan_path
     full = derive_slug(plan_path)
     rest = full
     if rest.startswith(f"{spec_slug}-"):

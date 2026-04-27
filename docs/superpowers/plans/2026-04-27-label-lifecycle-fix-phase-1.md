@@ -78,6 +78,17 @@ class TestLabelDef:
         assert labels.VK_SYNCED.name   == "vk-synced"
 
 
+class TestSpecLabel:
+    def test_renders_name(self) -> None:
+        assert labels.spec_label("foo").name == "spec:foo"
+
+    def test_color_is_canonical(self) -> None:
+        assert labels.spec_label("foo").color == labels.SPEC_LABEL_COLOR
+
+    def test_description_includes_slug(self) -> None:
+        assert "foo" in labels.spec_label("foo").description
+
+
 class TestPlanLabel:
     def test_renders_name(self) -> None:
         assert labels.plan_label("foo").name == "plan:foo"
@@ -85,7 +96,7 @@ class TestPlanLabel:
     def test_color_is_canonical(self) -> None:
         assert labels.plan_label("foo").color == labels.PLAN_LABEL_COLOR
 
-    def test_description_includes_slug(self) -> None:
+    def test_description_includes_name(self) -> None:
         assert "foo" in labels.plan_label("foo").description
 
 
@@ -152,17 +163,27 @@ PR_READY    = LabelDef("pr-ready",    "0E8A16", "PR is open; awaiting review")
 VK_SYNCED   = LabelDef("vk-synced",   "6A630D", "Synced to VK board")
 
 # Templated label colors (name is dynamic)
-PLAN_LABEL_COLOR  = "B60205"
+SPEC_LABEL_COLOR  = "B60205"
+PLAN_LABEL_COLOR  = "1D76DB"
 PHASE_LABEL_COLOR = "FBCA04"
 
 
-def plan_label(slug: str) -> LabelDef:
-    """Return the LabelDef for `plan:<slug>`."""
-    return LabelDef(f"plan:{slug}", PLAN_LABEL_COLOR, f"Part of plan {slug}")
+def spec_label(spec_slug: str) -> LabelDef:
+    """Return the LabelDef for `spec:<spec-slug>` (the umbrella identifier
+    rolling up every Issue across every plan under one spec)."""
+    return LabelDef(f"spec:{spec_slug}", SPEC_LABEL_COLOR, f"Part of spec {spec_slug}")
+
+
+def plan_label(plan_name: str) -> LabelDef:
+    """Return the LabelDef for `plan:<plan-name>` (the per-plan identifier
+    within a spec; falls back to `phase-N` for descriptor-less plan
+    filenames — see `derive_plan_name`)."""
+    return LabelDef(f"plan:{plan_name}", PLAN_LABEL_COLOR, f"Plan: {plan_name}")
 
 
 def phase_label(n: int) -> LabelDef:
-    """Return the LabelDef for `phase:<n>`."""
+    """Return the LabelDef for `phase:<n>` (the internal phase number
+    within a plan)."""
     return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
 
 
@@ -738,7 +759,10 @@ class TestDispatchUsesLabelRegistry:
 
 - [ ] **Step 4: Update `dispatch_cmd.py`**
 
-Replace lines 285-296 of `src/vk/commands/dispatch_cmd.py`:
+Refactor `dispatch_cmd.py`'s `required_labels` build to consume the registry. The
+spec/plan label derivation already lives in `dispatch_cmd.py` (the `spec_plan_labels`
+list, set up earlier from `derive_spec_slug` / `derive_plan_name`). This task wraps the
+existing string list in registry-aware `LabelDef`s so colors and descriptions land too:
 
 ```python
 from vk import labels as _labels
@@ -758,12 +782,24 @@ def _def_for(name: str, registry_def: _labels.LabelDef) -> _labels.LabelDef:
         return registry_def
     return _labels.LabelDef(name, "ededed", "")
 
+# Identifier hierarchy: spec:<spec-slug> + plan:<plan-name> + phase:<n>.
+# `plan.spec` is None for legacy spec-less plans → fall back to single-label
+# `plan:<full-slug>` (preserves the pre-three-tier behavior for old repos).
+identifier_defs: list[_labels.LabelDef] = []
+if plan.spec:
+    spec_slug = derive_spec_slug(Path(plan.spec))
+    plan_name = derive_plan_name(plan_path_resolved, spec_slug)
+    identifier_defs.append(_labels.spec_label(spec_slug))
+    identifier_defs.append(_labels.plan_label(plan_name))
+else:
+    identifier_defs.append(_labels.plan_label(derive_slug(plan_path_resolved)))
+
 required_labels: list[_labels.LabelDef] = [
     _def_for(agentic_name,     _labels.VK_READY),
     _def_for(manual_name,      _labels.MANUAL),
     _def_for(in_progress_name, _labels.IN_PROGRESS),
     _def_for(pr_ready_name,    _labels.PR_READY),
-    _labels.plan_label(slug),
+    *identifier_defs,
     *(_labels.phase_label(p.number) for p in plan.phases),
 ]
 required_labels = sorted(required_labels, key=lambda d: d.name)
