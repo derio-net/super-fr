@@ -9,11 +9,21 @@ from __future__ import annotations
 
 import re
 import subprocess
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypeVar
+
+T = TypeVar("T")
 
 
 class GhError(Exception):
     """Error from a gh CLI invocation."""
+
+    def __init__(self, message: str, *, stderr: str = "", returncode: int = 0) -> None:
+        super().__init__(message)
+        self.stderr = stderr
+        self.returncode = returncode
 
 
 def _run_gh(args: list[str]) -> str:
@@ -27,7 +37,7 @@ def _run_gh(args: list[str]) -> str:
         )
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
-        raise GhError(msg) from exc
+        raise GhError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
     return result.stdout.strip()
 
 
@@ -205,6 +215,27 @@ def edit_issue_labels(
     args = ["issue", "edit", str(issue_number), "--repo", repo]
     for label in add_labels:
         args.extend(["--add-label", label])
+    _run_gh(args)
+
+
+def swap_issue_labels(
+    *,
+    repo: str,
+    number: int,
+    add: list[str],
+    remove: list[str],
+) -> None:
+    """Add and remove labels on an Issue in a single gh call.
+
+    No-op if both lists are empty. Failure propagates as GhError.
+    """
+    if not add and not remove:
+        return
+    args = ["issue", "edit", str(number), "--repo", repo]
+    for lbl in add:
+        args.extend(["--add-label", lbl])
+    for lbl in remove:
+        args.extend(["--remove-label", lbl])
     _run_gh(args)
 
 
@@ -397,3 +428,54 @@ def auth_status() -> bool:
         return False
     else:
         return True
+
+
+_TRANSIENT_PATTERNS = (
+    "http 5",  # 500, 502, 503, 504, ...
+    "could not resolve",
+    "connection reset",
+    "connection refused",
+    "timeout",
+    "temporarily unavailable",
+)
+
+
+def is_transient(err: GhError) -> bool:
+    """True if the error looks like a transient network/server failure
+    that warrants retry. False for auth, 404, validation, and unknown
+    errors (fail fast)."""
+    text = (err.stderr + " " + str(err)).lower()
+    return any(p in text for p in _TRANSIENT_PATTERNS)
+
+
+def with_retry(
+    op: Callable[[], T],
+    *,
+    max_attempts: int = 3,
+    backoff_seconds: tuple[float, ...] = (1.0, 2.0, 4.0),
+) -> T:
+    """Run `op`; retry on transient GhError with backoff. Re-raise the
+    last error if max_attempts is exhausted or the error is permanent.
+
+    `backoff_seconds[i]` is the sleep before attempt i+1 (i.e. the gap
+    between attempt i and attempt i+1). At most `max_attempts - 1` sleeps
+    are performed, so `backoff_seconds` must contain at least that many
+    entries."""
+    if max_attempts < 1:
+        msg = f"max_attempts must be >= 1, got {max_attempts}"
+        raise ValueError(msg)
+    if len(backoff_seconds) < max_attempts - 1:
+        msg = (
+            f"backoff_seconds has {len(backoff_seconds)} entries but "
+            f"max_attempts={max_attempts} requires at least {max_attempts - 1}"
+        )
+        raise ValueError(msg)
+    attempt = 0
+    while True:
+        try:
+            return op()
+        except GhError as exc:
+            attempt += 1
+            if attempt >= max_attempts or not is_transient(exc):
+                raise
+            time.sleep(backoff_seconds[attempt - 1])
