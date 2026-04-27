@@ -193,14 +193,15 @@ class TestDispatchPlanPath:
 
 class TestDispatchLabels:
     @patch("vk.commands.dispatch_cmd.gh")
-    def test_dispatch_adds_plan_and_phase_labels(
+    def test_dispatch_adds_three_tier_labels(
         self,
         mock_gh: MagicMock,
         dispatch_config: Path,
         phased_plan: Path,
         tmp_repo: Path,
     ) -> None:
-        """Each created Issue must carry plan:<slug> and phase:<n> labels."""
+        """Each created Issue must carry the three-tier identifier hierarchy:
+        spec:<spec-slug>, plan:<plan-name>, and phase:<n>."""
         captured_labels: list[list[str]] = []
 
         def fake_create_issue(*, repo: str, title: str, body: str, labels: list[str]) -> str:
@@ -215,9 +216,68 @@ class TestDispatchLabels:
         assert result.exit_code == 0
 
         for i, labs in enumerate(captured_labels):
+            assert "spec:test-feature" in labs, f"Missing spec:test-feature in {labs}"
             assert "plan:test-feature" in labs, f"Missing plan:test-feature in {labs}"
             assert f"phase:{i}" in labs, f"Missing phase:{i} in {labs}"
             assert labs[0] in ("vk-ready", "manual"), f"First label should be tag label: {labs}"
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_dispatch_emits_distinct_spec_and_plan_labels(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan_distinct_names: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """When spec slug and plan name differ, both must appear distinctly.
+        Guards against a derivation bug where one collapses into the other."""
+        captured_labels: list[list[str]] = []
+
+        def fake_create_issue(*, repo: str, title: str, body: str, labels: list[str]) -> str:
+            captured_labels.append(list(labels))
+            return "https://github.com/org/repo/issues/100"
+
+        mock_gh.create_issue.side_effect = fake_create_issue
+        mock_gh.extract_issue_number.return_value = 100
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(
+            app, ["dispatch", "create", str(phased_plan_distinct_names), "--yes"]
+        )
+        assert result.exit_code == 0
+        for labs in captured_labels:
+            assert "spec:myspec" in labs, f"Missing spec:myspec in {labs}"
+            assert "plan:extras" in labs, f"Missing plan:extras in {labs}"
+            # No legacy full-slug emission when spec is set:
+            assert "plan:myspec-phase-2-extras" not in labs
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_spec_less_plan_falls_back_to_legacy_label(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan_no_spec: Path,
+        tmp_repo: Path,
+    ) -> None:
+        """Plans without a `**Spec:**` field must keep the legacy
+        `plan:<full-slug>` single-label scheme. No `spec:` label is emitted."""
+        captured_labels: list[list[str]] = []
+
+        def fake_create_issue(*, repo: str, title: str, body: str, labels: list[str]) -> str:
+            captured_labels.append(list(labels))
+            return "https://github.com/org/repo/issues/100"
+
+        mock_gh.create_issue.side_effect = fake_create_issue
+        mock_gh.extract_issue_number.return_value = 100
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan_no_spec), "--yes"])
+        assert result.exit_code == 0
+        for labs in captured_labels:
+            assert "plan:spec-less-feature" in labs, f"Legacy plan:<full-slug> missing in {labs}"
+            assert not any(lbl.startswith("spec:") for lbl in labs), (
+                f"No spec: label expected for spec-less plans, got {labs}"
+            )
 
 
 class TestDispatchEnsuresLabels:

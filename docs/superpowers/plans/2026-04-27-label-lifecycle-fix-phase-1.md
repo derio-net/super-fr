@@ -15,9 +15,15 @@
 
 **PR strategy:** Each phase ships as its own PR via the project's branch + PR workflow. Phase 4 contains the version bump, so it must merge last. Phase 2 and Phase 3 are independent of each other and may dispatch in parallel after Phase 1 lands.
 
+> **Note added during dispatch:** The dispatch label scheme was changed to a three-tier identifier hierarchy: `spec:<spec-slug>` + `plan:<plan-name>` + `phase:<n>`. The derivation helpers `derive_spec_slug` and `derive_plan_name` already live in `src/vk/plan/filename.py`, and `dispatch_cmd.py` already emits the new scheme (see spec §1 "Identifier hierarchy" and §3). Phase 1 below should:
+> - Add `spec_label(spec_slug)`, `plan_label(plan_name)`, and `phase_label(n)` templated helpers in the new `labels.py` registry (was: only `plan_label(slug)` and `phase_label(n)`).
+> - In Phase 2's dispatch test cases, assert all three identifier labels (`spec:<>`, `plan:<>`, `phase:<n>`) appear in `required_labels` — not just `plan:<full-slug>` and `phase:<n>`.
+> - Where this plan's existing tasks reference `plan_label(slug)`, read it as the new `plan_label(plan_name)` semantics, plus a peer `spec_label(spec_slug)` call. The `name_to_def` map in dispatch's bootstrap should look up the new label strings (`spec:<>`, `plan:<>`, `phase:<>`) — the registry's templated helpers know their canonical colors.
+
 ---
 
 ## Phase 1: Label registry and gh helpers [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/57 -->
 **Depends on:** —
 
 **Context:** Foundation work — no behavior change yet. Both Phase 2 (dispatch bootstrap) and Phase 3 (claim / pr-opened) consume the registry and the new `swap_issue_labels` / `with_retry` helpers. Splitting this off keeps the downstream phases focused on their actual feature work and makes the registry's color/description choices reviewable in isolation.
@@ -72,6 +78,17 @@ class TestLabelDef:
         assert labels.VK_SYNCED.name   == "vk-synced"
 
 
+class TestSpecLabel:
+    def test_renders_name(self) -> None:
+        assert labels.spec_label("foo").name == "spec:foo"
+
+    def test_color_is_canonical(self) -> None:
+        assert labels.spec_label("foo").color == labels.SPEC_LABEL_COLOR
+
+    def test_description_includes_slug(self) -> None:
+        assert "foo" in labels.spec_label("foo").description
+
+
 class TestPlanLabel:
     def test_renders_name(self) -> None:
         assert labels.plan_label("foo").name == "plan:foo"
@@ -79,7 +96,7 @@ class TestPlanLabel:
     def test_color_is_canonical(self) -> None:
         assert labels.plan_label("foo").color == labels.PLAN_LABEL_COLOR
 
-    def test_description_includes_slug(self) -> None:
+    def test_description_includes_name(self) -> None:
         assert "foo" in labels.plan_label("foo").description
 
 
@@ -146,17 +163,27 @@ PR_READY    = LabelDef("pr-ready",    "0E8A16", "PR is open; awaiting review")
 VK_SYNCED   = LabelDef("vk-synced",   "6A630D", "Synced to VK board")
 
 # Templated label colors (name is dynamic)
-PLAN_LABEL_COLOR  = "B60205"
+SPEC_LABEL_COLOR  = "B60205"
+PLAN_LABEL_COLOR  = "1D76DB"
 PHASE_LABEL_COLOR = "FBCA04"
 
 
-def plan_label(slug: str) -> LabelDef:
-    """Return the LabelDef for `plan:<slug>`."""
-    return LabelDef(f"plan:{slug}", PLAN_LABEL_COLOR, f"Part of plan {slug}")
+def spec_label(spec_slug: str) -> LabelDef:
+    """Return the LabelDef for `spec:<spec-slug>` (the umbrella identifier
+    rolling up every Issue across every plan under one spec)."""
+    return LabelDef(f"spec:{spec_slug}", SPEC_LABEL_COLOR, f"Part of spec {spec_slug}")
+
+
+def plan_label(plan_name: str) -> LabelDef:
+    """Return the LabelDef for `plan:<plan-name>` (the per-plan identifier
+    within a spec; falls back to `phase-N` for descriptor-less plan
+    filenames — see `derive_plan_name`)."""
+    return LabelDef(f"plan:{plan_name}", PLAN_LABEL_COLOR, f"Plan: {plan_name}")
 
 
 def phase_label(n: int) -> LabelDef:
-    """Return the LabelDef for `phase:<n>`."""
+    """Return the LabelDef for `phase:<n>` (the internal phase number
+    within a plan)."""
     return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
 
 
@@ -529,6 +556,7 @@ gh pr create --title "Phase 1 · Label registry and gh helpers" \
 ---
 
 ## Phase 2: DispatchConfig defaults and dispatch reads registry [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/58 -->
 **Depends on:** Phase 1
 
 **Context:** With the registry available, dispatch's bootstrap can drop its hardcoded label-list build and instead enumerate registry labels for `ensure_labels`. Two new keys (`in_progress`, `pr_ready`) join `agentic` and `manual` in `DispatchConfig.labels`. Existing `plan-config.yaml` files that override only `agentic`/`manual` continue to work — defaults merge in for missing keys.
@@ -731,7 +759,10 @@ class TestDispatchUsesLabelRegistry:
 
 - [ ] **Step 4: Update `dispatch_cmd.py`**
 
-Replace lines 285-296 of `src/vk/commands/dispatch_cmd.py`:
+Refactor `dispatch_cmd.py`'s `required_labels` build to consume the registry. The
+spec/plan label derivation already lives in `dispatch_cmd.py` (the `spec_plan_labels`
+list, set up earlier from `derive_spec_slug` / `derive_plan_name`). This task wraps the
+existing string list in registry-aware `LabelDef`s so colors and descriptions land too:
 
 ```python
 from vk import labels as _labels
@@ -751,12 +782,24 @@ def _def_for(name: str, registry_def: _labels.LabelDef) -> _labels.LabelDef:
         return registry_def
     return _labels.LabelDef(name, "ededed", "")
 
+# Identifier hierarchy: spec:<spec-slug> + plan:<plan-name> + phase:<n>.
+# `plan.spec` is None for legacy spec-less plans → fall back to single-label
+# `plan:<full-slug>` (preserves the pre-three-tier behavior for old repos).
+identifier_defs: list[_labels.LabelDef] = []
+if plan.spec:
+    spec_slug = derive_spec_slug(Path(plan.spec))
+    plan_name = derive_plan_name(plan_path_resolved, spec_slug)
+    identifier_defs.append(_labels.spec_label(spec_slug))
+    identifier_defs.append(_labels.plan_label(plan_name))
+else:
+    identifier_defs.append(_labels.plan_label(derive_slug(plan_path_resolved)))
+
 required_labels: list[_labels.LabelDef] = [
     _def_for(agentic_name,     _labels.VK_READY),
     _def_for(manual_name,      _labels.MANUAL),
     _def_for(in_progress_name, _labels.IN_PROGRESS),
     _def_for(pr_ready_name,    _labels.PR_READY),
-    _labels.plan_label(slug),
+    *identifier_defs,
     *(_labels.phase_label(p.number) for p in plan.phases),
 ]
 required_labels = sorted(required_labels, key=lambda d: d.name)
@@ -802,6 +845,7 @@ gh pr create --title "Phase 2 · Dispatch reads label registry" \
 ---
 
 ## Phase 3: vk execute claim and pr-opened [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/59 -->
 **Depends on:** Phase 1
 
 **Context:** The substantial feature work. Two new subcommands flip the Issue between lifecycle states with idempotency, network-only retry, and hard-fail on persistent errors. `claim` is called between procedure steps 1 (check-deps) and 2 (scope) of vk-execute; `pr-opened` is called after step 6 (`gh pr create` succeeds).
@@ -1283,6 +1327,7 @@ gh pr create --title "Phase 3 · vk execute claim + pr-opened" \
 ---
 
 ## Phase 4: vk-execute skill update and version bump [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/60 -->
 **Depends on:** Phase 3
 
 **Context:** With both subcommands shipped, update the skill to call them at the right procedure points. Remove the "best-effort" footnote — failures now hard-fail per the cross-cutting principle. Bump the plugin version (minor: new user-visible subcommands per `CLAUDE.md`'s release rule).

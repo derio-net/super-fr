@@ -20,6 +20,7 @@
 ---
 
 ## Phase 1: gh helpers, admin module skeleton, repo enumeration [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/63 -->
 **Depends on:** —
 
 **Context:** Foundation work. Three new `gh.py` helpers, a new `admin_cmd.py` module wired into `main.py`, and the repo-enumeration helper that drives the rest of the command. No business logic yet.
@@ -331,6 +332,7 @@ gh pr create --title "Labels-sync Phase 1 · Module skeleton + gh helpers + repo
 ---
 
 ## Phase 2: Diff logic, dry-run rendering, default-label removal logic [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/64 -->
 **Depends on:** Phase 1
 
 **Context:** The brain of the command. Compares each repo's existing labels to the registry, computes `create` / `update` / `remove` buckets, and renders the dry-run table. With `--remove-defaults`, also queries Issue counts to filter the `remove` bucket to defaults that have zero attached Issues. Apply mode is still stubbed.
@@ -765,6 +767,7 @@ gh pr create --title "Labels-sync Phase 2 · Diff logic + dry-run rendering" \
 ---
 
 ## Phase 3: Apply mode and version bump [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/65 -->
 **Depends on:** Phase 2
 
 **Context:** Wires `--apply` / `--yes` to actually run `gh.ensure_label` (for create/update) and `gh.delete_label` (for remove). Per-repo errors don't abort the run. Bumps the plugin version (minor — new user-visible subcommand).
