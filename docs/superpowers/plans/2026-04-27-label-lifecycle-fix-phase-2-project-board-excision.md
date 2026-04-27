@@ -18,6 +18,7 @@
 ---
 
 ## Phase 1: Drop dead gh helpers, config field, dispatch flag, scaffold refs [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/61 -->
 **Depends on:** —
 
 **Context:** The bulk of the deletions. After this phase, `dispatch.project_board` no longer exists in `DispatchConfig`, six gh project helpers are gone, the `--project` CLI flag is gone, and `vk init`'s YAML scaffold no longer mentions a project board.
@@ -244,6 +245,7 @@ gh pr create --title "Excision Phase 1 · Drop project_board config + dead gh he
 ---
 
 ## Phase 2: Drop dispatch-mode progress features and version bump [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/62 -->
 **Depends on:** Phase 1
 
 **Context:** Removes `_run_dispatch_audit` and its three remaining `gh.py` callees (`get_project_number`, `list_project_items`, `BoardItem`), drops `vk progress create --lifecycle`, and replaces `vk progress transition`'s dispatch branch with a clean refusal. Bumps the plugin version (patch — removing reserved/dead surface, no functional change for working code paths).
