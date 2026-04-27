@@ -18,6 +18,7 @@
 ---
 
 ## Phase 1: Label registry and gh helpers [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/57 -->
 **Depends on:** —
 
 **Context:** Foundation work — no behavior change yet. Both Phase 2 (dispatch bootstrap) and Phase 3 (claim / pr-opened) consume the registry and the new `swap_issue_labels` / `with_retry` helpers. Splitting this off keeps the downstream phases focused on their actual feature work and makes the registry's color/description choices reviewable in isolation.
@@ -529,6 +530,7 @@ gh pr create --title "Phase 1 · Label registry and gh helpers" \
 ---
 
 ## Phase 2: DispatchConfig defaults and dispatch reads registry [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/58 -->
 **Depends on:** Phase 1
 
 **Context:** With the registry available, dispatch's bootstrap can drop its hardcoded label-list build and instead enumerate registry labels for `ensure_labels`. Two new keys (`in_progress`, `pr_ready`) join `agentic` and `manual` in `DispatchConfig.labels`. Existing `plan-config.yaml` files that override only `agentic`/`manual` continue to work — defaults merge in for missing keys.
@@ -802,6 +804,7 @@ gh pr create --title "Phase 2 · Dispatch reads label registry" \
 ---
 
 ## Phase 3: vk execute claim and pr-opened [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/59 -->
 **Depends on:** Phase 1
 
 **Context:** The substantial feature work. Two new subcommands flip the Issue between lifecycle states with idempotency, network-only retry, and hard-fail on persistent errors. `claim` is called between procedure steps 1 (check-deps) and 2 (scope) of vk-execute; `pr-opened` is called after step 6 (`gh pr create` succeeds).
@@ -1283,6 +1286,7 @@ gh pr create --title "Phase 3 · vk execute claim + pr-opened" \
 ---
 
 ## Phase 4: vk-execute skill update and version bump [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/60 -->
 **Depends on:** Phase 3
 
 **Context:** With both subcommands shipped, update the skill to call them at the right procedure points. Remove the "best-effort" footnote — failures now hard-fail per the cross-cutting principle. Bump the plugin version (minor: new user-visible subcommands per `CLAUDE.md`'s release rule).
