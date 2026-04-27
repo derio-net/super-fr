@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from vk import gh
 from vk.gh import (
     GhError,
     add_to_project,
@@ -245,3 +246,162 @@ class TestEnsureLabels:
                 ensure_labels(repo="org/repo", labels=["a", "b", "c"])
         # Stopped at b — did not proceed to c
         assert calls == ["a", "b"]
+
+
+class TestGhErrorFields:
+    def test_default_stderr_and_returncode(self) -> None:
+        err = gh.GhError("boom")
+        assert err.stderr == ""
+        assert err.returncode == 0
+        assert str(err) == "boom"
+
+    def test_explicit_stderr_and_returncode(self) -> None:
+        err = gh.GhError("boom", stderr="HTTP 503\n", returncode=1)
+        assert err.stderr == "HTTP 503\n"
+        assert err.returncode == 1
+        assert str(err) == "boom"
+
+    def test_run_gh_populates_fields_on_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(*a, **kw):  # type: ignore[no-untyped-def]
+            raise subprocess.CalledProcessError(
+                returncode=1, cmd=["gh"], output="", stderr="HTTP 403\n"
+            )
+
+        monkeypatch.setattr(gh.subprocess, "run", fake_run)
+        with pytest.raises(gh.GhError) as exc_info:
+            gh._run_gh(["api", "user"])
+        assert exc_info.value.stderr == "HTTP 403\n"
+        assert exc_info.value.returncode == 1
+
+
+class TestSwapIssueLabels:
+    def test_emits_add_and_remove_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: list[list[str]] = []
+
+        def fake_run(args: list[str]) -> str:
+            captured.append(args)
+            return ""
+
+        monkeypatch.setattr(gh, "_run_gh", fake_run)
+        gh.swap_issue_labels(
+            repo="o/r",
+            number=42,
+            add=["pr-ready"],
+            remove=["in-progress", "vk-ready"],
+        )
+        assert captured == [
+            [
+                "issue",
+                "edit",
+                "42",
+                "--repo",
+                "o/r",
+                "--add-label",
+                "pr-ready",
+                "--remove-label",
+                "in-progress",
+                "--remove-label",
+                "vk-ready",
+            ]
+        ]
+
+    def test_empty_add_and_remove_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: list[list[str]] = []
+        monkeypatch.setattr(
+            gh,
+            "_run_gh",
+            lambda args: captured.append(args) or "",
+        )
+        gh.swap_issue_labels(repo="o/r", number=42, add=[], remove=[])
+        assert captured == []
+
+    def test_propagates_gh_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(args: list[str]) -> str:
+            raise gh.GhError("HTTP 404", stderr="HTTP 404\n", returncode=1)
+
+        monkeypatch.setattr(gh, "_run_gh", fake_run)
+        with pytest.raises(gh.GhError):
+            gh.swap_issue_labels(repo="o/r", number=42, add=["x"], remove=[])
+
+
+class TestIsTransient:
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "HTTP 500: server error",
+            "HTTP 502 Bad Gateway",
+            "HTTP 503: temporarily unavailable",
+            "could not resolve host: api.github.com",
+            "connection reset by peer",
+            "connection refused",
+            "i/o timeout",
+        ],
+    )
+    def test_returns_true_for_transient(self, stderr: str) -> None:
+        err = gh.GhError("x", stderr=stderr, returncode=1)
+        assert gh.is_transient(err)
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "HTTP 401: Bad credentials",
+            "HTTP 403: forbidden",
+            "HTTP 404: not found",
+            "validation failed",
+            "label already exists",
+            "",
+        ],
+    )
+    def test_returns_false_for_permanent(self, stderr: str) -> None:
+        err = gh.GhError("x", stderr=stderr, returncode=1)
+        assert not gh.is_transient(err)
+
+
+class TestWithRetry:
+    def test_succeeds_first_try(self) -> None:
+        calls = {"n": 0}
+
+        def op() -> str:
+            calls["n"] += 1
+            return "ok"
+
+        assert gh.with_retry(op) == "ok"
+        assert calls["n"] == 1
+
+    def test_retries_transient_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        slept: list[float] = []
+        monkeypatch.setattr(gh.time, "sleep", lambda s: slept.append(s))
+        attempts = {"n": 0}
+
+        def op() -> str:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise gh.GhError("x", stderr="HTTP 503", returncode=1)
+            return "ok"
+
+        assert gh.with_retry(op) == "ok"
+        assert attempts["n"] == 3
+        assert slept == [1.0, 2.0]  # backoff before attempts 2 and 3
+
+    def test_gives_up_after_max_attempts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(gh.time, "sleep", lambda s: None)
+
+        def op() -> str:
+            raise gh.GhError("x", stderr="HTTP 503", returncode=1)
+
+        with pytest.raises(gh.GhError):
+            gh.with_retry(op)
+
+    def test_no_retry_on_permanent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        slept: list[float] = []
+        monkeypatch.setattr(gh.time, "sleep", lambda s: slept.append(s))
+        attempts = {"n": 0}
+
+        def op() -> str:
+            attempts["n"] += 1
+            raise gh.GhError("x", stderr="HTTP 403", returncode=1)
+
+        with pytest.raises(gh.GhError):
+            gh.with_retry(op)
+        assert attempts["n"] == 1
+        assert slept == []

@@ -28,7 +28,7 @@
 - Add: `src/vk/labels.py`
 - Add: `tests/unit/test_labels.py`
 
-- [ ] **Step 1: TDD — registry tests**
+- [x] **Step 1: TDD — registry tests**
 
 `tests/unit/test_labels.py`:
 
@@ -107,7 +107,7 @@ class TestRegistryLookup:
         assert labels.LIFECYCLE["pr_ready"]    is labels.PR_READY
 ```
 
-- [ ] **Step 2: Implement `src/vk/labels.py`**
+- [x] **Step 2: Implement `src/vk/labels.py`**
 
 ```python
 """Canonical label registry — single source of truth for label colors,
@@ -170,7 +170,7 @@ LIFECYCLE: dict[str, LabelDef] = {
 }
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_labels.py -q --no-cov
@@ -186,7 +186,7 @@ Expected: 11 passed.
 
 **Context:** The retry classifier in Task 4 needs to distinguish transient (5xx, network) from persistent (4xx, auth) failures by inspecting stderr. Today `GhError` is a bare `Exception` with just a message string — the original `subprocess.CalledProcessError`'s stderr and returncode are lost. Extend `GhError` to keep them.
 
-- [ ] **Step 1: TDD — `GhError` carries fields**
+- [x] **Step 1: TDD — `GhError` carries fields**
 
 Add to `tests/unit/test_gh.py`:
 
@@ -219,7 +219,7 @@ class TestGhErrorFields:
         assert exc_info.value.returncode == 1
 ```
 
-- [ ] **Step 2: Extend `GhError` and `_run_gh`**
+- [x] **Step 2: Extend `GhError` and `_run_gh`**
 
 Replace the `GhError` class and update `_run_gh` in `src/vk/gh.py`:
 
@@ -248,7 +248,7 @@ def _run_gh(args: list[str]) -> str:
     return result.stdout.strip()
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_gh.py -q --no-cov
@@ -264,7 +264,7 @@ Expected: existing tests still pass + 3 new ones green.
 
 **Context:** `gh.edit_issue_labels` is add-only (`gh.py:198-208`). The lifecycle transitions need add + remove in one call. New helper, narrow contract.
 
-- [ ] **Step 1: TDD — `swap_issue_labels`**
+- [x] **Step 1: TDD — `swap_issue_labels`**
 
 Add to `tests/unit/test_gh.py`:
 
@@ -309,7 +309,7 @@ class TestSwapIssueLabels:
                                  add=["x"], remove=[])
 ```
 
-- [ ] **Step 2: Implement `swap_issue_labels`**
+- [x] **Step 2: Implement `swap_issue_labels`**
 
 Add to `src/vk/gh.py` (next to `edit_issue_labels`):
 
@@ -335,7 +335,7 @@ def swap_issue_labels(
     _run_gh(args)
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_gh.py::TestSwapIssueLabels -q --no-cov
@@ -351,7 +351,7 @@ Expected: 3 passed.
 
 **Context:** Phase 3's `claim` / `pr-opened` retry on network failures only. Permanent failures (auth, 404) hard-fail immediately. Classifier looks at stderr text — pragmatic, well-tested. Backoff: 1s, 2s, 4s (≤3 attempts, ~7s total worst-case).
 
-- [ ] **Step 1: TDD — classifier and retry**
+- [x] **Step 1: TDD — classifier and retry**
 
 Add to `tests/unit/test_gh.py`:
 
@@ -431,7 +431,7 @@ class TestWithRetry:
         assert slept == []
 ```
 
-- [ ] **Step 2: Implement classifier and retry**
+- [x] **Step 2: Implement classifier and retry**
 
 Add to `src/vk/gh.py` (top: `import time`):
 
@@ -486,7 +486,7 @@ from typing import Callable, TypeVar
 T = TypeVar("T")
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_gh.py -q --no-cov
@@ -499,7 +499,7 @@ Expected: existing + 11 new (`TestIsTransient` 14 parametrised + `TestWithRetry`
 **Files:**
 - Modify: nothing — verification only.
 
-- [ ] **Step 1: Format and type-check**
+- [x] **Step 1: Format and type-check**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
@@ -507,7 +507,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean.
 
-- [ ] **Step 2: Full unit suite**
+- [x] **Step 2: Full unit suite**
 
 ```bash
 uv run pytest -q --no-cov
