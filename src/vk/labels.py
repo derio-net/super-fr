@@ -42,8 +42,14 @@ PR_READY = LabelDef("pr-ready", "0E8A16", "PR is open; awaiting review")
 VK_SYNCED = LabelDef("vk-synced", "6A630D", "Synced to VK board")
 
 # Templated label colors (name is dynamic)
+SPEC_LABEL_COLOR = "5319E7"
 PLAN_LABEL_COLOR = "B60205"
 PHASE_LABEL_COLOR = "FBCA04"
+
+
+def spec_label(slug: str) -> LabelDef:
+    """Return the LabelDef for `spec:<slug>`."""
+    return LabelDef(f"spec:{slug}", SPEC_LABEL_COLOR, f"Spec {slug}")
 
 
 def plan_label(slug: str) -> LabelDef:

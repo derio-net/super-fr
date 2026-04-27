@@ -14,6 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TypeVar
 
+from vk.labels import LabelDef
+
 T = TypeVar("T")
 
 
@@ -133,14 +135,15 @@ def ensure_label(
     _run_gh(args)
 
 
-def ensure_labels(*, repo: str, labels: list[str]) -> None:
-    """Ensure every label exists on the repo; first failure propagates.
+def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
+    """Ensure every label exists on the repo with the right color and
+    description. First failure propagates.
 
     Fails loud on the first error so callers can abort before creating
     Issues that would end up in a partial-label state.
     """
-    for name in labels:
-        ensure_label(repo=repo, name=name)
+    for ld in labels:
+        ensure_label(repo=repo, name=ld.name, color=ld.color, description=ld.description)
 
 
 def close_issue(*, repo: str, number: int) -> None:

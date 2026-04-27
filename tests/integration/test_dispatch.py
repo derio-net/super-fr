@@ -309,14 +309,18 @@ class TestDispatchEnsuresLabels:
         mock_gh.ensure_labels.assert_called_once()
         kwargs = mock_gh.ensure_labels.call_args.kwargs
         assert kwargs["repo"] == "derio-net/test-repo"
-        labels = set(kwargs["labels"])
-        # Full expected label set for a 3-phase plan (agentic, manual, agentic)
-        assert "vk-ready" in labels
-        assert "manual" in labels
-        assert "plan:test-feature" in labels
-        assert "phase:0" in labels
-        assert "phase:1" in labels
-        assert "phase:2" in labels
+        # ensure_labels now takes list[LabelDef]
+        names = {ld.name for ld in kwargs["labels"]}
+        # Full expected label set for a 3-phase plan with the new lifecycle
+        # labels included (in-progress, pr-ready).
+        assert "vk-ready" in names
+        assert "manual" in names
+        assert "in-progress" in names
+        assert "pr-ready" in names
+        assert "plan:test-feature" in names
+        assert "phase:0" in names
+        assert "phase:1" in names
+        assert "phase:2" in names
 
     @patch("vk.commands.dispatch_cmd.gh")
     def test_ensure_labels_called_before_any_create_issue(
@@ -330,7 +334,7 @@ class TestDispatchEnsuresLabels:
         so a missing label doesn't tear down a partial dispatch."""
         call_order: list[str] = []
 
-        def _ensure(repo: str, labels: list[str]) -> None:
+        def _ensure(*, repo: str, labels: object) -> None:
             call_order.append("ensure_labels")
 
         def _create(*, repo: str, title: str, body: str, labels: list[str]) -> str:
@@ -364,6 +368,128 @@ class TestDispatchEnsuresLabels:
         result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
         assert result.exit_code != 0
         mock_gh.create_issue.assert_not_called()
+
+
+class TestDispatchUsesLabelRegistry:
+    """Phase 2 of label-lifecycle-fix-phase-1: dispatch must build the
+    bootstrap label list from the registry — including in-progress and
+    pr-ready — and emit canonical colors for them. Operator-overridden
+    label names that are not in the registry get a default-gray LabelDef.
+    """
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_required_labels_includes_in_progress_and_pr_ready(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        mock_gh.create_issue.side_effect = [
+            "https://github.com/derio-net/test-repo/issues/100",
+            "https://github.com/derio-net/test-repo/issues/101",
+            "https://github.com/derio-net/test-repo/issues/102",
+        ]
+        mock_gh.extract_issue_number.side_effect = [100, 101, 102]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        kwargs = mock_gh.ensure_labels.call_args.kwargs
+        names = {ld.name for ld in kwargs["labels"]}
+        # phased_plan has a **Spec:** field, so the three-tier scheme applies:
+        # spec:<spec-slug> + plan:<plan-name> + phase:<n>.
+        assert names == {
+            "vk-ready",
+            "manual",
+            "in-progress",
+            "pr-ready",
+            "spec:test-feature",
+            "plan:test-feature",
+            "phase:0",
+            "phase:1",
+            "phase:2",
+        }
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_lifecycle_labels_use_registry_colors(
+        self,
+        mock_gh: MagicMock,
+        dispatch_config: Path,
+        phased_plan: Path,
+        tmp_repo: Path,
+    ) -> None:
+        from vk import labels as _labels
+
+        mock_gh.create_issue.side_effect = [
+            "https://github.com/derio-net/test-repo/issues/100",
+            "https://github.com/derio-net/test-repo/issues/101",
+            "https://github.com/derio-net/test-repo/issues/102",
+        ]
+        mock_gh.extract_issue_number.side_effect = [100, 101, 102]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        kwargs = mock_gh.ensure_labels.call_args.kwargs
+        by_name = {ld.name: ld for ld in kwargs["labels"]}
+        assert by_name["vk-ready"].color == _labels.VK_READY.color
+        assert by_name["manual"].color == _labels.MANUAL.color
+        assert by_name["in-progress"].color == _labels.IN_PROGRESS.color
+        assert by_name["pr-ready"].color == _labels.PR_READY.color
+        assert by_name["plan:test-feature"].color == _labels.PLAN_LABEL_COLOR
+        assert by_name["phase:0"].color == _labels.PHASE_LABEL_COLOR
+        # Descriptions also flow from the registry.
+        assert by_name["vk-ready"].description == _labels.VK_READY.description
+
+    @patch("vk.commands.dispatch_cmd.gh")
+    def test_yaml_override_for_label_string_falls_back_to_default_color(
+        self,
+        mock_gh: MagicMock,
+        tmp_repo: Path,
+        phased_plan: Path,
+    ) -> None:
+        """A custom agentic label name (not in the registry) should ship
+        with the default gray color and an empty description, not a
+        registry color stamped onto a different name."""
+        # Override the dispatch_config fixture's labels with a custom name.
+        config_dir = tmp_repo / "docs" / "superpowers"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "plan-config.yaml").write_text(
+            textwrap.dedent("""\
+                plan:
+                  filename: "YYYY-MM-DD-{name}.md"
+                  save_to: docs/superpowers/plans/
+
+                dispatch:
+                  target: github-issues
+                  owner: derio-net
+                  project_board: "Derio Ops"
+                  default_repo: derio-net/test-repo
+                  labels:
+                    agentic: queued
+                    manual: manual
+            """)
+        )
+
+        mock_gh.create_issue.side_effect = [
+            "https://github.com/derio-net/test-repo/issues/100",
+            "https://github.com/derio-net/test-repo/issues/101",
+            "https://github.com/derio-net/test-repo/issues/102",
+        ]
+        mock_gh.extract_issue_number.side_effect = [100, 101, 102]
+        mock_gh.GhError = type("GhError", (Exception,), {})
+
+        result = runner.invoke(app, ["dispatch", "create", str(phased_plan), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        kwargs = mock_gh.ensure_labels.call_args.kwargs
+        by_name = {ld.name: ld for ld in kwargs["labels"]}
+        assert "queued" in by_name
+        assert by_name["queued"].color == "ededed"
+        assert by_name["queued"].description == ""
 
 
 class TestDispatchGitCommit:

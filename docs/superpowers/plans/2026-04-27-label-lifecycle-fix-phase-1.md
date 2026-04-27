@@ -567,7 +567,7 @@ gh pr create --title "Phase 1 · Label registry and gh helpers" \
 - Modify: `src/vk/config.py`
 - Modify: `tests/unit/test_config.py`
 
-- [ ] **Step 1: TDD — defaults include new keys, user override merges**
+- [x] **Step 1: TDD — defaults include new keys, user override merges**
 
 Add to `tests/unit/test_config.py`:
 
@@ -605,7 +605,7 @@ class TestDispatchLabelDefaults:
 
 (The test file already imports `DispatchConfig` and `_parse_dispatch`; if not, add at top.)
 
-- [ ] **Step 2: Update `DispatchConfig` and `_parse_dispatch`**
+- [x] **Step 2: Update `DispatchConfig` and `_parse_dispatch`**
 
 In `src/vk/config.py`, replace the `labels` field default:
 
@@ -638,7 +638,7 @@ return DispatchConfig(
 )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_config.py -q --no-cov
@@ -656,7 +656,7 @@ Expected: existing + 3 new pass.
 
 **Context:** `gh.ensure_labels` currently takes `list[str]` and uses default gray (`ededed`) for color and empty description. To use registry colors, refactor `ensure_labels` to take `list[LabelDef]`. Update both callsites in `dispatch_cmd.py` (Issue create and migrate paths). For label strings that aren't in the registry (operator-overridden custom names), wrap in a default `LabelDef` with the original gray.
 
-- [ ] **Step 1: TDD — `ensure_labels` accepts `LabelDef`s**
+- [x] **Step 1: TDD — `ensure_labels` accepts `LabelDef`s**
 
 Replace existing `TestEnsureLabels` in `tests/unit/test_gh.py` (or add new tests if the existing ones are signature-compatible) with:
 
@@ -710,7 +710,7 @@ class TestEnsureLabels:
         assert seen == ["vk-ready", "phase:1"]  # third never reached
 ```
 
-- [ ] **Step 2: Update `gh.ensure_labels` signature**
+- [x] **Step 2: Update `gh.ensure_labels` signature**
 
 In `src/vk/gh.py`:
 
@@ -725,7 +725,7 @@ def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
 
 Add `from vk.labels import LabelDef` to the imports.
 
-- [ ] **Step 3: TDD — `dispatch create` builds full registry list**
+- [x] **Step 3: TDD — `dispatch create` builds full registry list**
 
 Add to `tests/integration/test_dispatch.py`:
 
@@ -757,7 +757,7 @@ class TestDispatchUsesLabelRegistry:
 
 (The existing `tests/integration/test_dispatch.py` has fixtures and helper functions to mock `gh` calls — reuse them. Sketch left high-level here; the implementing agent fills in the test bodies using the existing pattern.)
 
-- [ ] **Step 4: Update `dispatch_cmd.py`**
+- [x] **Step 4: Update `dispatch_cmd.py`**
 
 Refactor `dispatch_cmd.py`'s `required_labels` build to consume the registry. The
 spec/plan label derivation already lives in `dispatch_cmd.py` (the `spec_plan_labels`
@@ -813,7 +813,7 @@ except gh.GhError as exc:
 
 Update the `dispatch migrate` callsite (line 543-548) similarly: build `[plan_label(slug), phase_label(r['phase_number'])]` and call `ensure_labels` with those.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_gh.py tests/integration/test_dispatch.py -q --no-cov
@@ -823,7 +823,7 @@ Expected: green.
 
 ### Task 3: Format, type-check, full suite, commit
 
-- [ ] **Step 1: Format, type-check, full suite**
+- [x] **Step 1: Format, type-check, full suite**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov

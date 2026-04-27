@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from vk.config import (
+    DispatchConfig,
     PlanConfig,
+    _parse_dispatch,
     load_profile,
 )
 
@@ -63,7 +65,12 @@ def test_gate_dispatch_empty_map() -> None:
     assert profile.dispatch.owner == "derio-net"
     assert profile.dispatch.project_board == "Derio Ops"
     assert profile.dispatch.target == "github-issues"
-    assert profile.dispatch.labels == {"agentic": "vk-ready", "manual": "manual"}
+    assert profile.dispatch.labels == {
+        "agentic": "vk-ready",
+        "manual": "manual",
+        "in_progress": "in-progress",
+        "pr_ready": "pr-ready",
+    }
 
 
 def test_gate_dispatch_full_map() -> None:
@@ -75,7 +82,13 @@ def test_gate_dispatch_full_map() -> None:
     assert profile.dispatch.project_board == "Derio Ops"
     assert profile.dispatch.default_repo == "derio-net/some-repo"
     assert profile.dispatch.target == "github-issues"
-    assert profile.dispatch.labels == {"agentic": "vk-ready", "manual": "manual"}
+    # The fixture only sets agentic/manual; the new keys merge in from defaults.
+    assert profile.dispatch.labels == {
+        "agentic": "vk-ready",
+        "manual": "manual",
+        "in_progress": "in-progress",
+        "pr_ready": "pr-ready",
+    }
 
 
 # --- Format derived from dispatch ---
@@ -153,3 +166,51 @@ def test_empty_file_gives_defaults() -> None:
     profile = load_profile(FIXTURES / "empty.yaml")
     assert profile.dispatch_enabled is False
     assert profile.plan.filename == "YYYY-MM-DD-{name}.md"
+
+
+# --- DispatchConfig label defaults and merge behaviour ---
+
+
+class TestDispatchLabelDefaults:
+    def test_default_includes_all_four_lifecycle_keys(self) -> None:
+        cfg = DispatchConfig()
+        assert cfg.labels == {
+            "agentic": "vk-ready",
+            "manual": "manual",
+            "in_progress": "in-progress",
+            "pr_ready": "pr-ready",
+        }
+
+    def test_yaml_partial_override_merges_with_defaults(self) -> None:
+        # Simulates a user plan-config.yaml with only old keys present
+        raw = {
+            "target": "github-issues",
+            "owner": "o",
+            "labels": {"agentic": "ready", "manual": "human-only"},
+        }
+        cfg = _parse_dispatch(raw)
+        assert cfg is not None
+        assert cfg.labels["agentic"] == "ready"  # override
+        assert cfg.labels["manual"] == "human-only"  # override
+        assert cfg.labels["in_progress"] == "in-progress"  # default
+        assert cfg.labels["pr_ready"] == "pr-ready"  # default
+
+    def test_yaml_full_override(self) -> None:
+        raw = {
+            "target": "github-issues",
+            "owner": "o",
+            "labels": {
+                "agentic": "a",
+                "manual": "m",
+                "in_progress": "ip",
+                "pr_ready": "pr",
+            },
+        }
+        cfg = _parse_dispatch(raw)
+        assert cfg is not None
+        assert cfg.labels == {
+            "agentic": "a",
+            "manual": "m",
+            "in_progress": "ip",
+            "pr_ready": "pr",
+        }

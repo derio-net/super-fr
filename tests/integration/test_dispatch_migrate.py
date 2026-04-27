@@ -280,10 +280,11 @@ class TestMigrateEnsuresLabels:
         mock_gh.ensure_labels.assert_called_once()
         kwargs = mock_gh.ensure_labels.call_args.kwargs
         assert kwargs["repo"] == "org/r"
-        labels = set(kwargs["labels"])
-        assert "plan:test-ensure" in labels
-        assert "phase:0" in labels
-        assert "phase:1" in labels
+        # ensure_labels takes list[LabelDef] — extract names
+        names = {ld.name for ld in kwargs["labels"]}
+        assert "plan:test-ensure" in names
+        assert "phase:0" in names
+        assert "phase:1" in names
 
     @patch("vk.commands.dispatch_cmd.gh")
     def test_migrate_aborts_when_ensure_labels_fails(

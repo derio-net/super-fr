@@ -18,7 +18,6 @@ from vk.gh import (
     create_issue,
     edit_issue_body,
     ensure_label,
-    ensure_labels,
     set_field,
 )
 
@@ -216,36 +215,62 @@ class TestEnsureLabel:
 
 
 class TestEnsureLabels:
-    def test_calls_once_per_name(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
-            ensure_labels(repo="org/repo", labels=["a", "b", "c"])
-            assert mock.call_count == 3
-            names = [call[0][0][2] for call in mock.call_args_list]
-            assert names == ["a", "b", "c"]
+    def test_calls_ensure_label_per_def_with_color_and_desc(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from vk.labels import LabelDef
 
-    def test_empty_list_is_noop(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
-            ensure_labels(repo="org/repo", labels=[])
-            mock.assert_not_called()
+        captured: list[dict[str, str]] = []
 
-    def test_error_aborts_remaining(self) -> None:
-        """First failure surfaces — caller decides recovery. Don't
-        silently swallow failures mid-batch (partial label state is
-        worse than no labels at all)."""
-        calls: list[str] = []
+        def fake_ensure(
+            *, repo: str, name: str, color: str = "ededed", description: str = ""
+        ) -> None:
+            captured.append(
+                {"repo": repo, "name": name, "color": color, "description": description}
+            )
 
-        def side_effect(args: list[str]) -> str:
-            name = args[2]
-            calls.append(name)
-            if name == "b":
-                raise GhError("fail on b")
-            return ""
+        monkeypatch.setattr(gh, "ensure_label", fake_ensure)
+        defs = [
+            LabelDef("vk-ready", "0E8AE6", "queued"),
+            LabelDef("phase:1", "FBCA04", "phase 1"),
+        ]
+        gh.ensure_labels(repo="o/r", labels=defs)
+        assert captured == [
+            {"repo": "o/r", "name": "vk-ready", "color": "0E8AE6", "description": "queued"},
+            {"repo": "o/r", "name": "phase:1", "color": "FBCA04", "description": "phase 1"},
+        ]
 
-        with patch("vk.gh._run_gh", side_effect=side_effect):
-            with pytest.raises(GhError, match="fail on b"):
-                ensure_labels(repo="org/repo", labels=["a", "b", "c"])
-        # Stopped at b — did not proceed to c
-        assert calls == ["a", "b"]
+    def test_empty_list_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        called = {"n": 0}
+
+        def fake_ensure(**kw: object) -> None:
+            called["n"] += 1
+
+        monkeypatch.setattr(gh, "ensure_label", fake_ensure)
+        gh.ensure_labels(repo="o/r", labels=[])
+        assert called["n"] == 0
+
+    def test_first_failure_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from vk.labels import LabelDef
+
+        seen: list[str] = []
+
+        def fake_ensure(
+            *, repo: str, name: str, color: str = "ededed", description: str = ""
+        ) -> None:
+            seen.append(name)
+            if name == "phase:1":
+                raise gh.GhError("nope", stderr="", returncode=1)
+
+        monkeypatch.setattr(gh, "ensure_label", fake_ensure)
+        defs = [
+            LabelDef("vk-ready", "0E8AE6", ""),
+            LabelDef("phase:1", "FBCA04", ""),
+            LabelDef("phase:2", "FBCA04", ""),
+        ]
+        with pytest.raises(gh.GhError):
+            gh.ensure_labels(repo="o/r", labels=defs)
+        assert seen == ["vk-ready", "phase:1"]  # third never reached
 
 
 class TestGhErrorFields:
