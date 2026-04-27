@@ -856,7 +856,7 @@ gh pr create --title "Phase 2 · Dispatch reads label registry" \
 - Modify: `src/vk/commands/execute_cmd.py`
 - Add: `tests/unit/test_execute_claim.py`
 
-- [ ] **Step 1: TDD — claim test cases**
+- [x] **Step 1: TDD — claim test cases**
 
 `tests/unit/test_execute_claim.py`:
 
@@ -1004,7 +1004,7 @@ class TestClaimHardFailOn403:
         assert "403" in result.stdout or "forbidden" in result.stdout.lower()
 ```
 
-- [ ] **Step 2: Implement `claim`**
+- [x] **Step 2: Implement `claim`**
 
 Add to `src/vk/commands/execute_cmd.py`:
 
@@ -1093,7 +1093,7 @@ def claim(
     console.print(f"Issue #{issue}: {vk_ready.name} → {in_progress.name}.")
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_execute_claim.py -q --no-cov
@@ -1107,7 +1107,7 @@ Expected: 7 passed.
 - Modify: `src/vk/commands/execute_cmd.py`
 - Add: `tests/unit/test_execute_pr_opened.py`
 
-- [ ] **Step 1: TDD — pr-opened test cases**
+- [x] **Step 1: TDD — pr-opened test cases**
 
 `tests/unit/test_execute_pr_opened.py`:
 
@@ -1233,7 +1233,7 @@ class TestPrOpenedNetworkRetry:
         assert result.exit_code == 0
 ```
 
-- [ ] **Step 2: Implement `pr-opened`**
+- [x] **Step 2: Implement `pr-opened`**
 
 Add to `src/vk/commands/execute_cmd.py`:
 
@@ -1295,7 +1295,7 @@ def pr_opened(
     console.print(f"Issue #{issue}: → {pr_ready.name}.")
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_execute_pr_opened.py -q --no-cov

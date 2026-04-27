@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 import typer
 from rich.console import Console
 
+from vk import gh, labels
 from vk.plan.format import PlanFormat
 from vk.plan.parser import parse_plan
 
@@ -249,3 +251,141 @@ def pr_body(
         lines.append(f"Implements {title} of `{plan_path}`")
 
     typer.echo("\n".join(lines))
+
+
+def _read_issue_labels(*, repo: str, number: int) -> list[str]:
+    """Return the current label names on the Issue."""
+    out = gh._run_gh(["issue", "view", str(number), "--repo", repo, "--json", "labels"])
+    data = json.loads(out)
+    return [lbl["name"] for lbl in data.get("labels", [])]
+
+
+def _print_remediation(
+    repo: str,
+    number: int,
+    add: list[str],
+    remove: list[str],
+    pr_url: str | None = None,
+) -> None:
+    """Print a copy-paste recovery command after a hard-fail."""
+    add_flags = " ".join(f"--add-label {n}" for n in add)
+    remove_flags = " ".join(f"--remove-label {n}" for n in remove)
+    parts = [s for s in (add_flags, remove_flags) if s]
+    flags = " ".join(parts)
+    err_console.print(f"\nManual recovery:\n  gh issue edit {number} --repo {repo} {flags}")
+    if pr_url:
+        err_console.print(f"PR: {pr_url}")
+
+
+@execute_app.command()
+def claim(
+    issue: int = typer.Option(..., "--issue", help="GitHub Issue number."),
+    repo: str = typer.Option(..., "--repo", help="owner/repo of the Issue."),
+) -> None:
+    """Flip an Issue from vk-ready to in-progress.
+
+    Called by the agent at the start of work, after `check-deps` passes.
+    Idempotent: no-op if already in-progress. Hard-fails if the Issue
+    carries the `manual` label.
+    """
+    in_progress = labels.IN_PROGRESS
+    vk_ready = labels.VK_READY
+    manual = labels.MANUAL
+
+    try:
+        current = _read_issue_labels(repo=repo, number=issue)
+    except gh.GhError as exc:
+        err_console.print(f"Error reading Issue #{issue} on {repo}: {exc}")
+        raise typer.Exit(2) from exc
+
+    if manual.name in current:
+        err_console.print(
+            f"Error: Issue #{issue} has the `{manual.name}` label; agents do not claim manual work."
+        )
+        raise typer.Exit(2)
+
+    if in_progress.name in current and vk_ready.name not in current:
+        console.print(f"Issue #{issue} already {in_progress.name} (noop).")
+        return
+
+    try:
+        gh.ensure_label(
+            repo=repo,
+            name=in_progress.name,
+            color=in_progress.color,
+            description=in_progress.description,
+        )
+    except gh.GhError as exc:
+        err_console.print(f"Error ensuring `{in_progress.name}` label on {repo}: {exc}")
+        raise typer.Exit(3) from exc
+
+    add = [in_progress.name] if in_progress.name not in current else []
+    remove = [vk_ready.name] if vk_ready.name in current else []
+
+    try:
+        gh.with_retry(lambda: gh.swap_issue_labels(repo=repo, number=issue, add=add, remove=remove))
+    except gh.GhError as exc:
+        err_console.print(f"Error transitioning Issue #{issue}: {exc}")
+        _print_remediation(repo, issue, add, remove)
+        raise typer.Exit(3) from exc
+
+    console.print(f"Issue #{issue}: {vk_ready.name} → {in_progress.name}.")
+
+
+@execute_app.command(name="pr-opened")
+def pr_opened(
+    issue: int = typer.Option(..., "--issue", help="GitHub Issue number."),
+    repo: str = typer.Option(..., "--repo", help="owner/repo of the Issue."),
+    pr_url: str | None = typer.Option(
+        None, "--pr-url", help="The just-created PR URL (printed on hard-fail)."
+    ),
+) -> None:
+    """Flip an Issue to pr-ready after `gh pr create` succeeded.
+
+    Idempotent. Removes any prior-state label (vk-ready, in-progress).
+    On hard-fail, prints the PR URL and the manual remediation command.
+    """
+    pr_ready = labels.PR_READY
+    in_progress = labels.IN_PROGRESS
+    vk_ready = labels.VK_READY
+
+    try:
+        current = _read_issue_labels(repo=repo, number=issue)
+    except gh.GhError as exc:
+        err_console.print(f"Error reading Issue #{issue} on {repo}: {exc}")
+        if pr_url:
+            err_console.print(f"PR: {pr_url}")
+        raise typer.Exit(2) from exc
+
+    if (
+        pr_ready.name in current
+        and in_progress.name not in current
+        and vk_ready.name not in current
+    ):
+        console.print(f"Issue #{issue} already {pr_ready.name} (noop).")
+        return
+
+    try:
+        gh.ensure_label(
+            repo=repo,
+            name=pr_ready.name,
+            color=pr_ready.color,
+            description=pr_ready.description,
+        )
+    except gh.GhError as exc:
+        err_console.print(f"Error ensuring `{pr_ready.name}` label on {repo}: {exc}")
+        if pr_url:
+            err_console.print(f"PR: {pr_url}")
+        raise typer.Exit(3) from exc
+
+    add = [pr_ready.name] if pr_ready.name not in current else []
+    remove = [n for n in (in_progress.name, vk_ready.name) if n in current]
+
+    try:
+        gh.with_retry(lambda: gh.swap_issue_labels(repo=repo, number=issue, add=add, remove=remove))
+    except gh.GhError as exc:
+        err_console.print(f"Error transitioning Issue #{issue}: {exc}")
+        _print_remediation(repo, issue, add, remove, pr_url=pr_url)
+        raise typer.Exit(3) from exc
+
+    console.print(f"Issue #{issue}: → {pr_ready.name}.")
