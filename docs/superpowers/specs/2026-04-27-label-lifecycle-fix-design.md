@@ -1,34 +1,48 @@
-# Issue Label Lifecycle Fix and Cross-Repo Color Cleanup
+# Issue Label Lifecycle Fix, Color Registry, and Project-Board Excision
 
 **Status:** Draft
 **Date:** 2026-04-27
-**Repos affected:** `derio-net/superpowers-for-vk`, `derio-net/agent-images` (subtractive cleanup of `kali/scripts/vk-issue-bridge.py`), all `derio-net/*` repos (operator-driven label sync)
+**Repos affected:** `derio-net/superpowers-for-vk`, all `derio-net/*` repos (operator-driven label sync)
 
 ## Goal
 
-Close two related holes in the dispatched-Issue lifecycle:
+Close three related issues in dispatch / lifecycle plumbing:
 
 **A. Make the 4-state kanban actually work.** The spec at
 `docs/superpowers/specs/2026-04-14-archive-and-unified-descriptions-design.md:70-75`
 defines the lifecycle as `vk-ready → in-progress → pr-ready → closed`. In
-practice, only `vk-ready` is reliably set (by `vk dispatch create`).
-`in-progress` is applied only by `agent-images/kali/scripts/vk-issue-bridge.py:502-505`
-— which never runs in non-kali harnesses. `pr-ready` has zero code-level
-producers (audit commit `e14348b`) and the `vk-execute` skill's
-post-`gh pr create` swap is best-effort, so it silently skips when the labels
-don't exist on the target repo. Real-world incident: agent in
-`derio-net/agent-images` opened PR #14 against Issue #8; the swap failed; #8
-was stuck on `vk-ready` until the operator hand-fixed it.
+practice, only `vk-ready` is reliably set (by `vk dispatch create`). The
+labels `in-progress` and `pr-ready` have **zero code-level producers** —
+audit commit `e14348b` confirms `pr-ready`, and code review during this
+spec confirms `in-progress` is the same: nothing in any repo applies it
+as an Issue label. The `vk-execute` skill's post-`gh pr create` swap is
+best-effort, so it silently skips when the labels don't exist on the
+target repo. Real-world incident: agent in `derio-net/agent-images`
+opened PR #14 against Issue #8; the swap failed; #8 was stuck on
+`vk-ready` until the operator hand-fixed it.
 
 **B. Stop creating ad-hoc label colors per-repo.** Today the same label can be
 gray in one repo (`vk-ready` at `aaaaaa` in `agent-images`) and absent in another.
 There is no canonical color or description for any of the lifecycle labels,
 so the GitHub board view is visually inconsistent across repos.
 
+**C. Excise the vestigial `project_board` config field and its dead-code
+satellites.** The "Derio Ops" Project board is now used only for Frank-cluster
+feature-level health, not for tracking superpowers-for-vk plan execution.
+The original toolchain spec (`2026-04-12-vk-cli-toolchain-design.md:548-550`)
+intended `vk` to manage board membership, lifecycle-field transitions, and
+board-aware audits. Reality: only `vk progress audit`'s dispatch-mode block
+ever made it past spec, and even that reads from a board this project no
+longer tracks. Six `gh.py` helpers, the `vk dispatch --project` flag, the
+`vk progress create --lifecycle` flag, the `vk progress transition` dispatch
+branch (returns "not yet implemented"), and the entire
+`_run_dispatch_audit` function are dead or near-dead. Remove them. ~250-350
+lines deleted, one config field gone, one less concept in the mental model.
+
 The fix moves both halves of the lifecycle into `vk execute` (one skill, one
 code path, no harness coupling), centralises label colors and descriptions in
-a label registry, and ships a one-shot `vk admin labels-sync` to bring
-existing repos into line.
+a label registry, ships a one-shot `vk admin labels-sync` to bring existing
+repos into line, and deletes the project-board config surface.
 
 ## Non-goals
 
@@ -42,8 +56,11 @@ existing repos into line.
   retroactively transitioned by this work. `vk dispatch create` is idempotent
   on labels for new dispatches; existing in-flight Issues are operator-fixed
   if needed.
-- **Replacing the `vk-synced` label or the bridge's other concerns.** The
-  bridge keeps doing everything except the `in-progress` flip.
+- **Replacing the `vk-synced` label or any of the bridge's concerns.** The
+  bridge sets a Project-board "Lifecycle" *field* (single-select), not an
+  Issue label — different surface entirely. See the "Lifecycle surfaces"
+  section below. Nothing in this spec touches the bridge or any
+  cross-repo code.
 - **A recurring label-policing job.** `vk admin labels-sync` is a one-shot
   command run by an operator, not a cron-driven sweeper.
 
@@ -365,16 +382,67 @@ in any future repo that adopts dispatch.
   references `vk execute claim` and `vk execute pr-opened` in the procedure;
   assert "best-effort: failure does not block" is *not* present.
 
-## Cross-repo deletion: kali bridge
+## Lifecycle surfaces: Issue label vs Project-board field
 
-`agent-images/kali/scripts/vk-issue-bridge.py:502-505` applies `in-progress`
-to the Issue after spinning up the workspace. With `vk execute claim` shipped,
-this becomes redundant: the agent flips `in-progress` itself when it starts
-work. Kali bridge cleanup phase removes those four lines (and any tests
-exercising them).
+The word "lifecycle" is overloaded in this org. Two distinct surfaces use
+the string `in-progress`:
 
-The deletion is gated on Phase 1 of this spec being deployed to the kali
-image — otherwise there's a window where neither side sets `in-progress`.
+| Surface | What it is | Who sets it (today / after this spec) |
+|---|---|---|
+| Issue *label* `in-progress` | A literal GitHub Issue label | Nothing today / `vk execute claim` after this spec |
+| Project-board field "Lifecycle" = `in-progress` | A single-select custom field on the "Derio Ops" GitHub Project | The bridge calls `willikins/scripts/hooks/vk-lifecycle-transition.sh`, which `gh project item-edit`s the field. Untouched by this spec. |
+
+The audit at `docs/superpowers/2026-04-14-unified-descriptions-audit.md:57`
+described the bridge's call as "Lifecycle transition after workspace
+creation" without distinguishing label from project-field. An earlier
+draft of this spec misread that as "the bridge applies the `in-progress`
+label," which is false. The two surfaces are complementary: the
+project-field tracks where the work is in the human-facing pipeline (idea
+→ spec → plan → in-progress → deployed → …); the label is for
+programmatic queries like `gh issue list --label in-progress`.
+
+**This spec only touches Issue labels.** No bridge changes. No
+project-board changes. `vk execute claim` does not call `gh project
+item-edit` — that remains the bridge's job.
+
+## Project-board excision
+
+The `dispatch.project_board` config field is vestigial. Trace through the
+codebase shows it ever reaches:
+
+| Site | Status |
+|---|---|
+| `vk progress audit` → `_run_dispatch_audit` (`progress_cmd.py:380-444`) | Active — but reads from a board this project no longer tracks |
+| `vk dispatch --project` flag (`dispatch_cmd.py:192-220`) | Reserved-but-unused: explicit `_ = project or ...  # reserved for project board operations` |
+| `vk progress create --lifecycle` (`progress_cmd.py:281-312`) | Writes lifecycle text into Issue body; never touches the board |
+| `vk progress transition` dispatch branch (`progress_cmd.py:358-360`) | Returns "not yet implemented" |
+| `gh.add_to_project`, `set_field`, `get_project_id`, `get_item_id`, `get_field_id`, `get_option_id` | Six helpers, ~150 LOC, only `add_to_project` has even a unit test — no callers in `src/` for any of them |
+| `gh.get_project_number`, `gh.list_project_items`, `gh.BoardItem` | Used only by `_run_dispatch_audit` |
+| `init_cmd.py`, `common.py`, `tests/integration/conftest.py:62`, `tests/fixtures/configs/dispatch-enabled.yaml:17` | Scaffold / fixture references |
+
+The "Derio Ops" board is now used for Frank-cluster feature-level health.
+Nothing in `superpowers-for-vk` needs to know about it. Excision scope:
+
+| Removed | Kept |
+|---|---|
+| `DispatchConfig.project_board` field (`config.py:42, 89`) | All other dispatch config |
+| `vk dispatch --project` flag (`dispatch_cmd.py:192-194`) and the `_ = project or dispatch_cfg.project_board` line at `:220` | `vk dispatch` itself |
+| `vk progress create --lifecycle` flag (`progress_cmd.py:285`) and any body-text emission of it | `vk progress create` itself |
+| `vk progress transition` dispatch branch (`progress_cmd.py:358-360`) — never worked | Local-mode `transition` |
+| `_run_dispatch_audit` function and its call from `audit` (`progress_cmd.py:380-444, 533`) | Local audit checks (status drift, spec-index drift, stale plans) |
+| `gh.add_to_project`, `set_field`, `get_project_id`, `get_project_number`, `get_item_id`, `get_field_id`, `get_option_id`, `list_project_items`, `BoardItem` dataclass | All Issue-related `gh` helpers |
+| `tests/unit/test_audit.py` board-mocking tests, `tests/unit/test_gh.py` `add_to_project` test | Local audit tests, all other gh tests |
+| `init_cmd` writes of `project_board` into YAML scaffold; `common.py` docstring reference | Scaffold itself |
+| `project_board` entries in `conftest.py` and `dispatch-enabled.yaml` fixtures | Fixtures themselves |
+
+After excision, `vk progress audit` becomes purely local — same checks it
+already runs in non-dispatch mode. The dispatch-mode branch collapses.
+
+**Side note for archival fidelity (optional):** `docs/superpowers/specs/2026-04-12-vk-cli-toolchain-design.md:548`
+references "project board" in a capability table. That table describes
+intent at spec time, not current contract. A one-line note ("project_board
+excised on 2026-04-27, see this spec") could be added if doc fidelity
+matters; otherwise leave the toolchain spec as historical record.
 
 ## Open questions
 
@@ -387,11 +455,14 @@ edge cases in repos with hand-curated label sets; per-repo errors from
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
 | Phase 1 — Lifecycle in vk-execute | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-27-label-lifecycle-fix-phase-1.md` | Not Started | — |
-| Phase 2 — Kali bridge cleanup | `derio-net/agent-images` | `docs/superpowers/plans/2026-04-27-label-lifecycle-fix-phase-2-bridge-cleanup.md` | Not Started | Phase 1 deployed |
+| Phase 2 — Project-board excision | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-27-label-lifecycle-fix-phase-2-project-board-excision.md` | Not Started | — |
 | Phase 3 — `vk admin labels-sync` | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-27-label-lifecycle-fix-phase-3-labels-sync.md` | Not Started | Phase 1 |
 | Phase 4 — Operator-driven org sweep | (operator action across `derio-net/*`) | — | Not Started | Phase 3 deployed |
 
-Phases 2 and 3 are independent of each other and may run in parallel once
-Phase 1 ships. Phase 4 is `[manual]` — an operator runs
+Phase 1 and Phase 2 are independent — both touch `config.py`,
+`dispatch_cmd.py`, and `gh.py`, but at different lines (Phase 1 adds dict
+keys + new helpers; Phase 2 removes a field + dead helpers). Whichever
+merges second rebases cleanly. Phase 3 depends on Phase 1's label
+registry. Phase 4 is `[manual]` — an operator runs
 `vk admin labels-sync --owner derio-net --remove-defaults --yes` after
 reviewing the dry-run output, and archives the diff. No agent dispatch.
