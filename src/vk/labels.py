@@ -14,7 +14,10 @@ preserved for compat). phase:<n> is yellow (attribute, not state).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+
+_HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,11 @@ class LabelDef:
     name: str  # the GitHub label string
     color: str  # 6-char hex without leading #
     description: str  # surfaces in the GitHub UI
+
+    def __post_init__(self) -> None:
+        if not _HEX_COLOR_RE.match(self.color):
+            msg = f"LabelDef({self.name!r}): color {self.color!r} is not a 6-char hex string"
+            raise ValueError(msg)
 
 
 # Lifecycle states (mutually exclusive — at most one on a given Issue)

@@ -273,6 +273,22 @@ class TestGhErrorFields:
         assert exc_info.value.stderr == "HTTP 403\n"
         assert exc_info.value.returncode == 1
 
+    def test_run_gh_falls_back_to_returncode_message_when_stderr_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # When the subprocess fails with empty stderr (e.g. crash, signal),
+        # _run_gh synthesises a message from the returncode and leaves
+        # GhError.stderr as "" rather than None.
+        def fake_run(*a, **kw):  # type: ignore[no-untyped-def]
+            raise subprocess.CalledProcessError(returncode=2, cmd=["gh"], output="", stderr=None)
+
+        monkeypatch.setattr(gh.subprocess, "run", fake_run)
+        with pytest.raises(gh.GhError) as exc_info:
+            gh._run_gh(["api", "user"])
+        assert str(exc_info.value) == "gh exited with code 2"
+        assert exc_info.value.stderr == ""
+        assert exc_info.value.returncode == 2
+
 
 class TestSwapIssueLabels:
     def test_emits_add_and_remove_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -405,3 +421,17 @@ class TestWithRetry:
             gh.with_retry(op)
         assert attempts["n"] == 1
         assert slept == []
+
+    def test_rejects_max_attempts_below_one(self) -> None:
+        with pytest.raises(ValueError, match="max_attempts must be >= 1"):
+            gh.with_retry(lambda: "x", max_attempts=0)
+
+    def test_rejects_backoff_shorter_than_required(self) -> None:
+        # max_attempts=4 needs at least 3 backoff entries; only 2 supplied.
+        with pytest.raises(ValueError, match="backoff_seconds has 2"):
+            gh.with_retry(lambda: "x", max_attempts=4, backoff_seconds=(1.0, 2.0))
+
+    def test_accepts_backoff_exactly_max_minus_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # max_attempts=3 with 2-entry backoff is the minimum-sized config.
+        monkeypatch.setattr(gh.time, "sleep", lambda s: None)
+        assert gh.with_retry(lambda: "ok", max_attempts=3, backoff_seconds=(1.0, 2.0)) == "ok"

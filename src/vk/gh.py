@@ -458,7 +458,18 @@ def with_retry(
     last error if max_attempts is exhausted or the error is permanent.
 
     `backoff_seconds[i]` is the sleep before attempt i+1 (i.e. the gap
-    between attempt i and attempt i+1)."""
+    between attempt i and attempt i+1). At most `max_attempts - 1` sleeps
+    are performed, so `backoff_seconds` must contain at least that many
+    entries."""
+    if max_attempts < 1:
+        msg = f"max_attempts must be >= 1, got {max_attempts}"
+        raise ValueError(msg)
+    if len(backoff_seconds) < max_attempts - 1:
+        msg = (
+            f"backoff_seconds has {len(backoff_seconds)} entries but "
+            f"max_attempts={max_attempts} requires at least {max_attempts - 1}"
+        )
+        raise ValueError(msg)
     attempt = 0
     while True:
         try:

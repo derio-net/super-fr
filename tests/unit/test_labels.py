@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from vk import labels
 
 HEX_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
@@ -46,6 +48,16 @@ class TestLabelDef:
         assert labels.IN_PROGRESS.name == "in-progress"
         assert labels.PR_READY.name == "pr-ready"
         assert labels.VK_SYNCED.name == "vk-synced"
+
+    @pytest.mark.parametrize("bad_color", ["", "abc", "abcde", "1234567", "xxxxxx", "#ABCDEF"])
+    def test_rejects_non_hex_color(self, bad_color: str) -> None:
+        with pytest.raises(ValueError, match="6-char hex"):
+            labels.LabelDef("x", bad_color, "desc")
+
+    def test_accepts_uppercase_and_lowercase_hex(self) -> None:
+        labels.LabelDef("upper", "ABCDEF", "desc")
+        labels.LabelDef("lower", "abcdef", "desc")
+        labels.LabelDef("mixed", "AbCdEf", "desc")
 
 
 class TestPlanLabel:
