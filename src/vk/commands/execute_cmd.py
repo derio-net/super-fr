@@ -272,7 +272,8 @@ def _print_remediation(
     remove_flags = " ".join(f"--remove-label {n}" for n in remove)
     parts = [s for s in (add_flags, remove_flags) if s]
     flags = " ".join(parts)
-    err_console.print(f"\nManual recovery:\n  gh issue edit {number} --repo {repo} {flags}")
+    cmd = f"gh issue edit {number} --repo {repo} {flags}".rstrip()
+    err_console.print(f"\nManual recovery:\n  {cmd}")
     if pr_url:
         err_console.print(f"PR: {pr_url}")
 
@@ -329,7 +330,13 @@ def claim(
         _print_remediation(repo, issue, add, remove)
         raise typer.Exit(3) from exc
 
-    console.print(f"Issue #{issue}: {vk_ready.name} → {in_progress.name}.")
+    if add:
+        console.print(f"Issue #{issue}: {vk_ready.name} → {in_progress.name}.")
+    else:
+        # in-progress was already present; only vk-ready was removed (corrupted state cleanup).
+        console.print(
+            f"Issue #{issue}: cleaned up stale {vk_ready.name} label (already in-progress)."
+        )
 
 
 @execute_app.command(name="pr-opened")

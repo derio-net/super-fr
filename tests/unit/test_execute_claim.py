@@ -149,3 +149,27 @@ class TestClaimHardFailOn403:
         assert result.exit_code != 0
         out = result.output.lower()
         assert "403" in result.output or "forbidden" in out
+
+
+class TestClaimHardFailRemediation:
+    def test_prints_remediation_command_on_hard_fail(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A hard-fail must print a copy-paste gh issue edit command so the
+        operator can recover without manually hunting for Issue state."""
+        monkeypatch.setattr(gh.time, "sleep", lambda s: None)
+        _stub_run_gh(
+            monkeypatch,
+            [
+                _labels_json("vk-ready"),
+                "",  # ensure_label
+                gh.GhError("forbidden", stderr="HTTP 403", returncode=1),
+            ],
+        )
+        result = runner.invoke(
+            execute_app,
+            ["claim", "--issue", "42", "--repo", "owner/myrepo"],
+        )
+        assert result.exit_code != 0
+        assert "gh issue edit 42" in result.output
+        assert "owner/myrepo" in result.output
+        assert "--add-label" in result.output
+        assert labels.IN_PROGRESS.name in result.output
