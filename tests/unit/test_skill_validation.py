@@ -68,3 +68,22 @@ class TestSkillValidation:
         assert "[{owner}/{repo}]" in text or "[owner/repo]" in text, (
             "vk-execute must document the unified PR title format"
         )
+
+    def test_vk_execute_calls_claim(self, skill_dir: Path) -> None:
+        if skill_dir.name != "vk-execute":
+            pytest.skip("Only applies to vk-execute")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "vk execute claim" in text
+
+    def test_vk_execute_calls_pr_opened(self, skill_dir: Path) -> None:
+        if skill_dir.name != "vk-execute":
+            pytest.skip("Only applies to vk-execute")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "vk execute pr-opened" in text
+
+    def test_vk_execute_no_longer_says_best_effort(self, skill_dir: Path) -> None:
+        if skill_dir.name != "vk-execute":
+            pytest.skip("Only applies to vk-execute")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "Best-effort" not in text
+        assert "best-effort: failure does not block" not in text.lower()
