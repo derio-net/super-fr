@@ -12,13 +12,11 @@ import pytest
 from vk import gh
 from vk.gh import (
     GhError,
-    add_to_project,
     auth_status,
     close_issue,
     create_issue,
     edit_issue_body,
     ensure_label,
-    set_field,
 )
 
 
@@ -92,58 +90,6 @@ class TestEditIssueBody:
         with patch("vk.gh._run_gh", side_effect=GhError("rate limited")):
             with pytest.raises(GhError, match="rate limited"):
                 edit_issue_body(repo="org/repo", number=42, body="body")
-
-
-class TestAddToProject:
-    def test_add(self) -> None:
-        with patch("vk.gh._run_gh", return_value="item-id-123") as mock:
-            item_id = add_to_project(
-                url="https://github.com/org/repo/issues/42",
-                project_owner="org",
-                project_number=5,
-            )
-            assert item_id == "item-id-123"
-            mock.assert_called_once_with(
-                [
-                    "project",
-                    "item-add",
-                    "5",
-                    "--owner",
-                    "org",
-                    "--url",
-                    "https://github.com/org/repo/issues/42",
-                    "--format",
-                    "json",
-                ]
-            )
-
-
-class TestSetField:
-    def test_set_text_field(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
-            set_field(
-                project_owner="org",
-                project_number=5,
-                item_id="item-123",
-                field_name="Status",
-                field_value="In Progress",
-            )
-            mock.assert_called_once_with(
-                [
-                    "project",
-                    "item-edit",
-                    "--owner",
-                    "org",
-                    "--project-id",
-                    "5",
-                    "--id",
-                    "item-123",
-                    "--field-name",
-                    "Status",
-                    "--field-value",
-                    "In Progress",
-                ]
-            )
 
 
 class TestAuthStatus:

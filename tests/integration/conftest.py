@@ -59,7 +59,6 @@ def dispatch_config(tmp_repo: Path) -> Path:
         dispatch:
           target: github-issues
           owner: derio-net
-          project_board: "Derio Ops"
           default_repo: derio-net/test-repo
           labels:
             agentic: vk-ready

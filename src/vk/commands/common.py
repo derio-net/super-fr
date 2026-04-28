@@ -110,7 +110,6 @@ To enable, add this to the file:
   dispatch:
     target: github-issues
     owner: <your-github-owner>
-    project_board: "<Project Name>"
     default_repo: <owner>/<repo>
     labels:
       agentic: vk-ready

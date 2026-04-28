@@ -190,9 +190,6 @@ def dispatch_create(
     repo: str | None = typer.Option(
         None, "--repo", help="Target repo (OWNER/REPO). Defaults to config default_repo."
     ),
-    project: str | None = typer.Option(
-        None, "--project", help="Project board name. Defaults to config project_board."
-    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutations."),
     yes: bool = typer.Option(False, "--yes", help="Execute without confirmation."),
 ) -> None:
@@ -218,7 +215,6 @@ def dispatch_create(
     assert dispatch_cfg is not None
 
     target_repo = repo or dispatch_cfg.default_repo
-    _ = project or dispatch_cfg.project_board  # reserved for project board operations
 
     # Parse and validate plan
     try:

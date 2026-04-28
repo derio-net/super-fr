@@ -31,7 +31,7 @@
 
 **Context:** Six functions delete cleanly — none have non-test callers. The unit test for `add_to_project` goes with it. `get_project_number`, `list_project_items`, and `BoardItem` are alive only via `_run_dispatch_audit` (deleted in Phase 2 of this plan); they move out together with their last consumer to avoid a transient broken state.
 
-- [ ] **Step 1: Identify deletion targets via grep**
+- [x] **Step 1: Identify deletion targets via grep**
 
 ```bash
 grep -n "^def add_to_project\|^def set_field\|^def get_project_id\|^def get_item_id\|^def get_field_id\|^def get_option_id" src/vk/gh.py
@@ -39,7 +39,7 @@ grep -n "^def add_to_project\|^def set_field\|^def get_project_id\|^def get_item
 
 Expected: six matches at the lines noted in the spec's excision table (149, 171, 233, 252, 276, 299).
 
-- [ ] **Step 2: Delete the six functions**
+- [x] **Step 2: Delete the six functions**
 
 In `src/vk/gh.py`, remove these function definitions (and any contiguous comment block above each):
 
@@ -57,7 +57,7 @@ Leave intact:
 
 These three are deleted in Phase 2 of this plan together with their final consumer.
 
-- [ ] **Step 3: Delete `add_to_project` test from `tests/unit/test_gh.py`**
+- [x] **Step 3: Delete `add_to_project` test from `tests/unit/test_gh.py`**
 
 ```bash
 grep -n "add_to_project" tests/unit/test_gh.py
@@ -65,7 +65,7 @@ grep -n "add_to_project" tests/unit/test_gh.py
 
 Remove the import on line 14 and the test body around line 100.
 
-- [ ] **Step 4: Run unit tests**
+- [x] **Step 4: Run unit tests**
 
 ```bash
 uv run pytest tests/unit/test_gh.py -q --no-cov
@@ -79,7 +79,7 @@ Expected: green (one fewer test class).
 - Modify: `src/vk/config.py`
 - Modify: `tests/unit/test_config.py`
 
-- [ ] **Step 1: TDD — assert field absence**
+- [x] **Step 1: TDD — assert field absence**
 
 In `tests/unit/test_config.py`, add:
 
@@ -104,7 +104,7 @@ class TestDispatchConfigNoProjectBoard:
 
 Update existing tests that reference `cfg.project_board` (lines 64, 75) — drop those assertions.
 
-- [ ] **Step 2: Drop the field**
+- [x] **Step 2: Drop the field**
 
 In `src/vk/config.py`:
 
@@ -113,7 +113,7 @@ In `src/vk/config.py`:
 
 `_parse_dispatch` continues to accept YAML containing the `project_board:` key — `dict.get` on the `raw` map silently ignores unknown keys at the dataclass-construction step. No backward-compat issue for repos that still have it in their `plan-config.yaml`.
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_config.py -q --no-cov
@@ -127,7 +127,7 @@ Expected: green.
 - Modify: `src/vk/commands/dispatch_cmd.py`
 - Modify: `tests/integration/test_dispatch.py` (if it asserts the flag)
 
-- [ ] **Step 1: Locate references**
+- [x] **Step 1: Locate references**
 
 ```bash
 grep -n "project" src/vk/commands/dispatch_cmd.py
@@ -135,14 +135,14 @@ grep -n "project" src/vk/commands/dispatch_cmd.py
 
 Expected: lines 192-194 (option declaration) and line 220 (the discarded read).
 
-- [ ] **Step 2: Remove the flag and the discard**
+- [x] **Step 2: Remove the flag and the discard**
 
 In `src/vk/commands/dispatch_cmd.py`:
 
 - Remove the `project: str | None = typer.Option(...)` parameter (lines 192-194).
 - Remove the `_ = project or dispatch_cfg.project_board  # reserved for project board operations` line (220).
 
-- [ ] **Step 3: Confirm tests still pass**
+- [x] **Step 3: Confirm tests still pass**
 
 ```bash
 uv run pytest tests/integration/test_dispatch.py -q --no-cov
@@ -158,19 +158,19 @@ Expected: green; second grep should produce no matches. If any test invokes the 
 - Modify: `src/vk/commands/common.py`
 - Modify: `tests/unit/test_common.py`
 
-- [ ] **Step 1: Update `init_cmd.py` YAML scaffold**
+- [x] **Step 1: Update `init_cmd.py` YAML scaffold**
 
 In `src/vk/commands/init_cmd.py` around lines 59-64, remove the `project_name = project or "Derio Ops"` resolution (line 59) and the `"project_board": project_name,` entry from the scaffold dict (line 64). If `init`'s function signature has a `--project` parameter, drop that too.
 
-- [ ] **Step 2: Update `common.py` scaffold docstring**
+- [x] **Step 2: Update `common.py` scaffold docstring**
 
 In `src/vk/commands/common.py` around line 113, remove the `project_board: "<Project Name>"` line from the scaffold-template docstring.
 
-- [ ] **Step 3: Update `test_common.py`**
+- [x] **Step 3: Update `test_common.py`**
 
 In `tests/unit/test_common.py` around line 55, drop the `assert "project_board:" in result` assertion. If a test asserts `assert "project_board:" not in result`, add that instead.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_common.py -q --no-cov
@@ -184,7 +184,7 @@ Expected: green.
 - Modify: `tests/integration/conftest.py`
 - Modify: `tests/fixtures/configs/dispatch-enabled.yaml`
 
-- [ ] **Step 1: Drop `project_board` from `conftest.py:62`**
+- [x] **Step 1: Drop `project_board` from `conftest.py:62`**
 
 ```bash
 grep -n "project_board" tests/integration/conftest.py
@@ -192,7 +192,7 @@ grep -n "project_board" tests/integration/conftest.py
 
 Remove the line that sets `project_board: "Derio Ops"` in the fixture YAML string.
 
-- [ ] **Step 2: Drop `project_board` from the fixture YAML**
+- [x] **Step 2: Drop `project_board` from the fixture YAML**
 
 ```bash
 grep -n "project_board" tests/fixtures/configs/dispatch-enabled.yaml
@@ -200,7 +200,7 @@ grep -n "project_board" tests/fixtures/configs/dispatch-enabled.yaml
 
 Remove line 17 (`project_board: "Derio Ops"`).
 
-- [ ] **Step 3: Run integration tests**
+- [x] **Step 3: Run integration tests**
 
 ```bash
 uv run pytest tests/integration/ -q --no-cov

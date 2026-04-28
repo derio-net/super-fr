@@ -47,7 +47,6 @@ class DispatchConfig:
     """GitHub Issues dispatch settings.  Present = dispatch enabled."""
 
     owner: str = "derio-net"
-    project_board: str = "Derio Ops"
     default_repo: str = ""
     target: str = "github-issues"
     labels: dict[str, str] = field(default_factory=lambda: dict(_DEFAULT_DISPATCH_LABELS))
@@ -94,7 +93,6 @@ def _parse_dispatch(raw: object) -> DispatchConfig | None:
     user_labels: dict[str, str] = raw_labels if isinstance(raw_labels, dict) else {}
     return DispatchConfig(
         owner=raw.get("owner", "derio-net"),
-        project_board=raw.get("project_board", "Derio Ops"),
         default_repo=raw.get("default_repo", ""),
         target=raw.get("target", "github-issues"),
         labels={**_DEFAULT_DISPATCH_LABELS, **user_labels},

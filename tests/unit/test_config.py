@@ -63,7 +63,6 @@ def test_gate_dispatch_empty_map() -> None:
     assert profile.dispatch_enabled is True
     assert profile.dispatch is not None
     assert profile.dispatch.owner == "derio-net"
-    assert profile.dispatch.project_board == "Derio Ops"
     assert profile.dispatch.target == "github-issues"
     assert profile.dispatch.labels == {
         "agentic": "vk-ready",
@@ -79,7 +78,6 @@ def test_gate_dispatch_full_map() -> None:
     assert profile.dispatch_enabled is True
     assert profile.dispatch is not None
     assert profile.dispatch.owner == "derio-net"
-    assert profile.dispatch.project_board == "Derio Ops"
     assert profile.dispatch.default_repo == "derio-net/some-repo"
     assert profile.dispatch.target == "github-issues"
     # The fixture only sets agentic/manual; the new keys merge in from defaults.
@@ -89,6 +87,29 @@ def test_gate_dispatch_full_map() -> None:
         "in_progress": "in-progress",
         "pr_ready": "pr-ready",
     }
+
+
+class TestDispatchConfigNoProjectBoard:
+    def test_dataclass_has_no_project_board_field(self) -> None:
+        from dataclasses import fields
+
+        from vk.config import DispatchConfig
+
+        names = {f.name for f in fields(DispatchConfig)}
+        assert "project_board" not in names
+
+    def test_yaml_with_project_board_key_does_not_break(self) -> None:
+        # Backward-compat: existing plan-config.yaml files in the wild still
+        # have the key. Parser must ignore it, not error.
+        raw = {
+            "target": "github-issues",
+            "owner": "o",
+            "project_board": "Some Board",
+            "default_repo": "o/r",
+        }
+        cfg = _parse_dispatch(raw)
+        assert cfg is not None
+        assert not hasattr(cfg, "project_board")
 
 
 # --- Format derived from dispatch ---
