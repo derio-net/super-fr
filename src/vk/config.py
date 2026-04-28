@@ -90,7 +90,8 @@ def _parse_dispatch(raw: object) -> DispatchConfig | None:
         return None
     if not isinstance(raw, dict):
         return None
-    user_labels = raw.get("labels") or {}
+    raw_labels = raw.get("labels")
+    user_labels: dict[str, str] = raw_labels if isinstance(raw_labels, dict) else {}
     return DispatchConfig(
         owner=raw.get("owner", "derio-net"),
         project_board=raw.get("project_board", "Derio Ops"),

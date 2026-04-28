@@ -62,11 +62,32 @@ def phase_label(n: int) -> LabelDef:
     return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
 
 
-# Role-name → LabelDef map. Keyed so dispatch.labels.<role> overrides apply
-# cleanly. The dispatch config defaults must mirror these keys.
+# Role-name → LabelDef map.  Keys match the values in LIFECYCLE
+# (e.g. VK_READY.name == "vk-ready"), NOT the config-role keys in
+# DispatchConfig.labels ("agentic", "manual", "in_progress", "pr_ready").
+# The two namespaces are intentionally separate:
+#   - LIFECYCLE is keyed by VK role (what the label IS)
+#   - DispatchConfig.labels is keyed by dispatch intent (how it is USED)
+# Phase 3's `vk execute claim/pr-opened` consume LabelDef constants
+# directly (VK_READY, IN_PROGRESS, PR_READY) rather than going through
+# the LIFECYCLE dict.
 LIFECYCLE: dict[str, LabelDef] = {
     "vk_ready": VK_READY,
     "manual": MANUAL,
     "in_progress": IN_PROGRESS,
     "pr_ready": PR_READY,
 }
+
+
+def def_for_name(name: str, canonical: LabelDef) -> LabelDef:
+    """Return *canonical* if *name* matches its registry name; otherwise
+    return a default-gray LabelDef with empty description.
+
+    Used by dispatch to handle operator-overridden label names (e.g.
+    ``labels.agentic: "queued"`` in plan-config.yaml).  The fallback
+    ensures ensure_labels always receives a valid LabelDef regardless of
+    whether the configured name is in the registry.
+    """
+    if name == canonical.name:
+        return canonical
+    return LabelDef(name, "ededed", "")

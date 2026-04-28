@@ -282,6 +282,12 @@ class TestMigrateEnsuresLabels:
         assert kwargs["repo"] == "org/r"
         # ensure_labels takes list[LabelDef] — extract names
         names = {ld.name for ld in kwargs["labels"]}
+        # Lifecycle labels must be bootstrapped so Phase 3's claim/pr-opened
+        # can transition Issues on repos that have never seen dispatch create.
+        assert "vk-ready" in names
+        assert "manual" in names
+        assert "in-progress" in names
+        assert "pr-ready" in names
         assert "plan:test-ensure" in names
         assert "phase:0" in names
         assert "phase:1" in names

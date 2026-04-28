@@ -214,3 +214,17 @@ class TestDispatchLabelDefaults:
             "in_progress": "ip",
             "pr_ready": "pr",
         }
+
+    def test_non_dict_labels_value_falls_back_to_defaults(self) -> None:
+        # A misconfigured plan-config.yaml with labels: "bad-string" must not
+        # raise TypeError — it silently falls back to all defaults.
+        for bad_value in ("bad-string", ["a", "b"], 42):
+            raw = {"target": "github-issues", "owner": "o", "labels": bad_value}
+            cfg = _parse_dispatch(raw)
+            assert cfg is not None, f"Expected DispatchConfig for labels={bad_value!r}"
+            assert cfg.labels == {
+                "agentic": "vk-ready",
+                "manual": "manual",
+                "in_progress": "in-progress",
+                "pr_ready": "pr-ready",
+            }, f"Expected defaults for labels={bad_value!r}"
