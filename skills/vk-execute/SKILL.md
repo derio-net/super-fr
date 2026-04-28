@@ -30,7 +30,7 @@ When creating the PR for an agentic phase:
 The Issue moves: `vk-ready → in-progress → pr-ready → closed`. Dispatched mode only.
 
 - `vk execute claim --issue <N> --repo <owner/repo>` — flips to `in-progress`.
-- `vk execute pr-opened --issue <N> --repo <owner/repo> --pr-url <url>` — flips to `pr-ready`.
+- `vk execute pr-opened --issue <N> --repo <owner/repo> [--pr-url <url>]` — flips to `pr-ready`.
 
 Both are idempotent, retry on transient errors, and hard-fail on persistent failure.
 
@@ -48,7 +48,7 @@ Both are idempotent, retry on transient errors, and hard-fail on persistent fail
    ```bash
    vk execute check-deps <plan> <phase>
    ```
-1.5. **Claim the Issue (dispatched mode only):**
+1.5. **Claim the Issue (dispatched mode only):** (`$N`/`$REPO` from the Issue body)
    ```bash
    vk execute claim --issue $N --repo $REPO
    ```
@@ -66,9 +66,9 @@ Both are idempotent, retry on transient errors, and hard-fail on persistent fail
    vk execute pr-body <plan> <phase> [--issue N]
    ```
 6. Delegate to `superpowers:finishing-a-development-branch`.
-6.5. **Mark Issue pr-ready (dispatched mode only):**
+6.5. **Mark Issue pr-ready (dispatched mode only):** (`$PR_URL` from `gh pr create`; run before step 7)
    ```bash
-   vk execute pr-opened --issue $N --repo $REPO --pr-url $PR_URL
+   vk execute pr-opened --issue $N --repo $REPO [--pr-url $PR_URL]
    ```
 7. Transition VK Issue to "In Review" (dispatch mode only):
    - Extract the GitHub Issue number from the plan's tracking comment (`<!-- Tracking: ...issues/<N> -->`)
