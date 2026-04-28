@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-27-label-lifecycle-fix-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Make the dispatched-Issue lifecycle (`vk-ready → in-progress → pr-ready → closed`) self-contained inside `vk` and `vk-execute`, with canonical label colors and descriptions sourced from a single registry. After this plan ships, an agent in any repo running `vk-execute` flips its Issue through the lifecycle without depending on a harness-specific bridge, and dispatch bootstraps the full label set with consistent colors.
 

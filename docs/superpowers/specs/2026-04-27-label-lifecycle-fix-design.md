@@ -486,7 +486,7 @@ edge cases in repos with hand-curated label sets; per-repo errors from
 
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
-| Phase 1 — Lifecycle in vk-execute | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-27-label-lifecycle-fix-phase-1.md` | Not Started | — |
+| Phase 1 — Lifecycle in vk-execute | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-27-label-lifecycle-fix-phase-1.md` | Complete | — |
 | Phase 2 — Project-board excision | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-27-label-lifecycle-fix-phase-2-project-board-excision.md` | Not Started | — |
 | Phase 3 — `vk admin labels-sync` | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-04-27-label-lifecycle-fix-phase-3-labels-sync.md` | Not Started | Phase 1 |
 | Phase 4 — Operator-driven org sweep | (operator action across `derio-net/*`) | — | Not Started | Phase 3 deployed |
