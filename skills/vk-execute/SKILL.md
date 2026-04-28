@@ -27,12 +27,12 @@ When creating the PR for an agentic phase:
 
 ## Label lifecycle
 
-After `gh pr create` succeeds:
+The Issue moves: `vk-ready → in-progress → pr-ready → closed`. Dispatched mode only.
 
-    gh issue edit <issue_number> --repo <owner/repo> \
-       --add-label pr-ready --remove-label in-progress
+- `vk execute claim --issue <N> --repo <owner/repo>` — flips to `in-progress`.
+- `vk execute pr-opened --issue <N> --repo <owner/repo> --pr-url <url>` — flips to `pr-ready`.
 
-Best-effort: failure does not block PR creation.
+Both are idempotent, retry on transient errors, and hard-fail on persistent failure.
 
 ## Procedure
 
@@ -48,6 +48,10 @@ Best-effort: failure does not block PR creation.
    ```bash
    vk execute check-deps <plan> <phase>
    ```
+1.5. **Claim the Issue (dispatched mode only):**
+   ```bash
+   vk execute claim --issue $N --repo $REPO
+   ```
 2. Get work scope:
    ```bash
    vk execute scope <plan> <phase>
@@ -62,6 +66,10 @@ Best-effort: failure does not block PR creation.
    vk execute pr-body <plan> <phase> [--issue N]
    ```
 6. Delegate to `superpowers:finishing-a-development-branch`.
+6.5. **Mark Issue pr-ready (dispatched mode only):**
+   ```bash
+   vk execute pr-opened --issue $N --repo $REPO --pr-url $PR_URL
+   ```
 7. Transition VK Issue to "In Review" (dispatch mode only):
    - Extract the GitHub Issue number from the plan's tracking comment (`<!-- Tracking: ...issues/<N> -->`)
    - Call VK MCP `list_issues` with `search: "gh#<N>"` to resolve the VK Issue ID

@@ -831,7 +831,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean / green.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git checkout -b phase-2-dispatch-reads-registry
@@ -1305,7 +1305,7 @@ Expected: 5 passed.
 
 ### Task 3: Format, type-check, full suite, commit
 
-- [ ] **Step 1: Format, type-check, full suite**
+- [x] **Step 1: Format, type-check, full suite**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov
@@ -1313,7 +1313,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean / green.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git checkout -b phase-3-execute-claim-and-pr-opened
@@ -1338,7 +1338,7 @@ gh pr create --title "Phase 3 · vk execute claim + pr-opened" \
 - Modify: `skills/vk-execute/SKILL.md`
 - Modify: `tests/unit/test_skill_validation.py`
 
-- [ ] **Step 1: TDD — skill validation asserts new shape**
+- [x] **Step 1: TDD — skill validation asserts new shape**
 
 Add or extend in `tests/unit/test_skill_validation.py`:
 
@@ -1358,7 +1358,7 @@ class TestVkExecuteSkillReferencesLifecycleCommands:
         assert "best-effort: failure does not block" not in text.lower()
 ```
 
-- [ ] **Step 2: Update `skills/vk-execute/SKILL.md`**
+- [x] **Step 2: Update `skills/vk-execute/SKILL.md`**
 
 Two changes.
 
@@ -1403,7 +1403,7 @@ After step 6 (`gh pr create` via `superpowers:finishing-a-development-branch`), 
    correct before the VK board sync, in case any board automation reads it.
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_skill_validation.py -q --no-cov
@@ -1421,7 +1421,7 @@ Expected: green.
 
 **Context:** Per `CLAUDE.md` release rule, this PR ships new user-visible subcommands → minor bump. Current version is `1.2.0` (from the vk-plan-rework feature). Bump to `1.3.0`.
 
-- [ ] **Step 1: Confirm current version**
+- [x] **Step 1: Confirm current version**
 
 ```bash
 grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json
@@ -1429,13 +1429,13 @@ grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-p
 
 Expected: all three report `1.2.0`.
 
-- [ ] **Step 2: Bump all three files to `1.3.0`**
+- [x] **Step 2: Bump all three files to `1.3.0`**
 
 In `pyproject.toml`: change `version = "1.2.0"` → `version = "1.3.0"`.
 In `.claude-plugin/plugin.json`: change `"version": "1.2.0"` → `"version": "1.3.0"`.
 In `.claude-plugin/marketplace.json`: change the first plugin's `"version": "1.2.0"` → `"version": "1.3.0"`.
 
-- [ ] **Step 3: Refresh lockfile and confirm CLI**
+- [x] **Step 3: Refresh lockfile and confirm CLI**
 
 ```bash
 uv sync
@@ -1444,7 +1444,7 @@ uv run vk --version
 
 Expected: `vk --version` reports `1.3.0`.
 
-- [ ] **Step 4: Format, type-check, full suite**
+- [x] **Step 4: Format, type-check, full suite**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov
