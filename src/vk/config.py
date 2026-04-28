@@ -34,6 +34,14 @@ class HeaderConfig:
     status_values: tuple[str, ...] = ("Not Started", "In Progress", "Complete")
 
 
+_DEFAULT_DISPATCH_LABELS: dict[str, str] = {
+    "agentic": "vk-ready",
+    "manual": "manual",
+    "in_progress": "in-progress",
+    "pr_ready": "pr-ready",
+}
+
+
 @dataclass(frozen=True)
 class DispatchConfig:
     """GitHub Issues dispatch settings.  Present = dispatch enabled."""
@@ -42,9 +50,7 @@ class DispatchConfig:
     project_board: str = "Derio Ops"
     default_repo: str = ""
     target: str = "github-issues"
-    labels: dict[str, str] = field(
-        default_factory=lambda: {"agentic": "vk-ready", "manual": "manual"}
-    )
+    labels: dict[str, str] = field(default_factory=lambda: dict(_DEFAULT_DISPATCH_LABELS))
 
 
 @dataclass(frozen=True)
@@ -84,12 +90,14 @@ def _parse_dispatch(raw: object) -> DispatchConfig | None:
         return None
     if not isinstance(raw, dict):
         return None
+    raw_labels = raw.get("labels")
+    user_labels: dict[str, str] = raw_labels if isinstance(raw_labels, dict) else {}
     return DispatchConfig(
         owner=raw.get("owner", "derio-net"),
         project_board=raw.get("project_board", "Derio Ops"),
         default_repo=raw.get("default_repo", ""),
         target=raw.get("target", "github-issues"),
-        labels=raw.get("labels", {"agentic": "vk-ready", "manual": "manual"}),
+        labels={**_DEFAULT_DISPATCH_LABELS, **user_labels},
     )
 
 

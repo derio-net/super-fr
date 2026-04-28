@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from vk import gh
+from vk import labels as _labels
 from vk.commands.common import (
     ConfirmAction,
     confirm_or_exit,
@@ -289,18 +290,30 @@ def dispatch_create(
     phase_to_issue: dict[int, int] = {}
 
     # Bootstrap labels on the target repo. Idempotent (gh label create --force).
-    # Prevents silent-partial-dispatch on repos where required labels don't
-    # yet exist.
-    agentic_label = dispatch_cfg.labels.get("agentic", "vk-ready")
-    manual_label = dispatch_cfg.labels.get("manual", "manual")
-    required_labels = sorted(
-        {
-            agentic_label,
-            manual_label,
-            *spec_plan_labels,
-            *(f"phase:{p.number}" for p in plan.phases),
-        }
-    )
+    # Prevents silent-partial-dispatch on repos where any of the lifecycle
+    # labels, spec/plan labels, or phase:<n> don't yet exist. Colors come from
+    # the registry so the board reads as a visual progression.
+    agentic_name = dispatch_cfg.labels.get("agentic", "vk-ready")
+    manual_name = dispatch_cfg.labels.get("manual", "manual")
+    in_progress_name = dispatch_cfg.labels.get("in_progress", "in-progress")
+    pr_ready_name = dispatch_cfg.labels.get("pr_ready", "pr-ready")
+
+    _spec_plan_defs: list[_labels.LabelDef]
+    if plan.spec:
+        _spec_plan_defs = [_labels.spec_label(spec_slug), _labels.plan_label(plan_name)]
+    else:
+        _spec_plan_defs = [_labels.plan_label(slug)]
+
+    required_labels: list[_labels.LabelDef] = [
+        _labels.def_for_name(agentic_name, _labels.VK_READY),
+        _labels.def_for_name(manual_name, _labels.MANUAL),
+        _labels.def_for_name(in_progress_name, _labels.IN_PROGRESS),
+        _labels.def_for_name(pr_ready_name, _labels.PR_READY),
+        *_spec_plan_defs,
+        *(_labels.phase_label(p.number) for p in plan.phases),
+    ]
+    required_labels = sorted(required_labels, key=lambda d: d.name)
+
     try:
         gh.ensure_labels(repo=target_repo, labels=required_labels)
     except gh.GhError as exc:
@@ -547,17 +560,40 @@ def migrate(
             console.print(f"\n#{r['number']}  {r['old_title']}  →  {r['new_title']}")
         confirm_or_exit("Apply these migrations?")
 
-    # Ensure spec/plan/phase labels exist on every target repo before the
-    # edit loop. Rewrites may span multiple repos if the plan dispatched
-    # cross-repo Issues, so we group by repo.
-    labels_by_repo: dict[str, set[str]] = {}
+    # Ensure all lifecycle, spec/plan, and phase:<n> labels exist on every
+    # target repo before the edit loop. Rewrites may span multiple repos if the
+    # plan dispatched cross-repo Issues, so we group by repo. Lifecycle labels
+    # are included so that Phase 3's `vk execute claim/pr-opened` can
+    # immediately transition Issues on repos that were never through
+    # `vk dispatch create` (i.e. migrated from a hand-dispatched state).
+    # Sourced from the registry so colors match dispatch create.
+    agentic_name_m = dispatch_cfg.labels.get("agentic", "vk-ready")
+    manual_name_m = dispatch_cfg.labels.get("manual", "manual")
+    in_progress_name_m = dispatch_cfg.labels.get("in_progress", "in-progress")
+    pr_ready_name_m = dispatch_cfg.labels.get("pr_ready", "pr-ready")
+    lifecycle_defs: list[_labels.LabelDef] = [
+        _labels.def_for_name(agentic_name_m, _labels.VK_READY),
+        _labels.def_for_name(manual_name_m, _labels.MANUAL),
+        _labels.def_for_name(in_progress_name_m, _labels.IN_PROGRESS),
+        _labels.def_for_name(pr_ready_name_m, _labels.PR_READY),
+    ]
+    phases_by_repo: dict[str, set[int]] = {}
     for r in rewrites:
-        labels_by_repo.setdefault(r["repo"], set()).update(
-            {*spec_plan_labels, f"phase:{r['phase_number']}"}
-        )
-    for repo_name, needed in labels_by_repo.items():
+        phases_by_repo.setdefault(r["repo"], set()).add(r["phase_number"])
+    for repo_name, phase_nums in phases_by_repo.items():
+        _m_spec_plan: list[_labels.LabelDef]
+        if plan.spec:
+            _m_spec_plan = [_labels.spec_label(spec_slug), _labels.plan_label(plan_name)]
+        else:
+            _m_spec_plan = [_labels.plan_label(slug)]
+        defs: list[_labels.LabelDef] = [
+            *lifecycle_defs,
+            *_m_spec_plan,
+            *(_labels.phase_label(n) for n in sorted(phase_nums)),
+        ]
+
         try:
-            gh.ensure_labels(repo=repo_name, labels=sorted(needed))
+            gh.ensure_labels(repo=repo_name, labels=defs)
         except gh.GhError as exc:
             err_console.print(f"Error ensuring labels on {repo_name}: {exc}")
             raise typer.Exit(4) from exc
