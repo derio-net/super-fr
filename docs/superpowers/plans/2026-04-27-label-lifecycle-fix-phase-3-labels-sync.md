@@ -31,7 +31,7 @@
 - Modify: `src/vk/gh.py`
 - Modify: `tests/unit/test_gh.py`
 
-- [ ] **Step 1: TDD — `list_labels`, `list_repos`, `delete_label`**
+- [x] **Step 1: TDD — `list_labels`, `list_repos`, `delete_label`**
 
 Add to `tests/unit/test_gh.py`:
 
@@ -89,7 +89,7 @@ class TestDeleteLabel:
         ]]
 ```
 
-- [ ] **Step 2: Implement `list_labels`, `list_repos`, `delete_label`**
+- [x] **Step 2: Implement `list_labels`, `list_repos`, `delete_label`**
 
 Add to `src/vk/gh.py`:
 
@@ -125,7 +125,7 @@ def delete_label(*, repo: str, name: str) -> None:
     _run_gh(["label", "delete", name, "--repo", repo, "--yes"])
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_gh.py -q --no-cov
@@ -140,7 +140,7 @@ Expected: existing + 3 new pass.
 - Modify: `src/vk/main.py`
 - Add: `tests/unit/test_admin_skeleton.py`
 
-- [ ] **Step 1: Create `admin_cmd.py` skeleton**
+- [x] **Step 1: Create `admin_cmd.py` skeleton**
 
 `src/vk/commands/admin_cmd.py`:
 
@@ -181,7 +181,7 @@ def labels_sync(
     raise NotImplementedError("labels-sync body lands in Phase 2 of this plan.")
 ```
 
-- [ ] **Step 2: Wire into `main.py`**
+- [x] **Step 2: Wire into `main.py`**
 
 In `src/vk/main.py`, register the new app alongside existing groups:
 
@@ -191,7 +191,7 @@ grep -n "add_typer\|Typer" src/vk/main.py
 
 Add: `app.add_typer(admin_app, name="admin")`
 
-- [ ] **Step 3: Skeleton-level tests**
+- [x] **Step 3: Skeleton-level tests**
 
 `tests/unit/test_admin_skeleton.py`:
 
@@ -219,7 +219,7 @@ def test_labels_sync_requires_owner() -> None:
     assert result.exit_code != 0  # missing --owner
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_admin_skeleton.py -q --no-cov
@@ -233,7 +233,7 @@ Expected: 2 passed.
 - Modify: `src/vk/commands/admin_cmd.py`
 - Add: `tests/unit/test_admin_repo_enumeration.py`
 
-- [ ] **Step 1: TDD — `_resolve_target_repos`**
+- [x] **Step 1: TDD — `_resolve_target_repos`**
 
 `tests/unit/test_admin_repo_enumeration.py`:
 
@@ -271,7 +271,7 @@ class TestResolveTargetReposOrgWide:
         assert result == ["derio-net/frank", "derio-net/willikins"]
 ```
 
-- [ ] **Step 2: Implement `_resolve_target_repos`**
+- [x] **Step 2: Implement `_resolve_target_repos`**
 
 In `src/vk/commands/admin_cmd.py`:
 
@@ -290,7 +290,7 @@ def _resolve_target_repos(*, owner: str, repo: str | None) -> list[str]:
     return [f"{owner}/{r['name']}" for r in gh.list_repos(owner=owner)]
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_admin_repo_enumeration.py -q --no-cov
@@ -300,7 +300,7 @@ Expected: 2 passed.
 
 ### Task 4: Format, type-check, full suite, commit
 
-- [ ] **Step 1: Format and type-check**
+- [x] **Step 1: Format and type-check**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
@@ -308,7 +308,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean.
 
-- [ ] **Step 2: Full suite**
+- [x] **Step 2: Full suite**
 
 ```bash
 uv run pytest -q --no-cov

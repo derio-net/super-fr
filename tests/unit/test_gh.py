@@ -365,6 +365,93 @@ class TestSwapIssueLabels:
             gh.swap_issue_labels(repo="o/r", number=42, add=["x"], remove=[])
 
 
+class TestListLabels:
+    def test_returns_parsed_label_objects(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json
+
+        captured: list[list] = []
+
+        def fake(args: list) -> str:
+            captured.append(args)
+            return json.dumps(
+                [
+                    {"name": "vk-ready", "color": "0E8AE6", "description": "queued"},
+                    {"name": "bug", "color": "d73a4a", "description": "Something's wrong"},
+                ]
+            )
+
+        monkeypatch.setattr(gh, "_run_gh", fake)
+        labels = gh.list_labels(repo="o/r")
+        assert labels[0]["name"] == "vk-ready"
+        assert labels[0]["color"] == "0E8AE6"
+        assert labels[1]["name"] == "bug"
+        assert captured[0] == [
+            "label",
+            "list",
+            "--repo",
+            "o/r",
+            "--json",
+            "name,color,description",
+            "--limit",
+            "200",
+        ]
+
+
+class TestListRepos:
+    def test_returns_non_archived_repos(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json
+
+        captured: list[list] = []
+
+        def fake(args: list) -> str:
+            captured.append(args)
+            return json.dumps(
+                [
+                    {"name": "frank", "isArchived": False},
+                    {"name": "old-repo", "isArchived": True},
+                    {"name": "willikins", "isArchived": False},
+                ]
+            )
+
+        monkeypatch.setattr(gh, "_run_gh", fake)
+        repos = gh.list_repos(owner="derio-net")
+        assert [r["name"] for r in repos] == ["frank", "willikins"]
+        assert captured[0] == [
+            "repo",
+            "list",
+            "derio-net",
+            "--json",
+            "name,isArchived",
+            "--limit",
+            "200",
+        ]
+
+    def test_includes_repo_missing_is_archived_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Repos missing `isArchived` should be included (treated as non-archived)."""
+        import json
+
+        monkeypatch.setattr(gh, "_run_gh", lambda args: json.dumps([{"name": "mystery"}]))
+        repos = gh.list_repos(owner="derio-net")
+        assert [r["name"] for r in repos] == ["mystery"]
+
+
+class TestDeleteLabel:
+    def test_emits_delete_yes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: list[list] = []
+        monkeypatch.setattr(gh, "_run_gh", lambda args: captured.append(args) or "")
+        gh.delete_label(repo="o/r", name="bug")
+        assert captured == [
+            [
+                "label",
+                "delete",
+                "bug",
+                "--repo",
+                "o/r",
+                "--yes",
+            ]
+        ]
+
+
 class TestIsTransient:
     @pytest.mark.parametrize(
         "stderr",

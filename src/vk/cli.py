@@ -3,6 +3,7 @@
 import typer
 
 from vk import __version__
+from vk.commands.admin_cmd import admin_app
 from vk.commands.dispatch_cmd import dispatch_app
 from vk.commands.execute_cmd import execute_app
 from vk.commands.init_cmd import init as init_command
@@ -16,6 +17,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+app.add_typer(admin_app, name="admin")
 app.add_typer(plan_app, name="plan")
 app.add_typer(dispatch_app, name="dispatch")
 app.add_typer(progress_app, name="progress")
