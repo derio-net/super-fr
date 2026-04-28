@@ -423,6 +423,49 @@ def is_issue_closed(*, repo: str, number: int) -> bool:
     return output.strip().lower() == "true"
 
 
+def list_labels(*, repo: str) -> list[dict[str, str]]:
+    """Return existing labels on the repo as parsed JSON."""
+    import json
+
+    out = _run_gh(
+        [
+            "label",
+            "list",
+            "--repo",
+            repo,
+            "--json",
+            "name,color,description",
+            "--limit",
+            "200",
+        ]
+    )
+    return json.loads(out) if out else []
+
+
+def list_repos(*, owner: str) -> list[dict[str, object]]:
+    """Return non-archived repos under the given owner."""
+    import json
+
+    out = _run_gh(
+        [
+            "repo",
+            "list",
+            owner,
+            "--json",
+            "name,isArchived",
+            "--limit",
+            "200",
+        ]
+    )
+    repos = json.loads(out) if out else []
+    return [r for r in repos if not r.get("isArchived")]
+
+
+def delete_label(*, repo: str, name: str) -> None:
+    """Delete a label from the repo. `--yes` skips gh's confirmation prompt."""
+    _run_gh(["label", "delete", name, "--repo", repo, "--yes"])
+
+
 def auth_status() -> bool:
     """Check if gh is authenticated.  Returns True if logged in."""
     try:
