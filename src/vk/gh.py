@@ -458,7 +458,7 @@ def list_repos(*, owner: str) -> list[dict[str, object]]:
         ]
     )
     repos = json.loads(out) if out else []
-    return [r for r in repos if not r.get("isArchived")]
+    return [r for r in repos if not r.get("isArchived", False)]
 
 
 def delete_label(*, repo: str, name: str) -> None:

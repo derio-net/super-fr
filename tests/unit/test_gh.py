@@ -401,7 +401,10 @@ class TestListRepos:
     def test_returns_non_archived_repos(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import json
 
+        captured: list[list] = []
+
         def fake(args: list) -> str:
+            captured.append(args)
             return json.dumps(
                 [
                     {"name": "frank", "isArchived": False},
@@ -413,6 +416,23 @@ class TestListRepos:
         monkeypatch.setattr(gh, "_run_gh", fake)
         repos = gh.list_repos(owner="derio-net")
         assert [r["name"] for r in repos] == ["frank", "willikins"]
+        assert captured[0] == [
+            "repo",
+            "list",
+            "derio-net",
+            "--json",
+            "name,isArchived",
+            "--limit",
+            "200",
+        ]
+
+    def test_includes_repo_missing_is_archived_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Repos missing `isArchived` should be included (treated as non-archived)."""
+        import json
+
+        monkeypatch.setattr(gh, "_run_gh", lambda args: json.dumps([{"name": "mystery"}]))
+        repos = gh.list_repos(owner="derio-net")
+        assert [r["name"] for r in repos] == ["mystery"]
 
 
 class TestDeleteLabel:
