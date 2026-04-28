@@ -466,6 +466,29 @@ def delete_label(*, repo: str, name: str) -> None:
     _run_gh(["label", "delete", name, "--repo", repo, "--yes"])
 
 
+def count_issues_with_label(*, repo: str, name: str) -> int:
+    """Count Issues (any state) that carry this label. Cap at 1000."""
+    import json
+
+    out = _run_gh(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--label",
+            name,
+            "--state",
+            "all",
+            "--json",
+            "id",
+            "--limit",
+            "1000",
+        ]
+    )
+    return len(json.loads(out)) if out else 0
+
+
 def auth_status() -> bool:
     """Check if gh is authenticated.  Returns True if logged in."""
     try:
