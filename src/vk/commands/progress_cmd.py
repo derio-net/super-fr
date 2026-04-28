@@ -390,6 +390,8 @@ def _run_dispatch_audit(
 
     # Query the project board
     try:
+        # TODO(Phase 2 #62): entire _run_dispatch_audit is deleted here;
+        # hardcoded "Derio Ops" replaces the removed dispatch_cfg.project_board field.
         project_num = gh.get_project_number(
             owner=dispatch_cfg.owner,
             project_name="Derio Ops",

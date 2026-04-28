@@ -109,6 +109,7 @@ class TestDispatchConfigNoProjectBoard:
         }
         cfg = _parse_dispatch(raw)
         assert cfg is not None
+        assert not hasattr(cfg, "project_board")
 
 
 # --- Format derived from dispatch ---
