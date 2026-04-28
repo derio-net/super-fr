@@ -23,7 +23,7 @@ class TestDryRunRendersActions:
         _patch_minimal_repo(monkeypatch, existing_labels=[])
         result = runner.invoke(
             admin_app,
-            ["--owner", "o", "--repo", "r", "--dry-run"],
+            ["labels-sync", "--owner", "o", "--repo", "r", "--dry-run"],
         )
         assert result.exit_code == 0
         for ld in (labels.VK_READY, labels.IN_PROGRESS, labels.PR_READY):
@@ -40,7 +40,7 @@ class TestDryRunRendersActions:
         )
         result = runner.invoke(
             admin_app,
-            ["--owner", "o", "--repo", "r", "--dry-run"],
+            ["labels-sync", "--owner", "o", "--repo", "r", "--dry-run"],
         )
         assert result.exit_code == 0
         assert "unchanged" in result.stdout.lower() or "= already correct" in result.stdout.lower()

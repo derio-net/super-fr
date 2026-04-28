@@ -44,3 +44,17 @@ class TestDiffLabelsCaseInsensitiveColor:
         existing = [_existing("vk-ready", "0e8ae6", labels.VK_READY.description)]
         actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
         assert actions[0].kind == "unchanged"
+
+
+class TestDiffLabelsExtraExistingIgnored:
+    def test_extra_existing_label_produces_no_action(self) -> None:
+        # Labels present in existing but absent from the registry are silently
+        # ignored — _diff_labels only iterates the registry, never existing.
+        # Removal of non-registry labels is handled by _default_label_actions.
+        existing = [
+            _existing("vk-ready", "0E8AE6", labels.VK_READY.description),
+            _existing("custom", "aabbcc"),
+        ]
+        actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
+        assert all(a.name != "custom" for a in actions)
+        assert len(actions) == 1  # only vk-ready, no action for custom

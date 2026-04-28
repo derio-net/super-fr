@@ -23,7 +23,8 @@ class TestDefaultLabelActions:
         existing = [_existing("bug")]
         monkeypatch.setattr(gh, "count_issues_with_label", lambda *, repo, name: 5)
         actions = _default_label_actions(repo="o/r", existing=existing)
-        assert all(a.kind != "remove" for a in actions)
+        # "bug" has 5 Issues attached — must produce no remove action at all
+        assert actions == []
 
     def test_non_default_label_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
         existing = [_existing("custom-label")]

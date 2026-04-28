@@ -17,6 +17,11 @@ err_console = Console(stderr=True)
 admin_app = typer.Typer(help="Operator-driven cross-repo administration.")
 
 
+@admin_app.callback()
+def _admin() -> None:
+    """Operator-driven cross-repo administration."""
+
+
 @dataclass(frozen=True)
 class LabelAction:
     kind: str  # "create" | "update" | "remove" | "unchanged"
