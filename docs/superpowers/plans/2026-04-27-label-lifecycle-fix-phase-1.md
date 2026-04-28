@@ -1452,7 +1452,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean / green.
 
-- [ ] **Step 5: Commit and PR**
+- [x] **Step 5: Commit and PR**
 
 ```bash
 git checkout -b phase-4-skill-update-and-version-bump
