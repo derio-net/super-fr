@@ -7,6 +7,7 @@ from vk.commands.admin_cmd import admin_app
 from vk.commands.dispatch_cmd import dispatch_app
 from vk.commands.execute_cmd import execute_app
 from vk.commands.init_cmd import init as init_command
+from vk.commands.issue_cmd import issue_app
 from vk.commands.plan_cmd import plan_app
 from vk.commands.progress_cmd import progress_app
 from vk.commands.skills_cmd import skills as skills_command
@@ -22,6 +23,7 @@ app.add_typer(plan_app, name="plan")
 app.add_typer(dispatch_app, name="dispatch")
 app.add_typer(progress_app, name="progress")
 app.add_typer(execute_app, name="execute")
+app.add_typer(issue_app, name="issue")
 app.command(name="init")(init_command)
 app.command(name="skills")(skills_command)
 
