@@ -123,8 +123,7 @@ def test_mixed_target_repos_warns_with_dispatch(
     plan_path = _write_plan(tmp_path, PLAN_MIXED_REPOS)
     result = runner.invoke(app, ["plan", "self-review", str(plan_path)])
     assert result.exit_code == 1
-    combined = (result.output or "") + (result.stdout or "")
-    assert "Multi-repo plan" in combined
+    assert "Multi-repo plan" in (result.output or "")
 
 
 def test_same_target_repo_no_warning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

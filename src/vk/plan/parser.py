@@ -277,6 +277,14 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
                     f"(or its '<!-- Tracking: ... -->' comment if present). "
                     f"Move the line up and re-run."
                 )
+            if _RE_TARGET_REPO.search(post_prelude):
+                raise ValueError(
+                    f"Phase {phase_number}: **Target repo:** line appears below "
+                    f"the first task header. It must sit directly under the "
+                    f"'## Phase {phase_number}:' header "
+                    f"(or its '<!-- Tracking: ... -->' comment if present). "
+                    f"Move the line up and re-run."
+                )
 
         tasks = _parse_tasks(section)
         phases.append(
