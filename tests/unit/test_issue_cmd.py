@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from vk.cli import app
@@ -77,8 +76,40 @@ class TestBuildIssueBody:
         validate_issue_body(body, phase_number=0)
 
 
+class TestResolveRepo:
+    def test_explicit_repo_returned_as_is(self) -> None:
+        assert _resolve_repo("derio-net/frank") == "derio-net/frank"
+
+    def test_ssh_remote_parsed_correctly(self) -> None:
+        fake = CompletedProcess(args=[], returncode=0, stdout="git@github.com:owner/repo.git\n")
+        with patch("subprocess.run", return_value=fake):
+            assert _resolve_repo(None) == "owner/repo"
+
+    def test_https_remote_parsed_correctly(self) -> None:
+        fake = CompletedProcess(args=[], returncode=0, stdout="https://github.com/owner/repo.git\n")
+        with patch("subprocess.run", return_value=fake):
+            assert _resolve_repo(None) == "owner/repo"
+
+    def test_https_remote_without_dotgit(self) -> None:
+        fake = CompletedProcess(args=[], returncode=0, stdout="https://github.com/owner/repo\n")
+        with patch("subprocess.run", return_value=fake):
+            assert _resolve_repo(None) == "owner/repo"
+
+    def test_git_failure_exits_with_code_2(self) -> None:
+        import subprocess
+
+        import typer
+
+        with patch("subprocess.run", side_effect=subprocess.CalledProcessError(128, "git")):
+            try:
+                _resolve_repo(None)
+                assert False, "should have raised"
+            except typer.Exit as exc:
+                assert exc.exit_code == 2
+
+
 class TestCreateDryRun:
-    def test_dry_run_prints_title_and_body(self, tmp_path: Path) -> None:
+    def test_dry_run_prints_title_and_body(self) -> None:
         result = runner.invoke(
             app,
             [
