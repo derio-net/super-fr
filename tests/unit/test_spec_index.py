@@ -122,6 +122,42 @@ def test_upsert_idempotent(tmp_path: Path) -> None:
 
 
 class TestUpsertByFilePath:
+    def test_section_exists_but_no_table_yet(self, tmp_path: Path) -> None:
+        """Table is inserted when section exists but has no rows yet."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(
+            "# Title\n\n## Implementation Plans\n\nSome prose.\n\n## Details\n\nContent.\n"
+        )
+        entry = IndexEntry(
+            plan="P0", repo="r", file="plans/p0.md", status="Not Started", depends_on="—"
+        )
+        upsert_entry(spec, entry)
+        text = spec.read_text()
+        assert "P0" in text
+        assert "Some prose." in text
+        assert "## Details" in text
+
+    def test_empty_file_matches_dash_placeholder(self, tmp_path: Path) -> None:
+        """file='' and file='—' are treated as the same placeholder — no duplicate rows."""
+        spec = tmp_path / "spec.md"
+        spec.write_text(
+            "## Implementation Plans\n\n"
+            "| Plan | Repo | File | Status | Depends on |\n"
+            "|------|------|------|--------|------------|\n"
+            "| Operator Row | | — | Not Started | — |\n"
+        )
+        entry = IndexEntry(
+            plan="Operator Row",
+            repo="",
+            file="",  # empty — should match the '—' placeholder row
+            status="In Progress",
+            depends_on="—",
+        )
+        upsert_entry(spec, entry)
+        entries = read_index(spec)
+        assert len(entries) == 1
+        assert entries[0].status == "In Progress"
+
     def test_same_path_different_title_updates_in_place(self, tmp_path: Path) -> None:
         spec = tmp_path / "spec.md"
         spec.write_text(SPEC_TABLE)
