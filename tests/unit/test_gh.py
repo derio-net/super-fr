@@ -493,3 +493,36 @@ class TestWithRetry:
         # max_attempts=3 with 2-entry backoff is the minimum-sized config.
         monkeypatch.setattr(gh.time, "sleep", lambda s: None)
         assert gh.with_retry(lambda: "ok", max_attempts=3, backoff_seconds=(1.0, 2.0)) == "ok"
+
+
+class TestCountIssuesWithLabel:
+    def test_returns_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json
+
+        captured: list[list[str]] = []
+
+        def fake(args: list[str]) -> str:
+            captured.append(args)
+            return json.dumps([{"id": 1}, {"id": 2}, {"id": 3}])
+
+        monkeypatch.setattr(gh, "_run_gh", fake)
+        n = gh.count_issues_with_label(repo="o/r", name="bug")
+        assert n == 3
+        assert captured[0] == [
+            "issue",
+            "list",
+            "--repo",
+            "o/r",
+            "--label",
+            "bug",
+            "--state",
+            "all",
+            "--json",
+            "id",
+            "--limit",
+            "1000",
+        ]
+
+    def test_empty_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(gh, "_run_gh", lambda args: "[]")
+        assert gh.count_issues_with_label(repo="o/r", name="bug") == 0

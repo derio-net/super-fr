@@ -343,7 +343,7 @@ gh pr create --title "Labels-sync Phase 1 · Module skeleton + gh helpers + repo
 - Modify: `src/vk/commands/admin_cmd.py`
 - Add: `tests/unit/test_admin_diff.py`
 
-- [ ] **Step 1: TDD — `_diff_labels` cases**
+- [x] **Step 1: TDD — `_diff_labels` cases**
 
 `tests/unit/test_admin_diff.py`:
 
@@ -396,7 +396,7 @@ class TestDiffLabelsCaseInsensitiveColor:
         assert actions[0].kind == "unchanged"
 ```
 
-- [ ] **Step 2: Implement `_diff_labels` + `LabelAction`**
+- [x] **Step 2: Implement `_diff_labels` + `LabelAction`**
 
 In `src/vk/commands/admin_cmd.py`:
 
@@ -445,7 +445,7 @@ def _diff_labels(
     return actions
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_admin_diff.py -q --no-cov
@@ -461,7 +461,7 @@ Expected: 4 passed.
 - Modify: `tests/unit/test_gh.py`
 - Add: `tests/unit/test_admin_defaults.py`
 
-- [ ] **Step 1: TDD — `gh.count_issues_with_label`**
+- [x] **Step 1: TDD — `gh.count_issues_with_label`**
 
 In `tests/unit/test_gh.py`:
 
@@ -489,7 +489,7 @@ class TestCountIssuesWithLabel:
         assert gh.count_issues_with_label(repo="o/r", name="bug") == 0
 ```
 
-- [ ] **Step 2: Implement `gh.count_issues_with_label`**
+- [x] **Step 2: Implement `gh.count_issues_with_label`**
 
 ```python
 def count_issues_with_label(*, repo: str, name: str) -> int:
@@ -503,7 +503,7 @@ def count_issues_with_label(*, repo: str, name: str) -> int:
     return len(json.loads(out)) if out else 0
 ```
 
-- [ ] **Step 3: TDD — `_default_label_actions`**
+- [x] **Step 3: TDD — `_default_label_actions`**
 
 `tests/unit/test_admin_defaults.py`:
 
@@ -552,7 +552,7 @@ class TestDefaultLabelActions:
         assert actions == []
 ```
 
-- [ ] **Step 4: Implement `DEFAULT_LABELS` + `_default_label_actions`**
+- [x] **Step 4: Implement `DEFAULT_LABELS` + `_default_label_actions`**
 
 In `src/vk/commands/admin_cmd.py`:
 
@@ -586,7 +586,7 @@ def _default_label_actions(
     return actions
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_admin_defaults.py tests/unit/test_gh.py::TestCountIssuesWithLabel -q --no-cov
@@ -600,7 +600,7 @@ Expected: 5 passed.
 - Modify: `src/vk/commands/admin_cmd.py`
 - Add: `tests/unit/test_admin_dryrun.py`
 
-- [ ] **Step 1: TDD — dry-run table rows match action buckets**
+- [x] **Step 1: TDD — dry-run table rows match action buckets**
 
 `tests/unit/test_admin_dryrun.py`:
 
@@ -654,7 +654,7 @@ class TestDryRunRendersActions:
         assert "unchanged" in result.stdout.lower() or "= already correct" in result.stdout.lower()
 ```
 
-- [ ] **Step 2: Implement `_render_dryrun_table` + wire into `labels_sync`**
+- [x] **Step 2: Implement `_render_dryrun_table` + wire into `labels_sync`**
 
 In `src/vk/commands/admin_cmd.py`:
 
@@ -727,7 +727,7 @@ def labels_sync(
         raise typer.Exit(1)
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_admin_dryrun.py -q --no-cov
@@ -737,7 +737,7 @@ Expected: 2 passed.
 
 ### Task 4: Format, type-check, full suite, commit
 
-- [ ] **Step 1: Format, type-check**
+- [x] **Step 1: Format, type-check**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
@@ -745,7 +745,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean.
 
-- [ ] **Step 2: Full suite**
+- [x] **Step 2: Full suite**
 
 ```bash
 uv run pytest -q --no-cov
