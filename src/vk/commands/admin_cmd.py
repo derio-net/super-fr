@@ -184,6 +184,10 @@ def labels_sync(
 
     any_errors = False
     for slug in repos:
+        # Per-repo progress summary lines go to stdout; per-repo errors go to
+        # err_console (stderr) so CI pipelines can grep stderr for failures
+        # without noise from normal output.  Fatal command-level errors (e.g.
+        # "no repos found") also use err_console.
         try:
             existing = gh.list_labels(repo=slug)
             actions = _diff_labels(existing=existing, registry=registry)

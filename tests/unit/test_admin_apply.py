@@ -3,7 +3,7 @@
 import pytest
 from typer.testing import CliRunner
 
-from vk import gh
+from vk import gh, labels
 from vk.commands.admin_cmd import admin_app
 
 runner = CliRunner()
@@ -50,7 +50,7 @@ class TestApplyCreatesMissingLabels:
         )
         assert result.exit_code == 0
         names_called = {c["name"] for c in ensure_calls}
-        assert names_called == {"vk-ready", "manual", "in-progress", "pr-ready"}
+        assert names_called == {ld.name for ld in labels.LIFECYCLE.values()}
 
 
 class TestApplyRemovesUnusedDefaults:
