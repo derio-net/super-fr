@@ -48,6 +48,7 @@ _TRACK_RE = re.compile(
     r"^\*\*Track:\*\*\s+(.+?)\s*$",
     re.MULTILINE,
 )
+_RE_TARGET_REPO = re.compile(r"^\*\*Target repo:\*\*\s*(.+)$", re.MULTILINE)
 _PHASE_REF_RE = re.compile(r"^Phase\s+(\d+)$")
 # Lines the plan header already captures as structured fields — everything
 # else in the header block is retained as ``Plan.preamble``.
@@ -248,6 +249,9 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
         if track_label == "":
             track_label = None
 
+        target_repo_m = _RE_TARGET_REPO.search(prelude_scan)
+        target_repo = target_repo_m.group(1).strip() if target_repo_m else None
+
         # Spec §1.1: **Depends on:** and **Track:** must live directly under
         # the ## Phase header (or its <!-- Tracking: ... --> comment); any
         # other location is a parse error. A misplaced line below the first
@@ -273,6 +277,14 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
                     f"(or its '<!-- Tracking: ... -->' comment if present). "
                     f"Move the line up and re-run."
                 )
+            if _RE_TARGET_REPO.search(post_prelude):
+                raise ValueError(
+                    f"Phase {phase_number}: **Target repo:** line appears below "
+                    f"the first task header. It must sit directly under the "
+                    f"'## Phase {phase_number}:' header "
+                    f"(or its '<!-- Tracking: ... -->' comment if present). "
+                    f"Move the line up and re-run."
+                )
 
         tasks = _parse_tasks(section)
         phases.append(
@@ -284,6 +296,7 @@ def _parse_phases(text: str) -> tuple[list[Phase], list[bool]]:
                 tasks=tuple(tasks),
                 tracking_url=tracking_url,
                 track_label=track_label,
+                target_repo=target_repo,
             )
         )
 

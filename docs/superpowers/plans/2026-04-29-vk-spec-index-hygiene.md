@@ -480,7 +480,7 @@ Expected: all pass.
 **Files:**
 - Create: `tests/unit/test_self_review_multi_repo.py`
 
-- [ ] **Step 1: TDD — write failing tests**
+- [x] **Step 1: TDD — write failing tests**
 
 ```python
 """Tests for vk plan self-review multi-repo warning (Thread 1a)."""
@@ -629,7 +629,7 @@ def test_mixed_target_no_dispatch_no_warning(tmp_path: Path) -> None:
     assert "Multi-repo" not in (result.output or "")
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail**
+- [x] **Step 2: Run tests to confirm they fail**
 
 ```bash
 uv run pytest tests/unit/test_self_review_multi_repo.py -x -q --no-cov 2>&1 | head -30
@@ -640,7 +640,7 @@ uv run pytest tests/unit/test_self_review_multi_repo.py -x -q --no-cov 2>&1 | he
 **Files:**
 - Edit: `src/vk/plan/models.py`
 
-- [ ] **Step 3: Add `target_repo: str | None = None` to `Phase`**
+- [x] **Step 3: Add `target_repo: str | None = None` to `Phase`**
 
 ```python
 @dataclass(frozen=True)
@@ -660,7 +660,7 @@ class Phase:
 **Files:**
 - Edit: `src/vk/plan/parser.py`
 
-- [ ] **Step 4: Add regex and extraction**
+- [x] **Step 4: Add regex and extraction**
 
 Near the top of `parser.py`, add alongside the other field regexes:
 
@@ -686,7 +686,7 @@ and the first `### Task` line. Use that same block for the regex search.
 **Files:**
 - Edit: `src/vk/commands/plan_cmd.py`
 
-- [ ] **Step 5: Add check after Track-label lint in `plan_self_review()`**
+- [x] **Step 5: Add check after Track-label lint in `plan_self_review()`**
 
 After the `for phase in plan.phases: if phase.track_label is None: ...` block, add:
 
@@ -709,7 +709,7 @@ if len(target_repos) > 1:
 Verify that `load_profile` is already imported in `plan_cmd.py` (it is used in
 `plan_spec_index` via `resolve_repo_root`); add the import if needed.
 
-- [ ] **Step 6: Run all tests**
+- [x] **Step 6: Run all tests**
 
 ```bash
 uv run ruff format src/ tests/
@@ -718,7 +718,7 @@ uv run pytest -q --no-cov
 
 Expected: all pass.
 
-- [ ] **Step 7: Run `vk plan self-review` on this plan to confirm it passes**
+- [x] **Step 7: Run `vk plan self-review` on this plan to confirm it passes**
 
 ```bash
 cd /var/tmp/vibe-kanban/worktrees/2547-ffe-80-gh-80/superpowers-for-vk

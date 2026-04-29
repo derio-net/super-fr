@@ -62,6 +62,7 @@ class Phase:
     tasks: tuple[Task, ...]
     tracking_url: str | None
     track_label: str | None = None
+    target_repo: str | None = None
 
 
 @dataclass(frozen=True)
