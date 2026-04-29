@@ -16,6 +16,7 @@
 ---
 
 ## Phase 1: Fix `spec_index.py` — path-based upsert + prose preservation [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/82 -->
 **Depends on:** —
 
 **Context:** All four `vk progress sync` corruption symptoms trace back to `spec_index.upsert_entry()`. Fixing this file first makes Phase 2 trivial (it just needs to pass the right entry; the write path is already correct).
@@ -248,6 +249,7 @@ Expected: all pass.
 ---
 
 ## Phase 2: Fix `progress_cmd.py` — column preservation + path-based lookup [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/83 -->
 **Depends on:** Phase 1
 
 **Context:** With `upsert_entry()` fixed to match by path, the callers in `progress_cmd.py` only need to provide the correct `repo` and `depends_on` values (copied from the existing row rather than hardcoded blanks). Also extend `_reconcile_spec_index` to accept an optional `prev_plan_path` for the archive-rename case.
@@ -468,6 +470,7 @@ Expected: all pass.
 ---
 
 ## Phase 3: Add `target_repo` to Phase model + parser + self-review check [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/84 -->
 **Depends on:** —
 
 **Context:** Independent of Phases 1 and 2 — no shared files. The `Phase` dataclass gains a nullable field; the parser learns to extract `**Target repo:**` per phase header; `plan_self_review` adds one check that warns when dispatch is configured and phases have mixed repos.
