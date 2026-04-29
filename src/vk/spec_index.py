@@ -89,7 +89,7 @@ def upsert_entry(spec_path: Path, entry: IndexEntry) -> None:
 
     found = False
     for i, e in enumerate(existing):
-        if e.plan == entry.plan:
+        if e.file == entry.file:
             existing[i] = entry
             found = True
             break
@@ -97,7 +97,21 @@ def upsert_entry(spec_path: Path, entry: IndexEntry) -> None:
         existing.append(entry)
 
     table = _build_table(existing)
-    new_text = text[:section_start] + f"\n{table}\n" + text[section_end:]
+    section_text = text[section_start:section_end]
+    lines = section_text.splitlines(keepends=True)
+
+    table_first = next((i for i, ln in enumerate(lines) if ln.strip().startswith("|")), None)
+    table_last = max((i for i, ln in enumerate(lines) if ln.strip().startswith("|")), default=None)
+
+    if table_first is None:
+        pre = text[:section_end].rstrip("\n")
+        new_text = pre + f"\n\n{table}\n" + text[section_end:]
+    else:
+        kept_before = "".join(lines[:table_first])
+        kept_after = "".join(lines[table_last + 1 :])
+        new_section = kept_before + table + "\n" + kept_after
+        new_text = text[:section_start] + new_section + text[section_end:]
+
     spec_path.write_text(new_text, encoding="utf-8")
 
 
@@ -108,5 +122,6 @@ def _build_table(entries: list[IndexEntry]) -> str:
         "|------|------|------|--------|------------|",
     ]
     for e in entries:
-        lines.append(f"| {e.plan} | {e.repo} | `{e.file}` | {e.status} | {e.depends_on} |")
+        file_cell = f"`{e.file}`" if e.file and e.file not in ("—", "-", "") else (e.file or "—")
+        lines.append(f"| {e.plan} | {e.repo} | {file_cell} | {e.status} | {e.depends_on} |")
     return "\n".join(lines)

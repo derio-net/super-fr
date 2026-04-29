@@ -26,7 +26,7 @@
 **Files:**
 - Edit: `tests/unit/test_spec_index.py` (add new test cases, or create if absent)
 
-- [ ] **Step 1: TDD — write failing tests**
+- [x] **Step 1: TDD — write failing tests**
 
 Create or append to `tests/unit/test_spec_index.py`:
 
@@ -147,7 +147,7 @@ class TestBuildTable:
         assert "| — |" in table
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail before the fix**
+- [x] **Step 2: Run tests to confirm they fail before the fix**
 
 ```bash
 uv run pytest tests/unit/test_spec_index.py -x -q --no-cov 2>&1 | head -30
@@ -160,7 +160,7 @@ Expected: `TestUpsertByFilePath` and `TestBuildTable` tests fail.
 **Files:**
 - Edit: `src/vk/spec_index.py`
 
-- [ ] **Step 3: Fix `upsert_entry()` — match by file path**
+- [x] **Step 3: Fix `upsert_entry()` — match by file path**
 
 In `upsert_entry()`, change the matching predicate (currently `e.plan == entry.plan`):
 
@@ -180,7 +180,7 @@ for i, e in enumerate(existing):
         break
 ```
 
-- [ ] **Step 4: Fix `upsert_entry()` — replace only the table block, preserve trailing prose**
+- [x] **Step 4: Fix `upsert_entry()` — replace only the table block, preserve trailing prose**
 
 Replace the section-replacement block at the end of `upsert_entry()`:
 
@@ -218,7 +218,7 @@ else:
 spec_path.write_text(new_text, encoding="utf-8")
 ```
 
-- [ ] **Step 5: Fix `_build_table()` — guard backticks on non-path File values**
+- [x] **Step 5: Fix `_build_table()` — guard backticks on non-path File values**
 
 ```python
 # Before
@@ -229,7 +229,7 @@ file_cell = f"`{e.file}`" if e.file and e.file not in ("—", "-", "") else (e.f
 lines.append(f"| {e.plan} | {e.repo} | {file_cell} | {e.status} | {e.depends_on} |")
 ```
 
-- [ ] **Step 6: Run all new tests — must pass**
+- [x] **Step 6: Run all new tests — must pass**
 
 ```bash
 uv run pytest tests/unit/test_spec_index.py -x -q --no-cov
@@ -237,7 +237,7 @@ uv run pytest tests/unit/test_spec_index.py -x -q --no-cov
 
 Expected: all pass.
 
-- [ ] **Step 7: Run full test suite — no regressions**
+- [x] **Step 7: Run full test suite — no regressions**
 
 ```bash
 uv run ruff format src/ tests/
