@@ -82,28 +82,42 @@ def _rewrite_status(plan_path: Path, new_status: str) -> None:
     plan_path.write_text(text, encoding="utf-8")
 
 
-def _resolve_spec(plan_path: Path) -> Path | None:
+def _resolve_spec(plan_path: Path, repo_root: Path | None = None) -> Path | None:
     """Resolve spec path from plan's Spec header."""
     plan = parse_plan(plan_path)
     if not plan.spec:
         return None
-    repo_root = _find_repo_root(plan_path)
+    if repo_root is None:
+        repo_root = _find_repo_root(plan_path)
     spec_path = repo_root / plan.spec
     return spec_path if spec_path.exists() else None
 
 
 def _reconcile_spec_index(
-    plan_path: Path, plan_title: str, status: str, repo_root: Path, *, dry_run: bool = False
+    plan_path: Path,
+    plan_title: str,
+    status: str,
+    repo_root: Path,
+    *,
+    dry_run: bool = False,
+    prev_plan_path: Path | None = None,
 ) -> bool:
     """Reconcile spec index with current plan status. Returns True if updated."""
-    spec_path = _resolve_spec(plan_path)
+    spec_path = _resolve_spec(plan_path, repo_root)
     if not spec_path:
         return False
 
     entries = read_index(spec_path)
     rel_file = str(plan_path.relative_to(repo_root))
-    matching = [e for e in entries if e.plan == plan_title]
-    if matching and matching[0].status == status and matching[0].file == rel_file:
+    lookup_path = str((prev_plan_path or plan_path).relative_to(repo_root))
+
+    existing_entry = next((e for e in entries if e.file == lookup_path), None)
+    if (
+        existing_entry
+        and existing_entry.status == status
+        and existing_entry.plan == plan_title
+        and rel_file == lookup_path
+    ):
         return False
 
     if dry_run:
@@ -112,12 +126,13 @@ def _reconcile_spec_index(
 
     entry = IndexEntry(
         plan=plan_title,
-        repo="",
+        repo=existing_entry.repo if existing_entry else "",
         file=rel_file,
         status=status,
-        depends_on="—",
+        depends_on=existing_entry.depends_on if existing_entry else "—",
     )
-    upsert_entry(spec_path, entry)
+    match_file = lookup_path if lookup_path != rel_file else None
+    upsert_entry(spec_path, entry, match_file=match_file)
     console.print(f"Spec index updated: {spec_path}")
     return True
 
@@ -234,7 +249,13 @@ def sync(
     if new_status == "Complete" and _plan_is_under_save_to(plan_path, profile, repo_root):
         archived_path = _archive_plan(plan_path, profile, repo_root, action)
         if archived_path:
-            _reconcile_spec_index(archived_path, plan.title, new_status, repo_root)
+            _reconcile_spec_index(
+                archived_path,
+                plan.title,
+                new_status,
+                repo_root,
+                prev_plan_path=plan_path,
+            )
 
     if not profile.dispatch_enabled:
         console.print("Local-only sync (dispatch disabled)")
@@ -343,14 +364,17 @@ def transition(
     _rewrite_status(plan_path, new_state)
     console.print(f"Status: {plan.status} -> {new_state}")
 
-    spec_path = _resolve_spec(plan_path)
+    spec_path = _resolve_spec(plan_path, repo_root)
     if spec_path:
+        rel_file = str(plan_path.relative_to(repo_root))
+        existing_entries = read_index(spec_path)
+        existing_entry = next((e for e in existing_entries if e.file == rel_file), None)
         entry = IndexEntry(
             plan=plan.title,
-            repo="",
-            file=str(plan_path.relative_to(repo_root)),
+            repo=existing_entry.repo if existing_entry else "",
+            file=rel_file,
             status=new_state,
-            depends_on="—",
+            depends_on=existing_entry.depends_on if existing_entry else "—",
         )
         upsert_entry(spec_path, entry)
 
