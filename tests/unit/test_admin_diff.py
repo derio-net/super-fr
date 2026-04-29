@@ -46,6 +46,25 @@ class TestDiffLabelsCaseInsensitiveColor:
         assert actions[0].kind == "unchanged"
 
 
+class TestDiffLabelsNullDescription:
+    def test_null_description_treated_as_empty_string(self) -> None:
+        # GitHub returns {"description": null} — must compare equal to "" (empty registry desc)
+        existing = [{"name": "vk-ready", "color": "0E8AE6", "description": None}]
+        # VK_READY.description is a non-empty string; null → "" so it should yield update
+        actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
+        assert actions[0].kind == "update"
+        assert actions[0].old_desc == ""  # None coerced, not passed through as None
+
+    def test_null_description_matches_empty_registry_desc(self) -> None:
+        # A label whose registry description is empty and API returns null → unchanged
+        from vk.labels import LabelDef
+
+        empty_desc_label = LabelDef("my-label", "aabbcc", "")
+        existing = [{"name": "my-label", "color": "aabbcc", "description": None}]
+        actions = _diff_labels(existing=existing, registry=[empty_desc_label])
+        assert actions[0].kind == "unchanged"
+
+
 class TestDiffLabelsExtraExistingIgnored:
     def test_extra_existing_label_produces_no_action(self) -> None:
         # Labels present in existing but absent from the registry are silently

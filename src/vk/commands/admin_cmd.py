@@ -34,10 +34,14 @@ class LabelAction:
 
 def _diff_labels(
     *,
-    existing: list[dict[str, str]],
+    existing: list[dict[str, str | None]],
     registry: list[_labels.LabelDef],
 ) -> list[LabelAction]:
-    """Compute per-label actions to bring existing in line with the registry."""
+    """Compute per-label actions to bring existing in line with the registry.
+
+    ``existing`` comes from the GitHub API which returns ``"description": null``
+    for labels with no description — hence ``str | None`` values.
+    """
     by_name = {e["name"]: e for e in existing}
     actions: list[LabelAction] = []
     for ld in registry:
@@ -52,8 +56,12 @@ def _diff_labels(
                 )
             )
             continue
-        cur_color = cur.get("color", "").lower()
-        cur_desc = cur.get("description", "")
+        # Use `or ""` (not .get(key, "")) because GitHub returns
+        # {"description": null} and dict.get returns None when the key
+        # exists with a null value — the default is only used when the
+        # key is absent entirely.
+        cur_color = (cur.get("color") or "").lower()
+        cur_desc = cur.get("description") or ""
         if cur_color == ld.color.lower() and cur_desc == ld.description:
             actions.append(LabelAction(kind="unchanged", name=ld.name))
         else:
@@ -61,7 +69,7 @@ def _diff_labels(
                 LabelAction(
                     kind="update",
                     name=ld.name,
-                    old_color=cur.get("color", ""),
+                    old_color=cur.get("color") or "",
                     new_color=ld.color,
                     old_desc=cur_desc,
                     new_desc=ld.description,
@@ -88,7 +96,7 @@ DEFAULT_LABELS = frozenset(
 def _default_label_actions(
     *,
     repo: str,
-    existing: list[dict[str, str]],
+    existing: list[dict[str, str | None]],
 ) -> list[LabelAction]:
     """Return remove actions for default labels with zero attached Issues.
 
@@ -96,16 +104,16 @@ def _default_label_actions(
     """
     actions: list[LabelAction] = []
     for lbl in existing:
-        name = lbl.get("name", "")
-        if name not in DEFAULT_LABELS:
+        name = lbl.get("name") or ""
+        if name.lower() not in DEFAULT_LABELS:
             continue
         if gh.count_issues_with_label(repo=repo, name=name) == 0:
             actions.append(
                 LabelAction(
                     kind="remove",
                     name=name,
-                    old_color=lbl.get("color", ""),
-                    old_desc=lbl.get("description", ""),
+                    old_color=lbl.get("color") or "",
+                    old_desc=lbl.get("description") or "",
                 )
             )
     return actions
@@ -153,13 +161,19 @@ def labels_sync(
     dry_run: bool = typer.Option(
         True,
         "--dry-run/--apply",
-        help="Print planned changes without mutating (default). Use --apply or --yes.",
+        help="Print planned changes without mutating (default). Pass --apply to execute.",
     ),
-    yes: bool = typer.Option(False, "--yes", help="Apply changes without confirmation."),
+    yes: bool = typer.Option(
+        False, "--yes", help="Apply immediately; implies --apply, overrides --dry-run."
+    ),
 ) -> None:
     """Sync repo labels to the canonical registry across one or many repos."""
-    if yes:
-        dry_run = False
+    # --yes is a convenience shorthand for --apply; it overrides the default
+    # dry-run mode.  Note: --dry-run/--apply is a bool toggle whose default
+    # is True (dry-run), so we cannot distinguish "user passed --dry-run
+    # explicitly" from "default was used" — mutual-exclusion enforcement
+    # would require changing the flag structure and is deferred to Phase 3.
+    is_dry_run = dry_run and not yes
 
     repos = _resolve_target_repos(owner=owner, repo=repo)
     if not repos:
@@ -172,18 +186,21 @@ def labels_sync(
     for slug in repos:
         try:
             existing = gh.list_labels(repo=slug)
-        except gh.GhError as exc:
-            err_console.print(f"{slug}: list-labels failed: {exc}")
+            actions = _diff_labels(existing=existing, registry=registry)
+            if remove_defaults:
+                actions += _default_label_actions(repo=slug, existing=existing)
+        except (gh.GhError, ValueError) as exc:
+            # ValueError covers json.JSONDecodeError (malformed gh output).
+            # GhError covers permission failures, 404s, and network errors —
+            # including those raised inside _default_label_actions when
+            # count_issues_with_label fails.  Both are non-blocking per spec.
+            err_console.print(f"{slug}: failed: {exc}")
             any_errors = True
             continue
 
-        actions = _diff_labels(existing=existing, registry=registry)
-        if remove_defaults:
-            actions += _default_label_actions(repo=slug, existing=existing)
-
         _render_dryrun_table(repo=slug, actions=actions)
 
-        if dry_run:
+        if is_dry_run:
             continue
         # Apply mode lands in Phase 3 of this plan.
         raise NotImplementedError("apply mode lands in Phase 3 of this plan.")
