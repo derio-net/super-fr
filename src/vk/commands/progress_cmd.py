@@ -1,7 +1,9 @@
 """vk progress — track work lifecycle.
 
 Five subcommands: sync, board, create, transition, audit.
-Each auto-detects dispatch/local mode via profile.dispatch_enabled.
+sync and create are dispatch-aware (branch on profile.dispatch_enabled).
+audit and transition are unconditionally local: they operate on plan files
+regardless of dispatch mode.
 """
 
 from __future__ import annotations
@@ -241,7 +243,6 @@ def sync(
 @progress_app.command()
 def board(
     format_output: str = typer.Option("table", "--format", help="Output: table or json."),
-    stale_days: int = typer.Option(7, "--stale-days", help="Days before stale."),
 ) -> None:
     """Show plan status board."""
     repo_root = _find_repo_root(Path.cwd())
