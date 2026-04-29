@@ -72,13 +72,16 @@ class TestPerRepoErrorAccumulation:
 
 
 class TestYesFlag:
-    def test_yes_flag_enters_apply_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """--yes must bypass dry-run and hit the apply path (NotImplementedError stub)."""
+    def test_yes_flag_applies_and_exits_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--yes must bypass dry-run and run apply mode successfully."""
         monkeypatch.setattr(gh, "list_repos", lambda *, owner: [{"name": "r"}])
         monkeypatch.setattr(gh, "list_labels", lambda *, repo: [])
+        monkeypatch.setattr(gh, "ensure_label", lambda **kw: None)
         result = runner.invoke(admin_app, ["labels-sync", "--owner", "o", "--repo", "r", "--yes"])
-        # Apply mode is stubbed for Phase 3; confirm --yes reaches it
-        assert isinstance(result.exception, NotImplementedError)
+        assert result.exit_code == 0
+        assert result.exception is None
+        # Apply mode emits a per-repo summary line to stdout
+        assert "o/r:" in result.stdout
 
 
 class TestEmptyRepoList:

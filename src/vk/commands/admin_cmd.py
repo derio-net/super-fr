@@ -202,8 +202,38 @@ def labels_sync(
 
         if is_dry_run:
             continue
-        # Apply mode lands in Phase 3 of this plan.
-        raise NotImplementedError("apply mode lands in Phase 3 of this plan.")
+
+        # Apply mode
+        repo_summary = {"created": 0, "updated": 0, "removed": 0, "unchanged": 0}
+        try:
+            for a in actions:
+                if a.kind in ("create", "update"):
+                    ld = next((d for d in registry if d.name == a.name), None)
+                    if ld is None:
+                        continue
+                    gh.ensure_label(
+                        repo=slug,
+                        name=ld.name,
+                        color=ld.color,
+                        description=ld.description,
+                    )
+                    repo_summary["created" if a.kind == "create" else "updated"] += 1
+                elif a.kind == "remove":
+                    gh.delete_label(repo=slug, name=a.name)
+                    repo_summary["removed"] += 1
+                else:
+                    repo_summary["unchanged"] += 1
+        except gh.GhError as exc:
+            err_console.print(f"{slug}: apply failed: {exc}")
+            any_errors = True
+            continue
+
+        console.print(
+            f"{slug}: {repo_summary['created']} created, "
+            f"{repo_summary['updated']} updated, "
+            f"{repo_summary['removed']} removed, "
+            f"{repo_summary['unchanged']} unchanged."
+        )
 
     if any_errors:
         raise typer.Exit(1)
