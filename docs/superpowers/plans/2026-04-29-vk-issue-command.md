@@ -16,6 +16,7 @@
 ---
 
 ## Phase 1: `vk issue create` command [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/85 -->
 **Depends on:** —
 
 **Context:** The `create` subcommand is the primary use case — closing the brainstorm-to-Issue loop. It builds a bridge-compatible body, validates it, and optionally calls `gh issue create`. The `--dry-run` flag is critical for testing without GitHub side effects.
@@ -342,6 +343,7 @@ Expected: prints title and body with all three contract sections.
 ---
 
 ## Phase 2: `vk issue convert` + version bump [agentic]
+<!-- Tracking: https://github.com/derio-net/superpowers-for-vk/issues/86 -->
 **Depends on:** Phase 1
 
 **Context:** `convert` retroactively makes existing plain Issues bridge-routable by appending the contract block. Also bumps the version since new user-visible subcommands shipped.
