@@ -210,7 +210,7 @@ Expected: green.
 
 ### Task 6: Format, type-check, full suite, commit
 
-- [ ] **Step 1: Format and type-check**
+- [x] **Step 1: Format and type-check**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
@@ -218,7 +218,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean.
 
-- [ ] **Step 2: Full unit + integration suite**
+- [x] **Step 2: Full unit + integration suite**
 
 ```bash
 uv run pytest -q --no-cov
@@ -226,7 +226,7 @@ uv run pytest -q --no-cov
 
 Expected: green.
 
-- [ ] **Step 3: Commit and PR**
+- [x] **Step 3: Commit and PR**
 
 ```bash
 git checkout -b excision-phase-1-config-and-helpers
@@ -257,7 +257,7 @@ gh pr create --title "Excision Phase 1 · Drop project_board config + dead gh he
 - Modify: `src/vk/gh.py`
 - Modify: `tests/unit/test_audit.py`
 
-- [ ] **Step 1: Delete the audit's dispatch-mode block**
+- [x] **Step 1: Delete the audit's dispatch-mode block**
 
 In `src/vk/commands/progress_cmd.py`:
 
@@ -265,7 +265,7 @@ In `src/vk/commands/progress_cmd.py`:
 - Delete the `if profile.dispatch_enabled: dispatch_issues = _run_dispatch_audit(...)` block in `audit` (around line 530-533).
 - Simplify the `mode` variable: `audit` no longer has dispatch-vs-local divergence, so `mode = "local"` everywhere or just drop the variable.
 
-- [ ] **Step 2: Delete `get_project_number`, `list_project_items`, `BoardItem`**
+- [x] **Step 2: Delete `get_project_number`, `list_project_items`, `BoardItem`**
 
 In `src/vk/gh.py`:
 
@@ -273,7 +273,7 @@ In `src/vk/gh.py`:
 - Delete `get_project_number` (211-230).
 - Delete `list_project_items` (338-372).
 
-- [ ] **Step 3: Delete board-mocking tests in `test_audit.py`**
+- [x] **Step 3: Delete board-mocking tests in `test_audit.py`**
 
 ```bash
 grep -n "TestDispatchAudit\|get_project_number\|list_project_items\|class.*Audit" tests/unit/test_audit.py | head
@@ -281,7 +281,7 @@ grep -n "TestDispatchAudit\|get_project_number\|list_project_items\|class.*Audit
 
 Delete every test class that depends on `gh.get_project_number` or `gh.list_project_items` mocks. Keep the local-audit tests (status drift, spec-index drift, stale plans). Roughly 8+ test cases get removed; the local-audit ones remain.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_audit.py tests/unit/test_gh.py -q --no-cov
@@ -295,14 +295,14 @@ Expected: green, with significantly fewer audit tests.
 - Modify: `src/vk/commands/progress_cmd.py`
 - Modify: `tests/` if any test invokes `--lifecycle`
 
-- [ ] **Step 1: Drop the flag and its body emission**
+- [x] **Step 1: Drop the flag and its body emission**
 
 In `src/vk/commands/progress_cmd.py` `create` (line 281-312):
 
 - Remove the `lifecycle: str = typer.Option("idea", "--lifecycle", ...)` parameter (line 285).
 - Update `body=f"Type: {type_label}\nLifecycle: {lifecycle}"` → `body=f"Type: {type_label}"` (line 306).
 
-- [ ] **Step 2: Confirm no tests invoke `--lifecycle`**
+- [x] **Step 2: Confirm no tests invoke `--lifecycle`**
 
 ```bash
 grep -rn "\-\-lifecycle\|lifecycle=" tests/ 2>/dev/null
@@ -310,7 +310,7 @@ grep -rn "\-\-lifecycle\|lifecycle=" tests/ 2>/dev/null
 
 Drop any invocations / assertions about lifecycle text in the body.
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest -q --no-cov -k "progress and create"
@@ -325,7 +325,7 @@ Expected: green.
 
 **Context:** The dispatch branch returns "not yet implemented" (line 358-360) — never worked. After excision, transition is local-only.
 
-- [ ] **Step 1: Replace dispatch branch with explicit gate**
+- [x] **Step 1: Replace dispatch branch with explicit gate**
 
 In `src/vk/commands/progress_cmd.py` `transition` (line 315-360), drop the `if not profile.dispatch_enabled:` gate and its `else: console.print("Dispatch-mode transition: not yet implemented"); raise typer.Exit(1)` branch. The function operates on plan files regardless of dispatch mode. Update the docstring: `target` is always a plan path, never an Issue URL.
 
@@ -374,7 +374,7 @@ def transition(
         upsert_entry(spec_path, entry)
 ```
 
-- [ ] **Step 2: Update tests if needed**
+- [x] **Step 2: Update tests if needed**
 
 ```bash
 grep -rn "transition.*dispatch\|dispatch.*transition\|not yet implemented" tests/ 2>/dev/null | head
@@ -384,7 +384,7 @@ If any test asserts the "not yet implemented" exit, delete it.
 
 ### Task 4: Format, type-check, full suite
 
-- [ ] **Step 1: Format, type-check**
+- [x] **Step 1: Format, type-check**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
@@ -392,7 +392,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean.
 
-- [ ] **Step 2: Full suite**
+- [x] **Step 2: Full suite**
 
 ```bash
 uv run pytest -q --no-cov
@@ -410,7 +410,7 @@ Expected: green.
 
 **Context:** Patch bump per `CLAUDE.md`. Removing reserved/dead user surface — no functional behavior change for any code path that worked before.
 
-- [ ] **Step 1: Confirm current version**
+- [x] **Step 1: Confirm current version**
 
 ```bash
 grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json
@@ -418,11 +418,11 @@ grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-p
 
 Note the current version. If the label-lifecycle-fix-phase-1 PR has already merged with its `1.3.0` bump, current is `1.3.0` and this excision bumps to `1.3.1`. If excision lands first, current is `1.2.0` and this bumps to `1.2.1`. Resolve at merge time.
 
-- [ ] **Step 2: Bump all three files (patch)**
+- [x] **Step 2: Bump all three files (patch)**
 
 Update the three version strings to current+patch. Keep the bump consistent across all three files.
 
-- [ ] **Step 3: Refresh lockfile**
+- [x] **Step 3: Refresh lockfile**
 
 ```bash
 uv sync
@@ -431,7 +431,7 @@ uv run vk --version
 
 Expected: `vk --version` reports the new patch version.
 
-- [ ] **Step 4: Final test run**
+- [x] **Step 4: Final test run**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov
