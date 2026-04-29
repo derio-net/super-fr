@@ -175,6 +175,20 @@ def plan_self_review(
                 f"'{phase.track_label}' (expected development / operations / decision)."
             )
 
+    # Multi-target repo check (Thread 1a)
+    target_repos = {p.target_repo for p in plan.phases if p.target_repo}
+    if len(target_repos) > 1:
+        repo_root = resolve_repo_root(cwd=plan_path.parent)
+        config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
+        profile = load_profile(config_path)
+        if profile.dispatch_enabled:
+            issues.append(
+                f"Multi-repo plan: phases declare different **Target repo:** values "
+                f"({', '.join(sorted(target_repos))}). "
+                "vk dispatch --repo is plan-wide; per-phase repo overrides are not "
+                "supported. Write one plan per target repo."
+            )
+
     # Structural DAG validation (cycle / forward-ref / self-ref / unknown-ref).
     # Report any previously-collected issues first so basic plan-shape errors
     # surface before dependency-grammar complaints.
