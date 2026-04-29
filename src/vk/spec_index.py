@@ -68,11 +68,14 @@ def _normalize_file(f: str) -> str:
     return "" if f in ("—", "-", "") else f
 
 
-def upsert_entry(spec_path: Path, entry: IndexEntry) -> None:
+def upsert_entry(spec_path: Path, entry: IndexEntry, *, match_file: str | None = None) -> None:
     """Add or update an entry in the spec's Implementation Plans table.
 
     Creates the section and table if they don't exist.
     Updates the row in place if an existing entry has a matching ``file`` path.
+    Pass ``match_file`` to look up by a different path (e.g. old path on rename).
+    ``match_file`` follows the same placeholder-normalization rules as ``entry.file``
+    (``"—"``, ``"-"``, and ``""`` all collapse to the same empty bucket).
     """
     text = spec_path.read_text(encoding="utf-8")
     header_match = _RE_INDEX_HEADER.search(text)
@@ -92,9 +95,10 @@ def upsert_entry(spec_path: Path, entry: IndexEntry) -> None:
 
     existing = read_index(spec_path)
 
+    lookup = _normalize_file(match_file) if match_file is not None else _normalize_file(entry.file)
     found = False
     for i, e in enumerate(existing):
-        if _normalize_file(e.file) == _normalize_file(entry.file):
+        if _normalize_file(e.file) == lookup:
             existing[i] = entry
             found = True
             break
