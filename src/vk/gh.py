@@ -11,7 +11,6 @@ import re
 import subprocess
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import TypeVar
 
 from vk.labels import LabelDef
@@ -191,78 +190,6 @@ def swap_issue_labels(
     for lbl in remove:
         args.extend(["--remove-label", lbl])
     _run_gh(args)
-
-
-def get_project_number(*, owner: str, project_name: str) -> int:
-    """Look up a project board number by name."""
-    output = _run_gh(
-        [
-            "project",
-            "list",
-            "--owner",
-            owner,
-            "--format",
-            "json",
-        ]
-    )
-    import json
-
-    projects = json.loads(output).get("projects", [])
-    for p in projects:
-        if p.get("title") == project_name:
-            return int(p["number"])
-    msg = f"Project '{project_name}' not found for owner '{owner}'"
-    raise GhError(msg)
-
-
-@dataclass
-class BoardItem:
-    """A project board item with lifecycle metadata."""
-
-    title: str
-    url: str
-    repo: str
-    number: int
-    closed: bool
-    lifecycle: str  # "unset" if missing
-    status: str  # board status column
-    labels: list[str]
-
-
-def list_project_items(*, owner: str, project_number: int) -> list[BoardItem]:
-    """List all items on a project board with lifecycle and status fields."""
-    output = _run_gh(
-        [
-            "project",
-            "item-list",
-            str(project_number),
-            "--owner",
-            owner,
-            "--format",
-            "json",
-        ]
-    )
-    import json
-
-    data = json.loads(output)
-    items: list[BoardItem] = []
-    for item in data.get("items", []):
-        content = item.get("content", {})
-        if content.get("type") != "Issue":
-            continue
-        items.append(
-            BoardItem(
-                title=content.get("title", ""),
-                url=content.get("url", ""),
-                repo=content.get("repository", ""),
-                number=content.get("number", 0),
-                closed=False,  # use is_issue_closed() for live check
-                lifecycle=item.get("lifecycle", "unset") or "unset",
-                status=item.get("status", ""),
-                labels=[lb for lb in item.get("labels", [])],
-            )
-        )
-    return items
 
 
 def is_issue_closed(*, repo: str, number: int) -> bool:
