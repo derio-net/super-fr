@@ -210,8 +210,12 @@ def is_issue_closed(*, repo: str, number: int) -> bool:
     return output.strip().lower() == "true"
 
 
-def list_labels(*, repo: str) -> list[dict[str, str]]:
-    """Return existing labels on the repo as parsed JSON."""
+def list_labels(*, repo: str) -> list[dict[str, str | None]]:
+    """Return existing labels on the repo as parsed JSON.
+
+    The GitHub API returns ``"description": null`` for labels with no
+    description, so values are ``str | None``.
+    """
     import json
 
     out = _run_gh(
