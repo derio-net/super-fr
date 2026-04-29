@@ -74,6 +74,8 @@ def upsert_entry(spec_path: Path, entry: IndexEntry, *, match_file: str | None =
     Creates the section and table if they don't exist.
     Updates the row in place if an existing entry has a matching ``file`` path.
     Pass ``match_file`` to look up by a different path (e.g. old path on rename).
+    ``match_file`` follows the same placeholder-normalization rules as ``entry.file``
+    (``"—"``, ``"-"``, and ``""`` all collapse to the same empty bucket).
     """
     text = spec_path.read_text(encoding="utf-8")
     header_match = _RE_INDEX_HEADER.search(text)

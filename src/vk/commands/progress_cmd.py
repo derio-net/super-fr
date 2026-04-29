@@ -83,7 +83,11 @@ def _rewrite_status(plan_path: Path, new_status: str) -> None:
 
 
 def _resolve_spec(plan_path: Path, repo_root: Path | None = None) -> Path | None:
-    """Resolve spec path from plan's Spec header."""
+    """Resolve spec path from plan's Spec header.
+
+    Pass ``repo_root`` when already known — avoids a git subprocess and makes
+    the function usable in unit-test environments outside a git repository.
+    """
     plan = parse_plan(plan_path)
     if not plan.spec:
         return None
@@ -430,10 +434,11 @@ def audit(
 
         # Check spec index consistency
         if plan.spec:
-            spec_path = _resolve_spec(pf)
+            spec_path = _resolve_spec(pf, repo_root)
             if spec_path and spec_path.exists():
                 entries = read_index(spec_path)
-                matching = [e for e in entries if plan.title in e.plan]
+                rel_file = str(pf.relative_to(repo_root))
+                matching = [e for e in entries if e.file == rel_file]
                 for entry in matching:
                     if entry.status != plan.status:
                         issues.append(

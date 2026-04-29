@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from vk.commands.progress_cmd import _reconcile_spec_index
 from vk.spec_index import read_index
-
 
 SPEC_WITH_RICH_ROW = """\
 # My Spec
@@ -94,3 +94,48 @@ def test_reconcile_updates_title_when_changed(tmp_path: Path) -> None:
     text = spec_path.read_text()
     assert "Plan A (revised)" in text
     assert text.count("plan-a.md") == 1  # no duplicate
+
+
+def test_reconcile_archive_rename_updates_file_path(tmp_path: Path) -> None:
+    """prev_plan_path causes the old-path row to be found and rewritten with new path."""
+    repo_root, spec_path, plan_path = _setup(tmp_path)
+
+    # Simulate archive: plan moved to archived-plans/
+    archive_dir = tmp_path / "docs" / "superpowers" / "archived-plans"
+    archive_dir.mkdir(parents=True)
+    archived_path = archive_dir / "plan-a.md"
+    shutil.copy(plan_path, archived_path)
+
+    # First sync already wrote status=Complete at old path (simulate that state)
+    from vk.spec_index import IndexEntry, upsert_entry
+
+    upsert_entry(
+        spec_path,
+        IndexEntry(
+            plan="Plan A",
+            repo="`org/repo`",
+            file="docs/superpowers/plans/plan-a.md",
+            status="Complete",
+            depends_on="Phase X of repo-b",
+        ),
+    )
+
+    # Archive reconcile: plan_path=archived_path, prev_plan_path=original plan_path
+    updated = _reconcile_spec_index(
+        plan_path=archived_path,
+        plan_title="Plan A",
+        status="Complete",
+        repo_root=repo_root,
+        prev_plan_path=plan_path,
+    )
+    assert updated is True
+    entries = read_index(spec_path)
+    # New path present, old path gone
+    assert any("archived-plans/plan-a.md" in e.file for e in entries)
+    assert not any(e.file == "docs/superpowers/plans/plan-a.md" for e in entries)
+    # Only one row total
+    assert len(entries) == 1
+    row = entries[0]
+    assert row.status == "Complete"
+    assert row.repo == "`org/repo`"
+    assert row.depends_on == "Phase X of repo-b"
