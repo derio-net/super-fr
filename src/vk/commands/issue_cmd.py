@@ -9,7 +9,13 @@ import sys
 import typer
 from rich.console import Console
 
-from vk.commands.dispatch_body_validator import BodyValidationError, validate_issue_body
+from vk.commands.dispatch_body_validator import (
+    _REQUIRED_SECTIONS as REQUIRED_SECTIONS,
+)
+from vk.commands.dispatch_body_validator import (
+    BodyValidationError,
+    validate_issue_body,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -126,9 +132,6 @@ def create(
         raise typer.Exit(3)
 
 
-_REQUIRED_SECTIONS = ("## Instruction", "## Workspace", "## Dependencies")
-
-
 def _build_contract_block(skill: str, repos: str, blockers: str) -> str:
     """Build only the contract section block (no topic prefix)."""
     return (
@@ -144,15 +147,15 @@ def _build_contract_block(skill: str, repos: str, blockers: str) -> str:
 @issue_app.command()
 def convert(
     number: int = typer.Argument(..., help="GitHub Issue number to convert."),
-    repo: str | None = typer.Option(
-        None,
-        "--repo",
-        help="Target repo (owner/repo). Defaults to git remote origin.",
-    ),
     skill: str = typer.Option(
         "superpowers:brainstorming",
         "--skill",
         help="Skill the next agent should use.",
+    ),
+    repo: str | None = typer.Option(
+        None,
+        "--repo",
+        help="Target repo (owner/repo). Defaults to git remote origin.",
     ),
     blockers: str = typer.Option(
         "None — no blocking phases.",
@@ -179,9 +182,15 @@ def convert(
         err_console.print(f"Error: could not fetch Issue #{number}: {exc.stderr.strip()}")
         raise typer.Exit(2)
 
-    existing_body = json.loads(result.stdout).get("body", "")
+    try:
+        existing_body = json.loads(result.stdout).get("body", "")
+    except json.JSONDecodeError as exc:
+        err_console.print(
+            f"Error: could not parse `gh issue view` output as JSON for Issue #{number}: {exc}"
+        )
+        raise typer.Exit(2)
 
-    if all(section in existing_body for section in _REQUIRED_SECTIONS):
+    if all(section in existing_body for section in REQUIRED_SECTIONS):
         console.print(f"Issue #{number} already has contract sections. Nothing to do.")
         raise typer.Exit(0)
 
@@ -190,7 +199,12 @@ def convert(
         repos=resolved_repo,
         blockers=blockers,
     )
-    new_body = existing_body.rstrip("\n") + "\n\n---\n\n" + contract_block
+    stripped = existing_body.rstrip("\n")
+    if stripped.strip():
+        new_body = stripped + "\n\n---\n\n" + contract_block
+    else:
+        # Empty body: skip the leading separator so we don't produce a blank-headed Issue.
+        new_body = contract_block
 
     try:
         validate_issue_body(new_body, phase_number=0)

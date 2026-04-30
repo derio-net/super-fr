@@ -1,7 +1,9 @@
-"""Tests for vk issue create subcommand."""
+"""Tests for vk issue create and convert subcommands."""
 
 from __future__ import annotations
 
+import json
+import subprocess
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
@@ -170,8 +172,6 @@ class TestCreateDryRun:
 
 class TestConvertDryRun:
     def test_dry_run_appends_contract_to_plain_body(self) -> None:
-        import json
-
         plain_body = "This is a plain bug report without contract sections."
         with patch("subprocess.run") as mock_run:
             mock_run.return_value.stdout = json.dumps({"body": plain_body})
@@ -194,8 +194,6 @@ class TestConvertDryRun:
         assert plain_body in result.output
 
     def test_dry_run_noop_when_already_has_sections(self) -> None:
-        import json
-
         body_with_contract = (
             "Topic\n\n---\n\n## Instruction\n\nUse skill.\n\n"
             "## Workspace\n\nRepos: org/repo\n\n## Dependencies\n\nNone — no blocking phases.\n"
@@ -218,8 +216,6 @@ class TestConvertDryRun:
         assert "already has contract sections" in result.output
 
     def test_convert_does_not_mutate_in_dry_run(self) -> None:
-        import json
-
         plain_body = "Plain bug report."
         with patch("subprocess.run") as mock_run:
             mock_run.return_value.stdout = json.dumps({"body": plain_body})
@@ -229,5 +225,55 @@ class TestConvertDryRun:
                 ["issue", "convert", "42", "--dry-run", "--repo", "derio-net/superpowers-for-vk"],
             )
         assert result.exit_code == 0
-        # Only one subprocess call (the view), not the edit
-        assert mock_run.call_count == 1
+        # The only subprocess call is `gh issue view`. Asserting on the call args
+        # (rather than just the count) means a future change to _resolve_repo
+        # that adds a git subprocess call won't silently flip this test's meaning.
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args[:3] == ["gh", "issue", "view"]
+
+
+class TestConvertFailurePaths:
+    def test_gh_issue_view_failure_exits_2(self) -> None:
+        """If `gh issue view` fails, we should print an error and exit 2 — not crash."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.CalledProcessError(
+                returncode=1,
+                cmd=["gh", "issue", "view", "42"],
+                stderr="Could not resolve to an Issue with the number of 42.",
+            )
+            result = runner.invoke(
+                app,
+                ["issue", "convert", "42", "--dry-run", "--repo", "derio-net/superpowers-for-vk"],
+            )
+        assert result.exit_code == 2
+
+    def test_gh_returns_non_json_exits_2(self) -> None:
+        """Defensive: if `gh` ever returns non-JSON (HTML proxy page, empty stdout)
+        we should exit 2 with a clean error rather than dump a JSONDecodeError stack."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.stdout = "<html>403 Forbidden</html>"
+            mock_run.return_value.returncode = 0
+            result = runner.invoke(
+                app,
+                ["issue", "convert", "42", "--dry-run", "--repo", "derio-net/superpowers-for-vk"],
+            )
+        assert result.exit_code == 2
+
+    def test_empty_existing_body_does_not_produce_blank_head(self) -> None:
+        """Issues with empty bodies should get the contract block as-is — no
+        leading `---` separator that would render as a blank-headed Issue."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.stdout = json.dumps({"body": ""})
+            mock_run.return_value.returncode = 0
+            result = runner.invoke(
+                app,
+                ["issue", "convert", "42", "--dry-run", "--repo", "derio-net/superpowers-for-vk"],
+            )
+        assert result.exit_code == 0
+        # First line of the body section should be the Instruction header — no
+        # stray '---' separator before it.
+        body_section = result.output.split("Converted body for Issue #42:", 1)[-1].strip()
+        assert body_section.startswith("## Instruction"), (
+            f"Empty body should not get a leading separator; got: {body_section[:60]!r}"
+        )
