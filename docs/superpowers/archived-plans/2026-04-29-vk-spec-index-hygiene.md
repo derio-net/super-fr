@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-29-vk-cli-hygiene-and-issue-authoring-design.md`
-**Status:** In Progress
+**Status:** Complete
 
 **Goal:** Fix three spec-index bugs that corrupt the Implementation Plans table in specs: de-duplicate rows by file path rather than plan title, preserve trailing prose when rewriting the table, stop re-quoting `—` placeholders in the File column, preserve operator-set `Repo` and `Depends on` cells on `vk progress sync`, and warn in `vk plan self-review` when phases declare mixed `**Target repo:**` values.
 
@@ -259,7 +259,7 @@ Expected: all pass.
 **Files:**
 - Create or edit: `tests/unit/test_progress_reconcile.py`
 
-- [ ] **Step 1: TDD — write failing tests**
+- [x] **Step 1: TDD — write failing tests**
 
 ```python
 """Tests for _reconcile_spec_index column preservation (Thread 2 fix)."""
@@ -360,7 +360,7 @@ def test_reconcile_updates_title_when_changed(tmp_path: Path) -> None:
     assert text.count("plan-a.md") == 1  # no duplicate
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail before the fix**
+- [x] **Step 2: Run tests to confirm they fail before the fix**
 
 ```bash
 uv run pytest tests/unit/test_progress_reconcile.py -x -q --no-cov 2>&1 | head -30
@@ -371,7 +371,7 @@ uv run pytest tests/unit/test_progress_reconcile.py -x -q --no-cov 2>&1 | head -
 **Files:**
 - Edit: `src/vk/commands/progress_cmd.py`
 
-- [ ] **Step 3: Update `_reconcile_spec_index()` signature**
+- [x] **Step 3: Update `_reconcile_spec_index()` signature**
 
 Change function signature to add optional `prev_plan_path`:
 
@@ -387,7 +387,7 @@ def _reconcile_spec_index(
 ) -> bool:
 ```
 
-- [ ] **Step 4: Rewrite lookup and entry-building in `_reconcile_spec_index()`**
+- [x] **Step 4: Rewrite lookup and entry-building in `_reconcile_spec_index()`**
 
 Replace the existing body from `entries = read_index(...)` through `upsert_entry(...)`:
 
@@ -418,7 +418,7 @@ console.print(f"Spec index updated: {spec_path}")
 return True
 ```
 
-- [ ] **Step 5: Update archive-rename call site in `sync()`**
+- [x] **Step 5: Update archive-rename call site in `sync()`**
 
 Find the second `_reconcile_spec_index` call after archiving (`sync()` line ~235) and add `prev_plan_path`:
 
@@ -435,7 +435,7 @@ if archived_path:
     )
 ```
 
-- [ ] **Step 6: Fix `transition` command — read existing entry before building IndexEntry**
+- [x] **Step 6: Fix `transition` command — read existing entry before building IndexEntry**
 
 In the `transition` command's local-mode branch, before calling `upsert_entry`, read
 the existing row to preserve `repo` and `depends_on`:
@@ -458,7 +458,7 @@ if spec_path:
 
 Remove the existing `spec_path = _resolve_spec(...)` + `entry = IndexEntry(...)` + `upsert_entry(...)` block and replace it with the above.
 
-- [ ] **Step 7: Run all tests — no regressions**
+- [x] **Step 7: Run all tests — no regressions**
 
 ```bash
 uv run ruff format src/ tests/

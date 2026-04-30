@@ -275,6 +275,38 @@ class TestDependsOnParsing:
         )
         assert plan.phases[0].tasks[0].number == 1
 
+    def test_fenced_step_lines_are_not_parsed(self, tmp_path: Path) -> None:
+        """``- [ ] **Step N: ...**`` lines inside a fenced code block must not
+        be counted as real steps. Mirrors the fence handling in
+        ``_parse_phases``/``_parse_tasks`` — without it, plans that embed
+        Python test fixtures or markdown examples with checkbox steps will
+        forever read as 'In Progress' even after every real step is ticked."""
+        content = (
+            "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+            "## Phase 1: P [agentic]\n"
+            "**Depends on:** —\n\n"
+            "### Task 1: Real\n\n"
+            "- [x] **Step 1: real done**\n\n"
+            "Here's a Python test fixture demonstrating the format:\n\n"
+            "```python\n"
+            'PLAN = """\\\n'
+            "## Phase 1: Phase A [agentic]\n\n"
+            "### Task 1: Something\n\n"
+            "- [ ] **Step 1: Do A**\n"
+            "- [ ] **Step 2: Do B**\n"
+            '"""\n'
+            "```\n"
+        )
+        p = tmp_path / "plan.md"
+        p.write_text(content)
+        plan = parse_plan(p)
+        steps = plan.phases[0].tasks[0].steps
+        assert len(steps) == 1, (
+            f"expected 1 real step, parser saw {len(steps)}: {[s.title for s in steps]}"
+        )
+        assert steps[0].state == "x"
+        assert steps[0].title == "real done"
+
     def test_line_after_tracking_comment(self, tmp_path: Path) -> None:
         content = (
             "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"

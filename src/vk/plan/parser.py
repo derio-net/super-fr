@@ -349,8 +349,16 @@ def _parse_steps(text: str) -> list[Step]:
     bold ``**Step N: title**`` header.  When present, the trailing text is
     merged into the step title — otherwise every loose-format step would be
     silently dropped (see ``tests/unit/test_plan_loose_format.py``).
+
+    Fenced code blocks are blanked out before regex scans so checkbox-style
+    step headers embedded in plan-format examples (Python test fixtures,
+    markdown samples) don't get mistaken for real steps. Without this, plans
+    that document the step format in their own body would be permanently
+    ``In Progress`` from the parser's perspective. Offsets are preserved so
+    body slicing into the original ``text`` still works.
     """
-    step_matches = list(_RE_STEP.finditer(text))
+    scan_text = _strip_fenced_regions(text)
+    step_matches = list(_RE_STEP.finditer(scan_text))
     steps: list[Step] = []
 
     for i, sm in enumerate(step_matches):
