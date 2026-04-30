@@ -393,5 +393,5 @@ usage errors (invalid number, conflicting flags).
 
 | Plan | Repo | File | Status | Depends on |
 |------|------|------|--------|------------|
-| vk spec-index hygiene (Threads 1a + 1b + 2) |  | `docs/superpowers/plans/2026-04-29-vk-spec-index-hygiene.md` | Not Started | — |
-| vk issue command (Thread 4) |  | `docs/superpowers/plans/2026-04-29-vk-issue-command.md` | Not Started | — |
+| vk spec-index hygiene (Threads 1a + 1b + 2) |  | `docs/superpowers/plans/2026-04-29-vk-spec-index-hygiene.md` | In Progress | — |
+| vk issue command (Thread 4) |  | `docs/superpowers/plans/2026-04-29-vk-issue-command.md` | In Progress | — |

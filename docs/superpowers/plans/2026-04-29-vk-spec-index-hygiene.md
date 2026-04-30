@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-29-vk-cli-hygiene-and-issue-authoring-design.md`
-**Status:** Not Started
+**Status:** In Progress
 
 **Goal:** Fix three spec-index bugs that corrupt the Implementation Plans table in specs: de-duplicate rows by file path rather than plan title, preserve trailing prose when rewriting the table, stop re-quoting `—` placeholders in the File column, preserve operator-set `Repo` and `Depends on` cells on `vk progress sync`, and warn in `vk plan self-review` when phases declare mixed `**Target repo:**` values.
 

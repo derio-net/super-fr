@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-27-label-lifecycle-fix-design.md`
-**Status:** Not Started
+**Status:** In Progress
 
 **Goal:** Add `vk admin labels-sync` — a one-shot operator command that brings every `derio-net/*` repo into line with the canonical label registry. Default mode is dry-run; `--yes` applies. With `--remove-defaults`, the command also removes GitHub's auto-created default labels (`bug`, `documentation`, `duplicate`, `enhancement`, `good first issue`, `help wanted`, `invalid`, `question`, `wontfix`) — but only when they have *zero* attached Issues, to avoid clobbering hand-applied user data. Per-repo errors are non-blocking; one repo with a permission glitch should not abort an org-wide sweep.
 

@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-29-vk-cli-hygiene-and-issue-authoring-design.md`
-**Status:** Not Started
+**Status:** In Progress
 
 **Goal:** Add a `vk issue` subcommand with two verbs — `create` (author a bridge-compatible GitHub Issue from a free-form topic) and `convert` (append the bridge contract to an existing plain Issue) — so agents and operators can file well-formed Issues without hand-assembling the `## Instruction` / `## Workspace` / `## Dependencies` sections.
 
