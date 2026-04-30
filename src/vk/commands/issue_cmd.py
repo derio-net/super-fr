@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 
 import typer
 from rich.console import Console
 
-from vk.commands.dispatch_body_validator import BodyValidationError, validate_issue_body
+from vk.commands.dispatch_body_validator import (
+    _REQUIRED_SECTIONS as REQUIRED_SECTIONS,
+)
+from vk.commands.dispatch_body_validator import (
+    BodyValidationError,
+    validate_issue_body,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -122,4 +129,102 @@ def create(
         console.print(f"Created: {url}")
     except subprocess.CalledProcessError as exc:
         err_console.print(f"Error: gh issue create failed: {exc.stderr.strip()}")
+        raise typer.Exit(3)
+
+
+def _build_contract_block(skill: str, repos: str, blockers: str) -> str:
+    """Build only the contract section block (no topic prefix)."""
+    return (
+        f"## Instruction\n\n"
+        f"Use {skill} to explore the above and produce deliverables.\n\n"
+        f"## Workspace\n\n"
+        f"Repos: {repos}\n\n"
+        f"## Dependencies\n\n"
+        f"{blockers}\n"
+    )
+
+
+@issue_app.command()
+def convert(
+    number: int = typer.Argument(..., help="GitHub Issue number to convert."),
+    skill: str = typer.Option(
+        "superpowers:brainstorming",
+        "--skill",
+        help="Skill the next agent should use.",
+    ),
+    repo: str | None = typer.Option(
+        None,
+        "--repo",
+        help="Target repo (owner/repo). Defaults to git remote origin.",
+    ),
+    blockers: str = typer.Option(
+        "None — no blocking phases.",
+        "--blockers",
+        help="Dependency string for ## Dependencies section.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print converted body without editing the Issue.",
+    ),
+) -> None:
+    """Append bridge contract sections to an existing GitHub Issue."""
+    resolved_repo = _resolve_repo(repo)
+
+    try:
+        result = subprocess.run(
+            ["gh", "issue", "view", str(number), "--repo", resolved_repo, "--json", "body"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        err_console.print(f"Error: could not fetch Issue #{number}: {exc.stderr.strip()}")
+        raise typer.Exit(2)
+
+    try:
+        existing_body = json.loads(result.stdout).get("body", "")
+    except json.JSONDecodeError as exc:
+        err_console.print(
+            f"Error: could not parse `gh issue view` output as JSON for Issue #{number}: {exc}"
+        )
+        raise typer.Exit(2)
+
+    if all(section in existing_body for section in REQUIRED_SECTIONS):
+        console.print(f"Issue #{number} already has contract sections. Nothing to do.")
+        raise typer.Exit(0)
+
+    contract_block = _build_contract_block(
+        skill=skill,
+        repos=resolved_repo,
+        blockers=blockers,
+    )
+    stripped = existing_body.rstrip("\n")
+    if stripped.strip():
+        new_body = stripped + "\n\n---\n\n" + contract_block
+    else:
+        # Empty body: skip the leading separator so we don't produce a blank-headed Issue.
+        new_body = contract_block
+
+    try:
+        validate_issue_body(new_body, phase_number=0)
+    except BodyValidationError as exc:
+        err_console.print(f"Error: converted body failed validation: {exc}")
+        raise typer.Exit(1)
+
+    if dry_run:
+        console.print(f"[bold]Converted body for Issue #{number}:[/bold]\n")
+        console.print(new_body)
+        raise typer.Exit(0)
+
+    try:
+        subprocess.run(
+            ["gh", "issue", "edit", str(number), "--repo", resolved_repo, "--body", new_body],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        console.print(f"Issue #{number} updated with bridge contract.")
+    except subprocess.CalledProcessError as exc:
+        err_console.print(f"Error: gh issue edit failed: {exc.stderr.strip()}")
         raise typer.Exit(3)
