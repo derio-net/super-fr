@@ -166,3 +166,68 @@ class TestCreateDryRun:
         )
         assert result.exit_code == 0
         assert "superpowers:systematic-debugging" in result.output
+
+
+class TestConvertDryRun:
+    def test_dry_run_appends_contract_to_plain_body(self) -> None:
+        import json
+
+        plain_body = "This is a plain bug report without contract sections."
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.stdout = json.dumps({"body": plain_body})
+            mock_run.return_value.returncode = 0
+            result = runner.invoke(
+                app,
+                [
+                    "issue",
+                    "convert",
+                    "42",
+                    "--dry-run",
+                    "--repo",
+                    "derio-net/superpowers-for-vk",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "## Instruction" in result.output
+        assert "## Workspace" in result.output
+        assert "## Dependencies" in result.output
+        assert plain_body in result.output
+
+    def test_dry_run_noop_when_already_has_sections(self) -> None:
+        import json
+
+        body_with_contract = (
+            "Topic\n\n---\n\n## Instruction\n\nUse skill.\n\n"
+            "## Workspace\n\nRepos: org/repo\n\n## Dependencies\n\nNone — no blocking phases.\n"
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.stdout = json.dumps({"body": body_with_contract})
+            mock_run.return_value.returncode = 0
+            result = runner.invoke(
+                app,
+                [
+                    "issue",
+                    "convert",
+                    "42",
+                    "--dry-run",
+                    "--repo",
+                    "derio-net/superpowers-for-vk",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "already has contract sections" in result.output
+
+    def test_convert_does_not_mutate_in_dry_run(self) -> None:
+        import json
+
+        plain_body = "Plain bug report."
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.stdout = json.dumps({"body": plain_body})
+            mock_run.return_value.returncode = 0
+            result = runner.invoke(
+                app,
+                ["issue", "convert", "42", "--dry-run", "--repo", "derio-net/superpowers-for-vk"],
+            )
+        assert result.exit_code == 0
+        # Only one subprocess call (the view), not the edit
+        assert mock_run.call_count == 1

@@ -353,7 +353,7 @@ Expected: prints title and body with all three contract sections.
 **Files:**
 - Edit: `tests/unit/test_issue_cmd.py`
 
-- [ ] **Step 1: TDD — write failing tests for `convert`**
+- [x] **Step 1: TDD — write failing tests for `convert`**
 
 Add to `tests/unit/test_issue_cmd.py`:
 
@@ -414,7 +414,7 @@ class TestConvertDryRun:
         assert mock_run.call_count == 1
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail**
+- [x] **Step 2: Run tests to confirm they fail**
 
 ```bash
 uv run pytest tests/unit/test_issue_cmd.py::TestConvertDryRun -x -q --no-cov 2>&1 | head -20
@@ -425,7 +425,7 @@ uv run pytest tests/unit/test_issue_cmd.py::TestConvertDryRun -x -q --no-cov 2>&
 **Files:**
 - Edit: `src/vk/commands/issue_cmd.py`
 
-- [ ] **Step 3: Add `_build_contract_block()` helper and `convert` command**
+- [x] **Step 3: Add `_build_contract_block()` helper and `convert` command**
 
 Add to `issue_cmd.py`:
 
@@ -505,7 +505,7 @@ def convert(
         raise typer.Exit(3)
 ```
 
-- [ ] **Step 4: Run all tests**
+- [x] **Step 4: Run all tests**
 
 ```bash
 uv run ruff format src/ tests/
@@ -521,7 +521,7 @@ Expected: all pass.
 - Edit: `.claude-plugin/plugin.json`
 - Edit: `.claude-plugin/marketplace.json`
 
-- [ ] **Step 5: Bump version in all three files**
+- [x] **Step 5: Bump version in all three files**
 
 Find the current version:
 
@@ -534,7 +534,7 @@ Increment the patch number (e.g. `1.3.0` → `1.3.1`) in all three files:
 - `.claude-plugin/plugin.json` → `.version`
 - `.claude-plugin/marketplace.json` → `.plugins[0].version`
 
-- [ ] **Step 6: Run `uv sync` and confirm version**
+- [x] **Step 6: Run `uv sync` and confirm version**
 
 ```bash
 uv sync
@@ -543,7 +543,7 @@ uv run vk --version
 
 Expected: new version number printed.
 
-- [ ] **Step 7: Run `vk plan self-review` on both plans**
+- [x] **Step 7: Run `vk plan self-review` on both plans**
 
 ```bash
 uv run vk plan self-review docs/superpowers/plans/2026-04-29-vk-spec-index-hygiene.md
@@ -552,7 +552,7 @@ uv run vk plan self-review docs/superpowers/plans/2026-04-29-vk-issue-command.md
 
 Expected: both report `Self-review passed.`
 
-- [ ] **Step 8: Update spec index for both plans**
+- [x] **Step 8: Update spec index for both plans**
 
 ```bash
 uv run vk plan spec-index docs/superpowers/plans/2026-04-29-vk-spec-index-hygiene.md --yes
