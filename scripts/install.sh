@@ -65,7 +65,14 @@ done
 # uncommitted, unpushed, or off-main gets baked into the cache. Past incidents
 # (cache stuck with a transient "Status: Not Started" revert that broke every
 # subsequent `git pull --ff-only`) trace back to running this from a dirty tree.
+#
+# Escape hatch: integration tests (and only integration tests) set
+# VK_INSTALL_SKIP_PREFLIGHT=1 to bypass these checks. CI runs this script from
+# a detached HEAD on a PR ref, which would always fail the branch/sync gates.
 echo ""
+if [ "${VK_INSTALL_SKIP_PREFLIGHT:-}" = "1" ]; then
+  echo "Preflight: SKIPPED (VK_INSTALL_SKIP_PREFLIGHT=1 — testing only)"
+else
 echo "Preflight: validating source repo at $PLUGIN_ROOT..."
 
 if [ ! -d "$PLUGIN_ROOT/.git" ]; then
@@ -130,6 +137,7 @@ if [ "$PREFLIGHT_FAILED" -ne 0 ]; then
   exit 1
 fi
 echo "  OK: on main, clean, in sync with origin/main"
+fi  # end VK_INSTALL_SKIP_PREFLIGHT guard
 
 # VK MCP binary is optional — warn but continue if missing.
 if [ ! -x "$VK_MCP_BINARY" ]; then
