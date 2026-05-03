@@ -59,6 +59,10 @@ def _run_install(
     env = {
         "HOME": str(fake_home),
         "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
+        # Bypass the main/clean/in-sync gate: integration tests run install.sh
+        # from the repo checkout (often detached HEAD on CI), which would
+        # always fail the gate. The escape hatch is documented in install.sh.
+        "VK_INSTALL_SKIP_PREFLIGHT": "1",
     }
     result = subprocess.run(
         ["bash", str(INSTALL_SH), *extra_args],

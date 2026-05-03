@@ -53,12 +53,91 @@ fi
 
 # Preflight: hard-require jq and uv. Both are used unconditionally downstream;
 # continuing past a missing one yields a half-install that looks successful.
-for cmd in jq uv rsync; do
+for cmd in jq uv rsync git; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "ERROR: '$cmd' not found in PATH. Install it first." >&2
     exit 1
   fi
 done
+
+# Preflight: PLUGIN_ROOT must be a clean checkout of main, in sync with origin.
+# This script clobbers $MARKETPLACE_DIR with PLUGIN_ROOT's contents, so anything
+# uncommitted, unpushed, or off-main gets baked into the cache. Past incidents
+# (cache stuck with a transient "Status: Not Started" revert that broke every
+# subsequent `git pull --ff-only`) trace back to running this from a dirty tree.
+#
+# Escape hatch: integration tests (and only integration tests) set
+# VK_INSTALL_SKIP_PREFLIGHT=1 to bypass these checks. CI runs this script from
+# a detached HEAD on a PR ref, which would always fail the branch/sync gates.
+echo ""
+if [ "${VK_INSTALL_SKIP_PREFLIGHT:-}" = "1" ]; then
+  echo "Preflight: SKIPPED (VK_INSTALL_SKIP_PREFLIGHT=1 — testing only)"
+else
+echo "Preflight: validating source repo at $PLUGIN_ROOT..."
+
+if [ ! -d "$PLUGIN_ROOT/.git" ]; then
+  echo "ERROR: $PLUGIN_ROOT is not a git checkout." >&2
+  echo "  install.sh must be run from a git clone of derio-net/superpowers-for-vk." >&2
+  exit 1
+fi
+
+PREFLIGHT_FAILED=0
+report_preflight_failure() {
+  PREFLIGHT_FAILED=1
+  echo "  - $1" >&2
+  if [ -n "${2:-}" ]; then
+    echo "    Fix: $2" >&2
+  fi
+}
+
+CURRENT_BRANCH="$(git -C "$PLUGIN_ROOT" symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")"
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  report_preflight_failure \
+    "Current branch is '$CURRENT_BRANCH', expected 'main'." \
+    "git -C $PLUGIN_ROOT checkout main"
+fi
+
+if [ -n "$(git -C "$PLUGIN_ROOT" status --porcelain)" ]; then
+  report_preflight_failure \
+    "Working tree has uncommitted or untracked files." \
+    "git -C $PLUGIN_ROOT status   # then commit, stash --include-untracked, or clean"
+fi
+
+if ! git -C "$PLUGIN_ROOT" fetch --quiet origin main 2>/dev/null; then
+  report_preflight_failure \
+    "Could not fetch origin/main." \
+    "check network/SSH access to origin"
+else
+  LOCAL_SHA="$(git -C "$PLUGIN_ROOT" rev-parse HEAD)"
+  ORIGIN_SHA="$(git -C "$PLUGIN_ROOT" rev-parse origin/main)"
+  if [ "$LOCAL_SHA" != "$ORIGIN_SHA" ]; then
+    BEHIND="$(git -C "$PLUGIN_ROOT" rev-list --count HEAD..origin/main)"
+    AHEAD="$(git -C "$PLUGIN_ROOT" rev-list --count origin/main..HEAD)"
+    if [ "$BEHIND" -gt 0 ] && [ "$AHEAD" -eq 0 ]; then
+      report_preflight_failure \
+        "Local main is behind origin/main by $BEHIND commit(s)." \
+        "git -C $PLUGIN_ROOT pull --ff-only"
+    elif [ "$AHEAD" -gt 0 ] && [ "$BEHIND" -eq 0 ]; then
+      report_preflight_failure \
+        "Local main is ahead of origin/main by $AHEAD commit(s) (unpushed work)." \
+        "git -C $PLUGIN_ROOT push origin main"
+    else
+      report_preflight_failure \
+        "Local main has diverged from origin/main (ahead $AHEAD, behind $BEHIND)." \
+        "reconcile (rebase/merge/reset) before installing"
+    fi
+  fi
+fi
+
+if [ "$PREFLIGHT_FAILED" -ne 0 ]; then
+  echo "" >&2
+  echo "Preflight failed. install.sh refuses to run from a dirty / out-of-sync source" >&2
+  echo "because it clobbers \$MARKETPLACE_DIR with PLUGIN_ROOT's contents — anything" >&2
+  echo "uncommitted ends up baked into the cache." >&2
+  exit 1
+fi
+echo "  OK: on main, clean, in sync with origin/main"
+fi  # end VK_INSTALL_SKIP_PREFLIGHT guard
 
 # VK MCP binary is optional — warn but continue if missing.
 if [ ! -x "$VK_MCP_BINARY" ]; then
@@ -70,15 +149,8 @@ else
   SKIP_MCP=false
 fi
 
+echo ""
 echo "Installing superpowers-for-vk..."
-
-# 1. If marketplace is a real git clone (not a symlink), pull latest first
-if [ ! -L "$MARKETPLACE_DIR" ] && [ -d "$MARKETPLACE_DIR/.git" ]; then
-  echo ""
-  echo "Pulling marketplace clone..."
-  # Fail hard: a stale clone silently installs stale files.
-  git -C "$MARKETPLACE_DIR" pull --ff-only origin main 2>&1 | sed 's/^/  /'
-fi
 
 # 2. Register derio-net marketplace so the plugin system knows where to find it
 echo ""
@@ -120,7 +192,9 @@ else
   echo "  WARNING: jq not found — cannot register marketplace automatically" >&2
 fi
 
-# 3. Copy plugin into marketplace directory (decoupled from source repo)
+# 3. Copy plugin into marketplace directory (decoupled from source repo).
+# The cache is treated as ephemeral — it holds nothing worth preserving across
+# runs, so we wipe any stale .git from older installs and clobber the rest.
 echo ""
 echo "Setting up marketplace directory..."
 mkdir -p "$MARKETPLACE_DIR"
@@ -129,6 +203,12 @@ if [ -L "$MARKETPLACE_DIR" ]; then
   rm "$MARKETPLACE_DIR"
   mkdir -p "$MARKETPLACE_DIR"
   echo "  Replaced stale symlink with standalone copy"
+fi
+# Drop any leftover .git so the cache cannot accumulate locally-modified state
+# that would make a future operation refuse to update it.
+if [ -e "$MARKETPLACE_DIR/.git" ]; then
+  rm -rf "$MARKETPLACE_DIR/.git"
+  echo "  Removed stale .git from cache (cache is ephemeral)"
 fi
 rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
   "$PLUGIN_ROOT/" "$MARKETPLACE_DIR/"
