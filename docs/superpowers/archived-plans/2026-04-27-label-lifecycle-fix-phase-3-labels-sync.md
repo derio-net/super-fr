@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-27-label-lifecycle-fix-design.md`
-**Status:** In Progress
+**Status:** Complete
 
 **Goal:** Add `vk admin labels-sync` — a one-shot operator command that brings every `derio-net/*` repo into line with the canonical label registry. Default mode is dry-run; `--yes` applies. With `--remove-defaults`, the command also removes GitHub's auto-created default labels (`bug`, `documentation`, `duplicate`, `enhancement`, `good first issue`, `help wanted`, `invalid`, `question`, `wontfix`) — but only when they have *zero* attached Issues, to avoid clobbering hand-applied user data. Per-repo errors are non-blocking; one repo with a permission glitch should not abort an org-wide sweep.
 
@@ -316,7 +316,7 @@ uv run pytest -q --no-cov
 
 Expected: green.
 
-- [ ] **Step 3: Commit and PR**
+- [x] **Step 3: Commit and PR**
 
 ```bash
 git checkout -b labels-sync-phase-1-skeleton
@@ -753,7 +753,7 @@ uv run pytest -q --no-cov
 
 Expected: green.
 
-- [ ] **Step 3: Commit and PR**
+- [x] **Step 3: Commit and PR**
 
 ```bash
 git checkout -b labels-sync-phase-2-diff-and-dryrun
@@ -778,7 +778,7 @@ gh pr create --title "Labels-sync Phase 2 · Diff logic + dry-run rendering" \
 - Modify: `src/vk/commands/admin_cmd.py`
 - Add: `tests/unit/test_admin_apply.py`
 
-- [ ] **Step 1: TDD — apply mode invokes correct gh calls**
+- [x] **Step 1: TDD — apply mode invokes correct gh calls**
 
 `tests/unit/test_admin_apply.py`:
 
@@ -877,7 +877,7 @@ class TestApplyPerRepoErrorIsNonFatal:
         assert "bad" in result.stdout
 ```
 
-- [ ] **Step 2: Implement apply mode**
+- [x] **Step 2: Implement apply mode**
 
 In `src/vk/commands/admin_cmd.py` `labels_sync`, replace the `raise NotImplementedError` block:
 
@@ -919,7 +919,7 @@ In `src/vk/commands/admin_cmd.py` `labels_sync`, replace the `raise NotImplement
         )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_admin_apply.py -q --no-cov
@@ -929,7 +929,7 @@ Expected: 3 passed.
 
 ### Task 2: Format, type-check, full suite
 
-- [ ] **Step 1: Format, type-check**
+- [x] **Step 1: Format, type-check**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
@@ -937,7 +937,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean.
 
-- [ ] **Step 2: Full suite**
+- [x] **Step 2: Full suite**
 
 ```bash
 uv run pytest -q --no-cov
@@ -955,7 +955,7 @@ Expected: green.
 
 **Context:** Minor bump per `CLAUDE.md`. New user-visible subcommand `vk admin labels-sync`.
 
-- [ ] **Step 1: Confirm current version**
+- [x] **Step 1: Confirm current version**
 
 ```bash
 grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json
@@ -963,11 +963,11 @@ grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-p
 
 Note the current. The exact bump depends on which of (label-lifecycle Phase 1, project-board excision Phase 2, this plan's Phase 3) merge first. Each plan declares its bump at merge time; resolve by checking what's already in `pyproject.toml`.
 
-- [ ] **Step 2: Bump (minor)**
+- [x] **Step 2: Bump (minor)**
 
 If current is `1.3.x` from label-lifecycle, this plan bumps to `1.4.0`. If current is still `1.2.x`, bumps to `1.3.0`. Update all three files consistently.
 
-- [ ] **Step 3: Refresh lockfile**
+- [x] **Step 3: Refresh lockfile**
 
 ```bash
 uv sync
@@ -976,7 +976,7 @@ uv run vk --version
 
 Expected: reports the new minor version.
 
-- [ ] **Step 4: Final test run**
+- [x] **Step 4: Final test run**
 
 ```bash
 uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov
@@ -984,7 +984,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean / green.
 
-- [ ] **Step 5: Commit and PR**
+- [x] **Step 5: Commit and PR**
 
 ```bash
 git checkout -b labels-sync-phase-3-apply-and-bump

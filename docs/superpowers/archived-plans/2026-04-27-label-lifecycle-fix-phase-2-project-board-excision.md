@@ -5,7 +5,7 @@
 > **For dispatch:** Use vk-dispatch to create Issues from this plan.
 
 **Spec:** `docs/superpowers/specs/2026-04-27-label-lifecycle-fix-design.md`
-**Status:** In Progress
+**Status:** Complete
 
 **Goal:** Excise the vestigial `project_board` config field, six dead `gh.py` project helpers (~150 LOC), the reserved-but-unused `vk dispatch --project` flag, the never-implemented `vk progress transition` dispatch branch, the body-text-only `vk progress create --lifecycle` flag, and the entire `_run_dispatch_audit` block — none of which `superpowers-for-vk` actually uses anymore. After this plan ships, `vk progress audit` runs purely local checks (status drift, spec-index drift, stale plans) regardless of dispatch mode, and the dispatch-config surface drops one field plus several reserved-future code paths that were never built.
 
@@ -439,7 +439,7 @@ uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy s
 
 Expected: clean / green.
 
-- [ ] **Step 5: Commit and PR**
+- [x] **Step 5: Commit and PR**
 
 ```bash
 git checkout -b excision-phase-2-progress-and-bump
