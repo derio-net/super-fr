@@ -857,26 +857,87 @@ vk_version: ">=2.1.0,<3.0.0"
 On every cron tick, for every plan the bridge encounters:
 - If the bridge's installed `vk` satisfies the constraint → process
   the plan normally.
-- If not → skip THIS plan, emit a structured log entry:
-  ```
-  WARN version_skew plan=<path> constraint=">=2.5.0,<3.0.0"
-       installed="2.1.3" repo=<owner/repo>
-  ```
-  Other plans on the tick continue processing.
-
-The trigger for upgrading the pod image is the operator authoring a
-new plan against their (newer) laptop's `vk`, which declares the
-newer constraint. The next bridge tick logs `version_skew` for that
-plan; operator sees the log, bumps the willikins Dockerfile, image
-re-rolls, next tick processes the plan.
+- If not → skip THIS plan, emit a structured log entry, and surface
+  the skew per the layered visibility scheme below. Other plans on
+  the tick continue processing.
 
 Operator's laptop installs `vk` however they prefer (`pip install
 --user`, `uv tool install`, `pipx`); same git-tag mechanism. Local
 `vk apply` enforces the same plan-level `vk_version` constraint, so
-laptop-vs-pod skew surfaces consistently.
+laptop-vs-pod skew surfaces consistently. Local skew message:
+```
+Error: plan requires vk >=2.5.0,<3.0.0 but installed vk is 2.1.3
+To upgrade:
+  pip install --user --upgrade \
+    "vk @ git+https://github.com/derio-net/superpowers-for-vk@v2.5.0"
+```
+
+### Surfacing version skew (layered visibility)
+
+A bridge that silently skips plans is the worst possible failure
+mode — it's a "plans aren't dispatching and I don't know why"
+mystery. Three surfacing layers, ordered from most-immediate to
+longest-term, ensure the operator can't miss the skew:
+
+**Layer 1 — GHA PR comment on plan merge (catches authoring-time skew).**
+The spec-status GHA in each consumer repo also checks: did the
+merged PR add/change a plan whose `vk_version` is unsatisfiable by
+the willikins Dockerfile baseline? (GHA reads willikins's Dockerfile
+to determine the baseline — that's the durable lower bound.) If so,
+post a comment on the PR with the actionable fix command. Catches
+skew at the moment the operator just merged and is in the GH UI.
+
+False positive on hot-swap-already-in-place is intentional — it's a
+reminder to merge the baseline-bump PR.
+
+**Layer 2 — `vk-version-skew` label on affected Issues (catches in-execution skew).**
+If the operator updates a plan's `vk_version` mid-execution (when
+Issues already exist), the bridge attaches the label to each
+affected Issue on the next tick. Visible in the GH Issues UI
+immediately. Label description carries the actionable fix command.
+Label is auto-removed by the next tick after skew clears.
+
+**Layer 3 — Willikins Issue escalation (catches persistent skew).**
+If a skew persists for >30 consecutive ticks (=1 hour), the bridge
+opens an Issue against willikins (where bridge-operational concerns
+naturally live, and where the bridge has unconditional gh auth):
+
+```
+Title: vk version skew: plan rebuild on derio-net/superpowers-for-vk
+       (constraint >=2.5.0, installed 2.1.3, persistent for 1h12m)
+Body:  Plan path: docs/superpowers/plans/2026-05-06-rebuild/
+       Affected Issues: #142, #143, #144
+       Bridge installed vk: 2.1.3 (baseline)
+       Plan requires: >=2.5.0,<3.0.0
+       Fix: kubectl -n <ns> exec deploy/claude-bot -- /opt/willikins/vk-bump v2.5.0
+Label: vk-version-skew
+```
+
+Idempotent — one Issue per skewed plan, auto-closed when skew
+clears. Catches the "operator missed the PR comment" case.
+
+### Fixing version skew
+
+All three surfaces include the literal command:
+
+```bash
+kubectl -n <namespace> exec deploy/claude-bot -- /opt/willikins/vk-bump v<version>
+```
+
+The command:
+1. Hot-swaps the bridge (~30s)
+2. Opens or updates the baseline-bump PR (per `vk-bump` script above)
+3. Operator merges the baseline PR for durability
+4. Bridge's next tick processes the previously-skipped plans
+5. Skew labels and willikins Issues auto-close
+
+For an **agent** dispatched to handle a willikins skew Issue: same
+flow, in whichever skill the operator routes through. The agent reads
+the Issue body (contains the version), runs the kubectl exec,
+verifies the resulting PR exists, optionally merges it.
 
 **Single mechanism, two artifacts (bridge code + vk library), one
-trigger (operator plan authoring).**
+trigger (operator plan authoring), three layers of visibility.**
 
 ## Rework plans
 
