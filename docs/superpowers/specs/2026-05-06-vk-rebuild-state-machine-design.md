@@ -137,19 +137,40 @@ Mutated by:
 
 ### `_prose.md` schema
 
-Free-form markdown. Contains:
-- Plan title and brief
-- Per-phase prose: title, goal, runbook commands (for manual phases),
-  rationale, etc.
+Plan-level markdown for human context: the plan's overall goal,
+design rationale, links to the originating brainstorm and spec,
+notes about cross-cutting concerns, anything that doesn't fit a
+specific phase or step.
 
-Generated at `vk plan create` time from the operator's brainstormed
-spec. Mutated by:
-- `vk plan create` at scaffolding (initial generation).
-- `vk plan rework` (creates a *new* plan folder; the original prose is
-  not mutated).
-- Never directly edited by tooling after creation.
+**Step-level implementation detail** — file paths, code snippets,
+runbook commands, per-step rationale, "watch out for X" notes —
+**lives in the yaml `step.text` field** as multi-line block
+literals (see "Per-phase YAML schema" below for an example). It
+does NOT live in prose. This avoids duplication: every fact has
+exactly one home, so drift between yaml and prose is impossible
+by construction.
 
-Tooling never reads `_prose.md`. It exists for humans.
+Hand-authored by the operator at plan creation time alongside the
+yaml; both are committed in the same PR. Mutated by:
+- `vk plan create` at scaffolding (initial operator write — the
+  command opens an editor or accepts content via stdin; the
+  operator authors the prose).
+- `vk plan rework` (creates a *new* plan folder; the original
+  prose is not mutated).
+- Never edited by tooling after creation.
+
+**Read patterns:**
+- The renderer, applier, observer, parser, and migration tools
+  NEVER read `_prose.md`. The structure they need is in yaml.
+- Agents picking up a phase via `vk pickup` get full per-step
+  detail from yaml. They MAY consult `_prose.md` for plan-level
+  context (and operators reviewing the plan in a markdown
+  previewer rely on it), but no agent workflow REQUIRES reading
+  prose.
+
+In short: yaml is canonical and complete for tooling and
+implementation; prose is canonical and complete for narrative
+context.
 
 ### Per-phase YAML schema (`NN.yaml`)
 
@@ -171,14 +192,24 @@ tasks:
     title: Define RenderedState dataclass
     steps:
       - id: P2.T1.S1
-        text: Write pydantic model for RenderedState
+        # `step.text` accepts multi-line block literals (`|`) and may
+        # contain code fences, file paths, rationale, runbook commands.
+        # Agents read this directly via `vk pickup`.
+        text: |
+          Write pydantic model `RenderedState` in `src/vk/types.py`.
+          Fields:
+          - `issue_per_phase: dict[int, RenderedIssue]`
+          - `archive_decision: bool`
+
+          Use `frozen=True`. The renderer must be a pure function —
+          mutable output defeats the test strategy.
       - id: P2.T1.S2
-        text: Add render_issue projection function
+        text: Add `render_issue` projection function in `src/vk/render.py`
   - number: 2
     title: Wire spec-index projection
     steps:
       - id: P2.T2.S1
-        text: Replace spec_index.upsert_entry call sites
+        text: Replace `spec_index.upsert_entry` call sites with `vk.spec.compute_status`
 
 # MUTATED during execution (per-branch writes; lands on main via PR merge)
 state:
@@ -580,7 +611,9 @@ vk plan self-review <plan-dir>
 
 vk pickup <plan-dir> --phase <n>
   Output phase scope (markdown) for an agent. No state mutation.
-  Returns: phase title, all step text, PR title template, dependency reminder.
+  Returns: phase title, all step text (full multi-line content from
+  yaml — agents work from this), PR title template, dependency reminder,
+  and a "see _prose.md for plan-level context" pointer.
 
 vk spec status <spec-path>
   Compute and print spec status.
