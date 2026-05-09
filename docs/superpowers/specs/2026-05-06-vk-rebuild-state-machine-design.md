@@ -717,22 +717,98 @@ COPY scripts/vk-bump /opt/willikins/vk-bump
 RUN chmod +x /opt/willikins/vk-bump
 ```
 
-`vk-bump` is a small shell script that pip-installs a different `vk`
-ref into `claude`'s user site-packages and signals the bridge to
-respawn:
+`vk-bump` does three things on every invocation:
+1. pip-installs the requested `vk` ref into `claude`'s user
+   site-packages
+2. signals the bridge to respawn (so the next cron tick imports the
+   new version)
+3. **opens (or updates) a PR against willikins bumping the Dockerfile
+   baseline to the same version** — the forcing function that
+   prevents baseline rot
 
 ```bash
 #!/bin/bash
 # Usage: vk-bump <git-ref>     e.g. vk-bump v2.1.4
 set -euo pipefail
 TAG="${1:-main}"
+REPO="derio-net/superpowers-for-vk"
+WILLIKINS="derio-net/willikins"
+BUMP_BRANCH="auto/vk-baseline-bump"
+
 pip install --user --upgrade --force-reinstall \
-  "vk @ git+https://github.com/derio-net/superpowers-for-vk@${TAG}"
-python -m vk --version
-# Bridge runs under supercronic; killing the current process makes the
-# next 2-minute tick spawn a fresh one that imports the just-installed vk.
+  "vk @ git+https://github.com/${REPO}@${TAG}"
+INSTALLED="$(python -m vk --version)"
+echo "[vk-bump] Installed: ${INSTALLED}"
+
 pkill -f vk-issue-bridge || true
+echo "[vk-bump] Bridge will pick up ${TAG} on next cron tick"
+
+# Open / update the willikins baseline-bump PR — but only for tagged
+# refs (main / feature branches are explicitly exploratory hot-swaps).
+if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "[vk-bump] Skipping baseline-bump PR for non-tag ref ${TAG}"
+  echo "[vk-bump] (exploratory hot-swap — pod recreation will revert)"
+  exit 0
+fi
+
+# Idempotent: re-uses the same branch every time, so serial hot-swaps
+# update one PR instead of opening N. Prior PR (if any) gets the new
+# version force-pushed onto its branch.
+gh repo clone "${WILLIKINS}" /tmp/willikins-bump 2>/dev/null || true
+cd /tmp/willikins-bump
+git fetch origin
+git checkout -B "${BUMP_BRANCH}" origin/main
+# Update the pinned tag in Dockerfile (using sed; the pin is on a single line)
+sed -i "s|@v[0-9]\+\.[0-9]\+\.[0-9]\+|@${TAG}|" Dockerfile
+CURRENT_BASELINE="$(git diff HEAD~ Dockerfile | grep -oP '(?<=@)v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+git add Dockerfile
+git commit -m "chore(deps): bump vk baseline to ${TAG}" || {
+  echo "[vk-bump] No baseline change (already at ${TAG}); nothing to PR"
+  exit 0
+}
+git push -f origin "${BUMP_BRANCH}"
+
+# Either open a new PR or update the existing one's body
+PR_BODY="Auto-opened by vk-bump after hot-swap.
+
+Bumps Dockerfile baseline: \`${CURRENT_BASELINE}\` → \`${TAG}\`.
+
+Pod \`${HOSTNAME}\` is currently hot-swapped to ${TAG}; merging this
+PR makes that version the baseline so future pod recreations boot
+with it.
+
+Changelog: https://github.com/${REPO}/compare/${CURRENT_BASELINE}...${TAG}"
+
+EXISTING_PR=$(gh pr list --repo "${WILLIKINS}" --head "${BUMP_BRANCH}" \
+              --json number --jq '.[0].number' 2>/dev/null || echo "")
+if [[ -n "${EXISTING_PR}" ]]; then
+  gh pr edit "${EXISTING_PR}" --repo "${WILLIKINS}" --body "${PR_BODY}"
+  echo "[vk-bump] Updated baseline-bump PR #${EXISTING_PR}"
+else
+  PR_URL=$(gh pr create --repo "${WILLIKINS}" \
+    --title "chore(deps): bump vk baseline to ${TAG}" \
+    --body "${PR_BODY}" --head "${BUMP_BRANCH}" --base main)
+  echo "[vk-bump] Opened baseline-bump PR: ${PR_URL}"
+fi
 ```
+
+**The PR is the explicit forcing function.** Open PR count = 0 means
+the pod baseline matches what's running. Open PR count = 1 means a
+hot-swap is in flight and needs to be made durable. The PR exists in
+your inbox until merged — no log line that scrolls away, no
+"I'll bump it later" failure mode.
+
+**Self-healing on serial hot-swaps.** Three hot-swaps in a day → one
+PR with the latest version (the branch is force-pushed each time),
+not three PRs to chase. If a hot-swap turns out to be bad and the
+operator reverts via `vk-bump <baseline-version>`, the diff in the
+PR becomes empty and `vk-bump` skips the PR update with the "no
+baseline change" message — operator can close the now-stale PR
+manually.
+
+**Tagged refs only.** vk-bump refuses to open a baseline-bump PR for
+`main` or feature branches. Those are explicitly exploratory
+hot-swaps; pod recreation reverts them.
 
 **Two update paths, one for each cadence:**
 
