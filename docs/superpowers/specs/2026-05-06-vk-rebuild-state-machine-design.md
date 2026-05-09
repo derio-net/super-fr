@@ -106,15 +106,34 @@ Symlinks are not used.
 schema_version: 2
 plan: <slug>                                  # matches folder slug
 spec: docs/superpowers/specs/<file>.md        # path relative to repo root
-target_repo: derio-net/<repo>                 # default repo for all phases (per-phase override allowed)
+target_repo: derio-net/<repo>                 # the plan's target repo — one repo per plan, no per-phase override
 vk_version: ">=2.0.0,<3.0.0"                  # CLI version constraint
 created: 2026-05-06                           # date the plan was first scaffolded
+
+# For rework plans only (absent for normal plans):
+parent_plan: docs/superpowers/archived-plans/<parent-slug>/   # what this rework descends from
+prior_rework: docs/superpowers/archived-plans/<earlier-rework-slug>/  # optional, only if N > 1
+origin_items:                                 # see "Rework plans" section below
+  - id: 1
+    item: <text>
+    source: <text>
+    track: development                        # one of: development | operations | decision
 ```
+
+`target_repo` is plan-level and immutable. Per-phase target overrides
+are NOT allowed by the schema — multi-target plans must be split into
+one plan per target repo at the spec level (existing convention; v1's
+`**Target repo:**` per-phase warning becomes structurally impossible
+in v2).
 
 Mutated by:
 - `vk plan create` at scaffolding time.
-- Never mutated thereafter. Editing requires `vk plan rework` (which
-  creates a sibling plan rather than mutating an existing one).
+- `vk plan rework` at rework scaffolding time (sets `parent_plan`,
+  `prior_rework`, initial empty `origin_items`).
+- `vk plan rework-add` (appends to `origin_items` only).
+- Never otherwise mutated. Editing the structural fields requires
+  `vk plan rework` (which creates a sibling plan rather than mutating
+  an existing one).
 
 ### `_prose.md` schema
 
@@ -143,9 +162,9 @@ phase:
   title: Renderer
   tag: agentic                              # or "manual"
   depends_on: [1]                           # phase numbers within this plan
-  target_repo: derio-net/superpowers-for-vk # optional; falls back to _meta.target_repo
   tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/142
   # tracking_issue is null until `vk apply` dispatches the phase
+  # NOTE: no target_repo here — it's plan-level only (in _meta.yaml)
 
 tasks:
   - number: 1
@@ -245,10 +264,10 @@ class Phase:
     title: str
     tag: Literal["agentic", "manual"]
     depends_on: tuple[int, ...]
-    target_repo: str
     tracking_issue: str | None
     tasks: tuple[Task, ...]
     state: PhaseState
+    # No target_repo — plan-level (Plan.meta.target_repo) is the only one
 ```
 
 - Refuses to load v1 plans. `PlanSchemaError("plan_dir is not a v2
@@ -391,20 +410,42 @@ Apply rules:
 ### Plan editing — `vk.plan.*`
 
 ```python
-def vk.plan.create(spec: Path, slug: str, phases: list[PhaseSpec]) -> Plan: ...
+def vk.plan.create(spec: Path, slug: str, target_repo: str,
+                   phases: list[PhaseSpec]) -> Plan: ...
 def vk.plan.tick(plan_dir: Path, step_id: str, *, state: str, note: str | None) -> None: ...
 def vk.plan.complete_phase(plan_dir: Path, phase: int, note: str) -> None: ...
-def vk.plan.rework(parent_plan_dir: Path, ...) -> Plan: ...
+def vk.plan.rework_create(parent_plan_dir: Path) -> Plan: ...
+def vk.plan.rework_add_origin(rework_dir: Path, item: str, source: str,
+                              track: Literal["development", "operations", "decision"]) -> int: ...
+def vk.plan.rework_list(repo_root: Path, *,
+                        include_archived: bool = False) -> list[ReworkRecord]: ...
 def vk.plan.self_review(plan: Plan) -> list[ReviewIssue]: ...
 ```
 
 All editing functions:
-- Write to per-phase yaml on the *current branch* (whichever it is —
-  feature branch during execution, main when operator is doing
-  state-only edits).
+- Write to per-phase yaml (or `_meta.yaml` for `rework_*` calls) on
+  the *current branch* (feature branch during execution, main when
+  operator is doing state-only edits).
 - Stage the change (`git add`); do not commit. Caller decides commit
   cadence and message.
 - Validate after writing (re-parse to confirm schema still passes).
+
+`vk.plan.create` and `vk.plan.rework_create` additionally:
+- **Append a row to the spec's `## Implementation Plans` table** for
+  the new plan (one row, idempotent — re-running with an existing
+  row is a no-op). The spec edit is staged in the same change so
+  it lands in the same PR. This eliminates the v1 "scaffold then
+  manually update the spec" two-step.
+- Refuse if the spec doesn't exist or doesn't have an
+  `## Implementation Plans` section.
+
+`vk.plan.self_review` v2 lints:
+- Schema validation already happened in `parse`; this surfaces softer
+  issues (cyclic dependencies, undeclared `tracking_issue` on a
+  phase that's been worked, missing `completion.note` for a manual
+  phase whose steps are all ticked, etc.).
+- The v1 multi-target-repo warning is removed — v2 schema makes
+  multi-target plans structurally impossible.
 
 `tick`:
 - `state` must be one of `" "`, `"x"`, `"-"`
@@ -515,18 +556,27 @@ vk apply <plan-dir> [--dry-run] [--yes]
 vk apply --all [--dry-run] [--yes]
   Walk docs/superpowers/plans/ in current repo, apply each.
 
-vk plan create [--from-spec <spec-path>] [--slug <slug>]
+vk plan create [--from-spec <spec-path>] [--slug <slug>] [--target-repo <owner/repo>]
   Scaffold new plan folder from spec. Prompts for phase structure.
+  Atomically appends row to spec's Implementation Plans table.
 
 vk plan edit <plan-dir> --tick <step-id> [--state x|-] [--note <text>]
 vk plan edit <plan-dir> --complete-phase <n> [--note <text>]
   Mutate state on current branch. Stages, doesn't commit.
 
 vk plan rework <parent-plan-dir>
-  Scaffold a sibling rework plan. Convention preserved from v1.
+  Scaffold a sibling rework folder (parent stays Complete and untouched).
+  Atomically appends row to spec's Implementation Plans table.
+  Convention preserved from v1; mechanics simplified (YAML, not markdown surgery).
+
+vk plan rework-add <rework-dir> --item <text> --source <text> --track development|operations|decision
+  Append a row to the rework plan's _meta.origin_items list.
+
+vk plan rework-list [--include-archived]
+  List rework plans in repo, with derived status from phase yamls.
 
 vk plan self-review <plan-dir>
-  Schema validation + lint (multi-target warning, dependency cycles, etc.)
+  Schema validation + soft lints (cycles, missing manual-phase completion notes, etc.)
 
 vk pickup <plan-dir> --phase <n>
   Output phase scope (markdown) for an agent. No state mutation.
@@ -541,6 +591,8 @@ vk spec status --all
 vk migrate v1-to-v2 [--dry-run] [--yes]
   One-shot mechanical conversion of every v1 plan in the repo.
   Writes new folders, removes Status column from spec tables.
+  Converts v1 *-rework-*.md sibling files to <slug>-rework-N/ folders
+  with Origin tables migrated to _meta.origin_items.
   Survives as a CLI tool for future use (rare, but possible).
 ```
 
@@ -565,6 +617,7 @@ vk migrate v1-to-v2 [--dry-run] [--yes]
 | `vk issue create` | Retired. Bridge-routable Issue authoring becomes a separate concern; if needed, a v2.x feature, not v2.0. |
 | `vk issue convert` | Same as above. |
 | `vk plan convert` | Deleted (v1 ↔ v2 migration is `vk migrate v1-to-v2` only). |
+| `vk plan spec-index` | Deleted — folded into `vk plan create` / `vk plan rework` (atomic spec-row writes at scaffold time). |
 
 ### Skill surface
 
@@ -608,6 +661,148 @@ Properties:
   and a plan declares `vk_version: ">=2.0.0,<2.1.0"`, the bridge
   refuses to operate on that plan and logs a clear "version drift"
   warning.
+
+## Rework plans
+
+Plans frequently spawn follow-up work after the parent PR merges and
+the parent is archived: code-review punch-list items, demo
+smoke-test findings, decisions deferred during execution. The v1
+convention — sibling plan with an `## Origin` table, parent stays
+Complete and is NEVER reopened — is preserved. The implementation
+collapses to YAML.
+
+### Folder layout
+
+```
+docs/superpowers/archived-plans/2026-04-08-kid-laptops-7-vscode-dev-env/   # parent (archived)
+docs/superpowers/plans/2026-04-08-kid-laptops-7-vscode-dev-env-rework-1/   # sibling rework
+docs/superpowers/plans/2026-04-08-kid-laptops-7-vscode-dev-env-rework-2/   # second rework
+```
+
+The folder slug is `<parent-date>-<parent-slug>-rework-<N>/`. N is
+auto-incremented by scanning *both* `plans/` and `archived-plans/`
+(refuses with a clear diagnostic if the same N exists in both — same
+collision rule as v1).
+
+### Rework-only `_meta.yaml` fields
+
+Rework plans have everything a normal plan has, plus:
+
+```yaml
+parent_plan: docs/superpowers/archived-plans/2026-04-08-kid-laptops-7-vscode-dev-env/
+prior_rework: docs/superpowers/archived-plans/2026-04-08-kid-laptops-7-vscode-dev-env-rework-0/  # optional, only if N > 1
+origin_items:
+  - id: 1
+    item: "Parental controls demo: VS Code can launch unrestricted shell"
+    source: "PR #51 review by @ioannis"
+    track: development          # one of: development | operations | decision
+  - id: 2
+    item: "Update operator runbook for the new lockfile path"
+    source: "post-demo smoke test"
+    track: operations
+  - id: 3
+    item: "Decide whether vscode dev container gets the same hardening"
+    source: "demo discussion 2026-04-09"
+    track: decision
+```
+
+`origin_items` ids are auto-incremented at insertion time and are
+immutable thereafter (operator-visible references in commit messages
+and discussion).
+
+### What scaffolding does atomically (single-PR contract)
+
+`vk plan rework <parent-plan-dir>`:
+
+1. Validates `parent_plan_dir` exists and lives under `plans/` or
+   `archived-plans/`.
+2. Computes next N (cross-directory collision check).
+3. Creates the rework folder with:
+   - `_meta.yaml`: standard fields (slug, spec, target_repo,
+     vk_version, created) + `parent_plan`, `prior_rework` (if
+     applicable), `origin_items: []`.
+   - `_prose.md`: short stub with the rework's title and a pointer
+     to the parent's prose.
+   - No phase yamls. (Operator authors phases later — the rework
+     items in `origin_items` inform the phase structure but don't
+     dictate it.)
+4. **Appends a row to the spec's `## Implementation Plans` table**
+   (Plan column gets the rework slug, Repo column gets
+   `_meta.target_repo`, File column gets the new folder path,
+   Depends on column gets the parent plan slug). Idempotent —
+   re-running on an existing rework folder is a no-op for the spec
+   edit.
+
+All file writes are staged but not committed; operator commits and
+opens a single PR. Reviewers see: new folder, spec row, in one
+diff.
+
+### Spec-doc updates
+
+`vk plan rework` and `vk plan create` both update the spec — this
+collapses the v1 two-step "scaffold then `vk plan spec-index`" flow
+into one atomic operation. The spec row update follows the spec
+table's static schema (Plan / Repo / File / Depends on; no Status
+column).
+
+If you author a new plan or rework outside of the `vk plan create` /
+`vk plan rework` commands (e.g., by manually copying a folder), the
+spec row will be missing. `vk plan self-review` flags this so it
+surfaces at review time.
+
+### Library API
+
+```python
+def vk.plan.rework_create(parent_plan_dir: Path) -> Plan:
+    """Scaffold a rework folder + append spec row. Returns the new Plan.
+    Stages all file writes; does not commit."""
+
+def vk.plan.rework_add_origin(
+    rework_dir: Path,
+    item: str,
+    source: str,
+    track: Literal["development", "operations", "decision"],
+) -> int:
+    """Append to _meta.origin_items. Returns assigned id."""
+
+def vk.plan.rework_list(
+    repo_root: Path,
+    *,
+    include_archived: bool = False,
+) -> list[ReworkRecord]:
+    """Glob plan folders, filter where _meta.parent_plan is set.
+    Status derived from phase yamls (same code path as everything else)."""
+
+@dataclass(frozen=True)
+class ReworkRecord:
+    parent_slug: str
+    rework_number: int
+    status: Literal["Not Started", "In Progress", "Complete"]
+    open_steps: int
+    origin_item_count: int
+    by_track: dict[str, int]   # {"development": 2, "operations": 1, ...}
+    folder_path: Path
+    spec_path: Path | None
+```
+
+### LOC reduction
+
+`src/vk/plan/rework.py` shrinks from ~450 lines to an estimated ~80
+lines. The deletions:
+
+- ~80 LOC of markdown table editing (pipe escaping, byte-offset
+  surgery, blank-line skipping, header validation) — replaced by
+  `yaml.safe_load → list.append → yaml.safe_dump`.
+- ~60 LOC of regex-based plan parsing for status / spec extraction
+  — replaced by the standard `vk.parse` flow.
+- The `_SCAFFOLD_TEMPLATE` markdown blob — replaced by a small
+  pydantic model and `yaml.safe_dump`.
+
+What stays:
+- `next_rework_number` (cross-directory N-collision logic) — same
+  shape, different filename glob.
+- The cross-directory collision diagnostic message.
+- The `prior_rework` lookup helper.
 
 ## GitHub Action
 
@@ -664,17 +859,27 @@ vk migrate v1-to-v2 [--dry-run] [--yes]
 For each `.md` plan in `docs/superpowers/plans/` and
 `docs/superpowers/archived-plans/`:
 1. Parse via the (about-to-be-deleted) v1 parser.
-2. Extract: plan slug, spec ref, phases (number, title, tag,
-   depends_on, target_repo, tracking_issue, tasks, steps, current
-   checkbox state).
+2. Extract: plan slug, spec ref, target_repo (plan-level — if v1
+   plan had per-phase target_repo overrides that disagree, FAIL
+   LOUD with a clear message; operator must split the plan
+   manually before re-running the migration), and per-phase data
+   (number, title, tag, depends_on, tracking_issue, tasks, steps,
+   current checkbox state).
 3. Write `<slug>/_meta.yaml`.
 4. Write `<slug>/_prose.md` — synthesized from phase titles, task
    titles, and step text. The prose is regenerated, not preserved
    literally; the YAML is the truth.
 5. Write `<slug>/01.yaml` ... `<slug>/0N.yaml` with `state.steps`
    populated from current checkbox state. `tracking_issue` preserved
-   if the plan had a `<!-- Tracking: URL -->` comment.
-6. `git mv` the original `.md` to `.v1-archive` (keeps git history;
+   if the plan had a `<!-- Tracking: URL -->` comment. No `target_repo`
+   field on phases (plan-level only).
+6. **For rework plans** (filename matches `*-rework-*.md`):
+   - Detect parent plan from the `**Parent plan:** ...` header line.
+   - Detect prior rework from `**Prior rework:** ...` if present.
+   - Parse the `## Origin` table; convert each row to an
+     `origin_items` entry in `_meta.yaml`.
+   - Set `_meta.parent_plan` and (optionally) `_meta.prior_rework`.
+7. `git mv` the original `.md` to `.v1-archive` (keeps git history;
    doesn't pollute v2 listings).
 
 For each spec file:
@@ -697,7 +902,7 @@ Same release window (likely the migration PR or an immediate follow-up):
 | `src/vk/plan/writer.py` | Replaced with `src/vk/plan/edit.py` (write functions) |
 | `src/vk/plan/convert.py` | Deleted |
 | `src/vk/plan/validate.py` | Replaced with pydantic validation in parse |
-| `src/vk/plan/rework.py` | Updated to write v2 folders |
+| `src/vk/plan/rework.py` | Replaced — ~450 LOC → ~80 LOC (markdown table editing → YAML) |
 | `src/vk/plan/filename.py` | Updated for folder-based slugs |
 | `src/vk/spec_index.py` | Replaced with `src/vk/spec.py` (compute_status only — no upsert, no reconcile) |
 | `src/vk/labels.py` | Mostly preserved — registry stays |
