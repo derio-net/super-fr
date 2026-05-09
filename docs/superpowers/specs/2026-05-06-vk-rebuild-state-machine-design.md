@@ -687,13 +687,76 @@ Properties:
 - Bridge has its own pod-local sqlite for cron state (last tick
   timestamp, dedup window). This is the only state outside the
   canonical plan files.
-- Bridge installs `vk` at `--user` scope in the pod. Same package, same
-  version constraints, as the operator's laptop install.
-- The two contexts (pod + laptop) share library version via the
-  `_meta.vk_version` constraint in each plan. If pod has `vk==2.1.0`
-  and a plan declares `vk_version: ">=2.0.0,<2.1.0"`, the bridge
-  refuses to operate on that plan and logs a clear "version drift"
-  warning.
+
+### Bridge deployment and version coordination
+
+The bridge runs in the `secure-agent-kali` image as the `claude` user.
+The existing v1 deployment chain is preserved:
+1. Bridge code (`scripts/vk-issue-bridge.py`) lives in willikins.
+2. CI (or scheduled rebuild) bakes a new `secure-agent-kali` image
+   when willikins's `main` updates.
+3. Pod deployments (Frank, agent-images, etc.) reference the image
+   via a tag in the consuming repo's deployment manifest. Updating
+   the bridge = bumping the manifest tag = pod re-roll.
+
+For v2, **the `vk` library is baked into the same image at a pinned
+version**:
+
+```dockerfile
+# Existing: copy bridge script
+COPY scripts/vk-issue-bridge.py /opt/willikins/
+
+# New (v2): install vk at a pinned version
+RUN pip install --user \
+    "vk @ git+https://github.com/derio-net/superpowers-for-vk@v2.1.3"
+```
+
+`pip install --user` keeps the package in `claude`'s home; private
+repo access uses the deploy key the image already carries.
+
+**Updating `vk` rides the same channel as updating the bridge:**
+1. New `vk` release tag in `superpowers-for-vk` (e.g., `v2.1.4`)
+2. One-line PR to willikins bumping the pinned tag in the Dockerfile
+3. Image rebuild, manifest bump, pod re-roll
+
+No runtime install. No self-update. No network dependency at pod
+boot. No race conditions between an in-flight cron tick and a
+mid-tick library upgrade.
+
+### Version coordination via plan declarations
+
+The bridge never polls for newer `vk` versions. The signal flows
+the other direction: plans declare their required `vk` range, and
+the bridge enforces the constraint locally per-tick.
+
+Each plan's `_meta.yaml` carries:
+```yaml
+vk_version: ">=2.1.0,<3.0.0"
+```
+
+On every cron tick, for every plan the bridge encounters:
+- If the bridge's installed `vk` satisfies the constraint → process
+  the plan normally.
+- If not → skip THIS plan, emit a structured log entry:
+  ```
+  WARN version_skew plan=<path> constraint=">=2.5.0,<3.0.0"
+       installed="2.1.3" repo=<owner/repo>
+  ```
+  Other plans on the tick continue processing.
+
+The trigger for upgrading the pod image is the operator authoring a
+new plan against their (newer) laptop's `vk`, which declares the
+newer constraint. The next bridge tick logs `version_skew` for that
+plan; operator sees the log, bumps the willikins Dockerfile, image
+re-rolls, next tick processes the plan.
+
+Operator's laptop installs `vk` however they prefer (`pip install
+--user`, `uv tool install`, `pipx`); same git-tag mechanism. Local
+`vk apply` enforces the same plan-level `vk_version` constraint, so
+laptop-vs-pod skew surfaces consistently.
+
+**Single mechanism, two artifacts (bridge code + vk library), one
+trigger (operator plan authoring).**
 
 ## Rework plans
 
