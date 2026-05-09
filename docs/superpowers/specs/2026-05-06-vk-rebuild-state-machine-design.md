@@ -699,29 +699,73 @@ The existing v1 deployment chain is preserved:
    via a tag in the consuming repo's deployment manifest. Updating
    the bridge = bumping the manifest tag = pod re-roll.
 
-For v2, **the `vk` library is baked into the same image at a pinned
-version**:
+For v2, the image bakes a **baseline `vk` version** AND ships a
+hot-swap helper, so patches don't require an image rebuild.
+
+**Dockerfile additions:**
 
 ```dockerfile
 # Existing: copy bridge script
 COPY scripts/vk-issue-bridge.py /opt/willikins/
 
-# New (v2): install vk at a pinned version
+# New (v2): install baseline vk
 RUN pip install --user \
     "vk @ git+https://github.com/derio-net/superpowers-for-vk@v2.1.3"
+
+# New (v2): ship the hot-swap helper
+COPY scripts/vk-bump /opt/willikins/vk-bump
+RUN chmod +x /opt/willikins/vk-bump
 ```
 
-`pip install --user` keeps the package in `claude`'s home; private
-repo access uses the deploy key the image already carries.
+`vk-bump` is a small shell script that pip-installs a different `vk`
+ref into `claude`'s user site-packages and signals the bridge to
+respawn:
 
-**Updating `vk` rides the same channel as updating the bridge:**
-1. New `vk` release tag in `superpowers-for-vk` (e.g., `v2.1.4`)
-2. One-line PR to willikins bumping the pinned tag in the Dockerfile
-3. Image rebuild, manifest bump, pod re-roll
+```bash
+#!/bin/bash
+# Usage: vk-bump <git-ref>     e.g. vk-bump v2.1.4
+set -euo pipefail
+TAG="${1:-main}"
+pip install --user --upgrade --force-reinstall \
+  "vk @ git+https://github.com/derio-net/superpowers-for-vk@${TAG}"
+python -m vk --version
+# Bridge runs under supercronic; killing the current process makes the
+# next 2-minute tick spawn a fresh one that imports the just-installed vk.
+pkill -f vk-issue-bridge || true
+```
 
-No runtime install. No self-update. No network dependency at pod
-boot. No race conditions between an in-flight cron tick and a
-mid-tick library upgrade.
+**Two update paths, one for each cadence:**
+
+| Cadence | Mechanism | When to use |
+|---|---|---|
+| Patch / fast iteration | `kubectl exec deploy/claude-bot -- /opt/willikins/vk-bump v2.1.4` — runs in ~30s, bridge picks up new version on next cron tick | Bugfixes, minor releases, anything that doesn't need a fresh baseline |
+| Baseline bump | One-line PR to willikins Dockerfile bumping the pinned tag → image rebuild → manifest bump → pod re-roll | Periodically (e.g. weekly), to ensure fresh pods boot with current `vk`; major versions; breaking schema changes |
+
+**Why the hybrid:**
+- Image baseline = reproducibility and disaster-recovery floor. Pod
+  recreation (eviction, deploy, scaling) reverts to baseline, which
+  is always known-good and tracked in git.
+- Hot-swap = laptop-like iteration. `pip install + restart` flow,
+  invoked via `kubectl exec`. No image rebuild, no manifest bump.
+- Operator can bump the Dockerfile baseline opportunistically after
+  hot-swapped versions have proven stable. The two channels never
+  fight: hot-swap wins until pod recreation, then baseline takes
+  over (and the operator re-runs `vk-bump` if desired).
+
+**Observability of "what's actually running":**
+- Bridge logs its installed `vk` version on every cron-tick startup.
+- `kubectl exec deploy/claude-bot -- python -m vk --version` is the
+  point-in-time check.
+- `kubectl describe pod` shows the image baseline; bridge logs show
+  the runtime version. Discrepancy = a hot-swap is active.
+
+**What we explicitly do NOT do:**
+- No version polling — bridge never asks "is there a newer `vk`?"
+- No auto-update — bridge never installs anything on its own
+- No bridge self-modification — `vk-bump` is operator-invoked only
+
+Updates are always explicit operator actions. Avoids the
+"why did it suddenly change?" mystery class of bugs.
 
 ### Version coordination via plan declarations
 
