@@ -1,0 +1,17 @@
+schema_version: 2
+phase:
+  number: 10
+  title: Tenth
+  tag: manual
+  depends_on: [2]
+  tracking_issue: null
+tasks:
+  - number: 1
+    title: t
+    steps:
+      - id: P10.T1.S1
+        text: s
+state:
+  steps:
+    P10.T1.S1: { state: " ", ticked_at: null, note: null }
+  completion: { at: null, note: null, observed_prs: [] }
