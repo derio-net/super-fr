@@ -21,11 +21,26 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import yaml
 
 from vk.v2.parser import Plan, PlanSchemaError, parse
+
+
+class StepSpec(TypedDict):
+    """Shape of a single step within a `PhaseSpec.tasks[*]['steps']` list."""
+
+    id: str
+    text: str
+
+
+class TaskSpec(TypedDict):
+    """Shape of an entry in `PhaseSpec.tasks` — a task with its step list."""
+
+    number: int
+    title: str
+    steps: list[StepSpec]
 
 
 class PlanEditError(Exception):
@@ -68,7 +83,7 @@ class PhaseSpec:
     title: str
     tag: Literal["agentic", "manual"] = "agentic"
     depends_on: tuple[int, ...] = ()
-    tasks: tuple[dict[str, Any], ...] = ()  # [{number, title, steps:[{id, text}]}]
+    tasks: tuple[TaskSpec, ...] = ()
 
 
 def create(
@@ -446,7 +461,7 @@ def rework_add_origin(
     *,
     item: str,
     source: str,
-    track: Literal["development", "operations", "decision"],
+    track: str,
 ) -> int:
     """Append an item to _meta.origin_items. Returns assigned id."""
     plan = parse(rework_dir)

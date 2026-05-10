@@ -140,14 +140,18 @@ def rework_add(
     rework_dir: Path = typer.Argument(..., help="Rework plan folder."),
     item: str = typer.Option(..., "--item", help="Origin item description."),
     source: str = typer.Option(..., "--source", help="Where the item came from."),
-    track: str = typer.Option(..., "--track", help="One of: development | operations | decision"),
+    track: str = typer.Option(
+        ...,
+        "--track",
+        help=(
+            "Free-form. Canonical: development | operations | decision. "
+            "Compounds like 'decision → development' or 'development (future-triggered)' OK."
+        ),
+    ),
 ) -> None:
     """Append an origin item to a rework plan's _meta.origin_items."""
-    if track not in ("development", "operations", "decision"):
-        err_console.print(f"--track must be development|operations|decision, got {track!r}")
-        raise typer.Exit(2)
     try:
-        new_id = rework_add_origin(rework_dir, item=item, source=source, track=track)  # type: ignore[arg-type]
+        new_id = rework_add_origin(rework_dir, item=item, source=source, track=track)
         console.print(f"added origin item #{new_id}")
     except PlanEditError as e:
         err_console.print(f"[red]error:[/red] {e}")

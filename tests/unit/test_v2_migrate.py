@@ -119,6 +119,96 @@ def test_migrate_rewrites_spec_table_drops_status_column(tmp_path):
     assert rows[0].count("|") == 5  # 4 cells = 5 pipes
 
 
+def test_migrate_rewrites_file_cells_md_to_folder(tmp_path):
+    """Spec File cells pointing at `<path>.md` get rewritten to `<path>/`
+    after migration converts them to v2 folders."""
+    from vk.v2.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-cells-fixture")
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
+    spec_path.write_text(
+        "# test\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Status | Depends on |\n"
+        "|------|------|------|--------|------------|\n"
+        "| The plan | `derio-net/x` "
+        "| `docs/superpowers/plans/2026-05-10-cells-fixture.md` | Complete | — |\n"
+    )
+
+    migrate_repo(repo, dry_run=False)
+    new_text = spec_path.read_text()
+    assert "2026-05-10-cells-fixture/" in new_text
+    assert "2026-05-10-cells-fixture.md" not in new_text
+
+
+def test_migrate_leaves_file_cells_when_folder_does_not_exist(tmp_path):
+    """If a row points at `<path>.md` but no `<path>/` folder exists,
+    the cell is left alone — re-running after fixing the cause completes
+    the rewrite."""
+    from vk.v2.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
+    spec_path.write_text(
+        "# test\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Status | Depends on |\n"
+        "|------|------|------|--------|------------|\n"
+        "| Cross-repo | `derio-net/y` | `docs/superpowers/plans/never-here.md` | Complete | — |\n"
+    )
+
+    migrate_repo(repo, dry_run=False)
+    new_text = spec_path.read_text()
+    # Status column is dropped; File cell is unchanged because folder doesn't exist
+    assert "never-here.md" in new_text
+    assert "Status" not in new_text.splitlines()[2]
+
+
+def test_migrate_rejects_non_iso_date_slug(tmp_path):
+    """Plans whose slug doesn't begin with YYYY-MM-DD raise MigrationError."""
+    from vk.v2.migrate import MigrationError, migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="legacy-plan-no-date")
+
+    with pytest.raises(MigrationError, match="YYYY-MM-DD"):
+        migrate_repo(repo, dry_run=False)
+
+
+def test_migrate_preserves_freeform_track(tmp_path):
+    """Origin table 'Track' cells with non-canonical values are preserved verbatim."""
+    from vk.v2 import parse
+    from vk.v2.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-2.md"
+    p.write_text(
+        "# Base — Rework 2\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "**Parent plan:** "
+        "`docs/superpowers/archived-plans/2026-05-08-base.md` (merged + archived)\n\n"
+        "---\n\n"
+        "## Origin\n\n"
+        "| # | Item | Source | Track |\n"
+        "|---|------|--------|-------|\n"
+        "| 1 | first item | demo | development (future-triggered) |\n"
+        "| 2 | second item | demo | decision → development |\n\n"
+        "---\n\n"
+        "## Phase 1: Apply rework [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Task 1: Apply\n\n"
+        "- [ ] **Step 1: Do the work** Details.\n"
+    )
+
+    migrate_repo(repo, dry_run=False)
+    new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-2"
+    plan = parse(new)
+    assert plan.meta.origin_items[0].track == "development (future-triggered)"
+    assert plan.meta.origin_items[1].track == "decision → development"
+
+
 def test_migrate_rework_extracts_origin_table(tmp_path):
     from vk.v2 import parse
     from vk.v2.migrate import migrate_repo
@@ -192,18 +282,22 @@ def test_migrate_rejects_per_phase_target_repo_conflict(tmp_path):
         migrate_repo(repo, dry_run=False)
 
 
-def test_migrate_cli_dry_run_and_yes_mutual_exclusion(tmp_path, monkeypatch):
+def test_migrate_cli_default_is_dry_run(tmp_path, monkeypatch):
+    """No --yes flag → preview mode; nothing gets written."""
     from typer.testing import CliRunner
 
     from vk.cli import app
 
     repo = _make_repo(tmp_path)
+    md = _write_v1_plan(repo, slug="2026-05-10-cli-default")
     monkeypatch.chdir(repo)
     runner = CliRunner()
     result = runner.invoke(app, ["v2", "migrate", "v1-to-v2"])
-    assert result.exit_code == 2  # neither --dry-run nor --yes
-    result = runner.invoke(app, ["v2", "migrate", "v1-to-v2", "--dry-run", "--yes"])
-    assert result.exit_code == 2  # both
+    assert result.exit_code == 0, result.output
+    assert "(dry-run; pass --yes to apply)" in result.output
+    # Original .md still in place
+    assert md.exists()
+    assert not (repo / "docs" / "superpowers" / "plans" / "2026-05-10-cli-default").exists()
 
 
 def test_migrate_cli_apply_yes(tmp_path, monkeypatch):
@@ -218,3 +312,5 @@ def test_migrate_cli_apply_yes(tmp_path, monkeypatch):
     result = runner.invoke(app, ["v2", "migrate", "v1-to-v2", "--yes"])
     assert result.exit_code == 0, result.output
     assert "1 migrated" in result.output
+    # Hint suffix should NOT appear when --yes was given
+    assert "(dry-run" not in result.output

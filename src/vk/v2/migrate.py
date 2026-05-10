@@ -69,11 +69,15 @@ def migrate_repo(
                 )
             )
 
-    # Rewrite spec files (drop Status column + adjust File cells)
+    # Rewrite spec files (drop Status column + adjust File cells).
+    # File-cell rewrites are gated on the corresponding folder actually
+    # existing on disk — if a plan failed to migrate, its row stays
+    # pointing at `<slug>.md` and a re-run will fix it once the underlying
+    # MigrationError is resolved.
     specs_dir = sp / "specs"
     if specs_dir.is_dir() and not dry_run:
         for spec_md in sorted(specs_dir.glob("*.md")):
-            _rewrite_spec_table(spec_md)
+            _rewrite_spec_table(spec_md, repo_root=repo_root)
 
     return outcomes
 
@@ -110,9 +114,7 @@ def _migrate_one(
 
     # Loud-fail if v1 phases declare conflicting target repos
     target_repos: set[str] = {
-        tr
-        for p in v1plan.phases
-        if (tr := getattr(p, "target_repo", None)) is not None
+        tr for p in v1plan.phases if (tr := getattr(p, "target_repo", None)) is not None
     }
     if len(target_repos) > 1:
         raise MigrationError(
@@ -120,6 +122,14 @@ def _migrate_one(
             f"Split into one plan per target repo before migrating."
         )
     target_repo = next(iter(target_repos)) if target_repos else "derio-net/superpowers-for-vk"
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}-", slug):
+        raise MigrationError(
+            f"{md_path}: slug does not start with a YYYY-MM-DD date. "
+            f"Rename the file to begin with the plan's creation date "
+            f"(e.g. 2026-05-10-{slug}.md) before migrating — v2 plans "
+            f"require an authoritative `created` date in _meta.yaml."
+        )
 
     if dry_run:
         return MigrationOutcome(
@@ -150,7 +160,7 @@ def _migrate_one(
         "spec": v1plan.spec,
         "target_repo": target_repo,
         "vk_version": ">=1.0.0,<3.0.0",
-        "created": slug[:10] if re.match(r"^\d{4}-\d{2}-\d{2}-", slug) else "1970-01-01",
+        "created": slug[:10],  # YYYY-MM-DD prefix is enforced above
     }
     if parent_plan:
         meta["parent_plan"] = parent_plan
@@ -225,15 +235,15 @@ def _parse_v1_origin_table(md_text: str) -> list[dict[str, Any]]:
             n = int(cells[0])
         except ValueError:
             continue
-        track = cells[3].lower()
-        if track not in ("development", "operations", "decision"):
-            track = "development"  # fallback
+        # Track is free-form per the v2 spec; preserve the original cell
+        # verbatim (compounds like "decision → development" or
+        # "development (future-triggered)" are valid).
         items.append(
             {
                 "id": n,
                 "item": cells[1],
                 "source": cells[2],
-                "track": track,
+                "track": cells[3],
             }
         )
     return items
@@ -280,10 +290,17 @@ def _build_phase_doc_from_v1(phase: Any) -> dict[str, Any]:
     }
 
 
-def _rewrite_spec_table(spec_path: Path) -> None:
-    """Drop Status column from the spec's `## Implementation Plans` table.
+def _rewrite_spec_table(spec_path: Path, *, repo_root: Path) -> None:
+    """Drop Status column + rewrite `<path>.md` File cells to `<path>/`.
 
-    Idempotent: if the table is already 4 columns, no-op.
+    Two transformations:
+      - 5-col tables (Plan | Repo | File | Status | Depends on) → drop Status.
+      - File cells matching `<path>.md` are rewritten to `<path>/` ONLY when
+        the corresponding folder exists in the repo. This way a partial
+        migration failure leaves stale `.md` cells alone instead of pointing
+        at archived files; the next successful re-run completes the rewrite.
+
+    Idempotent: 4-col tables and `<path>/` cells pass through unchanged.
     """
     text = spec_path.read_text()
     m = re.search(r"^## Implementation Plans\s*$", text, re.MULTILINE)
@@ -300,17 +317,20 @@ def _rewrite_spec_table(spec_path: Path) -> None:
         if stripped.startswith("|"):
             in_table = True
             cells = [c for c in stripped.strip("|").split("|")]
-            # Already 4 cols → leave alone
-            if len(cells) <= 4:
-                new_after_lines.append(line)
-                continue
-            # 5 cols (Plan | Repo | File | Status | Depends on) → drop Status
+            # Drop Status column if present (5 → 4 cells).
             if len(cells) == 5:
-                new_cells = [cells[0], cells[1], cells[2], cells[4]]
-                new_line = "|" + "|".join(new_cells) + "|\n"
-                new_after_lines.append(new_line)
-            else:
+                cells = [cells[0], cells[1], cells[2], cells[4]]
+            elif len(cells) != 4:
                 new_after_lines.append(line)  # weird shape; leave alone
+                continue
+            # Now 4 cells: rewrite File cell (index 2) if it points at a
+            # `.md` file whose v2 folder exists. Strip backticks for the
+            # filesystem check, preserve the surrounding spacing/backticks
+            # in the rewrite.
+            file_cell = cells[2]
+            new_file_cell = _rewrite_file_cell(file_cell, repo_root=repo_root)
+            cells[2] = new_file_cell
+            new_after_lines.append("|" + "|".join(cells) + "|\n")
         elif in_table and stripped == "":
             in_table = False
             new_after_lines.append(line)
@@ -319,3 +339,23 @@ def _rewrite_spec_table(spec_path: Path) -> None:
 
     new_text = text[:after_start] + "".join(new_after_lines)
     spec_path.write_text(new_text)
+
+
+_BACKTICKED_PATH_RE = re.compile(r"`([^`]+\.md)`")
+
+
+def _rewrite_file_cell(cell: str, *, repo_root: Path) -> str:
+    """If the cell wraps `<path>.md` and `<path>/` exists, rewrite to `<path>/`.
+
+    Otherwise leave the cell alone (header rows, separators, manual rows
+    with `—`, and rows for plans that didn't migrate all pass through).
+    """
+
+    def _maybe_swap(m: re.Match[str]) -> str:
+        path = m.group(1)
+        folder = repo_root / path.removesuffix(".md")
+        if folder.is_dir():
+            return f"`{path.removesuffix('.md')}/`"
+        return m.group(0)
+
+    return _BACKTICKED_PATH_RE.sub(_maybe_swap, cell)

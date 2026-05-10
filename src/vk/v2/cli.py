@@ -4,6 +4,17 @@ Phase 4 retires v1 and promotes these commands to top-level (e.g.
 `vk v2 apply` becomes `vk apply`). Until then, the `v2` namespace
 keeps v2 commands cleanly separated from v1's surface so name
 collisions (e.g. `vk plan rework` exists in both) don't fight.
+
+Exit code conventions (consistent across every v2 subcommand):
+  0 = success
+  1 = lint failure (e.g. `vk v2 plan self-review` found errors)
+  2 = usage error or plan-edit refusal (bad flags, dry-run-vs-yes
+      misuse, plan_ops `PlanEditError`)
+  4 = gh / network failure during `vk v2 apply`
+  5 = plan parse error (`PlanSchemaError`)
+
+Mutating commands (`vk v2 apply`, `vk v2 migrate v1-to-v2`) default
+to a dry-run. Pass `--yes` to actually write changes.
 """
 
 from __future__ import annotations

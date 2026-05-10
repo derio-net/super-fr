@@ -1,15 +1,25 @@
 """`vk v2 apply` CLI — render + observe + diff + apply for a plan.
 
-Wires the library functions into a typer command. The real `GhClient`
-implementation lands in Phase 4 alongside the v1 retirement; until
-then `--dry-run` is the only safe production usage. Tests inject
-`FakeGhClient` via the `_make_gh_client` factory hook.
+Wires the library functions (`render`/`observe`/`diff`/`apply`) into
+typer. Production uses `RealGhClient` (the gh-CLI wrapper); tests
+inject `FakeGhClient` by monkeypatching `_make_gh_client`.
+
+The factory hook is the test seam — keep it. Replacing the module-level
+function in tests is the cleanest way to swap the gh client without
+threading dependency-injection plumbing through the whole library.
+
+Exit code conventions (consistent across all v2 commands):
+  0 = success
+  2 = usage error or plan-edit refusal (e.g. flag combination invalid)
+  4 = gh / network failure during apply
+  5 = plan parse error
 """
 
 from __future__ import annotations
 
+import json as _json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -34,18 +44,16 @@ if TYPE_CHECKING:
 console = Console()
 err_console = Console(stderr=True)
 
-# Single-command app — registered as a leaf via add_typer in v2/cli.py
-
 
 def _make_gh_client() -> GhClient:
-    """Factory hook for the production GhClient (wired in Phase 4).
+    """Factory hook for the GhClient. Tests monkeypatch this to inject FakeGhClient.
 
-    Tests monkeypatch this to inject FakeGhClient.
+    Defaults to `RealGhClient` (subprocess wrapper around `gh`). Tests
+    override by `monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: FakeGhClient())`.
     """
-    raise NotImplementedError(
-        "Real GhClient implementation lands in Phase 4. "
-        "Tests should monkeypatch vk.v2.commands.apply_cmd._make_gh_client."
-    )
+    from vk.v2.real_ghclient import RealGhClient
+
+    return RealGhClient()
 
 
 def _format_diff(d: Diff) -> str:
@@ -69,12 +77,52 @@ def _format_diff(d: Diff) -> str:
     return "\n".join(lines)
 
 
-def _apply_one(plan_dir: Path, gh: GhClient, *, dry_run: bool) -> tuple[int, str]:
-    """Apply one plan with an injected GhClient. Returns (exit_code, output)."""
+def _mutation_to_json(m: Any) -> dict[str, Any]:
+    """Serialise a mutation dataclass to a plain JSON-friendly dict."""
+    if isinstance(m, RepoLabelEnsure):
+        return {"kind": "RepoLabelEnsure", "repo": m.repo, "labels": sorted(m.labels)}
+    if isinstance(m, IssueCreate):
+        return {
+            "kind": "IssueCreate",
+            "repo": m.repo,
+            "phase_number": m.phase_number,
+            "title": m.title,
+            "labels": sorted(m.labels),
+        }
+    if isinstance(m, IssueLabelChange):
+        return {
+            "kind": "IssueLabelChange",
+            "repo": m.repo,
+            "issue_number": m.issue_number,
+            "add": sorted(m.add),
+            "remove": sorted(m.remove),
+        }
+    if isinstance(m, IssueStateChange):
+        return {
+            "kind": "IssueStateChange",
+            "repo": m.repo,
+            "issue_number": m.issue_number,
+            "new_state": m.new_state,
+        }
+    if isinstance(m, IssueBodyChange):
+        return {
+            "kind": "IssueBodyChange",
+            "repo": m.repo,
+            "issue_number": m.issue_number,
+            "body_length": len(m.new_body),
+        }
+    return {"kind": type(m).__name__}
+
+
+def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, dict[str, Any]]:
+    """Apply one plan with an injected GhClient.
+
+    Returns (exit_code, text_output, json_output). `yes=False` is dry-run.
+    """
     try:
         plan = parse(plan_dir)
     except PlanSchemaError as e:
-        return 5, f"parse error: {e}"
+        return 5, f"parse error: {e}", {"plan": str(plan_dir), "parse_error": str(e)}
 
     observed = observe(plan, gh)
     rendered = render(plan, observed)
@@ -86,33 +134,62 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, dry_run: bool) -> tuple[int, str
         for w in rendered.warnings:
             parts.append(f"  [{w.severity}] {w.message}")
 
-    if dry_run:
-        return 0, "\n".join(parts)
+    json_out: dict[str, Any] = {
+        "plan": plan.meta.plan,
+        "mutations": [_mutation_to_json(m) for m in d.mutations],
+        "warnings": [{"severity": w.severity, "message": w.message} for w in rendered.warnings],
+        "applied": False,
+        "failures": [],
+        "created_issues": {},
+    }
+
+    if not yes:
+        return 0, "\n".join(parts), json_out
 
     result = apply(d, gh)
+    json_out["applied"] = True
+    json_out["failures"] = [
+        {"mutation": type(f.mutation).__name__, "error": f.error} for f in result.failures
+    ]
+    json_out["created_issues"] = {str(k): v for k, v in result.created_issues.items()}
     if result.failures:
         parts.append(f"\n{len(result.failures)} failure(s):")
         for f in result.failures:
             parts.append(f"  {type(f.mutation).__name__}: {f.error}")
-        return 4, "\n".join(parts)
+        return 4, "\n".join(parts), json_out
     if result.created_issues:
         parts.append("\ncreated:")
         for phase_n, url in result.created_issues.items():
             parts.append(f"  phase {phase_n}: {url}")
-    return 0, "\n".join(parts)
+    return 0, "\n".join(parts), json_out
 
 
 def apply_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(False, "--all", help="Walk all plans in current repo."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show diff without mutating."),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Apply mutations. Without this flag, runs as a preview (dry-run is the default).",
+    ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: text (default, human-readable) or json.",
+    ),
 ) -> None:
-    """Apply a v2 plan to GitHub (render → observe → diff → mutate)."""
+    """Apply a v2 plan to GitHub (render → observe → diff → mutate).
+
+    Defaults to a preview. Pass --yes to actually mutate GitHub state.
+    """
     if all_plans and plan_dir is not None:
         err_console.print("--all and plan_dir are mutually exclusive")
         raise typer.Exit(2)
     if not all_plans and plan_dir is None:
         err_console.print("Either provide a plan_dir argument or use --all")
+        raise typer.Exit(2)
+    if output_format not in ("text", "json"):
+        err_console.print(f"--format must be 'text' or 'json', got {output_format!r}")
         raise typer.Exit(2)
 
     if all_plans:
@@ -128,12 +205,24 @@ def apply_command(
         assert plan_dir is not None
         targets = [plan_dir]
 
-    gh = _make_gh_client()  # tests monkeypatch this
+    gh = _make_gh_client()
     overall_rc = 0
+    json_results: list[dict[str, Any]] = []
+    text_outputs: list[str] = []
     for t in targets:
-        rc, output = _apply_one(t, gh, dry_run=dry_run)
-        console.print(output)
+        rc, text_output, json_output = _apply_one(t, gh, yes=yes)
+        text_outputs.append(text_output)
+        json_results.append(json_output)
         if rc != 0:
             overall_rc = max(overall_rc, rc)
+
+    if output_format == "json":
+        console.print_json(_json.dumps({"plans": json_results, "applied": yes}))
+    else:
+        for text_output in text_outputs:
+            console.print(text_output)
+        if not yes and overall_rc == 0:
+            console.print("\n(dry-run; pass --yes to apply)")
+
     if overall_rc:
         raise typer.Exit(overall_rc)

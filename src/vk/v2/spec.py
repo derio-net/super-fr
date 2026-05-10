@@ -47,6 +47,11 @@ class PlanStatus:
     phases_total: int
     steps_ticked: int
     steps_total: int
+    # Per-plan diagnostic — populated for non-OK states (Missing,
+    # Unreachable, parse failures). `None` for healthy plans. Lets
+    # consumers display the reason inline instead of cross-referencing
+    # the top-level `warnings` list.
+    note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,13 +162,15 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
                         phases_total=0,
                         steps_ticked=0,
                         steps_total=0,
+                        note="manual / informational row (no plan file)",
                     )
                 )
                 continue
-            warnings.append(
-                f"plan {ref.name!r}: file {ref.file!r} not resolvable locally "
-                f"(cross-repo lookup not implemented in Phase 3)."
+            note = (
+                f"file {ref.file!r} not resolvable locally "
+                f"(cross-repo lookup not implemented in Phase 3)"
             )
+            warnings.append(f"plan {ref.name!r}: {note}.")
             plan_statuses.append(
                 PlanStatus(
                     plan_ref=ref,
@@ -172,12 +179,14 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
                     phases_total=0,
                     steps_ticked=0,
                     steps_total=0,
+                    note=note,
                 )
             )
             continue
 
         if not local.is_dir():
-            warnings.append(f"plan {ref.name!r}: file {ref.file!r} does not exist as a folder.")
+            note = f"file {ref.file!r} does not exist as a folder (resolved to {local})"
+            warnings.append(f"plan {ref.name!r}: {note}.")
             plan_statuses.append(
                 PlanStatus(
                     plan_ref=ref,
@@ -186,6 +195,7 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
                     phases_total=0,
                     steps_ticked=0,
                     steps_total=0,
+                    note=note,
                 )
             )
             continue
@@ -193,7 +203,8 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
         try:
             plan = parse(local)
         except PlanSchemaError as e:
-            warnings.append(f"plan {ref.name!r}: parse error: {e}")
+            note = f"parse error: {e}"
+            warnings.append(f"plan {ref.name!r}: {note}")
             plan_statuses.append(
                 PlanStatus(
                     plan_ref=ref,
@@ -202,6 +213,7 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
                     phases_total=0,
                     steps_ticked=0,
                     steps_total=0,
+                    note=note,
                 )
             )
             continue

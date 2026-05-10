@@ -3,6 +3,11 @@ on:
   pull_request:
     types: [closed]
 
+# `pull_request: types: [closed]` triggers on both merged and unmerged
+# closures — GitHub doesn't expose a "merged-only" trigger. Filter at
+# the job level so unmerged PRs don't queue a reusable-workflow run we
+# don't care about.
 jobs:
   status:
+    if: github.event.pull_request.merged == true
     uses: ./.github/workflows/vk-spec-status.yml

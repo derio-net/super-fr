@@ -2,6 +2,10 @@ name: vk-spec-status
 on:
   workflow_call:
 
+# Defense in depth: the calling workflow also filters on
+# `pull_request.merged == true`, but we keep the check here so this
+# reusable workflow stays safe to call from any context (cron, manual
+# dispatch, etc.) without leaking unmerged-PR status comments.
 jobs:
   status:
     if: github.event.pull_request.merged == true

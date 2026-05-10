@@ -62,10 +62,13 @@ def pickup_command(
         for step in task.steps:
             state = matched.state.steps[step.id].state
             mark = "x" if state == "x" else ("-" if state == "-" else " ")
-            # Multi-line step text rendered as a code-block-free block
+            # Multi-line step text rendered as nested content under the
+            # list item. 4-space indent is the markdown convention for
+            # "continuation paragraph under a list item" — preserves
+            # code-fence semantics for previewers and `gh issue view`.
             lines.append(f"- [{mark}] **{step.id}**")
             for sub in step.text.splitlines() or [""]:
-                lines.append(f"      {sub}")
+                lines.append(f"    {sub}")
         lines.append("")
     lines.append("---")
     lines.append("")
