@@ -25,6 +25,44 @@ def test_diff_undispatched_yields_create():
     assert "vk-ready" in ensures[0].labels
 
 
+def test_diff_emits_issuebodychange_when_body_drifts():
+    """Observed body differs from rendered → IssueBodyChange emitted."""
+    from dataclasses import replace as dc_replace
+
+    from vk.v2 import parse
+    from vk.v2.diff import IssueBodyChange, diff
+    from vk.v2.render import render
+    from vk.v2.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    repo = "derio-net/superpowers-for-vk"
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://github.com/{repo}/issues/142"}
+            )
+        }
+    )
+    new_plan = dc_replace(plan, phases=(phase,))
+
+    observed = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(),
+                issue_assignees=(),
+                linked_prs=(),
+                body="stale body that doesn't match what render produces",
+            )
+        }
+    )
+    rendered = render(new_plan, observed)
+    d = diff(rendered, observed, plan=new_plan)
+    body_changes = [m for m in d.mutations if isinstance(m, IssueBodyChange)]
+    assert len(body_changes) == 1
+    assert body_changes[0].issue_number == 142
+
+
 def test_diff_observed_matches_rendered_yields_minimal_diff():
     """Already-dispatched, labels match → only RepoLabelEnsure (always emitted)."""
     from dataclasses import replace as dc_replace
@@ -78,6 +116,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                 ),
                 issue_assignees=(),
                 linked_prs=(),
+                body=rendered.issue_per_phase[1].body,  # in sync
             )
         }
     )

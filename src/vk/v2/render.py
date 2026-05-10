@@ -21,6 +21,7 @@ from vk.v2.states import (
     PhaseObservation,
     RenderedIssue,
     RenderedState,
+    Warning,
 )
 from vk.v2.types import PhaseDoc
 
@@ -84,11 +85,22 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
 
 
 def _render_body(phase: PhaseDoc, plan: Plan) -> str:
-    """Static body template. Same content from dispatch through close."""
+    """Static body template. Same content from dispatch through close.
+
+    Uses `plan.repo_relative_dir` (NOT `plan.dir`) for the `📋 Plan:`
+    line so the body doesn't leak the dispatcher's absolute filesystem
+    path — the body is consumed by humans + tooling in every clone of
+    the repo, including pod-side agents on different filesystems.
+
+    Deliberately does NOT carry a "include `Closes #N` to auto-close"
+    hint. v2 handles auto-close via the renderer projection
+    (`apply()` closes Issues when the phase becomes Complete) so the
+    hint that v1's body needed is structurally unnecessary now.
+    """
     total = len(plan.phases)
     repo = plan.meta.target_repo
     spec = plan.meta.spec or "—"
-    plan_path = plan.dir
+    plan_path = plan.repo_relative_dir
     tracking = (
         f"📦 Repo:   {repo}\n"
         f"📋 Plan:   {plan_path}\n"
@@ -122,9 +134,15 @@ def _phase_labels(phase: PhaseDoc, plan: Plan) -> frozenset[str]:
     return frozenset(labels)
 
 
-def _drift_warnings(plan: Plan, observed: GhState) -> tuple[str, ...]:
-    """Surface non-blocking drift signals for operator review."""
-    warnings: list[str] = []
+def _drift_warnings(plan: Plan, observed: GhState) -> tuple[Warning, ...]:
+    """Surface non-blocking drift signals for operator review.
+
+    Severity levels:
+      - "info":  benign — agent forgot a checkbox tick
+      - "warn":  ambiguous — operator action may be needed
+      - "error": something is wrong — Issue closed without plan agreement
+    """
+    warnings: list[Warning] = []
     for phase in plan.phases:
         n = phase.phase.number
         obs = observed.phases.get(n)
@@ -136,18 +154,34 @@ def _drift_warnings(plan: Plan, observed: GhState) -> tuple[str, ...]:
         # Steps all ticked but no merged PR (operator may have ticked prematurely)
         if all_ticked and not has_merged_pr and obs.linked_prs:
             warnings.append(
-                f"Phase {n}: all steps ticked but no merged PR observed — "
-                f"operator may have ticked prematurely."
+                Warning(
+                    severity="warn",
+                    message=(
+                        f"Phase {n}: all steps ticked but no merged PR observed — "
+                        f"operator may have ticked prematurely."
+                    ),
+                )
             )
         # Merged PR but some steps still unticked (agent forgot to tick)
         if has_merged_pr and not all_ticked:
             warnings.append(
-                f"Phase {n}: PR merged but steps unticked — agent may have forgotten to tick them."
+                Warning(
+                    severity="info",
+                    message=(
+                        f"Phase {n}: PR merged but steps unticked — "
+                        f"agent may have forgotten to tick them."
+                    ),
+                )
             )
         # Issue closed but plan says incomplete (someone closed it manually)
         if obs.issue_state == "CLOSED" and not _phase_complete(phase, obs):
             warnings.append(
-                f"Phase {n}: Issue closed but plan is incomplete — reconciliation needed."
+                Warning(
+                    severity="error",
+                    message=(
+                        f"Phase {n}: Issue closed but plan is incomplete — reconciliation needed."
+                    ),
+                )
             )
     return tuple(warnings)
 
@@ -162,9 +196,7 @@ def render(plan: Plan, observed: GhState) -> RenderedState:
         lifecycle = _lifecycle_label(phase, obs)
         if lifecycle is not None:
             labels.add(lifecycle)
-        state: Literal["OPEN", "CLOSED"] = (
-            "CLOSED" if _phase_complete(phase, obs) else "OPEN"
-        )
+        state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
         issues[n] = RenderedIssue(
             body=_render_body(phase, plan),
             labels=frozenset(labels),

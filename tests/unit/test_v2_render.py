@@ -5,6 +5,21 @@ import pytest
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
+def test_render_body_uses_repo_relative_path_not_absolute():
+    """Issue body must not leak the dispatcher's absolute filesystem path."""
+    from vk.v2 import parse
+    from vk.v2.render import render
+    from vk.v2.states import GhState
+
+    plan = parse(FIXTURE)
+    rendered = render(plan, GhState(phases={}))
+    body = rendered.issue_per_phase[1].body
+    # The absolute path of FIXTURE should NOT appear in the body
+    assert str(FIXTURE.resolve()) not in body
+    # The repo-relative path SHOULD appear in the body
+    assert "tests/unit/fixtures/v2_plan_minimal" in body
+
+
 def test_render_undispatched_phase_yields_create_intent():
     from vk.v2 import parse
     from vk.v2.render import render
@@ -210,7 +225,8 @@ def test_drift_warning_steps_ticked_pr_not_merged():
         linked_prs=(PrObservation(url="...", state="OPEN", merged=False, draft=False, ci="PASS"),),
     )
     rendered = render(new_plan, GhState(phases={1: obs}))
-    assert any("ticked" in w.lower() and "merged" in w.lower() for w in rendered.warnings)
+    assert any("ticked" in str(w).lower() and "merged" in str(w).lower() for w in rendered.warnings)
+    assert any(w.severity == "warn" for w in rendered.warnings)
 
 
 def test_drift_warning_pr_merged_steps_unticked():
@@ -227,7 +243,10 @@ def test_drift_warning_pr_merged_steps_unticked():
         linked_prs=(PrObservation(url="...", state="CLOSED", merged=True, draft=False, ci="PASS"),),
     )
     rendered = render(plan, GhState(phases={1: obs}))
-    assert any("merged" in w.lower() and "unticked" in w.lower() for w in rendered.warnings)
+    assert any(
+        "merged" in str(w).lower() and "unticked" in str(w).lower() for w in rendered.warnings
+    )
+    assert any(w.severity == "info" for w in rendered.warnings)
 
 
 def test_drift_warning_issue_closed_plan_incomplete():
@@ -244,7 +263,10 @@ def test_drift_warning_issue_closed_plan_incomplete():
         linked_prs=(),
     )
     rendered = render(plan, GhState(phases={1: obs}))
-    assert any("closed" in w.lower() and "incomplete" in w.lower() for w in rendered.warnings)
+    assert any(
+        "closed" in str(w).lower() and "incomplete" in str(w).lower() for w in rendered.warnings
+    )
+    assert any(w.severity == "error" for w in rendered.warnings)
 
 
 def test_archive_decision_true_when_all_phases_complete():

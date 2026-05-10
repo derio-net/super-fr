@@ -1,4 +1,4 @@
-"""Frozen dataclasses for the projection chain.
+"""Dataclasses for the projection chain.
 
 Three families of state:
 
@@ -8,15 +8,19 @@ Three families of state:
 
 2. **Rendered** — what GitHub *should* say, computed from
    `(plan, observed)`.
-   - `RenderedState`, `RenderedIssue`
+   - `RenderedState`, `RenderedIssue`, `Warning`
    - Produced by `vk.v2.render.render(plan, observed)`.
 
 3. **Diff / Apply** — the mutations needed to bring observed → rendered.
    - Lives in `vk.v2.diff` (next module).
 
-All dataclasses are `frozen=True` so the renderer can be a pure
-function and consumers can compare states with `==` for idempotency
-checks.
+**Frozen-vs-not asymmetry.** Leaf dataclasses with only hashable fields
+(`PrObservation`, `PhaseObservation`, `RenderedIssue`, `Warning`) are
+`frozen=True` — they hash and compare cleanly. Container dataclasses
+that hold a `dict` (`GhState`, `RenderedState`) are NOT frozen because
+`dict` is unhashable; instead we treat them as by-convention immutable
+(don't mutate after construction). If we ever need to put one in a
+set, switch the `dict` to `tuple[tuple[...], ...]` first.
 """
 
 from __future__ import annotations
@@ -40,10 +44,12 @@ class PhaseObservation:
     issue_labels: frozenset[str]
     issue_assignees: tuple[str, ...]
     linked_prs: tuple[PrObservation, ...]
+    body: str = ""  # current Issue body — used by diff() to detect body drift
 
 
-@dataclass(frozen=True)
+@dataclass
 class GhState:
+    # Not frozen: holds a dict. By-convention immutable post-construction.
     phases: dict[int, PhaseObservation] = field(default_factory=dict)
 
 
@@ -55,7 +61,24 @@ class RenderedIssue:
 
 
 @dataclass(frozen=True)
+class Warning:
+    """A drift signal surfaced by the renderer.
+
+    Severity drives presentation in `vk apply --dry-run` output and
+    in the GHA spec-status comment, ordering more-actionable signals
+    first.
+    """
+
+    severity: Literal["info", "warn", "error"]
+    message: str
+
+    def __str__(self) -> str:  # makes legacy 'in warning' substring tests still pass
+        return self.message
+
+
+@dataclass
 class RenderedState:
+    # Not frozen: holds a dict. By-convention immutable post-construction.
     issue_per_phase: dict[int, RenderedIssue]
     archive_decision: bool
-    warnings: tuple[str, ...] = ()
+    warnings: tuple[Warning, ...] = ()

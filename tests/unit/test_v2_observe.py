@@ -63,6 +63,60 @@ def test_observe_dispatched_phase_returns_observation():
     assert pr.draft is False
 
 
+def test_observe_populates_body_field():
+    """PhaseObservation.body comes from gh's view_issue body field."""
+    from dataclasses import replace as dc_replace
+
+    from tests.unit.fakes import FakeGhClient
+    from vk.v2 import parse
+    from vk.v2.observe import observe
+
+    plan = parse(FIXTURE)
+    repo = "derio-net/superpowers-for-vk"
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://github.com/{repo}/issues/77"}
+            )
+        }
+    )
+    new_plan = dc_replace(plan, phases=(phase,))
+
+    gh = FakeGhClient()
+    gh.add_issue(repo, 77, body="some body content")
+
+    observed = observe(new_plan, gh)
+    assert observed.phases[1].body == "some body content"
+
+
+def test_observe_rejects_unexpected_issue_state():
+    """gh returning a state outside OPEN/CLOSED → boundary validation error."""
+    from dataclasses import replace as dc_replace
+
+    import pytest
+
+    from tests.unit.fakes import FakeGhClient
+    from vk.v2 import parse
+    from vk.v2.observe import observe
+
+    plan = parse(FIXTURE)
+    repo = "derio-net/superpowers-for-vk"
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://github.com/{repo}/issues/77"}
+            )
+        }
+    )
+    new_plan = dc_replace(plan, phases=(phase,))
+
+    gh = FakeGhClient()
+    gh.add_issue(repo, 77, state="WEIRD_STATE")
+
+    with pytest.raises(ValueError, match="unexpected Issue state"):
+        observe(new_plan, gh)
+
+
 def test_observe_skips_phases_without_tracking_issue():
     """Mixed dispatch state — observe returns only the dispatched phase."""
     from dataclasses import replace as dc_replace

@@ -3,36 +3,41 @@
 A `Diff` is a list of typed mutations. The applier consumes it.
 Both diff() and apply() are deterministic, idempotent, and
 managed-labels-only (won't touch labels outside the registry).
+
+**Body-diff caveat.** v1 plans usually didn't change Issue bodies
+post-create — body was set once at IssueCreate (with a placeholder
+where the URL would go), then best-effort patched once. v2's
+renderer produces the body from `(plan, observed)`, so the body
+naturally re-renders when `tracking_issue` is filled in. We diff
+bodies and emit `IssueBodyChange` when they drift; this catches
+the URL-fill-in case AND any future plan-rework that changes the
+body's substantive content.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
+from typing import Literal
 
+from vk.v2._urls import parse_issue_url
 from vk.v2.parser import Plan
 from vk.v2.states import GhState, RenderedState
 
-# Prefixes the applier is allowed to add/remove. Operator labels
-# (e.g. "good-first-issue", "bug") never get touched.
+# Prefix-owned namespaces. The applier may add/remove anything starting
+# with one of these; everything else (e.g. `good-first-issue`, `bug`)
+# is operator-owned and never touched.
 MANAGED_LABEL_PREFIXES = ("vk-", "spec:", "plan:", "phase:")
-MANAGED_LIFECYCLE_LABELS = frozenset({"vk-ready", "manual", "in-progress", "pr-ready"})
+
+# Bare lifecycle names — managed by the renderer but don't have a
+# distinguishing prefix. NOTE: `vk-ready` is omitted here because the
+# `vk-` prefix already covers it; including it would just be redundant.
+MANAGED_BARE_LABELS = frozenset({"manual", "in-progress", "pr-ready"})
 
 
 def _is_managed(label: str) -> bool:
-    if label in MANAGED_LIFECYCLE_LABELS:
+    if label in MANAGED_BARE_LABELS:
         return True
     return any(label.startswith(p) for p in MANAGED_LABEL_PREFIXES)
-
-
-_ISSUE_URL_RE = re.compile(r"^https://github\.com/([^/]+/[^/]+)/issues/(\d+)$")
-
-
-def _parse_issue_url(url: str) -> tuple[str, int]:
-    m = _ISSUE_URL_RE.match(url)
-    if not m:
-        raise ValueError(f"not a github issue url: {url}")
-    return m.group(1), int(m.group(2))
 
 
 @dataclass(frozen=True)
@@ -47,7 +52,7 @@ class IssueLabelChange:
 class IssueStateChange:
     repo: str
     issue_number: int
-    new_state: str  # "OPEN" or "CLOSED"
+    new_state: Literal["OPEN", "CLOSED"]
     close_reason: str | None = None
 
 
@@ -121,7 +126,7 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
             )
             continue
 
-        issue_repo, issue_number = _parse_issue_url(tracking)
+        issue_repo, issue_number = parse_issue_url(tracking)
 
         # Label diff (managed labels only)
         rendered_managed = frozenset(lbl for lbl in ri.labels if _is_managed(lbl))
@@ -135,6 +140,16 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
                     issue_number=issue_number,
                     add=to_add,
                     remove=to_remove,
+                )
+            )
+
+        # Body diff (catches the post-IssueCreate URL fill-in case)
+        if obs.body != ri.body:
+            mutations.append(
+                IssueBodyChange(
+                    repo=issue_repo,
+                    issue_number=issue_number,
+                    new_body=ri.body,
                 )
             )
 

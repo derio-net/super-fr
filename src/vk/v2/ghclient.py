@@ -17,11 +17,12 @@ class GhClient(Protocol):
         ...
 
     def list_linked_prs(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
-        """Return PRs linked to the issue (via closingIssuesReferences or title pattern)."""
-        ...
+        """Return PRs linked to the issue (via closingIssuesReferences or title pattern).
 
-    def view_pr(self, repo: str, number: int) -> dict[str, Any]:
-        """Return PR state, merged, draft, ci."""
+        Each dict has at minimum: `url`, `state` ("OPEN"|"CLOSED"), `merged` (bool),
+        `draft` (bool), `ci` ("PASS"|"FAIL"|"PENDING"|"NONE"). The wrapper is
+        responsible for shaping gh's GraphQL response into this contract.
+        """
         ...
 
     def edit_issue_labels(

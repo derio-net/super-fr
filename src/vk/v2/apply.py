@@ -13,6 +13,13 @@ Properties enforced here:
     that filter.
   - **Dry-run is read-only.** `dry_run=True` returns the result
     without calling any mutation method.
+  - **Confirmation is a CLI concern.** This library function executes
+    every mutation it receives; the CLI wraps with prompt-before-
+    destructive behavior. Don't add a `yes` flag here.
+  - **Programmer errors propagate.** A novel `Mutation` subclass
+    that we forgot to handle raises `_UnhandledMutationError` (subclass
+    of `AssertionError`) and is NOT caught — those should crash the
+    test suite rather than masquerade as a GH failure.
 """
 
 from __future__ import annotations
@@ -31,6 +38,13 @@ from vk.v2.diff import (
 from vk.v2.ghclient import GhClient
 
 
+class _UnhandledMutationError(AssertionError):
+    """Raised when apply() encounters a Mutation subclass it doesn't handle.
+
+    Programmer error. Not caught by the failure-accumulation except clause.
+    """
+
+
 @dataclass(frozen=True)
 class ApplyFailure:
     mutation: Mutation
@@ -45,13 +59,33 @@ class ApplyResult:
     dry_run: bool
 
 
-def apply(
-    d: Diff,
-    gh: GhClient,
-    *,
-    dry_run: bool = False,
-    yes: bool = False,
-) -> ApplyResult:
+def _execute_one(m: Mutation, gh: GhClient, created: dict[int, str]) -> None:
+    """Dispatch a single mutation to the correct GhClient method.
+
+    Side-effects only — appends to `created` for IssueCreate; raises
+    `_UnhandledMutationError` if the type isn't handled (programmer error).
+    """
+    if isinstance(m, RepoLabelEnsure):
+        gh.ensure_labels(m.repo, sorted(m.labels))
+    elif isinstance(m, IssueCreate):
+        url = gh.create_issue(m.repo, title=m.title, body=m.body, labels=m.labels)
+        created[m.phase_number] = url
+    elif isinstance(m, IssueLabelChange):
+        gh.edit_issue_labels(m.repo, m.issue_number, add=m.add, remove=m.remove)
+    elif isinstance(m, IssueStateChange):
+        gh.edit_issue_state(
+            m.repo,
+            m.issue_number,
+            state=m.new_state,
+            reason=m.close_reason,
+        )
+    elif isinstance(m, IssueBodyChange):
+        gh.edit_issue_body(m.repo, m.issue_number, m.new_body)
+    else:
+        raise _UnhandledMutationError(f"unknown mutation type: {type(m).__name__}")
+
+
+def apply(d: Diff, gh: GhClient, *, dry_run: bool = False) -> ApplyResult:
     """Execute the diff. On dry_run, return mutations without calling gh."""
     if dry_run:
         return ApplyResult(
@@ -67,32 +101,13 @@ def apply(
 
     for m in d.mutations:
         try:
-            if isinstance(m, RepoLabelEnsure):
-                gh.ensure_labels(m.repo, sorted(m.labels))
-            elif isinstance(m, IssueCreate):
-                url = gh.create_issue(m.repo, title=m.title, body=m.body, labels=m.labels)
-                created[m.phase_number] = url
-            elif isinstance(m, IssueLabelChange):
-                gh.edit_issue_labels(m.repo, m.issue_number, add=m.add, remove=m.remove)
-            elif isinstance(m, IssueStateChange):
-                gh.edit_issue_state(
-                    m.repo,
-                    m.issue_number,
-                    state=m.new_state,
-                    reason=m.close_reason,
-                )
-            elif isinstance(m, IssueBodyChange):
-                gh.edit_issue_body(m.repo, m.issue_number, m.new_body)
-            else:  # pragma: no cover — exhaustive over the union
-                raise TypeError(f"unknown mutation type: {type(m).__name__}")
+            _execute_one(m, gh, created)
             applied.append(m)
-        except Exception as e:  # noqa: BLE001 — accumulate any failure
+        except _UnhandledMutationError:
+            # Programmer error — don't mask it as a GH failure.
+            raise
+        except Exception as e:  # noqa: BLE001 — accumulate gh-side failures
             failures.append(ApplyFailure(mutation=m, error=str(e)))
-
-    # `yes` parameter reserved for the CLI layer's interactive prompts;
-    # at the library level, all mutations execute. The CLI wraps this
-    # with confirm-before-destructive behavior.
-    _ = yes
 
     return ApplyResult(
         applied=tuple(applied),

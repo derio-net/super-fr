@@ -10,32 +10,32 @@ been dispatched yet, so there's nothing to observe.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from vk.v2._urls import parse_issue_url
 from vk.v2.ghclient import GhClient
 from vk.v2.parser import Plan
 from vk.v2.states import GhState, PhaseObservation, PrObservation
 
-_ISSUE_URL_RE = re.compile(r"^https://github\.com/([^/]+/[^/]+)/issues/(\d+)$")
-
-
-def _parse_issue_url(url: str) -> tuple[str, int]:
-    """('https://github.com/owner/repo/issues/N') -> ('owner/repo', N)."""
-    m = _ISSUE_URL_RE.match(url)
-    if not m:
-        raise ValueError(f"not a github issue url: {url}")
-    return m.group(1), int(m.group(2))
+_VALID_ISSUE_STATES = ("OPEN", "CLOSED")
+_VALID_PR_STATES = ("OPEN", "CLOSED")
+_VALID_CI_STATES = ("PASS", "FAIL", "PENDING", "NONE")
 
 
 def _to_pr_observation(pr: dict[str, Any]) -> PrObservation:
-    """Coerce a gh PR dict into a PrObservation."""
+    """Coerce a gh PR dict into a PrObservation, validating enum fields."""
+    state = pr["state"]
+    if state not in _VALID_PR_STATES:
+        raise ValueError(f"unexpected PR state from gh: {state!r}")
+    ci = pr.get("ci", "NONE")
+    if ci not in _VALID_CI_STATES:
+        raise ValueError(f"unexpected PR ci from gh: {ci!r}")
     return PrObservation(
         url=str(pr["url"]),
-        state=pr["state"],
+        state=state,
         merged=bool(pr.get("merged", False)),
         draft=bool(pr.get("draft", False)),
-        ci=pr.get("ci", "NONE"),
+        ci=ci,
     )
 
 
@@ -45,13 +45,17 @@ def observe(plan: Plan, gh: GhClient) -> GhState:
         url = phase.phase.tracking_issue
         if not url:
             continue
-        repo, number = _parse_issue_url(url)
+        repo, number = parse_issue_url(url)
         info = gh.view_issue(repo, number)
+        state = info["state"]
+        if state not in _VALID_ISSUE_STATES:
+            raise ValueError(f"unexpected Issue state from gh for {repo}#{number}: {state!r}")
         prs = gh.list_linked_prs(repo, number)
         phases[phase.phase.number] = PhaseObservation(
-            issue_state=info["state"],
+            issue_state=state,
             issue_labels=frozenset(info.get("labels", [])),
             issue_assignees=tuple(info.get("assignees", [])),
             linked_prs=tuple(_to_pr_observation(pr) for pr in prs),
+            body=str(info.get("body", "")),
         )
     return GhState(phases=phases)

@@ -35,13 +35,43 @@ class PlanSchemaError(Exception):
 
 @dataclass(frozen=True)
 class Plan:
-    dir: Path
+    dir: Path  # absolute path to the plan folder
     meta: PlanMeta
     phases: tuple[PhaseDoc, ...]
+    repo_root: Path | None = None  # absolute path to the git repo root, if discoverable
 
     @property
     def prose_path(self) -> Path:
         return self.dir / "_prose.md"
+
+    @property
+    def repo_relative_dir(self) -> Path:
+        """Plan dir relative to `repo_root`; falls back to `dir` if root unknown.
+
+        Used by the renderer for the Issue-body `📋 Plan:` line so dispatched
+        bodies don't leak the dispatcher's local filesystem layout.
+        """
+        if self.repo_root is None:
+            return self.dir
+        try:
+            return self.dir.relative_to(self.repo_root)
+        except ValueError:
+            return self.dir
+
+
+def _find_repo_root(start: Path) -> Path | None:
+    """Walk up from `start` looking for a `.git` directory.
+
+    Filesystem-only — no shell-out to git. Returns None if `.git` is
+    not found before reaching the filesystem root.
+    """
+    cur = start.resolve()
+    while True:
+        if (cur / ".git").exists():
+            return cur
+        if cur.parent == cur:  # reached fs root
+            return None
+        cur = cur.parent
 
 
 # Phase yaml filenames are exactly two digits: `01.yaml` through `99.yaml`.
@@ -113,4 +143,9 @@ def parse(plan_dir: Path) -> Plan:
         except Exception as e:
             raise PlanSchemaError(f"{f.name}: {e}") from e
 
-    return Plan(dir=plan_dir, meta=meta, phases=tuple(phases))
+    return Plan(
+        dir=plan_dir,
+        meta=meta,
+        phases=tuple(phases),
+        repo_root=_find_repo_root(plan_dir),
+    )
