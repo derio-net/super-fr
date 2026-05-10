@@ -1,4 +1,4 @@
-"""Tests for vk.v2.migrate — v1-to-v2 mechanical sweep."""
+"""Tests for vk.migrate — v1-to-v2 mechanical sweep."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _write_v1_plan(repo: Path, *, slug: str, status: str = "Complete") -> Path:
 
 
 def test_migrate_dry_run_lists_outcomes_without_writing(tmp_path):
-    from vk.v2.migrate import migrate_repo
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     md = _write_v1_plan(repo, slug="2026-05-10-fixture-v1")
@@ -45,8 +45,8 @@ def test_migrate_dry_run_lists_outcomes_without_writing(tmp_path):
 
 
 def test_migrate_apply_creates_v2_folder_and_archives_md(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.migrate import migrate_repo
+    from vk import parse
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     md = _write_v1_plan(repo, slug="2026-05-10-fixture-v1")
@@ -75,7 +75,7 @@ def test_migrate_apply_creates_v2_folder_and_archives_md(tmp_path):
 
 
 def test_migrate_skips_in_progress_by_default(tmp_path):
-    from vk.v2.migrate import migrate_repo
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-complete", status="Complete")
@@ -88,7 +88,7 @@ def test_migrate_skips_in_progress_by_default(tmp_path):
 
 
 def test_migrate_include_in_progress_flag(tmp_path):
-    from vk.v2.migrate import migrate_repo
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-in-progress", status="In Progress")
@@ -98,7 +98,7 @@ def test_migrate_include_in_progress_flag(tmp_path):
 
 
 def test_migrate_rewrites_spec_table_drops_status_column(tmp_path):
-    from vk.v2.migrate import migrate_repo
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
@@ -122,7 +122,7 @@ def test_migrate_rewrites_spec_table_drops_status_column(tmp_path):
 def test_migrate_rewrites_file_cells_md_to_folder(tmp_path):
     """Spec File cells pointing at `<path>.md` get rewritten to `<path>/`
     after migration converts them to v2 folders."""
-    from vk.v2.migrate import migrate_repo
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-cells-fixture")
@@ -146,7 +146,7 @@ def test_migrate_leaves_file_cells_when_folder_does_not_exist(tmp_path):
     """If a row points at `<path>.md` but no `<path>/` folder exists,
     the cell is left alone — re-running after fixing the cause completes
     the rewrite."""
-    from vk.v2.migrate import migrate_repo
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
@@ -167,7 +167,7 @@ def test_migrate_leaves_file_cells_when_folder_does_not_exist(tmp_path):
 
 def test_migrate_rejects_non_iso_date_slug(tmp_path):
     """Plans whose slug doesn't begin with YYYY-MM-DD raise MigrationError."""
-    from vk.v2.migrate import MigrationError, migrate_repo
+    from vk.migrate import MigrationError, migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="legacy-plan-no-date")
@@ -178,8 +178,8 @@ def test_migrate_rejects_non_iso_date_slug(tmp_path):
 
 def test_migrate_preserves_freeform_track(tmp_path):
     """Origin table 'Track' cells with non-canonical values are preserved verbatim."""
-    from vk.v2 import parse
-    from vk.v2.migrate import migrate_repo
+    from vk import parse
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-2.md"
@@ -210,8 +210,8 @@ def test_migrate_preserves_freeform_track(tmp_path):
 
 
 def test_migrate_rework_extracts_origin_table(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.migrate import migrate_repo
+    from vk import parse
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-1.md"
@@ -245,7 +245,7 @@ def test_migrate_rework_extracts_origin_table(tmp_path):
 
 
 def test_migrate_skips_already_migrated(tmp_path):
-    from vk.v2.migrate import migrate_repo
+    from vk.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-already")
@@ -258,7 +258,7 @@ def test_migrate_skips_already_migrated(tmp_path):
 
 def test_migrate_rejects_per_phase_target_repo_conflict(tmp_path):
     """v1 plan with conflicting target_repo across phases → MigrationError."""
-    from vk.v2.migrate import MigrationError, migrate_repo
+    from vk.migrate import MigrationError, migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-multi-target.md"
@@ -292,7 +292,7 @@ def test_migrate_cli_default_is_dry_run(tmp_path, monkeypatch):
     md = _write_v1_plan(repo, slug="2026-05-10-cli-default")
     monkeypatch.chdir(repo)
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "migrate", "v1-to-v2"])
+    result = runner.invoke(app, ["migrate", "v1-to-v2"])
     assert result.exit_code == 0, result.output
     assert "(dry-run; pass --yes to apply)" in result.output
     # Original .md still in place
@@ -309,7 +309,7 @@ def test_migrate_cli_apply_yes(tmp_path, monkeypatch):
     _write_v1_plan(repo, slug="2026-05-10-cli-test")
     monkeypatch.chdir(repo)
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "migrate", "v1-to-v2", "--yes"])
+    result = runner.invoke(app, ["migrate", "v1-to-v2", "--yes"])
     assert result.exit_code == 0, result.output
     assert "1 migrated" in result.output
     # Hint suffix should NOT appear when --yes was given

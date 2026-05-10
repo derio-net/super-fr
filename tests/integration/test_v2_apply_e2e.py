@@ -1,4 +1,4 @@
-"""End-to-end test: `vk v2 apply --dry-run` against a fixture v2 plan."""
+"""End-to-end test: `vk apply --dry-run` against a fixture v2 plan."""
 
 from __future__ import annotations
 
@@ -17,18 +17,18 @@ def fake_gh_factory(monkeypatch):
 
     fake = FakeGhClient()
     monkeypatch.setattr(
-        "vk.v2.commands.apply_cmd._make_gh_client",
+        "vk.commands.apply_cmd._make_gh_client",
         lambda: fake,
     )
     return fake
 
 
 def test_vk_v2_apply_default_is_dry_run(fake_gh_factory):
-    """vk v2 apply <plan> (no flags) is a dry-run; emits a creation summary."""
+    """vk apply <plan> (no flags) is a dry-run; emits a creation summary."""
     from vk.cli import app
 
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "apply", str(FIXTURE)])
+    result = runner.invoke(app, ["apply", str(FIXTURE)])
     assert result.exit_code == 0, result.output
     assert "create Issue" in result.output
     assert "phase 1" in result.output
@@ -48,11 +48,11 @@ def test_vk_v2_apply_default_is_dry_run(fake_gh_factory):
 
 
 def test_vk_v2_apply_yes_actually_calls_gh(fake_gh_factory):
-    """vk v2 apply <plan> --yes actually mutates via the fake gh."""
+    """vk apply <plan> --yes actually mutates via the fake gh."""
     from vk.cli import app
 
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "apply", str(FIXTURE), "--yes"])
+    result = runner.invoke(app, ["apply", str(FIXTURE), "--yes"])
     assert result.exit_code == 0, result.output
     # Should have created at least the Issue + ensured labels
     methods = [c[0] for c in fake_gh_factory.calls]
@@ -75,10 +75,10 @@ def test_vk_v2_apply_all_walks_plans_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     fake = FakeGhClient()
-    monkeypatch.setattr("vk.v2.commands.apply_cmd._make_gh_client", lambda: fake)
+    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: fake)
 
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "apply", "--all"])
+    result = runner.invoke(app, ["apply", "--all"])
     assert result.exit_code == 0, result.output
     # Both plans should have been processed (each has plan: 2026-05-09-fixture-minimal)
     assert result.output.count("plan: 2026-05-09-fixture-minimal") == 2
@@ -89,9 +89,9 @@ def test_vk_v2_apply_rejects_both_arg_and_all(monkeypatch):
     from tests.unit.fakes import FakeGhClient
     from vk.cli import app
 
-    monkeypatch.setattr("vk.v2.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
+    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "apply", str(FIXTURE), "--all"])
+    result = runner.invoke(app, ["apply", str(FIXTURE), "--all"])
     assert result.exit_code == 2
 
 
@@ -100,20 +100,20 @@ def test_vk_v2_apply_missing_args_exits_2(monkeypatch):
     from tests.unit.fakes import FakeGhClient
     from vk.cli import app
 
-    monkeypatch.setattr("vk.v2.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
+    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "apply"])
+    result = runner.invoke(app, ["apply"])
     assert result.exit_code == 2
 
 
 def test_vk_v2_apply_json_format(fake_gh_factory):
-    """vk v2 apply <plan> --format json emits parseable JSON."""
+    """vk apply <plan> --format json emits parseable JSON."""
     import json
 
     from vk.cli import app
 
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "apply", str(FIXTURE), "--format", "json"])
+    result = runner.invoke(app, ["apply", str(FIXTURE), "--format", "json"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["applied"] is False  # default dry-run
@@ -129,7 +129,7 @@ def test_vk_v2_apply_invalid_format(monkeypatch):
     from tests.unit.fakes import FakeGhClient
     from vk.cli import app
 
-    monkeypatch.setattr("vk.v2.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
+    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "apply", str(FIXTURE), "--format", "xml"])
+    result = runner.invoke(app, ["apply", str(FIXTURE), "--format", "xml"])
     assert result.exit_code == 2

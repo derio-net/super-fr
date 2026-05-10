@@ -1,4 +1,4 @@
-"""Tests for vk.v2.spec — parse_spec / compute_status / render_status_md."""
+"""Tests for vk.spec — parse_spec / compute_status / render_status_md."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def _make_repo_with_spec(tmp_path: Path) -> Path:
 
 
 def test_parse_spec_extracts_4col_table(tmp_path):
-    from vk.v2.spec import parse_spec
+    from vk.spec import parse_spec
 
     repo = _make_repo_with_spec(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
@@ -47,7 +47,7 @@ def test_parse_spec_extracts_4col_table(tmp_path):
 
 
 def test_compute_status_aggregates_local_plan(tmp_path):
-    from vk.v2.spec import compute_status, parse_spec
+    from vk.spec import compute_status, parse_spec
 
     repo = _make_repo_with_spec(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
@@ -66,7 +66,7 @@ def test_compute_status_complete_when_all_phases_complete(tmp_path):
     """All steps ticked + completion.at set on every phase → state == Complete."""
     import yaml
 
-    from vk.v2.spec import compute_status, parse_spec
+    from vk.spec import compute_status, parse_spec
 
     repo = _make_repo_with_spec(tmp_path)
     plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-05-10-fixture-spec-test"
@@ -84,7 +84,7 @@ def test_compute_status_complete_when_all_phases_complete(tmp_path):
 
 
 def test_render_status_md_contains_table_and_aggregate(tmp_path):
-    from vk.v2.spec import compute_status, parse_spec, render_status_md
+    from vk.spec import compute_status, parse_spec, render_status_md
 
     repo = _make_repo_with_spec(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
@@ -104,7 +104,7 @@ def test_vk_v2_spec_status_cli_prints_markdown(tmp_path, monkeypatch):
     monkeypatch.chdir(repo)
     runner = CliRunner()
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
-    result = runner.invoke(app, ["v2", "spec", "status", str(spec_path)])
+    result = runner.invoke(app, ["spec", "status", str(spec_path)])
     assert result.exit_code == 0, result.output
     assert "Spec progress" in result.output
     assert "Test plan A" in result.output
@@ -116,7 +116,7 @@ def test_vk_v2_spec_status_all_walks_specs_dir(tmp_path, monkeypatch):
     repo = _make_repo_with_spec(tmp_path)
     monkeypatch.chdir(repo)
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "spec", "status", "--all"])
+    result = runner.invoke(app, ["spec", "status", "--all"])
     assert result.exit_code == 0, result.output
     assert "2026-05-10-fixture-spec.md" in result.output
     assert "Test plan A" in result.output

@@ -4,10 +4,10 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
 def test_diff_undispatched_yields_create():
-    from vk.v2 import parse
-    from vk.v2.diff import IssueCreate, RepoLabelEnsure, diff
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.diff import IssueCreate, RepoLabelEnsure, diff
+    from vk.render import render
+    from vk.states import GhState
 
     plan = parse(FIXTURE)
     observed = GhState(phases={})
@@ -29,10 +29,10 @@ def test_diff_emits_issuebodychange_when_body_drifts():
     """Observed body differs from rendered → IssueBodyChange emitted."""
     from dataclasses import replace as dc_replace
 
-    from vk.v2 import parse
-    from vk.v2.diff import IssueBodyChange, diff
-    from vk.v2.render import render
-    from vk.v2.states import GhState, PhaseObservation
+    from vk import parse
+    from vk.diff import IssueBodyChange, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -67,10 +67,10 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
     """Already-dispatched, labels match → only RepoLabelEnsure (always emitted)."""
     from dataclasses import replace as dc_replace
 
-    from vk.v2 import parse
-    from vk.v2.diff import IssueCreate, IssueLabelChange, IssueStateChange, diff
-    from vk.v2.render import render
-    from vk.v2.states import GhState, PhaseObservation
+    from vk import parse
+    from vk.diff import IssueCreate, IssueLabelChange, IssueStateChange, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"

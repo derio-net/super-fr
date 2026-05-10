@@ -117,7 +117,7 @@ def ensure_label(
     Uses ``gh label create --force``, which is idempotent: creates the label
     if missing, updates its color/description if present. Without this,
     ``gh issue create --label X`` fails hard on any repo that doesn't
-    already have X — which silently breaks ``vk dispatch`` on new repos.
+    already have X — which silently breaks ``vk apply`` on new repos.
     """
     args = [
         "label",

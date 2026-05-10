@@ -25,7 +25,7 @@ from typing import Any, Literal, TypedDict
 
 import yaml
 
-from vk.v2.parser import Plan, PlanSchemaError, parse
+from vk.parser import Plan, PlanSchemaError, parse
 
 
 class StepSpec(TypedDict):

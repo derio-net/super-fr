@@ -1,6 +1,6 @@
 """Production GhClient — wraps the `gh` CLI for v2's read/write surface.
 
-Conforms to `vk.v2.ghclient.GhClient`. Read methods (`view_issue`,
+Conforms to `vk.ghclient.GhClient`. Read methods (`view_issue`,
 `list_linked_prs`) shape gh's JSON output into the contract that
 `observe`/`diff` expect. Write methods (`edit_issue_*`, `create_issue`,
 `ensure_labels`) delegate to the same `vk.gh` helpers v1 uses, so
@@ -92,7 +92,7 @@ class RealGhClient:
             )
         except _gh.GhError:
             # Fail soft: an unreachable PR query shouldn't blow up the
-            # whole `vk v2 apply --dry-run`. Return [] and let downstream
+            # whole `vk apply --dry-run`. Return [] and let downstream
             # diff/render proceed without PR observations.
             return []
         data = json.loads(out)

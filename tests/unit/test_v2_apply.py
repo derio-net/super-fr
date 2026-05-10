@@ -6,7 +6,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 def _dispatched_plan_with_extra_label():
     """Helper: parse FIXTURE, attach tracking_issue, return (plan, repo, issue_number)."""
-    from vk.v2 import parse
+    from vk import parse
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -24,11 +24,11 @@ def _dispatched_plan_with_extra_label():
 def test_apply_dry_run_calls_no_mutation_methods():
     """dry_run=True returns mutations without touching gh."""
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.apply import apply
-    from vk.v2.diff import diff
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import diff
+    from vk.render import render
+    from vk.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -45,11 +45,11 @@ def test_apply_dry_run_calls_no_mutation_methods():
 
 def test_apply_creates_issue_and_returns_url():
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.apply import apply
-    from vk.v2.diff import diff
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import diff
+    from vk.render import render
+    from vk.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -67,10 +67,10 @@ def test_apply_creates_issue_and_returns_url():
 def test_apply_managed_labels_only_does_not_touch_operator_labels():
     """Pre-existing operator label like 'good-first-issue' must survive apply."""
     from tests.unit.fakes import FakeGhClient
-    from vk.v2.apply import apply
-    from vk.v2.diff import diff
-    from vk.v2.render import render
-    from vk.v2.states import GhState, PhaseObservation
+    from vk.apply import apply
+    from vk.diff import diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
 
     plan, repo, issue_n = _dispatched_plan_with_extra_label()
 
@@ -109,11 +109,11 @@ def test_apply_managed_labels_only_does_not_touch_operator_labels():
 def test_apply_idempotent_after_url_fillin_cycle():
     """Three cycles: create → fill-in URL body → no-op."""
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.apply import apply
-    from vk.v2.diff import IssueBodyChange, RepoLabelEnsure, diff
-    from vk.v2.observe import observe
-    from vk.v2.render import render
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import IssueBodyChange, RepoLabelEnsure, diff
+    from vk.observe import observe
+    from vk.render import render
 
     plan = parse(FIXTURE)
     gh = FakeGhClient()
@@ -157,8 +157,8 @@ def test_apply_propagates_unhandled_mutation_type():
     import pytest
 
     from tests.unit.fakes import FakeGhClient
-    from vk.v2.apply import _UnhandledMutationError, apply
-    from vk.v2.diff import Diff
+    from vk.apply import _UnhandledMutationError, apply
+    from vk.diff import Diff
 
     class NovelMutation:
         """A mutation type apply() doesn't know about."""
@@ -192,11 +192,11 @@ def test_fakegh_failed_mutation_not_recorded_in_calls():
 def test_apply_accumulates_failures_continues_past_one_bad_mutation():
     """Mutation N fails — mutation N+1 still runs; failure is recorded."""
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.apply import apply
-    from vk.v2.diff import diff
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import diff
+    from vk.render import render
+    from vk.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))

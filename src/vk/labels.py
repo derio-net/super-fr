@@ -1,6 +1,6 @@
 """Canonical label registry — single source of truth for label colors,
-descriptions, and dynamic templates used across vk dispatch, vk execute,
-and vk admin labels-sync.
+descriptions, and dynamic templates. Consumed by `vk apply` (which calls
+`ensure_labels` on the target repo before it touches Issues).
 
 Color scheme (lifecycle gradient, board reads visually as a progression):
   vk-ready     blue    queued for an agent to pick up
@@ -62,15 +62,10 @@ def phase_label(n: int) -> LabelDef:
     return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
 
 
-# Role-name → LabelDef map.  Keys match the values in LIFECYCLE
-# (e.g. VK_READY.name == "vk-ready"), NOT the config-role keys in
-# DispatchConfig.labels ("agentic", "manual", "in_progress", "pr_ready").
-# The two namespaces are intentionally separate:
-#   - LIFECYCLE is keyed by VK role (what the label IS)
-#   - DispatchConfig.labels is keyed by dispatch intent (how it is USED)
-# Phase 3's `vk execute claim/pr-opened` consume LabelDef constants
-# directly (VK_READY, IN_PROGRESS, PR_READY) rather than going through
-# the LIFECYCLE dict.
+# Role-name → LabelDef map. Keys are the lifecycle slot names (snake_case);
+# `.name` on each LabelDef is the GitHub label string (kebab-case). The
+# diff/render projection looks up entries by GitHub name when computing
+# label transitions.
 LIFECYCLE: dict[str, LabelDef] = {
     "vk_ready": VK_READY,
     "manual": MANUAL,

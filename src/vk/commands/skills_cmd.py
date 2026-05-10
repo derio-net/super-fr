@@ -4,36 +4,35 @@ from __future__ import annotations
 
 import typer
 
-from vk.commands.dispatch_cmd import dispatch_app
-from vk.commands.execute_cmd import execute_app
+from vk.commands.migrate_cmd import migrate_app
 from vk.commands.plan_cmd import plan_app
-from vk.commands.progress_cmd import progress_app
+from vk.commands.spec_cmd import spec_app
 
 SKILLS: list[tuple[str, str, typer.Typer, str]] = [
     (
         "vk-plan",
         "plan",
         plan_app,
-        "Write phase-structured plans with operator collaboration.",
+        "Author / edit plans (create, tick, complete, rework, self-review).",
     ),
     (
         "vk-dispatch",
-        "dispatch",
-        dispatch_app,
-        "Dispatch plan phases to GitHub Issues (one Issue per phase).",
+        "spec",
+        spec_app,
+        "Spec-level rollups (status across plans).",
     ),
     (
         "vk-execute",
-        "execute",
-        execute_app,
-        "Execute a single agentic phase (agent-facing; one phase = one PR).",
+        "migrate",
+        migrate_app,
+        "v1-to-v2 plan-folder migration.",
     ),
-    (
-        "vk-progress",
-        "progress",
-        progress_app,
-        "Work lifecycle — sync, board, create, transition, audit.",
-    ),
+]
+
+# Singleton commands (not Typer sub-apps) shown after the grouped skills.
+SINGLETONS: list[tuple[str, str]] = [
+    ("vk apply <plan>", "Render → observe → diff → mutate. --yes to write."),
+    ("vk pickup <plan> --phase N", "Markdown phase scope for an agent."),
 ]
 
 
@@ -59,4 +58,8 @@ def skills() -> None:
         for sub_name, sub_help in rows:
             typer.echo(f"  vk {cli_name} {sub_name:<{width}}  {sub_help}")
         typer.echo()
+    typer.echo("Singleton commands:")
+    for cmd, help_text in SINGLETONS:
+        typer.echo(f"  {cmd}  —  {help_text}")
+    typer.echo()
     typer.echo("Full skill docs: ~/.claude/plugins/cache/derio-net/superpowers-for-vk/")

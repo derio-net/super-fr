@@ -24,12 +24,12 @@ def tmp_repo(tmp_path, monkeypatch):
 def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
     """Walk through the v2 lifecycle: create → dispatch → tick → close."""
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.apply import apply
-    from vk.v2.diff import IssueCreate, RepoLabelEnsure, diff
-    from vk.v2.observe import observe
-    from vk.v2.plan_ops import PhaseSpec, create, tick
-    from vk.v2.render import render
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import IssueCreate, RepoLabelEnsure, diff
+    from vk.observe import observe
+    from vk.plan_ops import PhaseSpec, create, tick
+    from vk.render import render
 
     # 1. CREATE the plan
     create(
@@ -105,12 +105,12 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
 def test_full_lifecycle_manual_phase(tmp_repo):
     """Manual phase: completes via complete_phase(--note); apply closes Issue."""
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.apply import apply
-    from vk.v2.diff import diff
-    from vk.v2.observe import observe
-    from vk.v2.plan_ops import PhaseSpec, complete_phase, create
-    from vk.v2.render import render
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import diff
+    from vk.observe import observe
+    from vk.plan_ops import PhaseSpec, complete_phase, create
+    from vk.render import render
 
     create(
         repo_root=tmp_repo,

@@ -1,54 +1,83 @@
 ---
 name: vk-progress
 description: >
-  Work lifecycle tracking. Use when: "sync progress", "status board",
-  "what's in progress", "audit", "transition state", "health summary".
+  Plan / spec progress reporting. Use when: "what's in progress",
+  "status board", "audit drift", "spec rollup", "is this plan up to date".
 ---
 
 # vk-progress
 
-Five subcommands, auto-detecting dispatch/local mode.
+In v2 there is no separate `vk progress` subcommand surface. Progress
+queries decompose into one of three primitives:
+
+| Operator says | Command |
+|---|---|
+| "audit drift on this plan" | `vk apply <plan-dir>` (default dry-run lists what gh would change) |
+| "status of this spec" | `vk spec status <spec-path>` |
+| "status of every spec" | `vk spec status --all` |
+| "mark step done" | `vk plan edit <plan-dir> --tick P<n>.T<n>.S<n>` |
+| "mark phase done" | `vk plan edit <plan-dir> --complete-phase N [--note ...]` |
 
 **Announce at start:** "I'm using vk-progress for [capability]."
 
-## Triage
+## How it works (no separate state store)
 
-| Operator says | Subcommand |
-|---|---|
-| "sync progress", "update the plan" | `vk progress sync <plan> --yes` |
-| "status board", "what's in progress" | `vk progress board` |
-| "create work item", "new bug" | `vk progress create <title> --type <type>` |
-| "move to deployed", "mark complete" | `vk progress transition <target> <state> --yes` |
-| "audit", "what's stale" | `vk progress audit` |
+`vk` is a single state machine: the plan files (`_meta.yaml` + `NN.yaml`) are
+the source of truth, and every projection (Issue body / labels / state, spec
+table row) is computed on demand. There is nothing to "sync" — `vk apply`
+diffs the projection against observed gh state and emits the mutations
+needed to bring them in line. `vk spec status` walks the plan folders
+referenced by the spec table and rolls up step / phase counts.
 
-## Modes
+## Audit drift on a plan
 
-| Capability | Dispatch enabled | Local mode |
-|---|---|---|
-| Sync | Issues -> checkboxes -> spec index | Checkboxes -> Status -> spec index |
-| Board | Query project board | Scan local plan files |
-| Create | Create GitHub Issue | Unavailable (gate refusal) |
-| Transition | Move lifecycle state | Edit Status header |
-| Audit | Full drift checks + Grafana | Local drift checks only |
+```bash
+vk apply <plan-dir>             # default: dry-run; prints what would change
+vk apply <plan-dir> --yes       # apply the changes
+vk apply --all                  # walk every plan in docs/superpowers/plans/
+vk apply <plan-dir> --format json   # machine-readable
+```
 
-All subcommands use `--dry-run`/`--yes` contract.
+If the diff is empty, plan and gh are in sync. If it's non-empty, you have
+an actionable list of label / state / body changes.
 
-## Spec Index Reconciliation
+## Spec rollup
 
-`sync` always reconciles the spec index, even when the plan's Status header is already correct.
-This handles the case where a plan was updated (e.g., by a VK workspace agent) but the spec's
-`## Implementation Plans` table wasn't. Running `vk progress sync` on any plan with a `**Spec:**`
-header will bring the spec index row in line with the plan's current status.
+```bash
+vk spec status <spec-path>      # one spec
+vk spec status --all            # every spec in docs/superpowers/specs/
+```
 
-## Archive-on-Complete
+Output is markdown: per-plan state (Not Started / In Progress / Complete /
+Missing / Unreachable), step + phase counts, and an aggregate. Cross-repo
+plans surface as `Unreachable` in this layer (a future cross-repo lookup
+will resolve them via the gh contents API).
 
-When `sync` flips Status to `Complete`, it interactively offers to move the plan
-file to `docs/superpowers/archived-plans/`:
+The reusable `.github/workflows/vk-spec-status.yml` posts this output as a
+PR comment when a PR touching `docs/superpowers/{plans,archived-plans}/`
+merges.
 
-- Interactive: prompts `"Plan is Complete. Archive ... [y/N]"`
-- `--yes`: archives without prompt.
-- `--dry-run`: prints `"Would archive: <src> -> <dest>"`.
+## Tick / complete phases
 
-The destination is set by `profile.plan.archive_to` in `plan-config.yaml`
-(default `docs/superpowers/archived-plans/`). The spec index row is updated
-to point at the new archived path.
+```bash
+vk plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state x
+vk plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state - --note "<reason>"
+vk plan edit <plan-dir> --complete-phase N
+vk plan edit <plan-dir> --complete-phase N --note "ran <runbook ref>"  # required for manual phases
+```
+
+`--tick` is idempotent on re-tick; `--complete-phase` refuses agentic phases
+with unticked steps (use rework for deferred items — see `vk-plan`).
+
+## Archive-on-complete
+
+When the operator decides a plan folder should move to
+`docs/superpowers/archived-plans/`, do it as an explicit `git mv`:
+
+```bash
+git mv docs/superpowers/plans/<slug>/ docs/superpowers/archived-plans/<slug>/
+```
+
+The next `vk spec status` run will re-resolve the row from the new path.
+There is no automated archiver in v2 — keeping the move explicit avoids the
+v1 footgun where archiving fired without operator intent.

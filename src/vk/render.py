@@ -15,15 +15,15 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from vk.v2.parser import Plan
-from vk.v2.states import (
+from vk.parser import Plan
+from vk.states import (
     GhState,
     PhaseObservation,
     RenderedIssue,
     RenderedState,
     Warning,
 )
-from vk.v2.types import PhaseDoc
+from vk.types import PhaseDoc
 
 _DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 

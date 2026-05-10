@@ -1,4 +1,4 @@
-"""Tests for vk.v2.plan_ops — create / tick / complete_phase / rework / self_review."""
+"""Tests for vk.plan_ops — create / tick / complete_phase / rework / self_review."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _make_spec(repo: Path, slug: str = "test-spec") -> Path:
 
 
 def test_create_scaffolds_folder_and_appends_spec_row(tmp_path):
-    from vk.v2.plan_ops import PhaseSpec, create
+    from vk.plan_ops import PhaseSpec, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -69,7 +69,7 @@ def test_create_scaffolds_folder_and_appends_spec_row(tmp_path):
 
 
 def test_create_rejects_existing_folder(tmp_path):
-    from vk.v2.plan_ops import PhaseSpec, PlanEditError, create
+    from vk.plan_ops import PhaseSpec, PlanEditError, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -92,8 +92,8 @@ def test_create_rejects_existing_folder(tmp_path):
 
 
 def test_tick_marks_step_and_records_timestamp(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.plan_ops import tick
+    from vk import parse
+    from vk.plan_ops import tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -108,8 +108,8 @@ def test_tick_marks_step_and_records_timestamp(tmp_path):
 
 
 def test_tick_idempotent(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.plan_ops import tick
+    from vk import parse
+    from vk.plan_ops import tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -123,7 +123,7 @@ def test_tick_idempotent(tmp_path):
 
 
 def test_tick_skipped_requires_note(tmp_path):
-    from vk.v2.plan_ops import PlanEditError, tick
+    from vk.plan_ops import PlanEditError, tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -134,7 +134,7 @@ def test_tick_skipped_requires_note(tmp_path):
 
 
 def test_tick_unknown_step_id(tmp_path):
-    from vk.v2.plan_ops import PlanEditError, tick
+    from vk.plan_ops import PlanEditError, tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -149,7 +149,7 @@ def test_tick_unknown_step_id(tmp_path):
 
 
 def test_complete_phase_agentic_refuses_unticked(tmp_path):
-    from vk.v2.plan_ops import PlanEditError, complete_phase
+    from vk.plan_ops import PlanEditError, complete_phase
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -160,8 +160,8 @@ def test_complete_phase_agentic_refuses_unticked(tmp_path):
 
 
 def test_complete_phase_agentic_succeeds_after_ticking(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.plan_ops import complete_phase, tick
+    from vk import parse
+    from vk.plan_ops import complete_phase, tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -175,7 +175,7 @@ def test_complete_phase_agentic_succeeds_after_ticking(tmp_path):
 
 
 def test_complete_phase_manual_requires_note(tmp_path):
-    from vk.v2.plan_ops import PlanEditError, complete_phase
+    from vk.plan_ops import PlanEditError, complete_phase
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     dest = tmp_path / "v2_plan_multi_phase"
@@ -187,8 +187,8 @@ def test_complete_phase_manual_requires_note(tmp_path):
 
 
 def test_complete_phase_manual_succeeds_with_note(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.plan_ops import complete_phase
+    from vk import parse
+    from vk.plan_ops import complete_phase
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     dest = tmp_path / "v2_plan_multi_phase"
@@ -222,7 +222,7 @@ def _make_archived_parent_plan(repo: Path, slug: str, spec_path: Path) -> Path:
 
 
 def test_rework_create_scaffolds_sibling_with_parent_link(tmp_path):
-    from vk.v2.plan_ops import rework_create
+    from vk.plan_ops import rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -237,7 +237,7 @@ def test_rework_create_scaffolds_sibling_with_parent_link(tmp_path):
 
 
 def test_rework_create_collision_check_across_directories(tmp_path):
-    from vk.v2.plan_ops import PlanEditError, rework_create
+    from vk.plan_ops import PlanEditError, rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -256,8 +256,8 @@ def test_rework_create_collision_check_across_directories(tmp_path):
 
 
 def test_rework_add_origin_appends_with_auto_id(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.plan_ops import rework_add_origin, rework_create
+    from vk import parse
+    from vk.plan_ops import rework_add_origin, rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -275,7 +275,7 @@ def test_rework_add_origin_appends_with_auto_id(tmp_path):
 
 
 def test_rework_add_origin_rejects_non_rework_plan(tmp_path):
-    from vk.v2.plan_ops import PlanEditError, rework_add_origin
+    from vk.plan_ops import PlanEditError, rework_add_origin
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -290,7 +290,7 @@ def test_rework_add_origin_rejects_non_rework_plan(tmp_path):
 
 
 def test_rework_list_filters_by_parent_plan(tmp_path):
-    from vk.v2.plan_ops import rework_create, rework_list
+    from vk.plan_ops import rework_create, rework_list
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -314,8 +314,8 @@ def test_rework_list_filters_by_parent_plan(tmp_path):
 
 
 def test_self_review_clean_plan_has_no_issues(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.plan_ops import self_review
+    from vk import parse
+    from vk.plan_ops import self_review
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -326,8 +326,8 @@ def test_self_review_clean_plan_has_no_issues(tmp_path):
 
 
 def test_self_review_detects_manual_complete_without_note(tmp_path):
-    from vk.v2 import parse
-    from vk.v2.plan_ops import self_review
+    from vk import parse
+    from vk.plan_ops import self_review
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     dest = tmp_path / "v2_plan_multi_phase"
