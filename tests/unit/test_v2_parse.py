@@ -148,6 +148,41 @@ def test_plan_prose_path_resolves_under_dir():
     assert plan.prose_path.exists()
 
 
+def test_plan_repo_root_discovered_when_in_git_repo():
+    """parse() walks up from plan_dir to find .git."""
+    from vk.v2 import parse
+
+    plan = parse(FIXTURE_DIR)
+    # We're running from the superpowers-for-vk repo, so repo_root should resolve
+    assert plan.repo_root is not None
+    assert (plan.repo_root / ".git").exists()
+    assert FIXTURE_DIR.is_relative_to(plan.repo_root)
+
+
+def test_plan_repo_relative_dir_strips_repo_prefix():
+    """Plan.repo_relative_dir is dir relative to repo_root."""
+    from vk.v2 import parse
+
+    plan = parse(FIXTURE_DIR)
+    rel = plan.repo_relative_dir
+    assert not rel.is_absolute()
+    assert str(rel).startswith("tests/unit/fixtures/")
+
+
+def test_plan_repo_relative_dir_falls_back_when_no_git(tmp_path):
+    """Outside a git repo, repo_relative_dir falls back to absolute dir."""
+    import shutil
+
+    from vk.v2 import parse
+
+    # Copy fixture to a tmp dir that is NOT inside a git repo
+    dest = tmp_path / "v2_plan_minimal"
+    shutil.copytree(FIXTURE_DIR, dest)
+    plan = parse(dest)
+    assert plan.repo_root is None
+    assert plan.repo_relative_dir == plan.dir
+
+
 def test_phasedoc_loads_minimal_fixture():
     import yaml
 
