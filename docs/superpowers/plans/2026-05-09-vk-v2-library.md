@@ -448,10 +448,10 @@
 
 ### Task 1: Renderer (pure)
 
-- [ ] **Step 1: Define `RenderedState`, `RenderedIssue`, `GhState`, `PhaseObservation`, `PrObservation`**
+- [x] **Step 1: Define `RenderedState`, `RenderedIssue`, `GhState`, `PhaseObservation`, `PrObservation`**
   Create `src/vk/v2/states.py` with frozen dataclasses per spec §"Rendering" and §"Observing". No methods. All fields typed.
 
-- [ ] **Step 2: Test `render()` for the simplest case (one undispatched agentic phase, no observation)**
+- [x] **Step 2: Test `render()` for the simplest case (one undispatched agentic phase, no observation)**
   Create `tests/unit/test_v2_render.py`:
   ```python
   from vk.v2 import parse
@@ -476,7 +476,7 @@
   ```
   Run: ImportError.
 
-- [ ] **Step 3: Implement `render()` skeleton + body template**
+- [x] **Step 3: Implement `render()` skeleton + body template**
   Create `src/vk/v2/render.py`:
   - `_render_body(phase, plan) -> str` — static template per spec §"Rendering" (tracking block + Instruction/Workspace/Dependencies sections)
   - `_lifecycle_label(phase, observation) -> str | None` — implements the table from spec
@@ -484,7 +484,7 @@
   - `render(plan, observed) -> RenderedState`
   Run Step 2: green.
 
-- [ ] **Step 4: Test lifecycle label projection — table-driven**
+- [x] **Step 4: Test lifecycle label projection — table-driven**
   Append:
   ```python
   import pytest
@@ -506,11 +506,11 @@
   ```
   Run: red (some cases).
 
-- [ ] **Step 5: Implement lifecycle-label projection table**
+- [x] **Step 5: Implement lifecycle-label projection table**
   Per spec §"Rendering". Cover: vk-ready / manual / in-progress / pr-ready / None.
   Run Step 4: green.
 
-- [ ] **Step 6: Test phase-completion projection — agentic**
+- [x] **Step 6: Test phase-completion projection — agentic**
   Append:
   ```python
   def test_agentic_phase_complete_when_all_steps_ticked_and_pr_merged():
@@ -535,27 +535,27 @@
   ```
   Run: red.
 
-- [ ] **Step 7: Implement `_phase_complete()` per spec rules**
+- [x] **Step 7: Implement `_phase_complete()` per spec rules**
   Agentic: completion.at OR (all steps ticked AND merged PR observed AND no open PR). Manual: completion.at AND completion.note required; steps optional.
   Run Step 6: green.
 
-- [ ] **Step 8: Test archive_decision = all phases complete**
+- [x] **Step 8: Test archive_decision = all phases complete**
   Add `tests/unit/fixtures/v2_plan_two_phase/` with two phases. Both complete → archive=True; one incomplete → archive=False.
 
-- [ ] **Step 9: Implement and verify**
+- [x] **Step 9: Implement and verify**
   Run: green.
 
-- [ ] **Step 10: Test render() drift warnings (3 cases per spec)**
+- [x] **Step 10: Test render() drift warnings (3 cases per spec)**
   - Steps all ticked, PR not merged → warning
   - PR merged, steps unticked → warning
   - Issue closed, plan says incomplete → warning
 
-- [ ] **Step 11: Implement drift warnings in render()**
+- [x] **Step 11: Implement drift warnings in render()**
   Add `Warnings` field (tuple of strings) to `RenderedState`. Populate in `render()`. Run: green.
 
 ### Task 2: Observer (gh-API-backed)
 
-- [ ] **Step 1: Define `GhClient` Protocol**
+- [x] **Step 1: Define `GhClient` Protocol**
   Create `src/vk/v2/ghclient.py`:
   ```python
   from typing import Protocol
@@ -571,10 +571,10 @@
       def ensure_labels(self, repo: str, labels: list) -> None: ...
   ```
 
-- [ ] **Step 2: Implement `FakeGhClient` for tests**
+- [x] **Step 2: Implement `FakeGhClient` for tests**
   Create `tests/unit/fakes.py` with `FakeGhClient`: in-memory state, records calls, supports preconditions.
 
-- [ ] **Step 3: Test `observe()` for one-phase plan with no tracking_issue**
+- [x] **Step 3: Test `observe()` for one-phase plan with no tracking_issue**
   Create `tests/unit/test_v2_observe.py`:
   ```python
   from vk.v2 import parse
@@ -589,21 +589,21 @@
   ```
   Run: red.
 
-- [ ] **Step 4: Implement `observe()` skeleton**
+- [x] **Step 4: Implement `observe()` skeleton**
   Create `src/vk/v2/observe.py`. For each phase with `tracking_issue`: parse repo + number, query gh, build PhaseObservation. Phases without: skip. Run: green.
 
-- [ ] **Step 5: Test `observe()` for dispatched phase with merged PR**
+- [x] **Step 5: Test `observe()` for dispatched phase with merged PR**
   Use a fixture phase yaml with `tracking_issue` set; FakeGhClient pre-loaded with corresponding Issue + PR data. Assert `observed.phases[1].linked_prs[0].merged is True`.
 
-- [ ] **Step 6: Implement linked-PR discovery**
+- [x] **Step 6: Implement linked-PR discovery**
   GraphQL `closingIssuesReferences` first; title-pattern fallback. Run: green.
 
 ### Task 3: Differ + Applier
 
-- [ ] **Step 1: Define `Diff`, `IssueLabelChange`, `IssueStateChange`, `IssueBodyChange`, `IssueCreate`, `RepoLabelEnsure`**
+- [x] **Step 1: Define `Diff`, `IssueLabelChange`, `IssueStateChange`, `IssueBodyChange`, `IssueCreate`, `RepoLabelEnsure`**
   In `src/vk/v2/diff.py`. All frozen.
 
-- [ ] **Step 2: Test `diff()` — undispatched phase yields IssueCreate**
+- [x] **Step 2: Test `diff()` — undispatched phase yields IssueCreate**
   Create `tests/unit/test_v2_diff.py`:
   ```python
   def test_diff_undispatched_yields_create():
@@ -618,35 +618,35 @@
   ```
   Run: red.
 
-- [ ] **Step 3: Implement `diff()`**
+- [x] **Step 3: Implement `diff()`**
   For each phase: if no tracking_issue and no observation → IssueCreate; if tracking_issue and observation → compare labels, body, open/closed, emit changes. Always emit RepoLabelEnsure for the target_repo. Run: green.
 
-- [ ] **Step 4: Test diff is idempotent — re-diff after apply yields no mutations**
+- [x] **Step 4: Test diff is idempotent — re-diff after apply yields no mutations**
   Append a placeholder test that runs after the applier exists.
 
-- [ ] **Step 5: Test `apply()` honors managed-labels-only rule**
+- [x] **Step 5: Test `apply()` honors managed-labels-only rule**
   - Pre-load FakeGhClient Issue with operator-added label `good-first-issue`
   - render → diff → apply
   - Assert `good-first-issue` was NOT removed; only managed labels (vk-*/spec:/plan:/phase:) touched
 
-- [ ] **Step 6: Implement `apply()`**
+- [x] **Step 6: Implement `apply()`**
   Create `src/vk/v2/apply.py`. Iterate mutations; for label changes, intersect with `MANAGED_LABEL_PREFIXES = {"vk-", "spec:", "plan:", "phase:"}` plus the lifecycle names. `dry_run=True`: return mutations without executing. `yes=False` and a destructive op: prompt via `typer.confirm` if invoked from CLI. Run: green.
 
-- [ ] **Step 7: Test `apply()` dry-run returns mutations without calling gh**
+- [x] **Step 7: Test `apply()` dry-run returns mutations without calling gh**
   Append: `apply(diff, fake_gh, dry_run=True, yes=True)` → fake_gh has zero recorded calls.
 
-- [ ] **Step 8: Test `apply()` is atomic-per-mutation, accumulates failures**
+- [x] **Step 8: Test `apply()` is atomic-per-mutation, accumulates failures**
   - Configure FakeGhClient to fail on the second mutation
   - Apply 3 mutations
   - Assert: m1 succeeded, m2 failed (recorded in result), m3 succeeded
 
-- [ ] **Step 9: Implement failure accumulation**
+- [x] **Step 9: Implement failure accumulation**
   Run: green.
 
-- [ ] **Step 10: Run idempotency end-to-end**
+- [x] **Step 10: Run idempotency end-to-end**
   Re-run Step 4's test. Apply → re-observe → re-diff → assert empty mutations. Green.
 
-- [ ] **Step 11: Verify ruff, mypy, full test suite**
+- [x] **Step 11: Verify ruff, mypy, full test suite**
   ```
   uv run ruff check src/vk/v2/ tests/unit/test_v2_*.py
   uv run mypy src/vk/v2/
@@ -654,7 +654,7 @@
   ```
   All green.
 
-- [ ] **Step 12: Commit Phase 2**
+- [x] **Step 12: Commit Phase 2**
   ```
   feat(v2): renderer + observer + differ + applier — Phase 2
 
