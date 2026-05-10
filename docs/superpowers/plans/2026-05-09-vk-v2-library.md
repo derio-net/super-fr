@@ -1068,15 +1068,15 @@
 
 ### Task 1: Bump version triplet
 
-- [ ] **Step 1: Update `pyproject.toml`** — set `[project].version = "2.0.0"`
-- [ ] **Step 2: Update `.claude-plugin/plugin.json`** — set `.version = "2.0.0"`
-- [ ] **Step 3: Update `.claude-plugin/marketplace.json`** — set `.plugins[0].version = "2.0.0"`
-- [ ] **Step 4: Run `uv sync`** — uv.lock picks up `vk==2.0.0`
-- [ ] **Step 5: Verify `uv run vk --version`** — outputs `2.0.0`
+- [x] **Step 1: Update `pyproject.toml`** — set `[project].version = "2.0.0"`
+- [x] **Step 2: Update `.claude-plugin/plugin.json`** — set `.version = "2.0.0"`
+- [x] **Step 3: Update `.claude-plugin/marketplace.json`** — set `.plugins[0].version = "2.0.0"`
+- [x] **Step 4: Run `uv sync`** — uv.lock picks up `vk==2.0.0`
+- [x] **Step 5: Verify `uv run vk --version`** — outputs `2.0.0`
 
 ### Task 2: CHANGELOG
 
-- [ ] **Step 1: Add v2.0.0 section to `CHANGELOG.md`**
+- [x] **Step 1: Add v2.0.0 section to `CHANGELOG.md`**
   Brief but explicit: "BREAKING — full rewrite per 2026-05-06 spec. Plan format is now folder-based (v2.0); use `vk migrate v1-to-v2` to convert existing v1 plans. CLI surface collapses to `vk apply`, `vk plan create/edit/rework`, `vk pickup`, `vk spec status`, `vk migrate`. The bridge in willikins requires Plan 2 to migrate to v2 vk; until then it operates on consumer repos that haven't migrated."
 
 ### Task 3: Tag and push
