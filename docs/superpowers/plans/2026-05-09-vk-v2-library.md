@@ -25,7 +25,7 @@
 
 ### Task 1: Pydantic schemas
 
-- [ ] **Step 1: Create v2 package skeleton**
+- [x] **Step 1: Create v2 package skeleton**
   Create empty package files. Run:
   ```
   mkdir -p src/vk/v2 tests/unit/fixtures/v2_plan_minimal
@@ -33,7 +33,7 @@
   ```
   Verify: `python -c "import vk.v2"` exits 0.
 
-- [ ] **Step 2: Write fixture v2 plan folder (minimal valid)**
+- [x] **Step 2: Write fixture v2 plan folder (minimal valid)**
   Create `tests/unit/fixtures/v2_plan_minimal/_meta.yaml`:
   BEGIN: tests/unit/fixtures/v2_plan_minimal/_meta.yaml
   ```
@@ -81,7 +81,7 @@
   ```
   END: tests/unit/fixtures/v2_plan_minimal/01.yaml
 
-- [ ] **Step 3: Write test asserting pydantic loads `_meta.yaml`**
+- [x] **Step 3: Write test asserting pydantic loads `_meta.yaml`**
   Create `tests/unit/test_v2_parse.py`:
   ```python
   import pytest
@@ -101,7 +101,7 @@
   ```
   Run: `uv run pytest tests/unit/test_v2_parse.py::test_planmeta_loads_minimal_fixture -q` — expect ImportError (PlanMeta doesn't exist).
 
-- [ ] **Step 4: Implement `PlanMeta` pydantic model**
+- [x] **Step 4: Implement `PlanMeta` pydantic model**
   Edit `src/vk/v2/types.py`:
   BEGIN: src/vk/v2/types.py
   ```python
@@ -133,7 +133,7 @@
   END: src/vk/v2/types.py
   Re-run Step 3's test: green.
 
-- [ ] **Step 5: Test PlanMeta rejects bad input**
+- [x] **Step 5: Test PlanMeta rejects bad input**
   Append to `test_v2_parse.py`:
   ```python
   def test_planmeta_rejects_missing_required():
@@ -154,7 +154,7 @@
   ```
   Run: green.
 
-- [ ] **Step 6: Test PhaseDoc loads minimal fixture**
+- [x] **Step 6: Test PhaseDoc loads minimal fixture**
   Append:
   ```python
   def test_phasedoc_loads_minimal_fixture():
@@ -169,7 +169,7 @@
   ```
   Run: ImportError.
 
-- [ ] **Step 7: Implement `PhaseDoc`, `Task`, `Step`, `PhaseStateBlock`, `StepState`, `Completion`**
+- [x] **Step 7: Implement `PhaseDoc`, `Task`, `Step`, `PhaseStateBlock`, `StepState`, `Completion`**
   Append to `src/vk/v2/types.py`:
   ```python
   class Step(BaseModel):
@@ -223,7 +223,7 @@
   ```
   Run Step 6's test: green.
 
-- [ ] **Step 8: Test cross-validation — state.steps keys match step ids**
+- [x] **Step 8: Test cross-validation — state.steps keys match step ids**
   Append:
   ```python
   def test_phasedoc_rejects_state_key_mismatch():
@@ -242,7 +242,7 @@
   ```
   Run: red — pydantic doesn't enforce this yet.
 
-- [ ] **Step 9: Add cross-validator to PhaseDoc**
+- [x] **Step 9: Add cross-validator to PhaseDoc**
   Add `from pydantic import model_validator` to imports. Add to `PhaseDoc`:
   ```python
       @model_validator(mode="after")
@@ -262,7 +262,7 @@
 
 ### Task 2: `vk.v2.parse`
 
-- [ ] **Step 1: Test parse() round-trips minimal fixture**
+- [x] **Step 1: Test parse() round-trips minimal fixture**
   Append to `test_v2_parse.py`:
   ```python
   def test_parse_minimal_fixture():
@@ -275,7 +275,7 @@
   ```
   Run: ImportError.
 
-- [ ] **Step 2: Implement `vk.v2.parse`**
+- [x] **Step 2: Implement `vk.v2.parse`**
   Create `src/vk/v2/parse.py`:
   BEGIN: src/vk/v2/parse.py
   ```python
@@ -335,7 +335,7 @@
   ```
   END: src/vk/v2/parse.py
 
-- [ ] **Step 3: Wire parse() into `vk.v2.__init__`**
+- [x] **Step 3: Wire parse() into `vk.v2.__init__`**
   Edit `src/vk/v2/__init__.py`:
   ```python
   from vk.v2.parse import parse, Plan, PlanSchemaError
@@ -352,7 +352,7 @@
   ```
   Run Task 2 Step 1's test: green.
 
-- [ ] **Step 4: Test parse() rejects v1 plan**
+- [x] **Step 4: Test parse() rejects v1 plan**
   Append:
   ```python
   def test_parse_rejects_v1_plan(tmp_path):
@@ -365,7 +365,7 @@
   ```
   Run: green.
 
-- [ ] **Step 5: Test parse() enforces vk_version constraint**
+- [x] **Step 5: Test parse() enforces vk_version constraint**
   Add fixture `tests/unit/fixtures/v2_plan_future/_meta.yaml` with `vk_version: ">=99.0.0"`, plus `_prose.md` and `01.yaml`. Append:
   ```python
   def test_parse_enforces_vk_version(monkeypatch):
@@ -378,7 +378,7 @@
   ```
   Run: red.
 
-- [ ] **Step 6: Add version-constraint enforcement in parse()**
+- [x] **Step 6: Add version-constraint enforcement in parse()**
   Edit `src/vk/v2/parse.py`:
   - Add `import importlib.metadata`
   - Add `from packaging.specifiers import SpecifierSet`
@@ -400,7 +400,7 @@
 
 ### Task 3: Round-trip and regression check
 
-- [ ] **Step 1: Test round-trip — parse, serialize back, parse again equals original**
+- [x] **Step 1: Test round-trip — parse, serialize back, parse again equals original**
   Append:
   ```python
   def test_parse_roundtrip(tmp_path):
@@ -416,14 +416,14 @@
   ```
   Run: green.
 
-- [ ] **Step 2: Verify v1 tests still pass**
+- [x] **Step 2: Verify v1 tests still pass**
   Run `uv run pytest -q --no-cov` — every existing v1 test still green.
 
-- [ ] **Step 3: Verify ruff and mypy clean on new code**
+- [x] **Step 3: Verify ruff and mypy clean on new code**
   Run `uv run ruff check src/vk/v2/ tests/unit/test_v2_parse.py` — clean.
   Run `uv run mypy src/vk/v2/` — clean.
 
-- [ ] **Step 4: Commit Phase 1**
+- [x] **Step 4: Commit Phase 1**
   Stage: `src/vk/v2/`, `tests/unit/test_v2_parse.py`, `tests/unit/fixtures/v2_plan_minimal/`, `tests/unit/fixtures/v2_plan_future/`, `pyproject.toml`, `uv.lock`.
   Message:
   ```
