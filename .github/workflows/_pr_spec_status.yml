@@ -1,0 +1,8 @@
+name: PR spec status (self)
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  status:
+    uses: ./.github/workflows/vk-spec-status.yml

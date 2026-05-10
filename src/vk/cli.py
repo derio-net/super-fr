@@ -11,6 +11,7 @@ from vk.commands.issue_cmd import issue_app
 from vk.commands.plan_cmd import plan_app
 from vk.commands.progress_cmd import progress_app
 from vk.commands.skills_cmd import skills as skills_command
+from vk.v2.cli import v2_app
 
 app = typer.Typer(
     name="vk",
@@ -26,6 +27,7 @@ app.add_typer(execute_app, name="execute")
 app.add_typer(issue_app, name="issue")
 app.command(name="init")(init_command)
 app.command(name="skills")(skills_command)
+app.add_typer(v2_app, name="v2")
 
 
 def version_callback(value: bool) -> None:
