@@ -7,8 +7,8 @@ description: >
 
 # vk-progress
 
-In v2 there is no separate `vk progress` subcommand surface. Progress
-queries decompose into one of three primitives:
+In v2 there is no dedicated progress subcommand surface. Progress queries
+decompose into one of three primitives:
 
 | Operator says | Command |
 |---|---|

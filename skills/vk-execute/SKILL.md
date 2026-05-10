@@ -30,18 +30,24 @@ When creating the PR for an agentic phase:
 
 The `vk pickup` output below provides the canonical PR title template.
 
-## Label lifecycle (no manual claim/pr-opened verbs in v2)
+## Label lifecycle (no manual transition verbs in v2)
 
-The Issue moves: `vk-ready → in-progress → pr-ready → closed`. v2 derives
-every transition from observed state — there is no `vk execute claim` or
-`vk execute pr-opened`.
+The Issue moves: `vk-ready → in-progress → pr-ready → closed`. v2 has no
+manual transition verbs — every label flip is derived from what the
+renderer can observe on the Issue plus its linked PRs:
 
-- **vk-ready → in-progress:** project the agent assignment / branch existence.
-- **in-progress → pr-ready:** projection sees the linked open PR.
-- **pr-ready → closed:** projection sees the merged PR + completion timestamp.
+- **`vk-ready`:** the phase has a `tracking_issue` but no assignee, no draft
+  PR, and no open non-draft PR.
+- **`in-progress`:** the Issue has an assignee OR a draft linked PR.
+- **`pr-ready`:** an open non-draft, non-merged linked PR exists.
+- **closed:** `state.completion.at` is set on the phase AND a merged PR is
+  observed AND no open linked PR remains (per `_phase_complete` in
+  `render.py`).
 
-The `vk apply` step at the end of the phase pushes whichever transitions
-the renderer projects from current GitHub state.
+The `vk apply` step at the end of the phase pushes whichever transitions the
+renderer projects from current GitHub state. To trigger `in-progress`,
+assign yourself to the Issue (or open a draft PR); to trigger `pr-ready`,
+take the PR out of draft.
 
 ## Procedure
 
