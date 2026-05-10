@@ -7,9 +7,9 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 def test_render_body_uses_repo_relative_path_not_absolute():
     """Issue body must not leak the dispatcher's absolute filesystem path."""
-    from vk.v2 import parse
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -21,9 +21,9 @@ def test_render_body_uses_repo_relative_path_not_absolute():
 
 
 def test_render_undispatched_phase_yields_create_intent():
-    from vk.v2 import parse
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState
 
     plan = parse(FIXTURE)
     observed = GhState(phases={})
@@ -91,9 +91,9 @@ def test_render_undispatched_phase_yields_create_intent():
     ],
 )
 def test_lifecycle_label_projection(obs_kwargs, expected_label):
-    from vk.v2 import parse
-    from vk.v2.render import _lifecycle_label
-    from vk.v2.states import PhaseObservation, PrObservation
+    from vk import parse
+    from vk.render import _lifecycle_label
+    from vk.states import PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     obs = None
@@ -109,9 +109,9 @@ def test_lifecycle_label_projection(obs_kwargs, expected_label):
 
 
 def test_agentic_phase_complete_when_all_steps_ticked_and_pr_merged():
-    from vk.v2 import parse
-    from vk.v2.render import _phase_complete
-    from vk.v2.states import PhaseObservation, PrObservation
+    from vk import parse
+    from vk.render import _phase_complete
+    from vk.states import PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     # No PR observed → not complete
@@ -156,8 +156,8 @@ def test_agentic_phase_complete_when_all_steps_ticked_and_pr_merged():
 
 
 def test_manual_phase_complete_requires_completion_at_and_note():
-    from vk.v2 import parse
-    from vk.v2.render import _phase_complete
+    from vk import parse
+    from vk.render import _phase_complete
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -197,9 +197,9 @@ def test_manual_phase_complete_requires_completion_at_and_note():
 
 def test_drift_warning_steps_ticked_pr_not_merged():
     """All steps ticked but no merged PR → warning surfaces."""
-    from vk.v2 import parse
-    from vk.v2.render import render
-    from vk.v2.states import GhState, PhaseObservation, PrObservation
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     ticked = plan.phases[0].model_copy(
@@ -231,9 +231,9 @@ def test_drift_warning_steps_ticked_pr_not_merged():
 
 def test_drift_warning_pr_merged_steps_unticked():
     """Merged PR but steps unticked → warning surfaces."""
-    from vk.v2 import parse
-    from vk.v2.render import render
-    from vk.v2.states import GhState, PhaseObservation, PrObservation
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     obs = PhaseObservation(
@@ -251,9 +251,9 @@ def test_drift_warning_pr_merged_steps_unticked():
 
 def test_drift_warning_issue_closed_plan_incomplete():
     """Issue closed externally while plan still incomplete → warning."""
-    from vk.v2 import parse
-    from vk.v2.render import render
-    from vk.v2.states import GhState, PhaseObservation
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     obs = PhaseObservation(
@@ -273,9 +273,9 @@ def test_archive_decision_true_when_all_phases_complete():
     """All phases complete → archive_decision True."""
     from dataclasses import replace as dc_replace
 
-    from vk.v2 import parse
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -300,9 +300,9 @@ def test_archive_decision_true_when_all_phases_complete():
 
 
 def test_archive_decision_false_when_any_phase_incomplete():
-    from vk.v2 import parse
-    from vk.v2.render import render
-    from vk.v2.states import GhState
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -312,8 +312,8 @@ def test_archive_decision_false_when_any_phase_incomplete():
 
 def test_manual_phase_label_is_manual():
     """A phase with tag=manual gets the manual lifecycle label, not vk-ready."""
-    from vk.v2 import parse
-    from vk.v2.render import _lifecycle_label
+    from vk import parse
+    from vk.render import _lifecycle_label
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)

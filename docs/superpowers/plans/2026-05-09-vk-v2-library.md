@@ -949,7 +949,7 @@
 
 ### Task 1: Delete v1 source modules + tests
 
-- [ ] **Step 1: Move v1 modules out of `src/vk/`** — `git rm` per spec retirement table
+- [x] **Step 1: Move v1 modules out of `src/vk/`** — `git rm` per spec retirement table
   ```
   git rm src/vk/plan/parser.py src/vk/plan/models.py src/vk/plan/format.py \
          src/vk/plan/writer.py src/vk/plan/convert.py src/vk/plan/validate.py \
@@ -962,7 +962,7 @@
   ```
   (`src/vk/labels.py` stays — registry preserved; `src/vk/gh.py` stays.)
 
-- [ ] **Step 2: Delete v1 tests** — `git rm`
+- [x] **Step 2: Delete v1 tests** — `git rm`
   ```
   git rm tests/unit/test_plan_parser.py tests/unit/test_plan_writer.py \
          tests/unit/test_plan_validate.py tests/unit/test_plan_loose_format.py \
@@ -977,10 +977,10 @@
          tests/integration/test_plan_rework.py
   ```
 
-- [ ] **Step 3: Update `src/vk/cli.py`** — remove imports/registrations of deleted command modules
+- [x] **Step 3: Update `src/vk/cli.py`** — remove imports/registrations of deleted command modules
   Open `src/vk/cli.py`. Remove every `add_typer` and `from vk.commands.X` line for the deleted commands. Keep `apply_app`, `plan_app` (v2 version), `pickup_app`, `spec_app`, `migrate_app`.
 
-- [ ] **Step 4: Move v2 commands from `vk.v2.commands` to `vk.commands`** (the v2 namespace was a coexistence scaffold; collapse it now)
+- [x] **Step 4: Move v2 commands from `vk.v2.commands` to `vk.commands`** (the v2 namespace was a coexistence scaffold; collapse it now)
   ```
   git mv src/vk/v2/commands/* src/vk/commands/
   for f in src/vk/v2/*.py; do
@@ -991,13 +991,13 @@
   ```
   Update all imports (`from vk.v2.X` → `from vk.X`). Update tests similarly.
 
-- [ ] **Step 5: Run pytest — verify only v2 tests remain and all pass**
+- [x] **Step 5: Run pytest — verify only v2 tests remain and all pass**
   ```
   uv run pytest -q --no-cov
   ```
   Green.
 
-- [ ] **Step 6: Run ruff + mypy**
+- [x] **Step 6: Run ruff + mypy**
   ```
   uv run ruff format src/ tests/
   uv run ruff check src/ tests/
@@ -1007,39 +1007,39 @@
 
 ### Task 2: Update skill files
 
-- [ ] **Step 1: Update `skills/vk-plan/SKILL.md`**
+- [x] **Step 1: Update `skills/vk-plan/SKILL.md`**
   - `vk plan new` → `vk plan create`
   - `vk plan self-review` → unchanged name; lints differ
   - `vk plan spec-index` → DELETED; spec rows are auto-written by `vk plan create` and `vk plan rework`. Remove reference.
   - Migration section reference (vk-execute) → remove.
   - Add note about v2 plan-as-folder format.
 
-- [ ] **Step 2: Update `skills/vk-dispatch/SKILL.md`**
+- [x] **Step 2: Update `skills/vk-dispatch/SKILL.md`**
   - `vk dispatch create` → `vk apply <plan-dir>`
   - `vk dispatch migrate` → DELETED; `vk apply` is idempotent
   - Update entire flow narrative.
 
-- [ ] **Step 3: Update `skills/vk-execute/SKILL.md`**
+- [x] **Step 3: Update `skills/vk-execute/SKILL.md`**
   - `vk execute scope` / `check-deps` → `vk pickup <plan-dir> --phase N`
   - `vk execute claim` → DELETED (no claim verb in v2)
   - `vk execute pr-opened` → DELETED (observed by next apply tick)
   - `vk execute pr-body` → `vk pickup` outputs PR title template
   - `vk execute check-step` → `vk plan edit --tick`
 
-- [ ] **Step 4: Update `skills/vk-progress/SKILL.md`**
+- [x] **Step 4: Update `skills/vk-progress/SKILL.md`**
   - `vk progress sync` / `audit` / `transition` / `board` / `create` → ALL DELETED
   - Replace with `vk apply --dry-run` (audit), `vk plan edit --complete-phase` (transition), `vk spec status --all` (board)
 
-- [ ] **Step 5: Verify skills are coherent** — read each SKILL.md after edits, ensure no dangling references
+- [x] **Step 5: Verify skills are coherent** — read each SKILL.md after edits, ensure no dangling references
 
 ### Task 3: Confirm final state
 
-- [ ] **Step 1: `grep -rn "vk progress\|vk dispatch\|vk admin\|vk issue \|vk execute" skills/ src/`**
+- [x] **Step 1: `grep -rn "vk progress\|vk dispatch\|vk admin\|vk issue \|vk execute" skills/ src/`**
   Expected: zero matches.
 
-- [ ] **Step 2: `vk --help`** — confirm only v2 commands shown.
+- [x] **Step 2: `vk --help`** — confirm only v2 commands shown.
 
-- [ ] **Step 3: Commit Phase 4**
+- [x] **Step 3: Commit Phase 4**
   ```
   feat(v2)!: retire v1 code and update skills — Phase 4
 

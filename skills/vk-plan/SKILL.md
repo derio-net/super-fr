@@ -7,18 +7,26 @@ description: >
 
 # vk-plan
 
-Produce implementation plans through collaborative dialogue. Conversational parts
-stay here; mechanical parts delegate to the `vk plan` CLI.
+Produce implementation plans through collaborative dialogue. Conversational
+parts stay here; mechanical parts delegate to the `vk plan` CLI.
 
 **Announce at start:** "I'm using vk-plan to create the implementation plan."
 
-## Format
+## Format (v2 plan-as-folder)
 
-Plans are always phased. Dispatch intent is an orthogonal concern, expressed by
-the presence (or absence) of a `dispatch:` block in `plan-config.yaml`.
+A plan is a directory under `docs/superpowers/plans/<slug>/` containing:
 
-If you encounter a legacy flat plan, migrate it first — see the Migration
-section in `vk-execute`.
+- `_meta.yaml` — schema_version, plan slug, spec ref, target_repo, vk_version,
+  created date, optional rework metadata (`parent_plan`, `prior_rework`,
+  `origin_items`).
+- `_prose.md` — the human-readable narrative. Tooling never parses this; it's
+  for humans (and the implementing agent).
+- `NN.yaml` (one file per phase, two-digit zero-padded: `01.yaml`, `02.yaml`,
+  …, `99.yaml`) — phase header, tasks, steps, and per-step state. Per-phase
+  files prevent merge conflicts when parallel branches tick different phases.
+
+Every step id follows `P<n>.T<n>.S<n>` (phase number, task number, step
+number). The renderer / observer / diff / apply chain depends on this shape.
 
 ## Procedure
 
@@ -26,14 +34,22 @@ section in `vk-execute`.
 2. Confirm scope. Decompose if too large.
 3. Propose 2-3 approaches with tradeoffs. Recommend one.
 4. Present plan structure section by section, get approval.
-5. Create skeleton: `vk plan new <name> --spec <spec-path> --save`
-6. Fill in body via Edit tool.
-7. Run self-review: `vk plan self-review <plan-path>`
-8. Update spec index: `vk plan spec-index <plan-path> --yes`
-9. Present execution handoff:
-   - Dispatch via `vk-dispatch` — if `plan-config.yaml` has a `dispatch:` block
-   - Subagent-driven via `subagent-driven-development`
-   - Inline via `executing-plans`
+5. Scaffold the plan folder:
+   ```bash
+   vk plan create --slug <YYYY-MM-DD-slug> --target-repo <owner/repo> \
+       --spec docs/superpowers/specs/<spec-file>.md \
+       --phases-file <phases.yaml> \
+       --prose-file <prose.md>
+   ```
+   `vk plan create` ALSO appends a row to the spec's `## Implementation Plans`
+   table — there is no separate spec-index step.
+6. Iterate on the prose / per-phase yaml via the Edit tool.
+7. Run self-review: `vk plan self-review <plan-dir>`.
+8. Hand off for execution:
+   - `vk apply <plan-dir>` — render → observe → diff → preview (default
+     dry-run). Add `--yes` to actually create / update GitHub Issues.
+   - The implementing agent uses `vk pickup <plan-dir> --phase N` to receive
+     the phase scope as markdown.
 
 ## Rules
 
@@ -42,46 +58,36 @@ section in `vk-execute`.
 - Bite-sized steps: 2-5 minutes each.
 - Use BEGIN/END markers for full-file embeds, not nested fences.
 - **Cross-repo completeness:** If the spec lists multiple plans across repos,
-  write ALL of them before offering the execution handoff. For each target repo:
-  read its `plan-config.yaml`, write the plan in that repo's `plans/` directory,
-  and update the spec index. Only offer dispatch/execution after all plans exist.
+  write ALL of them before offering the execution handoff. For each target
+  repo: scaffold the plan in that repo's `docs/superpowers/plans/` directory.
+  `vk plan create` updates the spec table automatically.
 
 ## Dependency declarations
 
-Every phase declares its blockers on a `**Depends on:**` line directly under
-the phase header (after any `<!-- Tracking: ... -->` comment).
+Each per-phase yaml declares its blockers via `phase.depends_on: [N, ...]`
+(integers, comma-separated when multiple).
 
-- Root phases: `**Depends on:** —` (em-dash canonical; `None` accepted).
-- Non-root phases: `**Depends on:** Phase 1, Phase 2` (comma-separated Phase refs).
-- Multiple roots are allowed — use for fan-out / diamond shapes.
-- Deps are backward-only: Phase N may only reference phases < N.
-
-Example:
-
-    ## Phase 3: Fan-in [agentic]
-    **Depends on:** Phase 1, Phase 2
-
-`vk plan self-review` refuses non-root phases without the line in live plans
-(phases under `docs/superpowers/plans/`). `docs/superpowers/archived-plans/**`
-is exempt. To migrate an existing linear plan:
-
-    vk plan convert <plan> --add-deps --yes
+- Root phases: `depends_on: []`.
+- Non-root phases: `depends_on: [1, 2]` for fan-in.
+- Deps are backward-only: phase N may only reference phases < N.
+- Cycles are caught by `vk plan self-review`.
 
 ## Rework plans
 
 After a parent plan ships, defer surfaced-but-unrealised items into a separate
 rework plan — do not reopen the parent.
 
-- `vk plan rework <parent-plan-path>` scaffolds the rework file.
-- `vk plan rework-add <rework-path> --item ... --source ... --track ...`
-  appends a row to the Origin table.
-- `vk plan rework-list [--include-archived] [--status ...] [--track ...]`
-  surfaces open reworks across the repo.
-
-See the spec for the full convention:
-`docs/superpowers/specs/2026-04-22-vk-plan-rework-design.md`.
+- `vk plan rework <parent-plan-dir>` scaffolds a sibling
+  `<parent-slug>-rework-N/` folder, adds `parent_plan` (and `prior_rework` if
+  N>1) to its `_meta.yaml`, and appends a row to the spec table.
+- `vk plan rework-add <rework-dir> --item ... --source ... --track ...`
+  appends an entry to `_meta.origin_items`. `--track` is free-form (canonical
+  tokens `development`, `operations`, `decision`; compounds like
+  `decision → development` accepted).
+- `vk plan rework-list [--include-archived]` surfaces open reworks.
 
 ## Integration
 
-- Upstream: brainstorming hands off via vk-plan-override
-- Downstream: vk-dispatch, subagent-driven-development, executing-plans
+- Upstream: brainstorming hands off via vk-plan-override.
+- Downstream: `vk apply` for GitHub-side work; `executing-plans` for the
+  agent loop.

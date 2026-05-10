@@ -1,576 +1,213 @@
-"""vk plan — write, save, and maintain plan files."""
+"""`vk plan ...` CLI subcommands — wraps vk.plan_ops."""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
-from vk.commands.common import (
-    ConfirmAction,
-    resolve_action,
-    resolve_repo_root,
+from vk import parse
+from vk.parser import PlanSchemaError
+from vk.plan_ops import (
+    PhaseSpec,
+    PlanEditError,
+    complete_phase,
+    create,
+    rework_add_origin,
+    rework_create,
+    rework_list,
+    self_review,
+    tick,
 )
-from vk.config import load_profile
-from vk.plan.convert import (
-    MixedPlanError,
-    add_deps,
-    to_phased_group_by_tag,
-    to_phased_one_per_task,
-    to_phased_single,
-)
-from vk.plan.parser import parse_plan
-from vk.plan.rework import (
-    OriginRow,
-    ReworkRecord,
-    append_origin_row,
-    list_reworks,
-    parse_origin_table,
-)
-from vk.plan.validate import DagValidationError, validate_dag
-from vk.plan.writer import write_plan
-from vk.spec_index import IndexEntry, upsert_entry
 
 console = Console()
 err_console = Console(stderr=True)
 
-_CANONICAL_TRACKS = {"development", "operations", "decision"}
-
-plan_app = typer.Typer(help="Write, save, and maintain plan files.")
+plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
 
 
-@plan_app.command(name="format")
-def plan_format(
-    target: Path = typer.Argument(".", help="Plan file path or repository root."),
-) -> None:
-    """Print the plan's actual format.
-
-    - If ``target`` is a plan file: parse and print the detected shape.
-    - If ``target`` is a directory: fall back to the repo's dispatch config for
-      the expected shape (legacy behavior).
-
-    Output is either ``phased`` or ``flat``. A ``flat`` result means the plan
-    is a legacy artifact and must be migrated before any execute or dispatch
-    command will accept it — see ``vk plan convert --to phased``.
-    """
-    target = target.resolve()
-    if not target.exists():
-        err_console.print(f"Error: {target} does not exist.")
-        raise typer.Exit(2)
-    if target.is_file():
-        try:
-            plan = parse_plan(target)
-        except ValueError as exc:
-            err_console.print(f"Error: could not parse plan at {target}: {exc}")
-            raise typer.Exit(2)
-        console.print(plan.format.value)
-        return
-    config_path = target / "docs" / "superpowers" / "plan-config.yaml"
-    profile = load_profile(config_path)
-    console.print(profile.format.value)
-
-
-@plan_app.command(name="new")
-def plan_new(
-    name: str = typer.Argument(..., help="Plan name (kebab-case)."),
-    spec: str | None = typer.Option(None, "--spec", help="Path to spec file."),
-    save: bool = typer.Option(False, "--save", help="Write to plans directory."),
-) -> None:
-    """Generate a new plan file skeleton."""
-    from datetime import date
-
-    repo_root = resolve_repo_root()
-
-    config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
-    profile = load_profile(config_path)
-
-    today = date.today().isoformat()
-    filename = profile.plan.filename.replace("YYYY-MM-DD", today).replace("{name}", name)
-
-    lines = [
-        f"# {name.replace('-', ' ').title()} Implementation Plan",
-        "",
-    ]
-    if spec and "Spec" in profile.header.required:
-        lines.append(f"**Spec:** `{spec}`")
-    lines.extend(
-        [
-            "**Status:** Not Started",
-            "",
-            "**Goal:** [One sentence]",
-            "",
-            "---",
-            "",
-        ]
-    )
-
-    lines.extend(
-        [
-            "## Phase 1: [Name] [agentic]",
-            "",
-            "### Task 1: [Component]",
-            "",
-            "- [ ] **Step 1: [Action]**",
-            "",
-        ]
-    )
-
-    content = "\n".join(lines)
-
-    if save:
-        plans_dir = repo_root / profile.plan.save_to
-        plans_dir.mkdir(parents=True, exist_ok=True)
-        out_path = plans_dir / filename
-        out_path.write_text(content, encoding="utf-8")
-        console.print(f"Created: {out_path}")
-    else:
-        console.print(content)
-
-
-@plan_app.command(name="self-review")
-def plan_self_review(
-    plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
-) -> None:
-    """Run automated quality checks on a plan file."""
-    plan_path = plan_path.resolve()
-    text = plan_path.read_text()
-    issues: list[str] = []
-
-    # Placeholder scan
-    placeholders = ["TBD", "TODO", "fill in", "implement later", "to be determined"]
-    for ph in placeholders:
-        if ph.lower() in text.lower():
-            issues.append(f"Placeholder found: '{ph}'")
-
-    # Parse and check structure
-    try:
-        plan = parse_plan(plan_path)
-    except ValueError as exc:
-        issues.append(f"Parse error: {exc}")
-        _report_issues(issues)
-        return
-
-    # Phase/task tag consistency
-    if plan.phases:
-        for phase in plan.phases:
-            if not phase.tag:
-                issues.append(f"Phase {phase.number} missing [manual]/[agentic] tag")
-    elif plan.tasks:
-        for task in plan.tasks:
-            if not task.tag:
-                issues.append(f"Task {task.number} missing [manual]/[agentic] tag")
-
-    # Canonical **Track:** lint. First word (case-insensitive) must be one of
-    # the canonical labels; transitions like "decision → development" pass on
-    # the first token.
-    for phase in plan.phases:
-        if phase.track_label is None:
-            continue
-        first = phase.track_label.strip().split()[0].lower()
-        if first not in _CANONICAL_TRACKS:
-            issues.append(
-                f"Phase {phase.number} has non-canonical **Track:** value "
-                f"'{phase.track_label}' (expected development / operations / decision)."
-            )
-
-    # Multi-target repo check (Thread 1a)
-    target_repos = {p.target_repo for p in plan.phases if p.target_repo}
-    if len(target_repos) > 1:
-        repo_root = resolve_repo_root(cwd=plan_path.parent)
-        config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
-        profile = load_profile(config_path)
-        if profile.dispatch_enabled:
-            issues.append(
-                f"Multi-repo plan: phases declare different **Target repo:** values "
-                f"({', '.join(sorted(target_repos))}). "
-                "vk dispatch --repo is plan-wide; per-phase repo overrides are not "
-                "supported. Write one plan per target repo."
-            )
-
-    # Structural DAG validation (cycle / forward-ref / self-ref / unknown-ref).
-    # Report any previously-collected issues first so basic plan-shape errors
-    # surface before dependency-grammar complaints.
-    if issues:
-        _report_issues(issues)
-        return
-
-    try:
-        validate_dag(plan, plan_path=plan_path)
-    except DagValidationError as exc:
-        err_console.print(f"Error: {exc}")
-        raise typer.Exit(1)
-
-    _report_issues(issues)
-
-
-def _report_issues(issues: list[str]) -> None:
-    if issues:
-        err_console.print(f"[yellow]{len(issues)} issue(s) found:[/yellow]")
-        for issue in issues:
-            err_console.print(f"  - {issue}")
-        raise typer.Exit(1)
-    else:
-        console.print("[green]Self-review passed.[/green]")
-
-
-@plan_app.command(name="spec-index")
-def plan_spec_index(
-    plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutations."),
-    yes: bool = typer.Option(False, "--yes", help="Execute without confirmation."),
-) -> None:
-    """Update the spec's Implementation Plans table for this plan."""
-    try:
-        action = resolve_action(dry_run=dry_run, yes=yes)
-    except Exception:
-        err_console.print("Error: --dry-run and --yes are mutually exclusive")
-        raise typer.Exit(1)
-
-    plan_path = plan_path.resolve()
-    plan = parse_plan(plan_path)
-
-    if not plan.spec:
-        console.print("No **Spec:** header in plan. Nothing to update.")
-        raise typer.Exit(0)
-
-    repo_root = resolve_repo_root(cwd=plan_path.parent)
-
-    spec_path = repo_root / plan.spec
-    if not spec_path.exists():
-        console.print(f"Spec file not found: {spec_path}")
-        raise typer.Exit(2)
-
-    entry = IndexEntry(
-        plan=plan.title,
-        repo="",
-        file=str(plan_path.relative_to(repo_root)),
-        status=plan.status,
-        depends_on="—",
-    )
-
-    if action is ConfirmAction.DRY_RUN:
-        console.print(f"Would update spec index: {spec_path}")
-        console.print(f"  Plan: {plan.title}, Status: {plan.status}")
-        raise typer.Exit(0)
-
-    if action is ConfirmAction.PROMPT:
-        if not typer.confirm(f"Update spec index in {spec_path}?", default=False):
-            raise typer.Exit(0)
-
-    upsert_entry(spec_path, entry)
-    console.print(f"Spec index updated: {spec_path}")
-
-
-@plan_app.command(name="rework-add")
-def plan_rework_add(
-    rework_path: Path = typer.Argument(..., help="Path to the rework plan file."),
-    item: str = typer.Option(..., "--item", help="Origin item text."),
-    source: str = typer.Option(..., "--source", help="Where the item came from."),
-    track: str = typer.Option(..., "--track", help="Work-category label."),
-) -> None:
-    """Append a row to a rework plan's Origin table."""
-    # Validation order (spec §2.2): file-existence → flag non-empty / no
-    # newlines → canonical-track warn → Origin parse → append. The warn is
-    # informational and intentionally fires before the parse so a typo in
-    # ``--track`` still surfaces even if the Origin section is malformed.
-    if not rework_path.exists():
-        err_console.print(f"Error: rework plan not found: {rework_path}")
-        raise typer.Exit(2)
-
-    for name, value in (("--item", item), ("--source", source), ("--track", track)):
-        if not value.strip():
-            err_console.print(f"Error: {name} is required and must be non-empty.")
-            raise typer.Exit(2)
-        if "\n" in value or "\r" in value:
-            err_console.print(f"Error: {name} must not contain newlines.")
-            raise typer.Exit(2)
-
-    first_token = track.strip().split()[0].lower()
-    if first_token not in _CANONICAL_TRACKS:
-        err_console.print(
-            f"warn: --track value '{track}' is not a canonical token "
-            "(development / operations / decision). Accepted as free-form."
-        )
-
-    try:
-        existing = parse_origin_table(rework_path)
-    except ValueError as exc:
-        err_console.print(f"Error: {exc}")
-        raise typer.Exit(2)
-    next_n = (max((r.number for r in existing), default=0)) + 1
-    try:
-        append_origin_row(
-            rework_path,
-            OriginRow(
-                number=next_n,
-                item=item.strip(),
-                source=source.strip(),
-                track=track.strip(),
-            ),
-        )
-    except ValueError as exc:
-        err_console.print(f"Error: {exc}")
-        raise typer.Exit(2)
-    console.print(f"Added Origin row #{next_n} to {rework_path}")
-
-
-@plan_app.command(name="convert")
-def plan_convert(
-    plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
-    to: str = typer.Option("phased", "--to", help="Target format. Only 'phased' is supported."),
-    single_phase: bool = typer.Option(False, "--single-phase", help="Wrap in one phase."),
-    one_per_task: bool = typer.Option(False, "--one-per-task", help="One phase per task."),
-    group_by_tag: bool = typer.Option(
-        False, "--group-by-tag", help="Group consecutive same-tag tasks."
+@plan_app.command("create")
+def create_cmd(
+    slug: str = typer.Option(..., "--slug", help="Plan slug (becomes folder name)."),
+    target_repo: str = typer.Option(..., "--target-repo", help="owner/repo for phases."),
+    spec: Path | None = typer.Option(
+        None, "--spec", help="Spec path relative to repo root (optional)."
     ),
-    add_deps_flag: bool = typer.Option(
-        False,
-        "--add-deps",
-        help="Migration: add **Depends on:** lines to a legacy phased plan.",
+    vk_version: str = typer.Option(
+        ">=2.0.0,<3.0.0", "--vk-version", help="vk_version constraint for the plan."
     ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutations."),
-    yes: bool = typer.Option(False, "--yes", help="Execute without confirmation."),
+    phases_file: Path | None = typer.Option(
+        None, "--phases-file", help="YAML file with a list of phase specs."
+    ),
+    prose_file: Path | None = typer.Option(
+        None, "--prose-file", help="Markdown file with the plan's prose body."
+    ),
 ) -> None:
-    """Migrate a legacy flat plan to phased format, or add deps to a legacy phased plan.
+    """Scaffold a new v2 plan folder + append spec row.
 
-    One of --single-phase, --one-per-task, --group-by-tag, or --add-deps selects
-    the migration strategy. --add-deps is mutually exclusive with the other
-    three (it operates on already-phased plans missing dependency declarations).
+    --phases-file YAML shape:
+      - {number, title, tag (agentic|manual), depends_on: [N,...],
+         tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
+      - ...
+
+    --prose-file is the plan's narrative markdown. If omitted, a
+    minimal stub is generated.
     """
-    try:
-        action = resolve_action(dry_run=dry_run, yes=yes)
-    except Exception:
-        err_console.print("Error: --dry-run and --yes are mutually exclusive")
-        raise typer.Exit(1)
+    import yaml
 
-    # --add-deps is mutually exclusive with the flat->phased conversion flags.
-    if add_deps_flag and (single_phase or one_per_task or group_by_tag):
-        err_console.print(
-            "Error: --add-deps is mutually exclusive with --single-phase, "
-            "--one-per-task, and --group-by-tag."
-        )
-        raise typer.Exit(2)
-
-    plan_path = plan_path.resolve()
-
-    if add_deps_flag:
-        _plan_convert_add_deps(plan_path, action)
-        return
-
-    if to != "phased":
-        err_console.print(
-            f"Error: --to '{to}' is not supported. The only valid target is 'phased'."
-        )
-        raise typer.Exit(2)
-
-    plan = parse_plan(plan_path)
+    repo_root = Path.cwd()
+    phases: list[PhaseSpec] = []
+    if phases_file is not None:
+        raw = yaml.safe_load(phases_file.read_text())
+        for p in raw or []:
+            phases.append(
+                PhaseSpec(
+                    number=p["number"],
+                    title=p["title"],
+                    tag=p.get("tag", "agentic"),
+                    depends_on=tuple(p.get("depends_on") or ()),
+                    tasks=tuple(p.get("tasks") or ()),
+                )
+            )
+    prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
 
     try:
-        if single_phase:
-            converted = to_phased_single(plan)
-        elif one_per_task:
-            converted = to_phased_one_per_task(plan)
-        elif group_by_tag:
-            converted = to_phased_group_by_tag(plan)
+        plan = create(
+            repo_root=repo_root,
+            slug=slug,
+            spec=str(spec) if spec else None,
+            target_repo=target_repo,
+            vk_version=vk_version,
+            phases=phases,
+            prose=prose,
+        )
+        console.print(f"created plan: {plan.dir}")
+    except PlanEditError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+
+@plan_app.command("edit")
+def edit(
+    plan_dir: Path = typer.Argument(..., help="Path to plan folder."),
+    tick_step: str | None = typer.Option(None, "--tick", help="Step ID to tick (P<n>.T<n>.S<n>)."),
+    state: str = typer.Option("x", "--state", help="State for --tick: x | -"),
+    note: str | None = typer.Option(None, "--note", help="Note (required for --state -)"),
+    complete_phase_n: int | None = typer.Option(
+        None, "--complete-phase", help="Phase number to mark complete."
+    ),
+) -> None:
+    """Mutate plan state — tick a step OR complete a phase."""
+    if (tick_step is None) == (complete_phase_n is None):
+        err_console.print("Provide exactly one of --tick or --complete-phase")
+        raise typer.Exit(2)
+
+    try:
+        if tick_step is not None:
+            if state not in ("x", "-"):
+                err_console.print(f"--state must be 'x' or '-', got {state!r}")
+                raise typer.Exit(2)
+            tick(plan_dir, tick_step, state=state, note=note)  # type: ignore[arg-type]
+            console.print(f"ticked {tick_step} → {state}")
         else:
-            err_console.print(
-                "Error: --to phased requires one of: --single-phase, --one-per-task, --group-by-tag"
-            )
-            raise typer.Exit(2)
-    except ValueError as exc:
-        err_console.print(f"Error: {exc}")
-        raise typer.Exit(2)
-
-    if action is ConfirmAction.DRY_RUN:
-        console.print(f"Would convert: {plan.format.value} -> phased")
-        console.print(f"  Tasks: {len(plan.all_tasks)} -> {len(converted.all_tasks)}")
-        if converted.phases:
-            console.print(f"  Phases: {len(converted.phases)}")
-        raise typer.Exit(0)
-
-    if action is ConfirmAction.PROMPT:
-        if not typer.confirm(f"Convert {plan.format.value} -> phased?", default=False):
-            raise typer.Exit(0)
-
-    write_plan(converted, plan_path)
-    console.print(f"Converted: {plan.format.value} -> phased")
+            assert complete_phase_n is not None
+            complete_phase(plan_dir, complete_phase_n, note=note)
+            console.print(f"phase {complete_phase_n}: marked complete")
+    except PlanEditError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
 
 
-@plan_app.command(name="rework")
-def plan_rework(
-    parent_path: Path = typer.Argument(..., help="Path to the parent plan file."),
-) -> None:
-    """Scaffold a rework plan against a parent."""
-    from vk.plan.rework import scaffold_rework
-
-    repo_root = resolve_repo_root()
-
-    try:
-        out_path, warnings = scaffold_rework(parent_path, repo_root=repo_root)
-    except ValueError as exc:
-        err_console.print(f"Error: {exc}")
-        raise typer.Exit(2)
-
-    for w in warnings:
-        err_console.print(f"warn: {w}")
-    console.print(f"Created: {out_path}")
-
-
-def _plan_convert_add_deps(plan_path: Path, action: ConfirmAction) -> None:
-    """Implement the --add-deps migration branch of `vk plan convert`.
-
-    Flow is uniform across all three action modes: compute the proposed
-    migration on a temporary copy, show the diff, then decide to write.
-    PROMPT mode genuinely prompts (previous implementation wrote first and
-    pretended to prompt — surfaced in the PR #32 review as M-3).
-    """
-    import difflib
-    import tempfile
-
-    original = plan_path.read_text()
-
-    # Compute what the migration WOULD produce on a throwaway copy.
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
-        tmp.write(original)
-        tmp_path = Path(tmp.name)
-    try:
-        try:
-            add_deps(tmp_path)
-        except MixedPlanError as exc:
-            err_console.print(f"Error: {exc}")
-            raise typer.Exit(2)
-        proposed = tmp_path.read_text()
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-    if proposed == original:
-        console.print("No changes — plan already has all **Depends on:** lines.")
-        raise typer.Exit(0)
-
-    diff = "".join(
-        difflib.unified_diff(
-            original.splitlines(keepends=True),
-            proposed.splitlines(keepends=True),
-            fromfile=str(plan_path),
-            tofile=str(plan_path),
-        )
-    )
-
-    if action is ConfirmAction.DRY_RUN:
-        console.print(diff)
-        raise typer.Exit(0)
-
-    if action is ConfirmAction.PROMPT:
-        console.print(diff)
-        if not typer.confirm("Apply this migration?", default=False):
-            console.print("Aborted — no changes written.")
-            raise typer.Exit(0)
-
-    # APPLY path (either --yes or PROMPT-confirmed): write the file and commit.
-    plan_path.write_text(proposed)
-
-    repo_root = resolve_repo_root(cwd=plan_path.parent)
-
-    subprocess.run(["git", "add", str(plan_path)], check=True, cwd=repo_root)
-    subprocess.run(
-        ["git", "commit", "-m", "chore(plan): add **Depends on:** lines (migration)"],
-        check=True,
-        cwd=repo_root,
-    )
-    console.print(f"Updated and committed: {plan_path}")
-
-
-_TRACK_ABBREV = {"development": "dev", "operations": "ops", "decision": "dec"}
-
-
-def _format_by_track(d: dict[str, int]) -> str:
-    parts: list[str] = []
-    for label, count in d.items():
-        first = label.split()[0].lower() if label else ""
-        parts.append(f"{count} {_TRACK_ABBREV.get(first, first)}")
-    return " / ".join(parts)
-
-
-def _record_to_json(r: ReworkRecord) -> dict[str, object]:
-    return {
-        "parent_slug": r.parent_slug,
-        "rework_number": r.rework_number,
-        "status": r.status,
-        "open_steps": r.open_steps,
-        "origin_items": r.origin_items,
-        "by_track": r.by_track,
-        "path": r.path,
-        "parent_path": r.parent_path,
-        "spec_path": r.spec_path,
-    }
-
-
-@plan_app.command(name="rework-list")
-def plan_rework_list(
-    status: str | None = typer.Option(
-        None, "--status", help="Filter by plan status (case-insensitive exact match)."
+@plan_app.command("rework")
+def rework(
+    parent_plan_dir: Path = typer.Argument(
+        ..., help="Path to parent plan folder (Complete + archived)."
     ),
-    track: str | None = typer.Option(
-        None,
+) -> None:
+    """Scaffold a sibling rework plan + append spec row."""
+    try:
+        plan = rework_create(parent_plan_dir)
+        console.print(f"created rework plan: {plan.dir}")
+    except PlanEditError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+
+@plan_app.command("rework-add")
+def rework_add(
+    rework_dir: Path = typer.Argument(..., help="Rework plan folder."),
+    item: str = typer.Option(..., "--item", help="Origin item description."),
+    source: str = typer.Option(..., "--source", help="Where the item came from."),
+    track: str = typer.Option(
+        ...,
         "--track",
         help=(
-            "Substring match on Origin Track "
-            "(matches transition forms like 'decision → development')."
+            "Free-form. Canonical: development | operations | decision. "
+            "Compounds like 'decision → development' or 'development (future-triggered)' OK."
         ),
     ),
-    plan: str | None = typer.Option(None, "--plan", help="Exact parent-slug match."),
+) -> None:
+    """Append an origin item to a rework plan's _meta.origin_items."""
+    try:
+        new_id = rework_add_origin(rework_dir, item=item, source=source, track=track)
+        console.print(f"added origin item #{new_id}")
+    except PlanEditError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+
+@plan_app.command("rework-list")
+def rework_list_cmd(
     include_archived: bool = typer.Option(
-        False, "--include-archived", help="Also scan docs/superpowers/archived-plans/."
-    ),
-    json_output: bool = typer.Option(
-        False, "--json", help="Emit JSON on stdout instead of a table."
+        False, "--include-archived", help="Also scan archived-plans/"
     ),
 ) -> None:
-    """List open (and optionally archived) rework plans in this repo.
-
-    Filter flags ``--status``, ``--track``, and ``--plan`` compose with AND
-    semantics (each further narrows the result set).
-    """
-    import json as _json
-
-    from rich.table import Table
-
-    repo_root = resolve_repo_root()
-    records, warnings = list_reworks(repo_root=repo_root, include_archived=include_archived)
-    for w in warnings:
-        err_console.print(f"warn: {w}")
-
-    if status:
-        records = [r for r in records if r.status.casefold() == status.casefold()]
-    if track:
-        needle = track.casefold()
-        records = [r for r in records if any(needle in t.casefold() for t in r.by_track.keys())]
-    if plan:
-        records = [r for r in records if r.parent_slug == plan]
-
-    if json_output:
-        console.print(_json.dumps([_record_to_json(r) for r in records]))
+    """List rework plans in the current repo."""
+    repo_root = Path.cwd()
+    records = rework_list(repo_root, include_archived=include_archived)
+    if not records:
+        console.print("no rework plans found.")
         return
-
-    table = Table()
-    for col in (
-        "parent-slug",
-        "rework-#",
-        "status",
-        "open-steps",
-        "origin-items",
-        "by-track",
-    ):
-        table.add_column(col)
+    table = Table(title="Rework plans")
+    table.add_column("Parent")
+    table.add_column("N", justify="right")
+    table.add_column("Status")
+    table.add_column("Open steps", justify="right")
+    table.add_column("Origin items", justify="right")
+    table.add_column("By track")
+    table.add_column("Folder")
     for r in records:
+        track_summary = ", ".join(f"{t}={n}" for t, n in r.by_track) if r.by_track else "—"
         table.add_row(
             r.parent_slug,
             str(r.rework_number),
             r.status,
             str(r.open_steps),
-            str(r.origin_items),
-            _format_by_track(r.by_track),
+            str(r.origin_item_count),
+            track_summary,
+            str(r.folder_path),
         )
     console.print(table)
+
+
+@plan_app.command("self-review")
+def self_review_cmd(
+    plan_dir: Path = typer.Argument(..., help="Path to plan folder."),
+) -> None:
+    """Soft lints beyond schema validation."""
+    try:
+        plan = parse(plan_dir)
+    except PlanSchemaError as e:
+        err_console.print(f"[red]parse error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    issues = self_review(plan)
+    if not issues:
+        console.print("[green]self-review passed[/green]")
+        return
+    for issue in issues:
+        console.print(str(issue))
+    if any(issue.severity == "error" for issue in issues):
+        raise typer.Exit(1)

@@ -1,4 +1,4 @@
-"""`vk v2 pickup` tests."""
+"""`vk pickup` tests."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def test_pickup_emits_phase_title_and_pr_template():
     from vk.cli import app
 
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "pickup", str(FIXTURE), "--phase", "1"])
+    result = runner.invoke(app, ["pickup", str(FIXTURE), "--phase", "1"])
     assert result.exit_code == 0, result.output
     assert "Phase 1/1" in result.output
     assert "Fixture phase" in result.output
@@ -31,7 +31,7 @@ def test_pickup_unknown_phase_exits_2():
     from vk.cli import app
 
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "pickup", str(FIXTURE), "--phase", "99"])
+    result = runner.invoke(app, ["pickup", str(FIXTURE), "--phase", "99"])
     assert result.exit_code == 2
     assert "not found" in result.output.lower() or "not found" in (result.stderr or "").lower()
 
@@ -41,7 +41,7 @@ def test_pickup_includes_dependency_reminder():
 
     multi = FIXTURE.parent / "v2_plan_multi_phase"
     runner = CliRunner()
-    result = runner.invoke(app, ["v2", "pickup", str(multi), "--phase", "10"])
+    result = runner.invoke(app, ["pickup", str(multi), "--phase", "10"])
     assert result.exit_code == 0, result.output
     # Phase 10 in multi_phase fixture depends_on=[2]
     assert "Depends on" in result.output

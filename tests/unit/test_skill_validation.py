@@ -48,18 +48,25 @@ class TestSkillValidation:
         line_count = len(text.strip().split("\n"))
         assert line_count <= 120, f"{skill_dir.name}/SKILL.md has {line_count} lines (max 120)"
 
-    def test_vk_execute_has_lifecycle_transition(self, skill_dir: Path) -> None:
-        """vk-execute must include the post-PR lifecycle transition step."""
+    def test_vk_execute_uses_v2_pickup(self, skill_dir: Path) -> None:
+        """vk-execute must point at `vk pickup` for phase scope (v2 entry point)."""
         if skill_dir.name != "vk-execute":
             pytest.skip("Only applies to vk-execute")
         text = (skill_dir / "SKILL.md").read_text()
-        assert "In Review" in text, "vk-execute must reference 'In Review' lifecycle transition"
+        assert "vk pickup" in text, "vk-execute must reference vk pickup"
+
+    def test_vk_execute_uses_v2_apply_for_reconciliation(self, skill_dir: Path) -> None:
+        """vk-execute must hand reconciliation back to `vk apply` (no manual claim/pr-opened)."""
+        if skill_dir.name != "vk-execute":
+            pytest.skip("Only applies to vk-execute")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "vk apply" in text, "vk-execute must reference vk apply"
 
     def test_vk_execute_mentions_pr_ready_label(self, skill_dir: Path) -> None:
         if skill_dir.name != "vk-execute":
             pytest.skip("Only applies to vk-execute")
         text = (skill_dir / "SKILL.md").read_text()
-        assert "pr-ready" in text, "vk-execute must document the pr-ready label swap"
+        assert "pr-ready" in text, "vk-execute must document the pr-ready lifecycle stage"
 
     def test_vk_execute_mentions_unified_pr_title(self, skill_dir: Path) -> None:
         if skill_dir.name != "vk-execute":
@@ -68,22 +75,3 @@ class TestSkillValidation:
         assert "[{owner}/{repo}]" in text or "[owner/repo]" in text, (
             "vk-execute must document the unified PR title format"
         )
-
-    def test_vk_execute_calls_claim(self, skill_dir: Path) -> None:
-        if skill_dir.name != "vk-execute":
-            pytest.skip("Only applies to vk-execute")
-        text = (skill_dir / "SKILL.md").read_text()
-        assert "vk execute claim" in text
-
-    def test_vk_execute_calls_pr_opened(self, skill_dir: Path) -> None:
-        if skill_dir.name != "vk-execute":
-            pytest.skip("Only applies to vk-execute")
-        text = (skill_dir / "SKILL.md").read_text()
-        assert "vk execute pr-opened" in text
-
-    def test_vk_execute_no_longer_says_best_effort(self, skill_dir: Path) -> None:
-        if skill_dir.name != "vk-execute":
-            pytest.skip("Only applies to vk-execute")
-        text = (skill_dir / "SKILL.md").read_text()
-        assert "Best-effort" not in text
-        assert "best-effort: failure does not block" not in text.lower()

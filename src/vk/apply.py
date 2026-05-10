@@ -1,7 +1,7 @@
 """Apply a Diff to GitHub. The only mutation path in v2.
 
 `apply()` is the single point through which any GH-side change flows.
-It consumes a `Diff` (produced by `vk.v2.diff.diff`), executes each
+It consumes a `Diff` (produced by `vk.diff.diff`), executes each
 mutation through the `GhClient`, and accumulates failures rather than
 short-circuiting — so one bad mutation doesn't strand the rest.
 
@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from vk.v2.diff import (
+from vk.diff import (
     Diff,
     IssueBodyChange,
     IssueCreate,
@@ -35,7 +35,7 @@ from vk.v2.diff import (
     Mutation,
     RepoLabelEnsure,
 )
-from vk.v2.ghclient import GhClient
+from vk.ghclient import GhClient
 
 
 class _UnhandledMutationError(AssertionError):

@@ -1,4 +1,4 @@
-"""`vk v2 migrate v1-to-v2` CLI."""
+"""`vk migrate v1-to-v2` CLI."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vk.v2.migrate import MigrationError, migrate_repo
+from vk.migrate import MigrationError, migrate_repo
 
 console = Console()
 err_console = Console(stderr=True)

@@ -1,4 +1,4 @@
-"""`vk v2 spec status` CLI."""
+"""`vk spec status` CLI."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vk.v2.spec import compute_status, parse_spec, render_status_md
+from vk.spec import compute_status, parse_spec, render_status_md
 
 console = Console()
 err_console = Console(stderr=True)

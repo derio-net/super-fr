@@ -1,4 +1,4 @@
-"""`vk v2 pickup` CLI — output phase scope for an agent."""
+"""`vk pickup` CLI — output phase scope for an agent."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from vk.v2 import parse
-from vk.v2.parser import PlanSchemaError
+from vk import parse
+from vk.parser import PlanSchemaError
 
 console = Console()
 err_console = Console(stderr=True)

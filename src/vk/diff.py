@@ -19,9 +19,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from vk.v2._urls import parse_issue_url
-from vk.v2.parser import Plan
-from vk.v2.states import GhState, RenderedState
+from vk._urls import parse_issue_url
+from vk.parser import Plan
+from vk.states import GhState, RenderedState
 
 # Prefix-owned namespaces. The applier may add/remove anything starting
 # with one of these; everything else (e.g. `good-first-issue`, `bug`)

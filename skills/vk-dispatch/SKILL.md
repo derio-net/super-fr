@@ -1,62 +1,67 @@
 ---
 name: vk-dispatch
 description: >
-  Dispatch a phase-structured plan to GitHub Issues via the vk CLI. Use when:
-  "dispatch this plan", "send to VK", "create issues from plan". Requires a
-  phased plan and a plan-config.yaml with an explicit dispatch: block.
+  Reconcile a plan's GitHub Issues via the vk CLI (`vk apply`). Use when:
+  "dispatch this plan", "send to VK", "create issues from plan", "sync plan to GitHub".
 ---
 
 # vk-dispatch
 
-Wraps the `vk dispatch` CLI command. The CLI does all mechanical work: parse,
-idempotency check, create issues, add to board, inject tracking comments, commit.
+Wraps the `vk apply` CLI. The single command renders the plan, observes
+GitHub state, diffs, and emits the mutations needed to bring GitHub in line
+with the plan. Works for first-time creation, incremental updates, and
+ongoing reconciliation — there's no separate "first dispatch" verb in v2.
 
-**Announce at start:** "I'm using vk-dispatch to dispatch this plan via the vk CLI."
+**Announce at start:** "I'm using vk-dispatch to reconcile this plan via `vk apply`."
 
 ## Procedure
 
-1. **Dry run.**
+1. **Preview** (dry-run is the default):
    ```bash
-   vk dispatch <plan-path> --dry-run
+   vk apply <plan-dir>
    ```
-2. **Present the dry-run output to the operator verbatim.** Ask: *"Proceed? (yes/no)"*
+   The output lists the mutations `vk` would perform: ensure-labels, create
+   Issue, edit labels, edit body, set state.
+2. **Present the preview to the operator verbatim.** Ask: *"Proceed? (yes/no)"*
 3. **On approval:**
    ```bash
-   vk dispatch <plan-path> --yes
+   vk apply <plan-dir> --yes
    ```
-4. **Relay the Issue URLs** from the apply output.
+4. **Relay the Issue URLs** from the apply output (`created:` block).
 5. **On refusal, stop.** Wait for instructions.
+
+For machine-parseable output:
+
+```bash
+vk apply <plan-dir> --format json
+```
 
 ## Error handling
 
 | Exit | Meaning | Action |
 |------|---------|--------|
-| 0 | Success or noop | Relay URLs |
-| 1 | Gate disabled / config error | Paste CLI error verbatim |
-| 2 | Plan parse error (generic) | Paste CLI error; inspect the plan |
-| 2 | Legacy flat plan | `vk plan convert <plan> --to phased --single-phase --yes`, retry |
-| 2 | Phased plan missing `**Depends on:**` declarations | `vk plan convert <plan> --add-deps --yes`, retry |
-| 3 | gh error | Check `gh auth status` |
-| 4 | Partial success | CLI shows which failed |
+| 0 | Success or no diff | Relay URLs (if any) |
+| 2 | Usage error (bad flag combination) | Paste CLI error verbatim |
+| 4 | gh / network failure during apply | Check `gh auth status`, retry |
+| 5 | Plan parse error (`PlanSchemaError`) | Paste CLI error; inspect plan files |
+
+## Idempotency
+
+`vk apply` is fully idempotent: running it twice in a row yields the same end
+state. There is no separate "create then sync" workflow — every invocation
+reconciles. Re-run after editing the plan to push the deltas.
+
+## Reconciliation across the plan lifecycle
+
+- **Phase added / edited:** `vk apply <plan-dir> --yes` updates labels and
+  body for affected Issues.
+- **Phase complete:** the renderer projects `state == CLOSED` once
+  `state.completion.at` is set; `vk apply --yes` closes the Issue.
+- **Auto-close drift:** `vk apply` is the antidote — re-running detects an
+  Issue that's still open despite a merged PR and closes it.
 
 ## Integration
 
-- Migrate legacy flat plans: `vk plan convert <plan> --to phased --group-by-tag` (or `--single-phase`)
-- Sync progress after dispatch: use vk-progress skill
-- Execute a dispatched phase: use vk-execute skill
-- Issue title format: `[owner/repo] slug · Phase N/total · phase_title`
-
-## Retroactive migration
-
-For plans dispatched before the unified-title format, run:
-
-    vk dispatch migrate <plan-path> --dry-run
-    vk dispatch migrate <plan-path> --yes
-
-Rewrites open Issues' titles + bodies to the current format. Closed Issues are skipped.
-
-**Note:** `vk dispatch migrate` refuses plans that have dispatched Issues but
-no `**Depends on:**` declarations — silently inferring the N-1 chain would
-reintroduce the implicit dependency model the DAG grammar replaced. Run
-`vk plan convert <plan> --add-deps --yes` first to declare the DAG on disk,
-then re-run migrate.
+- Author / edit plans: vk-plan skill.
+- Execute a phase: vk-execute skill.
+- Spec rollups: `vk spec status [<spec>|--all]`.

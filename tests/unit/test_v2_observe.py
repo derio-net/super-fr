@@ -5,8 +5,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 def test_observe_undispatched_phase_returns_no_observation():
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.observe import observe
+    from vk import parse
+    from vk.observe import observe
 
     plan = parse(FIXTURE)
     gh = FakeGhClient()
@@ -19,8 +19,8 @@ def test_observe_dispatched_phase_returns_observation():
     from dataclasses import replace as dc_replace
 
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.observe import observe
+    from vk import parse
+    from vk.observe import observe
 
     plan = parse(FIXTURE)
     # Inject a tracking_issue into phase 1
@@ -68,8 +68,8 @@ def test_observe_populates_body_field():
     from dataclasses import replace as dc_replace
 
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.observe import observe
+    from vk import parse
+    from vk.observe import observe
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -96,8 +96,8 @@ def test_observe_rejects_unexpected_issue_state():
     import pytest
 
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.observe import observe
+    from vk import parse
+    from vk.observe import observe
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -122,8 +122,8 @@ def test_observe_skips_phases_without_tracking_issue():
     from dataclasses import replace as dc_replace
 
     from tests.unit.fakes import FakeGhClient
-    from vk.v2 import parse
-    from vk.v2.observe import observe
+    from vk import parse
+    from vk.observe import observe
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)

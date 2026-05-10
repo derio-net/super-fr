@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from vk.v2._urls import parse_issue_url
-from vk.v2.ghclient import GhClient
-from vk.v2.parser import Plan
-from vk.v2.states import GhState, PhaseObservation, PrObservation
+from vk._urls import parse_issue_url
+from vk.ghclient import GhClient
+from vk.parser import Plan
+from vk.states import GhState, PhaseObservation, PrObservation
 
 _VALID_ISSUE_STATES = ("OPEN", "CLOSED")
 _VALID_PR_STATES = ("OPEN", "CLOSED")

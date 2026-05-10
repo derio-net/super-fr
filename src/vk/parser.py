@@ -1,7 +1,7 @@
 """Parser for v2 plan-as-folder format.
 
 Loads `_meta.yaml` and per-phase yaml files (`NN.yaml`) from a plan
-folder, validates them against the pydantic schemas in `vk.v2.types`,
+folder, validates them against the pydantic schemas in `vk.types`,
 and returns an immutable `Plan` dataclass.
 
 Design rationale lives in:
@@ -26,7 +26,7 @@ import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from vk.v2.types import PhaseDoc, PlanMeta
+from vk.types import PhaseDoc, PlanMeta
 
 
 class PlanSchemaError(Exception):

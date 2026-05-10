@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from vk.v2.parser import PlanSchemaError, parse
+from vk.parser import PlanSchemaError, parse
 
 _TABLE_HEADER_RE = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE)
 # A row is `| col1 | col2 | col3 | col4 |`. We strip backticks for path matching.

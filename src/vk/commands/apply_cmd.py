@@ -1,4 +1,4 @@
-"""`vk v2 apply` CLI — render + observe + diff + apply for a plan.
+"""`vk apply` CLI — render + observe + diff + apply for a plan.
 
 Wires the library functions (`render`/`observe`/`diff`/`apply`) into
 typer. Production uses `RealGhClient` (the gh-CLI wrapper); tests
@@ -24,8 +24,8 @@ from typing import TYPE_CHECKING, Any
 import typer
 from rich.console import Console
 
-from vk.v2.apply import apply
-from vk.v2.diff import (
+from vk.apply import apply
+from vk.diff import (
     Diff,
     IssueBodyChange,
     IssueCreate,
@@ -34,12 +34,12 @@ from vk.v2.diff import (
     RepoLabelEnsure,
     diff,
 )
-from vk.v2.observe import observe
-from vk.v2.parser import PlanSchemaError, parse
-from vk.v2.render import render
+from vk.observe import observe
+from vk.parser import PlanSchemaError, parse
+from vk.render import render
 
 if TYPE_CHECKING:
-    from vk.v2.ghclient import GhClient
+    from vk.ghclient import GhClient
 
 console = Console()
 err_console = Console(stderr=True)
@@ -51,7 +51,7 @@ def _make_gh_client() -> GhClient:
     Defaults to `RealGhClient` (subprocess wrapper around `gh`). Tests
     override by `monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: FakeGhClient())`.
     """
-    from vk.v2.real_ghclient import RealGhClient
+    from vk.real_ghclient import RealGhClient
 
     return RealGhClient()
 
