@@ -1,0 +1,67 @@
+name: vk-spec-status
+on:
+  workflow_call:
+
+# Defense in depth: the calling workflow also filters on
+# `pull_request.merged == true`, but we keep the check here so this
+# reusable workflow stays safe to call from any context (cron, manual
+# dispatch, etc.) without leaking unmerged-PR status comments.
+jobs:
+  status:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install vk
+        run: pip install --user "vk @ git+https://github.com/derio-net/superpowers-for-vk@v2.0.0"
+      - name: Find specs touched by plan changes
+        id: affected
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t plan_dirs < <(
+            git diff --name-only "$BASE_SHA...$HEAD_SHA" \
+            | grep -E '^docs/superpowers/(plans|archived-plans)/[^/]+/' \
+            | sed -E 's|^(docs/superpowers/(plans\|archived-plans)/[^/]+)/.*|\1|' \
+            | sort -u
+          )
+          specs=()
+          for spec in docs/superpowers/specs/*.md; do
+            [ -f "$spec" ] || continue
+            for d in "${plan_dirs[@]:-}"; do
+              [ -z "$d" ] && continue
+              if grep -q -F "$d" "$spec"; then
+                specs+=("$spec")
+                break
+              fi
+            done
+          done
+          printf 'specs=%s\n' "${specs[*]:-}" >> "$GITHUB_OUTPUT"
+      - name: Build status comment
+        if: steps.affected.outputs.specs != ''
+        env:
+          SPECS: ${{ steps.affected.outputs.specs }}
+        run: |
+          set -euo pipefail
+          : > /tmp/status.md
+          for spec in $SPECS; do
+            vk v2 spec status "$spec" >> /tmp/status.md
+            printf '\n\n---\n\n' >> /tmp/status.md
+          done
+      - name: Post comment
+        if: steps.affected.outputs.specs != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body-file /tmp/status.md

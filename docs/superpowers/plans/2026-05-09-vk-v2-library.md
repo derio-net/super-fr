@@ -678,11 +678,11 @@
 
 ### Task 1: `vk apply` command + e2e
 
-- [ ] **Step 1: Test e2e — fixture plan → vk apply --dry-run → assert mutations**
+- [x] **Step 1: Test e2e — fixture plan → vk apply --dry-run → assert mutations**
   Create `tests/integration/test_v2_apply_e2e.py`. Use a tmp git repo with the minimal v2 fixture plan. Invoke `vk apply <plan-dir> --dry-run` via CliRunner. Assert stdout shows the IssueCreate mutation.
   Run: red (no apply command yet).
 
-- [ ] **Step 2: Implement `vk apply` typer command**
+- [x] **Step 2: Implement `vk apply` typer command**
   Create `src/vk/v2/commands/apply_cmd.py`. Wire into `src/vk/cli.py`:
   ```python
   from vk.v2.commands.apply_cmd import apply_app
@@ -690,105 +690,105 @@
   ```
   Run Step 1: green.
 
-- [ ] **Step 3: Test `vk apply --all` walks plans/**
+- [x] **Step 3: Test `vk apply --all` walks plans/**
   Run: red.
 
-- [ ] **Step 4: Implement `--all`** — find plan folders under `docs/superpowers/plans/`, apply each. Run: green.
+- [x] **Step 4: Implement `--all`** — find plan folders under `docs/superpowers/plans/`, apply each. Run: green.
 
 ### Task 2: `vk plan create / edit / rework / rework-add / rework-list`
 
-- [ ] **Step 1: Test `vk plan create` scaffolds a folder + appends spec row**
+- [x] **Step 1: Test `vk plan create` scaffolds a folder + appends spec row**
   Use a tmp repo with a stub spec containing `## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|---|---|---|---|`. Invoke `vk plan create --from-spec <spec> --slug test-plan --target-repo derio-net/x`. Assert: folder created with _meta + _prose; spec table has new row.
 
-- [ ] **Step 2: Implement `vk.plan.create()` library function**
+- [x] **Step 2: Implement `vk.plan.create()` library function**
   Per spec §"Plan editing — vk.plan.*". Atomically: write _meta.yaml, write _prose.md, write empty 01.yaml stub, append row to spec's Implementation Plans table.
 
-- [ ] **Step 3: Implement `vk plan create` CLI command**
+- [x] **Step 3: Implement `vk plan create` CLI command**
   Run Step 1: green.
 
-- [ ] **Step 4: Test `vk plan edit --tick P1.T1.S1`**
+- [x] **Step 4: Test `vk plan edit --tick P1.T1.S1`**
   Tick a step in a fixture plan. Assert state YAML changed; ticked_at populated; idempotent on re-tick.
 
-- [ ] **Step 5: Implement `vk plan edit --tick`**
+- [x] **Step 5: Implement `vk plan edit --tick`**
   Library function `vk.plan.tick()`; CLI wrapper. Stages via `git add` after write. Run: green.
 
-- [ ] **Step 6: Test `vk plan edit --complete-phase`**
+- [x] **Step 6: Test `vk plan edit --complete-phase`**
   - Manual phase requires `--note`
   - Agentic phase refuses if any step state == " "
 
-- [ ] **Step 7: Implement `vk.plan.complete_phase()` and CLI**
+- [x] **Step 7: Implement `vk.plan.complete_phase()` and CLI**
   Run: green.
 
-- [ ] **Step 8: Test `vk plan rework` scaffolds sibling folder + spec row + parent_plan field**
+- [x] **Step 8: Test `vk plan rework` scaffolds sibling folder + spec row + parent_plan field**
   Fixture: a "completed" v2 plan; invoke `vk plan rework <parent>`; assert sibling folder exists with `_meta.parent_plan` set and Implementation Plans table has the rework row.
 
-- [ ] **Step 9: Implement `vk.plan.rework_create()` and CLI**
+- [x] **Step 9: Implement `vk.plan.rework_create()` and CLI**
   Per spec §"Rework plans". Includes the cross-directory N-collision check from v1. Run: green.
 
-- [ ] **Step 10: Test `vk plan rework-add`**
+- [x] **Step 10: Test `vk plan rework-add`**
   Append an origin item; assert `_meta.origin_items` has the new entry with auto-incremented id; track validation rejects bad values.
 
-- [ ] **Step 11: Implement `vk.plan.rework_add_origin()` and CLI**
+- [x] **Step 11: Implement `vk.plan.rework_add_origin()` and CLI**
   Run: green.
 
-- [ ] **Step 12: Test `vk plan rework-list`**
+- [x] **Step 12: Test `vk plan rework-list`**
   Glob plan folders; filter by `_meta.parent_plan`; aggregate status from phase yamls. Assert columns match spec.
 
-- [ ] **Step 13: Implement `vk.plan.rework_list()` and CLI**
+- [x] **Step 13: Implement `vk.plan.rework_list()` and CLI**
   Run: green.
 
-- [ ] **Step 14: Test `vk plan self-review` lints**
+- [x] **Step 14: Test `vk plan self-review` lints**
   - Cyclic depends_on → flagged
   - Missing tracking_issue on a phase with state changes → flagged
   - Manual phase with all steps ticked but no completion.note → flagged
 
-- [ ] **Step 15: Implement `vk.plan.self_review()` and CLI**
+- [x] **Step 15: Implement `vk.plan.self_review()` and CLI**
   Run: green.
 
 ### Task 3: `vk pickup`
 
-- [ ] **Step 1: Test `vk pickup` outputs full step text + PR title template + dependency reminder**
+- [x] **Step 1: Test `vk pickup` outputs full step text + PR title template + dependency reminder**
   Run: red.
 
-- [ ] **Step 2: Implement `vk pickup`**
+- [x] **Step 2: Implement `vk pickup`**
   Per spec — output structured markdown for the agent. Includes the PR title template `[<repo>] <plan-slug> · Phase N/M · <subject>`. Run: green.
 
 ### Task 4: `vk spec status` + `--all`
 
-- [ ] **Step 1: Test `vk.spec.parse()` extracts Implementation Plans table without Status column**
+- [x] **Step 1: Test `vk.spec.parse()` extracts Implementation Plans table without Status column**
   Use a fixture spec file; assert `SpecMeta.plans` has the right PlanRefs.
 
-- [ ] **Step 2: Implement `vk.spec.parse()`**
+- [x] **Step 2: Implement `vk.spec.parse()`**
   Create `src/vk/v2/spec.py`. Run: green.
 
-- [ ] **Step 3: Test `vk.spec.compute_status()` aggregates across plans**
+- [x] **Step 3: Test `vk.spec.compute_status()` aggregates across plans**
   Fixture: two plan folders, one Complete, one half-done. Assert SpecStatus shows `1/2 plans complete` and percent calculation.
 
-- [ ] **Step 4: Implement `vk.spec.compute_status()`**
+- [x] **Step 4: Implement `vk.spec.compute_status()`**
   Walk PlanRefs; for each, read plan dir (local fs path-based for now; cross-repo gh API is documented for Plan 3). Aggregate. Run: green.
 
-- [ ] **Step 5: Test `vk.spec.render_status_md()`**
+- [x] **Step 5: Test `vk.spec.render_status_md()`**
   Snapshot test: known input → expected markdown comment body (matches the GHA comment example in the spec).
 
-- [ ] **Step 6: Implement `render_status_md()`**
+- [x] **Step 6: Implement `render_status_md()`**
   Run: green.
 
-- [ ] **Step 7: Implement `vk spec status` CLI**
+- [x] **Step 7: Implement `vk spec status` CLI**
   Print rendered markdown.
 
-- [ ] **Step 8: Implement `vk spec status --all`**
+- [x] **Step 8: Implement `vk spec status --all`**
   Walk `docs/superpowers/specs/`; print one block per spec.
 
 ### Task 5: `vk migrate v1-to-v2`
 
-- [ ] **Step 1: Test migrate converts a sample v1 plan to v2 folder**
+- [x] **Step 1: Test migrate converts a sample v1 plan to v2 folder**
   - Tmp v1 plan markdown with phases, tasks, steps, tracking comments
   - Invoke `vk migrate v1-to-v2 --dry-run` from the tmp repo
   - Assert stdout shows expected file moves
   - Invoke `vk migrate v1-to-v2 --yes`
   - Assert: folder created with _meta, _prose, 01.yaml; original .md moved to .v1-archive; new folder parses cleanly via `vk.v2.parse`
 
-- [ ] **Step 2: Implement migrate skeleton**
+- [x] **Step 2: Implement migrate skeleton**
   Create `src/vk/v2/migrate.py`. For each .md in plans/ + archived-plans/:
   - Parse via v1 parser
   - Extract per-spec migration mapping
@@ -796,35 +796,35 @@
   - Move .md to .v1-archive
   Run Step 1: green.
 
-- [ ] **Step 3: Test migrate fails loud on per-phase target_repo override**
+- [x] **Step 3: Test migrate fails loud on per-phase target_repo override**
   v1 plan with phases declaring different `**Target repo:**` values → migration fails with clear error.
 
-- [ ] **Step 4: Implement the cross-target-repo loud failure**
+- [x] **Step 4: Implement the cross-target-repo loud failure**
   Per spec §"Migration" step 2. Run: green.
 
-- [ ] **Step 5: Test migrate --skip-in-progress (default)**
+- [x] **Step 5: Test migrate --skip-in-progress (default)**
   - Tmp repo has two plans: one Status=Complete, one Status=In Progress
   - `vk migrate v1-to-v2 --yes`
   - Assert: Complete migrated; In Progress untouched; warning printed about the skipped plan
 
-- [ ] **Step 6: Implement `--skip-in-progress` (default true)**
+- [x] **Step 6: Implement `--skip-in-progress` (default true)**
   Add `--include-in-progress` opt-in flag. Run: green.
 
-- [ ] **Step 7: Test migrate handles v1 rework plans**
+- [x] **Step 7: Test migrate handles v1 rework plans**
   Tmp repo with a `*-rework-N.md` v1 file (with Origin table, parent_plan reference). Migrate. Assert: v2 rework folder has `_meta.parent_plan`, `_meta.origin_items` populated from Origin table.
 
-- [ ] **Step 8: Implement v1-rework parsing in migrate**
+- [x] **Step 8: Implement v1-rework parsing in migrate**
   Reuse existing `src/vk/plan/rework.py:parse_origin_table()`. Run: green.
 
-- [ ] **Step 9: Test migrate updates spec files (drops Status column, points File at folders)**
+- [x] **Step 9: Test migrate updates spec files (drops Status column, points File at folders)**
   Tmp spec with Implementation Plans table including Status column. Migrate. Assert: spec table has no Status column; File cells point to folder paths.
 
-- [ ] **Step 10: Implement spec-file rewrite**
+- [x] **Step 10: Implement spec-file rewrite**
   Run: green.
 
 ### Task 6: GitHub Action workflow file
 
-- [ ] **Step 1: Write `.github/workflows/vk-spec-status.yml`**
+- [x] **Step 1: Write `.github/workflows/vk-spec-status.yml`**
   Reusable workflow using bash/gh CLI (no inline JS), to keep the file simple and reviewable.
   BEGIN: .github/workflows/vk-spec-status.yml
   ```
@@ -893,7 +893,7 @@
   ```
   END: .github/workflows/vk-spec-status.yml
 
-- [ ] **Step 2: Add a thin wrapper workflow at `.github/workflows/_pr_spec_status.yml` for this repo's own use**
+- [x] **Step 2: Add a thin wrapper workflow at `.github/workflows/_pr_spec_status.yml` for this repo's own use**
   ```
   name: PR spec status (self)
   on:
@@ -904,7 +904,7 @@
       uses: ./.github/workflows/vk-spec-status.yml
   ```
 
-- [ ] **Step 3: Lint the workflow files**
+- [x] **Step 3: Lint the workflow files**
   ```
   command -v actionlint >/dev/null && actionlint .github/workflows/vk-spec-status.yml .github/workflows/_pr_spec_status.yml
   ```
@@ -912,10 +912,10 @@
 
 ### Task 7: Final integration
 
-- [ ] **Step 1: Full e2e test — fixture plan, dispatch via apply, simulated state changes, complete**
+- [x] **Step 1: Full e2e test — fixture plan, dispatch via apply, simulated state changes, complete**
   Add `tests/integration/test_v2_full_lifecycle.py`. Use FakeGhClient + tmp git repo.
 
-- [ ] **Step 2: Run full test suite + linters**
+- [x] **Step 2: Run full test suite + linters**
   ```
   uv run ruff format src/ tests/
   uv run ruff check src/ tests/
@@ -924,7 +924,7 @@
   ```
   All green.
 
-- [ ] **Step 3: Commit Phase 3**
+- [x] **Step 3: Commit Phase 3**
   ```
   feat(v2): CLI surface, migration tool, GHA workflow — Phase 3
 

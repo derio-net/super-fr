@@ -35,7 +35,11 @@ class OriginItem(BaseModel):
     id: int
     item: str
     source: str
-    track: Literal["development", "operations", "decision"]
+    # Free-form per the spec: canonical tokens are `development` /
+    # `operations` / `decision`, but transitions like
+    # `decision → development` and compounds like
+    # `development (future-triggered)` are accepted unchanged.
+    track: str
 
 
 class PlanMeta(BaseModel):
