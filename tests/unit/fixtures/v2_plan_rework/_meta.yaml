@@ -1,0 +1,20 @@
+schema_version: 2
+plan: 2026-05-09-fixture-rework-1
+target_repo: derio-net/superpowers-for-vk
+vk_version: ">=1.0.0,<3.0.0"
+created: "2026-05-09"
+parent_plan: docs/superpowers/archived-plans/2026-05-08-fixture-parent/
+prior_rework: docs/superpowers/archived-plans/2026-05-09-fixture-rework-0/
+origin_items:
+  - id: 1
+    item: "Reviewer asked: tighten the regex to two digits"
+    source: "PR #98 review"
+    track: development
+  - id: 2
+    item: "Document INSTALLED_VK_VERSION cache rationale"
+    source: "PR #98 review"
+    track: development
+  - id: 3
+    item: "Decide whether to support 100+ phases"
+    source: "PR #98 review"
+    track: decision

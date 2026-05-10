@@ -1,3 +1,20 @@
+"""Parser for v2 plan-as-folder format.
+
+Loads `_meta.yaml` and per-phase yaml files (`NN.yaml`) from a plan
+folder, validates them against the pydantic schemas in `vk.v2.types`,
+and returns an immutable `Plan` dataclass.
+
+Design rationale lives in:
+  docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md
+
+Key invariants enforced here:
+  - The directory must contain `_meta.yaml` (otherwise it's not a v2 plan).
+  - The plan's `vk_version` constraint must be satisfiable by the
+    installed `vk` package (otherwise we'd produce wrong renders).
+  - All errors surface as `PlanSchemaError` with the offending file
+    in the message — no naked pydantic/packaging exceptions leak out.
+"""
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -6,8 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from packaging.specifiers import SpecifierSet
-from packaging.version import Version
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from vk.v2.types import PhaseDoc, PlanMeta
 
@@ -27,12 +44,28 @@ class Plan:
         return self.dir / "_prose.md"
 
 
-_PHASE_FILE_RE = re.compile(r"^(\d{2,})\.yaml$")
+# Phase yaml filenames are exactly two digits: `01.yaml` through `99.yaml`.
+# Plans with 100+ phases would be a smell; if that ever becomes real, bump
+# this to three digits and revisit the spec's per-phase decomposition guidance.
+_PHASE_FILE_RE = re.compile(r"^(\d{2})\.yaml$")
 
+# Cached at module-import time because `importlib.metadata.version()` is not
+# free. The bridge runs under supercronic, which kills and respawns the
+# process on every cron tick after `vk-bump`, so a stale cache is not a real
+# concern — the new process always re-reads the metadata.
 INSTALLED_VK_VERSION = importlib.metadata.version("vk")
 
 
 def parse(plan_dir: Path) -> Plan:
+    """Load and validate a v2 plan folder.
+
+    Raises `PlanSchemaError` for any of:
+      - `plan_dir` is not a directory
+      - missing `_meta.yaml` (looks like a v1 plan)
+      - `_meta.yaml` fails schema validation
+      - `vk_version` is malformed or unsatisfiable by the installed vk
+      - any `NN.yaml` is malformed yaml or fails schema validation
+    """
     plan_dir = Path(plan_dir).resolve()
     if not plan_dir.is_dir():
         raise PlanSchemaError(f"not a directory: {plan_dir}")
@@ -47,13 +80,23 @@ def parse(plan_dir: Path) -> Plan:
     except Exception as e:
         raise PlanSchemaError(f"_meta.yaml: {e}") from e
 
-    spec = SpecifierSet(meta.vk_version)
-    if Version(INSTALLED_VK_VERSION) not in spec:
+    try:
+        spec = SpecifierSet(meta.vk_version)
+    except InvalidSpecifier as e:
+        raise PlanSchemaError(f"_meta.yaml: invalid vk_version {meta.vk_version!r}: {e}") from e
+    try:
+        installed = Version(INSTALLED_VK_VERSION)
+    except InvalidVersion as e:  # pragma: no cover — installed version comes from packaging
+        raise PlanSchemaError(
+            f"installed vk version {INSTALLED_VK_VERSION!r} is not a valid PEP 440 version: {e}"
+        ) from e
+    if installed not in spec:
         raise PlanSchemaError(
             f"plan {plan_dir} requires vk_version {meta.vk_version} "
             f"but installed is {INSTALLED_VK_VERSION}. "
             f"To upgrade: pip install --user --upgrade "
-            f'"vk @ git+https://github.com/derio-net/superpowers-for-vk@v<version>"'
+            f'"vk @ git+https://github.com/derio-net/superpowers-for-vk@vX.Y.Z" '
+            f"where X.Y.Z is a version satisfying {meta.vk_version}."
         )
 
     indexed_phase_files: list[tuple[int, Path]] = []

@@ -1,3 +1,27 @@
+"""Pydantic schemas for the v2 plan-as-folder format.
+
+Models are organised plan-level → phase-level:
+  - PlanMeta, OriginItem        (in `_meta.yaml`)
+  - PhaseDoc, PhaseHeader, Task, Step, PhaseStateBlock, StepState,
+    Completion                  (in `NN.yaml`)
+
+Design rules baked into every model:
+  - `frozen=True`                -- instances are immutable; the renderer
+                                    in Phase 2 relies on this for purity.
+  - `extra="forbid"`             -- closed-world schema. Adding any field
+                                    in v2.x is intentionally a "must update
+                                    your vk_version" event because new
+                                    fields typically come with new logic
+                                    (the renderer treats them as inputs).
+                                    Operators bump the constraint when they
+                                    adopt new fields. v2.0.0 plans loaded
+                                    by v2.1.0 tooling work fine; v2.1.0
+                                    plans loaded by v2.0.0 tooling fail
+                                    loud at parse time, which is the right
+                                    behaviour given the "don't silently
+                                    drop unknown data" stance.
+"""
+
 from __future__ import annotations
 
 import datetime as _dt
