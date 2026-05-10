@@ -1,0 +1,295 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Drop dispatch-mode progress features and version bump
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/62
+tasks:
+- number: 1
+  title: Delete `_run_dispatch_audit` and its callees
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Delete the audit's dispatch-mode block
+
+
+      In `src/vk/commands/progress_cmd.py`:
+
+      - Delete `_run_dispatch_audit` (lines 380-444 approximately — verify with `grep -n "_run_dispatch_audit\|^def " src/vk/commands/progress_cmd.py`).
+      - Delete the `if profile.dispatch_enabled: dispatch_issues = _run_dispatch_audit(...)` block in `audit` (around line 530-533).
+      - Simplify the `mode` variable: `audit` no longer has dispatch-vs-local divergence, so `mode = "local"` everywhere or just drop the variable.
+  - id: P2.T1.S2
+    text: |-
+      Delete `get_project_number`, `list_project_items`, `BoardItem`
+
+
+      In `src/vk/gh.py`:
+
+      - Delete `BoardItem` dataclass (search for `class BoardItem` or `@dataclass` near `list_project_items`).
+      - Delete `get_project_number` (211-230).
+      - Delete `list_project_items` (338-372).
+  - id: P2.T1.S3
+    text: |-
+      Delete board-mocking tests in `test_audit.py`
+
+
+      ```bash
+      grep -n "TestDispatchAudit\|get_project_number\|list_project_items\|class.*Audit" tests/unit/test_audit.py | head
+      ```
+
+      Delete every test class that depends on `gh.get_project_number` or `gh.list_project_items` mocks. Keep the local-audit tests (status drift, spec-index drift, stale plans). Roughly 8+ test cases get removed; the local-audit ones remain.
+  - id: P2.T1.S4
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_audit.py tests/unit/test_gh.py -q --no-cov
+      ```
+
+      Expected: green, with significantly fewer audit tests.
+- number: 2
+  title: Drop `vk progress create --lifecycle`
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Drop the flag and its body emission
+
+
+      In `src/vk/commands/progress_cmd.py` `create` (line 281-312):
+
+      - Remove the `lifecycle: str = typer.Option("idea", "--lifecycle", ...)` parameter (line 285).
+      - Update `body=f"Type: {type_label}\nLifecycle: {lifecycle}"` → `body=f"Type: {type_label}"` (line 306).
+  - id: P2.T2.S2
+    text: |-
+      Confirm no tests invoke `--lifecycle`
+
+
+      ```bash
+      grep -rn "\-\-lifecycle\|lifecycle=" tests/ 2>/dev/null
+      ```
+
+      Drop any invocations / assertions about lifecycle text in the body.
+  - id: P2.T2.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest -q --no-cov -k "progress and create"
+      ```
+
+      Expected: green.
+- number: 3
+  title: Drop `vk progress transition` dispatch branch
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Replace dispatch branch with explicit gate
+
+
+      In `src/vk/commands/progress_cmd.py` `transition` (line 315-360), drop the `if not profile.dispatch_enabled:` gate and its `else: console.print("Dispatch-mode transition: not yet implemented"); raise typer.Exit(1)` branch. The function operates on plan files regardless of dispatch mode. Update the docstring: `target` is always a plan path, never an Issue URL.
+
+      The simplified shape:
+
+      ```python
+      def transition(
+          target: str = typer.Argument(..., help="Plan file path."),
+          new_state: str = typer.Argument(..., help="New Status value."),
+          yes: bool = typer.Option(False, "--yes", help="Skip confirmation."),
+      ) -> None:
+          """Transition a plan's Status header (and spec-index entry)."""
+          repo_root = _find_repo_root(Path.cwd())
+          config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
+          profile = load_profile(config_path)
+
+          plan_path = Path(target).resolve()
+          if not plan_path.exists():
+              err_console.print(f"Plan not found: {plan_path}")
+              raise typer.Exit(2)
+
+          plan = parse_plan(plan_path)
+          allowed = profile.header.status_values
+          if new_state not in allowed:
+              err_console.print(f"Invalid status '{new_state}'. Allowed: {', '.join(allowed)}")
+              raise typer.Exit(2)
+
+          if not yes:
+              if not typer.confirm(
+                  f"Transition {plan.title}: {plan.status} -> {new_state}?", default=False
+              ):
+                  raise typer.Exit(0)
+
+          _rewrite_status(plan_path, new_state)
+          console.print(f"Status: {plan.status} -> {new_state}")
+
+          spec_path = _resolve_spec(plan_path)
+          if spec_path:
+              entry = IndexEntry(
+                  plan=plan.title,
+                  repo="",
+                  file=str(plan_path.relative_to(repo_root)),
+                  status=new_state,
+                  depends_on="—",
+              )
+              upsert_entry(spec_path, entry)
+      ```
+  - id: P2.T3.S2
+    text: |-
+      Update tests if needed
+
+
+      ```bash
+      grep -rn "transition.*dispatch\|dispatch.*transition\|not yet implemented" tests/ 2>/dev/null | head
+      ```
+
+      If any test asserts the "not yet implemented" exit, delete it.
+- number: 4
+  title: Format, type-check, full suite
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Format, type-check
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
+      ```
+
+      Expected: clean.
+  - id: P2.T4.S2
+    text: |-
+      Full suite
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: green.
+- number: 5
+  title: Version bump
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Confirm current version
+
+
+      ```bash
+      grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json
+      ```
+
+      Note the current version. If the label-lifecycle-fix-phase-1 PR has already merged with its `1.3.0` bump, current is `1.3.0` and this excision bumps to `1.3.1`. If excision lands first, current is `1.2.0` and this bumps to `1.2.1`. Resolve at merge time.
+  - id: P2.T5.S2
+    text: |-
+      Bump all three files (patch)
+
+
+      Update the three version strings to current+patch. Keep the bump consistent across all three files.
+  - id: P2.T5.S3
+    text: |-
+      Refresh lockfile
+
+
+      ```bash
+      uv sync
+      uv run vk --version
+      ```
+
+      Expected: `vk --version` reports the new patch version.
+  - id: P2.T5.S4
+    text: |-
+      Final test run
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov
+      ```
+
+      Expected: clean / green.
+  - id: P2.T5.S5
+    text: |-
+      Commit and PR
+
+
+      ```bash
+      git checkout -b excision-phase-2-progress-and-bump
+      git add src/vk/commands/progress_cmd.py src/vk/gh.py tests/unit/test_audit.py \
+              pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json uv.lock
+      git commit -m "refactor: drop _run_dispatch_audit, --lifecycle, transition dispatch branch + bump"
+      git push -u origin excision-phase-2-progress-and-bump
+      gh pr create --title "Excision Phase 2 · Drop progress dispatch-mode features + version bump" \
+        --body "Final phase of project-board excision. Removes _run_dispatch_audit, vk progress create --lifecycle, and the never-implemented vk progress transition dispatch branch. Patch bump per CLAUDE.md release rule. Depends on Excision Phase 1."
+      ```
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T5.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T5.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T5.S5:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

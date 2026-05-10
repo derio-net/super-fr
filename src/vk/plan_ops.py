@@ -68,7 +68,11 @@ def _now_iso() -> str:
 
 
 def _yaml_dump(d: dict[str, Any]) -> str:
-    return yaml.safe_dump(d, sort_keys=False, allow_unicode=True)
+    """Delegate to the shared plan-yaml dumper (literal block scalars for
+    multi-line strings, preserved key order, unicode-as-is)."""
+    from vk._yaml import dump_plan_yaml
+
+    return dump_plan_yaml(d)
 
 
 # ---------------------------------------------------------------------------

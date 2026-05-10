@@ -391,7 +391,7 @@ usage errors (invalid number, conflicting flags).
 
 ## Implementation Plans
 
-| Plan | Repo | File | Status | Depends on |
-|------|------|------|--------|------------|
-| vk spec-index hygiene (Threads 1a + 1b + 2) |  | `docs/superpowers/archived-plans/2026-04-29-vk-spec-index-hygiene.md` | Complete | — |
-| vk issue command (Thread 4) |  | `docs/superpowers/plans/2026-04-29-vk-issue-command.md` | In Progress | — |
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| vk spec-index hygiene (Threads 1a + 1b + 2) |  | `docs/superpowers/archived-plans/2026-04-29-vk-spec-index-hygiene/` | — |
+| vk issue command (Thread 4) |  | `docs/superpowers/plans/2026-04-29-vk-issue-command.md` | — |

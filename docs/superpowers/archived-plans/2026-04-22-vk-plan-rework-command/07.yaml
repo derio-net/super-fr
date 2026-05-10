@@ -1,0 +1,185 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Version bump, SKILL.md, release prep
+  tag: manual
+  depends_on:
+  - 3
+  - 4
+  - 5
+  - 6
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/43
+tasks:
+- number: 1
+  title: Version bump across three source-of-truth files
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      Bump `pyproject.toml`
+
+
+      Set `[project].version = "1.2.0"`.
+  - id: P7.T1.S2
+    text: |-
+      Bump `.claude-plugin/plugin.json`
+
+
+      Set `.version = "1.2.0"`.
+  - id: P7.T1.S3
+    text: |-
+      Bump `.claude-plugin/marketplace.json`
+
+
+      Set `.plugins[0].version = "1.2.0"`.
+  - id: P7.T1.S4
+    text: |-
+      Run `uv sync` to refresh `uv.lock`
+
+
+      ```bash
+      uv sync
+      ```
+
+      Expect a single `vk==1.2.0` line changed in `uv.lock`. Commit the lockfile change in the same PR.
+  - id: P7.T1.S5
+    text: |-
+      Confirm `vk --version`
+
+
+      ```bash
+      uv run vk --version
+      ```
+
+      Expected stdout: a line containing `1.2.0`. If the CLI has no `--version` flag, verify via `python -c "from importlib.metadata import version; print(version('vk'))"`.
+- number: 2
+  title: Update `skills/vk-plan/SKILL.md`
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      Add rework-surface mention under "Procedure" or "Integration"
+
+
+      Insert a bullet that names the three commands and when to invoke them. Draft:
+
+      ```markdown
+      ## Rework plans
+
+      After a parent plan ships, defer surfaced-but-unrealised items into a
+      separate rework plan — do not reopen the parent.
+
+      - `vk plan rework <parent-plan-path>` scaffolds the rework file.
+      - `vk plan rework-add <rework-path> --item ... --source ... --track ...`
+        appends a row to the Origin table.
+      - `vk plan rework-list [--include-archived] [--status ...] [--track ...]`
+        surfaces open reworks across the repo.
+
+      See the spec for the full convention: `docs/superpowers/specs/2026-04-22-vk-plan-rework-design.md`.
+      ```
+
+      Placement: insert as a new `## Rework plans` section after the existing procedural body. Keep the frontmatter and existing sections intact.
+- number: 3
+  title: Full-sweep CI gate + self-review
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      Run ruff format + check
+
+
+      ```bash
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      ```
+
+      Both clean.
+  - id: P7.T3.S2
+    text: |-
+      Run mypy
+
+
+      ```bash
+      uv run mypy src/
+      ```
+
+      Clean.
+  - id: P7.T3.S3
+    text: |-
+      Run full pytest
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      All green.
+  - id: P7.T3.S4
+    text: |-
+      Self-review this plan file
+
+
+      ```bash
+      uv run vk plan self-review docs/superpowers/plans/2026-04-22-vk-plan-rework-command.md
+      ```
+
+      Expect the only surviving issues to be structural-clean or already-addressed placeholders (the Goal bullet in the scaffold template uses "TODO" on purpose for operator handoff).
+  - id: P7.T3.S5
+    text: |-
+      `--help` smoke test
+
+
+      ```bash
+      uv run vk plan rework --help
+      uv run vk plan rework-add --help
+      uv run vk plan rework-list --help
+      ```
+
+      All three produce clean typer output with no stub text.
+state:
+  steps:
+    P7.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P7.T3.S5:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

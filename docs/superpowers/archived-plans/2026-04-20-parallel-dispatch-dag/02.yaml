@@ -1,0 +1,936 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Migration tooling, strict enforcement, execute, docs, version bump
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: '`vk plan convert --add-deps` + `phased-no-deps.md` fixture'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Create the no-deps fixture
+
+
+      Create `tests/fixtures/plans/phased-no-deps.md`:
+
+      ```
+      # Legacy Linear Plan
+
+      **Spec:** `specs/x.md`
+      **Status:** Not Started
+
+      **Goal:** Simulates a pre-DAG plan that needs migration.
+
+      ---
+
+      ## Phase 1: Alpha [agentic]
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+
+      ## Phase 2: Beta [agentic]
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+
+      ## Phase 3: Gamma [agentic]
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+      ```
+  - id: P2.T1.S2
+    text: |-
+      Write failing unit tests
+
+
+      Append to `tests/unit/test_plan_convert.py`:
+
+      ```python
+      class TestAddDeps:
+          def test_add_deps_on_linear_plan(self, tmp_path: Path) -> None:
+              src = Path(__file__).parent.parent / "fixtures" / "plans" / "phased-no-deps.md"
+              dst = tmp_path / "p.md"
+              dst.write_text(src.read_text())
+              add_deps(dst)
+              text = dst.read_text()
+              assert "## Phase 1: Alpha [agentic]\n**Depends on:** —" in text
+              assert "## Phase 2: Beta [agentic]\n**Depends on:** Phase 1" in text
+              assert "## Phase 3: Gamma [agentic]\n**Depends on:** Phase 2" in text
+
+          def test_add_deps_is_idempotent(self, tmp_path: Path) -> None:
+              src = Path(__file__).parent.parent / "fixtures" / "plans" / "phased-no-deps.md"
+              dst = tmp_path / "p.md"
+              dst.write_text(src.read_text())
+              add_deps(dst)
+              first = dst.read_text()
+              add_deps(dst)
+              second = dst.read_text()
+              assert first == second
+
+          def test_add_deps_refuses_mixed_plan(self, tmp_path: Path) -> None:
+              dst = tmp_path / "p.md"
+              dst.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+                  "## Phase 2: B [agentic]\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              with pytest.raises(MixedPlanError, match="declare both or neither"):
+                  add_deps(dst)
+      ```
+  - id: P2.T1.S3
+    text: |-
+      Write a failing integration test
+
+
+      Append to `tests/integration/test_convert.py`:
+
+      ```python
+      class TestAddDepsCli:
+          def test_add_deps_via_cli_modifies_file_and_commits(
+              self, tmp_repo: Path
+          ) -> None:
+              import shutil
+              src = Path(__file__).parent.parent / "fixtures" / "plans" / "phased-no-deps.md"
+              plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+              plans_dir.mkdir(parents=True, exist_ok=True)
+              plan = plans_dir / "2026-04-20-legacy.md"
+              shutil.copy(src, plan)
+
+              result = runner.invoke(
+                  app, ["plan", "convert", str(plan), "--add-deps", "--yes"],
+                  env={"GIT_DIR": str(tmp_repo / ".git")},
+              )
+              assert result.exit_code == 0, result.stdout
+
+              text = plan.read_text()
+              assert "**Depends on:** —" in text
+              assert "**Depends on:** Phase 1" in text
+      ```
+  - id: P2.T1.S4
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/unit/test_plan_convert.py::TestAddDeps tests/integration/test_convert.py::TestAddDepsCli -v
+      ```
+
+      Expected: FAIL — `add_deps` and `MixedPlanError` are not defined; `--add-deps` flag is not wired.
+  - id: P2.T1.S5
+    text: |-
+      Implement `add_deps` in `convert.py`
+
+
+      Add to `src/vk/plan/convert.py`:
+
+      ```python
+      class MixedPlanError(ValueError):
+          """Raised when some phases have **Depends on:** and others do not."""
+
+
+      _DEPENDS_LINE_RE = re.compile(r"^\*\*Depends on:\*\*", re.MULTILINE)
+      _PHASE_HEADER_RE = re.compile(r"^## Phase (\d+):.*\[(manual|agentic)\]\s*$", re.MULTILINE)
+
+
+      def add_deps(plan_path: Path) -> None:
+          """Migrate a phased plan by adding **Depends on:** lines.
+
+          Phase 1 gets '—'; phase N (N>=2) gets 'Phase {N-1}'. Idempotent: phases
+          that already have the line are left alone. If some phases have the line
+          and others do not, raise MixedPlanError without writing.
+          """
+          text = plan_path.read_text()
+          headers = list(_PHASE_HEADER_RE.finditer(text))
+          if not headers:
+              return  # nothing to do; not a phased plan
+
+          # Determine which phases already have the line.
+          slices: list[tuple[int, int]] = []
+          for i, match in enumerate(headers):
+              end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+              slices.append((match.end(), end))
+          has_line = [bool(_DEPENDS_LINE_RE.search(text[s:e])) for s, e in slices]
+
+          if any(has_line) and not all(has_line):
+              offenders_with = [str(int(h.group(1))) for h, flag in zip(headers, has_line, strict=True) if flag]
+              offenders_without = [str(int(h.group(1))) for h, flag in zip(headers, has_line, strict=True) if not flag]
+              raise MixedPlanError(
+                  f"Phases {', '.join(offenders_with)} have **Depends on:** but phases "
+                  f"{', '.join(offenders_without)} do not. Declare both or neither — "
+                  f"auto-inference is disabled."
+              )
+          if all(has_line):
+              return  # idempotent no-op
+
+          # Insert the line immediately after the header (skipping any tracking comment).
+          new_parts: list[str] = []
+          cursor = 0
+          for i, match in enumerate(headers):
+              phase_num = int(match.group(1))
+              dep_line = "**Depends on:** —" if phase_num == 1 else f"**Depends on:** Phase {phase_num - 1}"
+              header_end = match.end()
+              # Look for a tracking comment immediately after the header.
+              tail = text[header_end:slices[i][1]]
+              tail_lines = tail.split("\n")
+              insert_at = header_end
+              if len(tail_lines) >= 2 and tail_lines[1].startswith("<!-- Tracking:"):
+                  insert_at = header_end + len("\n" + tail_lines[1])
+
+              new_parts.append(text[cursor:insert_at])
+              new_parts.append(f"\n{dep_line}")
+              cursor = insert_at
+          new_parts.append(text[cursor:])
+          plan_path.write_text("".join(new_parts))
+      ```
+  - id: P2.T1.S6
+    text: |-
+      Wire the `--add-deps` flag in `plan_cmd.py`
+
+
+      In `src/vk/commands/plan_cmd.py`, extend the existing `convert` subcommand with the `--add-deps` option. Make it mutually exclusive with the existing `--single-phase` / `--one-per-task` / `--group-by-tag` flags (so `convert <plan> --add-deps --yes` works standalone). The `--add-deps` branch honours `resolve_action(dry_run, yes)`, calls `add_deps(plan_path)`, and on `--yes` also runs:
+
+      ```python
+      subprocess.run(["git", "add", str(plan_path)], check=True, cwd=repo_root)
+      subprocess.run(
+          ["git", "commit", "-m", "chore(plan): add **Depends on:** lines (migration)"],
+          check=True, cwd=repo_root,
+      )
+      ```
+
+      On `--dry-run`, print the diff (use `difflib.unified_diff` on original vs would-be-written text) and exit 0 without writing.
+  - id: P2.T1.S7
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/unit/test_plan_convert.py tests/integration/test_convert.py -v
+      ```
+
+      Expected: PASS.
+  - id: P2.T1.S8
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/plan/convert.py src/vk/commands/plan_cmd.py tests/unit/test_plan_convert.py tests/integration/test_convert.py
+      uv run ruff format --check src/vk/plan/convert.py src/vk/commands/plan_cmd.py tests/unit/test_plan_convert.py tests/integration/test_convert.py
+      uv run mypy src/vk/plan/convert.py src/vk/commands/plan_cmd.py
+      ```
+
+      Expected: PASS.
+  - id: P2.T1.S9
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/plan/convert.py src/vk/commands/plan_cmd.py tests/unit/test_plan_convert.py tests/integration/test_convert.py tests/fixtures/plans/phased-no-deps.md
+      git commit -m "feat(plan): vk plan convert --add-deps migration mode"
+      ```
+- number: 2
+  title: Strict missing-line enforcement (live plans only)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Write failing tests
+
+
+      Append to `tests/unit/test_plan_validate.py`:
+
+      ```python
+      class TestMissingLineEnforcement:
+          def test_missing_line_on_non_root_live_plan_fails(self, tmp_path: Path) -> None:
+              plan_path = tmp_path / "plans" / "p.md"
+              plan_path.parent.mkdir(parents=True)
+              plan_path.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+                  "## Phase 2: B [agentic]\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              plan = parse_plan(plan_path)
+              with pytest.raises(DagValidationError, match="has no \\*\\*Depends on:\\*\\* line"):
+                  validate_dag(plan, plan_path=plan_path)
+
+          def test_missing_line_on_archived_plan_is_allowed(self, tmp_path: Path) -> None:
+              plan_path = tmp_path / "archived-plans" / "p.md"
+              plan_path.parent.mkdir(parents=True)
+              plan_path.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Complete\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              plan = parse_plan(plan_path)
+              validate_dag(plan, plan_path=plan_path)
+
+          def test_root_phase_missing_line_also_fails_in_live(self, tmp_path: Path) -> None:
+              """Root phases MUST declare '**Depends on:** —' explicitly in live plans."""
+              plan_path = tmp_path / "plans" / "p.md"
+              plan_path.parent.mkdir(parents=True)
+              plan_path.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              plan = parse_plan(plan_path)
+              with pytest.raises(DagValidationError, match="has no \\*\\*Depends on:\\*\\* line"):
+                  validate_dag(plan, plan_path=plan_path)
+      ```
+  - id: P2.T2.S2
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/unit/test_plan_validate.py::TestMissingLineEnforcement -v
+      ```
+
+      Expected: FAIL — `validate_dag` takes no `plan_path` argument yet.
+  - id: P2.T2.S3
+    text: |-
+      Detection — track whether the line was present during parsing
+
+
+      The parser already returns `depends_on=()` for both `**Depends on:** —` and an absent line. To distinguish them, add a parser-level attribute `phase_has_depends_line: tuple[bool, ...]` to `Plan`. Update the model to include it, and the parser to populate it based on `_DEPENDS_ON_RE.search(phase_body) is not None`.
+
+      In `src/vk/plan/models.py`, add:
+
+      ```python
+      @dataclass(frozen=True)
+      class Plan:
+          # ... existing fields ...
+          phase_has_depends_line: tuple[bool, ...] = ()
+      ```
+
+      Default of `()` keeps pre-Phase-2 test fixtures working. Update all `Plan(...)` call sites (grep for `Plan(` in `src/` and `tests/`).
+  - id: P2.T2.S4
+    text: |-
+      Extend `validate_dag` to accept `plan_path` and enforce missing-line for live plans
+
+
+      In `src/vk/plan/validate.py`:
+
+      ```python
+      def validate_dag(plan: Plan, plan_path: Path | None = None) -> None:
+          """Check cycle, forward-ref, self-ref, unknown-ref, and (for live plans)
+          missing **Depends on:** lines.
+
+          'Live plan' = a plan not under a directory named 'archived-plans'.
+          If plan_path is None, the missing-line check is skipped.
+          """
+          # ...existing cycle/forward/self/unknown checks unchanged...
+
+          if plan_path is None:
+              return
+          if "archived-plans" in plan_path.parts:
+              return
+
+          for phase, present in zip(plan.phases, plan.phase_has_depends_line, strict=True):
+              if not present:
+                  raise DagValidationError(
+                      f"Phase {phase.number} has no **Depends on:** line. "
+                      f"Run 'vk plan convert {plan_path} --add-deps --yes' to migrate, "
+                      f"or declare it manually."
+                  )
+      ```
+  - id: P2.T2.S5
+    text: |-
+      Update self-review and dispatch --dry-run to pass `plan_path`
+
+
+      In `src/vk/commands/plan_cmd.py::self_review` and `src/vk/commands/dispatch_cmd.py::dispatch_create`, update the `validate_dag(plan)` call to `validate_dag(plan, plan_path=plan_path_resolved)`.
+  - id: P2.T2.S6
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/unit/test_plan_validate.py -v
+      ```
+
+      Expected: PASS.
+  - id: P2.T2.S7
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/plan/validate.py src/vk/plan/models.py src/vk/plan/parser.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py
+      uv run ruff format --check src/vk/plan/validate.py src/vk/plan/models.py src/vk/plan/parser.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py
+      uv run mypy src/vk/plan/validate.py src/vk/plan/models.py src/vk/plan/parser.py
+      ```
+
+      Expected: PASS.
+  - id: P2.T2.S8
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/plan/validate.py src/vk/plan/models.py src/vk/plan/parser.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py
+      git commit -m "feat(plan): enforce **Depends on:** on live plans; exempt archived-plans"
+      ```
+- number: 3
+  title: '`vk execute check-deps` reads the declared DAG'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write failing integration tests
+
+
+      Append to `tests/integration/test_plan_execute.py`:
+
+      ```python
+      class TestCheckDepsDag:
+          def test_checkdeps_on_phase_depending_on_phase_3_ignores_phase_4(
+              self, tmp_repo: Path
+          ) -> None:
+              """Phase 5 depends on Phase 3 only; check-deps passes even if Phase 4 unchecked."""
+              plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+              plans_dir.mkdir(parents=True, exist_ok=True)
+              plan = plans_dir / "2026-04-20-dag.md"
+              plan.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** In Progress\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+                  "### Task 1: T\n\n- [x] **Step 1:** s\n\n"
+                  "## Phase 2: B [agentic]\n**Depends on:** —\n\n"
+                  "### Task 1: T\n\n- [x] **Step 1:** s\n\n"
+                  "## Phase 3: C [agentic]\n**Depends on:** Phase 1\n\n"
+                  "### Task 1: T\n\n- [x] **Step 1:** s\n\n"
+                  "## Phase 4: D [agentic]\n**Depends on:** Phase 2\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+                  "## Phase 5: E [agentic]\n**Depends on:** Phase 3\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              result = runner.invoke(app, ["execute", "check-deps", str(plan), "5"])
+              assert result.exit_code == 0, result.stdout
+              assert "Dependencies satisfied" in result.stdout
+              assert "Phase 3" in result.stdout
+
+          def test_checkdeps_fails_when_declared_dep_incomplete(
+              self, tmp_repo: Path
+          ) -> None:
+              plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+              plans_dir.mkdir(parents=True, exist_ok=True)
+              plan = plans_dir / "2026-04-20-dag.md"
+              plan.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** In Progress\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+                  "## Phase 2: B [agentic]\n**Depends on:** Phase 1\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              result = runner.invoke(app, ["execute", "check-deps", str(plan), "2"])
+              assert result.exit_code == 1
+              assert "Phase 1" in (result.stdout + (result.stderr or ""))
+      ```
+  - id: P2.T3.S2
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/integration/test_plan_execute.py::TestCheckDepsDag -v
+      ```
+
+      Expected: FAIL — today's check-deps walks every phase `< target` and refuses due to Phase 4's unchecked step.
+  - id: P2.T3.S3
+    text: |-
+      Rewrite `check_deps`
+
+
+      Replace the body of `check_deps` in `src/vk/commands/execute_cmd.py`:
+
+      ```python
+      @execute_app.command(name="check-deps")
+      def check_deps(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file.", exists=True),
+          target: int = typer.Argument(..., help="Phase number."),
+      ) -> None:
+          """Check if declared dependencies for a phase are satisfied."""
+          plan_path = plan_path.resolve()
+          _reject_flat(plan_path)
+          plan = parse_plan(plan_path)
+
+          phases_by_num = {p.number: p for p in plan.phases}
+          target_phase = phases_by_num.get(target)
+          if target_phase is None:
+              err_console.print(f"Phase {target} not found in plan.")
+              raise typer.Exit(2)
+
+          for dep_num in target_phase.depends_on:
+              dep_phase = phases_by_num.get(dep_num)
+              if dep_phase is None:
+                  err_console.print(
+                      f"Phase {target} declares Phase {dep_num} as a dependency, "
+                      f"but Phase {dep_num} does not exist."
+                  )
+                  raise typer.Exit(1)
+              unchecked = sum(1 for t in dep_phase.tasks for s in t.steps if s.state == " ")
+              if unchecked > 0:
+                  err_console.print(
+                      f"Phase {target} depends on Phase {dep_num}, "
+                      f"which has {unchecked} unchecked step(s)."
+                  )
+                  raise typer.Exit(1)
+
+          dep_list = (
+              ", ".join(f"Phase {n}" for n in target_phase.depends_on)
+              if target_phase.depends_on else "none (root phase)"
+          )
+          console.print(f"Dependencies satisfied for Phase {target} (checked: {dep_list}).")
+      ```
+  - id: P2.T3.S4
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/integration/test_plan_execute.py -v
+      ```
+
+      Expected: PASS.
+  - id: P2.T3.S5
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/commands/execute_cmd.py tests/integration/test_plan_execute.py
+      uv run ruff format --check src/vk/commands/execute_cmd.py tests/integration/test_plan_execute.py
+      uv run mypy src/vk/commands/execute_cmd.py
+      ```
+
+      Expected: PASS.
+  - id: P2.T3.S6
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/commands/execute_cmd.py tests/integration/test_plan_execute.py
+      git commit -m "feat(execute): check-deps reads declared DAG instead of N-1 chain"
+      ```
+- number: 4
+  title: '`vk dispatch migrate` refusal guard'
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Write a failing integration test
+
+
+      Append to `tests/integration/test_dispatch.py`:
+
+      ```python
+      class TestDispatchMigrateGuard:
+          def test_migrate_refuses_pre_dag_plan(
+              self, dispatch_config: Path, tmp_repo: Path
+          ) -> None:
+              plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+              plans_dir.mkdir(parents=True, exist_ok=True)
+              plan = plans_dir / "2026-04-20-predag.md"
+              plan.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** In Progress\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n"
+                  "<!-- Tracking: https://github.com/derio-net/test-repo/issues/10 -->\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+                  "## Phase 2: B [agentic]\n"
+                  "<!-- Tracking: https://github.com/derio-net/test-repo/issues/11 -->\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              result = runner.invoke(
+                  app, ["dispatch", "migrate", str(plan), "--dry-run"],
+                  env={"GIT_DIR": str(tmp_repo / ".git")},
+              )
+              assert result.exit_code == 2
+              combined = result.stdout + (result.stderr or "")
+              assert "**Depends on:**" in combined
+              assert "vk plan convert" in combined
+              assert "--add-deps" in combined
+      ```
+  - id: P2.T4.S2
+    text: |-
+      Run the test to confirm it fails
+
+
+      ```
+      uv run pytest tests/integration/test_dispatch.py::TestDispatchMigrateGuard -v
+      ```
+
+      Expected: FAIL — migrate proceeds today regardless of whether `**Depends on:**` lines exist.
+  - id: P2.T4.S3
+    text: |-
+      Implement the guard in `migrate`
+
+
+      In `src/vk/commands/dispatch_cmd.py::migrate`, after `parse_plan` returns and before the existing `for phase in plan.phases` rewrite loop:
+
+      ```python
+      # Guard: refuse to migrate a plan that has dispatched Issues but no
+      # **Depends on:** declarations. The new dispatch body format requires
+      # per-phase deps to be declared in the plan file before we rewrite Issues.
+      if any(tracked) and not all(plan.phase_has_depends_line):
+          err_console.print(
+              "Error: Plan has dispatched Issues but no **Depends on:** declarations.\n"
+              "Migrate the plan file first, then re-run migrate:\n"
+              f"  vk plan convert {plan_path_resolved} --add-deps --yes\n"
+              f"  vk dispatch migrate {plan_path_resolved} --yes"
+          )
+          raise typer.Exit(2)
+      ```
+
+      (`tracked` is the existing `dict[int, str]` from `_get_already_tracked`; truthiness on it means at least one phase is dispatched.)
+  - id: P2.T4.S4
+    text: |-
+      Run the test to confirm it passes
+
+
+      ```
+      uv run pytest tests/integration/test_dispatch.py::TestDispatchMigrateGuard -v
+      ```
+
+      Expected: PASS.
+  - id: P2.T4.S5
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/commands/dispatch_cmd.py tests/integration/test_dispatch.py
+      uv run ruff format --check src/vk/commands/dispatch_cmd.py tests/integration/test_dispatch.py
+      uv run mypy src/vk/commands/dispatch_cmd.py
+      ```
+
+      Expected: PASS.
+  - id: P2.T4.S6
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/commands/dispatch_cmd.py tests/integration/test_dispatch.py
+      git commit -m "feat(dispatch): migrate refuses pre-DAG plans; points at convert --add-deps"
+      ```
+- number: 5
+  title: Skill docs + version bump 1.1.0
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Update `skills/vk-plan/SKILL.md`
+
+
+      Add a new section under the existing "Rules" heading:
+
+      ```markdown
+      ## Dependency declarations
+
+      Every phase in a phased plan declares its blockers on a `**Depends on:**` line
+      directly under the phase header (after any `<!-- Tracking: -->` comment).
+
+      - Root phases: `**Depends on:** —` (em-dash).
+      - Non-root phases: `**Depends on:** Phase 1, Phase 2` (comma-separated Phase refs).
+      - Multiple roots are allowed (fan-out / diamond shapes).
+      - Deps are backward-only: Phase N may only reference Phase < N.
+
+      Example:
+
+          ## Phase 3: Fan-in [agentic]
+          **Depends on:** Phase 1, Phase 2
+
+      To migrate an existing linear plan: `vk plan convert <plan> --add-deps --yes`.
+      ```
+  - id: P2.T5.S2
+    text: |-
+      Update `skills/vk-dispatch/SKILL.md`
+
+
+      In the Error handling table, change the row for exit code 2 to include the new migrate refusal:
+
+      ```markdown
+      | 2 | Plan parse error, flat plan, or legacy plan with no `**Depends on:**` lines | Run `vk plan convert <plan> --add-deps --yes` and retry |
+      ```
+  - id: P2.T5.S3
+    text: |-
+      Update `skills/vk-execute/SKILL.md`
+
+
+      In the Procedure section, update step 1's description under `check-deps`:
+
+      ```markdown
+      1. Check dependencies (reads the phase's declared `**Depends on:**` list):
+         ```bash
+         vk execute check-deps <plan> <phase>
+         ```
+      ```
+  - id: P2.T5.S4
+    text: |-
+      Bump the version in three files
+
+
+      Update `pyproject.toml`:
+
+      ```toml
+      [project]
+      version = "1.1.0"
+      ```
+
+      Update `.claude-plugin/plugin.json`:
+
+      ```json
+      {
+        "version": "1.1.0",
+        ...
+      }
+      ```
+
+      Update `.claude-plugin/marketplace.json`:
+
+      ```json
+      {
+        "plugins": [
+          {
+            "version": "1.1.0",
+            ...
+          }
+        ]
+      }
+      ```
+  - id: P2.T5.S5
+    text: |-
+      Update the version test
+
+
+      In `tests/unit/test_version.py`, update the expected version to `"1.1.0"`.
+  - id: P2.T5.S6
+    text: |-
+      Resync the lockfile
+
+
+      ```
+      uv sync
+      ```
+
+      Expected: writes updated `uv.lock` with `vk==1.1.0`.
+  - id: P2.T5.S7
+    text: |-
+      Verify the CLI reports the new version
+
+
+      ```
+      uv run vk --version
+      ```
+
+      Expected: prints `vk, version 1.1.0` (or the project's equivalent `--version` output format).
+  - id: P2.T5.S8
+    text: |-
+      Run the full test suite and quality gates
+
+
+      ```
+      uv run pytest -q --no-cov
+      uv run ruff check src/ tests/
+      uv run ruff format --check src/ tests/
+      uv run mypy src/
+      ```
+
+      Expected: PASS across the board.
+  - id: P2.T5.S9
+    text: |-
+      Commit
+
+
+      ```
+      git add skills/ pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json uv.lock tests/unit/test_version.py
+      git commit -m "chore: bump to 1.1.0 — DAG grammar, docs, execute+migrate hooks"
+      ```
+
+      ### Phase 2 exit
+
+      Re-run everything one more time and open the Phase 2 PR:
+
+      ```
+      uv run pytest -q --no-cov
+      uv run ruff check src/ tests/
+      uv run ruff format --check src/ tests/
+      uv run mypy src/
+      uv run vk --version
+      ```
+
+      All must PASS and version must read `1.1.0`. Open the PR with title `feat: parallel dispatch DAG — migration, strict enforcement, version 1.1.0` referencing Phase 2 of this plan.
+
+      After merge, run the operational migration against live plans in consumer repos:
+
+      ```
+      vk plan convert <plan> --add-deps --yes
+      ```
+
+      for every phased plan in `derio-net/*` that pre-dates 1.1.0. If any of those plans already have dispatched Issues, follow with `vk dispatch migrate <plan> --yes`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S8:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S9:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S7:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S8:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S7:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S8:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S9:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

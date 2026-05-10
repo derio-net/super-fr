@@ -1,0 +1,611 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Label registry and gh helpers
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/57
+tasks:
+- number: 1
+  title: '`src/vk/labels.py` registry'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      TDD — registry tests
+
+
+      `tests/unit/test_labels.py`:
+
+      ```python
+      """Tests for the canonical label registry."""
+
+      from __future__ import annotations
+
+      import re
+
+      import pytest
+
+      from vk import labels
+
+
+      HEX_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
+
+
+      class TestLabelDef:
+          def test_all_constants_have_six_char_hex_color(self) -> None:
+              for ld in (labels.VK_READY, labels.MANUAL, labels.IN_PROGRESS,
+                         labels.PR_READY, labels.VK_SYNCED):
+                  assert HEX_RE.match(ld.color), f"{ld.name}: bad color {ld.color!r}"
+
+          def test_all_constants_have_non_empty_description(self) -> None:
+              for ld in (labels.VK_READY, labels.MANUAL, labels.IN_PROGRESS,
+                         labels.PR_READY, labels.VK_SYNCED):
+                  assert ld.description, f"{ld.name}: empty description"
+
+          def test_lifecycle_names_are_unique(self) -> None:
+              names = [labels.VK_READY.name, labels.MANUAL.name,
+                       labels.IN_PROGRESS.name, labels.PR_READY.name,
+                       labels.VK_SYNCED.name]
+              assert len(names) == len(set(names))
+
+          def test_lifecycle_names_match_spec(self) -> None:
+              assert labels.VK_READY.name    == "vk-ready"
+              assert labels.MANUAL.name      == "manual"
+              assert labels.IN_PROGRESS.name == "in-progress"
+              assert labels.PR_READY.name    == "pr-ready"
+              assert labels.VK_SYNCED.name   == "vk-synced"
+
+
+      class TestSpecLabel:
+          def test_renders_name(self) -> None:
+              assert labels.spec_label("foo").name == "spec:foo"
+
+          def test_color_is_canonical(self) -> None:
+              assert labels.spec_label("foo").color == labels.SPEC_LABEL_COLOR
+
+          def test_description_includes_slug(self) -> None:
+              assert "foo" in labels.spec_label("foo").description
+
+
+      class TestPlanLabel:
+          def test_renders_name(self) -> None:
+              assert labels.plan_label("foo").name == "plan:foo"
+
+          def test_color_is_canonical(self) -> None:
+              assert labels.plan_label("foo").color == labels.PLAN_LABEL_COLOR
+
+          def test_description_includes_name(self) -> None:
+              assert "foo" in labels.plan_label("foo").description
+
+
+      class TestPhaseLabel:
+          def test_renders_name(self) -> None:
+              assert labels.phase_label(3).name == "phase:3"
+
+          def test_color_is_canonical(self) -> None:
+              assert labels.phase_label(3).color == labels.PHASE_LABEL_COLOR
+
+          def test_description_includes_number(self) -> None:
+              assert "3" in labels.phase_label(3).description
+
+
+      class TestRegistryLookup:
+          def test_lifecycle_dict_keys_are_role_names(self) -> None:
+              assert set(labels.LIFECYCLE.keys()) == {
+                  "vk_ready", "manual", "in_progress", "pr_ready"
+              }
+
+          def test_lifecycle_values_match_module_constants(self) -> None:
+              assert labels.LIFECYCLE["vk_ready"]    is labels.VK_READY
+              assert labels.LIFECYCLE["manual"]      is labels.MANUAL
+              assert labels.LIFECYCLE["in_progress"] is labels.IN_PROGRESS
+              assert labels.LIFECYCLE["pr_ready"]    is labels.PR_READY
+      ```
+  - id: P1.T1.S2
+    text: |-
+      Implement `src/vk/labels.py`
+
+
+      ```python
+      """Canonical label registry — single source of truth for label colors,
+      descriptions, and dynamic templates used across vk dispatch, vk execute,
+      and vk admin labels-sync.
+
+      Color scheme (lifecycle gradient, board reads visually as a progression):
+        vk-ready     blue    queued for an agent to pick up
+        in-progress  orange  agent is actively working
+        pr-ready     green   PR is open, awaiting review
+
+      manual is gray (human-only). vk-synced is olive (system metadata, set by
+      the vk-issue-bridge). plan:<slug> is dark red (already in the wild,
+      preserved for compat). phase:<n> is yellow (attribute, not state).
+      """
+
+      from __future__ import annotations
+
+      from dataclasses import dataclass
+
+
+      @dataclass(frozen=True)
+      class LabelDef:
+          name: str           # the GitHub label string
+          color: str          # 6-char hex without leading #
+          description: str    # surfaces in the GitHub UI
+
+
+      # Lifecycle states (mutually exclusive — at most one on a given Issue)
+      VK_READY    = LabelDef("vk-ready",    "0E8AE6", "Queued for an agent to pick up")
+      MANUAL      = LabelDef("manual",      "BFBFBF", "Human-only; not routable to an agent")
+      IN_PROGRESS = LabelDef("in-progress", "D93F0B", "An agent is actively working on this")
+      PR_READY    = LabelDef("pr-ready",    "0E8A16", "PR is open; awaiting review")
+
+      # Bridge-managed (set by vk-issue-bridge after VK board sync)
+      VK_SYNCED   = LabelDef("vk-synced",   "6A630D", "Synced to VK board")
+
+      # Templated label colors (name is dynamic)
+      SPEC_LABEL_COLOR  = "B60205"
+      PLAN_LABEL_COLOR  = "1D76DB"
+      PHASE_LABEL_COLOR = "FBCA04"
+
+
+      def spec_label(spec_slug: str) -> LabelDef:
+          """Return the LabelDef for `spec:<spec-slug>` (the umbrella identifier
+          rolling up every Issue across every plan under one spec)."""
+          return LabelDef(f"spec:{spec_slug}", SPEC_LABEL_COLOR, f"Part of spec {spec_slug}")
+
+
+      def plan_label(plan_name: str) -> LabelDef:
+          """Return the LabelDef for `plan:<plan-name>` (the per-plan identifier
+          within a spec; falls back to `phase-N` for descriptor-less plan
+          filenames — see `derive_plan_name`)."""
+          return LabelDef(f"plan:{plan_name}", PLAN_LABEL_COLOR, f"Plan: {plan_name}")
+
+
+      def phase_label(n: int) -> LabelDef:
+          """Return the LabelDef for `phase:<n>` (the internal phase number
+          within a plan)."""
+          return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
+
+
+      # Role-name → LabelDef map. Keyed so dispatch.labels.<role> overrides apply
+      # cleanly. The dispatch config defaults must mirror these keys.
+      LIFECYCLE: dict[str, LabelDef] = {
+          "vk_ready":    VK_READY,
+          "manual":      MANUAL,
+          "in_progress": IN_PROGRESS,
+          "pr_ready":    PR_READY,
+      }
+      ```
+  - id: P1.T1.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_labels.py -q --no-cov
+      ```
+
+      Expected: 11 passed.
+- number: 2
+  title: '`GhError` carries stderr and returncode'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      TDD — `GhError` carries fields
+
+
+      Add to `tests/unit/test_gh.py`:
+
+      ```python
+      class TestGhErrorFields:
+          def test_default_stderr_and_returncode(self) -> None:
+              err = gh.GhError("boom")
+              assert err.stderr == ""
+              assert err.returncode == 0
+              assert str(err) == "boom"
+
+          def test_explicit_stderr_and_returncode(self) -> None:
+              err = gh.GhError("boom", stderr="HTTP 503\n", returncode=1)
+              assert err.stderr == "HTTP 503\n"
+              assert err.returncode == 1
+              assert str(err) == "boom"
+
+          def test_run_gh_populates_fields_on_failure(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              import subprocess
+              def fake_run(*a, **kw):  # type: ignore[no-untyped-def]
+                  raise subprocess.CalledProcessError(
+                      returncode=1, cmd=["gh"], output="", stderr="HTTP 403\n"
+                  )
+              monkeypatch.setattr(gh.subprocess, "run", fake_run)
+              with pytest.raises(gh.GhError) as exc_info:
+                  gh._run_gh(["api", "user"])
+              assert exc_info.value.stderr == "HTTP 403\n"
+              assert exc_info.value.returncode == 1
+      ```
+  - id: P1.T2.S2
+    text: |-
+      Extend `GhError` and `_run_gh`
+
+
+      Replace the `GhError` class and update `_run_gh` in `src/vk/gh.py`:
+
+      ```python
+      class GhError(Exception):
+          """Error from a gh CLI invocation."""
+
+          def __init__(self, message: str, *, stderr: str = "", returncode: int = 0) -> None:
+              super().__init__(message)
+              self.stderr = stderr
+              self.returncode = returncode
+
+
+      def _run_gh(args: list[str]) -> str:
+          """Run a gh command and return stdout. Raises GhError on failure."""
+          try:
+              result = subprocess.run(
+                  ["gh", *args],
+                  capture_output=True,
+                  text=True,
+                  check=True,
+              )
+          except subprocess.CalledProcessError as exc:
+              msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
+              raise GhError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
+          return result.stdout.strip()
+      ```
+  - id: P1.T2.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_gh.py -q --no-cov
+      ```
+
+      Expected: existing tests still pass + 3 new ones green.
+- number: 3
+  title: '`gh.swap_issue_labels` helper'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      TDD — `swap_issue_labels`
+
+
+      Add to `tests/unit/test_gh.py`:
+
+      ```python
+      class TestSwapIssueLabels:
+          def test_emits_add_and_remove_flags(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              captured: list[list[str]] = []
+              def fake_run(args: list[str]) -> str:
+                  captured.append(args)
+                  return ""
+              monkeypatch.setattr(gh, "_run_gh", fake_run)
+              gh.swap_issue_labels(
+                  repo="o/r", number=42,
+                  add=["pr-ready"], remove=["in-progress", "vk-ready"],
+              )
+              assert captured == [[
+                  "issue", "edit", "42", "--repo", "o/r",
+                  "--add-label", "pr-ready",
+                  "--remove-label", "in-progress",
+                  "--remove-label", "vk-ready",
+              ]]
+
+          def test_empty_add_and_remove_is_noop(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              captured: list[list[str]] = []
+              monkeypatch.setattr(gh, "_run_gh",
+                                  lambda args: captured.append(args) or "")
+              gh.swap_issue_labels(repo="o/r", number=42, add=[], remove=[])
+              assert captured == []
+
+          def test_propagates_gh_error(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              def fake_run(args: list[str]) -> str:
+                  raise gh.GhError("HTTP 404", stderr="HTTP 404\n", returncode=1)
+              monkeypatch.setattr(gh, "_run_gh", fake_run)
+              with pytest.raises(gh.GhError):
+                  gh.swap_issue_labels(repo="o/r", number=42,
+                                       add=["x"], remove=[])
+      ```
+  - id: P1.T3.S2
+    text: |-
+      Implement `swap_issue_labels`
+
+
+      Add to `src/vk/gh.py` (next to `edit_issue_labels`):
+
+      ```python
+      def swap_issue_labels(
+          *,
+          repo: str,
+          number: int,
+          add: list[str],
+          remove: list[str],
+      ) -> None:
+          """Add and remove labels on an Issue in a single gh call.
+
+          No-op if both lists are empty. Failure propagates as GhError.
+          """
+          if not add and not remove:
+              return
+          args = ["issue", "edit", str(number), "--repo", repo]
+          for lbl in add:
+              args.extend(["--add-label", lbl])
+          for lbl in remove:
+              args.extend(["--remove-label", lbl])
+          _run_gh(args)
+      ```
+  - id: P1.T3.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_gh.py::TestSwapIssueLabels -q --no-cov
+      ```
+
+      Expected: 3 passed.
+- number: 4
+  title: '`is_transient` classifier and `with_retry` helper'
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      TDD — classifier and retry
+
+
+      Add to `tests/unit/test_gh.py`:
+
+      ```python
+      class TestIsTransient:
+          @pytest.mark.parametrize("stderr", [
+              "HTTP 500: server error",
+              "HTTP 502 Bad Gateway",
+              "HTTP 503: temporarily unavailable",
+              "could not resolve host: api.github.com",
+              "connection reset by peer",
+              "connection refused",
+              "i/o timeout",
+          ])
+          def test_returns_true_for_transient(self, stderr: str) -> None:
+              err = gh.GhError("x", stderr=stderr, returncode=1)
+              assert gh.is_transient(err)
+
+          @pytest.mark.parametrize("stderr", [
+              "HTTP 401: Bad credentials",
+              "HTTP 403: forbidden",
+              "HTTP 404: not found",
+              "validation failed",
+              "label already exists",
+              "",
+          ])
+          def test_returns_false_for_permanent(self, stderr: str) -> None:
+              err = gh.GhError("x", stderr=stderr, returncode=1)
+              assert not gh.is_transient(err)
+
+
+      class TestWithRetry:
+          def test_succeeds_first_try(self) -> None:
+              calls = {"n": 0}
+              def op() -> str:
+                  calls["n"] += 1
+                  return "ok"
+              assert gh.with_retry(op) == "ok"
+              assert calls["n"] == 1
+
+          def test_retries_transient_then_succeeds(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              slept: list[float] = []
+              monkeypatch.setattr(gh.time, "sleep", lambda s: slept.append(s))
+              attempts = {"n": 0}
+              def op() -> str:
+                  attempts["n"] += 1
+                  if attempts["n"] < 3:
+                      raise gh.GhError("x", stderr="HTTP 503", returncode=1)
+                  return "ok"
+              assert gh.with_retry(op) == "ok"
+              assert attempts["n"] == 3
+              assert slept == [1.0, 2.0]  # backoff before attempts 2 and 3
+
+          def test_gives_up_after_max_attempts(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              monkeypatch.setattr(gh.time, "sleep", lambda s: None)
+              def op() -> str:
+                  raise gh.GhError("x", stderr="HTTP 503", returncode=1)
+              with pytest.raises(gh.GhError):
+                  gh.with_retry(op)
+
+          def test_no_retry_on_permanent(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              slept: list[float] = []
+              monkeypatch.setattr(gh.time, "sleep", lambda s: slept.append(s))
+              attempts = {"n": 0}
+              def op() -> str:
+                  attempts["n"] += 1
+                  raise gh.GhError("x", stderr="HTTP 403", returncode=1)
+              with pytest.raises(gh.GhError):
+                  gh.with_retry(op)
+              assert attempts["n"] == 1
+              assert slept == []
+      ```
+  - id: P1.T4.S2
+    text: |-
+      Implement classifier and retry
+
+
+      Add to `src/vk/gh.py` (top: `import time`):
+
+      ```python
+      import time
+
+      _TRANSIENT_PATTERNS = (
+          "http 5",            # 500, 502, 503, 504, ...
+          "could not resolve",
+          "connection reset",
+          "connection refused",
+          "timeout",
+          "temporarily unavailable",
+      )
+
+
+      def is_transient(err: GhError) -> bool:
+          """True if the error looks like a transient network/server failure
+          that warrants retry. False for auth, 404, validation, and unknown
+          errors (fail fast)."""
+          text = (err.stderr + " " + str(err)).lower()
+          return any(p in text for p in _TRANSIENT_PATTERNS)
+
+
+      def with_retry(
+          op: Callable[[], T],
+          *,
+          max_attempts: int = 3,
+          backoff_seconds: tuple[float, ...] = (1.0, 2.0, 4.0),
+      ) -> T:
+          """Run `op`; retry on transient GhError with backoff. Re-raise the
+          last error if max_attempts is exhausted or the error is permanent.
+
+          `backoff_seconds[i]` is the sleep before attempt i+1 (i.e. the gap
+          between attempt i and attempt i+1)."""
+          attempt = 0
+          while True:
+              try:
+                  return op()
+              except GhError as exc:
+                  attempt += 1
+                  if attempt >= max_attempts or not is_transient(exc):
+                      raise
+                  time.sleep(backoff_seconds[attempt - 1])
+      ```
+
+      Add type imports at top of file:
+
+      ```python
+      from typing import Callable, TypeVar
+
+      T = TypeVar("T")
+      ```
+  - id: P1.T4.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_gh.py -q --no-cov
+      ```
+
+      Expected: existing + 11 new (`TestIsTransient` 14 parametrised + `TestWithRetry` 4) — should all pass.
+- number: 5
+  title: Format, type-check, full unit suite, commit
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Format and type-check
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
+      ```
+
+      Expected: clean.
+  - id: P1.T5.S2
+    text: |-
+      Full unit suite
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: green.
+  - id: P1.T5.S3
+    text: |-
+      Commit
+
+
+      ```bash
+      git checkout -b phase-1-label-registry-and-gh-helpers
+      git add src/vk/labels.py src/vk/gh.py tests/unit/test_labels.py tests/unit/test_gh.py
+      git commit -m "feat(labels): registry module + gh helpers (swap_issue_labels, with_retry)"
+      git push -u origin phase-1-label-registry-and-gh-helpers
+      gh pr create --title "Phase 1 · Label registry and gh helpers" \
+        --body "Foundation for the label-lifecycle-fix spec. No behavior change yet."
+      ```
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

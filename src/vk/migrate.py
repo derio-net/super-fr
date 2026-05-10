@@ -25,8 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from vk._yaml import dump_plan_yaml
 from vk.plan.parser import parse_plan as _parse_v1
 
 
@@ -44,6 +43,11 @@ class MigrationOutcome:
 _REWORK_PARENT_RE = re.compile(r"^\*\*Parent plan:\*\*\s*`?([^`\n]+)`?", re.MULTILINE)
 _PRIOR_REWORK_RE = re.compile(r"^\*\*Prior rework:\*\*\s*`?([^`\n]+)`?", re.MULTILINE)
 _ORIGIN_HEADING_RE = re.compile(r"^## Origin\s*$", re.MULTILINE)
+
+# A v2 rework slug has the form `<parent-slug>-rework-<N>` (anchored at end).
+# Plain substring matching on `"-rework-"` false-positives on plans that
+# merely *implement* a rework feature (e.g. `2026-04-22-vk-plan-rework-command`).
+_REWORK_SLUG_RE = re.compile(r"-rework-\d+$")
 
 
 def migrate_repo(
@@ -145,7 +149,7 @@ def _migrate_one(
     parent_plan = None
     prior_rework = None
     origin_items: list[dict[str, Any]] = []
-    if "-rework-" in slug:
+    if _REWORK_SLUG_RE.search(slug):
         m = _REWORK_PARENT_RE.search(md_text)
         if m:
             parent_plan = m.group(1).strip()
@@ -168,7 +172,7 @@ def _migrate_one(
         meta["prior_rework"] = prior_rework
     if origin_items:
         meta["origin_items"] = origin_items
-    (new_folder / "_meta.yaml").write_text(yaml.safe_dump(meta, sort_keys=False))
+    (new_folder / "_meta.yaml").write_text(dump_plan_yaml(meta))
 
     # Generate prose from v1 plan structure (titles + step text, plus
     # whatever lay between headers — we keep this lossy on purpose;
@@ -186,9 +190,7 @@ def _migrate_one(
     # Per-phase yaml
     for phase in v1plan.phases:
         phase_doc = _build_phase_doc_from_v1(phase)
-        (new_folder / f"{phase.number:02d}.yaml").write_text(
-            yaml.safe_dump(phase_doc, sort_keys=False)
-        )
+        (new_folder / f"{phase.number:02d}.yaml").write_text(dump_plan_yaml(phase_doc))
 
     # Move original .md to .v1-archive sibling
     archive = md_path.with_suffix(".md.v1-archive")

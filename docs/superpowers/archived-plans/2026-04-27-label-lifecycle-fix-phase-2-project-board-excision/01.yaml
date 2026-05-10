@@ -1,0 +1,338 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Drop dead gh helpers, config field, dispatch flag, scaffold refs
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/61
+tasks:
+- number: 1
+  title: Delete dead helpers from `src/vk/gh.py`
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Identify deletion targets via grep
+
+
+      ```bash
+      grep -n "^def add_to_project\|^def set_field\|^def get_project_id\|^def get_item_id\|^def get_field_id\|^def get_option_id" src/vk/gh.py
+      ```
+
+      Expected: six matches at the lines noted in the spec's excision table (149, 171, 233, 252, 276, 299).
+  - id: P1.T1.S2
+    text: |-
+      Delete the six functions
+
+
+      In `src/vk/gh.py`, remove these function definitions (and any contiguous comment block above each):
+
+      - `add_to_project` (around lines 149-168)
+      - `set_field` (around lines 171-196)
+      - `get_project_id` (around lines 233-249)
+      - `get_item_id` (around lines 252-273)
+      - `get_field_id` (around lines 276-297)
+      - `get_option_id` (around lines 299-336)
+
+      Leave intact:
+      - `get_project_number` (211-230)
+      - `list_project_items` (338-372)
+      - `BoardItem` dataclass
+
+      These three are deleted in Phase 2 of this plan together with their final consumer.
+  - id: P1.T1.S3
+    text: |-
+      Delete `add_to_project` test from `tests/unit/test_gh.py`
+
+
+      ```bash
+      grep -n "add_to_project" tests/unit/test_gh.py
+      ```
+
+      Remove the import on line 14 and the test body around line 100.
+  - id: P1.T1.S4
+    text: |-
+      Run unit tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_gh.py -q --no-cov
+      ```
+
+      Expected: green (one fewer test class).
+- number: 2
+  title: Drop `project_board` from `DispatchConfig` and `_parse_dispatch`
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      TDD — assert field absence
+
+
+      In `tests/unit/test_config.py`, add:
+
+      ```python
+      class TestDispatchConfigNoProjectBoard:
+          def test_dataclass_has_no_project_board_field(self) -> None:
+              from dataclasses import fields
+              from vk.config import DispatchConfig
+              names = {f.name for f in fields(DispatchConfig)}
+              assert "project_board" not in names
+
+          def test_yaml_with_project_board_key_does_not_break(self) -> None:
+              # Backward-compat: existing plan-config.yaml files in the wild still
+              # have the key. Parser must ignore it, not error.
+              raw = {"target": "github-issues", "owner": "o",
+                     "project_board": "Some Board",
+                     "default_repo": "o/r"}
+              cfg = _parse_dispatch(raw)
+              assert cfg is not None
+              # No assertion on project_board itself — it's gone.
+      ```
+
+      Update existing tests that reference `cfg.project_board` (lines 64, 75) — drop those assertions.
+  - id: P1.T2.S2
+    text: |-
+      Drop the field
+
+
+      In `src/vk/config.py`:
+
+      - Remove `project_board: str = "Derio Ops"` from the `DispatchConfig` dataclass (line 42).
+      - Remove `project_board=raw.get("project_board", "Derio Ops"),` from `_parse_dispatch` (line 89).
+
+      `_parse_dispatch` continues to accept YAML containing the `project_board:` key — `dict.get` on the `raw` map silently ignores unknown keys at the dataclass-construction step. No backward-compat issue for repos that still have it in their `plan-config.yaml`.
+  - id: P1.T2.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_config.py -q --no-cov
+      ```
+
+      Expected: green.
+- number: 3
+  title: Drop `--project` flag from `vk dispatch`
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Locate references
+
+
+      ```bash
+      grep -n "project" src/vk/commands/dispatch_cmd.py
+      ```
+
+      Expected: lines 192-194 (option declaration) and line 220 (the discarded read).
+  - id: P1.T3.S2
+    text: |-
+      Remove the flag and the discard
+
+
+      In `src/vk/commands/dispatch_cmd.py`:
+
+      - Remove the `project: str | None = typer.Option(...)` parameter (lines 192-194).
+      - Remove the `_ = project or dispatch_cfg.project_board  # reserved for project board operations` line (220).
+  - id: P1.T3.S3
+    text: |-
+      Confirm tests still pass
+
+
+      ```bash
+      uv run pytest tests/integration/test_dispatch.py -q --no-cov
+      grep -n "\-\-project\b\|project=\b" tests/integration/test_dispatch.py
+      ```
+
+      Expected: green; second grep should produce no matches. If any test invokes the `--project` flag, drop those invocations.
+- number: 4
+  title: Update scaffold (`init_cmd.py`, `common.py`)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Update `init_cmd.py` YAML scaffold
+
+
+      In `src/vk/commands/init_cmd.py` around lines 59-64, remove the `project_name = project or "Derio Ops"` resolution (line 59) and the `"project_board": project_name,` entry from the scaffold dict (line 64). If `init`'s function signature has a `--project` parameter, drop that too.
+  - id: P1.T4.S2
+    text: |-
+      Update `common.py` scaffold docstring
+
+
+      In `src/vk/commands/common.py` around line 113, remove the `project_board: "<Project Name>"` line from the scaffold-template docstring.
+  - id: P1.T4.S3
+    text: |-
+      Update `test_common.py`
+
+
+      In `tests/unit/test_common.py` around line 55, drop the `assert "project_board:" in result` assertion. If a test asserts `assert "project_board:" not in result`, add that instead.
+  - id: P1.T4.S4
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_common.py -q --no-cov
+      ```
+
+      Expected: green.
+- number: 5
+  title: Update fixtures
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Drop `project_board` from `conftest.py:62`
+
+
+      ```bash
+      grep -n "project_board" tests/integration/conftest.py
+      ```
+
+      Remove the line that sets `project_board: "Derio Ops"` in the fixture YAML string.
+  - id: P1.T5.S2
+    text: |-
+      Drop `project_board` from the fixture YAML
+
+
+      ```bash
+      grep -n "project_board" tests/fixtures/configs/dispatch-enabled.yaml
+      ```
+
+      Remove line 17 (`project_board: "Derio Ops"`).
+  - id: P1.T5.S3
+    text: |-
+      Run integration tests
+
+
+      ```bash
+      uv run pytest tests/integration/ -q --no-cov
+      ```
+
+      Expected: green.
+- number: 6
+  title: Format, type-check, full suite, commit
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Format and type-check
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
+      ```
+
+      Expected: clean.
+  - id: P1.T6.S2
+    text: |-
+      Full unit + integration suite
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: green.
+  - id: P1.T6.S3
+    text: |-
+      Commit and PR
+
+
+      ```bash
+      git checkout -b excision-phase-1-config-and-helpers
+      git add src/vk/gh.py src/vk/config.py src/vk/commands/dispatch_cmd.py \
+              src/vk/commands/init_cmd.py src/vk/commands/common.py \
+              tests/unit/test_gh.py tests/unit/test_config.py \
+              tests/unit/test_common.py tests/integration/conftest.py \
+              tests/fixtures/configs/dispatch-enabled.yaml \
+              tests/integration/test_dispatch.py
+      git commit -m "refactor: excise project_board config, dead gh helpers, --project flag"
+      git push -u origin excision-phase-1-config-and-helpers
+      gh pr create --title "Excision Phase 1 · Drop project_board config + dead gh helpers + --project flag" \
+        --body "Phase 1 of project-board excision per the label-lifecycle-fix spec. No behavior change for any code path actually used by anyone."
+      ```
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

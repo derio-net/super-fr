@@ -1,0 +1,296 @@
+schema_version: 2
+phase:
+  number: 3
+  title: vk dispatch migrate
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/12
+tasks:
+- number: 1
+  title: Scaffold subcommand
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Failing test — subcommand registered
+
+
+      In `tests/unit/test_cli.py`:
+
+      ```python
+      def test_dispatch_migrate_command_exists():
+          from typer.testing import CliRunner
+          from vk.cli import app
+          result = CliRunner().invoke(app, ["dispatch", "migrate", "--help"])
+          assert result.exit_code == 0
+          assert "migrate" in result.output.lower()
+      ```
+
+      Run; expect fail.
+  - id: P3.T1.S2
+    text: |-
+      Convert dispatch to a subcommand group
+
+
+      In `src/vk/commands/dispatch_cmd.py`, wrap the existing `dispatch` function as the default command of a typer sub-app:
+
+      ```python
+      dispatch_app = typer.Typer(invoke_without_command=True, help="Dispatch plans to GitHub Issues.")
+
+      @dispatch_app.callback(invoke_without_command=True)
+      def dispatch_default(ctx: typer.Context, ...):  # existing params
+          if ctx.invoked_subcommand is None:
+              # existing dispatch body
+              ...
+
+      @dispatch_app.command("migrate")
+      def migrate(
+          plan_path: Path = typer.Argument(..., exists=True),
+          dry_run: bool = typer.Option(False, "--dry-run"),
+          yes: bool = typer.Option(False, "--yes"),
+      ) -> None:
+          """Retrofit existing open Issues to the new title/body format."""
+          console.print("migrate stub")  # filled in next task
+      ```
+
+      Update `src/vk/cli.py` to register `dispatch_app` as `app.add_typer(dispatch_app, name="dispatch")` instead of the bare command.
+
+      Run the new test; expect pass. Run existing dispatch tests; fix any routing issues.
+- number: 2
+  title: Migrate logic
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Failing test — missing tracking comment aborts
+
+
+      Create `tests/integration/test_dispatch_migrate.py`:
+
+      ```python
+      from pathlib import Path
+      from typer.testing import CliRunner
+      from vk.cli import app
+
+
+      def _write_plan(path: Path, phases_with_tracking: list[tuple[int, str, str | None]]) -> None:
+          body = (
+              "# P\n"
+              "**Spec:** `docs/superpowers/specs/s.md`\n"
+              "**Status:** In Progress\n\n"
+              "**Goal:** G.\n\n---\n\n"
+          )
+          for n, title, url in phases_with_tracking:
+              body += f"## Phase {n}: {title} [agentic]\n"
+              if url:
+                  body += f"<!-- Tracking: {url} -->\n"
+              body += "\n### Task 1: T\n- [ ] **Step 1: s**\n\n"
+          path.write_text(body)
+
+
+      def test_migrate_aborts_on_missing_tracking(tmp_path, monkeypatch):
+          plan = tmp_path / "plan.md"
+          _write_plan(plan, [(0, "A", "https://github.com/org/r/issues/1"), (1, "B", None)])
+          # Also create plan-config.yaml with dispatch enabled
+          (tmp_path / "plan-config.yaml").write_text(
+              "dispatch:\n  owner: org\n  default_repo: org/r\n"
+              "  project_board: Derio Ops\n  labels:\n    agentic: vk-ready\n    manual: manual\n"
+          )
+          monkeypatch.chdir(tmp_path)
+          # Point config lookup at this dir
+          monkeypatch.setenv("VK_CONFIG_PATH", str(tmp_path / "plan-config.yaml"))
+          result = CliRunner().invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+          assert result.exit_code != 0
+          assert "Phase 1" in result.output and "no tracking comment" in result.output.lower()
+      ```
+
+      Note: if the config-lookup path in the codebase doesn't support env override, either add it or symlink to the repo-root-walked location. Adapt as needed.
+
+      Run; expect fail.
+  - id: P3.T2.S2
+    text: |-
+      Implement migrate — tracking-comment collection and validation
+
+
+      In `dispatch_cmd.py::migrate`, after parsing the plan:
+
+      ```python
+          tracked = _get_already_tracked(plan_path.read_text())
+          missing = [p.number for p in plan.phases if p.number not in tracked]
+          if missing:
+              err_console.print(
+                  f"Phase(s) {missing} have no tracking comment in {plan_path}. "
+                  f"Run 'vk dispatch <plan>' to create Issues for pending phases first."
+              )
+              raise typer.Exit(2)
+      ```
+
+      Run the test; expect pass.
+  - id: P3.T2.S3
+    text: |-
+      Failing test — dry-run prints diff
+
+
+      ```python
+      def test_migrate_dry_run_prints_diff(tmp_path, monkeypatch):
+          plan = tmp_path / "plan.md"
+          _write_plan(plan, [(0, "A", "https://github.com/org/r/issues/1")])
+          (tmp_path / "plan-config.yaml").write_text("dispatch:\n  owner: org\n  default_repo: org/r\n  project_board: X\n  labels:\n    agentic: vk-ready\n    manual: manual\n")
+
+          def fake_view(repo, number):
+              return {"state": "OPEN", "title": "old title",
+                      "body": "OLD BODY", "labels": [{"name": "vk-ready"}]}
+          monkeypatch.setattr("vk.gh.view_issue", fake_view, raising=False)
+          monkeypatch.chdir(tmp_path)
+
+          result = CliRunner().invoke(app, ["dispatch", "migrate", str(plan), "--dry-run"])
+          assert result.exit_code == 0
+          assert "[org/r]" in result.output  # new title format appears
+          assert "old title" in result.output  # old title shown in diff
+      ```
+
+      Run; expect fail.
+  - id: P3.T2.S4
+    text: |-
+      Implement dry-run flow
+
+
+      Add `view_issue` to `src/vk/gh.py`:
+
+      ```python
+      def view_issue(repo: str, number: int) -> dict:
+          """Fetch an Issue's title, body, labels, state via gh issue view --json."""
+          out = _run_gh(["issue", "view", str(number), "--repo", repo,
+                         "--json", "title,body,labels,state"])
+          return json.loads(out)
+      ```
+
+      In `migrate()`:
+
+      ```python
+          from vk.commands.dispatch_body_validator import validate_issue_body
+          rewrites: list[dict] = []
+          for phase in plan.phases:
+              url = tracked[phase.number]
+              number = gh.extract_issue_number(url)
+              issue_repo = url.split("/issues/")[0].replace("https://github.com/", "")
+              info = gh.view_issue(issue_repo, number)
+              if info.get("state") == "CLOSED":
+                  console.print(f"Skip #{number}: CLOSED")
+                  continue
+              new_title = _build_issue_title(slug, phase, target_repo=issue_repo, total=len(plan.phases))
+              prev_num = gh.extract_issue_number(tracked[phase.number - 1]) if phase.number > 0 else None
+              new_body = _build_issue_body(
+                  phase, plan_path, issue_repo, prev_num,
+                  total_phases=len(plan.phases),
+                  spec=plan.spec or "",
+                  goal=plan.goal,
+              )
+              new_body = new_body.replace("(assigned on create)", url)
+              validate_issue_body(new_body, phase.number)
+              rewrites.append({"repo": issue_repo, "number": number,
+                               "old_title": info["title"], "new_title": new_title,
+                               "new_body": new_body})
+
+          if action is ConfirmAction.DRY_RUN:
+              for r in rewrites:
+                  console.print(f"\n#{r['number']}  {r['old_title']}  →  {r['new_title']}")
+              raise typer.Exit(0)
+      ```
+
+      Run the test; expect pass.
+  - id: P3.T2.S5
+    text: |-
+      Failing test — --yes applies edits and aborts on gh failure
+
+
+      ```python
+      def test_migrate_yes_applies_edits(tmp_path, monkeypatch):
+          # ... same setup ...
+          applied: list[dict] = []
+          monkeypatch.setattr("vk.gh.view_issue", lambda repo, n: {
+              "state": "OPEN", "title": "old", "body": "b", "labels": []})
+          def fake_edit(repo, number, title, body, add_labels):
+              applied.append({"n": number, "title": title})
+          monkeypatch.setattr("vk.gh.edit_issue", fake_edit, raising=False)
+          # ...
+          result = CliRunner().invoke(app, ["dispatch", "migrate", str(plan), "--yes"])
+          assert result.exit_code == 0
+          assert applied[0]["title"].startswith("[org/r]")
+
+
+      def test_migrate_aborts_mid_run_on_gh_error(tmp_path, monkeypatch):
+          # two phases; second fails
+          def fake_edit(repo, number, title, body, add_labels):
+              if number == 2: raise Exception("gh boom")
+          # ... assert exit != 0 and only first edit applied
+      ```
+
+      Run; expect fail.
+  - id: P3.T2.S6
+    text: |-
+      Implement --yes apply path
+
+
+      Add `gh.edit_issue` (title + body + labels in one call):
+
+      ```python
+      def edit_issue(repo: str, number: int, title: str, body: str,
+                     add_labels: list[str]) -> None:
+          args = ["issue", "edit", str(number), "--repo", repo,
+                  "--title", title, "--body", body]
+          for lbl in add_labels:
+              args.extend(["--add-label", lbl])
+          _run_gh(args)
+      ```
+
+      In `migrate()` after the dry-run branch:
+
+      ```python
+          for r in rewrites:
+              gh.edit_issue(
+                  r["repo"], r["number"], r["new_title"], r["new_body"],
+                  add_labels=[f"plan:{slug}", f"phase:{phase.number}"],
+              )
+              console.print(f"Migrated #{r['number']}")
+      ```
+
+      Run tests; expect pass. Run full suite `pytest tests/ 2>&1 | tail -15`.
+
+      ---
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

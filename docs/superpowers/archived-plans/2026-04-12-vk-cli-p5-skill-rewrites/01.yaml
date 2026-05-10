@@ -1,0 +1,737 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Utility commands and skill validation tests
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Skill validation test suite
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write the skill validation tests
+
+
+      ```python
+      # tests/unit/test_skill_validation.py
+      """Validate SKILL.md files have correct structure.
+
+      Replaces scripts/validate-skills.sh with structured pytest assertions.
+      """
+
+      from pathlib import Path
+
+      import pytest
+      import yaml
+
+      REPO_ROOT = Path(__file__).parent.parent.parent
+      SKILLS_DIR = REPO_ROOT / "skills"
+
+
+      def skill_files() -> list[Path]:
+          """Discover all SKILL.md files."""
+          return sorted(SKILLS_DIR.glob("*/SKILL.md"))
+
+
+      @pytest.fixture(params=skill_files(), ids=lambda p: p.parent.name)
+      def skill_path(request: pytest.FixtureRequest) -> Path:
+          return request.param
+
+
+      def test_skill_files_exist() -> None:
+          """At least one SKILL.md exists."""
+          files = skill_files()
+          assert len(files) > 0, "No SKILL.md files found in skills/"
+
+
+      def test_first_line_is_frontmatter_open(skill_path: Path) -> None:
+          """First non-empty line must be '---' (catches fence-leak bugs)."""
+          lines = skill_path.read_text().splitlines()
+          first_nonempty = next((line for line in lines if line.strip()), None)
+          assert first_nonempty == "---", (
+              f"{skill_path.parent.name}/SKILL.md: first non-empty line is "
+              f"{first_nonempty!r}, not '---'. Possible fence-leak from plan source."
+          )
+
+
+      def test_frontmatter_parses_as_yaml(skill_path: Path) -> None:
+          """YAML frontmatter between first and second '---' must parse."""
+          text = skill_path.read_text()
+          parts = text.split("---", maxsplit=2)
+          assert len(parts) >= 3, (
+              f"{skill_path.parent.name}/SKILL.md: could not find closing '---' for frontmatter"
+          )
+          frontmatter = yaml.safe_load(parts[1])
+          assert isinstance(frontmatter, dict), (
+              f"{skill_path.parent.name}/SKILL.md: frontmatter is not a YAML mapping"
+          )
+
+
+      def test_frontmatter_has_name_and_description(skill_path: Path) -> None:
+          """Frontmatter must have 'name' and 'description' fields."""
+          text = skill_path.read_text()
+          parts = text.split("---", maxsplit=2)
+          frontmatter = yaml.safe_load(parts[1])
+          assert "name" in frontmatter, (
+              f"{skill_path.parent.name}/SKILL.md: frontmatter missing 'name' field"
+          )
+          assert "description" in frontmatter, (
+              f"{skill_path.parent.name}/SKILL.md: frontmatter missing 'description' field"
+          )
+
+
+      def test_file_under_120_lines(skill_path: Path) -> None:
+          """SKILL.md files must stay under 120 lines (guardrail against prose re-bloat)."""
+          lines = skill_path.read_text().splitlines()
+          assert len(lines) <= 120, (
+              f"{skill_path.parent.name}/SKILL.md: {len(lines)} lines exceeds 120-line limit"
+          )
+      ```
+  - id: P1.T1.S2
+    text: |-
+      Run tests to verify they pass against current SKILL.md files (except line limit)
+
+
+      Run: `uv run pytest tests/unit/test_skill_validation.py -v`
+      Expected: Most tests pass; `test_file_under_120_lines` will FAIL for current verbose SKILL.md files (vk-plan is 347 lines, vk-dispatch is 273 lines, vk-progress is 284 lines). This confirms the guardrail works. The tests will all pass after the SKILL.md rewrites in Phase 2.
+  - id: P1.T1.S3
+    text: |-
+      Commit
+
+
+      ```bash
+      git add tests/unit/test_skill_validation.py
+      git commit -m "test: add skill validation test suite replacing validate-skills.sh"
+      ```
+- number: 2
+  title: '`vk init` command'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write the failing test
+
+
+      ```python
+      # tests/unit/test_init_cmd.py
+      """Tests for vk init command."""
+
+      from pathlib import Path
+
+      import pytest
+      import yaml
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      runner = CliRunner()
+
+
+      @pytest.fixture
+      def tmp_repo(tmp_path: Path) -> Path:
+          """Create a minimal git repo in tmp_path."""
+          import subprocess
+
+          subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+          subprocess.run(
+              ["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"],
+              check=True,
+              capture_output=True,
+          )
+          subprocess.run(
+              ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+              check=True,
+              capture_output=True,
+          )
+          return tmp_path
+
+
+      def test_init_creates_local_config(tmp_repo: Path) -> None:
+          """Without --dispatch, creates a fail-closed local-only config."""
+          result = runner.invoke(app, ["init"], catch_exceptions=False, env={"VK_REPO_ROOT": str(tmp_repo)})
+          assert result.exit_code == 0
+
+          config_path = tmp_repo / "docs" / "superpowers" / "plan-config.yaml"
+          assert config_path.exists()
+
+          config = yaml.safe_load(config_path.read_text())
+          assert "plan" in config
+          assert "dispatch" not in config or config.get("dispatch") is False
+
+
+      def test_init_creates_directories(tmp_repo: Path) -> None:
+          """Creates docs/superpowers/{specs,plans,archived-plans}/."""
+          runner.invoke(app, ["init"], catch_exceptions=False, env={"VK_REPO_ROOT": str(tmp_repo)})
+
+          assert (tmp_repo / "docs" / "superpowers" / "specs").is_dir()
+          assert (tmp_repo / "docs" / "superpowers" / "plans").is_dir()
+          assert (tmp_repo / "docs" / "superpowers" / "archived-plans").is_dir()
+
+
+      def test_init_with_dispatch(tmp_repo: Path) -> None:
+          """With --dispatch, creates a full dispatch block."""
+          result = runner.invoke(
+              app,
+              ["init", "--dispatch", "derio-net/my-repo", "--project", "My Project"],
+              catch_exceptions=False,
+              env={"VK_REPO_ROOT": str(tmp_repo)},
+          )
+          assert result.exit_code == 0
+
+          config_path = tmp_repo / "docs" / "superpowers" / "plan-config.yaml"
+          config = yaml.safe_load(config_path.read_text())
+          assert isinstance(config.get("dispatch"), dict)
+          assert config["dispatch"]["owner"] == "derio-net"
+          assert config["dispatch"]["default_repo"] == "derio-net/my-repo"
+          assert config["dispatch"]["project_board"] == "My Project"
+
+
+      def test_init_refuses_overwrite(tmp_repo: Path) -> None:
+          """Refuses to overwrite existing config without --force."""
+          runner.invoke(app, ["init"], catch_exceptions=False, env={"VK_REPO_ROOT": str(tmp_repo)})
+          result = runner.invoke(app, ["init"], catch_exceptions=False, env={"VK_REPO_ROOT": str(tmp_repo)})
+          assert result.exit_code != 0
+          assert "already exists" in result.stdout.lower() or "already exists" in (result.stderr or "").lower()
+
+
+      def test_init_force_overwrites(tmp_repo: Path) -> None:
+          """--force allows overwriting existing config."""
+          runner.invoke(app, ["init"], catch_exceptions=False, env={"VK_REPO_ROOT": str(tmp_repo)})
+          result = runner.invoke(
+              app, ["init", "--force"], catch_exceptions=False, env={"VK_REPO_ROOT": str(tmp_repo)}
+          )
+          assert result.exit_code == 0
+
+
+      def test_init_dispatch_without_project_uses_default(tmp_repo: Path) -> None:
+          """--dispatch without --project uses 'Derio Ops' as default."""
+          runner.invoke(
+              app,
+              ["init", "--dispatch", "derio-net/my-repo"],
+              catch_exceptions=False,
+              env={"VK_REPO_ROOT": str(tmp_repo)},
+          )
+
+          config_path = tmp_repo / "docs" / "superpowers" / "plan-config.yaml"
+          config = yaml.safe_load(config_path.read_text())
+          assert config["dispatch"]["project_board"] == "Derio Ops"
+      ```
+  - id: P1.T2.S2
+    text: |-
+      Run test to verify it fails
+
+
+      Run: `uv run pytest tests/unit/test_init_cmd.py -v`
+      Expected: FAIL — `ImportError` or command not implemented
+  - id: P1.T2.S3
+    text: |-
+      Implement init_cmd.py
+
+
+      ```python
+      # src/vk/commands/init_cmd.py
+      """vk init — scaffold plan-config.yaml in a new repo."""
+
+      from __future__ import annotations
+
+      import os
+      from pathlib import Path
+
+      import typer
+      import yaml
+
+
+      def _resolve_repo_root() -> Path:
+          """Resolve repo root from VK_REPO_ROOT env var or git."""
+          env_root = os.environ.get("VK_REPO_ROOT")
+          if env_root:
+              return Path(env_root)
+
+          import subprocess
+
+          result = subprocess.run(
+              ["git", "rev-parse", "--show-toplevel"],
+              capture_output=True,
+              text=True,
+          )
+          if result.returncode == 0:
+              return Path(result.stdout.strip())
+          return Path.cwd()
+
+
+      def init(
+          dispatch: str | None = typer.Option(
+              None, "--dispatch", help="Enable dispatch with OWNER/REPO.",
+          ),
+          project: str | None = typer.Option(
+              None, "--project", help="Project board name.",
+          ),
+          force: bool = typer.Option(
+              False, "--force", help="Overwrite existing config.",
+          ),
+      ) -> None:
+          """Scaffold plan-config.yaml in a new repo."""
+          repo_root = _resolve_repo_root()
+          superpowers_dir = repo_root / "docs" / "superpowers"
+          config_path = superpowers_dir / "plan-config.yaml"
+
+          if config_path.exists() and not force:
+              typer.echo(f"Config already exists: {config_path}")
+              typer.echo("Use --force to overwrite.")
+              raise typer.Exit(1)
+
+          # Create directory structure
+          for subdir in ("specs", "plans", "archived-plans"):
+              (superpowers_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+          # Build config
+          config: dict[str, object] = {
+              "plan": {
+                  "save_to": "docs/superpowers/plans/",
+                  "filename": "YYYY-MM-DD-{name}.md",
+              },
+              "header": {
+                  "required": ["Spec", "Status"],
+                  "status_values": ["Not Started", "In Progress", "Complete"],
+              },
+          }
+
+          if dispatch:
+              parts = dispatch.split("/", maxsplit=1)
+              if len(parts) != 2:
+                  typer.echo(f"Invalid --dispatch format: {dispatch!r}. Expected OWNER/REPO.")
+                  raise typer.Exit(1)
+
+              owner = parts[0]
+              project_name = project or "Derio Ops"
+
+              config["dispatch"] = {
+                  "target": "github-issues",
+                  "owner": owner,
+                  "project_board": project_name,
+                  "default_repo": dispatch,
+                  "labels": {
+                      "agentic": "vk-ready",
+                      "manual": "manual",
+                  },
+              }
+
+          config_path.parent.mkdir(parents=True, exist_ok=True)
+          config_path.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False))
+          typer.echo(f"Created {config_path}")
+
+          if dispatch:
+              typer.echo("Dispatch enabled — phased plan format active.")
+          else:
+              typer.echo("Local-only config — flat plan format active. Add a dispatch: block to enable dispatch.")
+      ```
+  - id: P1.T2.S4
+    text: |-
+      Wire init command into cli.py
+
+
+      Replace the stub `init` command in `src/vk/cli.py` with:
+
+      ```python
+      from vk.commands.init_cmd import init as init_command
+
+      @app.command()
+      def init(
+          dispatch: Optional[str] = typer.Option(
+              None, "--dispatch", help="Enable dispatch with OWNER/REPO."
+          ),
+          project: Optional[str] = typer.Option(
+              None, "--project", help="Project board name."
+          ),
+          force: bool = typer.Option(
+              False, "--force", help="Overwrite existing config."
+          ),
+      ) -> None:
+          """Scaffold plan-config.yaml in a new repo."""
+          init_command(dispatch=dispatch, project=project, force=force)
+      ```
+  - id: P1.T2.S5
+    text: |-
+      Run tests and verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_init_cmd.py -v`
+      Expected: PASS — all 6 tests pass
+  - id: P1.T2.S6
+    text: |-
+      Run lint and type check
+
+
+      Run: `uv run ruff check src/vk/commands/init_cmd.py tests/unit/test_init_cmd.py && uv run mypy src/vk/commands/init_cmd.py`
+      Expected: PASS — no lint or type errors
+  - id: P1.T2.S7
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/init_cmd.py tests/unit/test_init_cmd.py src/vk/cli.py
+      git commit -m "feat: add vk init command for repo scaffolding"
+      ```
+- number: 3
+  title: '`vk install-skills` command'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Write the failing test
+
+
+      ```python
+      # tests/unit/test_install_cmd.py
+      """Tests for vk install-skills command."""
+
+      from pathlib import Path
+
+      import pytest
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      runner = CliRunner()
+
+
+      @pytest.fixture
+      def mock_skills(tmp_path: Path) -> Path:
+          """Create mock skill directories with SKILL.md files."""
+          for name in ("vk-plan", "vk-dispatch", "vk-progress", "vk-execute"):
+              skill_dir = tmp_path / "skills" / name
+              skill_dir.mkdir(parents=True)
+              (skill_dir / "SKILL.md").write_text(f"---\nname: {name}\ndescription: test\n---\n# {name}\n")
+          return tmp_path
+
+
+      @pytest.fixture
+      def mock_claude_dir(tmp_path: Path) -> Path:
+          """Create a mock ~/.claude directory."""
+          claude_dir = tmp_path / ".claude"
+          claude_dir.mkdir()
+          return claude_dir
+
+
+      def test_install_skills_creates_symlinks(
+          mock_skills: Path, mock_claude_dir: Path
+      ) -> None:
+          """Default mode creates symlinks."""
+          result = runner.invoke(
+              app,
+              ["install-skills"],
+              catch_exceptions=False,
+              env={
+                  "VK_PACKAGE_ROOT": str(mock_skills),
+                  "VK_CLAUDE_HOME": str(mock_claude_dir),
+              },
+          )
+          assert result.exit_code == 0
+
+          skills_target = mock_claude_dir / "skills"
+          for name in ("vk-plan", "vk-dispatch", "vk-progress", "vk-execute"):
+              link = skills_target / name
+              assert link.is_symlink()
+              assert link.resolve() == (mock_skills / "skills" / name).resolve()
+
+
+      def test_install_skills_copy_mode(
+          mock_skills: Path, mock_claude_dir: Path
+      ) -> None:
+          """--copy copies instead of symlinking."""
+          result = runner.invoke(
+              app,
+              ["install-skills", "--copy"],
+              catch_exceptions=False,
+              env={
+                  "VK_PACKAGE_ROOT": str(mock_skills),
+                  "VK_CLAUDE_HOME": str(mock_claude_dir),
+              },
+          )
+          assert result.exit_code == 0
+
+          skills_target = mock_claude_dir / "skills"
+          for name in ("vk-plan", "vk-dispatch", "vk-progress", "vk-execute"):
+              target = skills_target / name
+              assert target.is_dir()
+              assert not target.is_symlink()
+              assert (target / "SKILL.md").exists()
+
+
+      def test_install_skills_overwrites_existing(
+          mock_skills: Path, mock_claude_dir: Path
+      ) -> None:
+          """Re-running replaces existing symlinks/copies."""
+          runner.invoke(
+              app,
+              ["install-skills"],
+              catch_exceptions=False,
+              env={
+                  "VK_PACKAGE_ROOT": str(mock_skills),
+                  "VK_CLAUDE_HOME": str(mock_claude_dir),
+              },
+          )
+          # Run again
+          result = runner.invoke(
+              app,
+              ["install-skills"],
+              catch_exceptions=False,
+              env={
+                  "VK_PACKAGE_ROOT": str(mock_skills),
+                  "VK_CLAUDE_HOME": str(mock_claude_dir),
+              },
+          )
+          assert result.exit_code == 0
+
+
+      def test_install_skills_reports_count(
+          mock_skills: Path, mock_claude_dir: Path
+      ) -> None:
+          """Reports how many skills were installed."""
+          result = runner.invoke(
+              app,
+              ["install-skills"],
+              catch_exceptions=False,
+              env={
+                  "VK_PACKAGE_ROOT": str(mock_skills),
+                  "VK_CLAUDE_HOME": str(mock_claude_dir),
+              },
+          )
+          assert "4" in result.stdout
+      ```
+  - id: P1.T3.S2
+    text: |-
+      Run test to verify it fails
+
+
+      Run: `uv run pytest tests/unit/test_install_cmd.py -v`
+      Expected: FAIL — command not implemented
+  - id: P1.T3.S3
+    text: |-
+      Implement install_cmd.py
+
+
+      ```python
+      # src/vk/commands/install_cmd.py
+      """vk install-skills — symlink or copy SKILL.md dirs into ~/.claude/skills/."""
+
+      from __future__ import annotations
+
+      import os
+      import shutil
+      from pathlib import Path
+
+      import typer
+
+
+      def _resolve_package_root() -> Path:
+          """Resolve the superpowers-for-vk package root."""
+          env_root = os.environ.get("VK_PACKAGE_ROOT")
+          if env_root:
+              return Path(env_root)
+          # Default: the installed package's grandparent (src/vk -> superpowers-for-vk)
+          return Path(__file__).parent.parent.parent.parent
+
+
+      def _resolve_claude_home() -> Path:
+          """Resolve the Claude home directory."""
+          env_home = os.environ.get("VK_CLAUDE_HOME")
+          if env_home:
+              return Path(env_home)
+          return Path.home() / ".claude"
+
+
+      def install_skills(
+          copy: bool = typer.Option(
+              False, "--copy", help="Copy instead of symlink (for cross-filesystem installs).",
+          ),
+      ) -> None:
+          """Symlink SKILL.md files into ~/.claude/skills/."""
+          package_root = _resolve_package_root()
+          claude_home = _resolve_claude_home()
+          skills_src = package_root / "skills"
+
+          if not skills_src.is_dir():
+              typer.echo(f"Skills directory not found: {skills_src}")
+              raise typer.Exit(1)
+
+          skills_target = claude_home / "skills"
+          skills_target.mkdir(parents=True, exist_ok=True)
+
+          installed = 0
+          for skill_dir in sorted(skills_src.iterdir()):
+              if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+                  continue
+
+              dest = skills_target / skill_dir.name
+
+              # Remove existing link or directory
+              if dest.is_symlink():
+                  dest.unlink()
+              elif dest.is_dir():
+                  shutil.rmtree(dest)
+
+              if copy:
+                  shutil.copytree(skill_dir, dest)
+                  typer.echo(f"  Copied {skill_dir.name}/")
+              else:
+                  dest.symlink_to(skill_dir.resolve())
+                  typer.echo(f"  Linked {skill_dir.name}/ -> {skill_dir.resolve()}")
+
+              installed += 1
+
+          typer.echo(f"Installed {installed} skill(s) into {skills_target}")
+      ```
+  - id: P1.T3.S4
+    text: |-
+      Wire install-skills command into cli.py
+
+
+      Replace the stub `install_skills` command in `src/vk/cli.py` with:
+
+      ```python
+      from vk.commands.install_cmd import install_skills as install_skills_command
+
+      @app.command(name="install-skills")
+      def install_skills(
+          copy: bool = typer.Option(False, "--copy", help="Copy instead of symlink."),
+      ) -> None:
+          """Symlink SKILL.md files into ~/.claude/skills/."""
+          install_skills_command(copy=copy)
+      ```
+  - id: P1.T3.S5
+    text: |-
+      Run tests and verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_install_cmd.py -v`
+      Expected: PASS — all 4 tests pass
+  - id: P1.T3.S6
+    text: |-
+      Run lint and type check
+
+
+      Run: `uv run ruff check src/vk/commands/install_cmd.py tests/unit/test_install_cmd.py && uv run mypy src/vk/commands/install_cmd.py`
+      Expected: PASS — no lint or type errors
+  - id: P1.T3.S7
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/install_cmd.py tests/unit/test_install_cmd.py src/vk/cli.py
+      git commit -m "feat: add vk install-skills command for skill deployment"
+      ```
+- number: 4
+  title: Delete validate-skills.sh
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Verify test_skill_validation.py covers all validate-skills.sh checks
+
+
+      Run: `uv run pytest tests/unit/test_skill_validation.py -v`
+      Confirm: the pytest suite checks first-line-is-`---`, frontmatter parses, name+description present, and line count limit. This is a strict superset of the bash script (which only checked first line).
+  - id: P1.T4.S2
+    text: |-
+      Delete the bash script
+
+
+      ```bash
+      git rm scripts/validate-skills.sh
+      ```
+  - id: P1.T4.S3
+    text: |-
+      Commit
+
+
+      ```bash
+      git commit -m "chore: delete validate-skills.sh, replaced by test_skill_validation.py"
+      ```
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S7:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S7:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

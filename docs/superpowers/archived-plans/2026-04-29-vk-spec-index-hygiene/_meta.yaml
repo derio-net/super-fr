@@ -1,0 +1,6 @@
+schema_version: 2
+plan: 2026-04-29-vk-spec-index-hygiene
+spec: docs/superpowers/specs/2026-04-29-vk-cli-hygiene-and-issue-authoring-design.md
+target_repo: derio-net/superpowers-for-vk
+vk_version: '>=1.0.0,<3.0.0'
+created: '2026-04-29'

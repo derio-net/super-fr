@@ -1,0 +1,268 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Fix `progress_cmd.py` — column preservation + path-based lookup
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/83
+tasks:
+- number: 1
+  title: Tests for `_reconcile_spec_index` column preservation
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD — write failing tests
+
+
+      ```python
+      """Tests for _reconcile_spec_index column preservation (Thread 2 fix)."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      from vk.commands.progress_cmd import _reconcile_spec_index
+      from vk.spec_index import read_index
+
+
+      SPEC_WITH_RICH_ROW = """\
+      # My Spec
+
+      ## Implementation Plans
+
+      | Plan | Repo | File | Status | Depends on |
+      |------|------|------|--------|------------|
+      | Plan A | `org/repo` | `docs/superpowers/plans/plan-a.md` | Not Started | Phase X of repo-b |
+
+      Cross-phase note: important prose.
+      """
+
+      PLAN_CONTENT = """\
+      # Plan A
+
+      **Spec:** `docs/superpowers/specs/my-spec.md`
+      **Status:** Not Started
+
+      **Goal:** Test.
+
+      ---
+
+      ## Phase 1: Work [agentic]
+      **Depends on:** —
+
+      ### Task 1: Do thing
+
+      - [x] **Step 1: Done**
+      """
+
+
+      def _setup(tmp_path: Path) -> tuple[Path, Path, Path]:
+          plans_dir = tmp_path / "docs" / "superpowers" / "plans"
+          plans_dir.mkdir(parents=True)
+          specs_dir = tmp_path / "docs" / "superpowers" / "specs"
+          specs_dir.mkdir(parents=True)
+          spec_path = specs_dir / "my-spec.md"
+          spec_path.write_text(SPEC_WITH_RICH_ROW)
+          plan_path = plans_dir / "plan-a.md"
+          plan_path.write_text(PLAN_CONTENT)
+          return tmp_path, spec_path, plan_path
+
+
+      def test_reconcile_preserves_repo_and_depends_on(tmp_path: Path) -> None:
+          repo_root, spec_path, plan_path = _setup(tmp_path)
+          updated = _reconcile_spec_index(
+              plan_path=plan_path,
+              plan_title="Plan A",
+              status="In Progress",
+              repo_root=repo_root,
+          )
+          assert updated is True
+          entries = read_index(spec_path)
+          matching = [e for e in entries if "plan-a.md" in e.file]
+          assert len(matching) == 1
+          row = matching[0]
+          assert row.status == "In Progress"
+          assert row.repo == "`org/repo`"
+          assert row.depends_on == "Phase X of repo-b"
+          # Prose preserved
+          assert "Cross-phase note" in spec_path.read_text()
+
+
+      def test_reconcile_noop_when_status_and_title_match(tmp_path: Path) -> None:
+          repo_root, spec_path, plan_path = _setup(tmp_path)
+          updated = _reconcile_spec_index(
+              plan_path=plan_path,
+              plan_title="Plan A",
+              status="Not Started",
+              repo_root=repo_root,
+          )
+          assert updated is False
+
+
+      def test_reconcile_updates_title_when_changed(tmp_path: Path) -> None:
+          repo_root, spec_path, plan_path = _setup(tmp_path)
+          updated = _reconcile_spec_index(
+              plan_path=plan_path,
+              plan_title="Plan A (revised)",
+              status="Not Started",
+              repo_root=repo_root,
+          )
+          assert updated is True
+          text = spec_path.read_text()
+          assert "Plan A (revised)" in text
+          assert text.count("plan-a.md") == 1  # no duplicate
+      ```
+  - id: P2.T1.S2
+    text: |-
+      Run tests to confirm they fail before the fix
+
+
+      ```bash
+      uv run pytest tests/unit/test_progress_reconcile.py -x -q --no-cov 2>&1 | head -30
+      ```
+- number: 2
+  title: Fix `progress_cmd.py`
+  steps:
+  - id: P2.T2.S3
+    text: |-
+      Update `_reconcile_spec_index()` signature
+
+
+      Change function signature to add optional `prev_plan_path`:
+
+      ```python
+      def _reconcile_spec_index(
+          plan_path: Path,
+          plan_title: str,
+          status: str,
+          repo_root: Path,
+          *,
+          dry_run: bool = False,
+          prev_plan_path: Path | None = None,
+      ) -> bool:
+      ```
+  - id: P2.T2.S4
+    text: |-
+      Rewrite lookup and entry-building in `_reconcile_spec_index()`
+
+
+      Replace the existing body from `entries = read_index(...)` through `upsert_entry(...)`:
+
+      ```python
+      entries = read_index(spec_path)
+      rel_file = str(plan_path.relative_to(repo_root))
+      lookup_path = str((prev_plan_path or plan_path).relative_to(repo_root))
+
+      existing_entry = next((e for e in entries if e.file == lookup_path), None)
+      if (existing_entry
+              and existing_entry.status == status
+              and existing_entry.plan == plan_title):
+          return False
+
+      if dry_run:
+          console.print(f"Would update spec index for: {spec_path.name}")
+          return True
+
+      entry = IndexEntry(
+          plan=plan_title,
+          repo=existing_entry.repo if existing_entry else "",
+          file=rel_file,
+          status=status,
+          depends_on=existing_entry.depends_on if existing_entry else "—",
+      )
+      upsert_entry(spec_path, entry)
+      console.print(f"Spec index updated: {spec_path}")
+      return True
+      ```
+  - id: P2.T2.S5
+    text: |-
+      Update archive-rename call site in `sync()`
+
+
+      Find the second `_reconcile_spec_index` call after archiving (`sync()` line ~235) and add `prev_plan_path`:
+
+      ```python
+      # Before
+      if archived_path:
+          _reconcile_spec_index(archived_path, plan.title, new_status, repo_root)
+
+      # After
+      if archived_path:
+          _reconcile_spec_index(
+              archived_path, plan.title, new_status, repo_root,
+              prev_plan_path=plan_path,
+          )
+      ```
+  - id: P2.T2.S6
+    text: |-
+      Fix `transition` command — read existing entry before building IndexEntry
+
+
+      In the `transition` command's local-mode branch, before calling `upsert_entry`, read
+      the existing row to preserve `repo` and `depends_on`:
+
+      ```python
+      spec_path = _resolve_spec(plan_path)
+      if spec_path:
+          rel_file = str(plan_path.relative_to(repo_root))
+          existing_entries = read_index(spec_path)
+          existing_entry = next((e for e in existing_entries if e.file == rel_file), None)
+          entry = IndexEntry(
+              plan=plan.title,
+              repo=existing_entry.repo if existing_entry else "",
+              file=rel_file,
+              status=new_state,
+              depends_on=existing_entry.depends_on if existing_entry else "—",
+          )
+          upsert_entry(spec_path, entry)
+      ```
+
+      Remove the existing `spec_path = _resolve_spec(...)` + `entry = IndexEntry(...)` + `upsert_entry(...)` block and replace it with the above.
+  - id: P2.T2.S7
+    text: |-
+      Run all tests — no regressions
+
+
+      ```bash
+      uv run ruff format src/ tests/
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: all pass.
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S7:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

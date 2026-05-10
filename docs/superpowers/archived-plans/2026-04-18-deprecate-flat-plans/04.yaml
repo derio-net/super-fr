@@ -1,0 +1,127 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Address code-review feedback
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Fix I1 — `vk plan format` silently labeled missing paths as flat
+  steps:
+  - id: P4.T1.S1
+    text: 'Require `target.exists()`. A nonexistent path used to fall through to `load_profile()`
+      which returned `FLAT` by default — misrouting agents. Now: explicit `typer.Exit(2)`
+      with `"<path> does not exist."`'
+- number: 2
+  title: Fix I2 — uncaught tracebacks on non-plan files
+  steps:
+  - id: P4.T2.S1
+    text: Wrap `parse_plan` in `plan_format`. Catch `ValueError`; emit `"could not
+      parse plan at <path>"` and exit 2.
+  - id: P4.T2.S2
+    text: Wrap `parse_plan` in `_reject_flat`. Catch both `FileNotFoundError` and
+      `ValueError`; emit `"could not parse <path>"` and exit 2.
+- number: 3
+  title: Fix M1 — drop ghost `--force` flag from `vk plan convert`
+  steps:
+  - id: P4.T3.S1
+    text: Remove the typer Option. Flag had no effect on any supported target (`to_flat`
+      is the only consumer and is gone from the CLI). Also removed the `_ = force`
+      placeholder.
+  - id: P4.T3.S2
+    text: Trim the docstring accordingly.
+- number: 4
+  title: Fix M2 — consistent migration hints
+  steps:
+  - id: P4.T4.S1
+    text: '`dispatch migrate` error. Add the full `--to phased --single-phase --yes`
+      invocation (was missing the strategy flag).'
+  - id: P4.T4.S2
+    text: '`vk-dispatch` error row. Same — include the strategy flag so copying the
+      command works first try.'
+- number: 5
+  title: Fix M5 + M6 — skill polish
+  steps:
+  - id: P4.T5.S1
+    text: M5 — frontmatter description. `"Execute an agentic phase or task from a
+      plan."` → `"Execute an agentic phase from a plan."`
+  - id: P4.T5.S2
+    text: M6 — Constraints bullet. Add `- Migration (if needed) is a separate PR from
+      any phase.` so agents skimming Constraints see the rule.
+- number: 6
+  title: Regression tests for the guards
+  steps:
+  - id: P4.T6.S1
+    text: '`test_format_missing_path_errors`. Exit 2; "does not exist" in output.'
+  - id: P4.T6.S2
+    text: '`test_format_non_plan_file_errors`. Exit 2; "could not parse" in output.'
+  - id: P4.T6.S3
+    text: '`test_non_plan_file_errors_cleanly`. Parametrised across all four execute
+      sub-commands; asserts exit 2 and "could not parse" surfaces (no traceback).'
+  - id: P4.T6.S4
+    text: Verify full suite. `uv run pytest -q --no-cov` — 302 passed, 9 skipped.
+  - id: P4.T6.S5
+    text: Commit.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T6.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T6.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T6.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T6.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T6.S5:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

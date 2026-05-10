@@ -1,0 +1,185 @@
+schema_version: 2
+phase:
+  number: 4
+  title: vk-execute skill update and version bump
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/60
+tasks:
+- number: 1
+  title: Update `skills/vk-execute/SKILL.md`
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      TDD — skill validation asserts new shape
+
+
+      Add or extend in `tests/unit/test_skill_validation.py`:
+
+      ```python
+      class TestVkExecuteSkillReferencesLifecycleCommands:
+          def test_skill_calls_vk_execute_claim(self) -> None:
+              text = Path("skills/vk-execute/SKILL.md").read_text()
+              assert "vk execute claim" in text
+
+          def test_skill_calls_vk_execute_pr_opened(self) -> None:
+              text = Path("skills/vk-execute/SKILL.md").read_text()
+              assert "vk execute pr-opened" in text
+
+          def test_skill_no_longer_says_best_effort(self) -> None:
+              text = Path("skills/vk-execute/SKILL.md").read_text()
+              assert "Best-effort" not in text
+              assert "best-effort: failure does not block" not in text.lower()
+      ```
+  - id: P4.T1.S2
+    text: |-
+      Update `skills/vk-execute/SKILL.md`
+
+
+      Two changes.
+
+      (a) Replace the existing "Label lifecycle" section (currently lines 28-35) with:
+
+      ```markdown
+      ## Label lifecycle
+
+      The Issue moves through `vk-ready → in-progress → pr-ready → closed`.
+      `vk-execute` owns the two middle transitions. Both are dispatched-mode
+      only (Local mode has no Issue).
+
+      - `vk execute claim --issue <N> --repo <owner/repo>` — flips to `in-progress`.
+        Called between procedure steps 1 (check-deps) and 2 (scope).
+      - `vk execute pr-opened --issue <N> --repo <owner/repo> --pr-url <url>` —
+        flips to `pr-ready`. Called immediately after `gh pr create` succeeds.
+
+      Both are idempotent and retry on transient network errors. On persistent
+      failure (auth, 404, exhausted retries), they hard-fail with an actionable
+      error message and a manual recovery command. `pr-opened` failures also
+      print the PR URL so the operator can finish the transition by hand without
+      hunting for state.
+      ```
+
+      (b) Update the "Procedure" list to insert the two new calls. After step 1 (`vk execute check-deps`), add:
+
+      ```markdown
+      1.5. **Claim the Issue (dispatched mode only):**
+         ```bash
+         vk execute claim --issue $N --repo $REPO
+         ```
+      ```
+
+      After step 6 (`gh pr create` via `superpowers:finishing-a-development-branch`), add as step 6.5:
+
+      ```markdown
+      6.5. **Mark Issue pr-ready (dispatched mode only):**
+         ```bash
+         vk execute pr-opened --issue $N --repo $REPO --pr-url $PR_URL
+         ```
+         Run before step 7 (VK MCP `update_issue`) so the GitHub label state is
+         correct before the VK board sync, in case any board automation reads it.
+      ```
+  - id: P4.T1.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_skill_validation.py -q --no-cov
+      ```
+
+      Expected: green.
+- number: 2
+  title: Version bump
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Confirm current version
+
+
+      ```bash
+      grep -E '"version"|^version' pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json
+      ```
+
+      Expected: all three report `1.2.0`.
+  - id: P4.T2.S2
+    text: |-
+      Bump all three files to `1.3.0`
+
+
+      In `pyproject.toml`: change `version = "1.2.0"` → `version = "1.3.0"`.
+      In `.claude-plugin/plugin.json`: change `"version": "1.2.0"` → `"version": "1.3.0"`.
+      In `.claude-plugin/marketplace.json`: change the first plugin's `"version": "1.2.0"` → `"version": "1.3.0"`.
+  - id: P4.T2.S3
+    text: |-
+      Refresh lockfile and confirm CLI
+
+
+      ```bash
+      uv sync
+      uv run vk --version
+      ```
+
+      Expected: `vk --version` reports `1.3.0`.
+  - id: P4.T2.S4
+    text: |-
+      Format, type-check, full suite
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov
+      ```
+
+      Expected: clean / green.
+  - id: P4.T2.S5
+    text: |-
+      Commit and PR
+
+
+      ```bash
+      git checkout -b phase-4-skill-update-and-version-bump
+      git add skills/vk-execute/SKILL.md tests/unit/test_skill_validation.py \
+              pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json uv.lock
+      git commit -m "feat: vk-execute owns label lifecycle + version bump 1.3.0"
+      git push -u origin phase-4-skill-update-and-version-bump
+      gh pr create --title "Phase 4 · vk-execute skill calls claim + pr-opened, bump 1.3.0" \
+        --body "Final phase. Skill now calls the new subcommands at the right procedure points; best-effort footnote is gone. Minor bump per CLAUDE.md release rule. Depends on Phase 3."
+      ```
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

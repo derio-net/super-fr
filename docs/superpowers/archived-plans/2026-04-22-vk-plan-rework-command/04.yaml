@@ -1,0 +1,309 @@
+schema_version: 2
+phase:
+  number: 4
+  title: '`vk plan rework-add` CLI'
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/40
+tasks:
+- number: 1
+  title: Typer command with required flags
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Write failing happy-path integration test
+
+
+      ```python
+      """Integration tests for ``vk plan rework-add``."""
+
+      from __future__ import annotations
+
+      import shutil
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+      from vk.plan.rework import parse_origin_table
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures/rework"
+
+
+      def _rework_file(tmp_path: Path, fixture: str = "rework_empty.md") -> Path:
+          target = tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-1.md"
+          target.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copy(FIXTURES / fixture, target)
+          return target
+
+
+      def test_rework_add_happy_path(tmp_path: Path) -> None:
+          path = _rework_file(tmp_path)
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              [
+                  "plan", "rework-add", str(path),
+                  "--item", "Ship the docs",
+                  "--source", "PR #42",
+                  "--track", "development",
+              ],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 0, result.stdout + result.stderr
+          assert "Added Origin row #1" in result.stdout
+          rows = parse_origin_table(path)
+          assert len(rows) == 1
+          assert rows[0].item == "Ship the docs"
+          assert rows[0].track == "development"
+      ```
+
+      Run — expect failure (command missing).
+  - id: P4.T1.S2
+    text: |-
+      Register `vk plan rework-add`
+
+
+      In `plan_cmd.py`:
+
+      ```python
+      @plan_app.command(name="rework-add")
+      def plan_rework_add(
+          rework_path: Path = typer.Argument(..., help="Path to the rework plan file."),
+          item: str = typer.Option(..., "--item", help="Origin item text."),
+          source: str = typer.Option(..., "--source", help="Where the item came from."),
+          track: str = typer.Option(..., "--track", help="Work-category label."),
+      ) -> None:
+          """Append a row to a rework plan's Origin table."""
+          # ``OriginRow``, ``append_origin_row``, and ``parse_origin_table`` are
+          # imported at the top of ``plan_cmd.py`` alongside the other
+          # ``vk.plan.*`` helpers (no circular-import concern; rework.py has no
+          # dependency on plan_cmd).
+          if not rework_path.exists():
+              err_console.print(f"Error: rework plan not found: {rework_path}")
+              raise typer.Exit(2)
+
+          for name, value in (("--item", item), ("--source", source), ("--track", track)):
+              if not value.strip():
+                  err_console.print(f"Error: {name} is required and must be non-empty.")
+                  raise typer.Exit(2)
+              if "\n" in value or "\r" in value:
+                  err_console.print(f"Error: {name} must not contain newlines.")
+                  raise typer.Exit(2)
+
+          first_token = track.strip().split()[0].lower()
+          if first_token not in {"development", "operations", "decision"}:
+              err_console.print(
+                  f"warn: --track value '{track}' is not a canonical token "
+                  "(development / operations / decision). Accepted as free-form."
+              )
+
+          try:
+              existing = parse_origin_table(rework_path)
+          except ValueError as exc:
+              err_console.print(f"Error: {exc}")
+              raise typer.Exit(2)
+          next_n = (max((r.number for r in existing), default=0)) + 1
+          try:
+              append_origin_row(
+                  rework_path,
+                  OriginRow(number=next_n, item=item.strip(), source=source.strip(), track=track.strip()),
+              )
+          except ValueError as exc:
+              err_console.print(f"Error: {exc}")
+              raise typer.Exit(2)
+          console.print(f"Added Origin row #{next_n} to {rework_path}")
+      ```
+
+      Run — expect happy-path green.
+- number: 2
+  title: Flag-validation and edge-case tests
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Test — canonical tracks emit NO warn
+
+
+      ```python
+      def test_rework_add_canonical_track_no_warn(tmp_path: Path) -> None:
+          path = _rework_file(tmp_path)
+          runner = CliRunner()
+          for tok in ("development", "operations", "decision"):
+              result = runner.invoke(
+                  app,
+                  ["plan", "rework-add", str(path),
+                   "--item", "x", "--source", "y", "--track", tok],
+                  catch_exceptions=False,
+              )
+              assert result.exit_code == 0
+              assert "not a canonical token" not in result.stderr
+      ```
+  - id: P4.T2.S2
+    text: |-
+      Test — non-canonical track warns, still succeeds
+
+
+      ```python
+      def test_rework_add_non_canonical_track_warns(tmp_path: Path) -> None:
+          path = _rework_file(tmp_path)
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              ["plan", "rework-add", str(path),
+               "--item", "x", "--source", "y", "--track", "research"],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 0
+          assert "not a canonical token" in result.stderr
+      ```
+  - id: P4.T2.S3
+    text: |-
+      Test — empty flag value exits 2 naming the flag
+
+
+      ```python
+      import pytest
+
+      @pytest.mark.parametrize("item,source,track", [
+          ("", "y", "development"),
+          ("   ", "y", "development"),
+          ("x", "", "development"),
+          ("x", "y", "   "),
+      ])
+      def test_rework_add_empty_flag_exits_2(
+          tmp_path: Path, item, source, track
+      ) -> None:
+          path = _rework_file(tmp_path)
+          runner = CliRunner()
+          result = runner.invoke(
+              app, ["plan", "rework-add", str(path),
+                    "--item", item, "--source", source, "--track", track],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 2
+          assert "is required and must be non-empty" in result.stderr
+      ```
+  - id: P4.T2.S4
+    text: |-
+      Test — newline in any flag exits 2
+
+
+      ```python
+      def test_rework_add_newline_rejected(tmp_path: Path) -> None:
+          path = _rework_file(tmp_path)
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              ["plan", "rework-add", str(path),
+               "--item", "line1\nline2", "--source", "y", "--track", "development"],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 2
+          assert "must not contain newlines" in result.stderr
+      ```
+  - id: P4.T2.S5
+    text: |-
+      Test — pipe escape round-trips
+
+
+      ```python
+      def test_rework_add_pipe_escape_roundtrip(tmp_path: Path) -> None:
+          path = _rework_file(tmp_path)
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              ["plan", "rework-add", str(path),
+               "--item", "wire | pipe", "--source", "y", "--track", "development"],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 0
+          # File contains escaped pipe.
+          assert r"wire \| pipe" in path.read_text()
+          # Round-trip unescapes.
+          assert parse_origin_table(path)[0].item == "wire | pipe"
+      ```
+  - id: P4.T2.S6
+    text: |-
+      Test — missing Origin section exits 2
+
+
+      ```python
+      def test_rework_add_missing_origin_exits_2(tmp_path: Path) -> None:
+          path = tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-1.md"
+          path.parent.mkdir(parents=True)
+          path.write_text("# No Origin here\n\n**Status:** Not Started\n**Goal:** g\n")
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              ["plan", "rework-add", str(path),
+               "--item", "x", "--source", "y", "--track", "development"],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 2
+          assert "no ## Origin section" in result.stderr
+      ```
+  - id: P4.T2.S7
+    text: |-
+      Test — malformed Origin header exits 2
+
+
+      ```python
+      def test_rework_add_malformed_origin_exits_2(tmp_path: Path) -> None:
+          path = _rework_file(tmp_path, "rework_malformed_origin.md")
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              ["plan", "rework-add", str(path),
+               "--item", "x", "--source", "y", "--track", "development"],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 2
+          assert "Origin table header malformed" in result.stderr
+      ```
+
+      Run: `uv run pytest tests/integration/test_plan_rework_add.py -q` — all green.
+
+      ---
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S7:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

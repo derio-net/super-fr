@@ -1,0 +1,119 @@
+schema_version: 2
+phase:
+  number: 6
+  title: '`self-review` canonical-Track-token lint'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/42
+tasks:
+- number: 1
+  title: Extend `plan_self_review`
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Write failing tests for the new lint branch
+
+
+      Create `tests/integration/test_plan_self_review_track.py`:
+
+      ```python
+      """Track-token lint branch of ``vk plan self-review``."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      _PLAN_TEMPLATE = """# T
+
+      **Spec:** `s.md`
+      **Status:** Not Started
+
+      **Goal:** g.
+
+      ---
+
+      ## Phase 1: First [agentic]
+      **Depends on:** —
+      **Track:** {track}
+
+      ### Task 1: Thing
+
+      - [ ] **Step 1:** Do it
+      """
+
+
+      def _write_plan(tmp_path: Path, track: str) -> Path:
+          p = tmp_path / "plan.md"
+          p.write_text(_PLAN_TEMPLATE.format(track=track))
+          return p
+
+
+      def test_canonical_track_is_silent(tmp_path: Path) -> None:
+          p = _write_plan(tmp_path, "development")
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "self-review", str(p)], catch_exceptions=False)
+          assert result.exit_code == 0
+          assert "non-canonical" not in result.stderr
+
+
+      def test_non_canonical_track_surfaces_as_issue(tmp_path: Path) -> None:
+          p = _write_plan(tmp_path, "research")
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "self-review", str(p)], catch_exceptions=False)
+          assert result.exit_code == 1
+          assert "non-canonical **Track:** value 'research'" in result.stderr
+
+
+      def test_transition_syntax_passes_on_first_word(tmp_path: Path) -> None:
+          p = _write_plan(tmp_path, "decision → development")
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "self-review", str(p)], catch_exceptions=False)
+          assert result.exit_code == 0
+          assert "non-canonical" not in result.stderr
+      ```
+
+      Run — expect 2 failures (research case doesn't surface; transition may trip).
+  - id: P6.T1.S2
+    text: |-
+      Insert the lint check inside `plan_self_review`
+
+
+      In `plan_cmd.py`, inside `plan_self_review`, after the phase-tag loop and before the `validate_dag` call:
+
+      ```python
+          _CANONICAL_TRACKS = {"development", "operations", "decision"}
+          for phase in plan.phases:
+              if phase.track_label is None:
+                  continue
+              first = phase.track_label.strip().split()[0].lower()
+              if first not in _CANONICAL_TRACKS:
+                  issues.append(
+                      f"Phase {phase.number} has non-canonical **Track:** value "
+                      f"'{phase.track_label}' (expected development / operations / decision)."
+                  )
+      ```
+
+      Define `_CANONICAL_TRACKS` at module scope (next to the other constants) so it's reused by `plan_rework_add` too — refactor `plan_rework_add` to reference it.
+
+      Run the three tests — expect green. Run `uv run pytest -q --no-cov` — full green.
+
+      ---
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

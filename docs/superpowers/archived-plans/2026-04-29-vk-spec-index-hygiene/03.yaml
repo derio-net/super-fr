@@ -1,0 +1,300 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Add `target_repo` to Phase model + parser + self-review check
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/84
+tasks:
+- number: 1
+  title: Tests for multi-repo warning
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      TDD — write failing tests
+
+
+      ```python
+      """Tests for vk plan self-review multi-repo warning (Thread 1a)."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      runner = CliRunner()
+
+      _DISPATCH_CONFIG = """\
+      plan:
+        save_to: docs/superpowers/plans/
+      dispatch:
+        target: github-issues
+        owner: derio-net
+        default_repo: derio-net/frank
+        labels:
+          agentic: vk-ready
+          manual: manual
+      """
+
+      _NO_DISPATCH_CONFIG = """\
+      plan:
+        save_to: docs/superpowers/plans/
+      """
+
+      PLAN_MIXED_REPOS = """\
+      # Test Plan
+
+      **Spec:** `docs/superpowers/specs/some-spec.md`
+      **Status:** Not Started
+
+      **Goal:** Test.
+
+      ---
+
+      ## Phase 1: Phase A [agentic]
+      **Target repo:** derio-net/frank
+      **Depends on:** —
+
+      ### Task 1: Something
+
+      - [ ] **Step 1: Do A**
+
+      ## Phase 2: Phase B [agentic]
+      **Target repo:** derio-net/agent-images
+      **Depends on:** Phase 1
+
+      ### Task 1: Something
+
+      - [ ] **Step 1: Do B**
+      """
+
+      PLAN_SAME_REPO = """\
+      # Test Plan
+
+      **Spec:** `docs/superpowers/specs/some-spec.md`
+      **Status:** Not Started
+
+      **Goal:** Test.
+
+      ---
+
+      ## Phase 1: Phase A [agentic]
+      **Target repo:** derio-net/frank
+      **Depends on:** —
+
+      ### Task 1: Something
+
+      - [ ] **Step 1: Do A**
+
+      ## Phase 2: Phase B [agentic]
+      **Target repo:** derio-net/frank
+      **Depends on:** Phase 1
+
+      ### Task 1: Something
+
+      - [ ] **Step 1: Do B**
+      """
+
+      PLAN_NO_TARGET = """\
+      # Test Plan
+
+      **Spec:** `docs/superpowers/specs/some-spec.md`
+      **Status:** Not Started
+
+      **Goal:** Test.
+
+      ---
+
+      ## Phase 1: Phase A [agentic]
+      **Depends on:** —
+
+      ### Task 1: Something
+
+      - [ ] **Step 1: Do A**
+      """
+
+
+      def _write_config(tmp_path: Path, content: str) -> None:
+          config_dir = tmp_path / "docs" / "superpowers"
+          config_dir.mkdir(parents=True, exist_ok=True)
+          (config_dir / "plan-config.yaml").write_text(content)
+
+
+      def _write_plan(tmp_path: Path, content: str) -> Path:
+          plan_dir = tmp_path / "docs" / "superpowers" / "plans"
+          plan_dir.mkdir(parents=True, exist_ok=True)
+          plan_path = plan_dir / "test-plan.md"
+          plan_path.write_text(content)
+          return plan_path
+
+
+      def test_mixed_target_repos_warns_with_dispatch(tmp_path: Path) -> None:
+          _write_config(tmp_path, _DISPATCH_CONFIG)
+          plan_path = _write_plan(tmp_path, PLAN_MIXED_REPOS)
+          result = runner.invoke(app, ["plan", "self-review", str(plan_path)])
+          assert result.exit_code == 1
+          combined = (result.output or "") + (result.stdout or "")
+          assert "Multi-repo plan" in combined
+
+
+      def test_same_target_repo_no_warning(tmp_path: Path) -> None:
+          _write_config(tmp_path, _DISPATCH_CONFIG)
+          plan_path = _write_plan(tmp_path, PLAN_SAME_REPO)
+          result = runner.invoke(app, ["plan", "self-review", str(plan_path)])
+          assert "Multi-repo" not in (result.output or "")
+
+
+      def test_no_target_repo_no_warning(tmp_path: Path) -> None:
+          _write_config(tmp_path, _DISPATCH_CONFIG)
+          plan_path = _write_plan(tmp_path, PLAN_NO_TARGET)
+          result = runner.invoke(app, ["plan", "self-review", str(plan_path)])
+          assert "Multi-repo" not in (result.output or "")
+
+
+      def test_mixed_target_no_dispatch_no_warning(tmp_path: Path) -> None:
+          _write_config(tmp_path, _NO_DISPATCH_CONFIG)
+          plan_path = _write_plan(tmp_path, PLAN_MIXED_REPOS)
+          result = runner.invoke(app, ["plan", "self-review", str(plan_path)])
+          assert "Multi-repo" not in (result.output or "")
+      ```
+  - id: P3.T1.S2
+    text: |-
+      Run tests to confirm they fail
+
+
+      ```bash
+      uv run pytest tests/unit/test_self_review_multi_repo.py -x -q --no-cov 2>&1 | head -30
+      ```
+- number: 2
+  title: Add `target_repo` to Phase model
+  steps:
+  - id: P3.T2.S3
+    text: |-
+      Add `target_repo: str | None = None` to `Phase`
+
+
+      ```python
+      @dataclass(frozen=True)
+      class Phase:
+          number: int
+          title: str
+          tag: Literal["manual", "agentic"]
+          depends_on: tuple[int, ...]
+          tasks: tuple[Task, ...]
+          tracking_url: str | None
+          track_label: str | None = None
+          target_repo: str | None = None    # ← add this line
+      ```
+- number: 3
+  title: Update parser to extract `**Target repo:**`
+  steps:
+  - id: P3.T3.S4
+    text: |-
+      Add regex and extraction
+
+
+      Near the top of `parser.py`, add alongside the other field regexes:
+
+      ```python
+      _RE_TARGET_REPO = re.compile(r"^\*\*Target repo:\*\*\s*(.+)$", re.MULTILINE)
+      ```
+
+      In the phase-header parsing block (where `track_label` and `tracking_url` are
+      extracted), add the target_repo extraction and pass it when constructing `Phase`:
+
+      ```python
+      target_repo_m = _RE_TARGET_REPO.search(phase_header_text)
+      target_repo = target_repo_m.group(1).strip() if target_repo_m else None
+      # ... then in Phase(...):
+      target_repo=target_repo,
+      ```
+
+      The parser already extracts a "phase_header_text" block between the `## Phase N:` line
+      and the first `### Task` line. Use that same block for the regex search.
+- number: 4
+  title: Add multi-repo check to `plan_self_review()`
+  steps:
+  - id: P3.T4.S5
+    text: |-
+      Add check after Track-label lint in `plan_self_review()`
+
+
+      After the `for phase in plan.phases: if phase.track_label is None: ...` block, add:
+
+      ```python
+      # Multi-target repo check (Thread 1a)
+      target_repos = {p.target_repo for p in plan.phases if p.target_repo}
+      if len(target_repos) > 1:
+          repo_root = resolve_repo_root(cwd=plan_path.parent)
+          config_path = repo_root / "docs" / "superpowers" / "plan-config.yaml"
+          profile = load_profile(config_path)
+          if profile.dispatch_enabled:
+              issues.append(
+                  f"Multi-repo plan: phases declare different **Target repo:** values "
+                  f"({', '.join(sorted(target_repos))}). "
+                  "vk dispatch --repo is plan-wide; per-phase repo overrides are not "
+                  "supported. Write one plan per target repo."
+              )
+      ```
+
+      Verify that `load_profile` is already imported in `plan_cmd.py` (it is used in
+      `plan_spec_index` via `resolve_repo_root`); add the import if needed.
+  - id: P3.T4.S6
+    text: |-
+      Run all tests
+
+
+      ```bash
+      uv run ruff format src/ tests/
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: all pass.
+  - id: P3.T4.S7
+    text: |-
+      Run `vk plan self-review` on this plan to confirm it passes
+
+
+      ```bash
+      cd /var/tmp/vibe-kanban/worktrees/2547-ffe-80-gh-80/superpowers-for-vk
+      uv run vk plan self-review docs/superpowers/plans/2026-04-29-vk-spec-index-hygiene.md
+      ```
+
+      Expected: `Self-review passed.`
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S7:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

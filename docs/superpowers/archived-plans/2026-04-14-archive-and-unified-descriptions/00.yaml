@@ -1,0 +1,134 @@
+schema_version: 2
+phase:
+  number: 0
+  title: Impact audit across repos
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/9
+tasks:
+- number: 1
+  title: Enumerate title/label/body consumers
+  steps:
+  - id: P0.T1.S1
+    text: |-
+      Grep for slug-phase-tag title regex consumers
+
+
+      Run this command from the repo root and append the raw output to a scratchpad in `/tmp/audit-title.txt`:
+
+      ```bash
+      for repo in /home/claude/repos/superpowers-for-vk /home/claude/repos/secure-agent-kali /home/claude/repos/frank /home/claude/repos/willikins /home/claude/repos/vibe-kanban; do
+        echo "=== $repo ==="
+        rg -n --no-heading '(\{slug\}-\{phase\}-\{tag\}|-\d+-(?:agentic|manual))' "$repo" 2>/dev/null || true
+      done > /tmp/audit-title.txt
+      ```
+
+      Expected: at least one hit in `src/vk/commands/progress_cmd.py` (the `seen_titles` regex at line 391) and one in `src/vk/commands/dispatch_cmd.py::_build_issue_title`.
+  - id: P0.T1.S2
+    text: |-
+      Grep for vk-ready / vk-synced / in-progress / pr-ready label consumers
+
+
+      ```bash
+      for repo in /home/claude/repos/superpowers-for-vk /home/claude/repos/secure-agent-kali /home/claude/repos/frank /home/claude/repos/willikins; do
+        echo "=== $repo ==="
+        rg -n --no-heading '(vk-ready|vk-synced|pr-ready|in-progress)' "$repo" 2>/dev/null || true
+      done > /tmp/audit-labels.txt
+      ```
+
+      Expected: hits in `secure-agent-kali/scripts/vk-issue-bridge.py` (GH_LABEL_READY/SYNCED) and in `superpowers-for-vk/src/vk/commands/dispatch_cmd.py` (labels map).
+  - id: P0.T1.S3
+    text: |-
+      Enumerate open Issues with old-format titles across derio-net repos
+
+
+      ```bash
+      for repo in derio-net/superpowers-for-vk derio-net/secure-agent-kali derio-net/frank derio-net/willikins; do
+        gh issue list --repo "$repo" --state open --label vk-ready --json number,title,url --limit 100 \
+          | jq -r --arg R "$repo" '.[] | [$R, .number, .title, .url] | @tsv'
+      done > /tmp/audit-open-issues.tsv
+      ```
+
+      Expected: a TSV with the Frank hextra phases (5 rows for #68–#72) and any other open `vk-ready` Issues.
+  - id: P0.T1.S4
+    text: |-
+      Confirm bridge is singleton
+
+
+      ```bash
+      ls -la /opt/scripts/vk-issue-bridge.py /home/claude/.local/bin/vk-issue-bridge.py /home/claude/repos/secure-agent-kali/scripts/vk-issue-bridge.py 2>&1
+      ```
+
+      All three paths should resolve to the same inode OR the `secure-agent-kali` copy is the source of truth and the others are copies/symlinks. Record which case applies.
+  - id: P0.T1.S5
+    text: |-
+      Check willikins transition script for title parsing
+
+
+      ```bash
+      rg -n 'title|Title' /home/claude/repos/willikins/scripts/hooks/vk-lifecycle-transition.sh 2>&1
+      ```
+
+      Expected: no hits (the script takes a URL, not a title). If hits found, note them as additional consumers.
+- number: 2
+  title: Write the audit report
+  steps:
+  - id: P0.T2.S1
+    text: |-
+      Write the report
+
+
+      Synthesize the four `/tmp/audit-*.txt` and `.tsv` outputs into a markdown report at `docs/superpowers/2026-04-14-unified-descriptions-audit.md` with these sections:
+
+      - **Title consumers found** — list each file:line that matches or parses the old title format.
+      - **Label consumers found** — list each file:line that reads/writes the labels.
+      - **Open Issues to migrate** — the TSV contents rendered as a table, plus a total count.
+      - **Bridge singleton status** — `secure-agent-kali/scripts/vk-issue-bridge.py` is canonical; others are (symlinks | stale copies | unrelated).
+      - **Additional title parsers outside expected surfaces** — anything surprising in `willikins` or `vibe-kanban`. If none: "None found."
+
+      Keep the report under 150 lines. If any consumer requires a plan scope extension, flag it explicitly with "⚠️ scope impact".
+  - id: P0.T2.S2
+    text: |-
+      Commit the audit
+
+
+      ```bash
+      git add docs/superpowers/2026-04-14-unified-descriptions-audit.md
+      git commit -m "docs(audit): unified-descriptions impact audit (phase 0)"
+      ```
+
+      ---
+state:
+  steps:
+    P0.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

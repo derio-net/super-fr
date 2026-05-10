@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '`**Files:**` verb preservation'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Capture and re-emit the file-mention verb
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Add failing round-trip test for verb preservation.
+
+
+      In `test_plan_loose_format.py::TestFileMentionVerbRoundTrip::test_verbs_preserved_after_round_trip`, assert both `- Edit: \`playbooks/site.yml\`` and `- Test: \`cd roles/demo && molecule test\`` appear in the re-written plan text.
+  - id: P2.T1.S2
+    text: |-
+      Add `file_mention_verbs: tuple[str, ...] = ()` to `Task`.
+
+
+      The default-empty tuple keeps every existing `Task(..., files_mentioned=(...))` call-site compiling. An empty `file_mention_verbs` is the backward-compat signal for the writer to fall back to `Create`.
+  - id: P2.T1.S3
+    text: |-
+      Promote `_RE_FILE_MENTION` group 1 to capture the verb; update `_parse_files` to return `list[tuple[str, str]]`.
+
+
+      The pattern becomes `^- (Create|Edit|Test|Delete|Move|Rename|Modify):\s*\`([^\`]+)\``. `_parse_tasks` splits the pairs into the two parallel tuples when constructing the `Task`.
+  - id: P2.T1.S4
+    text: |-
+      Update `_write_tasks` in `writer.py` to zip verbs with paths.
+
+
+      `verbs = task.file_mention_verbs; verb = verbs[i] if i < len(verbs) else "Create"` — so programmatically-built tasks without `file_mention_verbs` still render as `Create:`.
+  - id: P2.T1.S5
+    text: |-
+      Propagate `file_mention_verbs` through all three converters in `convert.py` (`to_flat`, `to_phased_one_per_task`, `_renumber_tasks`).
+
+
+      Without this, the new field is dropped during flat→phased conversion even though the parser filled it in.
+  - id: P2.T1.S6
+    text: |-
+      Re-run the full plan test suite and the round-trip test.
+
+
+        ```bash
+        uv run --group dev python -m pytest tests/unit/test_plan_*.py --no-cov -q
+        ```
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

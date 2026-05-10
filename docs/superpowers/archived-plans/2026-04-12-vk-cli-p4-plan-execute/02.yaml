@@ -1,0 +1,941 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Execute helper subcommands
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 6
+  title: vk execute check-deps subcommand
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Write failing tests for check-deps
+
+
+      Create `tests/integration/test_execute.py`:
+
+      ```python
+      # tests/integration/test_execute.py
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      runner = CliRunner()
+
+
+      class TestCheckDeps:
+          def test_check_deps_phased_passes_when_prior_phases_done(
+              self, tmp_path, phased_plan_phase1_complete
+          ):
+              """Phase 2 deps satisfied when Phase 1 is fully checked."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_phase1_complete)
+              result = runner.invoke(app, ["execute", "check-deps", str(plan), "2"])
+              assert result.exit_code == 0
+              assert "satisfied" in result.stdout.lower() or "ready" in result.stdout.lower()
+
+          def test_check_deps_phased_fails_when_prior_phases_incomplete(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """Phase 2 deps not satisfied when Phase 1 has unchecked steps."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "check-deps", str(plan), "2"])
+              assert result.exit_code != 0
+              assert "blocked" in result.stdout.lower() or "incomplete" in result.stdout.lower()
+
+          def test_check_deps_flat_passes_when_prior_tasks_done(
+              self, tmp_path, flat_plan_task1_complete
+          ):
+              """Flat plan: Task 2 deps satisfied when Task 1 is fully checked."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_plan_task1_complete)
+              result = runner.invoke(app, ["execute", "check-deps", str(plan), "2"])
+              assert result.exit_code == 0
+
+          def test_check_deps_first_phase_always_passes(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """Phase 1 / Task 1 has no prior deps, always passes."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "check-deps", str(plan), "1"])
+              assert result.exit_code == 0
+
+          def test_check_deps_dispatch_mode_queries_issues(
+              self, tmp_git_repo_with_phased_dispatched_plan, mock_gh
+          ):
+              """Dispatch mode: checks `Blocked by #N` Issues."""
+              plan_path = (
+                  tmp_git_repo_with_phased_dispatched_plan
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              mock_gh.set_issue_state("https://github.com/derio-net/test-repo/issues/1", "closed")
+              result = runner.invoke(app, ["execute", "check-deps", str(plan_path), "2"])
+              assert result.exit_code == 0
+      ```
+  - id: P2.T6.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestCheckDeps" --no-header`
+      Expected: FAIL — `No such command 'check-deps'`
+  - id: P2.T6.S3
+    text: |-
+      Create execute_cmd.py with check-deps subcommand
+
+
+      Create `src/vk/commands/execute_cmd.py`:
+
+      ```python
+      """vk execute — helpers for phase/task execution."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+      from typing import Optional
+
+      import typer
+      from rich.console import Console
+
+      from vk.config import load_profile
+      from vk.plan.models import PlanFormat
+      from vk.plan.parser import parse_plan
+
+      console = Console(stderr=True)
+      execute_app = typer.Typer(help="Helpers for phase/task execution.")
+
+
+      @execute_app.command(name="check-deps")
+      def check_deps(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+          phase_or_task: int = typer.Argument(..., help="Phase number (phased) or task number (flat)."),
+      ) -> None:
+          """Check whether dependencies for a phase/task are satisfied."""
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          plan = parse_plan(plan_path)
+          profile = load_profile(plan_path)
+
+          if profile.dispatch_enabled:
+              _check_deps_dispatch(plan, plan_path, phase_or_task, profile)
+          else:
+              _check_deps_local(plan, phase_or_task)
+
+
+      def _check_deps_local(plan: object, target: int) -> None:
+          """Local mode: earlier phases/tasks must have all checkboxes checked."""
+          if target <= 1:
+              console.print("[green]No prior dependencies. Ready to execute.[/green]")
+              return
+
+          if plan.format is PlanFormat.PHASED:
+              for phase in plan.phases:
+                  if phase.number >= target:
+                      break
+                  for task in phase.tasks:
+                      for step in task.steps:
+                          if step.state == " ":
+                              console.print(
+                                  f"[red]Blocked: Phase {phase.number}, Task {task.number}, "
+                                  f"Step {step.number} is incomplete.[/red]"
+                              )
+                              raise typer.Exit(1)
+          elif plan.format is PlanFormat.FLAT:
+              for task in plan.tasks:
+                  if task.number >= target:
+                      break
+                  for step in task.steps:
+                      if step.state == " ":
+                          console.print(
+                              f"[red]Blocked: Task {task.number}, "
+                              f"Step {step.number} is incomplete.[/red]"
+                          )
+                          raise typer.Exit(1)
+
+          console.print(f"[green]Dependencies satisfied. Ready to execute {target}.[/green]")
+
+
+      def _check_deps_dispatch(
+          plan: object, plan_path: Path, target: int, profile: object
+      ) -> None:
+          """Dispatch mode: query `Blocked by #N` Issues."""
+          from vk.gh import query_issue_states
+
+          if target <= 1:
+              console.print("[green]No prior dependencies. Ready to execute.[/green]")
+              return
+
+          # Check local deps first
+          _check_deps_local(plan, target)
+
+          # Then check Issue states for dispatch
+          if plan.format is PlanFormat.PHASED:
+              issue_states = query_issue_states(plan)
+              for phase in plan.phases:
+                  if phase.number >= target:
+                      break
+                  if phase.tracking_url:
+                      state = issue_states.get(phase.tracking_url, "")
+                      if state.lower() not in ("closed", "done"):
+                          console.print(
+                              f"[red]Blocked: Phase {phase.number} Issue "
+                              f"({phase.tracking_url}) is still '{state}'.[/red]"
+                          )
+                          raise typer.Exit(1)
+
+          console.print(
+              f"[green]Dependencies satisfied (local + dispatch). "
+              f"Ready to execute {target}.[/green]"
+          )
+      ```
+  - id: P2.T6.S4
+    text: |-
+      Wire execute_app into cli.py
+
+
+      In `src/vk/cli.py`, replace the stub `execute_app` with the import from `execute_cmd`:
+
+      ```python
+      from vk.commands.execute_cmd import execute_app
+
+      # Remove the old: execute_app = typer.Typer(help="Helpers for phase/task execution.")
+      # Remove the old: execute_callback function
+      # Keep: app.add_typer(execute_app, name="execute")
+      ```
+  - id: P2.T6.S5
+    text: |-
+      Run tests to verify check-deps passes
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestCheckDeps" --no-header`
+      Expected: PASS — all check-deps tests pass
+  - id: P2.T6.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/execute_cmd.py tests/integration/test_execute.py src/vk/cli.py
+      git commit -m "feat: add vk execute check-deps subcommand with dual-mode support"
+      ```
+- number: 7
+  title: vk execute scope subcommand
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      Write failing tests for scope
+
+
+      Add to `tests/integration/test_execute.py`:
+
+      ```python
+      class TestScope:
+          def test_scope_phased_outputs_phase_tasks(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """Phased plan: scopes by phase, listing all tasks and files."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "scope", str(plan), "1"])
+              assert result.exit_code == 0
+              assert "Task" in result.stdout
+
+          def test_scope_flat_outputs_task_steps(self, tmp_path, flat_plan_fixture):
+              """Flat plan: scopes by task, listing steps and files."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_plan_fixture)
+              result = runner.invoke(app, ["execute", "scope", str(plan), "1"])
+              assert result.exit_code == 0
+              assert "Step" in result.stdout
+
+          def test_scope_includes_files_mentioned(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """Scope output includes the Files section from tasks."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "scope", str(plan), "1"])
+              assert result.exit_code == 0
+
+          def test_scope_invalid_number_errors(self, tmp_path, phased_plan_fixture):
+              """Requesting a non-existent phase/task number is an error."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "scope", str(plan), "99"])
+              assert result.exit_code != 0
+      ```
+  - id: P2.T7.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestScope" --no-header`
+      Expected: FAIL — `No such command 'scope'`
+  - id: P2.T7.S3
+    text: |-
+      Implement scope subcommand
+
+
+      Add to `execute_cmd.py`:
+
+      ```python
+      @execute_app.command()
+      def scope(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+          phase_or_task: int = typer.Argument(
+              ..., help="Phase number (phased) or task number (flat)."
+          ),
+      ) -> None:
+          """Show the scope (tasks, steps, files) for a phase or task."""
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          plan = parse_plan(plan_path)
+
+          if plan.format is PlanFormat.PHASED:
+              phase = next(
+                  (p for p in plan.phases if p.number == phase_or_task), None
+              )
+              if phase is None:
+                  console.print(f"[red]Phase {phase_or_task} not found.[/red]")
+                  raise typer.Exit(1)
+
+              console.print(f"[bold]Phase {phase.number}: {phase.title}[/bold] [{phase.tag}]")
+              if phase.tracking_url:
+                  console.print(f"Tracking: {phase.tracking_url}")
+              for task in phase.tasks:
+                  console.print(f"\n  [bold]Task {task.number}: {task.title}[/bold]")
+                  if task.files_mentioned:
+                      console.print("  Files:")
+                      for f in task.files_mentioned:
+                          console.print(f"    - {f}")
+                  for step in task.steps:
+                      state_char = step.state
+                      console.print(f"  [{state_char}] Step {step.number}: {step.title}")
+
+          elif plan.format is PlanFormat.FLAT:
+              task = next(
+                  (t for t in plan.tasks if t.number == phase_or_task), None
+              )
+              if task is None:
+                  console.print(f"[red]Task {phase_or_task} not found.[/red]")
+                  raise typer.Exit(1)
+
+              tag_str = f" [{task.tag}]" if task.tag else ""
+              console.print(f"[bold]Task {task.number}: {task.title}[/bold]{tag_str}")
+              if task.files_mentioned:
+                  console.print("Files:")
+                  for f in task.files_mentioned:
+                      console.print(f"  - {f}")
+              for step in task.steps:
+                  state_char = step.state
+                  console.print(f"[{state_char}] Step {step.number}: {step.title}")
+      ```
+  - id: P2.T7.S4
+    text: |-
+      Run tests to verify scope passes
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestScope" --no-header`
+      Expected: PASS — all scope tests pass
+  - id: P2.T7.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/execute_cmd.py tests/integration/test_execute.py
+      git commit -m "feat: add vk execute scope subcommand"
+      ```
+- number: 8
+  title: vk execute check-step subcommand
+  steps:
+  - id: P2.T8.S1
+    text: |-
+      Write failing tests for check-step
+
+
+      Add to `tests/integration/test_execute.py`:
+
+      ```python
+      class TestCheckStep:
+          def test_check_step_phased_marks_checkbox(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """P1.T1.S1 marks the correct checkbox as [x]."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(
+                  app, ["execute", "check-step", str(plan), "P1.T1.S1", "--state", "x"]
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "- [x] **Step 1:" in content
+
+          def test_check_step_flat_marks_checkbox(self, tmp_path, flat_plan_fixture):
+              """T1.S1 marks the correct checkbox as [x] in flat format."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_plan_fixture)
+              result = runner.invoke(
+                  app, ["execute", "check-step", str(plan), "T1.S1", "--state", "x"]
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "- [x] **Step 1:" in content
+
+          def test_check_step_skip_marks_as_dash(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """--state - marks the checkbox as [-] (skipped)."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(
+                  app, ["execute", "check-step", str(plan), "P1.T1.S1", "--state", "-"]
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "- [-] **Step 1:" in content
+
+          def test_check_step_never_unchecks(self, tmp_path, phased_plan_fixture):
+              """Re-running check-step on an already-checked step does not uncheck."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              # First: check it
+              runner.invoke(
+                  app, ["execute", "check-step", str(plan), "P1.T1.S1", "--state", "x"]
+              )
+              # Second: try to uncheck (no --state = default, which should not uncheck)
+              result = runner.invoke(
+                  app, ["execute", "check-step", str(plan), "P1.T1.S1", "--state", "x"]
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "- [x] **Step 1:" in content
+
+          def test_check_step_idempotent(self, tmp_path, phased_plan_fixture):
+              """Running check-step twice with same state produces identical file."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              runner.invoke(
+                  app, ["execute", "check-step", str(plan), "P1.T1.S1", "--state", "x"]
+              )
+              content_after_first = plan.read_text()
+              runner.invoke(
+                  app, ["execute", "check-step", str(plan), "P1.T1.S1", "--state", "x"]
+              )
+              content_after_second = plan.read_text()
+              assert content_after_first == content_after_second
+
+          def test_check_step_validates_step_id_exists(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """Invalid step ID is an error."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(
+                  app, ["execute", "check-step", str(plan), "P99.T1.S1", "--state", "x"]
+              )
+              assert result.exit_code != 0
+
+          def test_check_step_stages_but_does_not_commit(
+              self, tmp_git_repo_with_phased_plan
+          ):
+              """check-step stages the file change but does NOT create a git commit."""
+              plan_path = (
+                  tmp_git_repo_with_phased_plan
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              result = runner.invoke(
+                  app, ["execute", "check-step", str(plan_path), "P1.T1.S1", "--state", "x"]
+              )
+              assert result.exit_code == 0
+              # Verify staged but not committed
+              import subprocess
+
+              staged = subprocess.run(
+                  ["git", "diff", "--cached", "--name-only"],
+                  cwd=str(tmp_git_repo_with_phased_plan),
+                  capture_output=True,
+                  text=True,
+              )
+              assert "test-plan.md" in staged.stdout
+
+          def test_check_step_with_note_appends_text(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """--note TEXT appends a note after the checkbox line."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(
+                  app,
+                  [
+                      "execute", "check-step", str(plan), "P1.T1.S1",
+                      "--state", "x", "--note", "Verified output matches expected.",
+                  ],
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "Verified output matches expected." in content
+
+          def test_check_step_invalid_id_format(self, tmp_path, phased_plan_fixture):
+              """Malformed step IDs are rejected."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(
+                  app, ["execute", "check-step", str(plan), "INVALID", "--state", "x"]
+              )
+              assert result.exit_code != 0
+      ```
+  - id: P2.T8.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestCheckStep" --no-header`
+      Expected: FAIL — `No such command 'check-step'`
+  - id: P2.T8.S3
+    text: |-
+      Implement check-step subcommand
+
+
+      Add to `execute_cmd.py`:
+
+      ```python
+      import re
+      import subprocess
+
+
+      def _parse_step_id(step_id: str) -> tuple[int | None, int, int]:
+          """Parse step ID into (phase, task, step). Phase is None for flat format.
+
+          Phased: P<phase>.T<task>.S<step>
+          Flat: T<task>.S<step>
+          """
+          phased_match = re.match(r"^P(\d+)\.T(\d+)\.S(\d+)$", step_id)
+          if phased_match:
+              return (
+                  int(phased_match.group(1)),
+                  int(phased_match.group(2)),
+                  int(phased_match.group(3)),
+              )
+
+          flat_match = re.match(r"^T(\d+)\.S(\d+)$", step_id)
+          if flat_match:
+              return None, int(flat_match.group(1)), int(flat_match.group(2))
+
+          raise ValueError(
+              f"Invalid step ID: {step_id!r}. "
+              f"Expected P<phase>.T<task>.S<step> or T<task>.S<step>."
+          )
+
+
+      @execute_app.command(name="check-step")
+      def check_step(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+          step_id: str = typer.Argument(
+              ..., help="Step ID: P<phase>.T<task>.S<step> or T<task>.S<step>."
+          ),
+          state: str = typer.Option(
+              "x", "--state", help="Checkbox state: x (done) or - (skipped)."
+          ),
+          note: Optional[str] = typer.Option(None, "--note", help="Note to append after step."),
+      ) -> None:
+          """Mark a plan step as done or skipped. Stages but does NOT commit."""
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          if state not in ("x", "-"):
+              console.print(f"[red]Invalid state: {state!r}. Use 'x' or '-'.[/red]")
+              raise typer.Exit(1)
+
+          try:
+              phase_num, task_num, step_num = _parse_step_id(step_id)
+          except ValueError as e:
+              console.print(f"[red]{e}[/red]")
+              raise typer.Exit(1)
+
+          plan = parse_plan(plan_path)
+
+          # Validate step exists
+          target_task = None
+          if plan.format is PlanFormat.PHASED:
+              if phase_num is None:
+                  console.print("[red]Phased plan requires P<n>.T<n>.S<n> step ID.[/red]")
+                  raise typer.Exit(1)
+              phase = next((p for p in plan.phases if p.number == phase_num), None)
+              if phase is None:
+                  console.print(f"[red]Phase {phase_num} not found.[/red]")
+                  raise typer.Exit(1)
+              target_task = next((t for t in phase.tasks if t.number == task_num), None)
+          elif plan.format is PlanFormat.FLAT:
+              target_task = next((t for t in plan.tasks if t.number == task_num), None)
+
+          if target_task is None:
+              console.print(f"[red]Task {task_num} not found.[/red]")
+              raise typer.Exit(1)
+
+          target_step = next((s for s in target_task.steps if s.number == step_num), None)
+          if target_step is None:
+              console.print(f"[red]Step {step_num} not found in Task {task_num}.[/red]")
+              raise typer.Exit(1)
+
+          # Never uncheck a checked box
+          if target_step.state in ("x", "-"):
+              console.print(
+                  f"Step {step_id} already [{target_step.state}]. No change (never unchecks)."
+              )
+              return
+
+          # Rewrite the file
+          content = plan_path.read_text()
+          lines = content.splitlines(keepends=True)
+          step_pattern = re.compile(
+              rf"^- \[ \] \*\*Step {step_num}:\*\*"
+          )
+
+          # Find the correct step line (accounting for phase/task context)
+          found = False
+          current_phase = 0
+          current_task = 0
+          for i, line in enumerate(lines):
+              phase_match = re.match(r"^## Phase (\d+):", line)
+              if phase_match:
+                  current_phase = int(phase_match.group(1))
+              task_match = re.match(r"^### Task (\d+):", line)
+              if task_match:
+                  current_task = int(task_match.group(1))
+
+              if step_pattern.match(line.strip() if line.strip() else ""):
+                  in_scope = False
+                  if plan.format is PlanFormat.PHASED:
+                      in_scope = current_phase == phase_num and current_task == task_num
+                  else:
+                      in_scope = current_task == task_num
+
+                  if in_scope:
+                      lines[i] = line.replace("- [ ]", f"- [{state}]", 1)
+                      if note:
+                          indent = "  "
+                          note_line = f"{indent}{note}\n"
+                          lines.insert(i + 1, note_line)
+                      found = True
+                      break
+
+          if not found:
+              console.print(f"[red]Could not locate step {step_id} in file.[/red]")
+              raise typer.Exit(1)
+
+          plan_path.write_text("".join(lines))
+
+          # Stage but do not commit
+          repo_root = plan_path.parent
+          while repo_root != repo_root.parent:
+              if (repo_root / ".git").exists():
+                  break
+              repo_root = repo_root.parent
+
+          if (repo_root / ".git").exists():
+              subprocess.run(
+                  ["git", "add", str(plan_path)],
+                  cwd=str(repo_root),
+                  check=True,
+                  capture_output=True,
+              )
+
+          console.print(f"Checked [{state}] {step_id}. Staged (not committed).")
+      ```
+  - id: P2.T8.S4
+    text: |-
+      Run tests to verify check-step passes
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestCheckStep" --no-header`
+      Expected: PASS — all check-step tests pass
+  - id: P2.T8.S5
+    text: |-
+      Run full execute test suite
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v --no-header`
+      Expected: PASS — all execute tests pass
+  - id: P2.T8.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/execute_cmd.py tests/integration/test_execute.py
+      git commit -m "feat: add vk execute check-step subcommand with safety guarantees"
+      ```
+- number: 9
+  title: vk execute pr-body subcommand
+  steps:
+  - id: P2.T9.S1
+    text: |-
+      Write failing tests for pr-body
+
+
+      Add to `tests/integration/test_execute.py`:
+
+      ```python
+      class TestPrBody:
+          def test_pr_body_phased_local_format(self, tmp_path, phased_plan_fixture):
+              """Local mode: outputs 'Implements Phase N of <plan-path>'."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "pr-body", str(plan), "1"])
+              assert result.exit_code == 0
+              assert "Implements Phase 1" in result.stdout
+
+          def test_pr_body_phased_dispatch_format(
+              self, tmp_path, phased_dispatched_plan_fixture
+          ):
+              """Dispatch mode with --issue: outputs 'Closes #<issue>'."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_dispatched_plan_fixture)
+              result = runner.invoke(
+                  app, ["execute", "pr-body", str(plan), "1", "--issue", "42"]
+              )
+              assert result.exit_code == 0
+              assert "Closes #42" in result.stdout
+
+          def test_pr_body_flat_local_format(self, tmp_path, flat_plan_fixture):
+              """Flat plan local mode: outputs 'Implements Task N of <plan-path>'."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_plan_fixture)
+              result = runner.invoke(app, ["execute", "pr-body", str(plan), "1"])
+              assert result.exit_code == 0
+              assert "Implements Task 1" in result.stdout
+
+          def test_pr_body_includes_task_list(self, tmp_path, phased_plan_fixture):
+              """PR body includes a list of tasks in the phase."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "pr-body", str(plan), "1"])
+              assert result.exit_code == 0
+              assert "Task" in result.stdout
+
+          def test_pr_body_invalid_phase_errors(self, tmp_path, phased_plan_fixture):
+              """Non-existent phase number is an error."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(app, ["execute", "pr-body", str(plan), "99"])
+              assert result.exit_code != 0
+      ```
+  - id: P2.T9.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestPrBody" --no-header`
+      Expected: FAIL — `No such command 'pr-body'`
+  - id: P2.T9.S3
+    text: |-
+      Implement pr-body subcommand
+
+
+      Add to `execute_cmd.py`:
+
+      ```python
+      @execute_app.command(name="pr-body")
+      def pr_body(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+          phase_or_task: int = typer.Argument(
+              ..., help="Phase number (phased) or task number (flat)."
+          ),
+          issue: Optional[int] = typer.Option(
+              None, "--issue", help="GitHub Issue number for Closes reference."
+          ),
+      ) -> None:
+          """Generate a PR body for a phase or task."""
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          plan = parse_plan(plan_path)
+          rel_path = plan_path.name
+          lines: list[str] = []
+
+          if plan.format is PlanFormat.PHASED:
+              phase = next(
+                  (p for p in plan.phases if p.number == phase_or_task), None
+              )
+              if phase is None:
+                  console.print(f"[red]Phase {phase_or_task} not found.[/red]")
+                  raise typer.Exit(1)
+
+              if issue:
+                  lines.append(f"Closes #{issue}")
+                  lines.append("")
+              lines.append(f"Implements Phase {phase.number} of `{rel_path}`")
+              lines.append("")
+              lines.append(f"## {phase.title}")
+              lines.append("")
+              for task in phase.tasks:
+                  lines.append(f"- Task {task.number}: {task.title}")
+                  for f in task.files_mentioned:
+                      lines.append(f"  - `{f}`")
+
+          elif plan.format is PlanFormat.FLAT:
+              task = next(
+                  (t for t in plan.tasks if t.number == phase_or_task), None
+              )
+              if task is None:
+                  console.print(f"[red]Task {phase_or_task} not found.[/red]")
+                  raise typer.Exit(1)
+
+              if issue:
+                  lines.append(f"Closes #{issue}")
+                  lines.append("")
+              lines.append(f"Implements Task {task.number} of `{rel_path}`")
+              lines.append("")
+              lines.append(f"## {task.title}")
+              lines.append("")
+              for step in task.steps:
+                  lines.append(f"- Step {step.number}: {step.title}")
+              if task.files_mentioned:
+                  lines.append("")
+                  lines.append("### Files")
+                  for f in task.files_mentioned:
+                      lines.append(f"- `{f}`")
+
+          typer.echo("\n".join(lines))
+      ```
+  - id: P2.T9.S4
+    text: |-
+      Run tests to verify pr-body passes
+
+
+      Run: `uv run pytest tests/integration/test_execute.py -v -k "TestPrBody" --no-header`
+      Expected: PASS — all pr-body tests pass
+  - id: P2.T9.S5
+    text: |-
+      Run full test suite and quality gates
+
+
+      Run: `uv run pytest tests/integration/test_execute.py tests/integration/test_convert.py tests/integration/test_plan_cmd.py -v --no-header`
+      Expected: PASS — all plan and execute integration tests pass
+
+      Run: `uv run ruff check src/vk/commands/plan_cmd.py src/vk/commands/execute_cmd.py && uv run mypy src/vk/commands/plan_cmd.py src/vk/commands/execute_cmd.py`
+      Expected: PASS — no lint or type errors
+  - id: P2.T9.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/execute_cmd.py tests/integration/test_execute.py
+      git commit -m "feat: add vk execute pr-body subcommand"
+      ```
+state:
+  steps:
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

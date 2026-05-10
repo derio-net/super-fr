@@ -209,6 +209,40 @@ def test_migrate_preserves_freeform_track(tmp_path):
     assert plan.meta.origin_items[1].track == "decision → development"
 
 
+def test_migrate_does_not_treat_rework_substring_as_rework(tmp_path):
+    """A plan whose slug merely *contains* `rework` (e.g. a plan that adds a
+    rework feature) is NOT a rework plan — its parent_plan / origin_items
+    fields must NOT be populated. Anchored slug regex is the gate.
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    # Slug contains "rework" but does NOT end with `-rework-N`
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-vk-plan-rework-feature.md"
+    p.write_text(
+        "# A plan adding rework support\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        # Even if the markdown body mentions a parent_plan (illustrative
+        # example for the docs), the migration should NOT pick it up
+        # because the slug isn't a rework slug.
+        "**Parent plan:** `docs/superpowers/archived-plans/2026-04-08-foo.md`\n\n"
+        "## Phase 1: Build [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Task 1: t\n\n"
+        "- [x] **Step 1: x** d.\n"
+    )
+
+    migrate_repo(repo, dry_run=False)
+    new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-vk-plan-rework-feature"
+    plan = parse(new)
+    assert plan.meta.parent_plan is None, (
+        f"non-rework plan got parent_plan={plan.meta.parent_plan!r} — rework detection is too loose"
+    )
+    assert plan.meta.origin_items == []
+
+
 def test_migrate_rework_extracts_origin_table(tmp_path):
     from vk import parse
     from vk.migrate import migrate_repo

@@ -1,0 +1,75 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Call `ensure_labels` from `dispatch create`
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Bootstrap labels once before the creation loop
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD — integration tests
+
+
+      Three tests in `TestDispatchEnsuresLabels`:
+      - `test_dispatch_calls_ensure_labels_with_full_set` — asserts agentic + manual + `plan:<slug>` + `phase:0..N` all passed
+      - `test_ensure_labels_called_before_any_create_issue` — asserts ordering in the mock call log
+      - `test_ensure_labels_failure_aborts_before_any_issue` — exit non-zero, `create_issue` never called
+  - id: P2.T1.S2
+    text: |-
+      Wire the call
+
+
+      Before the phase loop:
+
+      ```python
+      agentic_label = dispatch_cfg.labels.get("agentic", "vk-ready")
+      manual_label = dispatch_cfg.labels.get("manual", "manual")
+      required_labels = sorted({
+          agentic_label,
+          manual_label,
+          f"plan:{slug}",
+          *(f"phase:{p.number}" for p in plan.phases),
+      })
+      try:
+          gh.ensure_labels(repo=target_repo, labels=required_labels)
+      except gh.GhError as exc:
+          err_console.print(f"Error: Could not ensure labels on {target_repo}: {exc}")
+          raise typer.Exit(4) from exc
+      ```
+
+      Labels are collected as a `set` (dedup) and `sorted()` for deterministic output.
+  - id: P2.T1.S3
+    text: |-
+      Run
+
+
+      ```bash
+      uv run pytest tests/integration/test_dispatch.py -q --no-cov
+      ```
+
+      Expected: new tests green, existing `TestDispatchApply` etc. still green (they mock `vk.commands.dispatch_cmd.gh` wholesale, so `ensure_labels` silently no-ops on `MagicMock`).
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
