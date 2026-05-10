@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 3
+  title: CLI enforcement — close all flat escape hatches
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: '`vk execute` guards'
+  steps:
+  - id: P3.T1.S1
+    text: Introduce `_reject_flat(plan_path)` helper. Parses the plan and raises `typer.Exit(2)`
+      with a copyable `vk plan convert` command if the shape is `FLAT`.
+  - id: P3.T1.S2
+    text: Call `_reject_flat` from all four sub-commands. `check-deps`, `scope`, `check-step`,
+      `pr-body` — immediately after `plan_path.resolve()`.
+  - id: P3.T1.S3
+    text: Remove flat code paths. Drop `else:` branches in `check-deps`, `scope`,
+      `pr-body`. Remove flat match from `_parse_step_id` (step IDs are now always
+      `P<n>.T<n>.S<n>`). Simplify `_locate_task_slice` — phase_num is mandatory.
+  - id: P3.T1.S4
+    text: Clean help strings and docstrings. No more "(phased) or … (flat)" phrasing
+      in CLI help; docstrings reflect phase-only model.
+- number: 2
+  title: '`vk plan format` dual-mode'
+  steps:
+  - id: P3.T2.S1
+    text: 'Accept either a plan file or a repo root. File input: parse and print actual
+      shape. Directory input: preserve legacy config-derived behavior.'
+  - id: P3.T2.S2
+    text: Update docstring to explain that a `flat` result means the plan is a legacy
+      artifact requiring migration.
+- number: 3
+  title: '`vk plan new` — phased by default'
+  steps:
+  - id: P3.T3.S1
+    text: Unconditionally emit phased skeleton. Drop the `if profile.format.value
+      == "phased"` branch — previously produced flat when dispatch was disabled, the
+      exact coupling being removed.
+- number: 4
+  title: '`vk plan convert` — only `--to phased`'
+  steps:
+  - id: P3.T4.S1
+    text: Reject `--to flat`. Emit error with exit 2 if any target other than `phased`
+      is passed.
+  - id: P3.T4.S2
+    text: Drop `to_flat` import. The library function stays in `vk.plan.convert` (library
+      tests retain coverage) but is no longer imported or called from the CLI.
+  - id: P3.T4.S3
+    text: Reframe docstring as "Migrate a legacy flat plan to phased format."
+- number: 5
+  title: '`vk dispatch` — sharpen error messages'
+  steps:
+  - id: P3.T5.S1
+    text: Full migration command in `dispatch create`. Replace "Convert to phased
+      first" with copy-pasteable `vk plan convert <plan> --to phased --single-phase
+      --yes`.
+  - id: P3.T5.S2
+    text: Full migration command in `dispatch migrate`. Same treatment.
+- number: 6
+  title: Tests
+  steps:
+  - id: P3.T6.S1
+    text: Add `phased_repo` fixture. Wraps `local_repo` through the migration converter.
+      All `vk execute *` tests now use it.
+  - id: P3.T6.S2
+    text: Update 7 existing execute tests. Point at `phased_repo`; flip flat step
+      IDs (`T1.S2`) to phased (`P1.T1.S2`); flip targets to phase numbers; rename
+      `test_scope_prints_task` → `test_scope_prints_phase`.
+  - id: P3.T6.S3
+    text: Add `TestExecuteRejectsFlat` parametrised class. Covers all four execute
+      sub-commands with exit-2 + `"vk plan convert"` substring assertions on flat
+      input. Encodes the invariant.
+  - id: P3.T6.S4
+    text: '`TestPlanFormat` gains file-path cases. Rename dir case to `test_format_directory_uses_config`;
+      add flat-file case and phased-file case.'
+  - id: P3.T6.S5
+    text: Verify full suite. `uv run pytest -q --no-cov` — 296 passed, 9 skipped.
+  - id: P3.T6.S6
+    text: Commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T6.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T6.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T6.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T6.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T6.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T6.S6:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Strengthen to mandatory migration
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Procedure step 0 in vk-execute
+  steps:
+  - id: P2.T1.S1
+    text: Replace lead sentence. Drop the "Flat plans are deprecated — see …" preamble;
+      lead becomes `Implements a single phase from a plan.`
+  - id: P2.T1.S2
+    text: Insert Procedure step 0. Run `vk plan format <plan>`; if output is `flat`,
+      run the Migration section before step 1. No alternative path.
+  - id: P2.T1.S3
+    text: 'Rewrite Migration section. Document two flows: **Automatic + review** (dry-run
+      → convert → commit) and **Guided** (wrap via `--single-phase` then hand-edit
+      to split at operator boundaries).'
+  - id: P2.T1.S4
+    text: '`vk-plan` Format section. Drop the soft "deprecated" sentence; point at
+      the `vk-execute` Migration section for legacy plans.'
+  - id: P2.T1.S5
+    text: '`vk-dispatch` error row. Exit-2 row changes from "Suggest `vk plan convert
+      …`" → "Run `vk plan convert …` and retry."'
+  - id: P2.T1.S6
+    text: '`vk-dispatch` integration bullet. "Convert flat to phased" → "Migrate legacy
+      flat plans".'
+  - id: P2.T1.S7
+    text: Verify tests. `uv run pytest tests/unit/test_skill_validation.py` — still
+      27 passed, 9 skipped.
+  - id: P2.T1.S8
+    text: Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S8:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

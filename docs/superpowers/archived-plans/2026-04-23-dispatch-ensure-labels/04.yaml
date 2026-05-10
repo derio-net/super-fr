@@ -1,0 +1,15 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Bump version and run full suite
+  tag: manual
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks: []
+state:
+  steps: {}
+  completion:
+    at: null
+    note: null
+    observed_prs: []

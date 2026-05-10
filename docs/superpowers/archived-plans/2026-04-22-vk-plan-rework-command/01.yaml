@@ -1,0 +1,292 @@
+schema_version: 2
+phase:
+  number: 1
+  title: '`**Track:**` parser, model, and writer plumbing'
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/37
+tasks:
+- number: 1
+  title: '`Phase.track_label` model field'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write a failing test pinning the default-None behaviour
+
+
+      Append to `tests/unit/test_models.py`:
+
+      ```python
+      def test_phase_track_label_defaults_to_none() -> None:
+          """Positional-constructor callers that predate **Track:** must still
+          build a Phase without supplying the new field."""
+          from vk.plan.models import Phase
+          p = Phase(
+              number=1,
+              title="First",
+              tag="agentic",
+              depends_on=(),
+              tasks=(),
+              tracking_url=None,
+          )
+          assert p.track_label is None
+
+
+      def test_phase_track_label_accepts_string() -> None:
+          from vk.plan.models import Phase
+          p = Phase(
+              number=1,
+              title="First",
+              tag="agentic",
+              depends_on=(),
+              tasks=(),
+              tracking_url=None,
+              track_label="development",
+          )
+          assert p.track_label == "development"
+      ```
+
+      Run: `uv run pytest tests/unit/test_models.py -x -q` — expect 2 failures naming `track_label`.
+  - id: P1.T1.S2
+    text: |-
+      Add `track_label` to `Phase` with default `None`
+
+
+      In `src/vk/plan/models.py`, inside the `Phase` dataclass, add below `tracking_url`:
+
+      ```python
+          track_label: str | None = None
+      ```
+
+      Default `None` preserves positional-constructor compatibility per spec D9 / §5.2.
+
+      Run: `uv run pytest tests/unit/test_models.py -x -q` — expect green.
+  - id: P1.T1.S3
+    text: |-
+      Sweep for existing fixtures that build `Phase` positionally
+
+
+      ```bash
+      uv run rg -n "Phase\(" tests/ src/
+      ```
+
+      Expected: every call-site either (a) uses keyword args, or (b) stops at `tracking_url`. If any positional call passes a 7th arg, it now collides with `track_label` and needs updating. Fix by converting to kwargs.
+
+      Run: `uv run pytest -q --no-cov` — expect full green suite (baseline preserved).
+- number: 2
+  title: Parser extraction of `**Track:**` body line
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write failing parser tests for ` Track:**`**
+
+
+      Append to `tests/unit/test_plan_parser.py`:
+
+      ```python
+      class TestTrackParsing:
+          """Parser extracts a phase **Track:** body-line into Phase.track_label."""
+
+          def _phase(self, extra_line: str) -> str:
+              return (
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: First [agentic]\n"
+                  "**Depends on:** —\n"
+                  f"{extra_line}"
+                  "\n### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n"
+              )
+
+          def test_absent_line_yields_none(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._phase(""))
+              plan = parse_plan(p)
+              assert plan.phases[0].track_label is None
+
+          def test_single_canonical_value(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._phase("**Track:** development\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].track_label == "development"
+
+          def test_transition_syntax_preserved(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._phase("**Track:** decision → development\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].track_label == "decision → development"
+
+          def test_compound_syntax_preserved(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._phase("**Track:** development (future-triggered)\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].track_label == "development (future-triggered)"
+
+          def test_multiple_track_lines_first_wins(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._phase("**Track:** operations\n**Track:** decision\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].track_label == "operations"
+      ```
+
+      Run: `uv run pytest tests/unit/test_plan_parser.py::TestTrackParsing -x -q` — expect 5 failures.
+  - id: P1.T2.S2
+    text: |-
+      Add `_TRACK_RE` adjacent to `_DEPENDS_ON_RE`
+
+
+      In `src/vk/plan/parser.py`, after `_DEPENDS_ON_RE` (line ~43):
+
+      ```python
+      _TRACK_RE = re.compile(
+          r"^\*\*Track:\*\*\s+(.+?)\s*$",
+          re.MULTILINE,
+      )
+      ```
+  - id: P1.T2.S3
+    text: |-
+      Extract track in `_parse_phases` prelude slice
+
+
+      In `_parse_phases`, after the `depends_on = _parse_depends_on(prelude, phase_number)` assignment, add:
+
+      ```python
+      track_match = _TRACK_RE.search(prelude)
+      track_label = track_match.group(1).strip() if track_match else None
+      ```
+
+      Pass `track_label=track_label` to the `Phase(...)` constructor call further down.
+
+      Run: `uv run pytest tests/unit/test_plan_parser.py::TestTrackParsing -x -q` — expect green.
+  - id: P1.T2.S4
+    text: |-
+      Re-run full parser suite to prove no regressions
+
+
+      ```bash
+      uv run pytest tests/unit/test_plan_parser.py tests/unit/test_plan_validate.py -q
+      ```
+
+      Expect all green. The new regex is scoped to the prelude slice, so it cannot leak into task bodies.
+- number: 3
+  title: Writer emits `**Track:**` after `**Depends on:**`
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Write failing writer tests for Track emission
+
+
+      Append to `tests/unit/test_plan_writer.py`:
+
+      ```python
+      class TestTrackWriterEmission:
+          def _one_phase_plan(self, track: str | None) -> Plan:
+              return Plan(
+                  title="T",
+                  spec="s.md",
+                  status="Not Started",
+                  goal="g",
+                  format=PlanFormat.PHASED,
+                  phases=(
+                      Phase(
+                          number=1,
+                          title="First",
+                          tag="agentic",
+                          depends_on=(),
+                          tasks=(),
+                          tracking_url=None,
+                          track_label=track,
+                      ),
+                  ),
+                  tasks=(),
+              )
+
+          def test_track_line_absent_when_none(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              write_plan(self._one_phase_plan(None), p)
+              text = p.read_text()
+              assert "**Track:**" not in text
+
+          def test_track_line_emitted_after_depends_on(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              write_plan(self._one_phase_plan("development"), p)
+              text = p.read_text()
+              assert "**Depends on:** —\n**Track:** development" in text
+
+          def test_round_trip_preserves_track_label(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              write_plan(self._one_phase_plan("decision → development"), p)
+              reparsed = parse_plan(p)
+              assert reparsed.phases[0].track_label == "decision → development"
+      ```
+
+      Run: `uv run pytest tests/unit/test_plan_writer.py::TestTrackWriterEmission -x -q` — expect 2 failures (absence test passes trivially).
+  - id: P1.T3.S2
+    text: |-
+      Emit ` Track:**` in `_write_phases`**
+
+
+      In `src/vk/plan/writer.py`, inside `_write_phases`, after `lines.append(_format_depends_on(phase))` and BEFORE the blank-line append that separates header from tasks:
+
+      ```python
+              if phase.track_label is not None:
+                  lines.append(f"**Track:** {phase.track_label}")
+      ```
+
+      Run: `uv run pytest tests/unit/test_plan_writer.py -x -q` — expect green.
+  - id: P1.T3.S3
+    text: |-
+      Full plan suite regression check
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      All green. Every existing round-trip fixture still parses → writes → parses identically (no Track line emitted when `track_label is None`).
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

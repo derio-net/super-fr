@@ -1,0 +1,54 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Loose step-header regex tolerates trailing prose
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: 'Tolerate trailing prose after `**Step N: title**`'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add failing fixture and test case for loose-format steps.
+
+
+      Write `tests/fixtures/plans/flat-loose-steps.md` with a step like `- [ ] **Step 1: Create \`roles/demo/tasks/main.yml\`** documenting the role.` followed by an indented YAML fence. Write `TestLooseStepHeaders::test_all_steps_parsed` asserting `len(task.steps) == 2`. The test MUST fail on the pre-fix parser.
+  - id: P1.T1.S2
+    text: |-
+      Loosen `_RE_STEP` to absorb trailing prose into the title.
+
+
+      Change the regex from requiring `\*\*\s*$` to allowing `\*\*[ \t]*(.*?)[ \t]*$`. Use `[ \t]*` (not `\s*`) so whitespace never crosses a newline — `\s` eats `\n`, which previously caused the regex to greedily slurp the next body line into group 4. Update `_parse_steps` to merge `group(3) + " " + group(4)` into the step title when `group(4)` is non-empty.
+  - id: P1.T1.S3
+    text: |-
+      Verify `test_plan_loose_format.py::TestLooseStepHeaders` passes and all 58 pre-existing plan tests still pass.
+
+
+        ```bash
+        cd /Users/derio/Docs/projects/DERIO_NET/superpowers-for-vk
+        uv run --group dev python -m pytest tests/unit/test_plan_parser.py \
+            tests/unit/test_plan_writer.py tests/unit/test_plan_convert.py \
+            tests/unit/test_plan_loose_format.py --no-cov -q
+        ```
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

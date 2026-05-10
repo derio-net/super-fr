@@ -107,10 +107,16 @@ class RealGhClient:
         for n in nodes:
             rollup = (n.get("statusCheckRollup") or {}).get("state", "")
             ci = _coerce_ci_state(rollup)
+            # GraphQL PullRequestState is OPEN / CLOSED / MERGED. Our
+            # observe() contract is OPEN / CLOSED only — `merged` is a
+            # separate boolean. Coerce MERGED → CLOSED so the validator
+            # accepts it; the `merged` field below preserves the distinction.
+            raw_state = n.get("state", "OPEN")
+            state = "CLOSED" if raw_state == "MERGED" else raw_state
             result.append(
                 {
                     "url": n.get("url", ""),
-                    "state": n.get("state", "OPEN"),
+                    "state": state,
                     "merged": bool(n.get("merged", False)),
                     "draft": bool(n.get("isDraft", False)),
                     "ci": ci,

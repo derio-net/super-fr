@@ -1,0 +1,136 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Preserve step-body indentation on parse
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Replace `strip()` with `textwrap.dedent(...).rstrip()`
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Write the failing test first.
+
+
+      Add `TestStepBodyIndentation::test_dedent_preserves_fence_alignment` in `test_plan_loose_format.py`:
+
+      ```python
+      class TestStepBodyIndentation:
+          def test_dedent_preserves_fence_alignment(self, loose_plan):
+              step1 = loose_plan.tasks[0].steps[0]
+              lines = step1.body.splitlines()
+              # The first line of the body is the fence marker ``` — once dedent
+              # is applied, every code-content line must start at column 0 too.
+              fence_line = next(i for i, L in enumerate(lines) if L.startswith("```"))
+              content_line = lines[fence_line + 1]
+              assert not content_line.startswith(" "), (
+                  f"step body not dedented — fence content still indented: {content_line!r}"
+              )
+      ```
+
+      Run it to confirm it fails on the current parser:
+
+      ```bash
+      cd /Users/derio/Docs/projects/DERIO_NET/superpowers-for-vk
+      uv run --group dev python -m pytest tests/unit/test_plan_loose_format.py::TestStepBodyIndentation -q --no-cov
+      ```
+  - id: P5.T1.S2
+    text: |-
+      Import `textwrap` and swap `.strip()` for `dedent().rstrip()` in `_parse_steps`.
+
+
+      In `src/vk/plan/parser.py`:
+
+      ```python
+      import textwrap
+      # ...
+      body = textwrap.dedent(text[start:end]).rstrip()
+      ```
+
+      `textwrap.dedent` drops the common leading whitespace from every line — so a body whose lines all start with 2 spaces has those 2 spaces removed uniformly. `rstrip()` trims trailing blank lines/whitespace, keeping the leading blank line that `textwrap` preserves minimal. We deliberately do NOT call `lstrip()` on the result — that would re-introduce the phase-1 bug where the first line's indent differs from the rest.
+  - id: P5.T1.S3
+    text: |-
+      Re-run the full plan test suite — confirm the new test goes green and no existing test regresses.
+
+
+      ```bash
+      uv run --group dev python -m pytest --no-header -q
+      ```
+
+      Expected: `322 passed, 9 skipped` (one more than phase 4's 321), coverage ≥ 79%.
+  - id: P5.T1.S4
+    text: |-
+      Verify end-to-end against kid-laptops plan 7.
+
+
+      ```bash
+      cp /Users/derio/Docs/projects/HOMELAB/kid-laptops/docs/superpowers/plans/2026-04-08-kid-laptops-7-vscode-dev-env.md /tmp/plan7-work.md
+      uv run --group dev vk plan convert /tmp/plan7-work.md --one-per-task --yes
+      sed -n '25,40p' /tmp/plan7-work.md
+      ```
+
+      Expected: the `# roles/vscode` line and all markdown body inside ```` ```markdown ```` start at column 0, not column 2.
+  - id: P5.T1.S5
+    text: |-
+      Commit on the same `fix/plan-convert-content-loss` branch.
+
+
+      ```bash
+      git add src/vk/plan/parser.py tests/unit/test_plan_loose_format.py
+      git commit -m "fix(plan): dedent step bodies on parse to preserve fence alignment"
+      ```
+  - id: P5.T1.S6
+    text: |-
+      Update this plan — mark phase 5 steps `[x]` and set ` Status:** Complete`.**
+
+
+        After the commit, edit `docs/superpowers/plans/2026-04-20-lossless-plan-convert.md`: flip every Phase 5 checkbox to `[x]`, change the Status header to `Complete`, then run:
+
+        ```bash
+        uv run --group dev vk progress sync docs/superpowers/plans/2026-04-20-lossless-plan-convert.md
+        ```
+
+        Commit the plan update as a separate commit (`docs(plan): complete lossless-plan-convert`).
+
+      ---
+
+      ## Definition of Done
+
+      - All four pre-existing bugs (loose step headers, verb loss, preamble drop, dotted labels) have their own regression test in `tests/unit/test_plan_loose_format.py` and stay green on the full `pytest` suite.
+      - Step-body indentation is preserved via `textwrap.dedent` — a fence marker and its content end up at the same column after parse + write.
+      - `vk plan convert --one-per-task` on each of kid-laptops plans 7, 8, 9 produces a phased plan with line count at-or-above the source and identical step-checkbox count.
+      - `vk plan self-review` reports `Passed` on all three converted plans (excluding pre-existing placeholder-word findings that already live in plan 8's source content).
+      - The plan itself is saved to `docs/superpowers/plans/2026-04-20-lossless-plan-convert.md` and indexed in the relevant spec.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

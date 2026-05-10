@@ -1,0 +1,1293 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Converter, spec index, git/gh helpers
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Plan converter — to_flat, to_phased variants
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Write the failing tests
+
+
+      Create `tests/unit/test_plan_convert.py`:
+
+      ```python
+      """Tests for vk.plan.convert — format conversion between flat and phased."""
+
+      from pathlib import Path
+
+      import pytest
+
+      from vk.plan.format import PlanFormat
+      from vk.plan.models import Phase, Plan, Step, Task
+      from vk.plan.convert import to_flat, to_phased_single, to_phased_one_per_task, to_phased_group_by_tag
+      from vk.plan.parser import parse_plan
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures" / "plans"
+
+
+      # --- Helpers ---
+
+
+      def _make_step(num: int, state: str = " ") -> Step:
+          return Step(number=num, title=f"Step {num}", body=f"Body {num}", state=state)  # type: ignore[arg-type]
+
+
+      def _make_task(num: int, tag: str = "agentic", steps: int = 2) -> Task:
+          return Task(
+              number=num,
+              title=f"Task {num}",
+              tag=tag,  # type: ignore[arg-type]
+              steps=tuple(_make_step(i + 1) for i in range(steps)),
+              files_mentioned=(),
+          )
+
+
+      def _make_phased_plan() -> Plan:
+          t1 = _make_task(1, "agentic")
+          t2 = _make_task(2, "agentic")
+          t3 = _make_task(1, "manual")
+          p1 = Phase(number=1, title="Build", tag="agentic", tasks=(t1, t2), tracking_url=None)
+          p2 = Phase(number=2, title="Deploy", tag="manual", tasks=(t3,), tracking_url=None)
+          return Plan(
+              title="Test",
+              spec="spec.md",
+              status="Not Started",
+              goal="Convert",
+              format=PlanFormat.PHASED,
+              phases=(p1, p2),
+              tasks=(),
+          )
+
+
+      def _make_flat_plan() -> Plan:
+          t1 = _make_task(1, "agentic")
+          t2 = _make_task(2, "manual")
+          t3 = _make_task(3, "agentic")
+          t4 = _make_task(4, "manual")
+          return Plan(
+              title="Flat Test",
+              spec=None,
+              status="In Progress",
+              goal="Convert",
+              format=PlanFormat.FLAT,
+              phases=(),
+              tasks=(t1, t2, t3, t4),
+          )
+
+
+      # --- Phased to flat ---
+
+
+      def test_to_flat_task_count() -> None:
+          plan = _make_phased_plan()
+          flat = to_flat(plan)
+          assert flat.format is PlanFormat.FLAT
+          assert len(flat.tasks) == 3
+
+
+      def test_to_flat_task_numbering() -> None:
+          """Task numbers reset globally 1, 2, 3..."""
+          plan = _make_phased_plan()
+          flat = to_flat(plan)
+          assert [t.number for t in flat.tasks] == [1, 2, 3]
+
+
+      def test_to_flat_inherits_phase_tag() -> None:
+          """Each task inherits its parent phase's tag."""
+          plan = _make_phased_plan()
+          flat = to_flat(plan)
+          assert flat.tasks[0].tag == "agentic"
+          assert flat.tasks[1].tag == "agentic"
+          assert flat.tasks[2].tag == "manual"
+
+
+      def test_to_flat_preserves_metadata() -> None:
+          plan = _make_phased_plan()
+          flat = to_flat(plan)
+          assert flat.title == plan.title
+          assert flat.spec == plan.spec
+          assert flat.status == plan.status
+          assert flat.goal == plan.goal
+
+
+      def test_to_flat_refuses_tracking_without_force() -> None:
+          """Refuses conversion if plan has tracking comments."""
+          plan = parse_plan(FIXTURES / "phased-dispatched.md")
+          with pytest.raises(ValueError, match="tracking"):
+              to_flat(plan)
+
+
+      def test_to_flat_tracking_with_force() -> None:
+          """Allows conversion with force=True even with tracking comments."""
+          plan = parse_plan(FIXTURES / "phased-dispatched.md")
+          flat = to_flat(plan, force=True)
+          assert flat.format is PlanFormat.FLAT
+
+
+      def test_to_flat_already_flat_raises() -> None:
+          flat = _make_flat_plan()
+          with pytest.raises(ValueError, match="already flat"):
+              to_flat(flat)
+
+
+      # --- Flat to phased: single phase ---
+
+
+      def test_to_phased_single() -> None:
+          flat = _make_flat_plan()
+          phased = to_phased_single(flat)
+          assert phased.format is PlanFormat.PHASED
+          assert len(phased.phases) == 1
+          assert len(phased.phases[0].tasks) == 4
+
+
+      def test_to_phased_single_dominant_tag() -> None:
+          """Phase gets the dominant tag (most common among tasks)."""
+          flat = _make_flat_plan()
+          phased = to_phased_single(flat)
+          # 2 agentic, 2 manual — tie-break to agentic
+          assert phased.phases[0].tag in ("agentic", "manual")
+
+
+      def test_to_phased_single_already_phased_raises() -> None:
+          phased = _make_phased_plan()
+          with pytest.raises(ValueError, match="already phased"):
+              to_phased_single(phased)
+
+
+      # --- Flat to phased: one per task ---
+
+
+      def test_to_phased_one_per_task() -> None:
+          flat = _make_flat_plan()
+          phased = to_phased_one_per_task(flat)
+          assert phased.format is PlanFormat.PHASED
+          assert len(phased.phases) == 4
+          for i, phase in enumerate(phased.phases):
+              assert phase.number == i + 1
+              assert len(phase.tasks) == 1
+
+
+      def test_to_phased_one_per_task_inherits_tag() -> None:
+          """Each phase inherits its task's tag."""
+          flat = _make_flat_plan()
+          phased = to_phased_one_per_task(flat)
+          assert phased.phases[0].tag == "agentic"
+          assert phased.phases[1].tag == "manual"
+
+
+      # --- Flat to phased: group by tag ---
+
+
+      def test_to_phased_group_by_tag() -> None:
+          """Consecutive tasks with the same tag merge into one phase."""
+          flat = _make_flat_plan()
+          phased = to_phased_group_by_tag(flat)
+          assert phased.format is PlanFormat.PHASED
+          # agentic, manual, agentic, manual -> 4 groups (alternating)
+          assert len(phased.phases) == 4
+
+
+      def test_to_phased_group_by_tag_consecutive() -> None:
+          """Consecutive same-tag tasks merge."""
+          t1 = _make_task(1, "agentic")
+          t2 = _make_task(2, "agentic")
+          t3 = _make_task(3, "manual")
+          flat = Plan(
+              title="T",
+              spec=None,
+              status="Not Started",
+              goal="G",
+              format=PlanFormat.FLAT,
+              phases=(),
+              tasks=(t1, t2, t3),
+          )
+          phased = to_phased_group_by_tag(flat)
+          assert len(phased.phases) == 2
+          assert len(phased.phases[0].tasks) == 2
+          assert phased.phases[0].tag == "agentic"
+          assert len(phased.phases[1].tasks) == 1
+          assert phased.phases[1].tag == "manual"
+
+
+      # --- Round-trip invariant ---
+
+
+      def test_round_trip_phased_flat_phased() -> None:
+          """phased -> flat -> phased(single) preserves all task content and ordering."""
+          original = _make_phased_plan()
+          flat = to_flat(original)
+          back = to_phased_single(flat)
+          assert len(back.all_tasks) == len(original.all_tasks)
+          for orig, converted in zip(original.all_tasks, back.all_tasks):
+              assert orig.title == converted.title
+              assert len(orig.steps) == len(converted.steps)
+      ```
+  - id: P3.T1.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/unit/test_plan_convert.py -v`
+      Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.convert'`
+  - id: P3.T1.S3
+    text: |-
+      Implement src/vk/plan/convert.py
+
+
+      ```python
+      """Plan format converter — flat <-> phased conversions.
+
+      Four modes:
+      - to_flat: Phased -> flat (refuses tracking comments without force)
+      - to_phased_single: Flat -> single phase
+      - to_phased_one_per_task: Flat -> one phase per task
+      - to_phased_group_by_tag: Flat -> phases grouped by consecutive tag
+      """
+
+      from __future__ import annotations
+
+      from collections import Counter
+      from itertools import groupby
+
+      from vk.plan.format import PlanFormat
+      from vk.plan.models import Phase, Plan, Task
+
+
+      def to_flat(plan: Plan, *, force: bool = False) -> Plan:
+          """Convert a phased plan to flat format.
+
+          Task numbering resets globally (1, 2, 3...).
+          Each task inherits its parent phase's tag.
+          Refuses if plan has tracking comments unless force=True.
+          """
+          if plan.format is PlanFormat.FLAT:
+              msg = "Plan is already flat"
+              raise ValueError(msg)
+
+          if not force:
+              has_tracking = any(p.tracking_url for p in plan.phases)
+              if has_tracking:
+                  msg = (
+                      "Cannot convert to flat: plan has tracking comments linking to "
+                      "GitHub Issues. Use force=True to convert anyway (this will orphan "
+                      "the issue links)."
+                  )
+                  raise ValueError(msg)
+
+          tasks: list[Task] = []
+          num = 1
+          for phase in plan.phases:
+              for task in phase.tasks:
+                  tasks.append(
+                      Task(
+                          number=num,
+                          title=task.title,
+                          tag=task.tag or phase.tag,
+                          steps=task.steps,
+                          files_mentioned=task.files_mentioned,
+                      )
+                  )
+                  num += 1
+
+          return Plan(
+              title=plan.title,
+              spec=plan.spec,
+              status=plan.status,
+              goal=plan.goal,
+              format=PlanFormat.FLAT,
+              phases=(),
+              tasks=tuple(tasks),
+          )
+
+
+      def to_phased_single(plan: Plan) -> Plan:
+          """Convert a flat plan to a single phase.
+
+          The phase gets the dominant tag (most common among tasks).
+          On a tie, prefers 'agentic'.
+          """
+          if plan.format is PlanFormat.PHASED:
+              msg = "Plan is already phased"
+              raise ValueError(msg)
+
+          tag = _dominant_tag(plan.tasks)
+          renumbered = _renumber_tasks(plan.tasks)
+          phase = Phase(
+              number=1,
+              title=plan.title,
+              tag=tag,
+              tasks=renumbered,
+              tracking_url=None,
+          )
+
+          return Plan(
+              title=plan.title,
+              spec=plan.spec,
+              status=plan.status,
+              goal=plan.goal,
+              format=PlanFormat.PHASED,
+              phases=(phase,),
+              tasks=(),
+          )
+
+
+      def to_phased_one_per_task(plan: Plan) -> Plan:
+          """Convert a flat plan to phased with one phase per task."""
+          if plan.format is PlanFormat.PHASED:
+              msg = "Plan is already phased"
+              raise ValueError(msg)
+
+          phases: list[Phase] = []
+          for i, task in enumerate(plan.tasks):
+              renumbered_task = Task(
+                  number=1,
+                  title=task.title,
+                  tag=None,
+                  steps=task.steps,
+                  files_mentioned=task.files_mentioned,
+              )
+              phases.append(
+                  Phase(
+                      number=i + 1,
+                      title=task.title,
+                      tag=task.tag or "agentic",
+                      tasks=(renumbered_task,),
+                      tracking_url=None,
+                  )
+              )
+
+          return Plan(
+              title=plan.title,
+              spec=plan.spec,
+              status=plan.status,
+              goal=plan.goal,
+              format=PlanFormat.PHASED,
+              phases=tuple(phases),
+              tasks=(),
+          )
+
+
+      def to_phased_group_by_tag(plan: Plan) -> Plan:
+          """Convert a flat plan to phased, grouping consecutive same-tag tasks."""
+          if plan.format is PlanFormat.PHASED:
+              msg = "Plan is already phased"
+              raise ValueError(msg)
+
+          phases: list[Phase] = []
+          phase_num = 1
+
+          for tag, group in groupby(plan.tasks, key=lambda t: t.tag or "agentic"):
+              group_tasks = list(group)
+              renumbered = _renumber_tasks(tuple(group_tasks))
+              # Generate a title from the first task or a generic one
+              if len(group_tasks) == 1:
+                  title = group_tasks[0].title
+              else:
+                  title = f"Phase {phase_num}"
+
+              phases.append(
+                  Phase(
+                      number=phase_num,
+                      title=title,
+                      tag=tag,  # type: ignore[arg-type]
+                      tasks=renumbered,
+                      tracking_url=None,
+                  )
+              )
+              phase_num += 1
+
+          return Plan(
+              title=plan.title,
+              spec=plan.spec,
+              status=plan.status,
+              goal=plan.goal,
+              format=PlanFormat.PHASED,
+              phases=tuple(phases),
+              tasks=(),
+          )
+
+
+      def _dominant_tag(tasks: tuple[Task, ...]) -> str:
+          """Return the most common tag among tasks.  Tie-breaks to 'agentic'."""
+          counts: Counter[str] = Counter()
+          for t in tasks:
+              counts[t.tag or "agentic"] += 1
+          if not counts:
+              return "agentic"
+          max_count = max(counts.values())
+          # If agentic is tied for max, prefer it
+          if counts.get("agentic", 0) == max_count:
+              return "agentic"
+          return counts.most_common(1)[0][0]
+
+
+      def _renumber_tasks(tasks: tuple[Task, ...]) -> tuple[Task, ...]:
+          """Renumber tasks starting from 1."""
+          return tuple(
+              Task(
+                  number=i + 1,
+                  title=t.title,
+                  tag=t.tag,
+                  steps=t.steps,
+                  files_mentioned=t.files_mentioned,
+              )
+              for i, t in enumerate(tasks)
+          )
+      ```
+  - id: P3.T1.S4
+    text: |-
+      Run tests to verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_plan_convert.py -v`
+      Expected: PASS — all tests pass
+  - id: P3.T1.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/plan/convert.py tests/unit/test_plan_convert.py
+      git commit -m "feat: add plan converter with four flat/phased conversion modes"
+      ```
+- number: 2
+  title: Spec index — read/create/update implementation plans table
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Write the failing tests
+
+
+      Create `tests/unit/test_spec_index.py`:
+
+      ```python
+      """Tests for vk.spec_index — read/create/update Implementation Plans table."""
+
+      from pathlib import Path
+
+      import pytest
+
+      from vk.spec_index import read_index, upsert_entry, IndexEntry
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures" / "specs"
+
+
+      # --- Read ---
+
+
+      def test_read_existing_index() -> None:
+          entries = read_index(FIXTURES / "spec-with-index.md")
+          assert len(entries) == 2
+          assert entries[0].plan == "P0: Scaffold"
+          assert entries[0].status == "Complete"
+          assert entries[1].plan == "P1: Core"
+          assert entries[1].status == "In Progress"
+
+
+      def test_read_no_index() -> None:
+          entries = read_index(FIXTURES / "spec-without-index.md")
+          assert entries == []
+
+
+      def test_read_missing_file() -> None:
+          entries = read_index(Path("/nonexistent/spec.md"))
+          assert entries == []
+
+
+      # --- Upsert ---
+
+
+      def test_upsert_creates_section(tmp_path: Path) -> None:
+          """Adds ## Implementation Plans section when missing."""
+          spec = tmp_path / "spec.md"
+          spec.write_text("# My Spec\n\n## Summary\n\nSome content.\n")
+          entry = IndexEntry(
+              plan="P0: Scaffold",
+              repo="my-repo",
+              file="plans/p0.md",
+              status="Not Started",
+              depends_on="—",
+          )
+          upsert_entry(spec, entry)
+          text = spec.read_text()
+          assert "## Implementation Plans" in text
+          assert "P0: Scaffold" in text
+          assert "Not Started" in text
+
+
+      def test_upsert_adds_row(tmp_path: Path) -> None:
+          """Adds a new row to existing table."""
+          spec = tmp_path / "spec.md"
+          spec.write_text(
+              (FIXTURES / "spec-with-index.md").read_text()
+          )
+          entry = IndexEntry(
+              plan="P2: Dispatch",
+              repo="superpowers-for-vk",
+              file="plans/p2.md",
+              status="Not Started",
+              depends_on="P1",
+          )
+          upsert_entry(spec, entry)
+          entries = read_index(spec)
+          assert len(entries) == 3
+          assert entries[2].plan == "P2: Dispatch"
+
+
+      def test_upsert_updates_existing(tmp_path: Path) -> None:
+          """Updates status of an existing plan row."""
+          spec = tmp_path / "spec.md"
+          spec.write_text(
+              (FIXTURES / "spec-with-index.md").read_text()
+          )
+          entry = IndexEntry(
+              plan="P1: Core",
+              repo="superpowers-for-vk",
+              file="plans/core.md",
+              status="Complete",
+              depends_on="P0",
+          )
+          upsert_entry(spec, entry)
+          entries = read_index(spec)
+          assert len(entries) == 2
+          p1 = [e for e in entries if e.plan == "P1: Core"][0]
+          assert p1.status == "Complete"
+
+
+      def test_upsert_idempotent(tmp_path: Path) -> None:
+          """Upserting the same entry twice doesn't create duplicates."""
+          spec = tmp_path / "spec.md"
+          spec.write_text("# Spec\n\n## Summary\n\nContent.\n")
+          entry = IndexEntry(
+              plan="P0: Init",
+              repo="r",
+              file="f.md",
+              status="Not Started",
+              depends_on="—",
+          )
+          upsert_entry(spec, entry)
+          upsert_entry(spec, entry)
+          entries = read_index(spec)
+          assert len(entries) == 1
+      ```
+  - id: P3.T2.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/unit/test_spec_index.py -v`
+      Expected: FAIL — `ModuleNotFoundError: No module named 'vk.spec_index'`
+  - id: P3.T2.S3
+    text: |-
+      Implement src/vk/spec_index.py
+
+
+      ```python
+      """Spec index — read/create/update the Implementation Plans markdown table.
+
+      Each spec file may contain a ``## Implementation Plans`` section with a
+      markdown table tracking sub-project plans, their statuses, and dependencies.
+      """
+
+      from __future__ import annotations
+
+      import re
+      from dataclasses import dataclass
+      from pathlib import Path
+
+
+      @dataclass
+      class IndexEntry:
+          """A row in the Implementation Plans table."""
+
+          plan: str
+          repo: str
+          file: str
+          status: str
+          depends_on: str
+
+
+      _RE_INDEX_HEADER = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE)
+      _RE_TABLE_ROW = re.compile(
+          r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|",
+          re.MULTILINE,
+      )
+
+
+      def read_index(spec_path: Path) -> list[IndexEntry]:
+          """Read implementation plan entries from a spec file.
+
+          Returns an empty list if the file doesn't exist or has no index section.
+          """
+          if not spec_path.exists():
+              return []
+
+          text = spec_path.read_text(encoding="utf-8")
+          header_match = _RE_INDEX_HEADER.search(text)
+          if not header_match:
+              return []
+
+          # Get the section after the header
+          section = text[header_match.end():]
+
+          entries: list[IndexEntry] = []
+          for m in _RE_TABLE_ROW.finditer(section):
+              plan, repo, file_col, status, depends = (
+                  m.group(1).strip(),
+                  m.group(2).strip(),
+                  m.group(3).strip(),
+                  m.group(4).strip(),
+                  m.group(5).strip(),
+              )
+              # Skip the header row and separator
+              if plan in ("Plan", "---", "------") or plan.startswith("-"):
+                  continue
+              # Strip backticks from file column
+              file_col = file_col.strip("`")
+              entries.append(
+                  IndexEntry(plan=plan, repo=repo, file=file_col, status=status, depends_on=depends)
+              )
+
+          return entries
+
+
+      def upsert_entry(spec_path: Path, entry: IndexEntry) -> None:
+          """Add or update an entry in the spec's Implementation Plans table.
+
+          Creates the section and table if they don't exist.
+          Updates the row if a matching plan name already exists.
+          """
+          text = spec_path.read_text(encoding="utf-8")
+          header_match = _RE_INDEX_HEADER.search(text)
+
+          if not header_match:
+              # Append the section
+              table = _build_table([entry])
+              if not text.endswith("\n"):
+                  text += "\n"
+              text += f"\n## Implementation Plans\n\n{table}\n"
+              spec_path.write_text(text, encoding="utf-8")
+              return
+
+          # Section exists — find the table boundaries
+          section_start = header_match.end()
+
+          # Find where the table ends (next ## header or end of file)
+          next_section = re.search(r"^## ", text[section_start:], re.MULTILINE)
+          section_end = section_start + next_section.start() if next_section else len(text)
+
+          section_text = text[section_start:section_end]
+
+          # Read existing entries
+          existing = read_index(spec_path)
+
+          # Upsert
+          found = False
+          for i, e in enumerate(existing):
+              if e.plan == entry.plan:
+                  existing[i] = entry
+                  found = True
+                  break
+          if not found:
+              existing.append(entry)
+
+          # Rebuild the table
+          table = _build_table(existing)
+          new_text = text[:section_start] + f"\n{table}\n" + text[section_end:]
+          spec_path.write_text(new_text, encoding="utf-8")
+
+
+      def _build_table(entries: list[IndexEntry]) -> str:
+          """Build a markdown table from index entries."""
+          lines = [
+              "| Plan | Repo | File | Status | Depends on |",
+              "|------|------|------|--------|------------|",
+          ]
+          for e in entries:
+              lines.append(
+                  f"| {e.plan} | {e.repo} | `{e.file}` | {e.status} | {e.depends_on} |"
+              )
+          return "\n".join(lines)
+      ```
+  - id: P3.T2.S4
+    text: |-
+      Run tests to verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_spec_index.py -v`
+      Expected: PASS — all tests pass
+  - id: P3.T2.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/spec_index.py tests/unit/test_spec_index.py
+      git commit -m "feat: add spec_index module for Implementation Plans table management"
+      ```
+- number: 3
+  title: Git helpers — subprocess wrappers
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Write the failing tests
+
+
+      Create `tests/unit/test_git.py`:
+
+      ```python
+      """Tests for vk.git — subprocess wrappers for git operations."""
+
+      from pathlib import Path
+      from unittest.mock import patch, MagicMock
+      import subprocess
+
+      import pytest
+
+      from vk.git import repo_root, add, commit, status
+
+
+      class TestRepoRoot:
+          def test_returns_path(self) -> None:
+              with patch("vk.git._run_git", return_value="/home/user/repo") as mock:
+                  result = repo_root()
+                  assert result == Path("/home/user/repo")
+                  mock.assert_called_once_with(["rev-parse", "--show-toplevel"])
+
+          def test_strips_trailing_newline(self) -> None:
+              with patch("vk.git._run_git", return_value="/home/user/repo\n"):
+                  result = repo_root()
+                  assert result == Path("/home/user/repo")
+
+
+      class TestAdd:
+          def test_add_single_file(self) -> None:
+              with patch("vk.git._run_git") as mock:
+                  add(["src/main.py"])
+                  mock.assert_called_once_with(["add", "src/main.py"])
+
+          def test_add_multiple_files(self) -> None:
+              with patch("vk.git._run_git") as mock:
+                  add(["src/a.py", "src/b.py"])
+                  mock.assert_called_once_with(["add", "src/a.py", "src/b.py"])
+
+
+      class TestCommit:
+          def test_commit_with_message(self) -> None:
+              with patch("vk.git._run_git") as mock:
+                  commit("feat: add feature")
+                  mock.assert_called_once_with(["commit", "-m", "feat: add feature"])
+
+
+      class TestStatus:
+          def test_status_returns_output(self) -> None:
+              with patch("vk.git._run_git", return_value="M  src/main.py\n") as mock:
+                  result = status()
+                  assert "M  src/main.py" in result
+                  mock.assert_called_once_with(["status", "--porcelain"])
+
+
+      class TestRunGitError:
+          def test_subprocess_error_raises(self) -> None:
+              with patch(
+                  "subprocess.run",
+                  side_effect=subprocess.CalledProcessError(128, "git"),
+              ):
+                  with pytest.raises(subprocess.CalledProcessError):
+                      repo_root()
+      ```
+  - id: P3.T3.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/unit/test_git.py -v`
+      Expected: FAIL — `ModuleNotFoundError: No module named 'vk.git'`
+  - id: P3.T3.S3
+    text: |-
+      Implement src/vk/git.py
+
+
+      ```python
+      """Git subprocess wrappers.
+
+      Thin wrappers around git commands used by the vk toolchain.
+      All functions raise subprocess.CalledProcessError on failure.
+      """
+
+      from __future__ import annotations
+
+      import subprocess
+      from pathlib import Path
+
+
+      def _run_git(args: list[str], cwd: Path | None = None) -> str:
+          """Run a git command and return stdout."""
+          result = subprocess.run(
+              ["git", *args],
+              capture_output=True,
+              text=True,
+              check=True,
+              cwd=cwd,
+          )
+          return result.stdout.strip()
+
+
+      def repo_root(cwd: Path | None = None) -> Path:
+          """Return the root directory of the current git repository."""
+          output = _run_git(["rev-parse", "--show-toplevel"], cwd=cwd)
+          return Path(output.strip())
+
+
+      def add(paths: list[str], cwd: Path | None = None) -> None:
+          """Stage files for commit."""
+          _run_git(["add", *paths], cwd=cwd)
+
+
+      def commit(message: str, cwd: Path | None = None) -> None:
+          """Create a commit with the given message."""
+          _run_git(["commit", "-m", message], cwd=cwd)
+
+
+      def status(cwd: Path | None = None) -> str:
+          """Return porcelain status output."""
+          return _run_git(["status", "--porcelain"], cwd=cwd)
+      ```
+  - id: P3.T3.S4
+    text: |-
+      Run tests to verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_git.py -v`
+      Expected: PASS — all tests pass
+  - id: P3.T3.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/git.py tests/unit/test_git.py
+      git commit -m "feat: add git subprocess wrappers — repo_root, add, commit, status"
+      ```
+- number: 4
+  title: GitHub CLI helpers — subprocess wrappers
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Write the failing tests
+
+
+      Create `tests/unit/test_gh.py`:
+
+      ```python
+      """Tests for vk.gh — subprocess wrappers for gh CLI operations.
+
+      These are contract tests: they verify the correct gh invocations
+      are constructed, using mocked subprocess calls.
+      """
+
+      from unittest.mock import patch, MagicMock
+      import subprocess
+
+      import pytest
+
+      from vk.gh import create_issue, close_issue, add_to_project, set_field, auth_status
+
+
+      class TestCreateIssue:
+          def test_basic_creation(self) -> None:
+              with patch("vk.gh._run_gh", return_value="https://github.com/org/repo/issues/42") as mock:
+                  url = create_issue(
+                      repo="org/repo",
+                      title="Phase 1: Setup",
+                      body="Implementation plan body.",
+                      labels=["vk-ready"],
+                  )
+                  assert url == "https://github.com/org/repo/issues/42"
+                  mock.assert_called_once_with([
+                      "issue", "create",
+                      "--repo", "org/repo",
+                      "--title", "Phase 1: Setup",
+                      "--body", "Implementation plan body.",
+                      "--label", "vk-ready",
+                  ])
+
+          def test_multiple_labels(self) -> None:
+              with patch("vk.gh._run_gh", return_value="https://github.com/org/repo/issues/43") as mock:
+                  create_issue(
+                      repo="org/repo",
+                      title="Task",
+                      body="Body.",
+                      labels=["vk-ready", "manual"],
+                  )
+                  args = mock.call_args[0][0]
+                  assert args.count("--label") == 2
+
+          def test_no_labels(self) -> None:
+              with patch("vk.gh._run_gh", return_value="url") as mock:
+                  create_issue(repo="org/repo", title="T", body="B", labels=[])
+                  args = mock.call_args[0][0]
+                  assert "--label" not in args
+
+
+      class TestCloseIssue:
+          def test_close(self) -> None:
+              with patch("vk.gh._run_gh") as mock:
+                  close_issue(repo="org/repo", number=42)
+                  mock.assert_called_once_with([
+                      "issue", "close",
+                      "--repo", "org/repo",
+                      "42",
+                  ])
+
+
+      class TestAddToProject:
+          def test_add(self) -> None:
+              with patch("vk.gh._run_gh", return_value="item-id-123") as mock:
+                  item_id = add_to_project(
+                      url="https://github.com/org/repo/issues/42",
+                      project_owner="org",
+                      project_number=5,
+                  )
+                  assert item_id == "item-id-123"
+                  mock.assert_called_once_with([
+                      "project", "item-add",
+                      "5",
+                      "--owner", "org",
+                      "--url", "https://github.com/org/repo/issues/42",
+                      "--format", "json",
+                  ])
+
+
+      class TestSetField:
+          def test_set_text_field(self) -> None:
+              with patch("vk.gh._run_gh") as mock:
+                  set_field(
+                      project_owner="org",
+                      project_number=5,
+                      item_id="item-123",
+                      field_name="Status",
+                      field_value="In Progress",
+                  )
+                  mock.assert_called_once_with([
+                      "project", "item-edit",
+                      "--owner", "org",
+                      "--project-id", "5",
+                      "--id", "item-123",
+                      "--field-name", "Status",
+                      "--field-value", "In Progress",
+                  ])
+
+
+      class TestAuthStatus:
+          def test_authenticated(self) -> None:
+              with patch("vk.gh._run_gh", return_value="github.com\n  Logged in") as mock:
+                  result = auth_status()
+                  assert result is True
+                  mock.assert_called_once_with(["auth", "status"])
+
+          def test_not_authenticated(self) -> None:
+              with patch(
+                  "vk.gh._run_gh",
+                  side_effect=subprocess.CalledProcessError(1, "gh"),
+              ):
+                  result = auth_status()
+                  assert result is False
+
+
+      class TestRunGhError:
+          def test_subprocess_error_propagates(self) -> None:
+              with patch(
+                  "subprocess.run",
+                  side_effect=subprocess.CalledProcessError(1, "gh"),
+              ):
+                  with pytest.raises(subprocess.CalledProcessError):
+                      create_issue(repo="org/repo", title="T", body="B", labels=[])
+      ```
+  - id: P3.T4.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/unit/test_gh.py -v`
+      Expected: FAIL — `ModuleNotFoundError: No module named 'vk.gh'`
+  - id: P3.T4.S3
+    text: |-
+      Implement src/vk/gh.py
+
+
+      ```python
+      """GitHub CLI subprocess wrappers.
+
+      Thin wrappers around ``gh`` commands used by the vk toolchain.
+      All functions (except auth_status) raise subprocess.CalledProcessError
+      on failure.  No direct GitHub API usage — we leverage gh's existing auth.
+      """
+
+      from __future__ import annotations
+
+      import subprocess
+
+
+      def _run_gh(args: list[str]) -> str:
+          """Run a gh command and return stdout."""
+          result = subprocess.run(
+              ["gh", *args],
+              capture_output=True,
+              text=True,
+              check=True,
+          )
+          return result.stdout.strip()
+
+
+      def create_issue(
+          *,
+          repo: str,
+          title: str,
+          body: str,
+          labels: list[str],
+      ) -> str:
+          """Create a GitHub Issue and return its URL."""
+          args = [
+              "issue", "create",
+              "--repo", repo,
+              "--title", title,
+              "--body", body,
+          ]
+          for label in labels:
+              args.extend(["--label", label])
+          return _run_gh(args)
+
+
+      def close_issue(*, repo: str, number: int) -> None:
+          """Close a GitHub Issue by number."""
+          _run_gh([
+              "issue", "close",
+              "--repo", repo,
+              str(number),
+          ])
+
+
+      def add_to_project(
+          *,
+          url: str,
+          project_owner: str,
+          project_number: int,
+      ) -> str:
+          """Add an issue to a GitHub Project board and return the item ID."""
+          return _run_gh([
+              "project", "item-add",
+              str(project_number),
+              "--owner", project_owner,
+              "--url", url,
+              "--format", "json",
+          ])
+
+
+      def set_field(
+          *,
+          project_owner: str,
+          project_number: int,
+          item_id: str,
+          field_name: str,
+          field_value: str,
+      ) -> None:
+          """Set a field value on a project board item."""
+          _run_gh([
+              "project", "item-edit",
+              "--owner", project_owner,
+              "--project-id", str(project_number),
+              "--id", item_id,
+              "--field-name", field_name,
+              "--field-value", field_value,
+          ])
+
+
+      def auth_status() -> bool:
+          """Check if gh is authenticated.  Returns True if logged in."""
+          try:
+              _run_gh(["auth", "status"])
+              return True
+          except subprocess.CalledProcessError:
+              return False
+      ```
+  - id: P3.T4.S4
+    text: |-
+      Run tests to verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_gh.py -v`
+      Expected: PASS — all tests pass
+  - id: P3.T4.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/gh.py tests/unit/test_gh.py
+      git commit -m "feat: add gh CLI subprocess wrappers — issues, projects, auth"
+      ```
+- number: 5
+  title: Final quality gates and coverage check
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      Run full test suite with coverage
+
+
+      Run: `uv run pytest -v --cov=vk --cov-report=term-missing`
+      Expected: PASS — all tests pass, coverage >=85% on `src/vk/`
+  - id: P3.T5.S2
+    text: |-
+      Run ruff lint and format check
+
+
+      Run: `uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/`
+      Expected: PASS — no lint or format errors. If there are errors, fix them.
+  - id: P3.T5.S3
+    text: |-
+      Run mypy strict type checking
+
+
+      Run: `uv run mypy src/`
+      Expected: PASS — no type errors. If there are errors, fix them.
+  - id: P3.T5.S4
+    text: |-
+      Fix any lint, format, or type errors
+
+
+      Address all issues found in steps 1-3. Common fixes:
+      - Add missing type annotations
+      - Fix import ordering
+      - Add `from __future__ import annotations` where needed
+      - Fix line length violations
+  - id: P3.T5.S5
+    text: |-
+      Commit fixes and verify clean
+
+
+      ```bash
+      git add -u
+      git commit -m "fix: resolve all lint, format, and type errors across P1 modules"
+      ```
+
+      Run all gates one final time:
+
+      ```bash
+      uv run pytest -v && uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run mypy src/
+      ```
+
+      Expected: all green, coverage >=85%.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T3.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T4.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T5.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T5.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T5.S5:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

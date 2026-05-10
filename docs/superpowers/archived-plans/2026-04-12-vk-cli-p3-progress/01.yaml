@@ -1,0 +1,1459 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Progress command scaffold and sync
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Test fixtures for progress commands
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create flat plan fixture with mixed checkbox states
+
+
+      Create `tests/fixtures/plans/flat-with-status.md` containing a flat plan with three tasks, each having 2-3 steps. Task 1 fully checked, Task 2 partially checked, Task 3 unchecked. Status header set to `In Progress`.
+  - id: P1.T1.S2
+    text: |-
+      Create phased plan fixture with partial progress
+
+
+      Create `tests/fixtures/plans/phased-partial-progress.md` containing a phased plan with two phases. Phase 1 fully checked, Phase 2 with one task partially checked. Include a `<!-- Tracking: https://github.com/derio-net/test-repo/issues/1 -->` comment on Phase 1.
+  - id: P1.T1.S3
+    text: |-
+      Create dispatch-enabled config fixture for progress tests
+
+
+      Create `tests/fixtures/configs/dispatch-enabled-progress.yaml`:
+
+      ```yaml
+      plan:
+        prefix: "2026-04-12"
+        plans_dir: "docs/superpowers/plans"
+        specs_dir: "docs/superpowers/specs"
+      header:
+        tech_stack: "Python 3.11+, uv, typer"
+      dispatch:
+        target: github-issues
+        owner: derio-net
+        project_board: "Derio Ops"
+        default_repo: derio-net/test-repo
+        labels:
+          agentic: vk-ready
+          manual: manual
+      ```
+  - id: P1.T1.S4
+    text: |-
+      Create integration test conftest with tmp_git_repo fixture
+
+
+      Create `tests/integration/__init__.py` (empty) and `tests/integration/conftest.py` with a `tmp_git_repo` fixture that creates a temporary directory, runs `git init`, copies fixture files into it, and returns the path. Also create a `mock_gh` fixture that patches `subprocess.run` for gh commands and records invocations.
+  - id: P1.T1.S5
+    text: |-
+      Run tests to confirm fixtures load
+
+
+      Run: `uv run pytest tests/integration/conftest.py --collect-only`
+      Expected: fixtures are collected without import errors.
+  - id: P1.T1.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add tests/fixtures/ tests/integration/
+      git commit -m "test: add progress integration test fixtures and conftest"
+      ```
+- number: 2
+  title: progress sync subcommand — local mode
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write failing tests for local-mode sync
+
+
+      Create `tests/integration/test_progress.py` with these tests:
+
+      ```python
+      # tests/integration/test_progress.py
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      runner = CliRunner()
+
+
+      class TestProgressSyncLocal:
+          """Local mode: checkboxes -> Status header -> spec index."""
+
+          def test_sync_updates_status_to_complete_when_all_checked(
+              self, tmp_git_repo_with_flat_plan
+          ):
+              """All checkboxes checked -> Status becomes Complete."""
+              plan_path = tmp_git_repo_with_flat_plan / "docs/superpowers/plans/test-plan.md"
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--yes"])
+              assert result.exit_code == 0
+              content = plan_path.read_text()
+              assert "**Status:** Complete" in content
+
+          def test_sync_updates_status_to_in_progress_when_partial(
+              self, tmp_git_repo_with_flat_plan_partial
+          ):
+              """Some checkboxes checked -> Status becomes In Progress."""
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_partial
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--yes"])
+              assert result.exit_code == 0
+              content = plan_path.read_text()
+              assert "**Status:** In Progress" in content
+
+          def test_sync_updates_status_to_not_started_when_none_checked(
+              self, tmp_git_repo_with_flat_plan_empty
+          ):
+              """No checkboxes checked -> Status stays Not Started."""
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_empty
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--yes"])
+              assert result.exit_code == 0
+              content = plan_path.read_text()
+              assert "**Status:** Not Started" in content
+
+          def test_sync_dry_run_shows_diff_without_mutating(
+              self, tmp_git_repo_with_flat_plan_partial
+          ):
+              """--dry-run prints what would change but does not write."""
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_partial
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              before = plan_path.read_text()
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--dry-run"])
+              assert result.exit_code == 0
+              assert "Would update" in result.stdout or "Status:" in result.stdout
+              assert plan_path.read_text() == before
+
+          def test_sync_updates_spec_index_when_spec_exists(
+              self, tmp_git_repo_with_flat_plan_and_spec
+          ):
+              """Sync updates the spec's Implementation Plans index table."""
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              spec_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/specs/test-spec.md"
+              )
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--yes"])
+              assert result.exit_code == 0
+              spec_content = spec_path.read_text()
+              assert "In Progress" in spec_content or "Complete" in spec_content
+
+          def test_sync_dry_run_and_yes_mutually_exclusive(self, tmp_path):
+              result = runner.invoke(
+                  app, ["progress", "sync", str(tmp_path / "plan.md"), "--dry-run", "--yes"]
+              )
+              assert result.exit_code != 0
+      ```
+  - id: P1.T2.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressSyncLocal" --no-header`
+      Expected: FAIL — `ModuleNotFoundError` or `No such command 'sync'`
+  - id: P1.T2.S3
+    text: |-
+      Create progress_cmd.py with sync subcommand (local mode)
+
+
+      Create `src/vk/commands/progress_cmd.py`:
+
+      ```python
+      """vk progress — track work lifecycle."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+      from typing import Optional
+
+      import typer
+      from rich.console import Console
+
+      from vk.commands.common import validate_dry_run_yes
+      from vk.config import load_profile
+      from vk.plan.parser import parse_plan
+      from vk.plan.writer import rewrite_status
+      from vk.spec_index import update_spec_index
+
+      console = Console(stderr=True)
+      progress_app = typer.Typer(help="Track work lifecycle.")
+
+
+      def _compute_status_from_checkboxes(plan_path: Path) -> str:
+          """Derive status from checkbox states in the plan file."""
+          plan = parse_plan(plan_path)
+          all_tasks = plan.all_tasks
+          if not all_tasks:
+              return "Not Started"
+
+          total_steps = 0
+          checked_steps = 0
+          for task in all_tasks:
+              for step in task.steps:
+                  total_steps += 1
+                  if step.state in ("x", "-"):
+                      checked_steps += 1
+
+          if total_steps == 0:
+              return "Not Started"
+          if checked_steps == 0:
+              return "Not Started"
+          if checked_steps == total_steps:
+              return "Complete"
+          return "In Progress"
+
+
+      @progress_app.command()
+      def sync(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+          dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutating."),
+          yes: bool = typer.Option(False, "--yes", help="Execute without prompting."),
+      ) -> None:
+          """Sync plan progress: checkboxes -> Status header -> spec index."""
+          validate_dry_run_yes(dry_run, yes)
+
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          profile = load_profile(plan_path)
+
+          if profile.dispatch_enabled:
+              _sync_dispatch(plan_path, profile, dry_run, yes)
+          else:
+              _sync_local(plan_path, dry_run, yes)
+
+
+      def _sync_local(plan_path: Path, dry_run: bool, yes: bool) -> None:
+          """Local mode: checkboxes -> Status header -> spec index."""
+          new_status = _compute_status_from_checkboxes(plan_path)
+          plan = parse_plan(plan_path)
+          old_status = plan.status
+
+          if old_status == new_status:
+              console.print(f"Status already [bold]{new_status}[/bold]. Nothing to sync.")
+              return
+
+          if dry_run:
+              console.print(
+                  f"Would update Status: [yellow]{old_status}[/yellow] -> [green]{new_status}[/green]"
+              )
+              if plan.spec:
+                  console.print(f"Would update spec index in: {plan.spec}")
+              return
+
+          if not yes:
+              typer.confirm(
+                  f"Update Status: {old_status} -> {new_status}. Proceed?", abort=True
+              )
+
+          rewrite_status(plan_path, new_status)
+          console.print(
+              f"Status: [yellow]{old_status}[/yellow] -> [green]{new_status}[/green]"
+          )
+
+          if plan.spec:
+              spec_path = _resolve_spec_path(plan_path, plan.spec)
+              if spec_path and spec_path.exists():
+                  update_spec_index(spec_path, plan_path, new_status)
+                  console.print(f"Updated spec index in: {spec_path}")
+
+
+      def _sync_dispatch(
+          plan_path: Path, profile: object, dry_run: bool, yes: bool
+      ) -> None:
+          """Dispatch mode: Issue states -> checkboxes -> spec index."""
+          from vk.gh import query_issue_states
+
+          plan = parse_plan(plan_path)
+          if not plan.phases:
+              console.print("[red]Dispatch sync requires a phased plan.[/red]")
+              raise typer.Exit(2)
+
+          issue_states = query_issue_states(plan)
+          changes: list[tuple[str, str, str]] = []
+
+          for phase in plan.phases:
+              if phase.tracking_url:
+                  issue_state = issue_states.get(phase.tracking_url, None)
+                  if issue_state:
+                      new_status = _map_issue_state_to_status(issue_state)
+                      changes.append((f"Phase {phase.number}", phase.title, new_status))
+
+          if not changes:
+              console.print("No dispatched phases with state changes found.")
+              return
+
+          if dry_run:
+              for phase_id, title, status in changes:
+                  console.print(f"Would sync {phase_id} ({title}): -> {status}")
+              return
+
+          if not yes:
+              typer.confirm(f"Sync {len(changes)} phase(s) from Issues. Proceed?", abort=True)
+
+          for phase_id, title, status in changes:
+              console.print(f"Synced {phase_id} ({title}): -> {status}")
+
+          new_plan_status = _compute_status_from_checkboxes(plan_path)
+          rewrite_status(plan_path, new_plan_status)
+
+          if plan.spec:
+              spec_path = _resolve_spec_path(plan_path, plan.spec)
+              if spec_path and spec_path.exists():
+                  update_spec_index(spec_path, plan_path, new_plan_status)
+
+
+      def _map_issue_state_to_status(issue_state: str) -> str:
+          """Map GitHub Issue lifecycle state to plan status."""
+          state_map = {
+              "open": "In Progress",
+              "closed": "Complete",
+              "done": "Complete",
+              "in_progress": "In Progress",
+              "todo": "Not Started",
+          }
+          return state_map.get(issue_state.lower(), "In Progress")
+
+
+      def _resolve_spec_path(plan_path: Path, spec_ref: str) -> Path | None:
+          """Resolve a spec reference (relative path) to an absolute path."""
+          repo_root = plan_path.parent
+          while repo_root != repo_root.parent:
+              if (repo_root / ".git").exists():
+                  return repo_root / spec_ref
+              repo_root = repo_root.parent
+          return None
+      ```
+  - id: P1.T2.S4
+    text: |-
+      Wire progress_app into cli.py
+
+
+      In `src/vk/cli.py`, replace the stub `progress_app` with the import from `progress_cmd`:
+
+      ```python
+      from vk.commands.progress_cmd import progress_app
+
+      # Remove the old: progress_app = typer.Typer(help="Track work lifecycle.")
+      # Remove the old: progress_callback function
+      # Keep: app.add_typer(progress_app, name="progress")
+      ```
+  - id: P1.T2.S5
+    text: |-
+      Run tests to verify local-mode sync passes
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressSyncLocal" --no-header`
+      Expected: PASS — all local-mode sync tests pass
+  - id: P1.T2.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/progress_cmd.py tests/integration/test_progress.py src/vk/cli.py
+      git commit -m "feat: add vk progress sync subcommand with local-mode support"
+      ```
+- number: 3
+  title: progress sync — dispatch mode
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Write failing tests for dispatch-mode sync
+
+
+      Add to `tests/integration/test_progress.py`:
+
+      ```python
+      class TestProgressSyncDispatch:
+          """Dispatch mode: Issue states -> checkboxes -> spec index."""
+
+          def test_sync_queries_issues_and_updates_plan(
+              self, tmp_git_repo_with_phased_dispatched_plan, mock_gh
+          ):
+              """Sync pulls Issue states and updates checkboxes."""
+              plan_path = (
+                  tmp_git_repo_with_phased_dispatched_plan
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              mock_gh.set_issue_state("https://github.com/derio-net/test-repo/issues/1", "closed")
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--yes"])
+              assert result.exit_code == 0
+              assert "Synced" in result.stdout
+
+          def test_sync_dispatch_dry_run_does_not_mutate(
+              self, tmp_git_repo_with_phased_dispatched_plan, mock_gh
+          ):
+              plan_path = (
+                  tmp_git_repo_with_phased_dispatched_plan
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              mock_gh.set_issue_state("https://github.com/derio-net/test-repo/issues/1", "closed")
+              before = plan_path.read_text()
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--dry-run"])
+              assert result.exit_code == 0
+              assert plan_path.read_text() == before
+
+          def test_sync_dispatch_refuses_flat_plan(self, tmp_git_repo_with_flat_plan):
+              """Dispatch sync on a flat plan is an error."""
+              plan_path = tmp_git_repo_with_flat_plan / "docs/superpowers/plans/test-plan.md"
+              result = runner.invoke(app, ["progress", "sync", str(plan_path), "--yes"])
+              assert result.exit_code == 2
+      ```
+  - id: P1.T3.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressSyncDispatch" --no-header`
+      Expected: FAIL — gh mock not wired or dispatch logic incomplete
+  - id: P1.T3.S3
+    text: |-
+      Implement dispatch-mode sync logic
+
+
+      Complete the `_sync_dispatch` function in `progress_cmd.py` to call `gh.query_issue_states()`, map states to checkbox updates, rewrite the plan file, and update the spec index. Ensure that when `dry_run=True`, no file mutations occur.
+  - id: P1.T3.S4
+    text: |-
+      Run tests to verify dispatch-mode sync passes
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressSync" --no-header`
+      Expected: PASS — all sync tests pass (local and dispatch)
+  - id: P1.T3.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/progress_cmd.py tests/integration/test_progress.py
+      git commit -m "feat: add dispatch-mode sync to vk progress"
+      ```
+- number: 4
+  title: progress board subcommand
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Write failing tests for board — both modes
+
+
+      Add to `tests/integration/test_progress.py`:
+
+      ```python
+      class TestProgressBoard:
+          def test_board_local_scans_plan_files_groups_by_status(
+              self, tmp_git_repo_with_multiple_plans
+          ):
+              """Local mode: scan plan files, group by Status header."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "board", "--format", "table"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_multiple_plans)},
+              )
+              assert result.exit_code == 0
+              assert "Not Started" in result.stdout or "In Progress" in result.stdout
+
+          def test_board_local_json_output(self, tmp_git_repo_with_multiple_plans):
+              """Local mode: --format json produces valid JSON."""
+              import json
+
+              result = runner.invoke(
+                  app,
+                  ["progress", "board", "--format", "json"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_multiple_plans)},
+              )
+              assert result.exit_code == 0
+              data = json.loads(result.stdout)
+              assert isinstance(data, dict)
+
+          def test_board_local_stale_days_filter(self, tmp_git_repo_with_multiple_plans):
+              """--stale-days filters to plans not updated recently."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "board", "--stale-days", "30"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_multiple_plans)},
+              )
+              assert result.exit_code == 0
+
+          def test_board_dispatch_queries_project_board(
+              self, tmp_git_repo_with_dispatch_config, mock_gh
+          ):
+              """Dispatch mode: queries gh project board."""
+              mock_gh.set_board_items([
+                  {"title": "Phase 1", "status": "In Progress"},
+                  {"title": "Phase 2", "status": "Todo"},
+              ])
+              result = runner.invoke(
+                  app,
+                  ["progress", "board", "--format", "table"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+              assert "In Progress" in result.stdout
+      ```
+  - id: P1.T4.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressBoard" --no-header`
+      Expected: FAIL — `No such command 'board'`
+  - id: P1.T4.S3
+    text: |-
+      Implement board subcommand
+
+
+      Add to `progress_cmd.py`:
+
+      ```python
+      @progress_app.command()
+      def board(
+          format: str = typer.Option("table", "--format", help="Output format: table or json."),
+          stale_days: Optional[int] = typer.Option(
+              None, "--stale-days", help="Show only plans not updated in N days."
+          ),
+      ) -> None:
+          """Show work status board."""
+          profile = load_profile_from_cwd()
+
+          if profile.dispatch_enabled:
+              _board_dispatch(profile, format, stale_days)
+          else:
+              _board_local(format, stale_days)
+
+
+      def _board_local(format: str, stale_days: int | None) -> None:
+          """Scan local plan files, group by Status header."""
+          import json as json_mod
+          from datetime import datetime, timedelta
+
+          from vk.config import find_repo_root
+          from vk.plan.parser import parse_plan
+
+          repo_root = find_repo_root()
+          plans_dir = repo_root / "docs" / "superpowers" / "plans"
+          if not plans_dir.exists():
+              console.print("[red]No plans directory found.[/red]")
+              raise typer.Exit(1)
+
+          board_data: dict[str, list[dict[str, str]]] = {}
+          for plan_file in sorted(plans_dir.glob("*.md")):
+              try:
+                  plan = parse_plan(plan_file)
+              except Exception:
+                  continue
+
+              if stale_days is not None:
+                  mtime = datetime.fromtimestamp(plan_file.stat().st_mtime)
+                  if datetime.now() - mtime < timedelta(days=stale_days):
+                      continue
+
+              status = plan.status
+              board_data.setdefault(status, []).append({
+                  "file": plan_file.name,
+                  "title": plan.title,
+                  "status": status,
+              })
+
+          if format == "json":
+              typer.echo(json_mod.dumps(board_data, indent=2))
+          else:
+              from rich.table import Table
+
+              table = Table(title="Plan Status Board")
+              table.add_column("Status", style="bold")
+              table.add_column("Plan")
+              table.add_column("Title")
+              for status, plans in board_data.items():
+                  for p in plans:
+                      table.add_row(status, p["file"], p["title"])
+              console.print(table)
+
+
+      def _board_dispatch(
+          profile: object, format: str, stale_days: int | None
+      ) -> None:
+          """Dispatch mode: query project board via gh."""
+          import json as json_mod
+
+          from vk.gh import query_project_board
+
+          items = query_project_board(profile)
+
+          if format == "json":
+              typer.echo(json_mod.dumps(items, indent=2))
+          else:
+              from rich.table import Table
+
+              table = Table(title="Project Board")
+              table.add_column("Title", style="bold")
+              table.add_column("Status")
+              for item in items:
+                  table.add_row(item.get("title", ""), item.get("status", ""))
+              console.print(table)
+      ```
+  - id: P1.T4.S4
+    text: |-
+      Run tests to verify board passes
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressBoard" --no-header`
+      Expected: PASS — all board tests pass
+  - id: P1.T4.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/progress_cmd.py tests/integration/test_progress.py
+      git commit -m "feat: add vk progress board subcommand with dual-mode support"
+      ```
+- number: 5
+  title: progress create subcommand
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write failing tests for create — both modes
+
+
+      Add to `tests/integration/test_progress.py`:
+
+      ```python
+      class TestProgressCreate:
+          def test_create_dispatch_creates_issue(
+              self, tmp_git_repo_with_dispatch_config, mock_gh
+          ):
+              """Dispatch mode: creates a GitHub Issue."""
+              result = runner.invoke(
+                  app,
+                  [
+                      "progress", "create", "New feature task",
+                      "--type", "agentic",
+                      "--yes",
+                  ],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+              assert mock_gh.issues_created == 1
+
+          def test_create_dispatch_with_repo_override(
+              self, tmp_git_repo_with_dispatch_config, mock_gh
+          ):
+              result = runner.invoke(
+                  app,
+                  [
+                      "progress", "create", "Another task",
+                      "--type", "manual",
+                      "--repo", "derio-net/other-repo",
+                      "--yes",
+                  ],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+              assert "derio-net/other-repo" in mock_gh.last_issue_repo
+
+          def test_create_local_mode_refuses_with_gate_message(
+              self, tmp_git_repo_no_dispatch
+          ):
+              """Local mode: refuses with gate refusal message and fix hint."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "create", "Some task", "--type", "agentic"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_no_dispatch)},
+              )
+              assert result.exit_code == 1
+              assert "Dispatch unavailable" in result.stdout
+              assert "dispatch:" in result.stdout
+
+          def test_create_dry_run_shows_issue_preview(
+              self, tmp_git_repo_with_dispatch_config, mock_gh
+          ):
+              result = runner.invoke(
+                  app,
+                  [
+                      "progress", "create", "Preview task",
+                      "--type", "agentic",
+                      "--dry-run",
+                  ],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+              assert "Would create" in result.stdout
+              assert mock_gh.issues_created == 0
+      ```
+  - id: P1.T5.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressCreate" --no-header`
+      Expected: FAIL — `No such command 'create'`
+  - id: P1.T5.S3
+    text: |-
+      Implement create subcommand
+
+
+      Add to `progress_cmd.py`:
+
+      ```python
+      GATE_REFUSAL_MESSAGE = """Dispatch unavailable -- no `dispatch:` block in `docs/superpowers/plan-config.yaml` for this repo.
+
+      To enable, add this to the file:
+
+        dispatch:
+          target: github-issues
+          owner: <your-github-owner>
+          project_board: "<Project Name>"
+          default_repo: <owner>/<repo>
+          labels:
+            agentic: vk-ready
+            manual: manual
+      """
+
+
+      @progress_app.command()
+      def create(
+          title: str = typer.Argument(..., help="Title for the new work item."),
+          type: str = typer.Option(..., "--type", help="Type: agentic or manual."),
+          repo: Optional[str] = typer.Option(None, "--repo", help="Target repo (OWNER/REPO)."),
+          lifecycle: Optional[str] = typer.Option(
+              None, "--lifecycle", help="Initial lifecycle state."
+          ),
+          dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutating."),
+          yes: bool = typer.Option(False, "--yes", help="Execute without prompting."),
+      ) -> None:
+          """Create a new work item (dispatch-only)."""
+          validate_dry_run_yes(dry_run, yes)
+
+          profile = load_profile_from_cwd()
+
+          if not profile.dispatch_enabled:
+              typer.echo(GATE_REFUSAL_MESSAGE)
+              raise typer.Exit(1)
+
+          target_repo = repo or profile.dispatch.default_repo
+          label = profile.dispatch.labels.get(type, type)
+
+          if dry_run:
+              console.print(f"Would create Issue: [bold]{title}[/bold]")
+              console.print(f"  Repo: {target_repo}")
+              console.print(f"  Label: {label}")
+              if lifecycle:
+                  console.print(f"  Lifecycle: {lifecycle}")
+              return
+
+          if not yes:
+              typer.confirm(f"Create Issue '{title}' in {target_repo}?", abort=True)
+
+          from vk.gh import create_issue
+
+          issue_url = create_issue(
+              repo=target_repo,
+              title=title,
+              labels=[label],
+              project=profile.dispatch.project_board,
+              lifecycle=lifecycle,
+          )
+          console.print(f"Created: [link={issue_url}]{issue_url}[/link]")
+      ```
+  - id: P1.T5.S4
+    text: |-
+      Run tests to verify create passes
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressCreate" --no-header`
+      Expected: PASS — all create tests pass (dispatch creates, local refuses)
+  - id: P1.T5.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/progress_cmd.py tests/integration/test_progress.py
+      git commit -m "feat: add vk progress create subcommand with gate refusal"
+      ```
+- number: 6
+  title: progress transition subcommand
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Write failing tests for transition — both modes
+
+
+      Add to `tests/integration/test_progress.py`:
+
+      ```python
+      class TestProgressTransition:
+          def test_transition_dispatch_moves_issue_state(
+              self, tmp_git_repo_with_dispatch_config, mock_gh
+          ):
+              """Dispatch mode: transitions a GitHub Issue lifecycle state."""
+              mock_gh.set_issue_state("https://github.com/derio-net/test-repo/issues/5", "open")
+              result = runner.invoke(
+                  app,
+                  ["progress", "transition", "#5", "done", "--yes"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+              assert mock_gh.get_issue_state("https://github.com/derio-net/test-repo/issues/5") == "done"
+
+          def test_transition_local_edits_status_header(
+              self, tmp_git_repo_with_flat_plan_partial
+          ):
+              """Local mode: edits plan Status header and syncs spec index."""
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_partial
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              result = runner.invoke(
+                  app,
+                  ["progress", "transition", str(plan_path), "Complete", "--yes"],
+              )
+              assert result.exit_code == 0
+              content = plan_path.read_text()
+              assert "**Status:** Complete" in content
+
+          def test_transition_local_updates_spec_index(
+              self, tmp_git_repo_with_flat_plan_and_spec
+          ):
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              spec_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/specs/test-spec.md"
+              )
+              result = runner.invoke(
+                  app,
+                  ["progress", "transition", str(plan_path), "Complete", "--yes"],
+              )
+              assert result.exit_code == 0
+              assert "Complete" in spec_path.read_text()
+
+          def test_transition_dry_run_does_not_mutate(
+              self, tmp_git_repo_with_flat_plan_partial
+          ):
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_partial
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              before = plan_path.read_text()
+              result = runner.invoke(
+                  app,
+                  ["progress", "transition", str(plan_path), "Complete", "--dry-run"],
+              )
+              assert result.exit_code == 0
+              assert plan_path.read_text() == before
+      ```
+  - id: P1.T6.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressTransition" --no-header`
+      Expected: FAIL — `No such command 'transition'`
+  - id: P1.T6.S3
+    text: |-
+      Implement transition subcommand
+
+
+      Add to `progress_cmd.py`:
+
+      ```python
+      @progress_app.command()
+      def transition(
+          target: str = typer.Argument(
+              ..., help="Plan path (local) or Issue ref like #N (dispatch)."
+          ),
+          new_state: str = typer.Argument(..., help="New lifecycle state."),
+          dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutating."),
+          yes: bool = typer.Option(False, "--yes", help="Execute without prompting."),
+      ) -> None:
+          """Transition a work item to a new lifecycle state."""
+          validate_dry_run_yes(dry_run, yes)
+
+          profile = load_profile_from_cwd()
+
+          if profile.dispatch_enabled and target.startswith("#"):
+              _transition_dispatch(target, new_state, profile, dry_run, yes)
+          else:
+              _transition_local(Path(target), new_state, dry_run, yes)
+
+
+      def _transition_local(
+          plan_path: Path, new_state: str, dry_run: bool, yes: bool
+      ) -> None:
+          """Local mode: edit plan Status header + spec index sync."""
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          plan = parse_plan(plan_path)
+          old_status = plan.status
+
+          if dry_run:
+              console.print(
+                  f"Would transition: [yellow]{old_status}[/yellow] -> [green]{new_state}[/green]"
+              )
+              return
+
+          if not yes:
+              typer.confirm(
+                  f"Transition {plan_path.name}: {old_status} -> {new_state}. Proceed?",
+                  abort=True,
+              )
+
+          rewrite_status(plan_path, new_state)
+          console.print(
+              f"Transitioned: [yellow]{old_status}[/yellow] -> [green]{new_state}[/green]"
+          )
+
+          if plan.spec:
+              spec_path = _resolve_spec_path(plan_path, plan.spec)
+              if spec_path and spec_path.exists():
+                  update_spec_index(spec_path, plan_path, new_state)
+                  console.print(f"Updated spec index in: {spec_path}")
+
+
+      def _transition_dispatch(
+          issue_ref: str, new_state: str, profile: object, dry_run: bool, yes: bool
+      ) -> None:
+          """Dispatch mode: move Issue lifecycle state on board."""
+          from vk.gh import transition_issue
+
+          issue_number = issue_ref.lstrip("#")
+
+          if dry_run:
+              console.print(
+                  f"Would transition Issue #{issue_number} -> [green]{new_state}[/green]"
+              )
+              return
+
+          if not yes:
+              typer.confirm(
+                  f"Transition Issue #{issue_number} to {new_state}?", abort=True
+              )
+
+          transition_issue(
+              repo=profile.dispatch.default_repo,
+              issue_number=int(issue_number),
+              new_state=new_state,
+              project=profile.dispatch.project_board,
+          )
+          console.print(f"Transitioned Issue #{issue_number} -> [green]{new_state}[/green]")
+      ```
+  - id: P1.T6.S4
+    text: |-
+      Run tests to verify transition passes
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressTransition" --no-header`
+      Expected: PASS — all transition tests pass
+  - id: P1.T6.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/progress_cmd.py tests/integration/test_progress.py
+      git commit -m "feat: add vk progress transition subcommand with dual-mode"
+      ```
+- number: 7
+  title: progress audit subcommand
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      Write failing tests for audit — both modes
+
+
+      Add to `tests/integration/test_progress.py`:
+
+      ```python
+      class TestProgressAudit:
+          def test_audit_local_checks_status_vs_checkboxes(
+              self, tmp_git_repo_with_flat_plan_stale_status
+          ):
+              """Local audit: detects status/checkbox mismatch."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "audit"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_flat_plan_stale_status)},
+              )
+              assert result.exit_code == 0
+              assert "mismatch" in result.stdout.lower() or "drift" in result.stdout.lower()
+
+          def test_audit_local_checks_spec_index_drift(
+              self, tmp_git_repo_with_flat_plan_and_stale_spec
+          ):
+              """Local audit: detects spec index out of sync with plan status."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "audit"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_flat_plan_and_stale_spec)},
+              )
+              assert result.exit_code == 0
+              assert "spec index" in result.stdout.lower() or "drift" in result.stdout.lower()
+
+          def test_audit_local_detects_stale_plans(
+              self, tmp_git_repo_with_stale_plan
+          ):
+              """Local audit: flags plans with In Progress status but no recent changes."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "audit"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_stale_plan)},
+              )
+              assert result.exit_code == 0
+              assert "stale" in result.stdout.lower()
+
+          def test_audit_local_clean_repo_no_issues(
+              self, tmp_git_repo_with_flat_plan
+          ):
+              """Local audit: clean repo produces no warnings."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "audit"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_flat_plan)},
+              )
+              assert result.exit_code == 0
+
+          def test_audit_dispatch_includes_issue_drift(
+              self, tmp_git_repo_with_dispatch_config, mock_gh
+          ):
+              """Dispatch audit: checks for Issue drift in addition to local checks."""
+              mock_gh.set_board_items([
+                  {"title": "Phase 1", "status": "Done", "issue_number": 1},
+              ])
+              result = runner.invoke(
+                  app,
+                  ["progress", "audit"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+
+          def test_audit_json_output(self, tmp_git_repo_with_flat_plan):
+              """--format json produces valid JSON."""
+              import json
+
+              result = runner.invoke(
+                  app,
+                  ["progress", "audit", "--format", "json"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_flat_plan)},
+              )
+              assert result.exit_code == 0
+              data = json.loads(result.stdout)
+              assert isinstance(data, dict)
+
+          def test_audit_report_output(self, tmp_git_repo_with_flat_plan):
+              """--format report produces human-readable output (default)."""
+              result = runner.invoke(
+                  app,
+                  ["progress", "audit", "--format", "report"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_flat_plan)},
+              )
+              assert result.exit_code == 0
+      ```
+  - id: P1.T7.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressAudit" --no-header`
+      Expected: FAIL — `No such command 'audit'`
+  - id: P1.T7.S3
+    text: |-
+      Implement audit subcommand
+
+
+      Add to `progress_cmd.py`:
+
+      ```python
+      @progress_app.command()
+      def audit(
+          format: str = typer.Option("report", "--format", help="Output: report or json."),
+      ) -> None:
+          """Audit plan health: drift, staleness, consistency."""
+          profile = load_profile_from_cwd()
+          findings: list[dict[str, str]] = []
+
+          # Local-always checks
+          findings.extend(_audit_status_vs_checkboxes())
+          findings.extend(_audit_spec_index_drift())
+          findings.extend(_audit_stale_plans())
+
+          # Dispatch-only checks
+          if profile.dispatch_enabled:
+              findings.extend(_audit_issue_drift(profile))
+
+          if format == "json":
+              import json as json_mod
+
+              typer.echo(json_mod.dumps({"findings": findings}, indent=2))
+          else:
+              if not findings:
+                  console.print("[green]Audit clean. No issues found.[/green]")
+              else:
+                  from rich.table import Table
+
+                  table = Table(title="Audit Findings")
+                  table.add_column("Severity", style="bold")
+                  table.add_column("Check")
+                  table.add_column("Detail")
+                  for f in findings:
+                      table.add_row(f.get("severity", ""), f.get("check", ""), f.get("detail", ""))
+                  console.print(table)
+
+
+      def _audit_status_vs_checkboxes() -> list[dict[str, str]]:
+          """Check that plan Status headers match actual checkbox state."""
+          from vk.config import find_repo_root
+
+          findings: list[dict[str, str]] = []
+          repo_root = find_repo_root()
+          plans_dir = repo_root / "docs" / "superpowers" / "plans"
+          if not plans_dir.exists():
+              return findings
+
+          for plan_file in plans_dir.glob("*.md"):
+              try:
+                  plan = parse_plan(plan_file)
+                  computed = _compute_status_from_checkboxes(plan_file)
+                  if plan.status != computed:
+                      findings.append({
+                          "severity": "warning",
+                          "check": "status-mismatch",
+                          "detail": (
+                              f"{plan_file.name}: Status header says '{plan.status}' "
+                              f"but checkboxes indicate '{computed}'"
+                          ),
+                      })
+              except Exception:
+                  continue
+          return findings
+
+
+      def _audit_spec_index_drift() -> list[dict[str, str]]:
+          """Check that spec index tables match plan statuses."""
+          from vk.config import find_repo_root
+          from vk.spec_index import read_spec_index
+
+          findings: list[dict[str, str]] = []
+          repo_root = find_repo_root()
+          specs_dir = repo_root / "docs" / "superpowers" / "specs"
+          plans_dir = repo_root / "docs" / "superpowers" / "plans"
+          if not specs_dir.exists() or not plans_dir.exists():
+              return findings
+
+          for spec_file in specs_dir.glob("*.md"):
+              index_entries = read_spec_index(spec_file)
+              for entry in index_entries:
+                  plan_file = plans_dir / entry["file"]
+                  if plan_file.exists():
+                      try:
+                          plan = parse_plan(plan_file)
+                          if plan.status != entry.get("status"):
+                              findings.append({
+                                  "severity": "warning",
+                                  "check": "spec-index-drift",
+                                  "detail": (
+                                      f"{spec_file.name} says '{entry.get('status')}' "
+                                      f"for {entry['file']} but plan says '{plan.status}'"
+                                  ),
+                              })
+                      except Exception:
+                          continue
+          return findings
+
+
+      def _audit_stale_plans() -> list[dict[str, str]]:
+          """Flag plans with In Progress status but no recent file changes."""
+          from datetime import datetime, timedelta
+
+          from vk.config import find_repo_root
+
+          findings: list[dict[str, str]] = []
+          repo_root = find_repo_root()
+          plans_dir = repo_root / "docs" / "superpowers" / "plans"
+          if not plans_dir.exists():
+              return findings
+
+          stale_threshold = timedelta(days=14)
+          for plan_file in plans_dir.glob("*.md"):
+              try:
+                  plan = parse_plan(plan_file)
+                  if plan.status == "In Progress":
+                      mtime = datetime.fromtimestamp(plan_file.stat().st_mtime)
+                      if datetime.now() - mtime > stale_threshold:
+                          days_old = (datetime.now() - mtime).days
+                          findings.append({
+                              "severity": "info",
+                              "check": "stale-plan",
+                              "detail": (
+                                  f"{plan_file.name}: In Progress but not modified "
+                                  f"in {days_old} days"
+                              ),
+                          })
+              except Exception:
+                  continue
+          return findings
+
+
+      def _audit_issue_drift(profile: object) -> list[dict[str, str]]:
+          """Dispatch-only: check for Issue state drift vs local plan state."""
+          from vk.config import find_repo_root
+          from vk.gh import query_project_board
+
+          findings: list[dict[str, str]] = []
+          repo_root = find_repo_root()
+          plans_dir = repo_root / "docs" / "superpowers" / "plans"
+          if not plans_dir.exists():
+              return findings
+
+          try:
+              board_items = query_project_board(profile)
+          except Exception:
+              findings.append({
+                  "severity": "error",
+                  "check": "issue-drift",
+                  "detail": "Failed to query project board",
+              })
+              return findings
+
+          for plan_file in plans_dir.glob("*.md"):
+              try:
+                  plan = parse_plan(plan_file)
+                  for phase in plan.phases:
+                      if phase.tracking_url:
+                          for item in board_items:
+                              if str(item.get("issue_number", "")) in phase.tracking_url:
+                                  remote_status = _map_issue_state_to_status(
+                                      item.get("status", "")
+                                  )
+                                  local_status = plan.status
+                                  if remote_status != local_status:
+                                      findings.append({
+                                          "severity": "warning",
+                                          "check": "issue-drift",
+                                          "detail": (
+                                              f"{plan_file.name} Phase {phase.number}: "
+                                              f"Issue says '{item.get('status')}' "
+                                              f"but plan says '{local_status}'"
+                                          ),
+                                      })
+              except Exception:
+                  continue
+          return findings
+      ```
+  - id: P1.T7.S4
+    text: |-
+      Run tests to verify audit passes
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v -k "TestProgressAudit" --no-header`
+      Expected: PASS — all audit tests pass
+  - id: P1.T7.S5
+    text: |-
+      Run full progress test suite
+
+
+      Run: `uv run pytest tests/integration/test_progress.py -v --no-header`
+      Expected: PASS — all progress tests pass across all 5 subcommands
+  - id: P1.T7.S6
+    text: |-
+      Run quality gates
+
+
+      Run: `uv run ruff check src/vk/commands/progress_cmd.py && uv run mypy src/vk/commands/progress_cmd.py`
+      Expected: PASS — no lint or type errors
+  - id: P1.T7.S7
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/progress_cmd.py tests/integration/test_progress.py
+      git commit -m "feat: add vk progress audit subcommand with local and dispatch checks"
+      ```
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S7:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

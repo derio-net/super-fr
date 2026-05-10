@@ -1,0 +1,60 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Make CI green
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Unblock CI
+  steps:
+  - id: P5.T1.S1
+    text: Diagnose. `gh pr checks 21` → lint fails. `gh run view … --log-failed` →
+      `ruff format --check` wants three files reformatted. Tests and typecheck pass.
+  - id: P5.T1.S2
+    text: Run `uv run ruff format src/ tests/`. Three files reformatted (whitespace
+      collapsing around tuple/call sites). No behavior change.
+  - id: P5.T1.S3
+    text: Re-verify. Full suite still 302 passed; `ruff format --check` clean; `ruff
+      check` clean.
+  - id: P5.T1.S4
+    text: |-
+      Commit.
+
+
+      ---
+
+      ## Self-review checklist
+
+      - [x] No flat-as-alternative language in any user-facing surface (skills, CLI help, error messages).
+      - [x] `_reject_flat` guard called by every `vk execute` sub-command currently registered.
+      - [x] `TestExecuteRejectsFlat` parametrisation matches the registered sub-command set.
+      - [x] Migration hints in every error path include a full copy-pasteable `vk plan convert <plan> --to phased --single-phase --yes`.
+      - [x] Library-level flat support (`parser`, `convert`, `models`, `format`, `config`) preserved — migration still works.
+      - [x] Regression tests cover missing-path and non-plan-file inputs for both `plan format` and all four execute sub-commands.
+      - [x] Full suite green: 302 passed, 9 skipped.
+      - [x] CI green after ruff format pass.
+      - [x] Plan status flipped to **Complete** — PR [#21](https://github.com/derio-net/superpowers-for-vk/pull/21) merged as commit `9365abc`.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

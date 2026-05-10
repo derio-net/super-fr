@@ -1,0 +1,79 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Initial skill-doc rule change
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Revise the PR-granularity rule
+  steps:
+  - id: P1.T1.S1
+    text: '`vk-execute` constraint text. Change `One phase/task = one PR.` → `One
+      phase = one PR.`; drop flat step-ID variant from the ID reference line.'
+  - id: P1.T1.S2
+    text: '`vk-execute` CLI arg placeholders. Replace `<phase-or-task>` → `<phase>`
+      in the Procedure''s `check-deps` / `scope` / `pr-body` commands.'
+  - id: P1.T1.S3
+    text: '`vk-execute` announce line. `implement this phase/task` → `implement this
+      phase`.'
+  - id: P1.T1.S4
+    text: Migration appendix (soft-deprecate). Add a `## Migrating flat plans` section
+      pointing at the existing `vk plan convert --to phased` CLI with both `--single-phase`
+      and `--group-by-tag` examples.
+  - id: P1.T1.S5
+    text: '`vk-plan` description. Drop "or flat" from the frontmatter description.'
+  - id: P1.T1.S6
+    text: '`vk-plan` Format section. Rewrite so structure (phased) and routing (dispatch
+      config) are independent concerns.'
+  - id: P1.T1.S7
+    text: '`vk-plan` execution handoff. Collapse the `Phased: …` / `Flat: …` fork
+      into a single list gated on `plan-config.yaml`.'
+  - id: P1.T1.S8
+    text: Verify tests. `uv run pytest tests/unit/test_skill_validation.py` — 27 passed,
+      9 skipped.
+  - id: P1.T1.S9
+    text: Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S8:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S9:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,1078 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Parser, dispatch emission, structural validation
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: '`Phase.depends_on` field + parser line extraction'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing tests for the parser's ` Depends on:**` extraction**
+
+
+      Append to `tests/unit/test_plan_parser.py`:
+
+      ```python
+      class TestDependsOnParsing:
+          """Parser extracts **Depends on:** lines into Phase.depends_on."""
+
+          def _plan_with_phase(self, extra_line: str) -> str:
+              return (
+                  "# T\n\n**Spec:** `specs/x.md`\n**Status:** Not Started\n\n"
+                  "**Goal:** Test.\n\n---\n\n"
+                  "## Phase 1: First [agentic]\n"
+                  f"{extra_line}"
+                  "\n### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n"
+              )
+
+          def test_emdash_parses_as_empty_tuple(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._plan_with_phase("**Depends on:** —\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].depends_on == ()
+
+          def test_none_alias_parses_as_empty_tuple(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._plan_with_phase("**Depends on:** None\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].depends_on == ()
+
+          def test_single_phase_ref(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._plan_with_phase("**Depends on:** Phase 3\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].depends_on == (3,)
+
+          def test_multiple_phase_refs(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._plan_with_phase("**Depends on:** Phase 1, Phase 2\n"))
+              plan = parse_plan(p)
+              assert plan.phases[0].depends_on == (1, 2)
+
+          def test_absent_line_yields_empty_tuple(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._plan_with_phase(""))
+              plan = parse_plan(p)
+              assert plan.phases[0].depends_on == ()
+
+          def test_malformed_value_raises_with_phase_number(self, tmp_path: Path) -> None:
+              p = tmp_path / "plan.md"
+              p.write_text(self._plan_with_phase("**Depends on:** foo, Phase bar\n"))
+              with pytest.raises(ValueError, match="Phase 1"):
+                  parse_plan(p)
+
+          def test_line_after_tracking_comment(self, tmp_path: Path) -> None:
+              content = (
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: First [agentic]\n"
+                  "<!-- Tracking: https://github.com/o/r/issues/10 -->\n"
+                  "**Depends on:** —\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              p = tmp_path / "plan.md"
+              p.write_text(content)
+              plan = parse_plan(p)
+              assert plan.phases[0].depends_on == ()
+              assert plan.phases[0].tracking_url == "https://github.com/o/r/issues/10"
+      ```
+  - id: P1.T1.S2
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
+      ```
+
+      Expected: all 7 tests FAIL because `depends_on` is not on `Phase` yet and the parser does not extract the line.
+  - id: P1.T1.S3
+    text: |-
+      Add `depends_on` to the `Phase` dataclass
+
+
+      In `src/vk/plan/models.py`, add a `depends_on` field to `Phase`:
+
+      ```python
+      @dataclass(frozen=True)
+      class Phase:
+          number: int
+          title: str
+          tag: Literal["manual", "agentic"]
+          depends_on: tuple[int, ...]
+          tasks: tuple[Task, ...]
+          tracking_url: str | None
+      ```
+
+      Field order matters for `__init__`. Place `depends_on` after `tag` and before `tasks`. Update any constructor callers in the codebase (grep for `Phase(` to find them — likely only `parser.py` and test fixtures).
+  - id: P1.T1.S4
+    text: |-
+      Implement the parser extraction
+
+
+      In `src/vk/plan/parser.py`, where phase blocks are parsed, extract the `**Depends on:**` line when present and compute `depends_on`:
+
+      ```python
+      _DEPENDS_ON_RE = re.compile(
+          r"^\*\*Depends on:\*\*\s+(.+?)\s*$",
+          re.MULTILINE,
+      )
+      _PHASE_REF_RE = re.compile(r"^Phase\s+(\d+)$")
+
+      def _parse_depends_on(phase_body: str, phase_number: int) -> tuple[int, ...]:
+          """Return the tuple of dependency phase numbers, or () if the line is absent."""
+          match = _DEPENDS_ON_RE.search(phase_body)
+          if match is None:
+              return ()
+          raw = match.group(1).strip()
+          if raw in ("—", "None"):
+              return ()
+          parts = [p.strip() for p in raw.split(",")]
+          deps: list[int] = []
+          for part in parts:
+              ref_match = _PHASE_REF_RE.match(part)
+              if ref_match is None:
+                  raise ValueError(
+                      f"Phase {phase_number}: could not parse dependency list "
+                      f"'{raw}'. Expected 'Phase <int>' refs."
+                  )
+              deps.append(int(ref_match.group(1)))
+          return tuple(deps)
+      ```
+
+      Search scope for `_DEPENDS_ON_RE` is the slice between the phase header (plus any `<!-- Tracking: -->` comment) and the first `### Task` header or the next `## Phase` header. Use the same boundary logic already in the parser for task extraction.
+
+      Call `_parse_depends_on(phase_body, phase_number)` during Phase construction and pass the result to the `depends_on=` keyword argument.
+  - id: P1.T1.S5
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/unit/test_plan_parser.py::TestDependsOnParsing -v
+      ```
+
+      Expected: all 7 tests PASS. Also re-run the full parser suite to catch regressions:
+
+      ```
+      uv run pytest tests/unit/test_plan_parser.py -v
+      ```
+
+      Expected: all pre-existing parser tests continue to pass (any fixtures without `**Depends on:**` parse with `depends_on=()`).
+  - id: P1.T1.S6
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/plan/models.py src/vk/plan/parser.py tests/unit/test_plan_parser.py
+      uv run ruff format --check src/vk/plan/models.py src/vk/plan/parser.py tests/unit/test_plan_parser.py
+      uv run mypy src/vk/plan/models.py src/vk/plan/parser.py
+      ```
+
+      Expected: PASS on all three.
+  - id: P1.T1.S7
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/plan/models.py src/vk/plan/parser.py tests/unit/test_plan_parser.py
+      git commit -m "feat(plan): parse **Depends on:** lines into Phase.depends_on"
+      ```
+- number: 2
+  title: Writer round-trip for `**Depends on:**`
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write a failing round-trip test
+
+
+      Append to `tests/unit/test_plan_writer.py`:
+
+      ```python
+      class TestDependsOnRoundTrip:
+          """Writer emits **Depends on:** so that parse -> write -> parse is lossless."""
+
+          def _build_plan_text(self) -> str:
+              return (
+                  "# Fan In Plan\n\n"
+                  "**Spec:** `specs/x.md`\n"
+                  "**Status:** Not Started\n\n"
+                  "**Goal:** Test.\n\n---\n\n"
+                  "## Phase 1: Root A [agentic]\n"
+                  "**Depends on:** —\n\n"
+                  "### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n\n"
+                  "## Phase 2: Root B [agentic]\n"
+                  "**Depends on:** —\n\n"
+                  "### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n\n"
+                  "## Phase 3: Fan in [agentic]\n"
+                  "**Depends on:** Phase 1, Phase 2\n\n"
+                  "### Task 1: Noop\n\n- [ ] **Step 1:** Nothing\n"
+              )
+
+          def test_round_trip_preserves_depends_on(self, tmp_path: Path) -> None:
+              src = tmp_path / "src.md"
+              src.write_text(self._build_plan_text())
+              plan = parse_plan(src)
+
+              dst = tmp_path / "dst.md"
+              write_plan(plan, dst)
+
+              reparsed = parse_plan(dst)
+              assert tuple(p.depends_on for p in reparsed.phases) == ((), (), (1, 2))
+
+          def test_write_emits_emdash_for_roots(self, tmp_path: Path) -> None:
+              src = tmp_path / "src.md"
+              src.write_text(self._build_plan_text())
+              plan = parse_plan(src)
+
+              dst = tmp_path / "dst.md"
+              write_plan(plan, dst)
+
+              text = dst.read_text()
+              assert "**Depends on:** —" in text
+              assert "**Depends on:** Phase 1, Phase 2" in text
+      ```
+
+      Ensure the test imports `parse_plan` and `write_plan` at the top.
+  - id: P1.T2.S2
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/unit/test_plan_writer.py::TestDependsOnRoundTrip -v
+      ```
+
+      Expected: FAIL — writer does not emit the line yet.
+  - id: P1.T2.S3
+    text: |-
+      Emit ` Depends on:**` in the writer**
+
+
+      In `src/vk/plan/writer.py`, after the phase header and any tracking comment are written, emit the `**Depends on:**` line:
+
+      ```python
+      def _format_depends_on(phase: Phase) -> str:
+          if not phase.depends_on:
+              return "**Depends on:** —"
+          refs = ", ".join(f"Phase {n}" for n in phase.depends_on)
+          return f"**Depends on:** {refs}"
+      ```
+
+      Invoke `_format_depends_on(phase)` in the phase-block writer and append it directly after the tracking comment (or directly after the header line if no tracking comment), followed by a blank line and then the task blocks. Preserve existing spacing around task blocks.
+  - id: P1.T2.S4
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/unit/test_plan_writer.py -v
+      ```
+
+      Expected: PASS — both new tests plus all pre-existing writer tests.
+  - id: P1.T2.S5
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/plan/writer.py tests/unit/test_plan_writer.py
+      uv run ruff format --check src/vk/plan/writer.py tests/unit/test_plan_writer.py
+      uv run mypy src/vk/plan/writer.py
+      ```
+
+      Expected: PASS.
+  - id: P1.T2.S6
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/plan/writer.py tests/unit/test_plan_writer.py
+      git commit -m "feat(plan): writer emits **Depends on:** for phased plans"
+      ```
+- number: 3
+  title: 'Dispatch emits one `- Blocked by #N` per declared dep + `phased-dag.md`
+    fixture'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Create the fan-in/fan-out fixture
+
+
+      Create `tests/fixtures/plans/phased-dag.md`:
+
+      ```
+      # Parallel DAG Fixture
+
+      **Spec:** `docs/superpowers/specs/2026-04-20-parallel-dispatch-dag-design.md`
+      **Status:** Not Started
+
+      **Goal:** Exercise fan-in, fan-out, and multi-root shapes for dispatch body tests.
+
+      ---
+
+      ## Phase 1: Scaffold [agentic]
+      **Depends on:** —
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+
+      ## Phase 2: Parallel init [agentic]
+      **Depends on:** —
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+
+      ## Phase 3: Consumer A [agentic]
+      **Depends on:** Phase 1
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+
+      ## Phase 4: Consumer B [agentic]
+      **Depends on:** Phase 2
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+
+      ## Phase 5: Fan in [agentic]
+      **Depends on:** Phase 3, Phase 4
+
+      ### Task 1: Noop
+
+      - [ ] **Step 1:** Nothing
+      ```
+  - id: P1.T3.S2
+    text: |-
+      Write failing unit tests for multi-blocker body emission
+
+
+      Append to `tests/unit/test_dispatch_body.py`:
+
+      ```python
+      class TestMultiBlockerBody:
+          """_build_issue_body emits one '- Blocked by #N' per declared dep."""
+
+          def test_empty_blocker_nums_emits_none(self) -> None:
+              phase = Phase(
+                  number=1, title="Scaffold", tag="agentic",
+                  depends_on=(), tasks=(), tracking_url=None,
+              )
+              body = _build_issue_body(
+                  phase=phase, plan_path=Path("plans/x.md"), target_repo="o/r",
+                  blocker_nums=(), total_phases=3, spec="s.md", goal="g",
+              )
+              assert "None — no blocking phases." in body
+              assert "- Blocked by #" not in body
+
+          def test_single_blocker_emits_one_line(self) -> None:
+              phase = Phase(
+                  number=2, title="Second", tag="agentic",
+                  depends_on=(1,), tasks=(), tracking_url=None,
+              )
+              body = _build_issue_body(
+                  phase=phase, plan_path=Path("plans/x.md"), target_repo="o/r",
+                  blocker_nums=(101,), total_phases=3, spec="s.md", goal="g",
+              )
+              assert body.count("- Blocked by #") == 1
+              assert "- Blocked by #101" in body
+
+          def test_multi_blocker_emits_lines_in_declared_order(self) -> None:
+              phase = Phase(
+                  number=5, title="Fan in", tag="agentic",
+                  depends_on=(3, 4), tasks=(), tracking_url=None,
+              )
+              body = _build_issue_body(
+                  phase=phase, plan_path=Path("plans/x.md"), target_repo="o/r",
+                  blocker_nums=(203, 204), total_phases=5, spec="s.md", goal="g",
+              )
+              idx_a = body.index("- Blocked by #203")
+              idx_b = body.index("- Blocked by #204")
+              assert idx_a < idx_b
+      ```
+  - id: P1.T3.S3
+    text: |-
+      Write a failing integration test for a fan-in dispatch
+
+
+      Append to `tests/integration/test_dispatch.py`:
+
+      ```python
+      class TestDispatchFanIn:
+          """Multi-blocker bodies round-trip via dispatch --yes."""
+
+          @patch("vk.commands.dispatch_cmd.gh")
+          def test_fan_in_body_contains_both_blockers(
+              self, mock_gh: MagicMock, dispatch_config: Path, tmp_repo: Path
+          ) -> None:
+              import shutil
+              src = Path(__file__).parent.parent / "fixtures" / "plans" / "phased-dag.md"
+              plans_dir = tmp_repo / "docs" / "superpowers" / "plans"
+              plans_dir.mkdir(parents=True, exist_ok=True)
+              plan = plans_dir / "2026-04-20-dag.md"
+              shutil.copy(src, plan)
+
+              urls = [
+                  "https://github.com/derio-net/test-repo/issues/101",
+                  "https://github.com/derio-net/test-repo/issues/102",
+                  "https://github.com/derio-net/test-repo/issues/103",
+                  "https://github.com/derio-net/test-repo/issues/104",
+                  "https://github.com/derio-net/test-repo/issues/105",
+              ]
+              mock_gh.create_issue.side_effect = urls
+              mock_gh.extract_issue_number.side_effect = [101, 102, 103, 104, 105]
+              mock_gh.edit_issue_body.return_value = None
+              mock_gh.GhError = __import__("vk.gh", fromlist=["GhError"]).GhError
+
+              result = runner.invoke(
+                  app, ["dispatch", "create", str(plan), "--yes"],
+                  env={"GIT_DIR": str(tmp_repo / ".git")},
+              )
+              assert result.exit_code == 0, result.stdout
+
+              # Phase 5 was the third create call that produced a multi-dep body.
+              phase5_body = [c.kwargs["body"] for c in mock_gh.create_issue.call_args_list][4]
+              assert "- Blocked by #103" in phase5_body
+              assert "- Blocked by #104" in phase5_body
+              # Phase 1 (root) should emit the None literal.
+              phase1_body = [c.kwargs["body"] for c in mock_gh.create_issue.call_args_list][0]
+              assert "None — no blocking phases." in phase1_body
+      ```
+  - id: P1.T3.S4
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/unit/test_dispatch_body.py::TestMultiBlockerBody tests/integration/test_dispatch.py::TestDispatchFanIn -v
+      ```
+
+      Expected: FAIL — signature of `_build_issue_body` still takes `prev_num: int | None` and the create-loop still computes `prev_num = phase_to_issue.get(phase.number - 1)`.
+  - id: P1.T3.S5
+    text: |-
+      Refactor `_build_issue_body` to accept `blocker_nums`
+
+
+      In `src/vk/commands/dispatch_cmd.py`, replace the `prev_num` parameter with `blocker_nums: tuple[int, ...]`:
+
+      ```python
+      def _build_issue_body(
+          phase: Phase,
+          plan_path: Path,
+          target_repo: str,
+          blocker_nums: tuple[int, ...],
+          total_phases: int,
+          spec: str,
+          goal: str,
+      ) -> str:
+          if not blocker_nums:
+              deps_block = "None — no blocking phases."
+          else:
+              deps_block = "\n".join(f"- Blocked by #{n}" for n in blocker_nums)
+
+          tracking_block = (
+              f"📦 Repo:   {target_repo}\n"
+              f"📋 Plan:   {plan_path}\n"
+              f"📐 Spec:   {spec}\n"
+              f"🎯 Phase:  {phase.number}/{total_phases} — {phase.title} [{phase.tag}]\n"
+              f"🔗 Issue:  (assigned on create)\n"
+              f"\n"
+              f"**Goal (from plan):** {goal}\n"
+          )
+
+          return (
+              f"{tracking_block}"
+              f"\n---\n\n"
+              f"## Instruction\n\n"
+              f"Use superpowers-for-vk:vk-execute to implement Phase {phase.number} of this plan.\n\n"
+              f"## Workspace\n\n"
+              f"Repos: {target_repo}\n\n"
+              f"## Dependencies\n\n"
+              f"{deps_block}\n"
+          )
+      ```
+  - id: P1.T3.S6
+    text: |-
+      Update `dispatch_create` to compute `blocker_nums` from `depends_on`
+
+
+      In `src/vk/commands/dispatch_cmd.py::dispatch_create`, replace the existing `prev_num = phase_to_issue.get(phase.number - 1)` line with:
+
+      ```python
+      try:
+          blocker_nums = tuple(phase_to_issue[dep] for dep in phase.depends_on)
+      except KeyError as exc:
+          err_console.print(
+              f"Error: Phase {phase.number} depends on Phase {exc.args[0]}, "
+              f"but that phase has no dispatched Issue. "
+              f"Run 'vk dispatch create <plan>' again — an earlier phase may have failed."
+          )
+          raise typer.Exit(3)
+      ```
+
+      Update the `_build_issue_body(...)` call to pass `blocker_nums=blocker_nums` instead of `prev_num=prev_num`.
+  - id: P1.T3.S7
+    text: |-
+      Update `migrate` to use the same signature
+
+
+      In `src/vk/commands/dispatch_cmd.py::migrate`, the block that computes `prev_num` from `tracked[phase.number - 1]` becomes:
+
+      ```python
+      try:
+          blocker_nums = tuple(
+              gh.extract_issue_number(tracked[dep]) for dep in phase.depends_on
+          )
+      except KeyError as exc:
+          err_console.print(
+              f"Error: Phase {phase.number} depends on Phase {exc.args[0]}, "
+              f"but that phase has no tracking comment. Cannot migrate safely."
+          )
+          raise typer.Exit(2)
+      ```
+
+      Update the `_build_issue_body(...)` call in `migrate` to pass `blocker_nums=blocker_nums`.
+  - id: P1.T3.S8
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py -v
+      ```
+
+      Expected: PASS — new tests plus all pre-existing dispatch tests (they construct `Phase` fixtures; check that each one now passes `depends_on=...`).
+  - id: P1.T3.S9
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/commands/dispatch_cmd.py tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py
+      uv run ruff format --check src/vk/commands/dispatch_cmd.py tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py
+      uv run mypy src/vk/commands/dispatch_cmd.py
+      ```
+
+      Expected: PASS.
+  - id: P1.T3.S10
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/commands/dispatch_cmd.py tests/unit/test_dispatch_body.py tests/integration/test_dispatch.py tests/fixtures/plans/phased-dag.md
+      git commit -m "feat(dispatch): emit one '- Blocked by #N' per declared dep"
+      ```
+- number: 4
+  title: Body validator relaxation
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Write failing tests for the relaxed validator
+
+
+      Append to `tests/unit/test_dispatch_body_validator.py`:
+
+      ```python
+      class TestRelaxedValidator:
+          """Validator accepts None literal or >=1 '- Blocked by #N' lines."""
+
+          def _body_with_deps(self, deps_block: str) -> str:
+              return (
+                  "📦 Repo: o/r\n\n---\n\n"
+                  "## Instruction\n\nDo stuff.\n\n"
+                  "## Workspace\n\nRepos: o/r\n\n"
+                  "## Dependencies\n\n"
+                  f"{deps_block}\n"
+              )
+
+          def test_accepts_none_literal_for_root_phase(self) -> None:
+              validate_issue_body(self._body_with_deps("None — no blocking phases."), phase_number=1)
+
+          def test_accepts_single_blocker_for_non_root(self) -> None:
+              validate_issue_body(self._body_with_deps("- Blocked by #42"), phase_number=2)
+
+          def test_accepts_multiple_blockers(self) -> None:
+              validate_issue_body(
+                  self._body_with_deps("- Blocked by #42\n- Blocked by #43"), phase_number=3,
+              )
+
+          def test_rejects_missing_dependencies_section(self) -> None:
+              body = "## Instruction\n\nDo.\n\n## Workspace\n\nRepos: o/r\n\n"
+              with pytest.raises(BodyValidationError, match="Dependencies"):
+                  validate_issue_body(body, phase_number=2)
+
+          def test_rejects_undashed_blocker_line(self) -> None:
+              body = self._body_with_deps("Blocked by #42")
+              with pytest.raises(BodyValidationError, match="dash-prefixed"):
+                  validate_issue_body(body, phase_number=2)
+
+          def test_rejects_empty_dependencies_section_for_non_root(self) -> None:
+              body = self._body_with_deps("")
+              with pytest.raises(BodyValidationError):
+                  validate_issue_body(body, phase_number=2)
+      ```
+  - id: P1.T4.S2
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/unit/test_dispatch_body_validator.py::TestRelaxedValidator -v
+      ```
+
+      Expected: FAIL on the `None` literal test (today's validator rejects it for phase > 0).
+  - id: P1.T4.S3
+    text: |-
+      Relax the validator
+
+
+      Replace the contents of `src/vk/commands/dispatch_body_validator.py::validate_issue_body` with logic that accepts either form:
+
+      ```python
+      _REQUIRED_SECTIONS = ("## Instruction", "## Workspace", "## Dependencies")
+      _NONE_LITERAL = "None — no blocking phases."
+
+
+      def validate_issue_body(body: str, phase_number: int) -> None:
+          for section in _REQUIRED_SECTIONS:
+              if section not in body:
+                  raise BodyValidationError(
+                      f"Generated body missing required section '{section}'. "
+                      f"The VK Issue Bridge will fail to parse this Issue. "
+                      f"Fix: investigate _build_issue_body in dispatch_cmd.py."
+                  )
+
+          deps_idx = body.index("## Dependencies")
+          deps_block = body[deps_idx:].split("\n\n", 2)[1] if "\n\n" in body[deps_idx:] else ""
+          has_none = _NONE_LITERAL in deps_block
+          dash_lines = [ln for ln in deps_block.splitlines() if ln.startswith("- Blocked by #")]
+          undashed = [ln for ln in deps_block.splitlines()
+                      if ln.strip().startswith("Blocked by #") and not ln.startswith("- Blocked by #")]
+
+          if undashed:
+              raise BodyValidationError(
+                  f"Phase {phase_number}: '## Dependencies' contains a non-dash-prefixed "
+                  f"'Blocked by #N' line. The bridge's dep-gating regex requires the dash. "
+                  f"Fix: investigate _build_issue_body in dispatch_cmd.py."
+              )
+
+          if has_none:
+              return
+
+          if not dash_lines:
+              raise BodyValidationError(
+                  f"Phase {phase_number}: '## Dependencies' is empty or malformed. "
+                  f"It must contain either 'None — no blocking phases.' "
+                  f"or one or more '- Blocked by #N' lines."
+              )
+      ```
+  - id: P1.T4.S4
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/unit/test_dispatch_body_validator.py -v
+      ```
+
+      Expected: PASS — all 6 new tests plus all pre-existing validator tests.
+  - id: P1.T4.S5
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/commands/dispatch_body_validator.py tests/unit/test_dispatch_body_validator.py
+      uv run ruff format --check src/vk/commands/dispatch_body_validator.py tests/unit/test_dispatch_body_validator.py
+      uv run mypy src/vk/commands/dispatch_body_validator.py
+      ```
+
+      Expected: PASS.
+  - id: P1.T4.S6
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/commands/dispatch_body_validator.py tests/unit/test_dispatch_body_validator.py
+      git commit -m "feat(dispatch): body validator accepts None literal or >=1 blocker lines"
+      ```
+- number: 5
+  title: Structural DAG validators in self-review and dispatch --dry-run
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write failing tests for `validate_dag`
+
+
+      Create `tests/unit/test_plan_validate.py`:
+
+      ```python
+      from __future__ import annotations
+
+      import pytest
+
+      from vk.plan.models import Phase, Plan, PlanFormat
+      from vk.plan.validate import DagValidationError, validate_dag
+
+
+      def _phase(number: int, depends_on: tuple[int, ...]) -> Phase:
+          return Phase(
+              number=number, title=f"Phase {number}", tag="agentic",
+              depends_on=depends_on, tasks=(), tracking_url=None,
+          )
+
+
+      def _plan(phases: tuple[Phase, ...]) -> Plan:
+          return Plan(
+              title="T", spec="s.md", status="Not Started", goal="g",
+              format=PlanFormat.PHASED, phases=phases, tasks=(),
+          )
+
+
+      class TestValidateDag:
+          def test_root_only_plan_passes(self) -> None:
+              validate_dag(_plan((_phase(1, ()),)))
+
+          def test_linear_plan_passes(self) -> None:
+              validate_dag(_plan((_phase(1, ()), _phase(2, (1,)), _phase(3, (2,)))))
+
+          def test_fan_in_passes(self) -> None:
+              validate_dag(_plan((_phase(1, ()), _phase(2, ()), _phase(3, (1, 2)))))
+
+          def test_self_reference_fails(self) -> None:
+              with pytest.raises(DagValidationError, match="Phase 2 depends on itself"):
+                  validate_dag(_plan((_phase(1, ()), _phase(2, (2,)))))
+
+          def test_forward_reference_fails(self) -> None:
+              with pytest.raises(DagValidationError, match="forward reference"):
+                  validate_dag(_plan((_phase(1, (2,)), _phase(2, ()))))
+
+          def test_unknown_reference_fails(self) -> None:
+              with pytest.raises(DagValidationError, match="does not exist"):
+                  validate_dag(_plan((_phase(1, ()), _phase(2, (99,)))))
+
+          def test_absent_depends_on_is_ignored_in_phase_1_window(self) -> None:
+              """Pre-DAG plans (no **Depends on:** anywhere) pass structural validation."""
+              validate_dag(_plan((_phase(1, ()), _phase(2, ()), _phase(3, ()))))
+      ```
+
+      Also append to `tests/unit/test_cli.py`:
+
+      ```python
+      class TestSelfReviewDagChecks:
+          def test_self_review_rejects_cycle(self, tmp_path: Path) -> None:
+              # Cycle can only arise from forward-ref under backward-only rule,
+              # so we construct a forward reference and confirm the specific message.
+              plan = tmp_path / "p.md"
+              plan.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n**Depends on:** Phase 2\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+                  "## Phase 2: B [agentic]\n**Depends on:** —\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              result = runner.invoke(app, ["plan", "self-review", str(plan)])
+              assert result.exit_code != 0
+              assert "forward reference" in (result.stdout + (result.stderr or ""))
+
+          def test_self_review_rejects_unknown_ref(self, tmp_path: Path) -> None:
+              plan = tmp_path / "p.md"
+              plan.write_text(
+                  "# T\n\n**Spec:** `s.md`\n**Status:** Not Started\n\n**Goal:** g\n\n---\n\n"
+                  "## Phase 1: A [agentic]\n**Depends on:** —\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n\n"
+                  "## Phase 2: B [agentic]\n**Depends on:** Phase 99\n\n"
+                  "### Task 1: T\n\n- [ ] **Step 1:** s\n"
+              )
+              result = runner.invoke(app, ["plan", "self-review", str(plan)])
+              assert result.exit_code != 0
+              assert "does not exist" in (result.stdout + (result.stderr or ""))
+      ```
+  - id: P1.T5.S2
+    text: |-
+      Run the tests to confirm they fail
+
+
+      ```
+      uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py::TestSelfReviewDagChecks -v
+      ```
+
+      Expected: FAIL — `validate_dag` does not exist and self-review doesn't call it.
+  - id: P1.T5.S3
+    text: |-
+      Implement `validate_dag`
+
+
+      Create `src/vk/plan/validate.py`:
+
+      ```python
+      """Structural validation for phase dependency declarations."""
+
+      from __future__ import annotations
+
+      from vk.plan.models import Plan
+
+
+      class DagValidationError(ValueError):
+          """Raised when a plan's declared DAG is structurally invalid."""
+
+
+      def validate_dag(plan: Plan) -> None:
+          """Check cycle, forward-ref, self-ref, unknown-ref. Skip missing-line check.
+
+          Backward-only deps (depends_on[i] < i) make cycles impossible unless a
+          forward reference is present; checking forward-ref is the cycle check.
+          """
+          known = {p.number for p in plan.phases}
+          for phase in plan.phases:
+              for dep in phase.depends_on:
+                  if dep == phase.number:
+                      raise DagValidationError(
+                          f"Phase {phase.number} depends on itself."
+                      )
+                  if dep not in known:
+                      raise DagValidationError(
+                          f"Phase {phase.number} depends on Phase {dep}, "
+                          f"which does not exist in this plan."
+                      )
+                  if dep >= phase.number:
+                      raise DagValidationError(
+                          f"Phase {phase.number} depends on Phase {dep} — "
+                          f"forward reference; only backward deps are permitted."
+                      )
+      ```
+  - id: P1.T5.S4
+    text: |-
+      Wire `validate_dag` into `vk plan self-review`
+
+
+      In `src/vk/commands/plan_cmd.py::self_review`, after the plan parses successfully, call `validate_dag(plan)` and map `DagValidationError` to a user-facing error with `typer.Exit(1)`.
+
+      ```python
+      from vk.plan.validate import DagValidationError, validate_dag
+
+      # ...inside self_review, after parse_plan():
+      try:
+          validate_dag(plan)
+      except DagValidationError as exc:
+          err_console.print(f"Error: {exc}")
+          raise typer.Exit(1)
+      ```
+  - id: P1.T5.S5
+    text: |-
+      Wire `validate_dag` into `vk dispatch --dry-run`
+
+
+      In `src/vk/commands/dispatch_cmd.py::dispatch_create`, after `_parse_and_validate(plan_path)` returns the `plan`, and before building any Issue body, call `validate_dag(plan)` with the same error mapping. Place it under the existing gate check so refusal reasons surface in dependency order: gate → parse → DAG validation.
+  - id: P1.T5.S6
+    text: |-
+      Run the tests to confirm they pass
+
+
+      ```
+      uv run pytest tests/unit/test_plan_validate.py tests/unit/test_cli.py -v
+      ```
+
+      Expected: PASS — structural validator tests + self-review CLI tests + all pre-existing tests.
+  - id: P1.T5.S7
+    text: |-
+      Quality gates
+
+
+      ```
+      uv run ruff check src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py tests/unit/test_cli.py
+      uv run ruff format --check src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py tests/unit/test_cli.py
+      uv run mypy src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py
+      ```
+
+      Expected: PASS.
+  - id: P1.T5.S8
+    text: |-
+      Commit
+
+
+      ```
+      git add src/vk/plan/validate.py src/vk/commands/plan_cmd.py src/vk/commands/dispatch_cmd.py tests/unit/test_plan_validate.py tests/unit/test_cli.py
+      git commit -m "feat(plan): structural DAG validator in self-review and dispatch --dry-run"
+      ```
+
+      ### Phase 1 exit
+
+      Run full quality gates before opening the Phase 1 PR:
+
+      ```
+      uv run pytest -q --no-cov
+      uv run ruff check src/ tests/
+      uv run ruff format --check src/ tests/
+      uv run mypy src/
+      ```
+
+      All must PASS. Open the PR with title `feat: parallel dispatch DAG — grammar, parser, validator` and body referencing Phase 1 of this plan.
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S8:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S9:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S10:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S8:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

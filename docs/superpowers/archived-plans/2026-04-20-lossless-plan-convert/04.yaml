@@ -1,0 +1,102 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Dotted step labels (`Step 0.1`, `Step 1.10`)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: 'Accept dotted step labels while keeping `number: int` for existing callers'
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Extend fixture with a `Task 2` using `Step 0.1` / `Step 0.2` labels.
+
+
+      Append to `flat-loose-steps.md`. Add `TestDottedStepLabels::test_dotted_steps_parsed` asserting `len(task2.steps) == 2`, and `test_dotted_step_label_preserved` asserting `**Step 0.1: ...**` survives round-trip.
+  - id: P4.T1.S2
+    text: |-
+      Add `label: str | None = None` to `Step`.
+
+
+      Keep `number: int` so every existing `Step(number=1, ...)` test call-site (30+ across `test_models.py`, `test_plan_writer.py`, etc.) keeps compiling. `label` is the raw token; `number` is the integer leading component for ordering/arithmetic.
+  - id: P4.T1.S3
+    text: |-
+      Change `_RE_STEP`'s number group to `(\d+(?:\.\d+)*)` and update `_parse_steps` to derive `number` / `label`.
+
+
+      ```python
+      raw_label = sm.group(2)
+      number = int(raw_label.split(".", 1)[0])
+      label = raw_label if "." in raw_label else None
+      ```
+
+      Dotted labels populate `label`; plain `1`, `2`, `3` keep `label=None` and round-trip as before.
+  - id: P4.T1.S4
+    text: |-
+      Update `_write_steps` to prefer `label` when present.
+
+
+      ```python
+      label = step.label if step.label is not None else str(step.number)
+      lines.append(f"- [{step.state}] **Step {label}: {step.title}**")
+      ```
+  - id: P4.T1.S5
+    text: |-
+      Verify against kid-laptops plan 8.
+
+
+      ```bash
+      cp /path/to/kid-laptops/.../2026-04-08-kid-laptops-8-remote-desktop.md /tmp/plan8-work.md
+      uv run --group dev vk plan convert /tmp/plan8-work.md --one-per-task --yes
+      grep -c "^- \[[x -]\] \*\*Step " /tmp/plan8-work.md  # expect 48, not 0
+      ```
+  - id: P4.T1.S6
+    text: |-
+      Commit phases 1–4 together and run the full suite.
+
+
+        ```bash
+        git checkout -b fix/plan-convert-content-loss
+        git add src/vk/plan/models.py src/vk/plan/parser.py src/vk/plan/writer.py \
+                src/vk/plan/convert.py tests/unit/test_plan_loose_format.py \
+                tests/fixtures/plans/flat-loose-steps.md
+        git commit -m "fix(plan): preserve step bodies, file-mention verbs, preamble, and dotted labels on convert"
+        uv run --group dev python -m pytest --no-header -q   # 319 passed, 9 skipped, 79% coverage
+        ```
+
+        Shipped as commit `50d77d2` on branch `fix/plan-convert-content-loss`.
+
+      ---
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

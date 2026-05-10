@@ -1,0 +1,389 @@
+schema_version: 2
+phase:
+  number: 1
+  title: gh helpers, admin module skeleton, repo enumeration
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/63
+tasks:
+- number: 1
+  title: New `gh.py` helpers
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      TDD — `list_labels`, `list_repos`, `delete_label`
+
+
+      Add to `tests/unit/test_gh.py`:
+
+      ```python
+      class TestListLabels:
+          def test_returns_parsed_label_objects(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              import json
+              captured: list[list[str]] = []
+              def fake(args: list[str]) -> str:
+                  captured.append(args)
+                  return json.dumps([
+                      {"name": "vk-ready", "color": "0E8AE6", "description": "queued"},
+                      {"name": "bug",      "color": "d73a4a", "description": "Something's wrong"},
+                  ])
+              monkeypatch.setattr(gh, "_run_gh", fake)
+              labels = gh.list_labels(repo="o/r")
+              assert labels[0]["name"]  == "vk-ready"
+              assert labels[0]["color"] == "0E8AE6"
+              assert labels[1]["name"]  == "bug"
+              assert captured[0] == [
+                  "label", "list", "--repo", "o/r",
+                  "--json", "name,color,description",
+                  "--limit", "200",
+              ]
+
+
+      class TestListRepos:
+          def test_returns_non_archived_repos(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              import json
+              def fake(args: list[str]) -> str:
+                  return json.dumps([
+                      {"name": "frank",    "isArchived": False},
+                      {"name": "old-repo", "isArchived": True},
+                      {"name": "willikins", "isArchived": False},
+                  ])
+              monkeypatch.setattr(gh, "_run_gh", fake)
+              repos = gh.list_repos(owner="derio-net")
+              assert [r["name"] for r in repos] == ["frank", "willikins"]
+
+
+      class TestDeleteLabel:
+          def test_emits_delete_yes(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              captured: list[list[str]] = []
+              monkeypatch.setattr(gh, "_run_gh",
+                                  lambda args: captured.append(args) or "")
+              gh.delete_label(repo="o/r", name="bug")
+              assert captured == [[
+                  "label", "delete", "bug", "--repo", "o/r", "--yes",
+              ]]
+      ```
+  - id: P1.T1.S2
+    text: |-
+      Implement `list_labels`, `list_repos`, `delete_label`
+
+
+      Add to `src/vk/gh.py`:
+
+      ```python
+      def list_labels(*, repo: str) -> list[dict]:
+          """Return existing labels on the repo as parsed JSON."""
+          import json
+          out = _run_gh([
+              "label", "list", "--repo", repo,
+              "--json", "name,color,description",
+              "--limit", "200",
+          ])
+          return json.loads(out) if out else []
+
+
+      def list_repos(*, owner: str) -> list[dict]:
+          """Return non-archived repos under the given owner.
+
+          Returns repo objects with `name` (and other fields gh exposes).
+          """
+          import json
+          out = _run_gh([
+              "repo", "list", owner,
+              "--json", "name,isArchived",
+              "--limit", "200",
+          ])
+          repos = json.loads(out) if out else []
+          return [r for r in repos if not r.get("isArchived", False)]
+
+
+      def delete_label(*, repo: str, name: str) -> None:
+          """Delete a label from the repo. `--yes` skips gh's confirmation prompt."""
+          _run_gh(["label", "delete", name, "--repo", repo, "--yes"])
+      ```
+  - id: P1.T1.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_gh.py -q --no-cov
+      ```
+
+      Expected: existing + 3 new pass.
+- number: 2
+  title: '`vk admin` skeleton'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Create `admin_cmd.py` skeleton
+
+
+      `src/vk/commands/admin_cmd.py`:
+
+      ```python
+      """vk admin — operator-driven cross-repo administration."""
+
+      from __future__ import annotations
+
+      import typer
+      from rich.console import Console
+
+      console = Console()
+      err_console = Console(stderr=True)
+
+      admin_app = typer.Typer(help="Operator-driven cross-repo administration.")
+
+
+      @admin_app.command(name="labels-sync")
+      def labels_sync(
+          owner: str = typer.Option(..., "--owner", help="GitHub owner / org."),
+          repo: str | None = typer.Option(
+              None, "--repo", help="Single repo (without owner). Default: all repos under owner."
+          ),
+          remove_defaults: bool = typer.Option(
+              False, "--remove-defaults",
+              help="Also remove GitHub default labels with zero attached Issues."
+          ),
+          dry_run: bool = typer.Option(
+              True, "--dry-run/--apply",
+              help="Print planned changes without mutating (default). Use --apply or --yes."
+          ),
+          yes: bool = typer.Option(False, "--yes", help="Apply changes without confirmation."),
+      ) -> None:
+          """Sync repo labels to the canonical registry across one or many repos."""
+          if yes:
+              dry_run = False
+          # Body is wired in Phase 2 of this plan; apply mode in Phase 3.
+          raise NotImplementedError("labels-sync body lands in Phase 2 of this plan.")
+      ```
+  - id: P1.T2.S2
+    text: |-
+      Wire into `main.py`
+
+
+      In `src/vk/main.py`, register the new app alongside existing groups:
+
+      ```bash
+      grep -n "add_typer\|Typer" src/vk/main.py
+      ```
+
+      Add: `app.add_typer(admin_app, name="admin")`
+  - id: P1.T2.S3
+    text: |-
+      Skeleton-level tests
+
+
+      `tests/unit/test_admin_skeleton.py`:
+
+      ```python
+      """Skeleton tests for vk admin labels-sync — body is in later phases."""
+
+      from typer.testing import CliRunner
+
+      from vk.commands.admin_cmd import admin_app
+
+
+      runner = CliRunner()
+
+
+      def test_labels_sync_help_lists_flags() -> None:
+          result = runner.invoke(admin_app, ["labels-sync", "--help"])
+          assert result.exit_code == 0
+          for flag in ("--owner", "--repo", "--remove-defaults",
+                       "--dry-run", "--yes"):
+              assert flag in result.stdout
+
+
+      def test_labels_sync_requires_owner() -> None:
+          result = runner.invoke(admin_app, ["labels-sync"])
+          assert result.exit_code != 0  # missing --owner
+      ```
+  - id: P1.T2.S4
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_admin_skeleton.py -q --no-cov
+      ```
+
+      Expected: 2 passed.
+- number: 3
+  title: Repo enumeration logic
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      TDD — `_resolve_target_repos`
+
+
+      `tests/unit/test_admin_repo_enumeration.py`:
+
+      ```python
+      """Tests for the repo-enumeration helper used by vk admin labels-sync."""
+
+      import pytest
+
+      from vk import gh
+      from vk.commands.admin_cmd import _resolve_target_repos
+
+
+      class TestResolveTargetReposExplicit:
+          def test_single_repo_skips_listing(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              called = {"n": 0}
+              def fake_list(*, owner: str) -> list[dict]:
+                  called["n"] += 1
+                  return []
+              monkeypatch.setattr(gh, "list_repos", fake_list)
+              result = _resolve_target_repos(owner="derio-net", repo="frank")
+              assert result == ["derio-net/frank"]
+              assert called["n"] == 0  # never called list_repos
+
+
+      class TestResolveTargetReposOrgWide:
+          def test_lists_all_non_archived(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              monkeypatch.setattr(gh, "list_repos", lambda *, owner: [
+                  {"name": "frank"}, {"name": "willikins"}
+              ])
+              result = _resolve_target_repos(owner="derio-net", repo=None)
+              assert result == ["derio-net/frank", "derio-net/willikins"]
+      ```
+  - id: P1.T3.S2
+    text: |-
+      Implement `_resolve_target_repos`
+
+
+      In `src/vk/commands/admin_cmd.py`:
+
+      ```python
+      from vk import gh
+
+
+      def _resolve_target_repos(*, owner: str, repo: str | None) -> list[str]:
+          """Resolve target repos as `owner/name` slugs.
+
+          With explicit `repo`, returns the single slug. Without, enumerates
+          non-archived repos under `owner` via gh.list_repos.
+          """
+          if repo:
+              return [f"{owner}/{repo}"]
+          return [f"{owner}/{r['name']}" for r in gh.list_repos(owner=owner)]
+      ```
+  - id: P1.T3.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_admin_repo_enumeration.py -q --no-cov
+      ```
+
+      Expected: 2 passed.
+- number: 4
+  title: Format, type-check, full suite, commit
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Format and type-check
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
+      ```
+
+      Expected: clean.
+  - id: P1.T4.S2
+    text: |-
+      Full suite
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: green.
+  - id: P1.T4.S3
+    text: |-
+      Commit and PR
+
+
+      ```bash
+      git checkout -b labels-sync-phase-1-skeleton
+      git add src/vk/gh.py src/vk/commands/admin_cmd.py src/vk/main.py \
+              tests/unit/test_gh.py tests/unit/test_admin_skeleton.py \
+              tests/unit/test_admin_repo_enumeration.py
+      git commit -m "feat(admin): vk admin labels-sync skeleton + gh helpers"
+      git push -u origin labels-sync-phase-1-skeleton
+      gh pr create --title "Labels-sync Phase 1 · Module skeleton + gh helpers + repo enumeration" \
+        --body "Foundation for vk admin labels-sync. No diff/apply logic yet — that lands in Phase 2."
+      ```
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

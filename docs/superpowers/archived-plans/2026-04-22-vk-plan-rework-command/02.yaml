@@ -1,0 +1,673 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '`rework.py` core — template, numbering, Origin helpers'
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/38
+tasks:
+- number: 1
+  title: '`next_rework_number` with cross-dir collision guard'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write failing tests for `next_rework_number`
+
+
+      Create `tests/unit/test_rework.py`:
+
+      ```python
+      """Unit tests for src/vk/plan/rework.py."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      import pytest
+
+      from vk.plan.rework import next_rework_number
+
+
+      def _touch(p: Path) -> None:
+          p.parent.mkdir(parents=True, exist_ok=True)
+          p.write_text("# placeholder\n")
+
+
+      class TestNextReworkNumber:
+          def test_no_existing_reworks_returns_1(self, tmp_path: Path) -> None:
+              parent = tmp_path / "docs/superpowers/plans/2026-04-08-foo.md"
+              _touch(parent)
+              assert next_rework_number(parent, repo_root=tmp_path) == 1
+
+          def test_active_rework_1_returns_2(self, tmp_path: Path) -> None:
+              parent = tmp_path / "docs/superpowers/plans/2026-04-08-foo.md"
+              _touch(parent)
+              _touch(tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-1.md")
+              assert next_rework_number(parent, repo_root=tmp_path) == 2
+
+          def test_archived_rework_1_returns_2(self, tmp_path: Path) -> None:
+              parent = tmp_path / "docs/superpowers/plans/2026-04-08-foo.md"
+              _touch(parent)
+              _touch(tmp_path / "docs/superpowers/archived-plans/2026-04-08-foo-rework-1.md")
+              assert next_rework_number(parent, repo_root=tmp_path) == 2
+
+          def test_gaps_tolerated(self, tmp_path: Path) -> None:
+              parent = tmp_path / "docs/superpowers/plans/2026-04-08-foo.md"
+              _touch(parent)
+              _touch(tmp_path / "docs/superpowers/archived-plans/2026-04-08-foo-rework-1.md")
+              _touch(tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-3.md")
+              assert next_rework_number(parent, repo_root=tmp_path) == 4
+
+          def test_collision_across_dirs_raises(self, tmp_path: Path) -> None:
+              parent = tmp_path / "docs/superpowers/plans/2026-04-08-foo.md"
+              _touch(parent)
+              _touch(tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-1.md")
+              _touch(tmp_path / "docs/superpowers/archived-plans/2026-04-08-foo-rework-1.md")
+              with pytest.raises(ValueError, match="ambiguous rework state"):
+                  next_rework_number(parent, repo_root=tmp_path)
+
+          def test_concurrent_active_reworks_allowed(self, tmp_path: Path) -> None:
+              parent = tmp_path / "docs/superpowers/plans/2026-04-08-foo.md"
+              _touch(parent)
+              _touch(tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-1.md")
+              _touch(tmp_path / "docs/superpowers/plans/2026-04-08-foo-rework-2.md")
+              assert next_rework_number(parent, repo_root=tmp_path) == 3
+      ```
+
+      Run: `uv run pytest tests/unit/test_rework.py -x -q` — expect import failure (file doesn't exist yet).
+  - id: P2.T1.S2
+    text: |-
+      Create `src/vk/plan/rework.py` with `next_rework_number`
+
+
+      ```python
+      """Rework-plan scaffolding, Origin-table I/O, and numbering helpers.
+
+      Sister module to ``src/vk/plan/convert.py`` and ``src/vk/plan/format.py``. The
+      command-level wrappers in ``src/vk/commands/plan_cmd.py`` delegate here; this
+      module has no typer dependency.
+      """
+
+      from __future__ import annotations
+
+      import re
+      from pathlib import Path
+
+      from vk.plan.filename import derive_slug
+
+      _REWORK_NUM_RE = re.compile(r"-rework-(\d+)\.md$")
+
+
+      def next_rework_number(parent_path: Path, *, repo_root: Path) -> int:
+          """Return the next available rework number for ``parent_path``.
+
+          Scans ``docs/superpowers/plans/`` and ``docs/superpowers/archived-plans/``
+          for files matching ``<date>-<slug>-rework-<N>.md``. Raises ``ValueError``
+          on the same ``N`` appearing in both directories (spec D10 / §4).
+          Tolerates gaps — returns ``max(N) + 1`` over the combined set.
+          """
+          slug = derive_slug(parent_path)
+          date_prefix = parent_path.stem[:10]  # YYYY-MM-DD
+          prefix = f"{date_prefix}-{slug}"
+
+          plans_dir = repo_root / "docs/superpowers/plans"
+          archived_dir = repo_root / "docs/superpowers/archived-plans"
+
+          def _scan(dir_: Path) -> set[int]:
+              if not dir_.is_dir():
+                  return set()
+              out: set[int] = set()
+              for p in dir_.iterdir():
+                  if not p.is_file() or not p.name.startswith(prefix):
+                      continue
+                  m = _REWORK_NUM_RE.search(p.name)
+                  if m:
+                      out.add(int(m.group(1)))
+              return out
+
+          in_plans = _scan(plans_dir)
+          in_archived = _scan(archived_dir)
+
+          collision = in_plans & in_archived
+          if collision:
+              n = sorted(collision)[0]
+              raise ValueError(
+                  f"ambiguous rework state: rework-{n} exists in both plans/ and "
+                  f"archived-plans/. Resolve manually before scaffolding."
+              )
+
+          combined = in_plans | in_archived
+          return max(combined) + 1 if combined else 1
+      ```
+
+      Run: `uv run pytest tests/unit/test_rework.py -x -q` — expect green.
+- number: 2
+  title: Template constant and `render_scaffold()`
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Write failing tests for `render_scaffold`
+
+
+      Append to `tests/unit/test_rework.py`:
+
+      ```python
+      from vk.plan.rework import render_scaffold
+
+
+      class TestRenderScaffold:
+          def test_archived_parent_with_spec_and_title(self) -> None:
+              out = render_scaffold(
+                  parent_title="Parental Controls Plan",
+                  parent_slug_date="2026-04-08-kid-laptops-5-parental-controls",
+                  spec="docs/superpowers/specs/2026-04-07-kid-laptops-design.md",
+                  parent_rel_path="docs/superpowers/archived-plans/2026-04-08-kid-laptops-5-parental-controls.md",
+                  parent_archived=True,
+                  n=1,
+                  prior_rework_rel_path=None,
+              )
+              assert out.startswith("# Parental Controls Plan — Rework 1\n")
+              assert "**Spec:** `docs/superpowers/specs/2026-04-07-kid-laptops-design.md`" in out
+              assert "(merged + archived)" in out
+              assert "**Prior rework:**" not in out
+              assert "## Origin" in out
+              assert "| # | Item | Source | Track |" in out
+              assert "## Definition of Done" in out
+
+          def test_unarchived_parent_annotation(self) -> None:
+              out = render_scaffold(
+                  parent_title="Foo",
+                  parent_slug_date="2026-04-08-foo",
+                  spec="s.md",
+                  parent_rel_path="docs/superpowers/plans/2026-04-08-foo.md",
+                  parent_archived=False,
+                  n=1,
+                  prior_rework_rel_path=None,
+              )
+              assert "(not yet archived)" in out
+
+          def test_prior_rework_rendered(self) -> None:
+              out = render_scaffold(
+                  parent_title="Foo",
+                  parent_slug_date="2026-04-08-foo",
+                  spec="s.md",
+                  parent_rel_path="docs/superpowers/archived-plans/2026-04-08-foo.md",
+                  parent_archived=True,
+                  n=2,
+                  prior_rework_rel_path="docs/superpowers/archived-plans/2026-04-08-foo-rework-1.md",
+              )
+              assert "**Prior rework:** `docs/superpowers/archived-plans/2026-04-08-foo-rework-1.md`" in out
+              assert out.split("# Foo — Rework 2")[0] == ""
+
+          def test_no_spec_line_when_spec_none(self) -> None:
+              out = render_scaffold(
+                  parent_title="Foo",
+                  parent_slug_date="2026-04-08-foo",
+                  spec=None,
+                  parent_rel_path="docs/superpowers/archived-plans/2026-04-08-foo.md",
+                  parent_archived=True,
+                  n=1,
+                  prior_rework_rel_path=None,
+              )
+              assert "**Spec:**" not in out
+      ```
+
+      Run tests — expect import failure on `render_scaffold`.
+  - id: P2.T2.S2
+    text: |-
+      Add the template literal and `render_scaffold()` to `rework.py`
+
+
+      Append to `src/vk/plan/rework.py`:
+
+      ```python
+      _SCAFFOLD_TEMPLATE = """\
+      # {title}
+
+      > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+      {spec_line}**Parent plan:** `{parent_rel_path}` {parent_annotation}
+      {prior_rework_line}**Status:** Not Started
+
+      **Goal:** [Address rework items on {parent_slug_date} without reopening the parent.]
+
+      ---
+
+      ## Origin
+
+      | # | Item | Source | Track |
+      |---|------|--------|-------|
+
+      ---
+
+      ## Definition of Done
+
+      - [ ] TODO: echo each resolved origin item here when the rework completes.
+      """
+
+
+      def render_scaffold(
+          *,
+          parent_title: str,
+          parent_slug_date: str,
+          spec: str | None,
+          parent_rel_path: str,
+          parent_archived: bool,
+          n: int,
+          prior_rework_rel_path: str | None,
+      ) -> str:
+          """Render the rework scaffold per spec §3.
+
+          Interpolation rules (spec §3):
+          - ``spec``: if ``None``, the whole ``**Spec:** ...`` line is omitted.
+          - ``parent_annotation``: ``(merged + archived)`` or ``(not yet archived)``.
+          - ``prior_rework_rel_path``: if ``None``, the line is omitted entirely
+            (not rendered with ``—``).
+          - ``title``: caller is responsible for passing ``"<parent_title> — Rework N"``
+            or the fallback ``"Rework N for <slug>"``.
+          """
+          title = f"{parent_title} — Rework {n}" if parent_title else f"Rework {n} for {parent_slug_date}"
+          annotation = "(merged + archived)" if parent_archived else "(not yet archived)"
+          spec_line = f"**Spec:** `{spec}`\n" if spec else ""
+          prior_line = (
+              f"**Prior rework:** `{prior_rework_rel_path}`\n" if prior_rework_rel_path else ""
+          )
+          return _SCAFFOLD_TEMPLATE.format(
+              title=title,
+              spec_line=spec_line,
+              parent_rel_path=parent_rel_path,
+              parent_annotation=annotation,
+              prior_rework_line=prior_line,
+              parent_slug_date=parent_slug_date,
+          )
+      ```
+
+      Run `uv run pytest tests/unit/test_rework.py::TestRenderScaffold -x -q` — expect green.
+  - id: P2.T2.S3
+    text: |-
+      Pin the no-H1-fallback title path
+
+
+      Append to `TestRenderScaffold`:
+
+      ```python
+          def test_fallback_title_when_parent_title_empty(self) -> None:
+              out = render_scaffold(
+                  parent_title="",
+                  parent_slug_date="2026-04-08-foo",
+                  spec="s.md",
+                  parent_rel_path="docs/superpowers/archived-plans/2026-04-08-foo.md",
+                  parent_archived=True,
+                  n=1,
+                  prior_rework_rel_path=None,
+              )
+              assert out.startswith("# Rework 1 for 2026-04-08-foo\n")
+      ```
+
+      Run — expect green. This locks the spec §3 fallback-title rule.
+- number: 3
+  title: '`OriginRow` + `parse_origin_table`'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write the three Origin-table fixtures
+
+
+      Create `tests/fixtures/rework/rework_empty.md`:
+
+      ```markdown
+      # Foo — Rework 1
+
+      **Spec:** `s.md`
+      **Parent plan:** `docs/superpowers/archived-plans/2026-04-08-foo.md` (merged + archived)
+      **Status:** Not Started
+
+      **Goal:** placeholder.
+
+      ---
+
+      ## Origin
+
+      | # | Item | Source | Track |
+      |---|------|--------|-------|
+
+      ---
+
+      ## Definition of Done
+
+      - [ ] TODO.
+      ```
+
+      Create `tests/fixtures/rework/rework_with_rows.md`:
+
+      ```markdown
+      # Foo — Rework 1
+
+      **Spec:** `s.md`
+      **Parent plan:** `docs/superpowers/archived-plans/2026-04-08-foo.md` (merged + archived)
+      **Status:** Not Started
+
+      **Goal:** placeholder.
+
+      ---
+
+      ## Origin
+
+      | # | Item | Source | Track |
+      |---|------|--------|-------|
+      | 1 | Wire \| pipe in item | PR #42 | development |
+      | 2 | Smoke test the deploy | demo | operations |
+      | 3 | Decide on theme palette | design review | decision |
+
+      ---
+
+      ## Definition of Done
+
+      - [ ] TODO.
+      ```
+
+      Create `tests/fixtures/rework/rework_malformed_origin.md`:
+
+      ```markdown
+      # Foo — Rework 1
+
+      **Status:** Not Started
+
+      **Goal:** placeholder.
+
+      ---
+
+      ## Origin
+
+      | # | Description | Source |
+      |---|-------------|--------|
+
+      ---
+
+      ## Definition of Done
+
+      - [ ] TODO.
+      ```
+  - id: P2.T3.S2
+    text: |-
+      Write failing tests for `parse_origin_table`
+
+
+      Append to `tests/unit/test_rework.py`:
+
+      ```python
+      from vk.plan.rework import OriginRow, parse_origin_table
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures/rework"
+
+
+      class TestParseOriginTable:
+          def test_empty_table(self) -> None:
+              rows = parse_origin_table(FIXTURES / "rework_empty.md")
+              assert rows == []
+
+          def test_three_rows_with_pipe_escape_unescaped(self) -> None:
+              rows = parse_origin_table(FIXTURES / "rework_with_rows.md")
+              assert rows == [
+                  OriginRow(number=1, item="Wire | pipe in item", source="PR #42", track="development"),
+                  OriginRow(number=2, item="Smoke test the deploy", source="demo", track="operations"),
+                  OriginRow(number=3, item="Decide on theme palette", source="design review", track="decision"),
+              ]
+
+          def test_malformed_header_raises(self) -> None:
+              with pytest.raises(ValueError, match="Origin table header malformed"):
+                  parse_origin_table(FIXTURES / "rework_malformed_origin.md")
+
+          def test_missing_origin_section_raises(self, tmp_path: Path) -> None:
+              p = tmp_path / "no_origin.md"
+              p.write_text("# T\n\n**Status:** Not Started\n\n**Goal:** g\n")
+              with pytest.raises(ValueError, match="no ## Origin section"):
+                  parse_origin_table(p)
+      ```
+
+      Run — expect import failure on `OriginRow`, `parse_origin_table`.
+  - id: P2.T3.S3
+    text: |-
+      Implement `OriginRow` and `parse_origin_table`
+
+
+      Append to `src/vk/plan/rework.py`:
+
+      ```python
+      from dataclasses import dataclass
+
+      _EXPECTED_ORIGIN_HEADER = "| # | Item | Source | Track |"
+      _ORIGIN_HEADING_RE = re.compile(r"^## Origin\s*$", re.MULTILINE)
+
+
+      @dataclass(frozen=True)
+      class OriginRow:
+          number: int
+          item: str
+          source: str
+          track: str
+
+
+      def parse_origin_table(path: Path) -> list[OriginRow]:
+          """Parse the Origin table from a rework plan file.
+
+          Raises ValueError on: missing ``## Origin`` heading, malformed header row.
+          Empty table (header + separator, no data rows) returns ``[]``. Unescapes
+          ``\\|`` back to ``|`` per spec §6.1.
+          """
+          text = path.read_text(encoding="utf-8")
+          heading_match = _ORIGIN_HEADING_RE.search(text)
+          if not heading_match:
+              raise ValueError(
+                  f"plan has no ## Origin section. Was this scaffolded via 'vk plan rework'? ({path})"
+              )
+          after = text[heading_match.end() :]
+          lines = after.splitlines()
+
+          # Locate the header row (first non-blank, non-divider line).
+          idx = 0
+          while idx < len(lines) and lines[idx].strip() == "":
+              idx += 1
+          if idx >= len(lines) or lines[idx].strip() != _EXPECTED_ORIGIN_HEADER:
+              raise ValueError(
+                  f"Origin table header malformed. Expected: {_EXPECTED_ORIGIN_HEADER}"
+              )
+          idx += 1
+          # Separator row (| --- | --- | --- | --- |). Skip whatever is there.
+          idx += 1
+
+          rows: list[OriginRow] = []
+          while idx < len(lines):
+              line = lines[idx].rstrip()
+              if not line.startswith("|"):
+                  break  # end of table
+              # Split on non-escaped pipes: first replace \| with a sentinel.
+              sentinel = "\x00"
+              encoded = line.replace(r"\|", sentinel)
+              parts = [p.strip().replace(sentinel, "|") for p in encoded.strip("|").split("|")]
+              if len(parts) != 4:
+                  raise ValueError(f"Origin table row has {len(parts)} cells, expected 4: {line!r}")
+              try:
+                  n = int(parts[0])
+              except ValueError:
+                  raise ValueError(f"Origin table row # column is not an int: {line!r}")
+              rows.append(OriginRow(number=n, item=parts[1], source=parts[2], track=parts[3]))
+              idx += 1
+          return rows
+      ```
+
+      Run `uv run pytest tests/unit/test_rework.py::TestParseOriginTable -x -q` — expect green.
+- number: 4
+  title: '`append_origin_row`'
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Write failing round-trip tests for `append_origin_row`
+
+
+      Append to `tests/unit/test_rework.py`:
+
+      ```python
+      from vk.plan.rework import append_origin_row
+
+
+      class TestAppendOriginRow:
+          def test_append_to_empty_table(self, tmp_path: Path) -> None:
+              p = tmp_path / "r.md"
+              p.write_text((FIXTURES / "rework_empty.md").read_text())
+              row = OriginRow(number=1, item="Ship docs", source="PR #42", track="development")
+              append_origin_row(p, row)
+              rows = parse_origin_table(p)
+              assert rows == [row]
+
+          def test_append_preserves_dod(self, tmp_path: Path) -> None:
+              p = tmp_path / "r.md"
+              p.write_text((FIXTURES / "rework_empty.md").read_text())
+              append_origin_row(p, OriginRow(1, "x", "y", "development"))
+              text = p.read_text()
+              assert "## Definition of Done" in text
+              assert "- [ ] TODO." in text
+
+          def test_append_escapes_pipes(self, tmp_path: Path) -> None:
+              p = tmp_path / "r.md"
+              p.write_text((FIXTURES / "rework_empty.md").read_text())
+              append_origin_row(p, OriginRow(1, "wire | pipe", "src | with pipe", "development"))
+              text = p.read_text()
+              assert r"wire \| pipe" in text
+              assert r"src \| with pipe" in text
+              # Round-trip unescapes.
+              rows = parse_origin_table(p)
+              assert rows[0].item == "wire | pipe"
+              assert rows[0].source == "src | with pipe"
+
+          def test_append_after_existing_rows(self, tmp_path: Path) -> None:
+              p = tmp_path / "r.md"
+              p.write_text((FIXTURES / "rework_with_rows.md").read_text())
+              append_origin_row(p, OriginRow(4, "new item", "PR #99", "operations"))
+              rows = parse_origin_table(p)
+              assert len(rows) == 4
+              assert rows[3] == OriginRow(4, "new item", "PR #99", "operations")
+      ```
+
+      Run — expect import failure on `append_origin_row`.
+  - id: P2.T4.S2
+    text: |-
+      Implement `append_origin_row`
+
+
+      Append to `src/vk/plan/rework.py`:
+
+      ```python
+      def append_origin_row(path: Path, row: OriginRow) -> None:
+          """Append a single row to the Origin table in ``path``.
+
+          Preserves every byte outside the Origin table. Escapes ``|`` in ``item``
+          and ``source`` by replacing with ``\\|``. Writes the file back atomically
+          via ``path.write_text`` (good enough — single-file scaffolds, no reader
+          concurrency concern in CLI contexts).
+          """
+          text = path.read_text(encoding="utf-8")
+          heading_match = _ORIGIN_HEADING_RE.search(text)
+          if not heading_match:
+              raise ValueError(
+                  f"plan has no ## Origin section. Was this scaffolded via 'vk plan rework'? ({path})"
+              )
+          after_heading = heading_match.end()
+          lines = text[after_heading:].splitlines(keepends=True)
+
+          # Walk forward to the header; then past separator; then past any data rows.
+          abs_offset = after_heading
+          idx = 0
+          # Skip blanks.
+          while idx < len(lines) and lines[idx].strip() == "":
+              abs_offset += len(lines[idx])
+              idx += 1
+          if idx >= len(lines) or lines[idx].strip() != _EXPECTED_ORIGIN_HEADER:
+              raise ValueError(
+                  f"Origin table header malformed. Expected: {_EXPECTED_ORIGIN_HEADER}"
+              )
+          abs_offset += len(lines[idx])  # consume header
+          idx += 1
+          if idx >= len(lines):
+              raise ValueError("Origin table truncated after header.")
+          abs_offset += len(lines[idx])  # consume separator
+          idx += 1
+          # Advance past any existing data rows.
+          while idx < len(lines) and lines[idx].startswith("|"):
+              abs_offset += len(lines[idx])
+              idx += 1
+
+          # Build the new row, escaping pipes.
+          def _esc(s: str) -> str:
+              return s.replace("|", r"\|")
+
+          new_line = f"| {row.number} | {_esc(row.item)} | {_esc(row.source)} | {row.track} |\n"
+
+          new_text = text[:abs_offset] + new_line + text[abs_offset:]
+          path.write_text(new_text, encoding="utf-8")
+      ```
+
+      Run `uv run pytest tests/unit/test_rework.py::TestAppendOriginRow -x -q` — expect green.
+  - id: P2.T4.S3
+    text: |-
+      Full `test_rework.py` suite + whole-tree regression
+
+
+      ```bash
+      uv run pytest tests/unit/test_rework.py -q
+      uv run pytest -q --no-cov
+      ```
+
+      Both green. No existing test touches rework.py, so the regression sweep is cheap but mandatory.
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

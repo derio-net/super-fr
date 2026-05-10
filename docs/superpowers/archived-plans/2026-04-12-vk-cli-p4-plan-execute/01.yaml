@@ -1,0 +1,994 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Plan helper subcommands
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: vk plan new subcommand
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing tests for plan new
+
+
+      Create `tests/integration/test_plan_cmd.py`:
+
+      ```python
+      # tests/integration/test_plan_cmd.py
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      runner = CliRunner()
+
+
+      class TestPlanNew:
+          def test_new_prints_plan_to_stdout_by_default(self, tmp_git_repo_local):
+              """Without --save, plan content goes to stdout."""
+              result = runner.invoke(
+                  app,
+                  ["plan", "new", "my-feature"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_local)},
+              )
+              assert result.exit_code == 0
+              assert "# " in result.stdout
+              assert "Task 1:" in result.stdout or "**Status:** Not Started" in result.stdout
+
+          def test_new_with_save_writes_file(self, tmp_git_repo_local):
+              """--save writes the plan to docs/superpowers/plans/."""
+              result = runner.invoke(
+                  app,
+                  ["plan", "new", "my-feature", "--save"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_local)},
+              )
+              assert result.exit_code == 0
+              plans_dir = tmp_git_repo_local / "docs" / "superpowers" / "plans"
+              plan_files = list(plans_dir.glob("*my-feature*.md"))
+              assert len(plan_files) == 1
+
+          def test_new_with_spec_includes_spec_reference(self, tmp_git_repo_local):
+              """--spec PATH sets the Spec header in the generated plan."""
+              spec_path = "docs/superpowers/specs/2026-04-12-my-spec.md"
+              result = runner.invoke(
+                  app,
+                  ["plan", "new", "my-feature", "--spec", spec_path],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_local)},
+              )
+              assert result.exit_code == 0
+              assert spec_path in result.stdout
+
+          def test_new_flat_format_when_no_dispatch(self, tmp_git_repo_local):
+              """Local-only repo gets flat format (Task > Step, no phases)."""
+              result = runner.invoke(
+                  app,
+                  ["plan", "new", "my-feature"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_local)},
+              )
+              assert result.exit_code == 0
+              assert "### Task" in result.stdout
+              assert "## Phase" not in result.stdout
+
+          def test_new_phased_format_when_dispatch_enabled(
+              self, tmp_git_repo_with_dispatch_config
+          ):
+              """Dispatch-enabled repo gets phased format (Phase > Task > Step)."""
+              result = runner.invoke(
+                  app,
+                  ["plan", "new", "my-feature"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+              assert "## Phase" in result.stdout
+      ```
+  - id: P1.T1.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanNew" --no-header`
+      Expected: FAIL — `No such command 'new'` or import error
+  - id: P1.T1.S3
+    text: |-
+      Create plan_cmd.py with new subcommand
+
+
+      Create `src/vk/commands/plan_cmd.py`:
+
+      ```python
+      """vk plan — write, save, and maintain plan files."""
+
+      from __future__ import annotations
+
+      from datetime import date
+      from pathlib import Path
+      from typing import Optional
+
+      import typer
+      from rich.console import Console
+
+      from vk.commands.common import validate_dry_run_yes
+      from vk.config import load_profile_from_cwd
+      from vk.plan.models import PlanFormat
+      from vk.plan.writer import render_skeleton
+
+      console = Console(stderr=True)
+      plan_app = typer.Typer(help="Write, save, and maintain plan files.")
+
+
+      @plan_app.command()
+      def new(
+          name: str = typer.Argument(..., help="Plan name slug (used in filename)."),
+          spec: Optional[str] = typer.Option(None, "--spec", help="Path to spec file."),
+          save: bool = typer.Option(
+              False, "--save", help="Write to plans directory instead of stdout."
+          ),
+      ) -> None:
+          """Generate a new plan skeleton."""
+          profile = load_profile_from_cwd()
+          plan_format = profile.format
+
+          content = render_skeleton(
+              name=name,
+              spec=spec,
+              plan_format=plan_format,
+              header=profile.header,
+          )
+
+          if save:
+              from vk.config import find_repo_root
+
+              repo_root = find_repo_root()
+              plans_dir = repo_root / profile.plan.plans_dir
+              plans_dir.mkdir(parents=True, exist_ok=True)
+              today = date.today().isoformat()
+              filename = f"{today}-{name}.md"
+              out_path = plans_dir / filename
+              out_path.write_text(content)
+              console.print(f"Saved: [bold]{out_path}[/bold]")
+          else:
+              typer.echo(content)
+      ```
+  - id: P1.T1.S4
+    text: |-
+      Wire plan_app into cli.py
+
+
+      In `src/vk/cli.py`, replace the stub `plan_app` with the import from `plan_cmd`:
+
+      ```python
+      from vk.commands.plan_cmd import plan_app
+
+      # Remove the old: plan_app = typer.Typer(help="Write, save, and maintain plan files.")
+      # Remove the old: plan_callback function
+      # Keep: app.add_typer(plan_app, name="plan")
+      ```
+  - id: P1.T1.S5
+    text: |-
+      Run tests to verify plan new passes
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanNew" --no-header`
+      Expected: PASS — all plan new tests pass
+  - id: P1.T1.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/plan_cmd.py tests/integration/test_plan_cmd.py src/vk/cli.py
+      git commit -m "feat: add vk plan new subcommand with format auto-detection"
+      ```
+- number: 2
+  title: vk plan self-review subcommand
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write failing tests for plan self-review
+
+
+      Add to `tests/integration/test_plan_cmd.py`:
+
+      ```python
+      class TestPlanSelfReview:
+          def test_self_review_passes_clean_plan(self, tmp_git_repo_with_flat_plan):
+              """A well-formed plan passes self-review."""
+              plan_path = (
+                  tmp_git_repo_with_flat_plan / "docs/superpowers/plans/test-plan.md"
+              )
+              result = runner.invoke(app, ["plan", "self-review", str(plan_path)])
+              assert result.exit_code == 0
+
+          def test_self_review_detects_placeholder_text(self, tmp_path):
+              """Plans with placeholder text like 'TODO' or 'similar to above' fail."""
+              plan = tmp_path / "bad-plan.md"
+              plan.write_text(
+                  "# Bad Plan\n\n"
+                  "**Spec:** `spec.md`\n"
+                  "**Status:** Not Started\n"
+                  "**Goal:** Do the thing.\n\n---\n\n"
+                  "### Task 1: Setup [agentic]\n\n"
+                  "- [ ] **Step 1:** TODO fill this in\n"
+              )
+              result = runner.invoke(app, ["plan", "self-review", str(plan)])
+              assert result.exit_code != 0
+              assert "placeholder" in result.stdout.lower() or "TODO" in result.stdout
+
+          def test_self_review_detects_missing_files_section(self, tmp_path):
+              """Tasks without a Files section get flagged."""
+              plan = tmp_path / "no-files.md"
+              plan.write_text(
+                  "# No Files Plan\n\n"
+                  "**Spec:** `spec.md`\n"
+                  "**Status:** Not Started\n"
+                  "**Goal:** Do the thing.\n\n---\n\n"
+                  "### Task 1: Setup [agentic]\n\n"
+                  "- [ ] **Step 1:** Write the test\n"
+              )
+              result = runner.invoke(app, ["plan", "self-review", str(plan)])
+              assert result.exit_code != 0 or "Files" in result.stdout
+
+          def test_self_review_checks_tag_placement_flat(self, tmp_path):
+              """Flat plans must have tags on task headers, not phase headers."""
+              plan = tmp_path / "flat-tags.md"
+              plan.write_text(
+                  "# Flat Plan\n\n"
+                  "**Spec:** `spec.md`\n"
+                  "**Status:** Not Started\n"
+                  "**Goal:** Do the thing.\n\n---\n\n"
+                  "### Task 1: Setup\n\n"
+                  "**Files:**\n- Create: `foo.py`\n\n"
+                  "- [ ] **Step 1:** Write the test\n"
+              )
+              result = runner.invoke(app, ["plan", "self-review", str(plan)])
+              assert result.exit_code != 0 or "tag" in result.stdout.lower()
+
+          def test_self_review_checks_tag_placement_phased(self, tmp_path):
+              """Phased plans must have tags on phase headers."""
+              plan = tmp_path / "phased-tags.md"
+              plan.write_text(
+                  "# Phased Plan\n\n"
+                  "**Spec:** `spec.md`\n"
+                  "**Status:** Not Started\n"
+                  "**Goal:** Do the thing.\n\n---\n\n"
+                  "## Phase 1: Setup\n\n"
+                  "### Task 1: Do stuff\n\n"
+                  "**Files:**\n- Create: `foo.py`\n\n"
+                  "- [ ] **Step 1:** Write the test\n"
+              )
+              result = runner.invoke(app, ["plan", "self-review", str(plan)])
+              assert result.exit_code != 0 or "tag" in result.stdout.lower()
+      ```
+  - id: P1.T2.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanSelfReview" --no-header`
+      Expected: FAIL — `No such command 'self-review'`
+  - id: P1.T2.S3
+    text: |-
+      Implement self-review subcommand
+
+
+      Add to `plan_cmd.py`:
+
+      ```python
+      import re
+
+      PLACEHOLDER_PATTERNS = [
+          re.compile(r"\bTODO\b", re.IGNORECASE),
+          re.compile(r"\bFIXME\b", re.IGNORECASE),
+          re.compile(r"similar to above", re.IGNORECASE),
+          re.compile(r"add appropriate", re.IGNORECASE),
+          re.compile(r"as needed", re.IGNORECASE),
+          re.compile(r"\.\.\.\s*$"),
+      ]
+
+
+      @plan_app.command(name="self-review")
+      def self_review(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+      ) -> None:
+          """Run automated quality checks on a plan file."""
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          from vk.plan.parser import parse_plan
+
+          plan = parse_plan(plan_path)
+          issues: list[str] = []
+          content = plan_path.read_text()
+
+          # Check for placeholder text in step bodies
+          for line_num, line in enumerate(content.splitlines(), 1):
+              for pattern in PLACEHOLDER_PATTERNS:
+                  if pattern.search(line):
+                      issues.append(
+                          f"Line {line_num}: placeholder text detected: {line.strip()!r}"
+                      )
+
+          # Check Files sections exist on agentic tasks
+          for task in plan.all_tasks:
+              if task.tag == "agentic" or task.tag is None:
+                  if not task.files_mentioned:
+                      issues.append(
+                          f"Task {task.number} ({task.title}): missing **Files:** section"
+                      )
+
+          # Check tag placement
+          if plan.format is PlanFormat.FLAT:
+              for task in plan.tasks:
+                  if task.tag is None:
+                      issues.append(
+                          f"Task {task.number} ({task.title}): missing [agentic] or "
+                          f"[manual] tag on task header"
+                      )
+          elif plan.format is PlanFormat.PHASED:
+              for phase in plan.phases:
+                  if not phase.tag:
+                      issues.append(
+                          f"Phase {phase.number} ({phase.title}): missing [agentic] or "
+                          f"[manual] tag on phase header"
+                      )
+
+          if issues:
+              console.print(f"[red]Self-review found {len(issues)} issue(s):[/red]")
+              for issue in issues:
+                  console.print(f"  - {issue}")
+              raise typer.Exit(1)
+          else:
+              console.print("[green]Self-review passed. No issues found.[/green]")
+      ```
+  - id: P1.T2.S4
+    text: |-
+      Run tests to verify self-review passes
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanSelfReview" --no-header`
+      Expected: PASS — all self-review tests pass
+  - id: P1.T2.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/plan_cmd.py tests/integration/test_plan_cmd.py
+      git commit -m "feat: add vk plan self-review subcommand with quality checks"
+      ```
+- number: 3
+  title: vk plan spec-index subcommand
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Write failing tests for plan spec-index
+
+
+      Add to `tests/integration/test_plan_cmd.py`:
+
+      ```python
+      class TestPlanSpecIndex:
+          def test_spec_index_adds_plan_to_spec(self, tmp_git_repo_with_flat_plan_and_spec):
+              """Adds or updates the plan entry in the spec's Implementation Plans table."""
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              result = runner.invoke(
+                  app, ["plan", "spec-index", str(plan_path), "--yes"]
+              )
+              assert result.exit_code == 0
+              spec_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/specs/test-spec.md"
+              )
+              content = spec_path.read_text()
+              assert "test-plan" in content
+
+          def test_spec_index_dry_run_does_not_mutate(
+              self, tmp_git_repo_with_flat_plan_and_spec
+          ):
+              plan_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/plans/test-plan.md"
+              )
+              spec_path = (
+                  tmp_git_repo_with_flat_plan_and_spec
+                  / "docs/superpowers/specs/test-spec.md"
+              )
+              before = spec_path.read_text()
+              result = runner.invoke(
+                  app, ["plan", "spec-index", str(plan_path), "--dry-run"]
+              )
+              assert result.exit_code == 0
+              assert spec_path.read_text() == before
+
+          def test_spec_index_refuses_when_no_spec_header(self, tmp_path):
+              """Plan without a Spec header cannot update spec index."""
+              plan = tmp_path / "no-spec-plan.md"
+              plan.write_text(
+                  "# No Spec Plan\n\n"
+                  "**Status:** Not Started\n"
+                  "**Goal:** Do the thing.\n\n---\n\n"
+                  "### Task 1: Setup [agentic]\n\n"
+                  "**Files:**\n- Create: `foo.py`\n\n"
+                  "- [ ] **Step 1:** Write the test\n"
+              )
+              result = runner.invoke(app, ["plan", "spec-index", str(plan), "--yes"])
+              assert result.exit_code != 0
+      ```
+  - id: P1.T3.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanSpecIndex" --no-header`
+      Expected: FAIL — `No such command 'spec-index'`
+  - id: P1.T3.S3
+    text: |-
+      Implement spec-index subcommand
+
+
+      Add to `plan_cmd.py`:
+
+      ```python
+      @plan_app.command(name="spec-index")
+      def spec_index(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+          dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutating."),
+          yes: bool = typer.Option(False, "--yes", help="Execute without prompting."),
+      ) -> None:
+          """Update the spec's Implementation Plans index with this plan's status."""
+          validate_dry_run_yes(dry_run, yes)
+
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          from vk.plan.parser import parse_plan
+          from vk.spec_index import update_spec_index
+
+          plan = parse_plan(plan_path)
+          if not plan.spec:
+              console.print("[red]Plan has no **Spec:** header. Cannot update spec index.[/red]")
+              raise typer.Exit(1)
+
+          spec_path = _resolve_spec_path(plan_path, plan.spec)
+          if not spec_path or not spec_path.exists():
+              console.print(f"[red]Spec file not found:[/red] {plan.spec}")
+              raise typer.Exit(2)
+
+          if dry_run:
+              console.print(f"Would update spec index in: {spec_path}")
+              console.print(f"  Plan: {plan_path.name}")
+              console.print(f"  Status: {plan.status}")
+              return
+
+          if not yes:
+              typer.confirm(f"Update spec index in {spec_path.name}?", abort=True)
+
+          update_spec_index(spec_path, plan_path, plan.status)
+          console.print(f"Updated spec index in: [bold]{spec_path}[/bold]")
+
+
+      def _resolve_spec_path(plan_path: Path, spec_ref: str) -> Path | None:
+          """Resolve a spec reference (relative path) to an absolute path."""
+          # Strip backticks if present
+          spec_ref = spec_ref.strip("`")
+          repo_root = plan_path.parent
+          while repo_root != repo_root.parent:
+              if (repo_root / ".git").exists():
+                  return repo_root / spec_ref
+              repo_root = repo_root.parent
+          return None
+      ```
+  - id: P1.T3.S4
+    text: |-
+      Run tests to verify spec-index passes
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanSpecIndex" --no-header`
+      Expected: PASS — all spec-index tests pass
+  - id: P1.T3.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/plan_cmd.py tests/integration/test_plan_cmd.py
+      git commit -m "feat: add vk plan spec-index subcommand"
+      ```
+- number: 4
+  title: vk plan convert subcommand
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Write failing tests for plan convert
+
+
+      Create `tests/integration/test_convert.py`:
+
+      ```python
+      # tests/integration/test_convert.py
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      runner = CliRunner()
+
+
+      class TestConvertPhasedToFlat:
+          def test_convert_phased_to_flat_renumbers_tasks(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """Flattening renumbers tasks globally."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(
+                  app, ["plan", "convert", str(plan), "--to", "flat", "--yes"]
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "### Task 1:" in content
+              assert "## Phase" not in content
+
+          def test_convert_phased_to_flat_inherits_phase_tags(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """Each task inherits its parent phase's tag."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              result = runner.invoke(
+                  app, ["plan", "convert", str(plan), "--to", "flat", "--yes"]
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "[agentic]" in content
+
+          def test_convert_phased_to_flat_refuses_tracked_without_force(
+              self, tmp_path, phased_dispatched_plan_fixture
+          ):
+              """Plans with tracking comments refuse conversion without --force."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_dispatched_plan_fixture)
+              result = runner.invoke(
+                  app, ["plan", "convert", str(plan), "--to", "flat", "--yes"]
+              )
+              assert result.exit_code != 0
+              assert "Tracking" in result.stdout or "force" in result.stdout.lower()
+
+          def test_convert_phased_to_flat_force_overrides_tracking_check(
+              self, tmp_path, phased_dispatched_plan_fixture
+          ):
+              """--force allows conversion even with tracking comments."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_dispatched_plan_fixture)
+              result = runner.invoke(
+                  app,
+                  ["plan", "convert", str(plan), "--to", "flat", "--force", "--yes"],
+              )
+              assert result.exit_code == 0
+
+          def test_convert_dry_run_does_not_mutate(self, tmp_path, phased_plan_fixture):
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+              before = plan.read_text()
+              result = runner.invoke(
+                  app, ["plan", "convert", str(plan), "--to", "flat", "--dry-run"]
+              )
+              assert result.exit_code == 0
+              assert plan.read_text() == before
+
+
+      class TestConvertFlatToPhased:
+          def test_convert_flat_to_phased_single_phase(
+              self, tmp_path, flat_plan_fixture
+          ):
+              """--single-phase wraps everything in one Phase 1."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_plan_fixture)
+              result = runner.invoke(
+                  app,
+                  ["plan", "convert", str(plan), "--to", "phased", "--single-phase", "--yes"],
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "## Phase 1:" in content
+
+          def test_convert_flat_to_phased_one_per_task(
+              self, tmp_path, flat_plan_fixture
+          ):
+              """--one-per-task: each task becomes its own phase."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_plan_fixture)
+              result = runner.invoke(
+                  app,
+                  [
+                      "plan", "convert", str(plan), "--to", "phased",
+                      "--one-per-task", "--yes",
+                  ],
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "## Phase 1:" in content
+              assert "## Phase 2:" in content
+
+          def test_convert_flat_to_phased_group_by_tag(
+              self, tmp_path, flat_mixed_tags_fixture
+          ):
+              """--group-by-tag: consecutive same-tag tasks merge into one phase."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_mixed_tags_fixture)
+              result = runner.invoke(
+                  app,
+                  [
+                      "plan", "convert", str(plan), "--to", "phased",
+                      "--group-by-tag", "--yes",
+                  ],
+              )
+              assert result.exit_code == 0
+              content = plan.read_text()
+              assert "## Phase" in content
+
+          def test_convert_flat_to_phased_requires_mode_flag(
+              self, tmp_path, flat_plan_fixture
+          ):
+              """Converting to phased without a mode flag is an error."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(flat_plan_fixture)
+              result = runner.invoke(
+                  app, ["plan", "convert", str(plan), "--to", "phased", "--yes"]
+              )
+              assert result.exit_code != 0
+
+          def test_convert_round_trip_preserves_content(
+              self, tmp_path, phased_plan_fixture
+          ):
+              """phased -> flat -> phased(single-phase) preserves all task content."""
+              plan = tmp_path / "plan.md"
+              plan.write_text(phased_plan_fixture)
+
+              from vk.plan.parser import parse_plan
+
+              original = parse_plan(plan)
+              original_tasks = [t.title for t in original.all_tasks]
+
+              runner.invoke(
+                  app, ["plan", "convert", str(plan), "--to", "flat", "--yes"]
+              )
+              runner.invoke(
+                  app,
+                  ["plan", "convert", str(plan), "--to", "phased", "--single-phase", "--yes"],
+              )
+
+              restored = parse_plan(plan)
+              restored_tasks = [t.title for t in restored.all_tasks]
+              assert original_tasks == restored_tasks
+      ```
+  - id: P1.T4.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_convert.py -v --no-header`
+      Expected: FAIL — `No such command 'convert'`
+  - id: P1.T4.S3
+    text: |-
+      Implement convert subcommand
+
+
+      Add to `plan_cmd.py`:
+
+      ```python
+      @plan_app.command()
+      def convert(
+          plan_path: Path = typer.Argument(..., help="Path to the plan file."),
+          to: str = typer.Option(..., "--to", help="Target format: flat or phased."),
+          force: bool = typer.Option(
+              False, "--force", help="Force conversion even with tracking comments."
+          ),
+          single_phase: bool = typer.Option(
+              False, "--single-phase", help="Wrap all tasks in one phase."
+          ),
+          one_per_task: bool = typer.Option(
+              False, "--one-per-task", help="Each task becomes its own phase."
+          ),
+          group_by_tag: bool = typer.Option(
+              False, "--group-by-tag", help="Group consecutive same-tag tasks into phases."
+          ),
+          dry_run: bool = typer.Option(False, "--dry-run", help="Preview without mutating."),
+          yes: bool = typer.Option(False, "--yes", help="Execute without prompting."),
+      ) -> None:
+          """Convert a plan between flat and phased formats."""
+          validate_dry_run_yes(dry_run, yes)
+
+          plan_path = plan_path.resolve()
+          if not plan_path.exists():
+              console.print(f"[red]Plan not found:[/red] {plan_path}")
+              raise typer.Exit(2)
+
+          from vk.plan.convert import convert_plan
+          from vk.plan.parser import parse_plan
+
+          plan = parse_plan(plan_path)
+
+          if to == "flat":
+              if plan.format is PlanFormat.FLAT:
+                  console.print("Plan is already flat. Nothing to convert.")
+                  return
+              if not force and "<!-- Tracking:" in plan_path.read_text():
+                  console.print(
+                      "[red]Plan has tracking comments. Use --force to convert anyway.[/red]"
+                  )
+                  raise typer.Exit(1)
+              mode = "phased-to-flat"
+          elif to == "phased":
+              if plan.format is PlanFormat.PHASED:
+                  console.print("Plan is already phased. Nothing to convert.")
+                  return
+              mode_flags = [single_phase, one_per_task, group_by_tag]
+              if sum(mode_flags) != 1:
+                  console.print(
+                      "[red]Exactly one of --single-phase, --one-per-task, "
+                      "or --group-by-tag is required.[/red]"
+                  )
+                  raise typer.Exit(1)
+              if single_phase:
+                  mode = "flat-to-phased-single"
+              elif one_per_task:
+                  mode = "flat-to-phased-per-task"
+              else:
+                  mode = "flat-to-phased-by-tag"
+          else:
+              console.print(f"[red]Unknown format: {to}. Use 'flat' or 'phased'.[/red]")
+              raise typer.Exit(1)
+
+          new_content = convert_plan(plan_path, mode)
+
+          if dry_run:
+              console.print(f"Would convert {plan_path.name} to {to} ({mode}).")
+              console.print("Preview:")
+              typer.echo(new_content[:500] + ("..." if len(new_content) > 500 else ""))
+              return
+
+          if not yes:
+              typer.confirm(f"Convert {plan_path.name} to {to}?", abort=True)
+
+          plan_path.write_text(new_content)
+          console.print(f"Converted {plan_path.name} to [bold]{to}[/bold] format.")
+      ```
+  - id: P1.T4.S4
+    text: |-
+      Run tests to verify convert passes
+
+
+      Run: `uv run pytest tests/integration/test_convert.py -v --no-header`
+      Expected: PASS — all convert tests pass
+  - id: P1.T4.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/plan_cmd.py tests/integration/test_convert.py
+      git commit -m "feat: add vk plan convert subcommand with four conversion modes"
+      ```
+- number: 5
+  title: vk plan format subcommand
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write failing tests for plan format
+
+
+      Add to `tests/integration/test_plan_cmd.py`:
+
+      ```python
+      class TestPlanFormat:
+          def test_format_reports_flat_for_local_repo(self, tmp_git_repo_local):
+              """Local-only repo reports flat format."""
+              result = runner.invoke(
+                  app,
+                  ["plan", "format"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_local)},
+              )
+              assert result.exit_code == 0
+              assert "flat" in result.stdout.lower()
+
+          def test_format_reports_phased_for_dispatch_repo(
+              self, tmp_git_repo_with_dispatch_config
+          ):
+              """Dispatch-enabled repo reports phased format."""
+              result = runner.invoke(
+                  app,
+                  ["plan", "format"],
+                  env={"VK_REPO_ROOT": str(tmp_git_repo_with_dispatch_config)},
+              )
+              assert result.exit_code == 0
+              assert "phased" in result.stdout.lower()
+
+          def test_format_with_explicit_repo_root(self, tmp_git_repo_local):
+              """Passing explicit REPO_ROOT argument works."""
+              result = runner.invoke(
+                  app, ["plan", "format", str(tmp_git_repo_local)]
+              )
+              assert result.exit_code == 0
+      ```
+  - id: P1.T5.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanFormat" --no-header`
+      Expected: FAIL — `No such command 'format'`
+  - id: P1.T5.S3
+    text: |-
+      Implement format subcommand
+
+
+      Add to `plan_cmd.py`:
+
+      ```python
+      @plan_app.command(name="format")
+      def plan_format(
+          repo_root: Optional[Path] = typer.Argument(
+              None, help="Repository root (default: auto-detect)."
+          ),
+      ) -> None:
+          """Show the plan format for this repo (flat or phased)."""
+          if repo_root:
+              import os
+
+              os.environ["VK_REPO_ROOT"] = str(repo_root.resolve())
+
+          profile = load_profile_from_cwd()
+          fmt = profile.format
+
+          if fmt is PlanFormat.FLAT:
+              typer.echo("flat")
+              console.print(
+                  "Format: [bold]flat[/bold] (Task > Step). "
+                  "No dispatch block in plan-config.yaml."
+              )
+          else:
+              typer.echo("phased")
+              console.print(
+                  "Format: [bold]phased[/bold] (Phase > Task > Step). "
+                  "Dispatch block present in plan-config.yaml."
+              )
+      ```
+  - id: P1.T5.S4
+    text: |-
+      Run tests to verify format passes
+
+
+      Run: `uv run pytest tests/integration/test_plan_cmd.py -v -k "TestPlanFormat" --no-header`
+      Expected: PASS — all format tests pass
+  - id: P1.T5.S5
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/commands/plan_cmd.py tests/integration/test_plan_cmd.py
+      git commit -m "feat: add vk plan format subcommand"
+      ```
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

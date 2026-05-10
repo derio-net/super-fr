@@ -1,0 +1,279 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Fix `spec_index.py` — path-based upsert + prose preservation
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/82
+tasks:
+- number: 1
+  title: Tests for `spec_index.py` fixes
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      TDD — write failing tests
+
+
+      Create or append to `tests/unit/test_spec_index.py`:
+
+      ```python
+      """Tests for spec_index path-based upsert fixes."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      from vk.spec_index import IndexEntry, _build_table, read_index, upsert_entry
+
+
+      SPEC_TABLE = """\
+      ## Implementation Plans
+
+      | Plan | Repo | File | Status | Depends on |
+      |------|------|------|--------|------------|
+      | Plan A | `org/repo-a` | `docs/superpowers/plans/plan-a.md` | Not Started | — |
+      | Plan B | `org/repo-b` | `docs/superpowers/plans/plan-b.md` | Not Started | Phase X |
+      """
+
+      SPEC_TABLE_WITH_PROSE = """\
+      ## Implementation Plans
+
+      | Plan | Repo | File | Status | Depends on |
+      |------|------|------|--------|------------|
+      | Plan A | `org/repo-a` | `docs/superpowers/plans/plan-a.md` | Not Started | — |
+
+      Cross-phase dependency note: Plan A must complete before Plan B.
+      """
+
+
+      class TestUpsertByFilePath:
+          def test_same_path_different_title_updates_in_place(self, tmp_path: Path) -> None:
+              spec = tmp_path / "spec.md"
+              spec.write_text(SPEC_TABLE)
+              entry = IndexEntry(
+                  plan="Plan A (revised title)",
+                  repo="`org/repo-a`",
+                  file="docs/superpowers/plans/plan-a.md",
+                  status="In Progress",
+                  depends_on="—",
+              )
+              upsert_entry(spec, entry)
+              text = spec.read_text()
+              assert "Plan A (revised title)" in text
+              assert "In Progress" in text
+              # No duplicate row — file path appears only once in data rows
+              assert text.count("docs/superpowers/plans/plan-a.md") == 1
+
+          def test_new_path_appends_row(self, tmp_path: Path) -> None:
+              spec = tmp_path / "spec.md"
+              spec.write_text(SPEC_TABLE)
+              entry = IndexEntry(
+                  plan="Plan C",
+                  repo="`org/repo-c`",
+                  file="docs/superpowers/plans/plan-c.md",
+                  status="Not Started",
+                  depends_on="—",
+              )
+              upsert_entry(spec, entry)
+              text = spec.read_text()
+              assert "Plan C" in text
+              assert "plan-c.md" in text
+              assert "plan-a.md" in text  # existing rows untouched
+              assert "plan-b.md" in text
+
+          def test_prose_after_table_is_preserved(self, tmp_path: Path) -> None:
+              spec = tmp_path / "spec.md"
+              spec.write_text(SPEC_TABLE_WITH_PROSE)
+              entry = IndexEntry(
+                  plan="Plan A",
+                  repo="`org/repo-a`",
+                  file="docs/superpowers/plans/plan-a.md",
+                  status="In Progress",
+                  depends_on="—",
+              )
+              upsert_entry(spec, entry)
+              text = spec.read_text()
+              assert "Cross-phase dependency note" in text
+              assert "In Progress" in text
+
+
+      class TestBuildTable:
+          def test_dash_file_not_backtick_quoted(self) -> None:
+              entries = [
+                  IndexEntry(
+                      plan="Operator Row",
+                      repo="",
+                      file="—",
+                      status="Not Started",
+                      depends_on="Phase 3 deployed",
+                  ),
+              ]
+              table = _build_table(entries)
+              assert "| — |" in table
+              assert "| `—` |" not in table
+
+          def test_path_file_is_backtick_quoted(self) -> None:
+              entries = [
+                  IndexEntry(
+                      plan="Plan A",
+                      repo="",
+                      file="docs/plans/plan-a.md",
+                      status="Not Started",
+                      depends_on="—",
+                  ),
+              ]
+              table = _build_table(entries)
+              assert "`docs/plans/plan-a.md`" in table
+
+          def test_empty_file_rendered_as_dash(self) -> None:
+              entries = [
+                  IndexEntry(plan="Plan A", repo="", file="", status="Not Started", depends_on="—"),
+              ]
+              table = _build_table(entries)
+              assert "| — |" in table
+      ```
+  - id: P1.T1.S2
+    text: |-
+      Run tests to confirm they fail before the fix
+
+
+      ```bash
+      uv run pytest tests/unit/test_spec_index.py -x -q --no-cov 2>&1 | head -30
+      ```
+
+      Expected: `TestUpsertByFilePath` and `TestBuildTable` tests fail.
+- number: 2
+  title: Fix `spec_index.py`
+  steps:
+  - id: P1.T2.S3
+    text: |-
+      Fix `upsert_entry()` — match by file path
+
+
+      In `upsert_entry()`, change the matching predicate (currently `e.plan == entry.plan`):
+
+      ```python
+      # Before (around line 92)
+      for i, e in enumerate(existing):
+          if e.plan == entry.plan:
+              existing[i] = entry
+              found = True
+              break
+
+      # After
+      for i, e in enumerate(existing):
+          if e.file == entry.file:
+              existing[i] = entry
+              found = True
+              break
+      ```
+  - id: P1.T2.S4
+    text: |-
+      Fix `upsert_entry()` — replace only the table block, preserve trailing prose
+
+
+      Replace the section-replacement block at the end of `upsert_entry()`:
+
+      ```python
+      # Before
+      table = _build_table(existing)
+      new_text = text[:section_start] + f"\n{table}\n" + text[section_end:]
+      spec_path.write_text(new_text, encoding="utf-8")
+      ```
+
+      With the surgical table-only replacement:
+
+      ```python
+      table = _build_table(existing)
+      section_text = text[section_start:section_end]
+      lines = section_text.splitlines(keepends=True)
+
+      table_first = next(
+          (i for i, ln in enumerate(lines) if ln.strip().startswith("|")), None
+      )
+      table_last = max(
+          (i for i, ln in enumerate(lines) if ln.strip().startswith("|")), default=None
+      )
+
+      if table_first is None:
+          # No existing table — append before section end
+          pre = text[:section_end].rstrip("\n")
+          new_text = pre + f"\n\n{table}\n" + text[section_end:]
+      else:
+          kept_before = "".join(lines[:table_first])
+          kept_after = "".join(lines[table_last + 1 :])
+          new_section = kept_before + table + "\n" + kept_after
+          new_text = text[:section_start] + new_section + text[section_end:]
+
+      spec_path.write_text(new_text, encoding="utf-8")
+      ```
+  - id: P1.T2.S5
+    text: |-
+      Fix `_build_table()` — guard backticks on non-path File values
+
+
+      ```python
+      # Before
+      lines.append(f"| {e.plan} | {e.repo} | `{e.file}` | {e.status} | {e.depends_on} |")
+
+      # After
+      file_cell = f"`{e.file}`" if e.file and e.file not in ("—", "-", "") else (e.file or "—")
+      lines.append(f"| {e.plan} | {e.repo} | {file_cell} | {e.status} | {e.depends_on} |")
+      ```
+  - id: P1.T2.S6
+    text: |-
+      Run all new tests — must pass
+
+
+      ```bash
+      uv run pytest tests/unit/test_spec_index.py -x -q --no-cov
+      ```
+
+      Expected: all pass.
+  - id: P1.T2.S7
+    text: |-
+      Run full test suite — no regressions
+
+
+      ```bash
+      uv run ruff format src/ tests/
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: all pass.
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S7:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

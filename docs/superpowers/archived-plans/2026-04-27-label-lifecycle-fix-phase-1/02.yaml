@@ -1,0 +1,349 @@
+schema_version: 2
+phase:
+  number: 2
+  title: DispatchConfig defaults and dispatch reads registry
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/58
+tasks:
+- number: 1
+  title: Extend `DispatchConfig.labels` defaults
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD — defaults include new keys, user override merges
+
+
+      Add to `tests/unit/test_config.py`:
+
+      ```python
+      class TestDispatchLabelDefaults:
+          def test_default_includes_all_four_lifecycle_keys(self) -> None:
+              cfg = DispatchConfig()
+              assert cfg.labels == {
+                  "agentic":     "vk-ready",
+                  "manual":      "manual",
+                  "in_progress": "in-progress",
+                  "pr_ready":    "pr-ready",
+              }
+
+          def test_yaml_partial_override_merges_with_defaults(self) -> None:
+              # Simulates a user plan-config.yaml with only old keys present
+              raw = {"target": "github-issues", "owner": "o",
+                     "labels": {"agentic": "ready", "manual": "human-only"}}
+              cfg = _parse_dispatch(raw)
+              assert cfg is not None
+              assert cfg.labels["agentic"]     == "ready"        # override
+              assert cfg.labels["manual"]      == "human-only"   # override
+              assert cfg.labels["in_progress"] == "in-progress"  # default
+              assert cfg.labels["pr_ready"]    == "pr-ready"     # default
+
+          def test_yaml_full_override(self) -> None:
+              raw = {"target": "github-issues", "owner": "o",
+                     "labels": {"agentic": "a", "manual": "m",
+                                "in_progress": "ip", "pr_ready": "pr"}}
+              cfg = _parse_dispatch(raw)
+              assert cfg is not None
+              assert cfg.labels == {"agentic": "a", "manual": "m",
+                                    "in_progress": "ip", "pr_ready": "pr"}
+      ```
+
+      (The test file already imports `DispatchConfig` and `_parse_dispatch`; if not, add at top.)
+  - id: P2.T1.S2
+    text: |-
+      Update `DispatchConfig` and `_parse_dispatch`
+
+
+      In `src/vk/config.py`, replace the `labels` field default:
+
+      ```python
+      labels: dict[str, str] = field(
+          default_factory=lambda: {
+              "agentic":     "vk-ready",
+              "manual":      "manual",
+              "in_progress": "in-progress",
+              "pr_ready":    "pr-ready",
+          }
+      )
+      ```
+
+      Update `_parse_dispatch` to merge user overrides over defaults:
+
+      ```python
+      default_labels = {
+          "agentic":     "vk-ready",
+          "manual":      "manual",
+          "in_progress": "in-progress",
+          "pr_ready":    "pr-ready",
+      }
+      return DispatchConfig(
+          owner=raw.get("owner", "derio-net"),
+          project_board=raw.get("project_board", "Derio Ops"),
+          default_repo=raw.get("default_repo", ""),
+          target=raw.get("target", "github-issues"),
+          labels={**default_labels, **(raw.get("labels") or {})},
+      )
+      ```
+  - id: P2.T1.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_config.py -q --no-cov
+      ```
+
+      Expected: existing + 3 new pass.
+- number: 2
+  title: Dispatch bootstraps full registry with canonical colors
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      TDD — `ensure_labels` accepts `LabelDef`s
+
+
+      Replace existing `TestEnsureLabels` in `tests/unit/test_gh.py` (or add new tests if the existing ones are signature-compatible) with:
+
+      ```python
+      class TestEnsureLabels:
+          def test_calls_ensure_label_per_def_with_color_and_desc(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              from vk.labels import LabelDef
+              captured: list[dict] = []
+              def fake_ensure(*, repo: str, name: str, color: str = "ededed",
+                              description: str = "") -> None:
+                  captured.append({"repo": repo, "name": name,
+                                   "color": color, "description": description})
+              monkeypatch.setattr(gh, "ensure_label", fake_ensure)
+              defs = [
+                  LabelDef("vk-ready", "0E8AE6", "queued"),
+                  LabelDef("phase:1",  "FBCA04", "phase 1"),
+              ]
+              gh.ensure_labels(repo="o/r", labels=defs)
+              assert captured == [
+                  {"repo": "o/r", "name": "vk-ready", "color": "0E8AE6", "description": "queued"},
+                  {"repo": "o/r", "name": "phase:1",  "color": "FBCA04", "description": "phase 1"},
+              ]
+
+          def test_empty_list_is_noop(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              called = {"n": 0}
+              monkeypatch.setattr(gh, "ensure_label",
+                                  lambda **kw: called.__setitem__("n", called["n"] + 1))
+              gh.ensure_labels(repo="o/r", labels=[])
+              assert called["n"] == 0
+
+          def test_first_failure_propagates(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              from vk.labels import LabelDef
+              seen: list[str] = []
+              def fake_ensure(*, repo: str, name: str, color: str = "ededed",
+                              description: str = "") -> None:
+                  seen.append(name)
+                  if name == "phase:1":
+                      raise gh.GhError("nope", stderr="", returncode=1)
+              monkeypatch.setattr(gh, "ensure_label", fake_ensure)
+              defs = [LabelDef("vk-ready", "0E8AE6", ""),
+                      LabelDef("phase:1",  "FBCA04", ""),
+                      LabelDef("phase:2",  "FBCA04", "")]
+              with pytest.raises(gh.GhError):
+                  gh.ensure_labels(repo="o/r", labels=defs)
+              assert seen == ["vk-ready", "phase:1"]  # third never reached
+      ```
+  - id: P2.T2.S2
+    text: |-
+      Update `gh.ensure_labels` signature
+
+
+      In `src/vk/gh.py`:
+
+      ```python
+      def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
+          """Ensure every label exists on the repo with the right color and
+          description. First failure propagates."""
+          for ld in labels:
+              ensure_label(repo=repo, name=ld.name, color=ld.color,
+                           description=ld.description)
+      ```
+
+      Add `from vk.labels import LabelDef` to the imports.
+  - id: P2.T2.S3
+    text: |-
+      TDD — `dispatch create` builds full registry list
+
+
+      Add to `tests/integration/test_dispatch.py`:
+
+      ```python
+      class TestDispatchUsesLabelRegistry:
+          def test_required_labels_includes_in_progress_and_pr_ready(
+              self, ...  # existing fixture for a minimal phased plan
+          ) -> None:
+              # Run vk dispatch create against a fake plan with 2 phases.
+              # Assert ensure_labels was called with LabelDefs whose .name set ==
+              # {"vk-ready", "manual", "in-progress", "pr-ready",
+              #  "plan:<slug>", "phase:1", "phase:2"}
+              ...
+
+          def test_lifecycle_labels_use_registry_colors(self, ...) -> None:
+              # Assert the LabelDef passed for vk-ready has color 0E8AE6,
+              # in-progress D93F0B, etc. — sourced from labels module, not
+              # hardcoded in dispatch_cmd.
+              ...
+
+          def test_yaml_override_for_label_string_falls_back_to_default_color(
+              self, ...
+          ) -> None:
+              # plan-config.yaml has labels.agentic: "queued" (custom name).
+              # Assert ensure_labels gets a LabelDef("queued", "ededed", "")
+              # — not in registry → default color, empty description.
+              ...
+      ```
+
+      (The existing `tests/integration/test_dispatch.py` has fixtures and helper functions to mock `gh` calls — reuse them. Sketch left high-level here; the implementing agent fills in the test bodies using the existing pattern.)
+  - id: P2.T2.S4
+    text: |-
+      Update `dispatch_cmd.py`
+
+
+      Refactor `dispatch_cmd.py`'s `required_labels` build to consume the registry. The
+      spec/plan label derivation already lives in `dispatch_cmd.py` (the `spec_plan_labels`
+      list, set up earlier from `derive_spec_slug` / `derive_plan_name`). This task wraps the
+      existing string list in registry-aware `LabelDef`s so colors and descriptions land too:
+
+      ```python
+      from vk import labels as _labels
+
+      # ... inside dispatch_create, after dispatch_cfg is loaded ...
+
+      agentic_name     = dispatch_cfg.labels.get("agentic",     "vk-ready")
+      manual_name      = dispatch_cfg.labels.get("manual",      "manual")
+      in_progress_name = dispatch_cfg.labels.get("in_progress", "in-progress")
+      pr_ready_name    = dispatch_cfg.labels.get("pr_ready",    "pr-ready")
+
+      # Map configured names to registry LabelDefs where possible; fall back
+      # to a default LabelDef (gray, no description) for operator-overridden
+      # names that aren't in the registry.
+      def _def_for(name: str, registry_def: _labels.LabelDef) -> _labels.LabelDef:
+          if name == registry_def.name:
+              return registry_def
+          return _labels.LabelDef(name, "ededed", "")
+
+      # Identifier hierarchy: spec:<spec-slug> + plan:<plan-name> + phase:<n>.
+      # `plan.spec` is None for legacy spec-less plans → fall back to single-label
+      # `plan:<full-slug>` (preserves the pre-three-tier behavior for old repos).
+      identifier_defs: list[_labels.LabelDef] = []
+      if plan.spec:
+          spec_slug = derive_spec_slug(Path(plan.spec))
+          plan_name = derive_plan_name(plan_path_resolved, spec_slug)
+          identifier_defs.append(_labels.spec_label(spec_slug))
+          identifier_defs.append(_labels.plan_label(plan_name))
+      else:
+          identifier_defs.append(_labels.plan_label(derive_slug(plan_path_resolved)))
+
+      required_labels: list[_labels.LabelDef] = [
+          _def_for(agentic_name,     _labels.VK_READY),
+          _def_for(manual_name,      _labels.MANUAL),
+          _def_for(in_progress_name, _labels.IN_PROGRESS),
+          _def_for(pr_ready_name,    _labels.PR_READY),
+          *identifier_defs,
+          *(_labels.phase_label(p.number) for p in plan.phases),
+      ]
+      required_labels = sorted(required_labels, key=lambda d: d.name)
+
+      try:
+          gh.ensure_labels(repo=target_repo, labels=required_labels)
+      except gh.GhError as exc:
+          err_console.print(f"Error: Could not ensure labels on {target_repo}: {exc}")
+          raise typer.Exit(4) from exc
+      ```
+
+      Update the `dispatch migrate` callsite (line 543-548) similarly: build `[plan_label(slug), phase_label(r['phase_number'])]` and call `ensure_labels` with those.
+  - id: P2.T2.S5
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_gh.py tests/integration/test_dispatch.py -q --no-cov
+      ```
+
+      Expected: green.
+- number: 3
+  title: Format, type-check, full suite, commit
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Format, type-check, full suite
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov
+      ```
+
+      Expected: clean / green.
+  - id: P2.T3.S2
+    text: |-
+      Commit
+
+
+      ```bash
+      git checkout -b phase-2-dispatch-reads-registry
+      git add src/vk/config.py src/vk/gh.py src/vk/commands/dispatch_cmd.py tests/
+      git commit -m "feat(dispatch): bootstrap full lifecycle label set with registry colors"
+      git push -u origin phase-2-dispatch-reads-registry
+      gh pr create --title "Phase 2 · Dispatch reads label registry" \
+        --body "Wires labels.LIFECYCLE into dispatch's required_labels and ensures registry colors land on every dispatched repo. Depends on Phase 1."
+      ```
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

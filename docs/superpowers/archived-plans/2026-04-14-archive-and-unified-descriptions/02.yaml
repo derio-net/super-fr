@@ -1,0 +1,287 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Archive-on-Complete in vk progress sync
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/11
+tasks:
+- number: 1
+  title: Add plan.archive_to config key
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Failing test for archive_to default and override
+
+
+      In `tests/unit/test_config.py`, add:
+
+      ```python
+      def test_plan_archive_to_default(tmp_path):
+          from vk.config import load_profile
+          p = tmp_path / "plan-config.yaml"
+          p.write_text("plan:\n  save_to: docs/plans/\n")
+          profile = load_profile(p)
+          assert profile.plan.archive_to == "docs/superpowers/archived-plans/"
+
+
+      def test_plan_archive_to_override(tmp_path):
+          from vk.config import load_profile
+          p = tmp_path / "plan-config.yaml"
+          p.write_text("plan:\n  archive_to: custom/archive/\n")
+          profile = load_profile(p)
+          assert profile.plan.archive_to == "custom/archive/"
+      ```
+
+      Run; expect AttributeError.
+  - id: P2.T1.S2
+    text: |-
+      Add archive_to to PlanConfig
+
+
+      In `src/vk/config.py`, update `PlanConfig`:
+
+      ```python
+      @dataclass(frozen=True)
+      class PlanConfig:
+          filename: str = "YYYY-MM-DD-{name}.md"
+          save_to: str = "docs/superpowers/plans/"
+          archive_to: str = "docs/superpowers/archived-plans/"
+      ```
+
+      And in `_parse_plan`:
+
+      ```python
+          return PlanConfig(
+              filename=str(raw.get("filename", PlanConfig.filename)),
+              save_to=str(raw.get("save_to", PlanConfig.save_to)),
+              archive_to=str(raw.get("archive_to", PlanConfig.archive_to)),
+          )
+      ```
+
+      Run tests; expect pass.
+- number: 2
+  title: Archive flow in sync
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Failing test — sync-to-Complete offers archive prompt
+
+
+      In `tests/integration/test_progress.py`, add:
+
+      ```python
+      def test_sync_to_complete_prompts_archive(tmp_path, monkeypatch):
+          from typer.testing import CliRunner
+          from vk.cli import app
+          # Set up a repo with a plan whose checkboxes are all checked
+          repo = tmp_path / "repo"
+          (repo / "docs/superpowers/plans").mkdir(parents=True)
+          (repo / "docs/superpowers/archived-plans").mkdir(parents=True)
+          (repo / "docs/superpowers").joinpath("plan-config.yaml").write_text(
+              "plan:\n  save_to: docs/superpowers/plans/\n"
+          )
+          plan = repo / "docs/superpowers/plans/p.md"
+          plan.write_text(
+              "# P\n**Spec:** `s.md`\n**Status:** In Progress\n\n"
+              "## Phase 0: X [agentic]\n### Task 1: T\n- [x] **Step 1: done**\n"
+          )
+          import subprocess
+          subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+          subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+          subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                          "commit", "-m", "init"], cwd=repo, check=True, capture_output=True)
+
+          monkeypatch.chdir(repo)
+          result = CliRunner().invoke(app, ["progress", "sync", str(plan), "--yes"])
+          assert result.exit_code == 0
+          assert not plan.exists(), "plan should be moved out of plans/"
+          assert (repo / "docs/superpowers/archived-plans/p.md").exists()
+      ```
+
+      Run; expect fail (sync today does not archive).
+  - id: P2.T2.S2
+    text: |-
+      Failing test — dry-run shows "Would archive"
+
+
+      ```python
+      def test_sync_dry_run_previews_archive(tmp_path):
+          # ... same setup as above up to `monkeypatch.chdir(repo)` ...
+          result = CliRunner().invoke(app, ["progress", "sync", str(plan), "--dry-run"])
+          assert "Would archive" in result.output
+          assert plan.exists(), "dry-run must not move the file"
+      ```
+
+      Run; expect fail.
+  - id: P2.T2.S3
+    text: |-
+      Failing test — destination collision refused
+
+
+      ```python
+      def test_sync_archive_refuses_overwrite(tmp_path):
+          # ... setup ... then also create archived-plans/p.md beforehand
+          (repo / "docs/superpowers/archived-plans/p.md").write_text("existing")
+          result = CliRunner().invoke(app, ["progress", "sync", str(plan), "--yes"])
+          assert result.exit_code != 0
+          assert "already exists" in (result.output + str(result.exception))
+          assert plan.exists(), "plan must remain in place on refusal"
+      ```
+
+      Run; expect fail.
+  - id: P2.T2.S4
+    text: |-
+      Implement _archive_plan helper in progress_cmd.py
+
+
+      Add to `src/vk/commands/progress_cmd.py`:
+
+      ```python
+      import shutil
+
+
+      def _archive_plan(plan_path: Path, profile: Profile, repo_root: Path,
+                        action: ConfirmAction) -> Path | None:
+          """Move a Complete plan to the archive directory. Returns new path or None.
+
+          Interactive: prompt first (default No).
+          --yes:       auto-archive.
+          --dry-run:   print preview, no move.
+          """
+          dest_dir = repo_root / profile.plan.archive_to
+          dest_dir.mkdir(parents=True, exist_ok=True)
+          dest = dest_dir / plan_path.name
+
+          if dest.exists():
+              err_console.print(
+                  f"Archive destination already exists: {dest}. Refusing to overwrite."
+              )
+              raise typer.Exit(2)
+
+          if action is ConfirmAction.DRY_RUN:
+              console.print(f"Would archive: {plan_path} -> {dest}")
+              return None
+          if action is ConfirmAction.PROMPT:
+              if not typer.confirm(
+                  f"Plan is Complete. Archive to {profile.plan.archive_to}?",
+                  default=False,
+              ):
+                  return None
+
+          # git mv (preserves history), fall back to shutil.move
+          try:
+              subprocess.run(
+                  ["git", "mv", str(plan_path), str(dest)],
+                  check=True, capture_output=True, text=True, cwd=repo_root,
+              )
+          except (subprocess.CalledProcessError, FileNotFoundError):
+              shutil.move(str(plan_path), str(dest))
+              subprocess.run(
+                  ["git", "add", str(dest)], check=False, capture_output=True, cwd=repo_root
+              )
+
+          subprocess.run(
+              ["git", "commit", "-m", f"chore(plan): archive {plan_path.stem} on completion"],
+              check=True, capture_output=True, text=True, cwd=repo_root,
+          )
+          console.print(f"Archived: {plan_path.name} -> {profile.plan.archive_to}")
+          return dest
+      ```
+  - id: P2.T2.S5
+    text: |-
+      Wire into sync() after Status write
+
+
+      At the end of the `sync` function in `progress_cmd.py`, after `_reconcile_spec_index(...)` when `new_status == "Complete"`:
+
+      ```python
+          archived_path: Path | None = None
+          if new_status == "Complete":
+              save_to = Path(profile.plan.save_to)
+              try:
+                  plan_path.relative_to(repo_root / save_to)
+              except ValueError:
+                  pass  # not under save_to, skip archiving
+              else:
+                  archived_path = _archive_plan(plan_path, profile, repo_root, action)
+                  if archived_path:
+                      # Re-reconcile with new path
+                      _reconcile_spec_index(
+                          archived_path, plan.title, new_status, repo_root
+                      )
+      ```
+
+      Run the three new tests; expect pass. Then full suite `pytest tests/ 2>&1 | tail -15`.
+- number: 3
+  title: Update spec index file path on archive
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Failing test — spec index file: column reflects archive path
+
+
+      ```python
+      def test_archive_updates_spec_index_file_column(tmp_path):
+          # ... setup repo with spec and plan linked; complete and archive ...
+          # After sync --yes, read the spec file and assert the index row's
+          # file: column points to docs/superpowers/archived-plans/p.md
+          spec_text = (repo / "docs/superpowers/specs/s.md").read_text()
+          assert "docs/superpowers/archived-plans/p.md" in spec_text
+      ```
+
+      Wire the full fixture (create `docs/superpowers/specs/s.md` with an `## Implementation Plans` table). Refer to `src/vk/spec_index.py` and existing fixtures.
+
+      Run; expect fail (spec index still shows `docs/superpowers/plans/p.md`).
+  - id: P2.T3.S2
+    text: |-
+      Implementation already handled
+
+
+      The re-reconcile in Task 2 Step 5 already passes `archived_path` to `_reconcile_spec_index`. But verify `_reconcile_spec_index` writes the correct `file:` via `IndexEntry.file`. If not, update it to use `archived_path.relative_to(repo_root)` when archived.
+
+      Run the new test; expect pass.
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

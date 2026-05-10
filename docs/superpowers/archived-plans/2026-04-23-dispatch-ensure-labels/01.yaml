@@ -1,0 +1,81 @@
+schema_version: 2
+phase:
+  number: 1
+  title: '`ensure_label` / `ensure_labels` in `vk.gh`'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Helpers + unit tests
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      TDD — add `TestEnsureLabel` and `TestEnsureLabels`
+
+
+      Seven unit tests in `tests/unit/test_gh.py`:
+
+      `TestEnsureLabel`:
+      - `test_calls_gh_label_create_with_force` — command shape and presence of `--force`, `--repo`, `--color`
+      - `test_includes_description_when_given`
+      - `test_omits_description_by_default`
+      - `test_propagates_gh_error`
+
+      `TestEnsureLabels`:
+      - `test_calls_once_per_name` — iteration order preserved
+      - `test_empty_list_is_noop`
+      - `test_error_aborts_remaining` — first failure propagates; caller decides recovery (partial-label state is worse than none)
+  - id: P1.T1.S2
+    text: |-
+      Implement `ensure_label` and `ensure_labels`
+
+
+      ```python
+      def ensure_label(
+          *,
+          repo: str,
+          name: str,
+          color: str = "ededed",
+          description: str = "",
+      ) -> None:
+          args = ["label", "create", name, "--repo", repo, "--force", "--color", color]
+          if description:
+              args.extend(["--description", description])
+          _run_gh(args)
+
+
+      def ensure_labels(*, repo: str, labels: list[str]) -> None:
+          for name in labels:
+              ensure_label(repo=repo, name=name)
+      ```
+  - id: P1.T1.S3
+    text: |-
+      Run unit tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_gh.py -q --no-cov
+      ```
+
+      Expected: green, 7 new + existing passing.
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

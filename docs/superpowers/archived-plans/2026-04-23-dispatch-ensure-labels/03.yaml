@@ -1,0 +1,70 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Call `ensure_labels` from `dispatch migrate`
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Group by repo and ensure labels per repo
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      TDD — integration tests
+
+
+      Two tests in `TestMigrateEnsuresLabels`:
+      - `test_migrate_calls_ensure_labels_per_repo` — one call per unique repo with the right `plan:<slug>` + `phase:<n>` set
+      - `test_migrate_aborts_when_ensure_labels_fails` — exit non-zero, `edit_issue` never called
+  - id: P3.T1.S2
+    text: |-
+      Wire the call
+
+
+      Before the rewrites loop:
+
+      ```python
+      labels_by_repo: dict[str, set[str]] = {}
+      for r in rewrites:
+          labels_by_repo.setdefault(r["repo"], set()).update(
+              {f"plan:{slug}", f"phase:{r['phase_number']}"}
+          )
+      for repo_name, needed in labels_by_repo.items():
+          try:
+              gh.ensure_labels(repo=repo_name, labels=sorted(needed))
+          except gh.GhError as exc:
+              err_console.print(f"Error ensuring labels on {repo_name}: {exc}")
+              raise typer.Exit(4) from exc
+      ```
+  - id: P3.T1.S3
+    text: |-
+      Run
+
+
+      ```bash
+      uv run pytest tests/integration/test_dispatch_migrate.py -q --no-cov
+      ```
+
+      Expected: 10 tests green (2 new + 8 existing).
+
+      ---
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

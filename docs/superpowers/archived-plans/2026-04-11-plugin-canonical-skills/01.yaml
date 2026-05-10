@@ -1,0 +1,557 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Plugin Infrastructure
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/2
+tasks:
+- number: 1
+  title: Create plan-config.yaml for superpowers-for-vk
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write the minimal profile
+
+
+      ```yaml
+      plan:
+        filename: "YYYY-MM-DD-{name}.md"
+        save_to: docs/superpowers/plans/
+
+      header:
+        required:
+          - Spec
+          - Status
+        status_values:
+          - Not Started
+          - In Progress
+          - Complete
+
+      dispatch:
+        target: github-issues
+        owner: derio-net
+        project_board: "Derio Ops"
+        default_repo: derio-net/superpowers-for-vk
+        labels:
+          agentic: vk-ready
+          manual: manual
+      ```
+
+      **Note:** No `structure:` section — the `## Phase` / `### Task` / `- [ ] **Step` markers are invariants across all profiles, hardcoded in vk-plan and vk-execute. `dispatch.owner` is new (previously hardcoded as `derio-net`).
+  - id: P1.T1.S2
+    text: |-
+      Verify YAML
+
+
+      ```bash
+      python3 -c "import yaml; yaml.safe_load(open('docs/superpowers/plan-config.yaml'))" && echo "Valid YAML"
+      ```
+  - id: P1.T1.S3
+    text: |-
+      Commit
+
+
+      ```bash
+      git add docs/superpowers/plan-config.yaml
+      git commit -m "feat: add plan-config.yaml for superpowers-for-vk
+
+      Minimal profile: simple filename, Spec+Status headers, Derio Ops dispatch.
+      Bootstraps the plugin repo's own plan infrastructure."
+      ```
+- number: 2
+  title: Create canonical validator script
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write the validator
+
+
+      ```bash
+      mkdir -p scripts
+      ```
+
+      Write `scripts/validate-plans.sh`:
+
+      ```bash
+      #!/usr/bin/env bash
+      # Canonical plan validator — profile-driven.
+      # Ships with superpowers-for-vk plugin. Per-repo thin wrappers call this.
+      set -euo pipefail
+
+      REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+      ERRORS=()
+      PROFILE=""
+
+      FILES=()
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --profile) PROFILE="$2"; shift 2 ;;
+          *) FILES+=("$1"); shift ;;
+        esac
+      done
+
+      if [ -z "$PROFILE" ]; then
+        PROFILE="$REPO_ROOT/docs/superpowers/plan-config.yaml"
+      fi
+
+      if [ -f "$PROFILE" ]; then
+        FILENAME_PATTERN=$(sed -n '/^plan:/,/^[^ ]/{ s/^  filename: *"\(.*\)"/\1/p }' "$PROFILE" | head -1)
+        REQUIRED_HEADERS=$(sed -n '/^header:/,/^[^ ]/{/^  required:/,/^  [^ ]/{/^    - /{ s/^    - //p }}}' "$PROFILE")
+        STATUS_VALUES=$(sed -n '/^header:/,/^[^ ]/{/status_values:/,/^  [^ ]/{/^    - /{ s/^    - //p }}}' "$PROFILE")
+      else
+        FILENAME_PATTERN="YYYY-MM-DD-{name}.md"
+        REQUIRED_HEADERS="Status"
+        STATUS_VALUES=""
+      fi
+
+      if ! echo "$REQUIRED_HEADERS" | grep -q "Status"; then
+        REQUIRED_HEADERS="$REQUIRED_HEADERS
+      Status"
+      fi
+
+      validate_file() {
+        local f="$1"
+        local base
+        base="$(basename "$f" .md)"
+
+        # Filename validation
+        case "$FILENAME_PATTERN" in
+          *"{layer}"*)
+            if ! [[ "$base" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}--[a-z]+--[a-z0-9].*$ ]]; then
+              ERRORS+=("$base: malformed filename (expected YYYY-MM-DD--<layer>--<details>)")
+            fi
+            ;;
+          *)
+            if ! [[ "$base" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9].*$ ]]; then
+              ERRORS+=("$base: malformed filename (expected YYYY-MM-DD-<name>)")
+            fi
+            ;;
+        esac
+
+        # Header validation
+        local header
+        header=$(head -20 "$f")
+
+        while IFS= read -r field; do
+          [ -z "$field" ] && continue
+          if ! echo "$header" | grep -q "\*\*${field}:\*\*"; then
+            ERRORS+=("$base: missing **${field}:** line in header")
+          fi
+        done <<< "$REQUIRED_HEADERS"
+
+        # Spec reference validation
+        if echo "$REQUIRED_HEADERS" | grep -q "Spec"; then
+          if echo "$header" | grep -q '\*\*Spec:\*\*'; then
+            local spec_ref
+            spec_ref=$(echo "$header" | sed -n 's/.*\*\*Spec:\*\* `\([^`]*\)`.*/\1/p' | head -1)
+            if [ -z "$spec_ref" ]; then
+              ERRORS+=("$base: **Spec:** line has no backtick-enclosed path")
+            elif [ "$spec_ref" != "none" ] && [[ "$spec_ref" != willikins/* ]] && [[ "$spec_ref" != frank/* ]] && [[ "$spec_ref" != content-factory/* ]]; then
+              if [ ! -f "$REPO_ROOT/$spec_ref" ]; then
+                ERRORS+=("$base: spec ref not found: $spec_ref")
+              fi
+            fi
+          fi
+        fi
+
+        # Status value validation
+        if [ -n "$STATUS_VALUES" ]; then
+          local status_val
+          status_val=$(echo "$header" | sed -n 's/.*\*\*Status:\*\* \(.*\)/\1/p' | head -1)
+          status_val="${status_val%% (*}"
+          status_val="${status_val#semi-}"
+          if [ -n "$status_val" ] && ! echo "$STATUS_VALUES" | grep -qx "$status_val"; then
+            ERRORS+=("$base: invalid status '$status_val' — allowed: $(echo "$STATUS_VALUES" | tr '\n' ', ')")
+          fi
+        fi
+
+        # Structure validation
+        local has_phases=false
+        if grep -q '^## Phase [0-9]' "$f"; then
+          has_phases=true
+        fi
+
+        if $has_phases; then
+          while IFS= read -r line; do
+            if ! [[ "$line" =~ \[(manual|agentic)\] ]]; then
+              ERRORS+=("$base: untagged phase: $line")
+            fi
+          done < <(grep '^## Phase [0-9]' "$f")
+
+          if grep -q '^## Task [0-9]' "$f"; then
+            ERRORS+=("$base: uses '## Task' — should be '### Task' (h3 inside Phase)")
+          fi
+        else
+          if grep -q '^## Task [0-9]' "$f"; then
+            ERRORS+=("$base: uses '## Task' — should be '### Task'")
+          fi
+        fi
+      }
+
+      if [ ${#FILES[@]} -gt 0 ]; then
+        for f in "${FILES[@]}"; do
+          [ -f "$f" ] && validate_file "$f"
+        done
+      else
+        PLANS_DIR="$REPO_ROOT/docs/superpowers/plans"
+        ARCHIVE_DIR="$REPO_ROOT/docs/superpowers/archived-plans"
+        for f in "$PLANS_DIR"/*.md "$ARCHIVE_DIR"/*.md; do
+          [ -e "$f" ] && validate_file "$f"
+        done
+      fi
+
+      if [ ${#ERRORS[@]} -gt 0 ]; then
+        echo "Plan validation failed:" >&2
+        for e in "${ERRORS[@]}"; do
+          echo "  - $e" >&2
+        done
+        exit 1
+      fi
+      ```
+  - id: P1.T2.S2
+    text: |-
+      Make executable and test
+
+
+      ```bash
+      chmod +x scripts/validate-plans.sh
+
+      # Test against the current plan file — should pass
+      ./scripts/validate-plans.sh docs/superpowers/plans/2026-04-11-plugin-canonical-skills.md && echo "PASS: self-validation"
+
+      # Test with a bad file
+      cat > /tmp/bad-plan.md << 'EOF'
+      # Bad Plan
+      No status here.
+      EOF
+      ./scripts/validate-plans.sh /tmp/bad-plan.md 2>&1 && echo "FAIL: should have errored" || echo "PASS: caught missing status"
+      rm /tmp/bad-plan.md
+      ```
+  - id: P1.T2.S3
+    text: |-
+      Commit
+
+
+      ```bash
+      git add scripts/validate-plans.sh
+      git commit -m "feat: add canonical profile-driven plan validator
+
+      Reads plan-config.yaml for filename pattern, required headers, status values.
+      Validates both new (Phase > Task > Step) and grandfathered (flat Task) formats.
+      Per-repo thin wrappers call this script."
+      ```
+- number: 3
+  title: Create install script and vk-plan override rule
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Create the rule
+
+
+      ```bash
+      mkdir -p rules
+      ```
+
+      Write `rules/vk-plan-override.md`:
+
+      ```markdown
+      ## Plan Skill Override
+
+      When the brainstorming skill says to invoke `writing-plans`, invoke `vk-plan` instead.
+      When any skill references `superpowers:writing-plans`, use `vk-plan`.
+      ```
+  - id: P1.T3.S2
+    text: |-
+      Write the install script
+
+
+      Write `scripts/install.sh`:
+
+      ```bash
+      #!/usr/bin/env bash
+      # Install superpowers-for-vk skills, rules, and hooks at user level.
+      set -euo pipefail
+
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+      CLAUDE_DIR="$HOME/.claude"
+      SKILLS_DIR="$CLAUDE_DIR/skills"
+      RULES_DIR="$CLAUDE_DIR/rules"
+      SETTINGS="$CLAUDE_DIR/settings.json"
+
+      SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
+
+      if [[ "${1:-}" == "--uninstall" ]]; then
+        echo "Uninstalling superpowers-for-vk..."
+        for skill in "${SKILL_NAMES[@]}"; do
+          rm -rf "$SKILLS_DIR/$skill"
+          echo "  Removed $SKILLS_DIR/$skill"
+        done
+        rm -f "$RULES_DIR/vk-plan-override.md"
+        echo "  Removed $RULES_DIR/vk-plan-override.md"
+        echo "Done. Note: PostToolUse hook in settings.json was NOT removed (manual cleanup)."
+        exit 0
+      fi
+
+      echo "Installing superpowers-for-vk..."
+
+      for skill in "${SKILL_NAMES[@]}"; do
+        mkdir -p "$SKILLS_DIR/$skill"
+        cp "$PLUGIN_ROOT/skills/$skill/SKILL.md" "$SKILLS_DIR/$skill/SKILL.md"
+        echo "  Installed $SKILLS_DIR/$skill/SKILL.md"
+      done
+
+      mkdir -p "$RULES_DIR"
+      cp "$PLUGIN_ROOT/rules/vk-plan-override.md" "$RULES_DIR/vk-plan-override.md"
+      echo "  Installed $RULES_DIR/vk-plan-override.md"
+
+      if [ ! -f "$SETTINGS" ]; then
+        echo "  WARNING: $SETTINGS not found — skipping hook installation"
+      else
+        if grep -q "validate-plans" "$SETTINGS"; then
+          echo "  PostToolUse hook already present — skipping"
+        else
+          echo ""
+          echo "  NOTE: Manual settings.json edit required. Add this PostToolUse hook:"
+          cat << 'HOOK'
+          {
+            "matcher": "Edit|Write",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "bash -c 'FILE=$(cat | jq -r \".tool_input.file_path // .tool_response.filePath // empty\"); case \"$FILE\" in */docs/superpowers/plans/*.md) REPO_ROOT=$(git -C \"$(dirname \"$FILE\")\" rev-parse --show-toplevel 2>/dev/null); [ -x \"$REPO_ROOT/scripts/validate-plans.sh\" ] && \"$REPO_ROOT/scripts/validate-plans.sh\" \"$FILE\" 2>&1 || true;; esac'",
+                "statusMessage": "Validating plan..."
+              }
+            ]
+          }
+      HOOK
+        fi
+      fi
+
+      echo ""
+      echo "Installation complete. Verify with:"
+      echo "  ls ~/.claude/skills/vk-*/"
+      echo "  cat ~/.claude/rules/vk-plan-override.md"
+      ```
+  - id: P1.T3.S3
+    text: |-
+      Make executable and verify
+
+
+      ```bash
+      chmod +x scripts/install.sh
+      bash -n scripts/install.sh && echo "Syntax OK"
+      ```
+  - id: P1.T3.S4
+    text: |-
+      Commit
+
+
+      ```bash
+      git add rules/vk-plan-override.md scripts/install.sh
+      git commit -m "feat: add install script and vk-plan-override rule
+
+      install.sh copies skills to ~/.claude/skills/vk-*/, installs the
+      brainstorming→vk-plan redirect rule, and documents the PostToolUse hook."
+      ```
+- number: 4
+  title: Update README and bump version to 0.2.0
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Replace README.md
+
+
+      ```markdown
+      # superpowers-for-vk
+
+      Canonical planning and work lifecycle skills for derio-net repos. Wraps the upstream
+      [superpowers](https://github.com/obra/superpowers) plugin with phase-based plans,
+      profile-driven per-repo behavior, and work lifecycle tracking.
+
+      ## Skills
+
+      | Skill | Description |
+      |-------|-------------|
+      | `vk-plan` | Canonical plan skill — phase-structured plans with profile-driven behavior and spec index maintenance |
+      | `vk-dispatch` | Dispatch plan phases to GitHub Issues with profile-aware config |
+      | `vk-execute` | Execute an agentic phase (agent-facing, Phase > Task > Step) |
+      | `vk-progress` | Work lifecycle — plan sync, status board, create/transition, health, audit |
+
+      ## Installation
+
+      ### Option 1: Plugin (recommended)
+
+      Add to `~/.claude/settings.json`:
+
+      ```json
+      {
+        "enabledPlugins": {
+          "superpowers-for-vk@derio-net": true
+        }
+      }
+      ```
+
+      ### Option 2: User-level install
+
+      ```bash
+      git clone https://github.com/derio-net/superpowers-for-vk
+      cd superpowers-for-vk
+      ./scripts/install.sh
+      ```
+
+      ## Per-Repo Profile
+
+      Each repo can define `docs/superpowers/plan-config.yaml` to control:
+      - Filename patterns, required headers, status values
+      - Post-deploy phases (auto-appended by vk-plan)
+      - Dispatch config (project board, labels, target repo)
+
+      ## Plan Model
+
+      - **One plan = one repo's worth of work.** Plans live in the repo they modify.
+      - **One phase = one GitHub Issue = one PR.** Phases are scoped for reviewability.
+      - **Cross-repo features use multiple plans**, coordinated via the spec's "Implementation Plans" section (maintained automatically by vk-plan).
+
+      ## Requirements
+
+      - [superpowers](https://github.com/obra/superpowers) plugin installed
+      - GitHub CLI (`gh`) authenticated
+      - VK MCP server (optional): `npx vibe-kanban@latest --mcp`
+
+      ## Validator
+
+      `scripts/validate-plans.sh` — canonical, profile-driven plan validator. Per-repo thin wrappers delegate here.
+      ```
+  - id: P1.T4.S2
+    text: |-
+      Bump version
+
+
+      Update `package.json`:
+
+      ```json
+      {
+          "name": "superpowers-for-vk",
+          "version": "0.2.0",
+          "type": "module"
+      }
+      ```
+
+      Also update `.claude-plugin/plugin.json`:
+
+      ```bash
+      python3 -c "
+      import json
+      with open('.claude-plugin/plugin.json') as f:
+          d = json.load(f)
+      d['version'] = '0.2.0'
+      with open('.claude-plugin/plugin.json', 'w') as f:
+          json.dump(d, f, indent=2)
+          f.write('\n')
+      "
+      ```
+
+      And `.claude-plugin/marketplace.json`:
+
+      ```bash
+      python3 -c "
+      import json
+      with open('.claude-plugin/marketplace.json') as f:
+          d = json.load(f)
+      for p in d['plugins']:
+          if p['name'] == 'superpowers-for-vk':
+              p['version'] = '0.2.0'
+      with open('.claude-plugin/marketplace.json', 'w') as f:
+          json.dump(d, f, indent=2)
+          f.write('\n')
+      "
+      ```
+  - id: P1.T4.S3
+    text: |-
+      Verify versions match
+
+
+      ```bash
+      grep '"version"' package.json
+      grep '"version"' .claude-plugin/plugin.json
+      grep '"version"' .claude-plugin/marketplace.json
+      # All three should show 0.2.0
+      ```
+  - id: P1.T4.S4
+    text: |-
+      Commit
+
+
+      ```bash
+      git add README.md package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json
+      git commit -m "chore: update README and bump to v0.2.0
+
+      Documents profile-driven behavior, install script, validator, spec index
+      maintenance, and the one-plan-one-repo + one-phase-one-PR model."
+      ```
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

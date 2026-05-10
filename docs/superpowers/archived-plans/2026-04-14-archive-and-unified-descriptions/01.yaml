@@ -1,0 +1,565 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Dispatch output — titles, body, labels, validator
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/10
+tasks:
+- number: 1
+  title: Body builder — tracking block and dash-prefixed deps
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add failing test for tracking block in body
+
+
+      Append to `tests/unit/test_dispatch_body.py` inside `class TestBuildIssueBody`:
+
+      ```python
+          def test_tracking_block_includes_repo_plan_spec(self) -> None:
+              body = _build_issue_body(
+                  _make_phase(1, title="Bootstrap"),
+                  Path("docs/superpowers/plans/2026-04-14-feature.md"),
+                  "org/repo",
+                  prev_num=None,
+                  total_phases=3,
+                  spec="docs/superpowers/specs/2026-04-14-feature-design.md",
+                  goal="Build a thing that does X.",
+              )
+              assert "📦 Repo:   org/repo" in body
+              assert "📋 Plan:   docs/superpowers/plans/2026-04-14-feature.md" in body
+              assert "📐 Spec:   docs/superpowers/specs/2026-04-14-feature-design.md" in body
+              assert "🎯 Phase:  1/3 — Bootstrap [agentic]" in body
+              assert "**Goal (from plan):** Build a thing that does X." in body
+      ```
+
+      Run `pytest tests/unit/test_dispatch_body.py -x 2>&1 | tail -20`. Expected: TypeError on unexpected kwargs `total_phases`/`spec`/`goal` — confirming the builder signature must be extended.
+  - id: P1.T1.S2
+    text: |-
+      Add failing test for dash-prefixed Blocked by
+
+
+      Append to `TestBuildIssueBody`:
+
+      ```python
+          def test_dependencies_use_dash_prefix(self) -> None:
+              body = _build_issue_body(
+                  _make_phase(2), Path("/p.md"), "org/repo",
+                  prev_num=42, total_phases=3, spec="s.md", goal="G.",
+              )
+              assert "## Dependencies\n\n- Blocked by #42" in body
+
+          def test_phase_zero_no_blocker_line(self) -> None:
+              body = _build_issue_body(
+                  _make_phase(0), Path("/p.md"), "org/repo",
+                  prev_num=None, total_phases=3, spec="s.md", goal="G.",
+              )
+              assert "None — no blocking phases." in body
+              assert "- Blocked by" not in body
+      ```
+
+      Run the test file; both new tests fail.
+  - id: P1.T1.S3
+    text: |-
+      Update _build_issue_body signature and body composition
+
+
+      In `src/vk/commands/dispatch_cmd.py`, replace `_build_issue_body` (lines 69–112) with:
+
+      ```python
+      def _build_issue_body(
+          phase: Phase,
+          plan_path: Path,
+          target_repo: str,
+          prev_num: int | None,
+          total_phases: int,
+          spec: str,
+          goal: str,
+      ) -> str:
+          """Build an Issue body: tracking block + Instruction/Workspace/Dependencies.
+
+          The body is consumed by the VK Issue Bridge, which requires the
+          ``- Blocked by #N`` dash prefix in ``## Dependencies`` for gating.
+          """
+          if phase.number == 0:
+              deps_block = "None — no blocking phases."
+          elif prev_num is not None:
+              deps_block = f"- Blocked by #{prev_num}"
+          else:
+              raise ValueError(
+                  f"Phase {phase.number} has no prev_num but is not phase 0. "
+                  "Cannot emit parseable dependency line. "
+                  "Fix: ensure earlier phases were dispatched first."
+              )
+
+          tracking_block = (
+              f"📦 Repo:   {target_repo}\n"
+              f"📋 Plan:   {plan_path}\n"
+              f"📐 Spec:   {spec}\n"
+              f"🎯 Phase:  {phase.number}/{total_phases} — {phase.title} [{phase.tag}]\n"
+              f"🔗 Issue:  (assigned on create)\n"
+              f"\n"
+              f"**Goal (from plan):** {goal}\n"
+          )
+
+          return (
+              f"{tracking_block}"
+              f"\n---\n\n"
+              f"## Instruction\n\n"
+              f"Use superpowers-for-vk:vk-execute to implement Phase {phase.number} of this plan.\n\n"
+              f"## Workspace\n\n"
+              f"Repos: {target_repo}\n\n"
+              f"## Dependencies\n\n"
+              f"{deps_block}\n"
+          )
+      ```
+  - id: P1.T1.S4
+    text: |-
+      Update all existing tests for new signature
+
+
+      Existing `TestBuildIssueBody` tests (test_contains_instruction_section, test_contains_workspace_section, test_contains_dependencies_section, test_phase_zero_no_blocking, test_phase_one_no_prev_issue, test_phase_with_prev_issue, test_header_contains_phase_info, test_manual_type, test_plan_path_in_body, test_footer_contains_phase_title, test_instruction_references_phase_number) need `total_phases=3, spec="s.md", goal="G."` added.
+
+      Note: `test_phase_one_no_prev_issue` expects `"Phases 0-0 complete."` and `test_phase_with_prev_issue` expects `"Phases 0-2 complete. Blocked by #42."`. These now become incorrect — update to assert `"- Blocked by #42"` for the prev-num case and change `test_phase_one_no_prev_issue` to assert the builder raises ValueError (since phase 1 with `prev_num=None` is invalid per the new contract).
+
+      Note: `test_footer_contains_phase_title` asserts `"**Phase:** 2 — Integration"` — update to assert `"🎯 Phase:  2/3 — Integration"`.
+
+      Run `pytest tests/unit/test_dispatch_body.py 2>&1 | tail -10`. Expected: all pass.
+  - id: P1.T1.S5
+    text: |-
+      Update dispatch_cmd.dispatch() call site
+
+
+      In `src/vk/commands/dispatch_cmd.py::dispatch`, at the loop `for phase in plan.phases:` (around line 248), the body call (line 255) becomes:
+
+      ```python
+              body = _build_issue_body(
+                  phase,
+                  plan_path_resolved,
+                  target_repo,
+                  prev_num,
+                  total_phases=len(plan.phases),
+                  spec=plan.spec or "",
+                  goal=plan.goal,
+              )
+      ```
+
+      Run `pytest tests/ 2>&1 | tail -15`. Expect test_dispatch.py integration tests need adjustment in the next step.
+- number: 2
+  title: Title builder — human-readable format
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Add failing test for new title format
+
+
+      Append to `tests/unit/test_dispatch_body.py`:
+
+      ```python
+      from vk.commands.dispatch_cmd import _build_issue_title
+
+
+      class TestBuildIssueTitle:
+          def test_title_format(self) -> None:
+              phase = Phase(number=2, title="Content Migration", tag="agentic", tasks=(), tracking_url=None)
+              title = _build_issue_title("blog-hextra", phase, target_repo="derio-net/frank", total=5)
+              assert title == "[derio-net/frank] blog-hextra · Phase 2/5 · Content Migration"
+
+          def test_manual_phase_title(self) -> None:
+              phase = Phase(number=0, title="Operator Review", tag="manual", tasks=(), tracking_url=None)
+              title = _build_issue_title("my-plan", phase, target_repo="org/repo", total=1)
+              assert title == "[org/repo] my-plan · Phase 0/1 · Operator Review"
+      ```
+
+      Run the test file; both new tests fail because `_build_issue_title` signature differs.
+  - id: P1.T2.S2
+    text: |-
+      Update _build_issue_title signature
+
+
+      Replace lines 64–66 of `src/vk/commands/dispatch_cmd.py`:
+
+      ```python
+      def _build_issue_title(slug: str, phase: Phase, target_repo: str, total: int) -> str:
+          """Human-readable title: [{repo}] {slug} · Phase {n}/{total} · {phase_title}."""
+          return f"[{target_repo}] {slug} · Phase {phase.number}/{total} · {phase.title}"
+      ```
+
+      Update call sites in `dispatch_cmd.py`: `_print_dry_run` loop (around line 138) and the main apply loop (around line 252) need `target_repo=target_repo, total=len(phases_or_plan.phases)`.
+
+      Run `pytest tests/unit/test_dispatch_body.py 2>&1 | tail -10`. Expected: pass.
+- number: 3
+  title: Structured labels on create
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Add failing integration test for structured labels
+
+
+      Open `tests/integration/test_dispatch.py` and find the existing dispatch success test. Append a new test:
+
+      ```python
+      def test_dispatch_adds_plan_and_phase_labels(tmp_path, monkeypatch, phased_plan_file, dispatch_config):
+          """Each created Issue must carry plan:<slug> and phase:<n> labels."""
+          captured_labels: list[list[str]] = []
+
+          def fake_create_issue(repo, title, body, labels):
+              captured_labels.append(list(labels))
+              return "https://github.com/org/repo/issues/100"
+
+          monkeypatch.setattr("vk.gh.create_issue", fake_create_issue)
+          monkeypatch.setattr("vk.gh.extract_issue_number", lambda url: 100)
+
+          from typer.testing import CliRunner
+          from vk.cli import app
+          runner = CliRunner()
+          runner.invoke(app, ["dispatch", str(phased_plan_file), "--yes"])
+
+          for labs in captured_labels:
+              assert any(lab.startswith("plan:") for lab in labs), f"Missing plan: label in {labs}"
+              assert any(lab.startswith("phase:") for lab in labs), f"Missing phase: label in {labs}"
+      ```
+
+      Note: the fixture names (`phased_plan_file`, `dispatch_config`) must match existing fixtures in `tests/integration/conftest.py`. If names differ, use whatever is there.
+
+      Run `pytest tests/integration/test_dispatch.py::test_dispatch_adds_plan_and_phase_labels -x 2>&1 | tail -10`. Expected: fail (labels don't include plan:/phase: yet).
+  - id: P1.T3.S2
+    text: |-
+      Add structured labels in dispatch loop
+
+
+      In `src/vk/commands/dispatch_cmd.py`, at the `gh.create_issue(...)` call (around line 258), replace the `labels=[...]` argument:
+
+      ```python
+                  tag_label = (
+                      dispatch_cfg.labels.get("agentic", "vk-ready")
+                      if phase.tag == "agentic"
+                      else dispatch_cfg.labels.get("manual", "manual")
+                  )
+                  issue_url = gh.create_issue(
+                      repo=target_repo,
+                      title=title,
+                      body=body,
+                      labels=[tag_label, f"plan:{slug}", f"phase:{phase.number}"],
+                  )
+      ```
+
+      Run the test; expect pass. Then run `pytest tests/ 2>&1 | tail -10`. Fix any fallout in other tests.
+- number: 4
+  title: Body validator
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Write failing tests for validator
+
+
+      Create `tests/unit/test_dispatch_body_validator.py`:
+
+      ```python
+      """Tests for validate_issue_body."""
+      from __future__ import annotations
+
+      import pytest
+
+      from vk.commands.dispatch_body_validator import BodyValidationError, validate_issue_body
+
+
+      class TestValidateIssueBody:
+          def test_accepts_complete_phase_zero_body(self) -> None:
+              body = (
+                  "📦 Repo:   org/repo\n\n---\n\n"
+                  "## Instruction\n\nUse ...\n\n"
+                  "## Workspace\n\nRepos: org/repo\n\n"
+                  "## Dependencies\n\nNone — no blocking phases.\n"
+              )
+              validate_issue_body(body, phase_number=0)  # no raise
+
+          def test_accepts_complete_phase_n_body(self) -> None:
+              body = (
+                  "## Instruction\n\nUse ...\n\n"
+                  "## Workspace\n\nRepos: org/repo\n\n"
+                  "## Dependencies\n\n- Blocked by #42\n"
+              )
+              validate_issue_body(body, phase_number=2)
+
+          def test_rejects_missing_instruction(self) -> None:
+              body = "## Workspace\n\nRepos: x\n\n## Dependencies\n\n- Blocked by #1\n"
+              with pytest.raises(BodyValidationError, match="## Instruction"):
+                  validate_issue_body(body, phase_number=1)
+
+          def test_rejects_missing_workspace(self) -> None:
+              body = "## Instruction\n\nUse ...\n\n## Dependencies\n\n- Blocked by #1\n"
+              with pytest.raises(BodyValidationError, match="## Workspace"):
+                  validate_issue_body(body, phase_number=1)
+
+          def test_rejects_missing_dependencies(self) -> None:
+              body = "## Instruction\n\nUse ...\n\n## Workspace\n\nRepos: x\n"
+              with pytest.raises(BodyValidationError, match="## Dependencies"):
+                  validate_issue_body(body, phase_number=1)
+
+          def test_rejects_phase_n_without_dash_blocker(self) -> None:
+              body = (
+                  "## Instruction\n\nUse ...\n\n"
+                  "## Workspace\n\nRepos: x\n\n"
+                  "## Dependencies\n\nBlocked by #42\n"  # missing dash prefix
+              )
+              with pytest.raises(BodyValidationError, match="- Blocked by"):
+                  validate_issue_body(body, phase_number=2)
+      ```
+
+      Run: `pytest tests/unit/test_dispatch_body_validator.py 2>&1 | tail -10`. Expected: ImportError (module doesn't exist).
+  - id: P1.T4.S2
+    text: |-
+      Implement the validator
+
+
+      Create `src/vk/commands/dispatch_body_validator.py`:
+
+      ```python
+      """Validator for Issue bodies produced by vk dispatch.
+
+      Fail-loud: any missing required section or wrong dependency format
+      raises BodyValidationError with an actionable message.
+      """
+      from __future__ import annotations
+
+
+      class BodyValidationError(ValueError):
+          """Raised when a generated Issue body fails the dispatch contract."""
+
+
+      _REQUIRED_SECTIONS = ("## Instruction", "## Workspace", "## Dependencies")
+
+
+      def validate_issue_body(body: str, phase_number: int) -> None:
+          """Raise BodyValidationError if body is not bridge-compatible.
+
+          Checks:
+          - All required sections present.
+          - For phase_number > 0, the Dependencies section contains '- Blocked by #N'.
+          """
+          for section in _REQUIRED_SECTIONS:
+              if section not in body:
+                  raise BodyValidationError(
+                      f"Generated body missing required section '{section}'. "
+                      f"The VK Issue Bridge will fail to parse this Issue. "
+                      f"Fix: investigate _build_issue_body in dispatch_cmd.py."
+                  )
+
+          if phase_number > 0:
+              deps_idx = body.index("## Dependencies")
+              deps_block = body[deps_idx:]
+              if "- Blocked by #" not in deps_block:
+                  raise BodyValidationError(
+                      f"Phase {phase_number} body's Dependencies section lacks "
+                      f"the required '- Blocked by #N' dash-prefixed line. "
+                      f"The bridge's dep-gating regex requires the dash. "
+                      f"Fix: investigate _build_issue_body in dispatch_cmd.py."
+                  )
+      ```
+
+      Run the test file; expect pass.
+  - id: P1.T4.S3
+    text: |-
+      Wire validator into dispatch apply loop
+
+
+      In `src/vk/commands/dispatch_cmd.py`, after building `body` and before calling `gh.create_issue`, add:
+
+      ```python
+                  from vk.commands.dispatch_body_validator import validate_issue_body
+                  validate_issue_body(body, phase.number)
+      ```
+
+      Move the import to the top-of-file imports. Run `pytest tests/ 2>&1 | tail -15`. Expect pass.
+- number: 5
+  title: Remove quiet git-commit swallow
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write failing test for git commit failure propagation
+
+
+      In `tests/integration/test_dispatch.py`, add:
+
+      ```python
+      def test_dispatch_git_commit_failure_surfaces(tmp_path, monkeypatch, phased_plan_file, dispatch_config):
+          """A failing git commit must surface, not be silently swallowed."""
+          import subprocess
+          original_run = subprocess.run
+
+          def fake_run(cmd, *args, **kwargs):
+              if cmd and cmd[0] == "git" and "commit" in cmd:
+                  raise subprocess.CalledProcessError(1, cmd, stderr="pre-commit hook failed")
+              return original_run(cmd, *args, **kwargs)
+
+          monkeypatch.setattr("vk.gh.create_issue", lambda **kw: "https://github.com/org/repo/issues/1")
+          monkeypatch.setattr("vk.gh.extract_issue_number", lambda url: 1)
+          monkeypatch.setattr("subprocess.run", fake_run)
+
+          from typer.testing import CliRunner
+          from vk.cli import app
+          result = CliRunner().invoke(app, ["dispatch", str(phased_plan_file), "--yes"])
+          assert result.exit_code != 0
+          assert "pre-commit hook failed" in (result.output + str(result.exception))
+      ```
+
+      Run; expect fail (today: `except Exception: pass` swallows the error and exit is 0).
+  - id: P1.T5.S2
+    text: |-
+      Remove the silent except
+
+
+      In `src/vk/commands/dispatch_cmd.py` lines 282–296, replace the try/except wrapping the git commit with direct subprocess calls:
+
+      ```python
+          subprocess.run(
+              ["git", "add", str(plan_path_resolved)],
+              check=True, capture_output=True, text=True, cwd=repo_root,
+          )
+          subprocess.run(
+              ["git", "commit", "-m", "chore: link plan phases to GitHub Issues (vk dispatch)"],
+              check=True, capture_output=True, text=True, cwd=repo_root,
+          )
+      ```
+
+      Run the test; expect pass. Run full suite `pytest tests/ 2>&1 | tail -15`; fix any fallout.
+- number: 6
+  title: Inject issue URL into tracking block after create
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Write failing test that Issue body is updated with its own URL
+
+
+      In `tests/integration/test_dispatch.py`, add:
+
+      ```python
+      def test_dispatch_updates_body_with_issue_url(tmp_path, monkeypatch, phased_plan_file, dispatch_config):
+          """After Issue creation, the body's '🔗 Issue:' line gets the real URL."""
+          edits: list[tuple[str, str]] = []
+
+          def fake_create(repo, title, body, labels):
+              assert "(assigned on create)" in body
+              return "https://github.com/org/repo/issues/77"
+
+          def fake_edit(repo, number, body):
+              edits.append((repo, body))
+
+          monkeypatch.setattr("vk.gh.create_issue", fake_create)
+          monkeypatch.setattr("vk.gh.extract_issue_number", lambda url: 77)
+          monkeypatch.setattr("vk.gh.edit_issue_body", fake_edit)
+
+          from typer.testing import CliRunner
+          from vk.cli import app
+          CliRunner().invoke(app, ["dispatch", str(phased_plan_file), "--yes"])
+          assert edits, "expected at least one edit_issue_body call"
+          for _, body in edits:
+              assert "🔗 Issue:  https://github.com/org/repo/issues/77" in body
+      ```
+
+      Expected: fail — `gh.edit_issue_body` may not exist; dispatch doesn't re-edit the body.
+  - id: P1.T6.S2
+    text: |-
+      Add gh.edit_issue_body helper
+
+
+      In `src/vk/gh.py`, add:
+
+      ```python
+      def edit_issue_body(repo: str, number: int, body: str) -> None:
+          """Update the body of an existing Issue via `gh issue edit`."""
+          _run_gh(["issue", "edit", str(number), "--repo", repo, "--body", body])
+      ```
+
+      Use whatever `_run_gh`/equivalent helper already exists in that module. Add a minimal unit test in `tests/unit/test_gh.py` mirroring existing patterns.
+  - id: P1.T6.S3
+    text: |-
+      Call edit_issue_body after create in dispatch loop
+
+
+      After `issue_num = gh.extract_issue_number(issue_url)` in the apply loop:
+
+      ```python
+                  updated_body = body.replace("(assigned on create)", issue_url)
+                  gh.edit_issue_body(target_repo, issue_num, updated_body)
+      ```
+
+      Run `pytest tests/ 2>&1 | tail -10`; expect pass.
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

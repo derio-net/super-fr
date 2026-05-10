@@ -1,0 +1,1211 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Parser, writer, and plan fixtures
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/some-repo/issues/42
+tasks:
+- number: 1
+  title: Plan fixture files
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Create phased-small.md fixture
+
+
+      Create `tests/fixtures/plans/phased-small.md`:
+
+      ```markdown
+      # Small Phased Plan
+
+      **Spec:** `docs/superpowers/specs/2026-01-01-example.md`
+      **Status:** Not Started
+
+      **Goal:** A small phased plan for testing.
+
+      ---
+
+      ## Phase 1: Setup [agentic]
+
+      ### Task 1: Create project structure
+
+      **Files:**
+      - Create: `src/main.py`
+      - Test: `tests/test_main.py`
+
+      - [x] **Step 1: Write the failing test**
+
+      Create `tests/test_main.py` with a basic import test.
+
+      - [x] **Step 2: Implement src/main.py**
+
+      Create the main module with a hello function.
+
+      - [x] **Step 3: Run tests**
+
+      Run: `uv run pytest -v`
+
+      ## Phase 2: Documentation [manual]
+
+      ### Task 1: Write README
+
+      - [x] **Step 1: Create README.md**
+
+      Write the project README with usage instructions.
+
+      - [x] **Step 2: Review documentation**
+
+      Verify all sections are complete.
+      ```
+  - id: P2.T1.S2
+    text: |-
+      Create phased-large.md fixture
+
+
+      Create `tests/fixtures/plans/phased-large.md`:
+
+      ```markdown
+      # Large Phased Plan
+
+      **Spec:** `docs/superpowers/specs/2026-02-15-big-feature.md`
+      **Status:** In Progress
+
+      **Goal:** A larger phased plan with multiple tasks per phase.
+
+      ---
+
+      ## Phase 1: Foundation [agentic]
+
+      ### Task 1: Database schema
+
+      **Files:**
+      - Create: `migrations/001_init.sql`
+      - Test: `tests/test_schema.py`
+
+      - [x] **Step 1: Write schema test**
+
+      Create `tests/test_schema.py` with table existence checks.
+
+      - [x] **Step 2: Create migration**
+
+      Write the SQL migration file.
+
+      - [x] **Step 3: Run migration**
+
+      Apply and verify.
+
+      ### Task 2: Configuration loader
+
+      **Files:**
+      - Create: `src/config.py`
+      - Test: `tests/test_config.py`
+
+      - [x] **Step 1: Write config tests**
+
+      Test YAML loading with defaults.
+
+      - [x] **Step 2: Implement config module**
+
+      Build the config loader.
+
+      ## Phase 2: API Layer [agentic]
+
+      ### Task 1: REST endpoints
+
+      **Files:**
+      - Create: `src/api.py`
+      - Test: `tests/test_api.py`
+
+      - [x] **Step 1: Write API tests**
+
+      Test endpoint responses.
+
+      - [x] **Step 2: Implement endpoints**
+
+      Build the REST handlers.
+
+      ### Task 2: Authentication middleware
+
+      **Files:**
+      - Create: `src/auth.py`
+      - Test: `tests/test_auth.py`
+
+      - [x] **Step 1: Write auth tests**
+
+      Test token validation.
+
+      - [x] **Step 2: Implement auth middleware**
+
+      Build the authentication layer.
+
+      ## Phase 3: Deployment [manual]
+
+      ### Task 1: CI/CD pipeline
+
+      - [x] **Step 1: Create workflow file**
+
+      Write `.github/workflows/deploy.yml`.
+
+      - [x] **Step 2: Configure secrets**
+
+      Set up repository secrets for deployment.
+      ```
+  - id: P2.T1.S3
+    text: |-
+      Create phased-dispatched.md fixture
+
+
+      Create `tests/fixtures/plans/phased-dispatched.md`:
+
+      ```markdown
+      # Dispatched Phased Plan
+
+      **Spec:** `docs/superpowers/specs/2026-03-01-dispatched.md`
+      **Status:** In Progress
+
+      **Goal:** A phased plan that has been dispatched to GitHub Issues.
+
+      ---
+
+      ## Phase 1: Core Implementation [agentic]
+
+      <!-- Tracking: https://github.com/derio-net/some-repo/issues/42 -->
+
+      ### Task 1: Build the thing
+
+      **Files:**
+      - Create: `src/thing.py`
+      - Test: `tests/test_thing.py`
+
+      - [x] **Step 1: Write tests**
+
+      Create comprehensive test suite.
+
+      - [x] **Step 2: Implement**
+
+      Build the core module.
+
+      - [x] **Step 3: Commit**
+
+      Stage and commit all files.
+
+      ## Phase 2: Integration [agentic]
+
+      <!-- Tracking: https://github.com/derio-net/some-repo/issues/43 -->
+
+      ### Task 1: Wire up components
+
+      - [x] **Step 1: Integration tests**
+
+      Write integration test suite.
+
+      - [x] **Step 2: Connect modules**
+
+      Wire the modules together.
+
+      ## Phase 3: Release [manual]
+
+      ### Task 1: Version bump
+
+      - [x] **Step 1: Update version**
+
+      Bump version in pyproject.toml.
+      ```
+  - id: P2.T1.S4
+    text: |-
+      Create flat-small.md fixture
+
+
+      Create `tests/fixtures/plans/flat-small.md`:
+
+      ```markdown
+      # Small Flat Plan
+
+      **Spec:** `docs/superpowers/specs/2026-04-01-local-feature.md`
+      **Status:** Not Started
+
+      **Goal:** A small flat plan for local-mode repos.
+
+      ---
+
+      ### Task 1: Set up database schema [agentic]
+
+      **Files:**
+      - Create: `migrations/001_create_table.sql`
+      - Test: `tests/test_schema.py`
+
+      - [x] **Step 1: Write the failing test**
+
+      Create schema validation tests.
+
+      - [x] **Step 2: Create migration**
+
+      Write the SQL migration.
+
+      ### Task 2: Configure DNS records [manual]
+
+      - [x] **Step 1: Log in to Cloudflare dashboard**
+
+      URL: https://dash.cloudflare.com/
+
+      - [x] **Step 2: Add A record**
+
+      Point domain to server IP.
+
+      ### Task 3: Implement API endpoint [agentic]
+
+      **Files:**
+      - Create: `src/api.py`
+      - Test: `tests/test_api.py`
+
+      - [x] **Step 1: Write API tests**
+
+      Test the endpoint responses.
+
+      - [x] **Step 2: Implement handler**
+
+      Build the request handler.
+      ```
+  - id: P2.T1.S5
+    text: |-
+      Create flat-mixed-tags.md fixture
+
+
+      Create `tests/fixtures/plans/flat-mixed-tags.md`:
+
+      ```markdown
+      # Mixed Tags Flat Plan
+
+      **Status:** In Progress
+
+      **Goal:** Flat plan with alternating manual and agentic tasks.
+
+      ---
+
+      ### Task 1: Scaffold project [agentic]
+
+      - [x] **Step 1: Create directory structure**
+
+      Set up the project layout.
+
+      ### Task 2: Order hardware [manual]
+
+      - [x] **Step 1: Submit purchase order**
+
+      File the PO with procurement.
+
+      - [x] **Step 2: Verify delivery**
+
+      Confirm hardware arrives.
+
+      ### Task 3: Write firmware [agentic]
+
+      - [x] **Step 1: Implement bootloader**
+
+      Write the initial bootloader code.
+
+      ### Task 4: Install hardware [manual]
+
+      - [x] **Step 1: Rack the server**
+
+      Mount in rack position U12.
+
+      ### Task 5: Deploy software [agentic]
+
+      - [x] **Step 1: Build and push image**
+
+      Build the container and push to registry.
+
+      - [-] **Step 2: Run smoke tests**
+
+      Verify basic functionality.
+      ```
+  - id: P2.T1.S6
+    text: |-
+      Create not-a-plan.md fixture
+
+
+      Create `tests/fixtures/plans/not-a-plan.md`:
+
+      ```markdown
+      # Meeting Notes
+
+      ## Attendees
+
+      - Alice
+      - Bob
+
+      ## Discussion
+
+      We talked about the architecture.
+
+      ## Action Items
+
+      - Alice will draft the design doc.
+      - Bob will set up the repo.
+      ```
+  - id: P2.T1.S7
+    text: |-
+      Commit all plan fixtures
+
+
+      ```bash
+      git add tests/fixtures/plans/
+      git commit -m "test: add plan fixture files for parser and writer tests"
+      ```
+- number: 2
+  title: Plan parser — parse_plan() for both formats
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Write the failing tests
+
+
+      Create `tests/unit/test_plan_parser.py`:
+
+      ```python
+      """Tests for vk.plan.parser — parse_plan() for flat and phased formats."""
+
+      from pathlib import Path
+
+      import pytest
+
+      from vk.plan.format import PlanFormat
+      from vk.plan.models import Plan
+      from vk.plan.parser import parse_plan
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures" / "plans"
+
+
+      # --- Phased format parsing ---
+
+
+      class TestPhasedSmall:
+          @pytest.fixture()
+          def plan(self) -> Plan:
+              return parse_plan(FIXTURES / "phased-small.md")
+
+          def test_title(self, plan: Plan) -> None:
+              assert plan.title == "Small Phased Plan"
+
+          def test_spec(self, plan: Plan) -> None:
+              assert plan.spec == "docs/superpowers/specs/2026-01-01-example.md"
+
+          def test_status(self, plan: Plan) -> None:
+              assert plan.status == "Not Started"
+
+          def test_goal(self, plan: Plan) -> None:
+              assert plan.goal == "A small phased plan for testing."
+
+          def test_format(self, plan: Plan) -> None:
+              assert plan.format is PlanFormat.PHASED
+
+          def test_phase_count(self, plan: Plan) -> None:
+              assert len(plan.phases) == 2
+
+          def test_phase_1_tag(self, plan: Plan) -> None:
+              assert plan.phases[0].tag == "agentic"
+              assert plan.phases[0].title == "Setup"
+
+          def test_phase_2_tag(self, plan: Plan) -> None:
+              assert plan.phases[1].tag == "manual"
+              assert plan.phases[1].title == "Documentation"
+
+          def test_phase_1_task_count(self, plan: Plan) -> None:
+              assert len(plan.phases[0].tasks) == 1
+
+          def test_phase_1_task_1_steps(self, plan: Plan) -> None:
+              task = plan.phases[0].tasks[0]
+              assert task.title == "Create project structure"
+              assert len(task.steps) == 3
+
+          def test_step_states(self, plan: Plan) -> None:
+              phase2_task1 = plan.phases[1].tasks[0]
+              assert phase2_task1.steps[0].state == " "
+              assert phase2_task1.steps[1].state == "x"
+
+          def test_files_mentioned(self, plan: Plan) -> None:
+              task = plan.phases[0].tasks[0]
+              assert "src/main.py" in task.files_mentioned
+              assert "tests/test_main.py" in task.files_mentioned
+
+          def test_all_tasks_flattens(self, plan: Plan) -> None:
+              assert len(plan.all_tasks) == 2
+
+
+      class TestPhasedLarge:
+          @pytest.fixture()
+          def plan(self) -> Plan:
+              return parse_plan(FIXTURES / "phased-large.md")
+
+          def test_phase_count(self, plan: Plan) -> None:
+              assert len(plan.phases) == 3
+
+          def test_all_tasks_count(self, plan: Plan) -> None:
+              assert len(plan.all_tasks) == 5
+
+          def test_status(self, plan: Plan) -> None:
+              assert plan.status == "In Progress"
+
+          def test_phase_2_has_two_tasks(self, plan: Plan) -> None:
+              assert len(plan.phases[1].tasks) == 2
+
+          def test_mixed_step_states(self, plan: Plan) -> None:
+              phase1_task1 = plan.phases[0].tasks[0]
+              assert phase1_task1.steps[0].state == " "
+              assert phase1_task1.steps[1].state == "x"
+              assert phase1_task1.steps[2].state == "x"
+
+
+      class TestPhasedDispatched:
+          @pytest.fixture()
+          def plan(self) -> Plan:
+              return parse_plan(FIXTURES / "phased-dispatched.md")
+
+          def test_tracking_urls(self, plan: Plan) -> None:
+              assert plan.phases[0].tracking_url == "https://github.com/derio-net/some-repo/issues/42"
+              assert plan.phases[1].tracking_url == "https://github.com/derio-net/some-repo/issues/43"
+              assert plan.phases[2].tracking_url is None
+
+          def test_phase_count(self, plan: Plan) -> None:
+              assert len(plan.phases) == 3
+
+          def test_dispatched_steps_checked(self, plan: Plan) -> None:
+              phase1_task1 = plan.phases[0].tasks[0]
+              assert all(s.state == "x" for s in phase1_task1.steps)
+
+
+      # --- Flat format parsing ---
+
+
+      class TestFlatSmall:
+          @pytest.fixture()
+          def plan(self) -> Plan:
+              return parse_plan(FIXTURES / "flat-small.md")
+
+          def test_title(self, plan: Plan) -> None:
+              assert plan.title == "Small Flat Plan"
+
+          def test_format(self, plan: Plan) -> None:
+              assert plan.format is PlanFormat.FLAT
+
+          def test_task_count(self, plan: Plan) -> None:
+              assert len(plan.tasks) == 3
+
+          def test_task_tags(self, plan: Plan) -> None:
+              assert plan.tasks[0].tag == "agentic"
+              assert plan.tasks[1].tag == "manual"
+              assert plan.tasks[2].tag == "agentic"
+
+          def test_spec(self, plan: Plan) -> None:
+              assert plan.spec == "docs/superpowers/specs/2026-04-01-local-feature.md"
+
+          def test_all_tasks_is_tasks(self, plan: Plan) -> None:
+              assert plan.all_tasks == plan.tasks
+
+          def test_files_mentioned(self, plan: Plan) -> None:
+              assert "migrations/001_create_table.sql" in plan.tasks[0].files_mentioned
+              assert "tests/test_schema.py" in plan.tasks[0].files_mentioned
+
+
+      class TestFlatMixedTags:
+          @pytest.fixture()
+          def plan(self) -> Plan:
+              return parse_plan(FIXTURES / "flat-mixed-tags.md")
+
+          def test_task_count(self, plan: Plan) -> None:
+              assert len(plan.tasks) == 5
+
+          def test_alternating_tags(self, plan: Plan) -> None:
+              expected = ["agentic", "manual", "agentic", "manual", "agentic"]
+              assert [t.tag for t in plan.tasks] == expected
+
+          def test_no_spec(self, plan: Plan) -> None:
+              assert plan.spec is None
+
+          def test_skipped_step(self, plan: Plan) -> None:
+              task5 = plan.tasks[4]
+              assert task5.steps[1].state == "-"
+
+          def test_checked_step(self, plan: Plan) -> None:
+              task1 = plan.tasks[0]
+              assert task1.steps[0].state == "x"
+
+
+      # --- Error cases ---
+
+
+      def test_not_a_plan_raises() -> None:
+          with pytest.raises(ValueError, match="not a vk plan"):
+              parse_plan(FIXTURES / "not-a-plan.md")
+
+
+      def test_missing_file_raises() -> None:
+          with pytest.raises(FileNotFoundError):
+              parse_plan(Path("/nonexistent/path/plan.md"))
+      ```
+  - id: P2.T2.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/unit/test_plan_parser.py -v`
+      Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.parser'`
+  - id: P2.T2.S3
+    text: |-
+      Implement src/vk/plan/parser.py
+
+
+      ```python
+      """Plan parser — regex-driven, supports both flat and phased formats.
+
+      Produces a frozen Plan AST from a markdown file.  Body content between
+      headers is preserved as raw strings for lossless round-trip.
+      """
+
+      from __future__ import annotations
+
+      import re
+      from pathlib import Path
+
+      from vk.plan.format import PlanFormat, detect
+      from vk.plan.models import Phase, Plan, Step, Task
+
+      # --- Header field patterns ---
+
+      _RE_TITLE = re.compile(r"^# (.+)$", re.MULTILINE)
+      _RE_SPEC = re.compile(r"^\*\*Spec:\*\*\s*`([^`]+)`", re.MULTILINE)
+      _RE_STATUS = re.compile(r"^\*\*Status:\*\*\s*(.+)$", re.MULTILINE)
+      _RE_GOAL = re.compile(r"^\*\*Goal:\*\*\s*(.+)$", re.MULTILINE)
+
+      # --- Structural patterns ---
+
+      _RE_PHASE = re.compile(
+          r"^## Phase (\d+):\s*(.+?)(?:\s+\[(agentic|manual)\])?\s*$", re.MULTILINE
+      )
+      _RE_TASK = re.compile(
+          r"^### Task (\d+):\s*(.+?)(?:\s+\[(agentic|manual)\])?\s*$", re.MULTILINE
+      )
+      _RE_STEP = re.compile(
+          r"^- \[([x \-])\] \*\*Step (\d+):\s*(.+?)\*\*\s*$", re.MULTILINE
+      )
+      _RE_TRACKING = re.compile(
+          r"^<!-- Tracking:\s*(https?://\S+)\s*-->", re.MULTILINE
+      )
+      _RE_FILE_MENTION = re.compile(
+          r"^- (?:Create|Edit|Test|Delete|Move|Rename):\s*`([^`]+)`", re.MULTILINE
+      )
+
+
+      def parse_plan(path: Path) -> Plan:
+          """Parse a plan markdown file into a frozen Plan AST.
+
+          Raises FileNotFoundError if path does not exist.
+          Raises ValueError if the file is not a valid vk plan.
+          """
+          text = path.read_text(encoding="utf-8")
+          fmt = detect(text)
+
+          title = _extract(text, _RE_TITLE, "Untitled Plan")
+          spec = _extract_optional(text, _RE_SPEC)
+          status = _extract(text, _RE_STATUS, "Not Started")
+          goal = _extract(text, _RE_GOAL, "")
+
+          if fmt is PlanFormat.PHASED:
+              phases = _parse_phases(text)
+              return Plan(
+                  title=title,
+                  spec=spec,
+                  status=status,
+                  goal=goal,
+                  format=fmt,
+                  phases=tuple(phases),
+                  tasks=(),
+              )
+          else:
+              tasks = _parse_tasks(text)
+              return Plan(
+                  title=title,
+                  spec=spec,
+                  status=status,
+                  goal=goal,
+                  format=fmt,
+                  phases=(),
+                  tasks=tuple(tasks),
+              )
+
+
+      def _extract(text: str, pattern: re.Pattern[str], default: str) -> str:
+          m = pattern.search(text)
+          return m.group(1).strip() if m else default
+
+
+      def _extract_optional(text: str, pattern: re.Pattern[str]) -> str | None:
+          m = pattern.search(text)
+          return m.group(1).strip() if m else None
+
+
+      def _parse_phases(text: str) -> list[Phase]:
+          """Parse all phases from phased-format markdown."""
+          phase_matches = list(_RE_PHASE.finditer(text))
+          phases: list[Phase] = []
+
+          for i, pm in enumerate(phase_matches):
+              start = pm.end()
+              end = phase_matches[i + 1].start() if i + 1 < len(phase_matches) else len(text)
+              section = text[start:end]
+
+              tracking_match = _RE_TRACKING.search(section)
+              tracking_url = tracking_match.group(1) if tracking_match else None
+
+              tasks = _parse_tasks(section)
+              phases.append(
+                  Phase(
+                      number=int(pm.group(1)),
+                      title=pm.group(2).strip(),
+                      tag=pm.group(3) or "agentic",
+                      tasks=tuple(tasks),
+                      tracking_url=tracking_url,
+                  )
+              )
+
+          return phases
+
+
+      def _parse_tasks(text: str) -> list[Task]:
+          """Parse all tasks from a section of markdown."""
+          task_matches = list(_RE_TASK.finditer(text))
+          tasks: list[Task] = []
+
+          for i, tm in enumerate(task_matches):
+              start = tm.end()
+              end = task_matches[i + 1].start() if i + 1 < len(task_matches) else len(text)
+              section = text[start:end]
+
+              # Don't cross into the next phase
+              next_phase = _RE_PHASE.search(section)
+              if next_phase:
+                  section = section[: next_phase.start()]
+
+              steps = _parse_steps(section)
+              files = _parse_files(section)
+              tasks.append(
+                  Task(
+                      number=int(tm.group(1)),
+                      title=tm.group(2).strip(),
+                      tag=tm.group(3) or None,
+                      steps=tuple(steps),
+                      files_mentioned=tuple(files),
+                  )
+              )
+
+          return tasks
+
+
+      def _parse_steps(text: str) -> list[Step]:
+          """Parse all steps from a task section."""
+          step_matches = list(_RE_STEP.finditer(text))
+          steps: list[Step] = []
+
+          for i, sm in enumerate(step_matches):
+              start = sm.end()
+              end = step_matches[i + 1].start() if i + 1 < len(step_matches) else len(text)
+              body = text[start:end].strip()
+
+              state_char = sm.group(1)
+              state = state_char if state_char in (" ", "x", "-") else " "
+
+              steps.append(
+                  Step(
+                      number=int(sm.group(2)),
+                      title=sm.group(3).strip(),
+                      body=body,
+                      state=state,  # type: ignore[arg-type]
+                  )
+              )
+
+          return steps
+
+
+      def _parse_files(text: str) -> list[str]:
+          """Extract file mentions from a task section."""
+          return [m.group(1) for m in _RE_FILE_MENTION.finditer(text)]
+      ```
+  - id: P2.T2.S4
+    text: |-
+      Run tests to verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_plan_parser.py -v`
+      Expected: PASS — all tests pass
+  - id: P2.T2.S5
+    text: |-
+      Run ruff and mypy on new code
+
+
+      Run: `uv run ruff check src/vk/plan/parser.py tests/unit/test_plan_parser.py && uv run mypy src/vk/plan/parser.py`
+      Expected: PASS — no lint or type errors. Fix any issues.
+  - id: P2.T2.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/plan/parser.py tests/unit/test_plan_parser.py
+      git commit -m "feat: add regex-driven plan parser for flat and phased formats"
+      ```
+- number: 3
+  title: Plan writer — write_plan() with round-trip fidelity
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write the failing tests
+
+
+      Create `tests/unit/test_plan_writer.py`:
+
+      ```python
+      """Tests for vk.plan.writer — write_plan() with round-trip fidelity."""
+
+      from pathlib import Path
+
+      import pytest
+
+      from vk.plan.format import PlanFormat
+      from vk.plan.models import Phase, Plan, Step, Task
+      from vk.plan.parser import parse_plan
+      from vk.plan.writer import write_plan
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures" / "plans"
+
+
+      # --- Round-trip: parse -> write -> parse = identical AST ---
+
+
+      @pytest.mark.parametrize(
+          "fixture",
+          [
+              "phased-small.md",
+              "phased-large.md",
+              "phased-dispatched.md",
+              "flat-small.md",
+              "flat-mixed-tags.md",
+          ],
+      )
+      def test_round_trip(fixture: str, tmp_path: Path) -> None:
+          """parse -> write -> parse produces identical AST."""
+          original = parse_plan(FIXTURES / fixture)
+          output_path = tmp_path / fixture
+          write_plan(original, output_path)
+          reparsed = parse_plan(output_path)
+
+          assert reparsed.title == original.title
+          assert reparsed.spec == original.spec
+          assert reparsed.status == original.status
+          assert reparsed.goal == original.goal
+          assert reparsed.format == original.format
+          assert len(reparsed.all_tasks) == len(original.all_tasks)
+
+          for orig_task, new_task in zip(original.all_tasks, reparsed.all_tasks):
+              assert new_task.number == orig_task.number
+              assert new_task.title == orig_task.title
+              assert new_task.tag == orig_task.tag
+              assert len(new_task.steps) == len(orig_task.steps)
+              for orig_step, new_step in zip(orig_task.steps, new_task.steps):
+                  assert new_step.number == orig_step.number
+                  assert new_step.title == orig_step.title
+                  assert new_step.state == orig_step.state
+
+          if original.format is PlanFormat.PHASED:
+              assert len(reparsed.phases) == len(original.phases)
+              for orig_phase, new_phase in zip(original.phases, reparsed.phases):
+                  assert new_phase.number == orig_phase.number
+                  assert new_phase.title == orig_phase.title
+                  assert new_phase.tag == orig_phase.tag
+                  assert new_phase.tracking_url == orig_phase.tracking_url
+
+
+      # --- Direct write tests ---
+
+
+      def test_write_flat_plan(tmp_path: Path) -> None:
+          """Write a flat plan and verify structure."""
+          s1 = Step(number=1, title="Write test", body="Create the test file.", state=" ")
+          s2 = Step(number=2, title="Implement", body="Write the code.", state="x")
+          t1 = Task(number=1, title="Setup", tag="agentic", steps=(s1, s2), files_mentioned=("a.py",))
+          t2 = Task(number=2, title="Deploy", tag="manual", steps=(), files_mentioned=())
+          plan = Plan(
+              title="Test Plan",
+              spec="spec.md",
+              status="Not Started",
+              goal="Test writing.",
+              format=PlanFormat.FLAT,
+              phases=(),
+              tasks=(t1, t2),
+          )
+          path = tmp_path / "plan.md"
+          write_plan(plan, path)
+          text = path.read_text()
+
+          assert "# Test Plan" in text
+          assert "**Spec:** `spec.md`" in text
+          assert "**Status:** Not Started" in text
+          assert "**Goal:** Test writing." in text
+          assert "### Task 1: Setup [agentic]" in text
+          assert "### Task 2: Deploy [manual]" in text
+          assert "- [x] **Step 1: Write test**" in text
+          assert "- [x] **Step 2: Implement**" in text
+          assert "- Create: `a.py`" in text
+
+
+      def test_write_phased_plan(tmp_path: Path) -> None:
+          """Write a phased plan and verify structure."""
+          s1 = Step(number=1, title="Do it", body="Just do it.", state=" ")
+          t1 = Task(number=1, title="Build", tag=None, steps=(s1,), files_mentioned=())
+          p1 = Phase(number=1, title="Core", tag="agentic", tasks=(t1,), tracking_url=None)
+          p2 = Phase(
+              number=2,
+              title="Release",
+              tag="manual",
+              tasks=(),
+              tracking_url="https://github.com/org/repo/issues/99",
+          )
+          plan = Plan(
+              title="Phased Plan",
+              spec=None,
+              status="In Progress",
+              goal="Ship it.",
+              format=PlanFormat.PHASED,
+              phases=(p1, p2),
+              tasks=(),
+          )
+          path = tmp_path / "plan.md"
+          write_plan(plan, path)
+          text = path.read_text()
+
+          assert "# Phased Plan" in text
+          assert "**Spec:**" not in text  # no spec
+          assert "**Status:** In Progress" in text
+          assert "## Phase 1: Core [agentic]" in text
+          assert "## Phase 2: Release [manual]" in text
+          assert "<!-- Tracking: https://github.com/org/repo/issues/99 -->" in text
+          assert "### Task 1: Build" in text
+
+
+      def test_write_skipped_step(tmp_path: Path) -> None:
+          """Skipped steps render with [-]."""
+          s = Step(number=1, title="Skip me", body="", state="-")
+          t = Task(number=1, title="Task", tag="agentic", steps=(s,), files_mentioned=())
+          plan = Plan(
+              title="P",
+              spec=None,
+              status="Not Started",
+              goal="G",
+              format=PlanFormat.FLAT,
+              phases=(),
+              tasks=(t,),
+          )
+          path = tmp_path / "plan.md"
+          write_plan(plan, path)
+          text = path.read_text()
+          assert "- [-] **Step 1: Skip me**" in text
+      ```
+  - id: P2.T3.S2
+    text: |-
+      Run tests to verify they fail
+
+
+      Run: `uv run pytest tests/unit/test_plan_writer.py -v`
+      Expected: FAIL — `ModuleNotFoundError: No module named 'vk.plan.writer'`
+  - id: P2.T3.S3
+    text: |-
+      Implement src/vk/plan/writer.py
+
+
+      ```python
+      """Plan writer — renders a Plan AST back to markdown.
+
+      Preserves body content for lossless round-trip:
+      parse -> write -> parse = identical AST.
+      """
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      from vk.plan.format import PlanFormat
+      from vk.plan.models import Plan, Phase, Task, Step
+
+
+      def write_plan(plan: Plan, path: Path) -> None:
+          """Write a Plan AST to a markdown file."""
+          lines: list[str] = []
+          _write_header(lines, plan)
+          lines.append("")
+          lines.append("---")
+          lines.append("")
+
+          if plan.format is PlanFormat.PHASED:
+              _write_phases(lines, plan.phases)
+          else:
+              _write_tasks(lines, plan.tasks)
+
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+      def _write_header(lines: list[str], plan: Plan) -> None:
+          """Write the plan header block."""
+          lines.append(f"# {plan.title}")
+          lines.append("")
+          if plan.spec:
+              lines.append(f"**Spec:** `{plan.spec}`")
+          lines.append(f"**Status:** {plan.status}")
+          lines.append("")
+          lines.append(f"**Goal:** {plan.goal}")
+
+
+      def _write_phases(lines: list[str], phases: tuple[Phase, ...]) -> None:
+          """Write all phases in phased format."""
+          for i, phase in enumerate(phases):
+              if i > 0:
+                  lines.append("")
+              lines.append(f"## Phase {phase.number}: {phase.title} [{phase.tag}]")
+              lines.append("")
+              if phase.tracking_url:
+                  lines.append(f"<!-- Tracking: {phase.tracking_url} -->")
+                  lines.append("")
+              _write_tasks(lines, phase.tasks)
+
+
+      def _write_tasks(lines: list[str], tasks: tuple[Task, ...]) -> None:
+          """Write all tasks."""
+          for i, task in enumerate(tasks):
+              if i > 0:
+                  lines.append("")
+              tag_suffix = f" [{task.tag}]" if task.tag else ""
+              lines.append(f"### Task {task.number}: {task.title}{tag_suffix}")
+              lines.append("")
+              if task.files_mentioned:
+                  lines.append("**Files:**")
+                  for f in task.files_mentioned:
+                      lines.append(f"- Create: `{f}`")
+                  lines.append("")
+              _write_steps(lines, task.steps)
+
+
+      def _write_steps(lines: list[str], steps: tuple[Step, ...]) -> None:
+          """Write all steps within a task."""
+          for step in steps:
+              lines.append(f"- [{step.state}] **Step {step.number}: {step.title}**")
+              if step.body:
+                  lines.append("")
+                  lines.append(step.body)
+              lines.append("")
+      ```
+  - id: P2.T3.S4
+    text: |-
+      Run tests to verify they pass
+
+
+      Run: `uv run pytest tests/unit/test_plan_writer.py -v`
+      Expected: PASS — all tests pass. If round-trip tests fail, adjust the writer to match the parser's expectations (e.g., blank line placement, file mention format).
+  - id: P2.T3.S5
+    text: |-
+      Debug and fix round-trip mismatches
+
+
+      If any round-trip tests fail, compare the written output to the original fixture and adjust the writer. Common issues:
+      - Extra or missing blank lines between sections
+      - File mention prefix (the writer always uses "Create:" but the parser accepts Create/Edit/Test/Delete/Move/Rename — round-trip only needs to preserve files_mentioned tuple values, not the verb)
+      - Step body trailing whitespace
+
+      Run: `uv run pytest tests/unit/test_plan_writer.py -v` until all tests pass.
+  - id: P2.T3.S6
+    text: |-
+      Commit
+
+
+      ```bash
+      git add src/vk/plan/writer.py tests/unit/test_plan_writer.py
+      git commit -m "feat: add plan writer with round-trip parse-write-parse fidelity"
+      ```
+- number: 4
+  title: Spec fixture files
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Create spec-with-index.md fixture
+
+
+      Create `tests/fixtures/specs/spec-with-index.md`:
+
+      ```markdown
+      # Example Feature Design Spec
+
+      ## Summary
+
+      This is an example spec with an existing implementation plans index.
+
+      ## Design
+
+      Some design content here.
+
+      ## Implementation Plans
+
+      | Plan | Repo | File | Status | Depends on |
+      |------|------|------|--------|------------|
+      | P0: Scaffold | superpowers-for-vk | `docs/superpowers/plans/2026-04-12-scaffold.md` | Complete | — |
+      | P1: Core | superpowers-for-vk | `docs/superpowers/plans/2026-04-12-core.md` | In Progress | P0 |
+      ```
+  - id: P2.T4.S2
+    text: |-
+      Create spec-without-index.md fixture
+
+
+      Create `tests/fixtures/specs/spec-without-index.md`:
+
+      ```markdown
+      # Another Feature Design Spec
+
+      ## Summary
+
+      This spec has no implementation plans section yet.
+
+      ## Design
+
+      Design details here.
+
+      ## Testing Strategy
+
+      How to test the feature.
+      ```
+  - id: P2.T4.S3
+    text: |-
+      Commit spec fixtures
+
+
+      ```bash
+      git add tests/fixtures/specs/
+      git commit -m "test: add spec fixture files for spec_index tests"
+      ```
+  - id: P2.T4.S4
+    text: |-
+      Run full test suite and quality gates
+
+
+      Run: `uv run pytest -v && uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run mypy src/`
+      Expected: PASS — all tests pass, no lint/format/type errors.
+  - id: P2.T4.S5
+    text: |-
+      Commit any fixes
+
+
+      ```bash
+      git add -u
+      git commit -m "fix: resolve lint and type errors in Phase 2 modules"
+      ```
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S5:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -364,7 +364,7 @@ None at spec time. Phase A's unit tests will surface any grammar edge cases miss
 
 ## Implementation Plans
 
-| Plan | Repo | File | Status | Depends on |
-|------|------|------|--------|------------|
-| Parallel Dispatch DAG Implementation Plan | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag.md` | Complete | — |
-| Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag-bridge-audit.md` | Complete | Phase 2 of the superpowers-for-vk plan |
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| Parallel Dispatch DAG Implementation Plan | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag/` | — |
+| Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag-bridge-audit.md` | Phase 2 of the superpowers-for-vk plan |

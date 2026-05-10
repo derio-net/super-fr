@@ -1112,30 +1112,30 @@
 
 ### Task 1: Dry-run
 
-- [ ] **Step 1: From repo root, run dry-run**
+- [x] **Step 1: From repo root, run dry-run**
   ```
   uv run vk migrate v1-to-v2 --dry-run
   ```
   Expected output: list of every .md plan that will be converted (excluding this in-progress plan); list of spec files that will have Status column dropped; nothing applied.
 
-- [ ] **Step 2: Sanity-check the output**
+- [x] **Step 2: Sanity-check the output**
   Verify: this plan's own file is in the SKIPPED list (because Status: In Progress). All Complete plans listed for conversion.
 
 ### Task 2: Apply
 
-- [ ] **Step 1: Apply migration**
+- [x] **Step 1: Apply migration**
   ```
   uv run vk migrate v1-to-v2 --yes
   ```
   Expected output: per-plan conversion log; per-spec table-rewrite log; summary of files added/moved.
 
-- [ ] **Step 2: Verify a sample migrated plan**
+- [x] **Step 2: Verify a sample migrated plan**
   ```
   uv run vk apply --dry-run docs/superpowers/archived-plans/<a-migrated-folder>
   ```
   Should parse cleanly; mostly "no diff" output for archived plans.
 
-- [ ] **Step 3: Run full test suite** — ensure migration didn't break anything
+- [x] **Step 3: Run full test suite** — ensure migration didn't break anything
   ```
   uv run pytest -q --no-cov
   ```
@@ -1143,7 +1143,7 @@
 
 ### Task 3: PR + review
 
-- [ ] **Step 1: Branch, commit, push**
+- [x] **Step 1: Branch, commit, push**
   ```
   git checkout -b chore/self-migrate-v1-to-v2
   git add -A
@@ -1151,7 +1151,7 @@
   git push -u origin chore/self-migrate-v1-to-v2
   ```
 
-- [ ] **Step 2: Open PR**
+- [x] **Step 2: Open PR**
   ```
   gh pr create --title "chore(plans): self-migrate v1 plans to v2 folder format" \
     --body "Mechanical migration via 'vk migrate v1-to-v2'. Excludes this plan (still in progress). Spec tables updated to drop Status column. See spec 2026-05-06-vk-rebuild-state-machine-design.md."

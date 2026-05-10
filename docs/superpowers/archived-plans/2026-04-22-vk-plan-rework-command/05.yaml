@@ -1,0 +1,431 @@
+schema_version: 2
+phase:
+  number: 5
+  title: '`vk plan rework-list` CLI'
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/41
+tasks:
+- number: 1
+  title: Core glob + record assembly
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Write failing test for empty repo
+
+
+      Create `tests/integration/test_plan_rework_list.py`:
+
+      ```python
+      """Integration tests for ``vk plan rework-list``."""
+
+      from __future__ import annotations
+
+      import json
+      import shutil
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures/rework"
+
+
+      def test_rework_list_empty_repo(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          (tmp_path / "docs/superpowers/plans").mkdir(parents=True)
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
+          assert result.exit_code == 0
+          # Rich table prints headers but no data rows.
+          assert "parent-slug" in result.stdout or result.stdout.strip() == ""
+      ```
+  - id: P5.T1.S2
+    text: |-
+      Implement `list_reworks` in `rework.py`
+
+
+      Append to `src/vk/plan/rework.py`:
+
+      ```python
+      from dataclasses import asdict
+
+
+      @dataclass(frozen=True)
+      class ReworkRecord:
+          parent_slug: str
+          rework_number: int
+          status: str
+          open_steps: int
+          origin_items: int
+          by_track: dict[str, int]
+          path: str
+          parent_path: str | None
+          spec_path: str | None
+
+
+      def list_reworks(
+          *,
+          repo_root: Path,
+          include_archived: bool = False,
+      ) -> tuple[list[ReworkRecord], list[str]]:
+          """Return (records, warnings). Warnings are per-file skip messages."""
+          dirs = [repo_root / "docs/superpowers/plans"]
+          if include_archived:
+              dirs.append(repo_root / "docs/superpowers/archived-plans")
+
+          records: list[ReworkRecord] = []
+          warnings: list[str] = []
+          for d in dirs:
+              if not d.is_dir():
+                  continue
+              for p in sorted(d.glob("*-rework-*.md")):
+                  try:
+                      records.append(_record_for(p, repo_root))
+                  except Exception as exc:
+                      warnings.append(f"skipping {p}: {exc}")
+          return records, warnings
+
+
+      def _record_for(path: Path, repo_root: Path) -> ReworkRecord:
+          plan = parse_plan(path)
+          # Derive parent_slug by stripping -rework-N from the filename slug.
+          full_slug = derive_slug(path)
+          m = _REWORK_NUM_RE.search(path.name)
+          if not m:
+              raise ValueError(f"rework file has no -rework-N suffix: {path.name}")
+          n = int(m.group(1))
+          parent_slug = re.sub(r"-rework-\d+$", "", full_slug)
+          open_steps = sum(1 for t in plan.all_tasks for s in t.steps if s.state == " ")
+          try:
+              rows = parse_origin_table(path)
+          except ValueError:
+              rows = []
+          by_track: dict[str, int] = {}
+          for r in rows:
+              by_track[r.track] = by_track.get(r.track, 0) + 1
+          return ReworkRecord(
+              parent_slug=parent_slug,
+              rework_number=n,
+              status=plan.status,
+              open_steps=open_steps,
+              origin_items=len(rows),
+              by_track=by_track,
+              path=str(path.relative_to(repo_root)),
+              parent_path=None,
+              spec_path=plan.spec,
+          )
+      ```
+  - id: P5.T1.S3
+    text: |-
+      Register `vk plan rework-list` CLI
+
+
+      In `plan_cmd.py`:
+
+      ```python
+      @plan_app.command(name="rework-list")
+      def plan_rework_list(
+          status: str | None = typer.Option(None, "--status", help="Filter by plan status."),
+          track: str | None = typer.Option(None, "--track", help="Substring match on Origin Track."),
+          plan: str | None = typer.Option(None, "--plan", help="Exact parent-slug match."),
+          include_archived: bool = typer.Option(False, "--include-archived"),
+          json_output: bool = typer.Option(False, "--json", help="Emit JSON on stdout."),
+      ) -> None:
+          """List open (and optionally archived) rework plans in this repo."""
+          import json as _json
+          from vk.plan.rework import list_reworks
+          from rich.table import Table
+
+          repo_root = _resolve_repo_root()
+          records, warnings = list_reworks(repo_root=repo_root, include_archived=include_archived)
+          for w in warnings:
+              err_console.print(f"warn: {w}")
+
+          if status:
+              records = [r for r in records if r.status.casefold() == status.casefold()]
+          if track:
+              needle = track.casefold()
+              records = [
+                  r for r in records
+                  if any(needle in t.casefold() for t in r.by_track.keys())
+              ]
+          if plan:
+              records = [r for r in records if r.parent_slug == plan]
+
+          if json_output:
+              console.print(_json.dumps([_record_to_json(r) for r in records]))
+              return
+
+          table = Table()
+          for col in ("parent-slug", "rework-#", "status", "open-steps", "origin-items", "by-track"):
+              table.add_column(col)
+          for r in records:
+              table.add_row(
+                  r.parent_slug,
+                  str(r.rework_number),
+                  r.status,
+                  str(r.open_steps),
+                  str(r.origin_items),
+                  _format_by_track(r.by_track),
+              )
+          console.print(table)
+
+
+      def _format_by_track(d: dict[str, int]) -> str:
+          abbrev = {"development": "dev", "operations": "ops", "decision": "dec"}
+          parts: list[str] = []
+          for label, count in d.items():
+              first = label.split()[0].lower() if label else ""
+              parts.append(f"{count} {abbrev.get(first, first)}")
+          return " / ".join(parts)
+
+
+      def _record_to_json(r: "ReworkRecord") -> dict[str, object]:
+          return {
+              "parent_slug": r.parent_slug,
+              "rework_number": r.rework_number,
+              "status": r.status,
+              "open_steps": r.open_steps,
+              "origin_items": r.origin_items,
+              "by_track": r.by_track,
+              "path": r.path,
+              "parent_path": r.parent_path,
+              "spec_path": r.spec_path,
+          }
+      ```
+
+      Add `from vk.plan.rework import ReworkRecord` for the type hint.
+
+      Run the empty-repo test — expect green.
+- number: 2
+  title: Filters and `--json`
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Create `rework_with_phases.md` fixture
+
+
+      ```markdown
+      # Foo — Rework 1
+
+      **Spec:** `docs/superpowers/specs/2026-04-07-kid-laptops-design.md`
+      **Parent plan:** `docs/superpowers/archived-plans/2026-04-08-foo.md` (merged + archived)
+      **Status:** In Progress
+
+      **Goal:** Address rework items on foo.
+
+      ---
+
+      ## Origin
+
+      | # | Item | Source | Track |
+      |---|------|--------|-------|
+      | 1 | Thing one | PR #1 | development |
+      | 2 | Thing two | PR #1 | operations |
+      | 3 | Thing three | demo | decision → development |
+
+      ---
+
+      ## Phase 1: Do thing one [agentic]
+
+      **Depends on:** —
+      **Track:** development
+
+      ### Task 1: Setup
+
+      - [ ] **Step 1:** Do it
+
+      ## Phase 2: Smoke test [manual]
+
+      **Depends on:** Phase 1
+      **Track:** operations
+
+      ### Task 1: Check
+
+      - [x] **Step 1:** Done
+      - [ ] **Step 2:** Still open
+
+      ---
+
+      ## Definition of Done
+
+      - [ ] TODO.
+      ```
+  - id: P5.T2.S2
+    text: |-
+      Test — two reworks list under default filters
+
+
+      ```python
+      def _seed_rework(tmp_path: Path, fixture: str, filename: str, archived: bool = False) -> Path:
+          dir_ = tmp_path / ("docs/superpowers/archived-plans" if archived else "docs/superpowers/plans")
+          dir_.mkdir(parents=True, exist_ok=True)
+          dest = dir_ / filename
+          shutil.copy(FIXTURES / fixture, dest)
+          return dest
+
+
+      def test_rework_list_two_active_reworks(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")
+          _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-bar-rework-2.md")
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
+          assert result.exit_code == 0
+          assert "foo" in result.stdout
+          assert "bar" in result.stdout
+      ```
+  - id: P5.T2.S3
+    text: |-
+      Test — `--include-archived` picks up archived-plans
+
+
+      ```python
+      def test_rework_list_include_archived(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-foo-rework-1.md", archived=True)
+          runner = CliRunner()
+          without = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
+          with_archived = runner.invoke(app, ["plan", "rework-list", "--include-archived"], catch_exceptions=False)
+          assert "foo" not in without.stdout
+          assert "foo" in with_archived.stdout
+      ```
+  - id: P5.T2.S4
+    text: |-
+      Test — `--status` filter case-insensitive exact match
+
+
+      ```python
+      def test_rework_list_status_filter(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")  # In Progress
+          _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-bar-rework-2.md")  # Not Started
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "rework-list", "--status", "in progress"], catch_exceptions=False)
+          assert "foo" in result.stdout
+          assert "bar" not in result.stdout
+      ```
+  - id: P5.T2.S5
+    text: |-
+      Test — `--track decision` substring-matches `decision → development`
+
+
+      ```python
+      def test_rework_list_track_substring_matches_transition(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "rework-list", "--track", "decision"], catch_exceptions=False)
+          assert result.exit_code == 0
+          assert "foo" in result.stdout
+      ```
+  - id: P5.T2.S6
+    text: |-
+      Test — `--plan` exact parent-slug match
+
+
+      ```python
+      def test_rework_list_plan_filter(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          _seed_rework(tmp_path, "rework_with_phases.md", "2026-04-08-foo-rework-1.md")
+          _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-bar-rework-2.md")
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "rework-list", "--plan", "foo"], catch_exceptions=False)
+          assert "foo" in result.stdout
+          assert "bar" not in result.stdout
+      ```
+  - id: P5.T2.S7
+    text: |-
+      Test — `--json` emits valid, non-empty JSON
+
+
+      ```python
+      def test_rework_list_json_output(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-foo-rework-1.md")
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "rework-list", "--json"], catch_exceptions=False)
+          assert result.exit_code == 0
+          data = json.loads(result.stdout)
+          assert len(data) == 1
+          assert data[0]["parent_slug"] == "foo"
+          assert data[0]["rework_number"] == 1
+          assert data[0]["origin_items"] == 3
+          assert set(data[0]["by_track"].keys()) == {"development", "operations", "decision"}
+      ```
+  - id: P5.T2.S8
+    text: |-
+      Test — malformed file skipped with warn, others listed
+
+
+      ```python
+      def test_rework_list_skips_malformed_file(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          _seed_rework(tmp_path, "rework_with_rows.md", "2026-04-08-foo-rework-1.md")
+          (tmp_path / "docs/superpowers/plans/2026-04-08-bar-rework-1.md").write_text(
+              "not a plan at all"
+          )
+          runner = CliRunner()
+          result = runner.invoke(app, ["plan", "rework-list"], catch_exceptions=False)
+          assert result.exit_code == 0
+          assert "foo" in result.stdout
+          assert "warn" in result.stderr or "skipping" in result.stderr
+      ```
+
+      Run `uv run pytest tests/integration/test_plan_rework_list.py -q` — all green.
+
+      ---
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P5.T2.S8:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -8,6 +8,39 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 2.0.1 — bugfixes surfaced by self-migration
+
+Three bugs found while running `vk migrate v1-to-v2 --yes` against this
+repo's archived plans (Phase 6 of the v2 rebuild):
+
+- **`migrate`: rework-detection was a substring match.** `"-rework-" in
+  slug` false-positived on plans whose slug merely *contained* the string
+  "rework" — most notably `2026-04-22-vk-plan-rework-command` (which *adds*
+  the rework feature but is not itself a rework). Such plans were getting
+  a stale `parent_plan` field populated from illustrative markdown in their
+  body. Fixed by anchoring the detection to the canonical rework slug
+  shape: `<parent-slug>-rework-<N>` (regex `-rework-\d+$`).
+- **`real_ghclient`: GraphQL `MERGED` PR state crashed `observe`.** GitHub's
+  `PullRequestState` enum has `OPEN`/`CLOSED`/`MERGED`, but the v2 observe
+  contract is `OPEN`/`CLOSED` (the `merged` boolean carries the distinction).
+  `RealGhClient.list_linked_prs` now coerces `MERGED` → `CLOSED` before
+  returning. Crashed `vk apply` on any plan with merged PRs in the wild.
+- **`migrate` + `plan_ops`: multi-line `text:` fields were unreadable.**
+  Default PyYAML `safe_dump` serialises any string containing a newline as
+  a double-quoted scalar with `\n` escapes — borderline impossible to read
+  for v2 step bodies (multi-paragraph prose + fenced code blocks). New
+  `vk._yaml.dump_plan_yaml` swaps in a representer that emits multi-line
+  strings as YAML literal block scalars (`text: |`), preserving newlines
+  and code fences verbatim. `allow_unicode=True` keeps `→` / em-dashes
+  as-is instead of `→`-escaping them. Both `vk.migrate` and
+  `vk.plan_ops` route through this so migrated and hand-edited yaml stays
+  visually consistent.
+
+Regression tests added for all three. New files
+`tests/unit/test_real_ghclient.py` (GraphQL-shaping seam, monkeypatched
+gh subprocess) and `tests/unit/test_yaml_dumper.py` (block scalar +
+unicode + key-order assertions).
+
 ## 2.0.0 — single state machine
 
 **BREAKING — full rewrite per [the v2 design spec](docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md).**

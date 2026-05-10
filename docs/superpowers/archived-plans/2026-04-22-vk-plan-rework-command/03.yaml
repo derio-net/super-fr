@@ -1,0 +1,490 @@
+schema_version: 2
+phase:
+  number: 3
+  title: '`vk plan rework` scaffold CLI'
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/39
+tasks:
+- number: 1
+  title: Typer command + happy-path integration test
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Write the parent fixtures
+
+
+      Create `tests/fixtures/rework/parent_archived.md`:
+
+      ```markdown
+      # Kid Laptops Plan 5
+
+      **Spec:** `docs/superpowers/specs/2026-04-07-kid-laptops-design.md`
+      **Status:** Complete
+
+      **Goal:** Parental controls for kid laptops.
+
+      ---
+
+      ## Phase 1: First [agentic]
+      **Depends on:** —
+
+      ### Task 1: Setup
+
+      - [x] **Step 1:** Do thing
+      ```
+
+      Create `tests/fixtures/rework/parent_no_spec.md`:
+
+      ```markdown
+      # Spec-less Parent
+
+      **Status:** Complete
+
+      **Goal:** A parent without a spec line.
+
+      ---
+
+      ## Phase 1: First [agentic]
+      **Depends on:** —
+
+      ### Task 1: Setup
+
+      - [x] **Step 1:** Do thing
+      ```
+  - id: P3.T1.S2
+    text: |-
+      Write a failing happy-path integration test
+
+
+      Create `tests/integration/test_plan_rework.py`:
+
+      ```python
+      """Integration tests for ``vk plan rework <parent>``."""
+
+      from __future__ import annotations
+
+      import shutil
+      from pathlib import Path
+
+      from typer.testing import CliRunner
+
+      from vk.cli import app
+
+      FIXTURES = Path(__file__).parent.parent / "fixtures/rework"
+
+
+      def _setup_repo(tmp_path: Path, parent_fixture: str, *, archived: bool = True) -> Path:
+          """Build a minimal repo with a parent plan in plans/ or archived-plans/."""
+          target_dir = tmp_path / (
+              "docs/superpowers/archived-plans" if archived else "docs/superpowers/plans"
+          )
+          target_dir.mkdir(parents=True, exist_ok=True)
+          parent_dest = target_dir / "2026-04-08-kid-laptops-5-parental-controls.md"
+          shutil.copy(FIXTURES / parent_fixture, parent_dest)
+          (tmp_path / "docs/superpowers/plans").mkdir(parents=True, exist_ok=True)
+          return parent_dest
+
+
+      def test_rework_archived_parent_happy_path(tmp_path: Path) -> None:
+          parent = _setup_repo(tmp_path, "parent_archived.md")
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              ["plan", "rework", str(parent)],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 0, result.stdout + result.stderr
+          out_path = tmp_path / "docs/superpowers/plans/2026-04-08-kid-laptops-5-parental-controls-rework-1.md"
+          assert out_path.exists()
+          text = out_path.read_text()
+          assert "# Kid Laptops Plan 5 — Rework 1" in text
+          assert "**Spec:** `docs/superpowers/specs/2026-04-07-kid-laptops-design.md`" in text
+          assert "(merged + archived)" in text
+          assert "## Origin" in text
+      ```
+
+      Run `uv run pytest tests/integration/test_plan_rework.py -x -q` — expect failure (command not registered).
+  - id: P3.T1.S3
+    text: |-
+      Add `scaffold_rework` orchestrator in `rework.py`
+
+
+      Append to `src/vk/plan/rework.py`:
+
+      ```python
+      from vk.plan.parser import parse_plan
+
+
+      def scaffold_rework(parent_path: Path, *, repo_root: Path) -> tuple[Path, list[str]]:
+          """Scaffold a rework plan for ``parent_path``. Returns (output_path, warnings).
+
+          Raises ValueError on structural refusals (spec §7). Callers translate to
+          typer.Exit(2). Warnings are stderr-destined strings — caller emits them.
+          """
+          parent_path = parent_path.resolve()
+          if not parent_path.exists():
+              raise ValueError(f"parent plan not found: {parent_path}")
+
+          plans_dir = (repo_root / "docs/superpowers/plans").resolve()
+          archived_dir = (repo_root / "docs/superpowers/archived-plans").resolve()
+          is_in_plans = parent_path.is_relative_to(plans_dir)
+          is_in_archived = parent_path.is_relative_to(archived_dir)
+          if not (is_in_plans or is_in_archived):
+              raise ValueError(
+                  "parent plan must live in docs/superpowers/plans/ or "
+                  f"docs/superpowers/archived-plans/. Got: {parent_path}"
+              )
+
+          warnings: list[str] = []
+          parent = parse_plan(parent_path)
+          title = parent.title if parent.title != "Untitled Plan" else ""
+          if not title:
+              warnings.append("parent has no H1 title; using slug-derived fallback.")
+
+          n = next_rework_number(parent_path, repo_root=repo_root)
+
+          slug = derive_slug(parent_path)
+          date_prefix = parent_path.stem[:10]
+          parent_slug_date = f"{date_prefix}-{slug}"
+
+          # Prior rework: highest archived N lower than the new N.
+          prior = _highest_archived_prior(
+              repo_root=repo_root, prefix=parent_slug_date, below=n
+          )
+
+          if is_in_plans:
+              warnings.append(
+                  "parent is not yet archived; Parent plan header points at plans/. "
+                  "Update when parent is moved."
+              )
+
+          rendered = render_scaffold(
+              parent_title=title,
+              parent_slug_date=parent_slug_date,
+              spec=parent.spec,
+              parent_rel_path=str(parent_path.relative_to(repo_root)),
+              parent_archived=is_in_archived,
+              n=n,
+              prior_rework_rel_path=str(prior.relative_to(repo_root)) if prior else None,
+          )
+
+          out_path = plans_dir / f"{parent_slug_date}-rework-{n}.md"
+          if out_path.exists():
+              raise ValueError(f"output path already exists: {out_path}")
+          out_path.parent.mkdir(parents=True, exist_ok=True)
+          out_path.write_text(rendered, encoding="utf-8")
+          return out_path, warnings
+
+
+      def _highest_archived_prior(
+          *, repo_root: Path, prefix: str, below: int
+      ) -> Path | None:
+          archived_dir = repo_root / "docs/superpowers/archived-plans"
+          if not archived_dir.is_dir():
+              return None
+          best_n = -1
+          best_path: Path | None = None
+          for p in archived_dir.iterdir():
+              if not p.is_file() or not p.name.startswith(prefix):
+                  continue
+              m = _REWORK_NUM_RE.search(p.name)
+              if not m:
+                  continue
+              n = int(m.group(1))
+              if n < below and n > best_n:
+                  best_n = n
+                  best_path = p
+          return best_path
+      ```
+  - id: P3.T1.S4
+    text: |-
+      Register `vk plan rework` in `plan_cmd.py`
+
+
+      In `src/vk/commands/plan_cmd.py`, after `plan_convert`, add:
+
+      ```python
+      @plan_app.command(name="rework")
+      def plan_rework(
+          parent_path: Path = typer.Argument(..., help="Path to the parent plan file."),
+      ) -> None:
+          """Scaffold a rework plan against a parent."""
+          import subprocess
+          from vk.plan.rework import scaffold_rework
+
+          try:
+              result = subprocess.run(
+                  ["git", "rev-parse", "--show-toplevel"],
+                  capture_output=True,
+                  text=True,
+                  check=True,
+              )
+              repo_root = Path(result.stdout.strip())
+          except (subprocess.CalledProcessError, FileNotFoundError):
+              repo_root = Path.cwd()
+
+          try:
+              out_path, warnings = scaffold_rework(parent_path, repo_root=repo_root)
+          except ValueError as exc:
+              err_console.print(f"Error: {exc}")
+              raise typer.Exit(2)
+
+          for w in warnings:
+              err_console.print(f"warn: {w}")
+          console.print(f"Created: {out_path}")
+      ```
+
+      Run the happy-path test — expect green.
+
+      > Note: `CliRunner` invokes the typer app within the test's `tmp_path`, but
+      > `subprocess.run(["git", "rev-parse", ...])` will return the actual repo
+      > root. Integration tests set CWD via the `test_plan_execute.py` pattern —
+      > each test either `monkeypatch.chdir(tmp_path)` or invokes via a subprocess
+      > that we already use elsewhere. See Step 5.
+  - id: P3.T1.S5
+    text: |-
+      Stabilise repo_root discovery under tmp_path
+
+
+      Replace the `git rev-parse` block in `plan_rework` with:
+
+      ```python
+          repo_root = _resolve_repo_root()
+      ```
+
+      Add a helper near the top of `plan_cmd.py`:
+
+      ```python
+      def _resolve_repo_root() -> Path:
+          """Resolve repo root for a plan command.
+
+          Honors ``$VK_REPO_ROOT`` first (so integration tests can point the
+          command at ``tmp_path`` without spawning a fake git repo), then falls
+          back to ``git rev-parse``, then to ``Path.cwd()``.
+          """
+          import os
+          import subprocess
+          override = os.environ.get("VK_REPO_ROOT")
+          if override:
+              return Path(override)
+          try:
+              result = subprocess.run(
+                  ["git", "rev-parse", "--show-toplevel"],
+                  capture_output=True,
+                  text=True,
+                  check=True,
+              )
+              return Path(result.stdout.strip())
+          except (subprocess.CalledProcessError, FileNotFoundError):
+              return Path.cwd()
+      ```
+
+      Refactor `plan_new`, `plan_spec_index`, and `plan_rework` to call `_resolve_repo_root()`.
+
+      Update `test_rework_archived_parent_happy_path` to set `env={"VK_REPO_ROOT": str(tmp_path)}` on the `CliRunner.invoke` call. Keep in mind CliRunner does not pass `env` — set `monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))` instead.
+
+      Run the test — expect green.
+- number: 2
+  title: Exit-code and warning matrix
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Test — parent missing returns exit 2
+
+
+      Append to `tests/integration/test_plan_rework.py`:
+
+      ```python
+      def test_rework_missing_parent_exits_2(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          runner = CliRunner()
+          result = runner.invoke(
+              app,
+              ["plan", "rework", str(tmp_path / "nope.md")],
+              catch_exceptions=False,
+          )
+          assert result.exit_code == 2
+          assert "parent plan not found" in result.stderr
+      ```
+
+      Run — expect green if orchestrator raises correctly; otherwise fix.
+  - id: P3.T2.S2
+    text: |-
+      Test — mis-located parent returns exit 2
+
+
+      ```python
+      def test_rework_parent_outside_plans_dirs_exits_2(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          rogue = tmp_path / "not-a-plan-dir" / "2026-04-08-foo.md"
+          rogue.parent.mkdir(parents=True)
+          rogue.write_text("# Foo\n**Status:** Complete\n**Goal:** g\n")
+          runner = CliRunner()
+          result = runner.invoke(
+              app, ["plan", "rework", str(rogue)], catch_exceptions=False
+          )
+          assert result.exit_code == 2
+          assert "must live in docs/superpowers/plans/" in result.stderr
+      ```
+
+      Run — expect green.
+  - id: P3.T2.S3
+    text: |-
+      Test — unarchived parent emits warning, proceeds
+
+
+      ```python
+      def test_rework_unarchived_parent_warns(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          parent = _setup_repo(tmp_path, "parent_archived.md", archived=False)
+          runner = CliRunner()
+          result = runner.invoke(
+              app, ["plan", "rework", str(parent)], catch_exceptions=False
+          )
+          assert result.exit_code == 0
+          assert "not yet archived" in result.stderr
+          out = tmp_path / "docs/superpowers/plans/2026-04-08-kid-laptops-5-parental-controls-rework-1.md"
+          assert out.exists()
+          text = out.read_text()
+          assert "(not yet archived)" in text
+      ```
+
+      Run — expect green.
+  - id: P3.T2.S4
+    text: |-
+      Test — rework-1 archived, rework-2 gets Prior rework line
+
+
+      ```python
+      def test_rework_chains_prior_rework(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          parent = _setup_repo(tmp_path, "parent_archived.md")
+          # Seed an archived rework-1.
+          (tmp_path / "docs/superpowers/archived-plans/2026-04-08-kid-laptops-5-parental-controls-rework-1.md").write_text(
+              "# Stub — Rework 1\n**Status:** Complete\n**Goal:** done.\n"
+          )
+          runner = CliRunner()
+          result = runner.invoke(
+              app, ["plan", "rework", str(parent)], catch_exceptions=False
+          )
+          assert result.exit_code == 0
+          out = tmp_path / "docs/superpowers/plans/2026-04-08-kid-laptops-5-parental-controls-rework-2.md"
+          assert out.exists()
+          assert "# Kid Laptops Plan 5 — Rework 2" in out.read_text()
+          assert "**Prior rework:** `docs/superpowers/archived-plans/2026-04-08-kid-laptops-5-parental-controls-rework-1.md`" in out.read_text()
+      ```
+
+      Run — expect green.
+  - id: P3.T2.S5
+    text: |-
+      Test — cross-dir collision exits 2
+
+
+      ```python
+      def test_rework_cross_dir_collision_exits_2(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          parent = _setup_repo(tmp_path, "parent_archived.md")
+          slug = "2026-04-08-kid-laptops-5-parental-controls-rework-1.md"
+          (tmp_path / "docs/superpowers/plans" / slug).write_text("# x\n")
+          (tmp_path / "docs/superpowers/archived-plans" / slug).write_text("# x\n")
+          runner = CliRunner()
+          result = runner.invoke(
+              app, ["plan", "rework", str(parent)], catch_exceptions=False
+          )
+          assert result.exit_code == 2
+          assert "ambiguous rework state" in result.stderr
+      ```
+
+      Run — expect green.
+  - id: P3.T2.S6
+    text: |-
+      Test — no-H1 parent warns, uses fallback title
+
+
+      ```python
+      def test_rework_no_h1_title_fallback(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+          target_dir = tmp_path / "docs/superpowers/archived-plans"
+          target_dir.mkdir(parents=True)
+          parent = target_dir / "2026-04-08-no-title.md"
+          parent.write_text("**Status:** Complete\n\n**Goal:** g\n")
+          (tmp_path / "docs/superpowers/plans").mkdir(parents=True)
+          runner = CliRunner()
+          result = runner.invoke(
+              app, ["plan", "rework", str(parent)], catch_exceptions=False
+          )
+          assert result.exit_code == 0
+          assert "no H1 title" in result.stderr
+          out_text = (tmp_path / "docs/superpowers/plans/2026-04-08-no-title-rework-1.md").read_text()
+          assert out_text.startswith("# Rework 1 for 2026-04-08-no-title\n")
+      ```
+
+      Run — expect green.
+  - id: P3.T2.S7
+    text: |-
+      Full integration + unit regression
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      All green.
+
+      ---
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P3.T2.S7:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

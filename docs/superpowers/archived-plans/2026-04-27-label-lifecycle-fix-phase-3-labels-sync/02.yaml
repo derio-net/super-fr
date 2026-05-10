@@ -1,0 +1,518 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Diff logic, dry-run rendering, default-label removal logic
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/64
+tasks:
+- number: 1
+  title: '`_diff_labels` — compute action buckets'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD — `_diff_labels` cases
+
+
+      `tests/unit/test_admin_diff.py`:
+
+      ```python
+      """Tests for the registry-diff logic in vk admin labels-sync."""
+
+      from vk import labels
+      from vk.commands.admin_cmd import _diff_labels, LabelAction
+
+
+      def _existing(name: str, color: str, desc: str = "") -> dict:
+          return {"name": name, "color": color, "description": desc}
+
+
+      class TestDiffLabelsCreate:
+          def test_registry_label_missing_yields_create(self) -> None:
+              existing = []
+              actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
+              assert len(actions) == 1
+              assert actions[0].kind   == "create"
+              assert actions[0].name   == "vk-ready"
+              assert actions[0].new_color == "0E8AE6"
+
+
+      class TestDiffLabelsUpdate:
+          def test_wrong_color_yields_update(self) -> None:
+              existing = [_existing("vk-ready", "aaaaaa", "")]
+              actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
+              assert actions[0].kind == "update"
+              assert actions[0].old_color == "aaaaaa"
+              assert actions[0].new_color == "0E8AE6"
+
+          def test_wrong_description_yields_update(self) -> None:
+              existing = [_existing("vk-ready", "0E8AE6", "wrong")]
+              actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
+              assert actions[0].kind == "update"
+
+
+      class TestDiffLabelsAlreadyCorrect:
+          def test_matching_label_yields_unchanged(self) -> None:
+              existing = [_existing("vk-ready", "0E8AE6", labels.VK_READY.description)]
+              actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
+              assert actions[0].kind == "unchanged"
+
+
+      class TestDiffLabelsCaseInsensitiveColor:
+          def test_color_matches_ignoring_case(self) -> None:
+              existing = [_existing("vk-ready", "0e8ae6", labels.VK_READY.description)]
+              actions = _diff_labels(existing=existing, registry=[labels.VK_READY])
+              assert actions[0].kind == "unchanged"
+      ```
+  - id: P2.T1.S2
+    text: |-
+      Implement `_diff_labels` + `LabelAction`
+
+
+      In `src/vk/commands/admin_cmd.py`:
+
+      ```python
+      from dataclasses import dataclass
+
+      from vk import labels as _labels
+
+
+      @dataclass(frozen=True)
+      class LabelAction:
+          kind: str          # "create" | "update" | "remove" | "unchanged"
+          name: str
+          old_color: str = ""
+          new_color: str = ""
+          old_desc: str = ""
+          new_desc: str = ""
+
+
+      def _diff_labels(
+          *,
+          existing: list[dict],
+          registry: list[_labels.LabelDef],
+      ) -> list[LabelAction]:
+          """Compute per-label actions to bring existing in line with the registry."""
+          by_name = {e["name"]: e for e in existing}
+          actions: list[LabelAction] = []
+          for ld in registry:
+              cur = by_name.get(ld.name)
+              if cur is None:
+                  actions.append(LabelAction(
+                      kind="create", name=ld.name,
+                      new_color=ld.color, new_desc=ld.description,
+                  ))
+                  continue
+              cur_color = cur.get("color", "").lower()
+              cur_desc  = cur.get("description", "")
+              if cur_color == ld.color.lower() and cur_desc == ld.description:
+                  actions.append(LabelAction(kind="unchanged", name=ld.name))
+              else:
+                  actions.append(LabelAction(
+                      kind="update", name=ld.name,
+                      old_color=cur.get("color", ""), new_color=ld.color,
+                      old_desc=cur_desc, new_desc=ld.description,
+                  ))
+          return actions
+      ```
+  - id: P2.T1.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_admin_diff.py -q --no-cov
+      ```
+
+      Expected: 4 passed.
+- number: 2
+  title: '`_default_label_actions` — `--remove-defaults` with safety guard'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      TDD — `gh.count_issues_with_label`
+
+
+      In `tests/unit/test_gh.py`:
+
+      ```python
+      class TestCountIssuesWithLabel:
+          def test_returns_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+              import json
+              captured: list[list[str]] = []
+              def fake(args: list[str]) -> str:
+                  captured.append(args)
+                  return json.dumps([{"id": 1}, {"id": 2}, {"id": 3}])
+              monkeypatch.setattr(gh, "_run_gh", fake)
+              n = gh.count_issues_with_label(repo="o/r", name="bug")
+              assert n == 3
+              assert captured[0] == [
+                  "issue", "list", "--repo", "o/r",
+                  "--label", "bug", "--state", "all",
+                  "--json", "id", "--limit", "1000",
+              ]
+
+          def test_empty_returns_zero(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              monkeypatch.setattr(gh, "_run_gh", lambda args: "[]")
+              assert gh.count_issues_with_label(repo="o/r", name="bug") == 0
+      ```
+  - id: P2.T2.S2
+    text: |-
+      Implement `gh.count_issues_with_label`
+
+
+      ```python
+      def count_issues_with_label(*, repo: str, name: str) -> int:
+          """Count Issues (any state) that carry this label. Cap at 1000."""
+          import json
+          out = _run_gh([
+              "issue", "list", "--repo", repo,
+              "--label", name, "--state", "all",
+              "--json", "id", "--limit", "1000",
+          ])
+          return len(json.loads(out)) if out else 0
+      ```
+  - id: P2.T2.S3
+    text: |-
+      TDD — `_default_label_actions`
+
+
+      `tests/unit/test_admin_defaults.py`:
+
+      ```python
+      """Tests for default-label removal logic."""
+
+      import pytest
+
+      from vk import gh
+      from vk.commands.admin_cmd import _default_label_actions, DEFAULT_LABELS
+
+
+      def _existing(name: str) -> dict:
+          return {"name": name, "color": "ededed", "description": ""}
+
+
+      class TestDefaultLabelActions:
+          def test_default_with_zero_issues_yields_remove(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              existing = [_existing("bug"), _existing("documentation")]
+              monkeypatch.setattr(gh, "count_issues_with_label",
+                                  lambda *, repo, name: 0)
+              actions = _default_label_actions(repo="o/r", existing=existing)
+              kinds = {a.kind for a in actions}
+              assert kinds == {"remove"}
+              assert {a.name for a in actions} == {"bug", "documentation"}
+
+          def test_default_with_issues_skipped(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              existing = [_existing("bug")]
+              monkeypatch.setattr(gh, "count_issues_with_label",
+                                  lambda *, repo, name: 5)
+              actions = _default_label_actions(repo="o/r", existing=existing)
+              # Skipped — should not return a remove action for "bug" when used.
+              assert all(a.kind != "remove" for a in actions)
+
+          def test_non_default_label_ignored(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              existing = [_existing("custom-label")]
+              monkeypatch.setattr(gh, "count_issues_with_label",
+                                  lambda *, repo, name: 0)
+              actions = _default_label_actions(repo="o/r", existing=existing)
+              assert actions == []
+      ```
+  - id: P2.T2.S4
+    text: |-
+      Implement `DEFAULT_LABELS` + `_default_label_actions`
+
+
+      In `src/vk/commands/admin_cmd.py`:
+
+      ```python
+      DEFAULT_LABELS = frozenset({
+          "bug", "documentation", "duplicate", "enhancement",
+          "good first issue", "help wanted", "invalid", "question", "wontfix",
+      })
+
+
+      def _default_label_actions(
+          *,
+          repo: str,
+          existing: list[dict],
+      ) -> list[LabelAction]:
+          """Return remove actions for default labels with zero attached Issues.
+
+          Defaults with attached Issues are silently skipped — that's user data.
+          """
+          actions: list[LabelAction] = []
+          for lbl in existing:
+              name = lbl.get("name", "")
+              if name not in DEFAULT_LABELS:
+                  continue
+              if gh.count_issues_with_label(repo=repo, name=name) == 0:
+                  actions.append(LabelAction(
+                      kind="remove", name=name,
+                      old_color=lbl.get("color", ""),
+                      old_desc=lbl.get("description", ""),
+                  ))
+          return actions
+      ```
+  - id: P2.T2.S5
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_admin_defaults.py tests/unit/test_gh.py::TestCountIssuesWithLabel -q --no-cov
+      ```
+
+      Expected: 5 passed.
+- number: 3
+  title: Dry-run rendering
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      TDD — dry-run table rows match action buckets
+
+
+      `tests/unit/test_admin_dryrun.py`:
+
+      ```python
+      """Tests for dry-run rendering — verify the table contains expected rows."""
+
+      import pytest
+      from typer.testing import CliRunner
+
+      from vk import gh, labels
+      from vk.commands.admin_cmd import admin_app
+
+
+      runner = CliRunner()
+
+
+      def _patch_minimal_repo(monkeypatch: pytest.MonkeyPatch,
+                             existing_labels: list[dict]) -> None:
+          monkeypatch.setattr(gh, "list_repos", lambda *, owner: [{"name": "r"}])
+          monkeypatch.setattr(gh, "list_labels",
+                              lambda *, repo: existing_labels)
+          monkeypatch.setattr(gh, "count_issues_with_label",
+                              lambda *, repo, name: 0)
+
+
+      class TestDryRunRendersActions:
+          def test_create_appears_when_label_missing(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              _patch_minimal_repo(monkeypatch, existing_labels=[])
+              result = runner.invoke(admin_app, [
+                  "labels-sync", "--owner", "o", "--repo", "r", "--dry-run",
+              ])
+              assert result.exit_code == 0
+              # Expect each registry label to appear with action "create"
+              for ld in (labels.VK_READY, labels.IN_PROGRESS, labels.PR_READY):
+                  assert ld.name in result.stdout
+                  assert "create" in result.stdout
+
+          def test_unchanged_when_correct(
+              self, monkeypatch: pytest.MonkeyPatch
+          ) -> None:
+              _patch_minimal_repo(monkeypatch, existing_labels=[
+                  {"name": ld.name, "color": ld.color, "description": ld.description}
+                  for ld in labels.LIFECYCLE.values()
+              ])
+              result = runner.invoke(admin_app, [
+                  "labels-sync", "--owner", "o", "--repo", "r", "--dry-run",
+              ])
+              assert result.exit_code == 0
+              assert "unchanged" in result.stdout.lower() or "= already correct" in result.stdout.lower()
+      ```
+  - id: P2.T3.S2
+    text: |-
+      Implement `_render_dryrun_table` + wire into `labels_sync`
+
+
+      In `src/vk/commands/admin_cmd.py`:
+
+      ```python
+      from rich.table import Table
+
+
+      def _render_dryrun_table(
+          *,
+          repo: str,
+          actions: list[LabelAction],
+      ) -> None:
+          table = Table(title=f"{repo}", show_header=True, header_style="bold")
+          table.add_column("Action")
+          table.add_column("Label")
+          table.add_column("Detail")
+          for a in actions:
+              if a.kind == "create":
+                  table.add_row("+ create",   a.name, f"color={a.new_color}")
+              elif a.kind == "update":
+                  table.add_row("~ update",   a.name,
+                                f"{a.old_color or '?'} → {a.new_color}")
+              elif a.kind == "remove":
+                  table.add_row("- remove",   a.name, "(default, no Issues)")
+              else:
+                  table.add_row("= unchanged", a.name, "")
+          console.print(table)
+
+
+      @admin_app.command(name="labels-sync")
+      def labels_sync(
+          owner: str = typer.Option(..., "--owner"),
+          repo: str | None = typer.Option(None, "--repo"),
+          remove_defaults: bool = typer.Option(False, "--remove-defaults"),
+          dry_run: bool = typer.Option(True, "--dry-run/--apply"),
+          yes: bool = typer.Option(False, "--yes"),
+      ) -> None:
+          """Sync repo labels to the canonical registry."""
+          if yes:
+              dry_run = False
+
+          repos = _resolve_target_repos(owner=owner, repo=repo)
+          if not repos:
+              err_console.print(f"No repos found for owner '{owner}'.")
+              raise typer.Exit(1)
+
+          registry = list(_labels.LIFECYCLE.values())  # lifecycle labels only
+
+          any_errors = False
+          for slug in repos:
+              try:
+                  existing = gh.list_labels(repo=slug)
+              except gh.GhError as exc:
+                  err_console.print(f"{slug}: list-labels failed: {exc}")
+                  any_errors = True
+                  continue
+
+              actions = _diff_labels(existing=existing, registry=registry)
+              if remove_defaults:
+                  actions += _default_label_actions(repo=slug, existing=existing)
+
+              _render_dryrun_table(repo=slug, actions=actions)
+
+              if dry_run:
+                  continue
+              # Apply mode lands in Phase 3 of this plan.
+              raise NotImplementedError("apply mode lands in Phase 3 of this plan.")
+
+          if any_errors:
+              raise typer.Exit(1)
+      ```
+  - id: P2.T3.S3
+    text: |-
+      Run tests
+
+
+      ```bash
+      uv run pytest tests/unit/test_admin_dryrun.py -q --no-cov
+      ```
+
+      Expected: 2 passed.
+- number: 4
+  title: Format, type-check, full suite, commit
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Format, type-check
+
+
+      ```bash
+      uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/
+      ```
+
+      Expected: clean.
+  - id: P2.T4.S2
+    text: |-
+      Full suite
+
+
+      ```bash
+      uv run pytest -q --no-cov
+      ```
+
+      Expected: green.
+  - id: P2.T4.S3
+    text: |-
+      Commit and PR
+
+
+      ```bash
+      git checkout -b labels-sync-phase-2-diff-and-dryrun
+      git add src/vk/gh.py src/vk/commands/admin_cmd.py tests/
+      git commit -m "feat(admin): labels-sync diff + dry-run rendering + defaults guard"
+      git push -u origin labels-sync-phase-2-diff-and-dryrun
+      gh pr create --title "Labels-sync Phase 2 · Diff logic + dry-run rendering" \
+        --body "Computes per-repo action buckets and renders the dry-run table. Apply mode still stubbed; lands in Phase 3."
+      ```
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

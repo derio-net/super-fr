@@ -1,0 +1,152 @@
+schema_version: 2
+phase:
+  number: 0
+  title: Add lifecycle transition step to vk-execute skill
+  tag: agentic
+  depends_on: []
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/7
+tasks:
+- number: 1
+  title: Update the thin CLI wrapper skill
+  steps:
+  - id: P0.T1.S1
+    text: |-
+      Write a failing validation test for the new step
+
+
+      Add a test to `tests/unit/test_skill_validation.py` that verifies the `vk-execute` skill mentions the "In Review" transition:
+
+      ```python
+      def test_vk_execute_has_lifecycle_transition(self, skill_dir: Path) -> None:
+          """vk-execute must include the post-PR lifecycle transition step."""
+          if skill_dir.name != "vk-execute":
+              pytest.skip("Only applies to vk-execute")
+          text = (skill_dir / "SKILL.md").read_text()
+          assert "In Review" in text, "vk-execute must reference 'In Review' lifecycle transition"
+      ```
+
+      Run: `cd /home/claude/repos/superpowers-for-vk && uv run pytest tests/unit/test_skill_validation.py::TestSkillValidation::test_vk_execute_has_lifecycle_transition -v`
+      Expected: FAIL — "In Review" not found in current skill file.
+  - id: P0.T1.S2
+    text: |-
+      Add Step 7 to the thin CLI wrapper
+
+
+      Edit `skills/vk-execute/SKILL.md`. After the existing step 6 ("Delegate to `superpowers:finishing-a-development-branch`."), add a new step 7:
+
+      ```markdown
+      7. Transition VK Issue to "In Review" (dispatch mode only):
+         - Extract the GitHub Issue number from the plan's tracking comment (`<!-- Tracking: ...issues/<N> -->`)
+         - Call VK MCP `list_issues` with `search: "gh#<N>"` to resolve the VK Issue ID
+         - Call VK MCP `update_issue(issue_id: "<id>", status: "In Review")`
+         - If MCP is unavailable or calls fail, skip silently — the server fallback will handle it
+      ```
+
+      Verify the file stays under 120 lines (current: 48 lines, adding ~5 lines is well within budget).
+  - id: P0.T1.S3
+    text: |-
+      Run validation tests
+
+
+      Run: `cd /home/claude/repos/superpowers-for-vk && uv run pytest tests/unit/test_skill_validation.py -v`
+      Expected: ALL PASS, including the new `test_vk_execute_has_lifecycle_transition`.
+  - id: P0.T1.S4
+    text: |-
+      Commit
+
+
+      ```bash
+      git add skills/vk-execute/SKILL.md tests/unit/test_skill_validation.py
+      git commit -m "feat: add post-PR lifecycle transition to vk-execute skill"
+      ```
+- number: 2
+  title: Verify and run full CI checks
+  steps:
+  - id: P0.T2.S1
+    text: |-
+      Run full test suite
+
+
+      Run: `cd /home/claude/repos/superpowers-for-vk && uv run pytest -v`
+      Expected: ALL PASS.
+  - id: P0.T2.S2
+    text: |-
+      Run linting and type checks
+
+
+      Run: `cd /home/claude/repos/superpowers-for-vk && uv run ruff check . && uv run mypy src/`
+      Expected: Clean.
+- number: 3
+  title: Update plugin version and reinstall
+  steps:
+  - id: P0.T3.S1
+    text: |-
+      Bump plugin patch version
+
+
+      Edit `pyproject.toml` to bump the version (e.g., `0.2.2` → `0.2.3` or whatever the current version is). Check current version first:
+
+      ```bash
+      grep 'version' pyproject.toml | head -1
+      ```
+  - id: P0.T3.S2
+    text: |-
+      Reinstall skills to update plugin cache
+
+
+      ```bash
+      cd /home/claude/repos/superpowers-for-vk && uv run vk install-skills
+      ```
+
+      Verify the cached skill file now contains "In Review".
+  - id: P0.T3.S3
+    text: |-
+      Commit version bump
+
+
+      ```bash
+      git add pyproject.toml
+      git commit -m "chore: bump version for lifecycle transition feature"
+      ```
+state:
+  steps:
+    P0.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P0.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

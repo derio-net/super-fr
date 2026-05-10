@@ -233,6 +233,6 @@ None at spec time. Phase 0 audit will surface any additional title/label consume
 
 ## Implementation Plans
 
-| Plan | Repo | File | Status | Depends on |
-|------|------|------|--------|------------|
-| Archive And Unified Descriptions Implementation Plan |  | `docs/superpowers/archived-plans/2026-04-14-archive-and-unified-descriptions.md` | Complete | — |
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| Archive And Unified Descriptions Implementation Plan |  | `docs/superpowers/archived-plans/2026-04-14-archive-and-unified-descriptions/` | — |
