@@ -178,6 +178,7 @@ def _migrate_one(
     # Flat-format plans (no ## Phase headings) land in v1plan.tasks with an
     # empty v1plan.phases. Wrap them into a synthetic Phase 1 so the migration
     # produces 01.yaml instead of an empty folder.
+    phases_to_emit: list[Any]
     if v1plan.phases:
         phases_to_emit = list(v1plan.phases)
     else:
