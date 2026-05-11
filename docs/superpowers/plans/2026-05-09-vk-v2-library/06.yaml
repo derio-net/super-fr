@@ -1,0 +1,146 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Self-migrate this repo's plans
+  tag: manual
+  depends_on:
+  - 5
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Dry-run
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      From repo root, run dry-run
+
+      ```
+      uv run vk migrate v1-to-v2 --dry-run
+      ```
+      Expected output: list of every .md plan that will be converted (excluding this in-progress plan); list of spec files that will have Status column dropped; nothing applied.
+  - id: P6.T1.S2
+    text: |-
+      Sanity-check the output
+
+      Verify: this plan's own file is in the SKIPPED list (because Status: In Progress). All Complete plans listed for conversion.
+- number: 2
+  title: Apply
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Apply migration
+
+      ```
+      uv run vk migrate v1-to-v2 --yes
+      ```
+      Expected output: per-plan conversion log; per-spec table-rewrite log; summary of files added/moved.
+  - id: P6.T2.S2
+    text: |-
+      Verify a sample migrated plan
+
+      ```
+      uv run vk apply --dry-run docs/superpowers/archived-plans/<a-migrated-folder>
+      ```
+      Should parse cleanly; mostly "no diff" output for archived plans.
+  - id: P6.T2.S3
+    text: |-
+      Run full test suite — ensure migration didn't break anything
+
+      ```
+      uv run pytest -q --no-cov
+      ```
+      Green.
+- number: 3
+  title: PR + review
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      Branch, commit, push
+
+      ```
+      git checkout -b chore/self-migrate-v1-to-v2
+      git add -A
+      git commit -m "chore(plans): self-migrate v1 plans to v2 folder format"
+      git push -u origin chore/self-migrate-v1-to-v2
+      ```
+  - id: P6.T3.S2
+    text: |-
+      Open PR
+
+      ```
+      gh pr create --title "chore(plans): self-migrate v1 plans to v2 folder format" \
+        --body "Mechanical migration via 'vk migrate v1-to-v2'. Excludes this plan (still in progress). Spec tables updated to drop Status column. See spec 2026-05-06-vk-rebuild-state-machine-design.md."
+      ```
+  - id: P6.T3.S3
+    text: Review and merge — operator action; once green, merge.
+- number: 4
+  title: Post-completion housekeeping (documented; executed AFTER Phase 6)
+  steps:
+  - id: P6.T4.S1
+    text: 'Mark this plan Status: Complete via `vk plan edit ... --complete-phase`
+      for any remaining unchecked steps'
+  - id: P6.T4.S2
+    text: |-
+      Run migration on the now-complete plan
+
+      ```
+      uv run vk migrate v1-to-v2 --include-in-progress --yes
+      ```
+  - id: P6.T4.S3
+    text: Open a tiny follow-up PR archiving this plan
+  - id: P6.T4.S4
+    text: Plan 1 is closed. Plan 2 (bridge migration in willikins) is now unblocked.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T4.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T4.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T4.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P6.T4.S4:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

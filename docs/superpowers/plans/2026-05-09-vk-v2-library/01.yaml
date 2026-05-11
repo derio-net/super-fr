@@ -1,0 +1,544 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Schema + parser foundation
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Pydantic schemas
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create v2 package skeleton
+
+      Create empty package files. Run:
+      ```
+      mkdir -p src/vk/v2 tests/unit/fixtures/v2_plan_minimal
+      touch src/vk/v2/__init__.py src/vk/v2/types.py
+      ```
+      Verify: `python -c "import vk.v2"` exits 0.
+  - id: P1.T1.S2
+    text: |-
+      Write fixture v2 plan folder (minimal valid)
+
+      Create `tests/unit/fixtures/v2_plan_minimal/_meta.yaml`:
+      BEGIN: tests/unit/fixtures/v2_plan_minimal/_meta.yaml
+      ```
+      schema_version: 2
+      plan: 2026-05-09-fixture-minimal
+      spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md
+      target_repo: derio-net/superpowers-for-vk
+      vk_version: ">=2.0.0,<3.0.0"
+      created: 2026-05-09
+      ```
+      END: tests/unit/fixtures/v2_plan_minimal/_meta.yaml
+      Create `tests/unit/fixtures/v2_plan_minimal/_prose.md`:
+      BEGIN: tests/unit/fixtures/v2_plan_minimal/_prose.md
+      ```
+      # Fixture: minimal v2 plan
+      Plan-level prose. Not read by tooling.
+      ```
+      END: tests/unit/fixtures/v2_plan_minimal/_prose.md
+      Create `tests/unit/fixtures/v2_plan_minimal/01.yaml`:
+      BEGIN: tests/unit/fixtures/v2_plan_minimal/01.yaml
+      ```
+      schema_version: 2
+      phase:
+        number: 1
+        title: Fixture phase
+        tag: agentic
+        depends_on: []
+        tracking_issue: null
+      tasks:
+        - number: 1
+          title: Fixture task
+          steps:
+            - id: P1.T1.S1
+              text: Fixture step
+      state:
+        steps:
+          P1.T1.S1:
+            state: " "
+            ticked_at: null
+            note: null
+        completion:
+          at: null
+          note: null
+          observed_prs: []
+      ```
+      END: tests/unit/fixtures/v2_plan_minimal/01.yaml
+  - id: P1.T1.S3
+    text: |-
+      Write test asserting pydantic loads `_meta.yaml`
+
+      Create `tests/unit/test_v2_parse.py`:
+      ```python
+      import pytest
+      from pathlib import Path
+
+      FIXTURE_DIR = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+
+      def test_planmeta_loads_minimal_fixture():
+          from vk.v2.types import PlanMeta
+          import yaml
+          meta = PlanMeta.model_validate(yaml.safe_load((FIXTURE_DIR / "_meta.yaml").read_text()))
+          assert meta.plan == "2026-05-09-fixture-minimal"
+          assert meta.target_repo == "derio-net/superpowers-for-vk"
+          assert meta.vk_version == ">=2.0.0,<3.0.0"
+          assert meta.parent_plan is None
+          assert meta.origin_items == []
+      ```
+      Run: `uv run pytest tests/unit/test_v2_parse.py::test_planmeta_loads_minimal_fixture -q` — expect ImportError (PlanMeta doesn't exist).
+  - id: P1.T1.S4
+    text: |-
+      Implement `PlanMeta` pydantic model
+
+      Edit `src/vk/v2/types.py`:
+      BEGIN: src/vk/v2/types.py
+      ```python
+      from __future__ import annotations
+      from typing import Literal
+      from pydantic import BaseModel, ConfigDict, Field
+
+
+      class OriginItem(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          id: int
+          item: str
+          source: str
+          track: Literal["development", "operations", "decision"]
+
+
+      class PlanMeta(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          schema_version: Literal[2]
+          plan: str
+          spec: str | None = None
+          target_repo: str
+          vk_version: str
+          created: str  # YYYY-MM-DD; not parsed to date for round-trip stability
+          parent_plan: str | None = None
+          prior_rework: str | None = None
+          origin_items: list[OriginItem] = Field(default_factory=list)
+      ```
+      END: src/vk/v2/types.py
+      Re-run Step 3's test: green.
+  - id: P1.T1.S5
+    text: |-
+      Test PlanMeta rejects bad input
+
+      Append to `test_v2_parse.py`:
+      ```python
+      def test_planmeta_rejects_missing_required():
+          from vk.v2.types import PlanMeta
+          from pydantic import ValidationError
+          with pytest.raises(ValidationError):
+              PlanMeta.model_validate({"schema_version": 2, "plan": "x"})
+
+      def test_planmeta_rejects_extra_field():
+          from vk.v2.types import PlanMeta
+          from pydantic import ValidationError
+          with pytest.raises(ValidationError):
+              PlanMeta.model_validate({
+                  "schema_version": 2, "plan": "x", "target_repo": "o/r",
+                  "vk_version": ">=2", "created": "2026-05-09",
+                  "extra_field": "boom",
+              })
+      ```
+      Run: green.
+  - id: P1.T1.S6
+    text: |-
+      Test PhaseDoc loads minimal fixture
+
+      Append:
+      ```python
+      def test_phasedoc_loads_minimal_fixture():
+          from vk.v2.types import PhaseDoc
+          import yaml
+          doc = PhaseDoc.model_validate(yaml.safe_load((FIXTURE_DIR / "01.yaml").read_text()))
+          assert doc.phase.number == 1
+          assert doc.phase.tag == "agentic"
+          assert doc.phase.depends_on == ()
+          assert doc.tasks[0].steps[0].id == "P1.T1.S1"
+          assert doc.state.steps["P1.T1.S1"].state == " "
+      ```
+      Run: ImportError.
+  - id: P1.T1.S7
+    text: |-
+      Implement `PhaseDoc`, `Task`, `Step`, `PhaseStateBlock`, `StepState`, `Completion`
+
+      Append to `src/vk/v2/types.py`:
+      ```python
+      class Step(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          id: str = Field(pattern=r"^P\d+\.T\d+\.S\d+$")
+          text: str
+
+
+      class Task(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          number: int
+          title: str
+          steps: tuple[Step, ...]
+
+
+      class PhaseHeader(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          number: int
+          title: str
+          tag: Literal["agentic", "manual"]
+          depends_on: tuple[int, ...] = ()
+          tracking_issue: str | None = None
+
+
+      class StepState(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          state: Literal[" ", "x", "-"]
+          ticked_at: str | None = None
+          note: str | None = None
+
+
+      class Completion(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          at: str | None = None
+          note: str | None = None
+          observed_prs: tuple[str, ...] = ()
+
+
+      class PhaseStateBlock(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          steps: dict[str, StepState]
+          completion: Completion
+
+
+      class PhaseDoc(BaseModel):
+          model_config = ConfigDict(frozen=True, extra="forbid")
+          schema_version: Literal[2]
+          phase: PhaseHeader
+          tasks: tuple[Task, ...]
+          state: PhaseStateBlock
+      ```
+      Run Step 6's test: green.
+  - id: P1.T1.S8
+    text: |-
+      Test cross-validation — state.steps keys match step ids
+
+      Append:
+      ```python
+      def test_phasedoc_rejects_state_key_mismatch():
+          from vk.v2.types import PhaseDoc
+          from pydantic import ValidationError
+          with pytest.raises(ValidationError):
+              PhaseDoc.model_validate({
+                  "schema_version": 2,
+                  "phase": {"number": 1, "title": "x", "tag": "agentic"},
+                  "tasks": [{"number": 1, "title": "t", "steps": [{"id": "P1.T1.S1", "text": "s"}]}],
+                  "state": {
+                      "steps": {"P1.T1.S99": {"state": " "}},
+                      "completion": {"observed_prs": []}
+                  }
+              })
+      ```
+      Run: red — pydantic doesn't enforce this yet.
+  - id: P1.T1.S9
+    text: |-
+      Add cross-validator to PhaseDoc
+
+      Add `from pydantic import model_validator` to imports. Add to `PhaseDoc`:
+      ```python
+          @model_validator(mode="after")
+          def _state_keys_match_steps(self) -> "PhaseDoc":
+              step_ids = {s.id for t in self.tasks for s in t.steps}
+              state_keys = set(self.state.steps.keys())
+              if step_ids != state_keys:
+                  missing = step_ids - state_keys
+                  extra = state_keys - step_ids
+                  raise ValueError(
+                      f"state.steps keys must match task step ids exactly. "
+                      f"missing={sorted(missing)} extra={sorted(extra)}"
+                  )
+              return self
+      ```
+      Run Step 8's test: green.
+- number: 2
+  title: '`vk.v2.parse`'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Test parse() round-trips minimal fixture
+
+      Append to `test_v2_parse.py`:
+      ```python
+      def test_parse_minimal_fixture():
+          from vk.v2 import parse
+          plan = parse(FIXTURE_DIR)
+          assert plan.meta.plan == "2026-05-09-fixture-minimal"
+          assert len(plan.phases) == 1
+          assert plan.phases[0].phase.number == 1
+          assert plan.dir == FIXTURE_DIR
+      ```
+      Run: ImportError.
+  - id: P1.T2.S2
+    text: |-
+      Implement `vk.v2.parse`
+
+      Create `src/vk/v2/parse.py`:
+      BEGIN: src/vk/v2/parse.py
+      ```python
+      from __future__ import annotations
+      import re
+      from dataclasses import dataclass
+      from pathlib import Path
+      import yaml
+      from vk.v2.types import PlanMeta, PhaseDoc
+
+
+      class PlanSchemaError(Exception):
+          pass
+
+
+      @dataclass(frozen=True)
+      class Plan:
+          dir: Path
+          meta: PlanMeta
+          phases: tuple[PhaseDoc, ...]
+
+          @property
+          def prose_path(self) -> Path:
+              return self.dir / "_prose.md"
+
+
+      _PHASE_FILE_RE = re.compile(r"^(\d{2,})\.yaml$")
+
+
+      def parse(plan_dir: Path) -> Plan:
+          plan_dir = Path(plan_dir).resolve()
+          if not plan_dir.is_dir():
+              raise PlanSchemaError(f"not a directory: {plan_dir}")
+          meta_path = plan_dir / "_meta.yaml"
+          if not meta_path.exists():
+              raise PlanSchemaError(
+                  f"{plan_dir} is not a v2 plan (no _meta.yaml). "
+                  f"Run `vk migrate v1-to-v2` first if migrating from v1."
+              )
+          try:
+              meta = PlanMeta.model_validate(yaml.safe_load(meta_path.read_text()))
+          except Exception as e:
+              raise PlanSchemaError(f"_meta.yaml: {e}") from e
+
+          phase_files = sorted(
+              (p for p in plan_dir.iterdir() if _PHASE_FILE_RE.match(p.name)),
+              key=lambda p: int(_PHASE_FILE_RE.match(p.name).group(1)),
+          )
+          phases: list[PhaseDoc] = []
+          for f in phase_files:
+              try:
+                  phases.append(PhaseDoc.model_validate(yaml.safe_load(f.read_text())))
+              except Exception as e:
+                  raise PlanSchemaError(f"{f.name}: {e}") from e
+
+          return Plan(dir=plan_dir, meta=meta, phases=tuple(phases))
+      ```
+      END: src/vk/v2/parse.py
+  - id: P1.T2.S3
+    text: |-
+      Wire parse() into `vk.v2.__init__`
+
+      Edit `src/vk/v2/__init__.py`:
+      ```python
+      from vk.v2.parse import parse, Plan, PlanSchemaError
+      from vk.v2.types import (
+          PlanMeta, PhaseDoc, Task, Step, PhaseHeader,
+          PhaseStateBlock, StepState, Completion, OriginItem,
+      )
+
+      __all__ = [
+          "parse", "Plan", "PlanSchemaError",
+          "PlanMeta", "PhaseDoc", "Task", "Step", "PhaseHeader",
+          "PhaseStateBlock", "StepState", "Completion", "OriginItem",
+      ]
+      ```
+      Run Task 2 Step 1's test: green.
+  - id: P1.T2.S4
+    text: |-
+      Test parse() rejects v1 plan
+
+      Append:
+      ```python
+      def test_parse_rejects_v1_plan(tmp_path):
+          from vk.v2 import parse, PlanSchemaError
+          v1 = tmp_path / "v1-plan"
+          v1.mkdir()
+          (v1 / "looks-like-a-plan.md").write_text("# old")
+          with pytest.raises(PlanSchemaError, match="not a v2 plan"):
+              parse(v1)
+      ```
+      Run: green.
+  - id: P1.T2.S5
+    text: |-
+      Test parse() enforces vk_version constraint
+
+      Add fixture `tests/unit/fixtures/v2_plan_future/_meta.yaml` with `vk_version: ">=99.0.0"`, plus `_prose.md` and `01.yaml`. Append:
+      ```python
+      def test_parse_enforces_vk_version(monkeypatch):
+          from vk.v2 import parse, PlanSchemaError
+          from vk.v2 import parse as parse_module
+          monkeypatch.setattr(parse_module, "INSTALLED_VK_VERSION", "1.4.5")
+          future = Path(__file__).parent / "fixtures" / "v2_plan_future"
+          with pytest.raises(PlanSchemaError, match="vk_version"):
+              parse(future)
+      ```
+      Run: red.
+  - id: P1.T2.S6
+    text: |-
+      Add version-constraint enforcement in parse()
+
+      Edit `src/vk/v2/parse.py`:
+      - Add `import importlib.metadata`
+      - Add `from packaging.specifiers import SpecifierSet`
+      - Add `from packaging.version import Version`
+      - Add module-level `INSTALLED_VK_VERSION = importlib.metadata.version("vk")`
+      - Inside `parse()`, after meta validation:
+        ```python
+        spec = SpecifierSet(meta.vk_version)
+        if Version(INSTALLED_VK_VERSION) not in spec:
+            raise PlanSchemaError(
+                f"plan {plan_dir} requires vk_version {meta.vk_version} "
+                f"but installed is {INSTALLED_VK_VERSION}. "
+                f"To upgrade: pip install --user --upgrade "
+                f'"vk @ git+https://github.com/derio-net/superpowers-for-vk@v<version>"'
+            )
+        ```
+      - Add `packaging>=24` to `pyproject.toml` dependencies.
+      Run: `uv sync && uv run pytest tests/unit/test_v2_parse.py -q` — green.
+- number: 3
+  title: Round-trip and regression check
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Test round-trip — parse, serialize back, parse again equals original
+
+      Append:
+      ```python
+      def test_parse_roundtrip(tmp_path):
+          from vk.v2 import parse
+          import yaml, shutil
+          shutil.copytree(FIXTURE_DIR, tmp_path / "copy")
+          plan = parse(tmp_path / "copy")
+          (tmp_path / "copy" / "_meta.yaml").write_text(yaml.safe_dump(plan.meta.model_dump()))
+          (tmp_path / "copy" / "01.yaml").write_text(yaml.safe_dump(plan.phases[0].model_dump()))
+          reparsed = parse(tmp_path / "copy")
+          assert reparsed.meta == plan.meta
+          assert reparsed.phases == plan.phases
+      ```
+      Run: green.
+  - id: P1.T3.S2
+    text: |-
+      Verify v1 tests still pass
+
+      Run `uv run pytest -q --no-cov` — every existing v1 test still green.
+  - id: P1.T3.S3
+    text: |-
+      Verify ruff and mypy clean on new code
+
+      Run `uv run ruff check src/vk/v2/ tests/unit/test_v2_parse.py` — clean.
+      Run `uv run mypy src/vk/v2/` — clean.
+  - id: P1.T3.S4
+    text: |-
+      Commit Phase 1
+
+        Stage: `src/vk/v2/`, `tests/unit/test_v2_parse.py`, `tests/unit/fixtures/v2_plan_minimal/`, `tests/unit/fixtures/v2_plan_future/`, `pyproject.toml`, `uv.lock`.
+        Message:
+        ```
+        feat(v2): pydantic schemas + parse() — Phase 1 of v2 library
+
+        Lives under src/vk/v2/. v1 code untouched. Loads plan-as-folder
+        format defined in 2026-05-06 spec; refuses v1 plans with actionable
+        error; enforces vk_version constraint at parse time.
+        ```
+
+      ---
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S8:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T1.S9:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,411 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Library projection chain
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Renderer (pure)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Define `RenderedState`, `RenderedIssue`, `GhState`, `PhaseObservation`, `PrObservation`
+
+      Create `src/vk/v2/states.py` with frozen dataclasses per spec §"Rendering" and §"Observing". No methods. All fields typed.
+  - id: P2.T1.S2
+    text: |-
+      Test `render()` for the simplest case (one undispatched agentic phase, no observation)
+
+      Create `tests/unit/test_v2_render.py`:
+      ```python
+      from vk.v2 import parse
+      from vk.v2.render import render
+      from vk.v2.states import GhState
+      from pathlib import Path
+
+      FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+
+      def test_render_undispatched_phase_yields_create_intent():
+          plan = parse(FIXTURE)
+          observed = GhState(phases={})
+          rendered = render(plan, observed)
+          assert 1 in rendered.issue_per_phase
+          issue = rendered.issue_per_phase[1]
+          assert issue.state == "OPEN"
+          assert "spec:vk-rebuild-state-machine-design" in issue.labels
+          assert "plan:2026-05-09-fixture-minimal" in issue.labels
+          assert "phase:1" in issue.labels
+          assert "vk-ready" in issue.labels
+          assert rendered.archive_decision is False
+      ```
+      Run: ImportError.
+  - id: P2.T1.S3
+    text: |-
+      Implement `render()` skeleton + body template
+
+      Create `src/vk/v2/render.py`:
+      - `_render_body(phase, plan) -> str` — static template per spec §"Rendering" (tracking block + Instruction/Workspace/Dependencies sections)
+      - `_lifecycle_label(phase, observation) -> str | None` — implements the table from spec
+      - `_render_one_phase(phase, plan, observation) -> RenderedIssue`
+      - `render(plan, observed) -> RenderedState`
+      Run Step 2: green.
+  - id: P2.T1.S4
+    text: |-
+      Test lifecycle label projection — table-driven
+
+      Append:
+      ```python
+      import pytest
+      from vk.v2.states import PhaseObservation, PrObservation
+
+      @pytest.mark.parametrize("obs,expected_label", [
+          (PhaseObservation(issue_state="OPEN", issue_labels=frozenset(), issue_assignees=(), linked_prs=()), "vk-ready"),
+          (PhaseObservation(issue_state="OPEN", issue_labels=frozenset(), issue_assignees=("claude-bot",), linked_prs=()), "in-progress"),
+          (PhaseObservation(issue_state="OPEN", issue_labels=frozenset(), issue_assignees=(),
+                            linked_prs=(PrObservation(url="...", state="OPEN", merged=False, draft=True, ci="PASS"),)), "in-progress"),
+          (PhaseObservation(issue_state="OPEN", issue_labels=frozenset(), issue_assignees=(),
+                            linked_prs=(PrObservation(url="...", state="OPEN", merged=False, draft=False, ci="PASS"),)), "pr-ready"),
+      ])
+      def test_lifecycle_label_projection(obs, expected_label):
+          from vk.v2.render import _lifecycle_label
+          from vk.v2 import parse
+          plan = parse(FIXTURE)
+          assert _lifecycle_label(plan.phases[0], obs) == expected_label
+      ```
+      Run: red (some cases).
+  - id: P2.T1.S5
+    text: |-
+      Implement lifecycle-label projection table
+
+      Per spec §"Rendering". Cover: vk-ready / manual / in-progress / pr-ready / None.
+      Run Step 4: green.
+  - id: P2.T1.S6
+    text: |-
+      Test phase-completion projection — agentic
+
+      Append:
+      ```python
+      def test_agentic_phase_complete_when_all_steps_ticked_and_pr_merged():
+          from vk.v2.render import _phase_complete
+          from vk.v2 import parse
+          plan = parse(FIXTURE)
+          observed_open_pr = PhaseObservation(
+              issue_state="OPEN", issue_labels=frozenset(), issue_assignees=(),
+              linked_prs=(PrObservation(url="...", state="OPEN", merged=False, draft=False, ci="PASS"),)
+          )
+          assert _phase_complete(plan.phases[0], observed_open_pr) is False
+          ticked_phase = plan.phases[0].model_copy(update={
+              "state": plan.phases[0].state.model_copy(update={
+                  "steps": {"P1.T1.S1": plan.phases[0].state.steps["P1.T1.S1"].model_copy(update={"state": "x"})}
+              })
+          })
+          observed_merged = PhaseObservation(
+              issue_state="OPEN", issue_labels=frozenset(), issue_assignees=(),
+              linked_prs=(PrObservation(url="...", state="CLOSED", merged=True, draft=False, ci="PASS"),)
+          )
+          assert _phase_complete(ticked_phase, observed_merged) is True
+      ```
+      Run: red.
+  - id: P2.T1.S7
+    text: |-
+      Implement `_phase_complete()` per spec rules
+
+      Agentic: completion.at OR (all steps ticked AND merged PR observed AND no open PR). Manual: completion.at AND completion.note required; steps optional.
+      Run Step 6: green.
+  - id: P2.T1.S8
+    text: |-
+      Test archive_decision = all phases complete
+
+      Add `tests/unit/fixtures/v2_plan_two_phase/` with two phases. Both complete → archive=True; one incomplete → archive=False.
+  - id: P2.T1.S9
+    text: |-
+      Implement and verify
+
+      Run: green.
+  - id: P2.T1.S10
+    text: |-
+      Test render() drift warnings (3 cases per spec)
+
+      - Steps all ticked, PR not merged → warning
+      - PR merged, steps unticked → warning
+      - Issue closed, plan says incomplete → warning
+  - id: P2.T1.S11
+    text: |-
+      Implement drift warnings in render()
+
+      Add `Warnings` field (tuple of strings) to `RenderedState`. Populate in `render()`. Run: green.
+- number: 2
+  title: Observer (gh-API-backed)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Define `GhClient` Protocol
+
+      Create `src/vk/v2/ghclient.py`:
+      ```python
+      from typing import Protocol
+
+      class GhClient(Protocol):
+          def view_issue(self, repo: str, number: int) -> dict: ...
+          def list_linked_prs(self, repo: str, issue_number: int) -> list[dict]: ...
+          def view_pr(self, repo: str, number: int) -> dict: ...
+          def edit_issue_labels(self, repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]) -> None: ...
+          def edit_issue_state(self, repo: str, number: int, *, state: str, reason: str | None = None) -> None: ...
+          def edit_issue_body(self, repo: str, number: int, body: str) -> None: ...
+          def create_issue(self, repo: str, *, title: str, body: str, labels: frozenset[str]) -> str: ...
+          def ensure_labels(self, repo: str, labels: list) -> None: ...
+      ```
+  - id: P2.T2.S2
+    text: |-
+      Implement `FakeGhClient` for tests
+
+      Create `tests/unit/fakes.py` with `FakeGhClient`: in-memory state, records calls, supports preconditions.
+  - id: P2.T2.S3
+    text: |-
+      Test `observe()` for one-phase plan with no tracking_issue
+
+      Create `tests/unit/test_v2_observe.py`:
+      ```python
+      from vk.v2 import parse
+      from vk.v2.observe import observe
+      from tests.unit.fakes import FakeGhClient
+
+      def test_observe_undispatched_phase_returns_no_observation():
+          plan = parse(FIXTURE)
+          gh = FakeGhClient()
+          observed = observe(plan, gh)
+          assert observed.phases == {}
+      ```
+      Run: red.
+  - id: P2.T2.S4
+    text: |-
+      Implement `observe()` skeleton
+
+      Create `src/vk/v2/observe.py`. For each phase with `tracking_issue`: parse repo + number, query gh, build PhaseObservation. Phases without: skip. Run: green.
+  - id: P2.T2.S5
+    text: |-
+      Test `observe()` for dispatched phase with merged PR
+
+      Use a fixture phase yaml with `tracking_issue` set; FakeGhClient pre-loaded with corresponding Issue + PR data. Assert `observed.phases[1].linked_prs[0].merged is True`.
+  - id: P2.T2.S6
+    text: |-
+      Implement linked-PR discovery
+
+      GraphQL `closingIssuesReferences` first; title-pattern fallback. Run: green.
+- number: 3
+  title: Differ + Applier
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Define `Diff`, `IssueLabelChange`, `IssueStateChange`, `IssueBodyChange`, `IssueCreate`, `RepoLabelEnsure`
+
+      In `src/vk/v2/diff.py`. All frozen.
+  - id: P2.T3.S2
+    text: |-
+      Test `diff()` — undispatched phase yields IssueCreate
+
+      Create `tests/unit/test_v2_diff.py`:
+      ```python
+      def test_diff_undispatched_yields_create():
+          plan = parse(FIXTURE)
+          observed = GhState(phases={})
+          rendered = render(plan, observed)
+          d = diff(rendered, observed, plan=plan)
+          creates = [m for m in d.mutations if isinstance(m, IssueCreate)]
+          assert len(creates) == 1
+          assert creates[0].phase_number == 1
+          assert creates[0].labels >= frozenset({"vk-ready", "phase:1"})
+      ```
+      Run: red.
+  - id: P2.T3.S3
+    text: |-
+      Implement `diff()`
+
+      For each phase: if no tracking_issue and no observation → IssueCreate; if tracking_issue and observation → compare labels, body, open/closed, emit changes. Always emit RepoLabelEnsure for the target_repo. Run: green.
+  - id: P2.T3.S4
+    text: |-
+      Test diff is idempotent — re-diff after apply yields no mutations
+
+      Append a placeholder test that runs after the applier exists.
+  - id: P2.T3.S5
+    text: |-
+      Test `apply()` honors managed-labels-only rule
+
+      - Pre-load FakeGhClient Issue with operator-added label `good-first-issue`
+      - render → diff → apply
+      - Assert `good-first-issue` was NOT removed; only managed labels (vk-*/spec:/plan:/phase:) touched
+  - id: P2.T3.S6
+    text: |-
+      Implement `apply()`
+
+      Create `src/vk/v2/apply.py`. Iterate mutations; for label changes, intersect with `MANAGED_LABEL_PREFIXES = {"vk-", "spec:", "plan:", "phase:"}` plus the lifecycle names. `dry_run=True`: return mutations without executing. `yes=False` and a destructive op: prompt via `typer.confirm` if invoked from CLI. Run: green.
+  - id: P2.T3.S7
+    text: |-
+      Test `apply()` dry-run returns mutations without calling gh
+
+      Append: `apply(diff, fake_gh, dry_run=True, yes=True)` → fake_gh has zero recorded calls.
+  - id: P2.T3.S8
+    text: |-
+      Test `apply()` is atomic-per-mutation, accumulates failures
+
+      - Configure FakeGhClient to fail on the second mutation
+      - Apply 3 mutations
+      - Assert: m1 succeeded, m2 failed (recorded in result), m3 succeeded
+  - id: P2.T3.S9
+    text: |-
+      Implement failure accumulation
+
+      Run: green.
+  - id: P2.T3.S10
+    text: |-
+      Run idempotency end-to-end
+
+      Re-run Step 4's test. Apply → re-observe → re-diff → assert empty mutations. Green.
+  - id: P2.T3.S11
+    text: |-
+      Verify ruff, mypy, full test suite
+
+      ```
+      uv run ruff check src/vk/v2/ tests/unit/test_v2_*.py
+      uv run mypy src/vk/v2/
+      uv run pytest -q --no-cov
+      ```
+      All green.
+  - id: P2.T3.S12
+    text: |-
+      Commit Phase 2
+
+        ```
+        feat(v2): renderer + observer + differ + applier — Phase 2
+
+        Pure render() and diff(); observe() reads gh; apply() mutates gh
+        idempotently with managed-labels-only rule and per-mutation
+        failure accumulation. FakeGhClient added for tests.
+        ```
+
+      ---
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S8:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S9:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S10:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T1.S11:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T2.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S7:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S8:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S9:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S10:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S11:
+      state: x
+      ticked_at: null
+      note: null
+    P2.T3.S12:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
