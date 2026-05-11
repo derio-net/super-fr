@@ -1,0 +1,207 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Retire v1 + skill updates
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Delete v1 source modules + tests
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Move v1 modules out of `src/vk/` — `git rm` per spec retirement table
+
+      ```
+      git rm src/vk/plan/parser.py src/vk/plan/models.py src/vk/plan/format.py \
+             src/vk/plan/writer.py src/vk/plan/convert.py src/vk/plan/validate.py \
+             src/vk/plan/rework.py src/vk/plan/filename.py \
+             src/vk/spec_index.py \
+             src/vk/commands/progress_cmd.py src/vk/commands/dispatch_cmd.py \
+             src/vk/commands/admin_cmd.py src/vk/commands/execute_cmd.py \
+             src/vk/commands/issue_cmd.py \
+             src/vk/commands/dispatch_body_validator.py
+      ```
+      (`src/vk/labels.py` stays — registry preserved; `src/vk/gh.py` stays.)
+  - id: P4.T1.S2
+    text: |-
+      Delete v1 tests — `git rm`
+
+      ```
+      git rm tests/unit/test_plan_parser.py tests/unit/test_plan_writer.py \
+             tests/unit/test_plan_validate.py tests/unit/test_plan_loose_format.py \
+             tests/unit/test_plan_convert.py tests/unit/test_rework.py \
+             tests/unit/test_spec_index.py tests/unit/test_admin_*.py \
+             tests/unit/test_execute_*.py tests/unit/test_issue_cmd.py \
+             tests/unit/test_dispatch_body.py tests/unit/test_dispatch_body_validator.py \
+             tests/unit/test_progress_reconcile.py tests/unit/test_audit.py \
+             tests/unit/test_self_review_multi_repo.py tests/unit/test_filename.py \
+             tests/unit/test_format.py tests/unit/test_models.py \
+             tests/integration/test_dispatch.py tests/integration/test_plan_execute.py \
+             tests/integration/test_plan_rework.py
+      ```
+  - id: P4.T1.S3
+    text: |-
+      Update `src/vk/cli.py` — remove imports/registrations of deleted command modules
+
+      Open `src/vk/cli.py`. Remove every `add_typer` and `from vk.commands.X` line for the deleted commands. Keep `apply_app`, `plan_app` (v2 version), `pickup_app`, `spec_app`, `migrate_app`.
+  - id: P4.T1.S4
+    text: |-
+      Move v2 commands from `vk.v2.commands` to `vk.commands` (the v2 namespace was a coexistence scaffold; collapse it now)
+
+      ```
+      git mv src/vk/v2/commands/* src/vk/commands/
+      for f in src/vk/v2/*.py; do
+        [ "$(basename "$f")" = "__init__.py" ] && continue
+        git mv "$f" "src/vk/$(basename "$f")"
+      done
+      rmdir src/vk/v2/commands src/vk/v2
+      ```
+      Update all imports (`from vk.v2.X` → `from vk.X`). Update tests similarly.
+  - id: P4.T1.S5
+    text: |-
+      Run pytest — verify only v2 tests remain and all pass
+
+      ```
+      uv run pytest -q --no-cov
+      ```
+      Green.
+  - id: P4.T1.S6
+    text: |-
+      Run ruff + mypy
+
+      ```
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      ```
+      Clean.
+- number: 2
+  title: Update skill files
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Update `skills/vk-plan/SKILL.md`
+
+      - `vk plan new` → `vk plan create`
+      - `vk plan self-review` → unchanged name; lints differ
+      - `vk plan spec-index` → DELETED; spec rows are auto-written by `vk plan create` and `vk plan rework`. Remove reference.
+      - Migration section reference (vk-execute) → remove.
+      - Add note about v2 plan-as-folder format.
+  - id: P4.T2.S2
+    text: |-
+      Update `skills/vk-dispatch/SKILL.md`
+
+      - `vk dispatch create` → `vk apply <plan-dir>`
+      - `vk dispatch migrate` → DELETED; `vk apply` is idempotent
+      - Update entire flow narrative.
+  - id: P4.T2.S3
+    text: |-
+      Update `skills/vk-execute/SKILL.md`
+
+      - `vk execute scope` / `check-deps` → `vk pickup <plan-dir> --phase N`
+      - `vk execute claim` → DELETED (no claim verb in v2)
+      - `vk execute pr-opened` → DELETED (observed by next apply tick)
+      - `vk execute pr-body` → `vk pickup` outputs PR title template
+      - `vk execute check-step` → `vk plan edit --tick`
+  - id: P4.T2.S4
+    text: |-
+      Update `skills/vk-progress/SKILL.md`
+
+      - `vk progress sync` / `audit` / `transition` / `board` / `create` → ALL DELETED
+      - Replace with `vk apply --dry-run` (audit), `vk plan edit --complete-phase` (transition), `vk spec status --all` (board)
+  - id: P4.T2.S5
+    text: Verify skills are coherent — read each SKILL.md after edits, ensure no dangling
+      references
+- number: 3
+  title: Confirm final state
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      `grep -rn "vk progress\|vk dispatch\|vk admin\|vk issue \|vk execute" skills/ src/`
+
+      Expected: zero matches.
+  - id: P4.T3.S2
+    text: '`vk --help` — confirm only v2 commands shown.'
+  - id: P4.T3.S3
+    text: |-
+      Commit Phase 4
+
+        ```
+        feat(v2)!: retire v1 code and update skills — Phase 4
+
+        Deletes all v1 modules and tests per spec retirement table.
+        Updates vk-plan, vk-dispatch, vk-execute, vk-progress skill files
+        to call v2 commands only. After this commit the package exposes
+        only the v2 surface.
+
+        BREAKING CHANGE: every v1 CLI command is removed. Plans must be
+        in v2 folder format; v1 .md plans must be migrated via
+        `vk migrate v1-to-v2` (in this same release).
+        ```
+
+      ---
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T1.S6:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S4:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T2.S5:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: x
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

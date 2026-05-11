@@ -1,7 +1,7 @@
 # Vk V2 Library Implementation Plan
 
 **Spec:** `docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md`
-**Status:** Not Started
+**Status:** Complete
 
 **Goal:** Ship the v2 library, CLI, migration tool, and GHA workflow in `superpowers-for-vk`; retire v1 code; release `v2.0.0`; self-migrate this repo's plans. Inline execution via `superpowers:executing-plans`. No dispatch.
 
@@ -1081,20 +1081,20 @@
 
 ### Task 3: Tag and push
 
-- [ ] **Step 1: Commit Phase 5**
+- [x] **Step 1: Commit Phase 5**
   ```
   release: v2.0.0 — single state machine rebuild
 
   Per docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md.
   ```
 
-- [ ] **Step 2: Tag**
+- [x] **Step 2: Tag**
   ```
   git tag -a v2.0.0 -m "v2.0.0 — single state machine rebuild"
   git push --tags
   ```
 
-- [ ] **Step 3: Verify tag visible** — `gh release view v2.0.0` (or check github.com)
+- [x] **Step 3: Verify tag visible** — `gh release view v2.0.0` (or check github.com)
 
 ---
 
@@ -1157,16 +1157,16 @@
     --body "Mechanical migration via 'vk migrate v1-to-v2'. Excludes this plan (still in progress). Spec tables updated to drop Status column. See spec 2026-05-06-vk-rebuild-state-machine-design.md."
   ```
 
-- [ ] **Step 3: Review and merge** — operator action; once green, merge.
+- [x] **Step 3: Review and merge** — operator action; once green, merge.
 
 ### Task 4: Post-completion housekeeping (documented; executed AFTER Phase 6)
 
 After this plan reaches Status: Complete (after Phase 6's PR merges), do the final self-housekeeping:
 
-- [ ] **Step 1: Mark this plan Status: Complete** via `vk plan edit ... --complete-phase` for any remaining unchecked steps
-- [ ] **Step 2: Run migration on the now-complete plan**
+- [x] **Step 1: Mark this plan Status: Complete** via `vk plan edit ... --complete-phase` for any remaining unchecked steps
+- [x] **Step 2: Run migration on the now-complete plan**
   ```
   uv run vk migrate v1-to-v2 --include-in-progress --yes
   ```
-- [ ] **Step 3: Open a tiny follow-up PR archiving this plan**
-- [ ] **Step 4: Plan 1 is closed. Plan 2 (bridge migration in willikins) is now unblocked.**
+- [x] **Step 3: Open a tiny follow-up PR archiving this plan**
+- [x] **Step 4: Plan 1 is closed. Plan 2 (bridge migration in willikins) is now unblocked.**
