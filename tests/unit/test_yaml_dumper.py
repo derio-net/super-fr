@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import yaml
 
-from vk._yaml import dump_plan_yaml
+from vk._yaml import LiteralStr, dump_plan_yaml
 
 
 def test_multiline_string_uses_literal_block_scalar():
@@ -81,3 +81,26 @@ def test_empty_dict():
     """No regression on empty input."""
     out = dump_plan_yaml({})
     assert out == "{}\n"
+
+
+def test_literal_str_single_line_uses_block_scalar():
+    """LiteralStr forces literal block even for single-line strings."""
+    out = dump_plan_yaml({"text": LiteralStr("Run the tests")})
+    assert "text: |-\n" in out
+    assert yaml.safe_load(out) == {"text": "Run the tests"}
+
+
+def test_literal_str_with_special_chars_no_quoting():
+    """LiteralStr avoids single-quoting for strings with backticks or colons."""
+    out = dump_plan_yaml({"text": LiteralStr("Install `foo`: run the script")})
+    assert "'" not in out
+    assert "text: |-\n" in out
+    assert yaml.safe_load(out) == {"text": "Install `foo`: run the script"}
+
+
+def test_literal_str_multiline_same_as_plain_str():
+    """LiteralStr and plain str both use block scalar for multi-line content."""
+    text = "line one\nline two"
+    out_plain = dump_plan_yaml({"text": text})
+    out_literal = dump_plan_yaml({"text": LiteralStr(text)})
+    assert yaml.safe_load(out_plain) == yaml.safe_load(out_literal)

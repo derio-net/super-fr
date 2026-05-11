@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from vk._yaml import dump_plan_yaml
+from vk._yaml import LiteralStr, dump_plan_yaml
 from vk.plan.parser import parse_plan as _parse_v1
 
 
@@ -287,7 +287,7 @@ def _build_phase_doc_from_v1(phase: Any) -> dict[str, Any]:
             body = getattr(step, "body", None)
             if body:
                 text = f"{step.title}\n{body}".strip()
-            steps_out.append({"id": step_id, "text": text})
+            steps_out.append({"id": step_id, "text": LiteralStr(text)})
             v1state = getattr(step, "state", " ")
             mapped = v1state if v1state in ("x", "-") else " "
             state_steps[step_id] = {"state": mapped, "ticked_at": None, "note": None}
