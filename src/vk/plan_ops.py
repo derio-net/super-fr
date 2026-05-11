@@ -67,12 +67,28 @@ def _now_iso() -> str:
     return _dt.datetime.now(tz=_dt.UTC).isoformat(timespec="seconds")
 
 
+def _coerce_step_texts(d: dict[str, Any]) -> dict[str, Any]:
+    """Wrap step text values in LiteralStr so they always emit as `|-`.
+
+    Called before every _yaml_dump so round-tripped phase files (loaded via
+    yaml.safe_load and mutated for state updates) keep the same consistent
+    block-scalar style as freshly-created plans.
+    """
+    from vk._yaml import LiteralStr
+
+    for task in d.get("tasks", []):
+        for step in task.get("steps", []):
+            if "text" in step and not isinstance(step["text"], LiteralStr):
+                step["text"] = LiteralStr(step["text"])
+    return d
+
+
 def _yaml_dump(d: dict[str, Any]) -> str:
     """Delegate to the shared plan-yaml dumper (literal block scalars for
     multi-line strings, preserved key order, unicode-as-is)."""
     from vk._yaml import dump_plan_yaml
 
-    return dump_plan_yaml(d)
+    return dump_plan_yaml(_coerce_step_texts(d))
 
 
 # ---------------------------------------------------------------------------

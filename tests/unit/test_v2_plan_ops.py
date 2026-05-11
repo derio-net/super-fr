@@ -313,6 +313,24 @@ def test_rework_list_filters_by_parent_plan(tmp_path):
 # vk.plan.self_review
 
 
+def test_yaml_dump_coerces_step_text_to_literal_block(tmp_path):
+    """After any write (tick, complete, create), step text must use `|-`.
+
+    yaml.safe_load returns plain str, so round-tripped phase files would
+    regress to plain/quoted scalars without _coerce_step_texts in _yaml_dump.
+    """
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    dest = tmp_path / "v2_plan_minimal"
+    shutil.copytree(fixture, dest)
+
+    from vk.plan_ops import tick
+
+    tick(dest, "P1.T1.S1")
+
+    phase_text = (dest / "01.yaml").read_text()
+    assert "text: |-" in phase_text, "step text must use `|-` after round-trip write"
+
+
 def test_self_review_clean_plan_has_no_issues(tmp_path):
     from vk import parse
     from vk.plan_ops import self_review
