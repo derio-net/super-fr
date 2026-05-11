@@ -8,6 +8,16 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 2.0.3 — consistent `|-` for all step text fields in migrated plans
+
+- **`migrate`: step `text:` values now always use YAML literal block scalar.**
+  Single-line step titles were emitting as plain or single-quoted scalars
+  (e.g. `text: Do the thing` or `text: 'Install: foo'`), while multi-line
+  bodies correctly used `|-`. Introduced `LiteralStr` — a `str` subclass
+  with its own PyYAML representer that forces `style="|"` unconditionally.
+  The migrator wraps all step `text` values in `LiteralStr` so every phase
+  YAML is visually uniform: one canonical style, no quoting surprises.
+
 ## 2.0.2 — fix flat-plan migration producing empty folders
 
 - **`migrate`: flat-format v1 plans (no `## Phase` headings) produced empty
