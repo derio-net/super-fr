@@ -334,6 +334,44 @@ def test_migrate_cli_default_is_dry_run(tmp_path, monkeypatch):
     assert not (repo / "docs" / "superpowers" / "plans" / "2026-05-10-cli-default").exists()
 
 
+def test_migrate_flat_plan_emits_single_phase_yaml(tmp_path):
+    """v1 flat-format plans (no ## Phase headings) must produce 01.yaml.
+
+    The v1 parser puts tasks into v1plan.tasks (not v1plan.phases) for flat
+    plans. Without the fix the migration would create an empty folder with
+    only _meta.yaml; with the fix all tasks land in a synthetic Phase 1.
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-flat-plan.md"
+    p.write_text(
+        "# Flat Plan\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "### Task 1: Bootstrap\n\n"
+        "- [x] **Step 1: Do the thing** Some details.\n"
+        "- [ ] **Step 2: Verify** Check the output.\n\n"
+        "### Task 2: Finalise\n\n"
+        "- [ ] **Step 1: Clean up** Remove temp files.\n"
+    )
+
+    migrate_repo(repo, dry_run=False)
+    new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-flat-plan"
+    assert (new / "01.yaml").exists(), "flat plan must produce 01.yaml"
+
+    plan = parse(new)
+    assert len(plan.phases) == 1
+    phase = plan.phases[0]
+    assert phase.phase.number == 1
+    assert len(phase.tasks) == 2
+    assert phase.tasks[0].steps[0].id == "P1.T1.S1"
+    assert phase.state.steps["P1.T1.S1"].state == "x"
+    assert phase.state.steps["P1.T1.S2"].state == " "
+    assert phase.state.steps["P1.T2.S1"].state == " "
+
+
 def test_migrate_cli_apply_yes(tmp_path, monkeypatch):
     from typer.testing import CliRunner
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -174,11 +175,28 @@ def _migrate_one(
         meta["origin_items"] = origin_items
     (new_folder / "_meta.yaml").write_text(dump_plan_yaml(meta))
 
+    # Flat-format plans (no ## Phase headings) land in v1plan.tasks with an
+    # empty v1plan.phases. Wrap them into a synthetic Phase 1 so the migration
+    # produces 01.yaml instead of an empty folder.
+    if v1plan.phases:
+        phases_to_emit = list(v1plan.phases)
+    else:
+        phases_to_emit = [
+            types.SimpleNamespace(
+                number=1,
+                title=v1plan.title or "Phase 1",
+                tag=None,
+                depends_on=(),
+                tracking_url=None,
+                tasks=list(v1plan.tasks),
+            )
+        ]
+
     # Generate prose from v1 plan structure (titles + step text, plus
     # whatever lay between headers — we keep this lossy on purpose;
     # spec lives in yaml, prose is for humans only)
     prose_lines = [f"# {v1plan.title or slug}\n"]
-    for phase in v1plan.phases:
+    for phase in phases_to_emit:
         prose_lines.append(f"\n## Phase {phase.number}: {phase.title}\n")
         for task in phase.tasks:
             prose_lines.append(f"\n### Task {task.number}: {task.title}\n")
@@ -188,7 +206,7 @@ def _migrate_one(
     (new_folder / "_prose.md").write_text("".join(prose_lines))
 
     # Per-phase yaml
-    for phase in v1plan.phases:
+    for phase in phases_to_emit:
         phase_doc = _build_phase_doc_from_v1(phase)
         (new_folder / f"{phase.number:02d}.yaml").write_text(dump_plan_yaml(phase_doc))
 

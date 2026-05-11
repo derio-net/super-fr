@@ -8,6 +8,16 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 2.0.2 — fix flat-plan migration producing empty folders
+
+- **`migrate`: flat-format v1 plans (no `## Phase` headings) produced empty
+  folders.** The v1 parser puts tasks into `v1plan.tasks` (not `v1plan.phases`)
+  for plans without phase headings. The migrator iterated only over
+  `v1plan.phases`, so flat plans got only a `_meta.yaml` with no phase YAML
+  files. Fixed by synthesising a single Phase 1 from `v1plan.tasks` when
+  `v1plan.phases` is empty — flat plans now produce `01.yaml` with all tasks
+  intact.
+
 ## 2.0.1 — bugfixes surfaced by self-migration
 
 Three bugs found while running `vk migrate v1-to-v2 --yes` against this
