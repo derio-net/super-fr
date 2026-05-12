@@ -85,7 +85,7 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
     return has_merged_pr and not has_open_pr
 
 
-def _render_body(
+def render_body(
     phase: PhaseDoc,
     plan: Plan,
     *,
@@ -269,7 +269,7 @@ def render(
             labels.add(lifecycle)
         state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
         issues[n] = RenderedIssue(
-            body=_render_body(
+            body=render_body(
                 phase, plan, phase_to_issue=phase_to_issue, phase_to_repo=phase_to_repo
             ),
             labels=frozenset(labels),

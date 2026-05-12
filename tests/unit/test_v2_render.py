@@ -328,32 +328,21 @@ def test_render_body_blocked_by_uses_issue_number_not_phase_number():
     using a phase number silently mis-gates dependent phases.
     """
     from vk import parse
-    from vk.render import _render_body
+    from vk.render import render_body
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
-    phase1 = next(p for p in plan.phases if p.phase.number == 1)
     phase2 = next(p for p in plan.phases if p.phase.number == 2)
-
-    # Phase 1 has tracking_issue ending in /issues/42; Phase 2 depends_on [1]
-    phase1_with_issue = phase1.model_copy(
-        update={
-            "phase": phase1.phase.model_copy(
-                update={
-                    "tracking_issue": "https://github.com/derio-net/superpowers-for-vk/issues/42"
-                }
-            )
-        }
-    )
-    # phase2 already has depends_on=[1] in the fixture
+    # Fixture precondition: phase2 already depends on phase1.
     assert phase2.phase.depends_on == (1,)
 
-    body = _render_body(phase2, plan, phase_to_issue={1: 42})
+    # `phase_to_issue={1: 42}` simulates Phase 1 having tracking_issue
+    # `.../issues/42` — we don't need to mutate phase1's model for this
+    # unit test since `render_body` consults the map, not the phase.
+    body = render_body(phase2, plan, phase_to_issue={1: 42})
 
     assert "- Blocked by #42" in body
     assert "- Blocked by #1" not in body
-    # silence unused warning — keep reference for clarity that fixture is right
-    del phase1_with_issue
 
 
 def test_render_body_blocked_by_cross_repo_dep():
@@ -364,13 +353,13 @@ def test_render_body_blocked_by_cross_repo_dep():
     lands.
     """
     from vk import parse
-    from vk.render import _render_body
+    from vk.render import render_body
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
     phase2 = next(p for p in plan.phases if p.phase.number == 2)
 
-    body = _render_body(
+    body = render_body(
         phase2,
         plan,
         phase_to_issue={1: 42},
@@ -390,12 +379,12 @@ def test_render_body_blocked_by_missing_predecessor_falls_back_to_phase_number()
     form so the operator sees a broken ref instead of an empty deps block.
     """
     from vk import parse
-    from vk.render import _render_body
+    from vk.render import render_body
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
     phase2 = next(p for p in plan.phases if p.phase.number == 2)
 
-    body = _render_body(phase2, plan, phase_to_issue={})
+    body = render_body(phase2, plan, phase_to_issue={})
 
     assert "- Blocked by #1" in body

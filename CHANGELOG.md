@@ -18,7 +18,9 @@ typos) are not listed; consult the PR history for those.
   what shipped pre-rework) were unaffected, which is why the bug stayed
   invisible. Fix lives in `vk/render.py`: `_render_body` and `render()` now
   accept an explicit `phase_to_issue` map, which `render()` builds from
-  each phase's `tracking_issue` URL.
+  each phase's `tracking_issue` URL. The body renderer (formerly
+  `_render_body`) is promoted to public `render_body` since `apply()`
+  now reuses it for in-flight re-rendering.
 - **`apply`: in-flight predecessors are propagated forward.** When two
   dependent phases are created in the same `apply()` run, the second
   phase's `IssueCreate` body is re-rendered after the first phase's Issue
