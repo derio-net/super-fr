@@ -72,13 +72,14 @@ tasks:
         --body "Mechanical migration via 'vk migrate v1-to-v2'. Excludes this plan (still in progress). Spec tables updated to drop Status column. See spec 2026-05-06-vk-rebuild-state-machine-design.md."
       ```
   - id: P6.T3.S3
-    text: Review and merge — operator action; once green, merge.
+    text: |-
+      Review and merge — operator action; once green, merge.
 - number: 4
   title: Post-completion housekeeping (documented; executed AFTER Phase 6)
   steps:
   - id: P6.T4.S1
-    text: 'Mark this plan Status: Complete via `vk plan edit ... --complete-phase`
-      for any remaining unchecked steps'
+    text: |-
+      Mark this plan Status: Complete via `vk plan edit ... --complete-phase` for any remaining unchecked steps
   - id: P6.T4.S2
     text: |-
       Run migration on the now-complete plan
@@ -87,9 +88,11 @@ tasks:
       uv run vk migrate v1-to-v2 --include-in-progress --yes
       ```
   - id: P6.T4.S3
-    text: Open a tiny follow-up PR archiving this plan
+    text: |-
+      Open a tiny follow-up PR archiving this plan
   - id: P6.T4.S4
-    text: Plan 1 is closed. Plan 2 (bridge migration in willikins) is now unblocked.
+    text: |-
+      Plan 1 is closed. Plan 2 (bridge migration in willikins) is now unblocked.
 state:
   steps:
     P6.T1.S1:
@@ -141,6 +144,6 @@ state:
       ticked_at: null
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-05-12T07:13:21+00:00'
+    note: shipped pre-rework; state YAMLs synced after the fact
     observed_prs: []

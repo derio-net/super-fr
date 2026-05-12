@@ -11,15 +11,20 @@ tasks:
   title: Bump version triplet
   steps:
   - id: P5.T1.S1
-    text: Update `pyproject.toml` — set `[project].version = "2.0.0"`
+    text: |-
+      Update `pyproject.toml` — set `[project].version = "2.0.0"`
   - id: P5.T1.S2
-    text: Update `.claude-plugin/plugin.json` — set `.version = "2.0.0"`
+    text: |-
+      Update `.claude-plugin/plugin.json` — set `.version = "2.0.0"`
   - id: P5.T1.S3
-    text: Update `.claude-plugin/marketplace.json` — set `.plugins[0].version = "2.0.0"`
+    text: |-
+      Update `.claude-plugin/marketplace.json` — set `.plugins[0].version = "2.0.0"`
   - id: P5.T1.S4
-    text: Run `uv sync` — uv.lock picks up `vk==2.0.0`
+    text: |-
+      Run `uv sync` — uv.lock picks up `vk==2.0.0`
   - id: P5.T1.S5
-    text: Verify `uv run vk --version` — outputs `2.0.0`
+    text: |-
+      Verify `uv run vk --version` — outputs `2.0.0`
 - number: 2
   title: CHANGELOG
   steps:
@@ -93,6 +98,6 @@ state:
       ticked_at: null
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-05-12T07:13:20+00:00'
+    note: shipped pre-rework; state YAMLs synced after the fact
     observed_prs: []

@@ -1282,6 +1282,8 @@ and 4; steps 2, 5, 6 are operator-driven and can be batched.
 | v2 library, CLI, retire v1 (steps 1–3) | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-09-vk-v2-library/` | — |
 | Bridge migration (step 4) | `derio-net/willikins` | `docs/superpowers/plans/2026-05-06-vk-v2-bridge-migration/` | superpowers-for-vk plan |
 | Consumer repo migration sweep (steps 5–6) | (operator action across `derio-net/*`) | — | superpowers-for-vk plan |
+| 2026-05-09-vk-v2-library-rework-1 | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-09-vk-v2-library-rework-1/` | 2026-05-09-vk-v2-library |
+| 2026-05-12-bridge-vk-library-integration | `derio-net/agent-images` | `docs/superpowers/plans/2026-05-12-bridge-vk-library-integration/` | 2026-05-09-vk-v2-library-rework-1 |
 
 ## Open considerations (non-blocking for spec)
 

@@ -1,0 +1,189 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Fix renderer phase-number → tracking-issue translation
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Pin the bug with a failing test
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add the regression test
+
+      In `tests/unit/test_v2_render.py`, add a test that constructs a plan
+      with two phases where Phase 2 has `depends_on: [1]` and Phase 1's
+      `tracking_issue` is set to a real-looking URL ending in `/issues/42`.
+
+      Assert that `_render_body(phase2, plan, phase_to_issue={1: 42})`
+      contains the line `- Blocked by #42`, NOT `- Blocked by #1`.
+
+      Run: `uv run pytest tests/unit/test_v2_render.py -k blocked_by_issue_number -x --no-cov`
+      Expect: red — `_render_body` does not yet accept `phase_to_issue` and
+      writes `#1` from `phase.depends_on`.
+  - id: P1.T1.S2
+    text: |-
+      Add the cross-repo dep test (forward-compatible)
+
+      Add a second test asserting that when a `phase_to_issue` map contains
+      `{1: 42}` and a `phase_to_repo` map contains `{1: "derio-net/other"}`,
+      the rendered line is `- Blocked by derio-net/other#42`.
+
+      Even though v2 doesn't dispatch cross-repo today, the bridge already
+      parses `owner/repo#N` (see `agent-images/kali/scripts/vk-issue-bridge.py`
+      line 186 — the `dep_re` regex), so making the renderer symmetric now
+      avoids a second rework when cross-repo dispatch lands.
+
+      Run: same pytest invocation, expect both tests red.
+- number: 2
+  title: Implement the translation
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Extend `_render_body` signature
+
+      Edit `src/vk/render.py`. Change `_render_body(phase, plan)` to
+      `_render_body(phase, plan, phase_to_issue=None, phase_to_repo=None)`.
+      Both default to `None` (treated as empty dict) for backwards
+      compatibility with any caller that doesn't yet pass them.
+
+      Replace the deps_block construction:
+      ```python
+      def _dep_ref(n: int) -> str:
+          issue_n = (phase_to_issue or {}).get(n)
+          if issue_n is None:
+              # Predecessor hasn't been dispatched yet AND isn't in this
+              # apply's created_issues. Fall back to the phase-number form
+              # — the operator will see the broken ref and re-dispatch.
+              return f"#{n}"  # placeholder; tests pin this fallback
+          repo = (phase_to_repo or {}).get(n)
+          if repo and repo != plan.meta.target_repo:
+              return f"{repo}#{issue_n}"
+          return f"#{issue_n}"
+
+      if phase.phase.depends_on:
+          deps_block = "\n".join(f"- Blocked by {_dep_ref(n)}" for n in phase.phase.depends_on)
+      ```
+
+      Run the two tests from Task 1. Expect: green.
+  - id: P1.T2.S2
+    text: |-
+      Add fallback-path test for missing predecessor
+
+      Add a test where Phase 2 has `depends_on: [1]` but `phase_to_issue`
+      is empty (predecessor not yet dispatched, not in this run's created
+      set either). Assert the rendered line is `- Blocked by #1` (the
+      phase-number fallback) so the operator sees a broken ref instead of
+      a silent empty-deps block.
+
+      Run: pytest -k blocked_by, expect green for all three tests.
+- number: 3
+  title: Build the map in diff.py and thread it through
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Failing test for the diff-level wiring
+
+      Add `test_diff_passes_phase_to_issue_map_to_render` in
+      `tests/unit/test_v2_diff.py`. Construct a plan where:
+        - Phase 1 has `tracking_issue: "https://github.com/owner/repo/issues/100"`
+        - Phase 2 has `depends_on: [1]`, no tracking_issue
+
+      Run diff against a `GhState` where Phase 2's Issue doesn't yet exist
+      (so an `IssueCreate` mutation is emitted). Assert the body in the
+      created mutation contains `- Blocked by #100`.
+
+      Run: pytest tests/unit/test_v2_diff.py -k phase_to_issue -x --no-cov
+      Expect: red.
+  - id: P1.T3.S2
+    text: |-
+      Extract issue number from tracking_issue URL
+
+      In `src/vk/diff.py`, add:
+      ```python
+      _ISSUE_NUM_RE = re.compile(r"/issues/(\d+)/?$")
+
+      def _issue_number(url: str | None) -> int | None:
+          if not url:
+              return None
+          m = _ISSUE_NUM_RE.search(url)
+          return int(m.group(1)) if m else None
+      ```
+
+      Build the map at the top of `diff()`:
+      ```python
+      phase_to_issue: dict[int, int] = {}
+      for ph in plan.phases:
+          n = _issue_number(ph.phase.tracking_issue)
+          if n is not None:
+              phase_to_issue[ph.phase.number] = n
+      ```
+
+      No `phase_to_repo` map yet — v2 is single-target_repo. Pass `None`
+      for the repo arg.
+  - id: P1.T3.S3
+    text: |-
+      Thread the map through every `_render_body` call site
+
+      In `diff.py`, every call to `_render_body(phase, plan)` becomes
+      `_render_body(phase, plan, phase_to_issue=phase_to_issue)`. Audit:
+      ```
+      uv run grep -n "_render_body" src/vk/
+      ```
+
+      Re-run all of: `test_v2_render`, `test_v2_diff`.
+      Expect: green.
+- number: 4
+  title: In-flight created_issues integration
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Failing test for in-flight issue creation order
+
+      Two phases both being created in the SAME apply() run:
+        - Phase 1 has no tracking_issue, gets created with Issue #50
+        - Phase 2 has depends_on=[1], also being created
+
+      In a single `apply()` call, after Phase 1's IssueCreate succeeds and
+      returns URL `.../issues/50`, Phase 2's body MUST include `- Blocked
+      by #50` — even though when `diff()` ran, no tracking_issue existed
+      for Phase 1.
+
+      This requires either (a) running diff twice, or (b) re-rendering
+      Phase 2's body after Phase 1's Issue lands, or (c) emitting an
+      `IssueBodyChange` after-the-fact.
+
+      Add the failing test to `test_v2_apply.py`. Expect: red.
+  - id: P1.T4.S2
+    text: |-
+      Implement post-create re-render
+
+      In `apply.py`, after an `IssueCreate` for phase N succeeds and
+      `created[N] = url` is set, walk plan.phases for any phase whose
+      `depends_on` contains N. For each such phase, look up its current
+      mutation in `applied` (or pending in remaining `d.mutations`),
+      replace the body using the now-known issue number.
+
+      Simpler alternative: at the end of `apply()`, if any `created_issues`
+      were set, re-run `render → diff → apply` for the BodyChange-only
+      delta. Pick whichever has cleaner tests. Document the choice in a
+      one-line comment.
+
+      Re-run the test from S1. Expect: green.
+state:
+  steps:
+    P1.T1.S1: {state: ' ', ticked_at: null, note: null}
+    P1.T1.S2: {state: ' ', ticked_at: null, note: null}
+    P1.T2.S1: {state: ' ', ticked_at: null, note: null}
+    P1.T2.S2: {state: ' ', ticked_at: null, note: null}
+    P1.T3.S1: {state: ' ', ticked_at: null, note: null}
+    P1.T3.S2: {state: ' ', ticked_at: null, note: null}
+    P1.T3.S3: {state: ' ', ticked_at: null, note: null}
+    P1.T4.S1: {state: ' ', ticked_at: null, note: null}
+    P1.T4.S2: {state: ' ', ticked_at: null, note: null}
+  completion:
+    at: null
+    note: null
+    observed_prs: []
