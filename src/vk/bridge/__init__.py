@@ -32,6 +32,18 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class TickResult:
+    """Counters for one `tick()` invocation, returned to the cron caller.
+
+    - `synced`: VK board cards successfully created this tick.
+    - `errors`: total failures accumulated (apply-side + per-phase MCP).
+      Always equal to `len(failures)`.
+    - `skipped`: `1` if this plan had no phases eligible for sync (all
+      projected non-ready, or all already `vk-synced`), `0` otherwise.
+      The unit is **plans**, not phases — bridges summing across plans
+      get a count of idle plans.
+    - `failures`: human-readable strings, one per error.
+    """
+
     synced: int = 0
     errors: int = 0
     skipped: int = 0
@@ -112,17 +124,25 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
     """One cron iteration for a single plan.
 
     Pipeline: observe → render → diff → apply (GH-side only) → sync VK
-    board cards for phases whose Issue carries `vk-ready` but not yet
-    `vk-synced`. After a successful `create_card`, the bridge flips
-    `vk-synced` on so the next tick is a no-op for that phase.
+    board cards for phases whose **rendered** labels say they're
+    `vk-ready` but not yet `vk-synced`. The gate runs against the
+    projected label set (`rendered.issue_per_phase[N].labels`), not the
+    pre-apply observation: if an agent claimed the Issue between dispatch
+    and this tick, the renderer projects `in-progress` (no `vk-ready`)
+    and the bridge correctly skips. `vk-synced` is preserved by the
+    renderer from observed labels (see `render.py`) so the gate stays
+    accurate after the first successful sync.
 
     GH-side `apply()` failures are accumulated rather than raised — they
-    don't block per-phase VK syncs for phases whose Issues observed clean.
-    Per-phase MCP failures are likewise accumulated; if `create_card`
-    raises, `vk-synced` is NOT added, so the next tick retries.
+    don't block per-phase VK syncs for phases whose projected state is
+    still ready. Per-phase MCP failures are likewise accumulated; if
+    `create_card` raises, `vk-synced` is NOT added, so the next tick
+    retries.
 
-    A plan with zero phases eligible for sync returns `skipped=1` so the
-    bridge can distinguish "nothing to do" from a real no-op apply.
+    Returns `skipped=1` when this plan had no phases eligible for sync
+    so the cron caller can distinguish "nothing to do" from a real
+    no-op apply. The unit is **plans**, not phases — sum across plans
+    to count idle plans, not idle phases.
     """
     observed = observe(plan, gh)
     rendered = render(plan, observed)
@@ -133,17 +153,16 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
     synced = 0
     eligible = 0
     for phase in plan.phases:
-        ph_obs = observed.phases.get(phase.phase.number)
-        if ph_obs is None:
+        if phase.phase.number not in observed.phases:
             continue
-        labels = ph_obs.issue_labels
-        if "vk-ready" not in labels or "vk-synced" in labels:
-            continue
-        eligible += 1
         ri = rendered.issue_per_phase.get(phase.phase.number)
         tracking = phase.phase.tracking_issue
         if ri is None or not tracking:  # pragma: no cover — defensive guard
             continue
+        rlabels = ri.labels
+        if "vk-ready" not in rlabels or "vk-synced" in rlabels:
+            continue
+        eligible += 1
         try:
             issue_repo, issue_number = parse_issue_url(tracking)
             vk_mcp.create_card(

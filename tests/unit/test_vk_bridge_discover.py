@@ -125,6 +125,31 @@ def test_discover_plans_returns_empty_when_plans_dir_absent(
     assert discover_plans("derio-net/test", FakeGhClient()) == []
 
 
+def test_discover_plans_survives_view_issue_failure_for_one_phase(
+    repo_layout: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """If `gh.view_issue` raises for a phase (e.g., the Issue was deleted
+    or gh is briefly flaky), the bridge logs and treats the phase as
+    not-ready rather than crashing the whole tick.
+    """
+    from tests.unit.fakes import FakeGhClient
+    from vk.bridge import discover_plans
+
+    _write_plan(
+        repo_layout,
+        "2026-05-09-plan-a",
+        tracking_issue="https://github.com/derio-net/test/issues/999",  # not added to gh
+    )
+
+    gh = FakeGhClient()  # no Issues registered — view_issue will KeyError
+
+    with caplog.at_level("WARNING", logger="vk.bridge"):
+        found = discover_plans("derio-net/test", gh)
+
+    assert found == []  # phase not ready (couldn't view its Issue)
+    assert any("/issues/999" in rec.getMessage() for rec in caplog.records)
+
+
 def test_discover_plans_skips_unparseable_plan_and_keeps_going(
     repo_layout: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

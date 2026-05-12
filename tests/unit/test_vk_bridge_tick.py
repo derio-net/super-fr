@@ -119,10 +119,14 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
     assert "vk-synced" not in gh.issues[(repo, n)].labels
 
 
-def test_tick_continues_vk_sync_when_gh_apply_has_unrelated_failure():
-    """When `apply()` reports a failure, surfacing it in `failures` must not
-    block VK syncing for phases whose Issues are already in the desired
-    state — the bridge accumulates errors, it doesn't short-circuit."""
+def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
+    """When `apply()`'s leading `RepoLabelEnsure` mutation fails, the
+    failure is surfaced in `TickResult.failures` but the per-phase
+    VK sync still runs for projected-ready phases. This pins the
+    accumulate-don't-short-circuit contract for the most realistic
+    apply-side failure shape (the label-ensure is always emitted first
+    when a plan has any managed labels).
+    """
     from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
@@ -134,10 +138,10 @@ def test_tick_continues_vk_sync_when_gh_apply_has_unrelated_failure():
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    # First mutation will be the managed RepoLabelEnsure (ensure_labels).
-    # Make that fail so apply's failures tuple has one entry, while leaving
-    # the vk-synced label-edit (which happens later via tick itself) free
-    # to land.
+    # First mutation emitted by diff() is the managed RepoLabelEnsure
+    # (ensure_labels). Make that fail so apply's failures tuple has one
+    # entry, leaving the vk-synced edit (issued by tick itself, after
+    # apply returns) free to land.
     gh.fail_on_mutation = 0
 
     mcp = StubMcpClient()
@@ -148,7 +152,10 @@ def test_tick_continues_vk_sync_when_gh_apply_has_unrelated_failure():
     assert any("configured failure" in f for f in result.failures)
 
 
-def test_tick_returns_skipped_when_no_phase_is_vk_ready():
+def test_tick_returns_skipped_when_phase_is_in_progress():
+    """An assigned phase projects `in-progress` (not `vk-ready`) — the
+    bridge gates on the rendered lifecycle, not stale observed labels,
+    so a phase claimed mid-tick is correctly skipped."""
     from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
@@ -156,14 +163,23 @@ def test_tick_returns_skipped_when_no_phase_is_vk_ready():
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    # vk-ready missing entirely — nothing for the bridge to sync.
-    gh.add_issue(repo, n, state="OPEN", labels={"phase:1"})
+    # Issue still carries `vk-ready` (stale, from dispatch) but has an
+    # assignee — renderer projects in-progress so we must not sync.
+    gh.add_issue(
+        repo,
+        n,
+        state="OPEN",
+        labels={"vk-ready", "phase:1"},
+        assignees=("some-agent",),
+    )
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
     mcp = StubMcpClient()
     result = tick(plan, gh, mcp)
 
+    assert "in-progress" in rendered.issue_per_phase[1].labels
+    assert "vk-ready" not in rendered.issue_per_phase[1].labels
     assert result.synced == 0
     assert result.skipped == 1
     assert result.errors == 0
@@ -172,7 +188,8 @@ def test_tick_returns_skipped_when_no_phase_is_vk_ready():
 
 def test_tick_skipped_when_phase_already_vk_synced():
     """vk-ready + vk-synced means the previous tick already created the
-    card — leave it alone."""
+    card — leave it alone. Render preserves `vk-synced` from observed
+    so the gate sees it on the projected side."""
     from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
@@ -184,9 +201,45 @@ def test_tick_skipped_when_phase_already_vk_synced():
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
+    assert "vk-synced" in rendered.issue_per_phase[1].labels  # preservation
     mcp = StubMcpClient()
     result = tick(plan, gh, mcp)
 
     assert result.synced == 0
     assert result.skipped == 1
     assert mcp.create_calls == []
+
+
+def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_synced():
+    """Regression for the two coupled bugs the review surfaced:
+
+    (a) Gating on pre-apply observed labels would erroneously sync a
+        phase that an agent has already claimed (assignee set after
+        dispatch but before this tick).
+    (b) Before the renderer preserved `vk-synced`, every tick after the
+        first would re-create the card because `apply()` stripped the
+        marker via the `vk-` managed-prefix sweep, then the bridge
+        re-synced + re-added it on the next tick.
+
+    Together: a Plan B (agent-images) bridge running on a busy repo
+    must not duplicate cards and must not undo its own sync state.
+    """
+    from tests.unit.fakes import FakeGhClient
+    from vk.bridge import tick
+    from vk.observe import observe
+    from vk.render import render
+
+    plan, repo, n = _dispatched_plan()
+    gh = FakeGhClient()
+    # Second-tick scenario: vk-synced already set, body in sync.
+    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "vk-synced", "phase:1"})
+    rendered = render(plan, observe(plan, gh))
+    gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
+
+    mcp = StubMcpClient()
+    result = tick(plan, gh, mcp)
+
+    assert result.synced == 0  # no duplicate
+    assert mcp.create_calls == []
+    # vk-synced must survive the apply() in this tick.
+    assert "vk-synced" in gh.issues[(repo, n)].labels

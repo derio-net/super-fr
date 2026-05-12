@@ -267,6 +267,12 @@ def render(
         lifecycle = _lifecycle_label(phase, obs)
         if lifecycle is not None:
             labels.add(lifecycle)
+        # `vk-synced` is bridge-owned: the renderer doesn't set it, but it
+        # shares the `vk-` managed prefix, so without explicit preservation
+        # `diff()` would strip it on every tick after the bridge added it.
+        # Carry it forward from observed so apply() sees no drift.
+        if obs is not None and "vk-synced" in obs.issue_labels:
+            labels.add("vk-synced")
         state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
         issues[n] = RenderedIssue(
             body=render_body(
