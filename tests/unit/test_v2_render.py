@@ -320,3 +320,71 @@ def test_manual_phase_label_is_manual():
     # Phase 10 in this fixture is tagged manual
     manual_phase = next(p for p in plan.phases if p.phase.tag == "manual")
     assert _lifecycle_label(manual_phase, None) == "manual"
+
+
+def test_render_body_blocked_by_uses_issue_number_not_phase_number():
+    """Regression: `- Blocked by #N` must use the predecessor's tracking-issue
+    number, not its phase number. Bridge parses `#N` as an Issue number, so
+    using a phase number silently mis-gates dependent phases.
+    """
+    from vk import parse
+    from vk.render import render_body
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+    phase2 = next(p for p in plan.phases if p.phase.number == 2)
+    # Fixture precondition: phase2 already depends on phase1.
+    assert phase2.phase.depends_on == (1,)
+
+    # `phase_to_issue={1: 42}` simulates Phase 1 having tracking_issue
+    # `.../issues/42` — we don't need to mutate phase1's model for this
+    # unit test since `render_body` consults the map, not the phase.
+    body = render_body(phase2, plan, phase_to_issue={1: 42})
+
+    assert "- Blocked by #42" in body
+    assert "- Blocked by #1" not in body
+
+
+def test_render_body_blocked_by_cross_repo_dep():
+    """Forward-compat: when phase_to_repo names a different repo, the rendered
+    line uses `owner/repo#N`. The bridge already parses this shape (see
+    agent-images/kali/scripts/vk-issue-bridge.py dep_re), so making the
+    renderer symmetric now avoids a second rework when cross-repo dispatch
+    lands.
+    """
+    from vk import parse
+    from vk.render import render_body
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+    phase2 = next(p for p in plan.phases if p.phase.number == 2)
+
+    body = render_body(
+        phase2,
+        plan,
+        phase_to_issue={1: 42},
+        phase_to_repo={1: "derio-net/other"},
+    )
+
+    assert "- Blocked by derio-net/other#42" in body
+    # Plain `#42` would be wrong here (cross-repo), but the longer form
+    # contains `#42` as a substring, so guard against the bare-form mistake
+    # by checking that no line is exactly `- Blocked by #42`.
+    assert "- Blocked by #42\n" not in body and not body.endswith("- Blocked by #42")
+
+
+def test_render_body_blocked_by_missing_predecessor_falls_back_to_phase_number():
+    """Fallback: when predecessor's Issue isn't in phase_to_issue (not yet
+    dispatched and not in this run's created set), emit the phase-number
+    form so the operator sees a broken ref instead of an empty deps block.
+    """
+    from vk import parse
+    from vk.render import render_body
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+    phase2 = next(p for p in plan.phases if p.phase.number == 2)
+
+    body = render_body(phase2, plan, phase_to_issue={})
+
+    assert "- Blocked by #1" in body

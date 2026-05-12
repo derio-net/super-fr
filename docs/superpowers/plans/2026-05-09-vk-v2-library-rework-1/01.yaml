@@ -174,16 +174,16 @@ tasks:
       Re-run the test from S1. Expect: green.
 state:
   steps:
-    P1.T1.S1: {state: ' ', ticked_at: null, note: null}
-    P1.T1.S2: {state: ' ', ticked_at: null, note: null}
-    P1.T2.S1: {state: ' ', ticked_at: null, note: null}
-    P1.T2.S2: {state: ' ', ticked_at: null, note: null}
-    P1.T3.S1: {state: ' ', ticked_at: null, note: null}
-    P1.T3.S2: {state: ' ', ticked_at: null, note: null}
-    P1.T3.S3: {state: ' ', ticked_at: null, note: null}
-    P1.T4.S1: {state: ' ', ticked_at: null, note: null}
-    P1.T4.S2: {state: ' ', ticked_at: null, note: null}
+    P1.T1.S1: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: null}
+    P1.T1.S2: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: null}
+    P1.T2.S1: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: null}
+    P1.T2.S2: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: null}
+    P1.T3.S1: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: null}
+    P1.T3.S2: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: 'helper landed in vk/_urls.py (alongside parse_issue_url); render() builds the map'}
+    P1.T3.S3: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: 'only _render_body call site is in render(); threaded there'}
+    P1.T4.S1: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: null}
+    P1.T4.S2: {state: 'x', ticked_at: '2026-05-12T15:54:25Z', note: 'in-place pending-mutation rewrite — chosen over alt B (post-loop re-run) for simpler test setup'}
   completion:
-    at: null
+    at: '2026-05-12T15:54:25Z'
     note: null
     observed_prs: []

@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
+from vk._urls import issue_number as _issue_number_from_url
 from vk.parser import Plan
 from vk.states import (
     GhState,
@@ -84,13 +85,32 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
     return has_merged_pr and not has_open_pr
 
 
-def _render_body(phase: PhaseDoc, plan: Plan) -> str:
+def render_body(
+    phase: PhaseDoc,
+    plan: Plan,
+    *,
+    phase_to_issue: dict[int, int] | None = None,
+    phase_to_repo: dict[int, str] | None = None,
+) -> str:
     """Static body template. Same content from dispatch through close.
 
     Uses `plan.repo_relative_dir` (NOT `plan.dir`) for the `📋 Plan:`
     line so the body doesn't leak the dispatcher's absolute filesystem
     path — the body is consumed by humans + tooling in every clone of
     the repo, including pod-side agents on different filesystems.
+
+    `phase_to_issue` maps phase numbers to the predecessor's tracking
+    Issue number (int). When set, `- Blocked by #N` uses the Issue
+    number, not the phase number — which is what the bridge actually
+    parses. `phase_to_repo` is forward-compat for cross-repo deps; v2
+    doesn't dispatch cross-repo today, but the bridge already accepts
+    `owner/repo#N`, so making the renderer symmetric now avoids a
+    second rework.
+
+    Both default to None (treated as empty dict) — callers that
+    haven't been updated still get the phase-number form, which is
+    obviously broken at a glance, so the operator notices and
+    re-dispatches.
 
     Deliberately does NOT carry a "include `Closes #N` to auto-close"
     hint. v2 handles auto-close via the renderer projection
@@ -108,8 +128,21 @@ def _render_body(phase: PhaseDoc, plan: Plan) -> str:
         f"🎯 Phase:  {phase.phase.number}/{total} — {phase.phase.title} [{phase.phase.tag}]\n"
         f"🔗 Issue:  {phase.phase.tracking_issue or '(assigned on create)'}\n"
     )
+
+    def _dep_ref(n: int) -> str:
+        issue_n = (phase_to_issue or {}).get(n)
+        if issue_n is None:
+            # Predecessor hasn't been dispatched yet AND isn't in this
+            # apply's created_issues. Fall back to the phase-number form —
+            # the operator will see the broken ref and re-dispatch.
+            return f"#{n}"
+        dep_repo = (phase_to_repo or {}).get(n)
+        if dep_repo and dep_repo != plan.meta.target_repo:
+            return f"{dep_repo}#{issue_n}"
+        return f"#{issue_n}"
+
     if phase.phase.depends_on:
-        deps_block = "\n".join(f"- Blocked by #{n}" for n in phase.phase.depends_on)
+        deps_block = "\n".join(f"- Blocked by {_dep_ref(n)}" for n in phase.phase.depends_on)
     else:
         deps_block = "None — no blocking phases."
     return (
@@ -186,8 +219,46 @@ def _drift_warnings(plan: Plan, observed: GhState) -> tuple[Warning, ...]:
     return tuple(warnings)
 
 
-def render(plan: Plan, observed: GhState) -> RenderedState:
-    """Project (plan, observed) → RenderedState. Pure function."""
+def build_phase_to_issue(
+    plan: Plan, created_issues: dict[int, str] | None = None
+) -> dict[int, int]:
+    """Map phase number → tracking-issue number.
+
+    Pulls from each phase's persisted `tracking_issue`. If `created_issues`
+    is supplied (the in-flight `phase_number → issue_url` dict returned by
+    `apply()`), its entries take precedence — that's how `apply()` can
+    re-render a dependent phase's body after its predecessor's
+    `IssueCreate` lands in the same run.
+    """
+    result: dict[int, int] = {}
+    for ph in plan.phases:
+        n = _issue_number_from_url(ph.phase.tracking_issue)
+        if n is not None:
+            result[ph.phase.number] = n
+    if created_issues:
+        for phase_n, url in created_issues.items():
+            n = _issue_number_from_url(url)
+            if n is not None:
+                result[phase_n] = n
+    return result
+
+
+def render(
+    plan: Plan,
+    observed: GhState,
+    *,
+    created_issues: dict[int, str] | None = None,
+) -> RenderedState:
+    """Project (plan, observed) → RenderedState. Pure function.
+
+    `created_issues` is the in-flight `phase_number → issue_url` map from
+    a running `apply()`. When set, dependent phases' bodies render with
+    the now-known Issue numbers instead of the phase-number fallback.
+    """
+    phase_to_issue = build_phase_to_issue(plan, created_issues)
+    # phase_to_repo is forward-compat for cross-repo deps. v2 is
+    # single-target_repo today, so the map is always empty in practice.
+    phase_to_repo: dict[int, str] = {}
     issues: dict[int, RenderedIssue] = {}
     for phase in plan.phases:
         n = phase.phase.number
@@ -198,7 +269,9 @@ def render(plan: Plan, observed: GhState) -> RenderedState:
             labels.add(lifecycle)
         state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
         issues[n] = RenderedIssue(
-            body=_render_body(phase, plan),
+            body=render_body(
+                phase, plan, phase_to_issue=phase_to_issue, phase_to_repo=phase_to_repo
+            ),
             labels=frozenset(labels),
             state=state,
         )
