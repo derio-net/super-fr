@@ -386,3 +386,175 @@ def test_migrate_cli_apply_yes(tmp_path, monkeypatch):
     assert "1 migrated" in result.output
     # Hint suffix should NOT appear when --yes was given
     assert "(dry-run" not in result.output
+
+
+def test_migrate_step_bold_paragraph_format(tmp_path):
+    """`**Step N: title**` (no checkbox) — bold-paragraph step format.
+
+    Frank's argocd-infrastructure, openrgb-* plans and many others use bare
+    bold paragraphs instead of `- [x] **Step N:**` checkboxes. Before 2.0.4
+    the regex required the checkbox prefix and silently dropped every step.
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-paragraph.md"
+    p.write_text(
+        "# Bold Paragraph\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "### Task 1: Bootstrap\n\n"
+        "**Step 1: Do the first thing**\n\n"
+        "Some prose body here.\n\n"
+        "**Step 2: Do the second**\n\n"
+        "More body.\n"
+    )
+    migrate_repo(repo, dry_run=False)
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-paragraph")
+    task = plan.phases[0].tasks[0]
+    assert len(task.steps) == 2
+    assert task.steps[0].text.startswith("Do the first thing")
+    # Body got merged into step text
+    assert "Some prose body here" in task.steps[0].text
+
+
+def test_migrate_step_bold_prefix_format(tmp_path):
+    """`- [x] **Step N:** title` — bold-prefix-only format (title outside bold).
+
+    Used in willikins/stoa-goals-entry plan. Distinct from `**Step N: title**`
+    because the closing `**` comes immediately after the colon.
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-prefix.md"
+    p.write_text(
+        "# Bold Prefix\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "### Task 1: Enter goal\n\n"
+        "- [x] **Step 1:** Create goal verbatim from spec — `level: company`, `status: active`.\n"
+    )
+    migrate_repo(repo, dry_run=False)
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-prefix")
+    task = plan.phases[0].tasks[0]
+    assert len(task.steps) == 1
+    assert "Create goal verbatim from spec" in task.steps[0].text
+    # State == "x" (checkbox was ticked)
+    assert plan.phases[0].state.steps["P1.T1.S1"].state == "x"
+
+
+def test_migrate_phase_with_step_subsections_fallback(tmp_path):
+    """`### Step N:` h3 headers (instead of `### Task N:`) trigger phase-level fallback.
+
+    Content-factory's content-pipeline-foundation uses `### Step N:` as the
+    sub-section header under `## Phase N:`. Without fallback, the migrator
+    emits `tasks: []`. With fallback, each `### Step` becomes a synthetic
+    task with the raw body preserved as a single step.
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-step-subsections.md"
+    p.write_text(
+        "# Step Subsections\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 0: Bootstrap [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Step 1: Create repo\n\n"
+        "- [x] **Create repo and clone**\n\n"
+        "```bash\ngh repo create foo\ngit clone foo\n```\n\n"
+        "### Step 2: Add files\n\n"
+        "- [x] **Add .gitignore**\n"
+    )
+    migrate_repo(repo, dry_run=False)
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-step-subsections")
+    phase = plan.phases[0]
+    assert len(phase.tasks) == 2, "fallback should synthesize a task per ### Step"
+    assert "Create repo" in phase.tasks[0].title
+    # Each synthetic task has one step with the raw body
+    assert len(phase.tasks[0].steps) == 1
+    assert "Create repo and clone" in phase.tasks[0].steps[0].text
+    assert "gh repo create foo" in phase.tasks[0].steps[0].text
+
+
+def test_migrate_task_with_no_parseable_steps_fallback(tmp_path):
+    """Task whose body uses an unrecognised step format gets its raw body
+    spliced in as a single synthetic step (no silent content loss).
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-task-body-fallback.md"
+    p.write_text(
+        "# Task Body Fallback\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "### Task 1: Research candidates\n\n"
+        "Evaluated: ElevenLabs, XTTS, Bark. Tested with sample content.\n"
+        "Documented in `docs/decisions/tts-evaluation.md`.\n"
+    )
+    migrate_repo(repo, dry_run=False)
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-task-body-fallback")
+    task = plan.phases[0].tasks[0]
+    assert len(task.steps) == 1, "task with no parseable steps must get one synthetic step"
+    assert "Evaluated: ElevenLabs" in task.steps[0].text
+    assert "tts-evaluation.md" in task.steps[0].text
+
+
+def test_migrate_force_re_migrates_existing_folder(tmp_path):
+    """`--force` tears down an existing v2 folder + restores the .v1-archive."""
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-force-target")
+
+    # First migration succeeds normally.
+    out1 = migrate_repo(repo, dry_run=False)
+    assert out1[0].reason == "migrated"
+    folder = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-target"
+    archive = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-target.md.v1-archive"
+    assert folder.is_dir()
+    assert archive.exists()
+
+    # Tamper with the migrated yaml to prove it gets regenerated.
+    (folder / "01.yaml").write_text(
+        "schema_version: 2\n"
+        "phase:\n  number: 1\n  title: TAMPERED\n  tag: agentic\n"
+        "  depends_on: []\n  tracking_issue: null\n"
+        "tasks: []\n"
+        "state:\n  steps: {}\n  completion:\n"
+        "    at: null\n    note: null\n    observed_prs: []\n"
+    )
+
+    # Second run with --force re-migrates from the archive.
+    out2 = migrate_repo(repo, dry_run=False, force=True)
+    by_name = {o.plan_path.stem: o.reason for o in out2}
+    assert by_name["2026-05-10-force-target"] == "migrated"
+    # Fresh yaml — no longer tampered.
+    assert "TAMPERED" not in (folder / "01.yaml").read_text()
+
+
+def test_migrate_force_dry_run_does_not_destroy(tmp_path):
+    """`--force` in dry-run mode reports re-migration but doesn't touch disk."""
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-force-dryrun")
+    migrate_repo(repo, dry_run=False)  # initial migration
+
+    folder = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-dryrun"
+    archive = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-dryrun.md.v1-archive"
+    yaml_before = (folder / "01.yaml").read_text()
+
+    outcomes = migrate_repo(repo, dry_run=True, force=True)
+    assert any("dry run" in o.reason for o in outcomes)
+    # Folder + archive both still in place; yaml unchanged
+    assert folder.is_dir()
+    assert archive.exists()
+    assert (folder / "01.yaml").read_text() == yaml_before

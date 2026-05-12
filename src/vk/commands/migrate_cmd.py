@@ -27,6 +27,15 @@ def v1_to_v2_cmd(
         "--include-in-progress",
         help="Migrate plans even if Status != Complete.",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Re-migrate plans whose v2 folder already exists by restoring the "
+            "paired `.md.v1-archive`. Use to repair migrations done by older "
+            "versions (pre-2.0.4) that silently dropped non-canonical step formats."
+        ),
+    ),
 ) -> None:
     """Convert every v1 .md plan in this repo to a v2 folder + rewrite spec tables.
 
@@ -38,6 +47,7 @@ def v1_to_v2_cmd(
             repo_root,
             dry_run=not yes,
             include_in_progress=include_in_progress,
+            force=force,
         )
     except MigrationError as e:
         err_console.print(f"[red]migration error:[/red] {e}")
@@ -45,7 +55,7 @@ def v1_to_v2_cmd(
 
     for o in outcomes:
         console.print(f"  {o.plan_path.name}: {o.reason}")
-    n_migrated = sum(1 for o in outcomes if o.reason.startswith("migrated"))
+    n_migrated = sum(1 for o in outcomes if "migrated" in o.reason)
     n_skipped = sum(1 for o in outcomes if o.reason.startswith("skipped"))
     suffix = "" if yes else " (dry-run; pass --yes to apply)"
     console.print(f"\n{n_migrated} migrated, {n_skipped} skipped.{suffix}")

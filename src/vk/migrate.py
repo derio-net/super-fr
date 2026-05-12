@@ -50,27 +50,60 @@ _ORIGIN_HEADING_RE = re.compile(r"^## Origin\s*$", re.MULTILINE)
 # merely *implement* a rework feature (e.g. `2026-04-22-vk-plan-rework-command`).
 _REWORK_SLUG_RE = re.compile(r"-rework-\d+$")
 
+# Body-extraction helpers. The v1 parser only recognises canonical
+# `### Task N:` headers and `- [x] **Step N: ...**` step markers. Plans
+# in the wild use variants the parser drops on the floor — most commonly
+# `### Step N:` (content-factory) or sub-items like `- [x] **free-form
+# title**` that lack the `Step N:` prefix. When a task ends up with zero
+# parsed steps, or a phase with zero parsed tasks, the migrator falls back
+# to splicing the raw markdown into the v2 yaml as a single step body so
+# nothing is silently dropped.
+_BODY_PHASE_RE = re.compile(r"^## Phase\s+(\S+):", re.MULTILINE)
+_BODY_TASKLIKE_RE = re.compile(
+    r"^### (?:Task|Step)\s+(\d+(?:\.\d+)*[a-z]?):\s*(.+?)\s*$",
+    re.MULTILINE,
+)
+
 
 def migrate_repo(
     repo_root: Path,
     *,
     dry_run: bool = True,
     include_in_progress: bool = False,
+    force: bool = False,
 ) -> list[MigrationOutcome]:
-    """Migrate every v1 plan in repo_root. Returns per-plan outcomes."""
+    """Migrate every v1 plan in repo_root. Returns per-plan outcomes.
+
+    When ``force=True``, an existing `<slug>/` folder paired with a
+    `<slug>.md.v1-archive` sibling is treated as a re-migration target:
+    the folder is removed, the archive renamed back to `<slug>.md`, and
+    migration runs fresh. Use this to repair plans migrated by older
+    buggy versions (e.g. pre-2.0.4 silently dropped non-canonical step
+    formats).
+    """
     outcomes: list[MigrationOutcome] = []
     sp = repo_root / "docs" / "superpowers"
     for sub in ("plans", "archived-plans"):
         d = sp / sub
         if not d.is_dir():
             continue
-        for md_path in sorted(d.glob("*.md")):
+        # When `force` is on we also pick up `<slug>.md.v1-archive` files
+        # whose corresponding `<slug>/` folder needs re-migration.
+        md_paths = list(d.glob("*.md"))
+        if force:
+            for archive in d.glob("*.md.v1-archive"):
+                # archive.stem is `<slug>.md` (archive.suffix is `.v1-archive`)
+                restored = archive.with_suffix("")
+                if not restored.exists():
+                    md_paths.append(restored)
+        for md_path in sorted(md_paths):
             outcomes.append(
                 _migrate_one(
                     md_path,
                     repo_root=repo_root,
                     dry_run=dry_run,
                     include_in_progress=include_in_progress,
+                    force=force,
                 )
             )
 
@@ -93,16 +126,40 @@ def _migrate_one(
     repo_root: Path,
     dry_run: bool,
     include_in_progress: bool,
+    force: bool = False,
 ) -> MigrationOutcome:
     """Migrate a single .md plan."""
     slug = md_path.stem
     new_folder = md_path.parent / slug
+    archive = md_path.with_suffix(".md.v1-archive")
+
+    if force and new_folder.exists() and archive.exists():
+        # Re-migration path: tear down the previously-migrated folder, restore
+        # the archived .md, and let the rest of this function run fresh.
+        if dry_run:
+            return MigrationOutcome(
+                plan_path=md_path,
+                new_folder=new_folder,
+                reason="re-migrated (dry run, --force)",
+            )
+        shutil.rmtree(new_folder)
+        shutil.move(str(archive), str(md_path))
 
     if new_folder.exists():
         return MigrationOutcome(
             plan_path=md_path,
             new_folder=None,
             reason="skipped (folder already exists)",
+        )
+
+    if not md_path.exists():
+        # `--force` left the archive in place but the .md isn't here either.
+        # Skip silently — the operator might be re-running without expecting
+        # all archives to be processable.
+        return MigrationOutcome(
+            plan_path=md_path,
+            new_folder=None,
+            reason="skipped (no .md to migrate)",
         )
 
     try:
@@ -206,9 +263,11 @@ def _migrate_one(
                 prose_lines.append(f"\n- {step_id}: {step.title}\n")
     (new_folder / "_prose.md").write_text("".join(prose_lines))
 
-    # Per-phase yaml
+    # Per-phase yaml. md_text is passed through so the body-preservation
+    # fallback can splice raw markdown into phases/tasks the parser left
+    # empty (non-canonical step formats, `### Step N:` h3 headers, etc.).
     for phase in phases_to_emit:
-        phase_doc = _build_phase_doc_from_v1(phase)
+        phase_doc = _build_phase_doc_from_v1(phase, md_text=md_text)
         (new_folder / f"{phase.number:02d}.yaml").write_text(dump_plan_yaml(phase_doc))
 
     # Move original .md to .v1-archive sibling
@@ -270,16 +329,104 @@ def _parse_v1_origin_table(md_text: str) -> list[dict[str, Any]]:
     return items
 
 
-def _build_phase_doc_from_v1(phase: Any) -> dict[str, Any]:
+def _extract_phase_body(md_text: str, phase_number: int) -> str:
+    """Return the markdown body between `## Phase <N>:` and the next phase header.
+
+    Matches numeric, alphabetic, or dotted phase identifiers. Returns empty
+    string when no `## Phase` header for `phase_number` exists (e.g. flat-format
+    plans). Used as a fallback content source when the parser couldn't extract
+    any tasks for a phase.
+    """
+    matches = list(_BODY_PHASE_RE.finditer(md_text))
+    for i, m in enumerate(matches):
+        if m.group(1) == str(phase_number):
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(md_text)
+            return md_text[start:end].strip()
+    return ""
+
+
+def _extract_sub_sections(body: str) -> list[tuple[str, str, str]]:
+    """Return [(label, title, body), ...] for every `### Task|Step <N>:` header in body.
+
+    Used when a phase has zero parsed tasks (e.g. plans that use `### Step N:`
+    instead of `### Task N:`). Each captured sub-section becomes a synthetic
+    task in the v2 yaml so its content survives the migration.
+    """
+    matches = list(_BODY_TASKLIKE_RE.finditer(body))
+    out: list[tuple[str, str, str]] = []
+    for i, m in enumerate(matches):
+        label = m.group(1)
+        title = m.group(2).strip()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
+        out.append((label, title, body[start:end].strip()))
+    return out
+
+
+def _find_task_body_by_title(md_text: str, task_title: str) -> str:
+    """Return the body of `### Task|Step <N>: <task_title>` in md_text.
+
+    Used when a parsed task ended up with zero steps and we need to splice
+    the raw markdown back in as a fallback. The match is keyed on exact
+    title (after strip) because phase numbering is lost on flat plans.
+    """
+    matches = list(_BODY_TASKLIKE_RE.finditer(md_text))
+    for i, m in enumerate(matches):
+        if m.group(2).strip() == task_title.strip():
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(md_text)
+            return md_text[start:end].strip()
+    return ""
+
+
+def _build_phase_doc_from_v1(phase: Any, md_text: str = "") -> dict[str, Any]:
     """Convert a v1 Phase model into the v2 phase yaml dict.
 
     v1 steps have `number`/`title`/`body` (no `id`). We synthesize the
     v2 `P<phase>.T<task>.S<step>` id from the phase + task + step
     numbers. v1 step text is `title` + optional `body`.
+
+    When `md_text` is supplied and the parser produced an empty phase
+    (zero tasks) or empty tasks (zero steps), the migrator falls back to
+    splicing the raw markdown body into the v2 yaml as a single synthetic
+    step. Without this fallback, plans with non-canonical formatting (e.g.
+    `### Step N:` h3 headers, or bare `**Step N:**` paragraphs the regex
+    can't fully resolve) were emitted with `tasks: []` or `steps: []`,
+    silently losing the entire body content of every affected phase.
     """
+    tasks_iter: list[Any] = list(phase.tasks)
+
+    # Phase-level fallback: extract `### Task|Step` sub-sections from the raw
+    # phase body and present them as synthetic tasks. Triggers when the parser
+    # found zero tasks for a phase (e.g. content-factory's `### Step N:`).
+    if not tasks_iter and md_text:
+        phase_body = _extract_phase_body(md_text, phase.number)
+        if phase_body:
+            sub_sections = _extract_sub_sections(phase_body)
+            if sub_sections:
+                tasks_iter = [
+                    types.SimpleNamespace(
+                        number=i + 1,
+                        title=title,
+                        steps=(),
+                        _fallback_body=body,
+                    )
+                    for i, (_label, title, body) in enumerate(sub_sections)
+                ]
+            else:
+                tasks_iter = [
+                    types.SimpleNamespace(
+                        number=1,
+                        title="(unstructured content)",
+                        steps=(),
+                        _fallback_body=phase_body,
+                    )
+                ]
+
     tasks: list[dict[str, Any]] = []
     state_steps: dict[str, dict[str, Any]] = {}
-    for task in phase.tasks:
+    for task in tasks_iter:
         steps_out: list[dict[str, Any]] = []
         for step in task.steps:
             step_id = f"P{phase.number}.T{task.number}.S{step.number}"
@@ -291,6 +438,19 @@ def _build_phase_doc_from_v1(phase: Any) -> dict[str, Any]:
             v1state = getattr(step, "state", " ")
             mapped = v1state if v1state in ("x", "-") else " "
             state_steps[step_id] = {"state": mapped, "ticked_at": None, "note": None}
+
+        # Task-level fallback: if no steps parsed, splice the raw task body
+        # in as a single synthetic step so the content isn't dropped.
+        if not steps_out:
+            fallback = getattr(task, "_fallback_body", None)
+            if fallback is None and md_text:
+                # Look up this task's body by scanning md_text for its title.
+                fallback = _find_task_body_by_title(md_text, task.title)
+            if fallback and fallback.strip():
+                step_id = f"P{phase.number}.T{task.number}.S1"
+                steps_out.append({"id": step_id, "text": LiteralStr(fallback.strip())})
+                state_steps[step_id] = {"state": " ", "ticked_at": None, "note": None}
+
         tasks.append({"number": task.number, "title": task.title, "steps": steps_out})
     tag = "manual" if getattr(phase, "tag", None) == "manual" else "agentic"
     tracking = getattr(phase, "tracking_url", None)

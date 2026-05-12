@@ -27,13 +27,29 @@ _RE_GOAL = re.compile(r"^\*\*Goal:\*\*\s*(.+)$", re.MULTILINE)
 
 _RE_PHASE = re.compile(r"^## Phase (\d+):\s*(.+?)(?:\s+\[(agentic|manual)\])?\s*$", re.MULTILINE)
 _RE_TASK = re.compile(r"^### Task (\d+):\s*(.+?)(?:\s+\[(agentic|manual)\])?\s*$", re.MULTILINE)
-# Step header: the bold ``**Step N: title**`` may be followed by trailing prose
-# on the same line — common in real-world plans that write
-# ``**Step 1: Create \`foo\`** documenting the role.``  Group 4 captures that
-# trailing text so _parse_steps can merge it into the title instead of
-# silently dropping the whole step.
+# Step header. Real-world v1 plans use four variants of step headers:
+#   1. ``- [x] **Step 1: title**``               — checkbox + title inside bold
+#   2. ``- [x] **Step 1:** title``               — checkbox + bold prefix only
+#   3. ``**Step 1: title**``                     — bare bold-paragraph step
+#   4. ``**Step 1:** title``                     — bare bold-prefix step
+# Without the optional checkbox prefix and the two title-position cases,
+# bold-paragraph plans (e.g. frank's argocd-infrastructure) silently parsed
+# as ``steps: []`` and the v1→v2 migrator emitted empty phase yamls.
+#
+# Groups:
+#   1 = checkbox state char (None when no checkbox)
+#   2 = step number (or dotted label)
+#   3 = title-inside-bold (when ``**Step N: title**``)
+#   4 = trailing prose after the closing ``**`` (variants 1, 3)
+#   5 = title-after-bold (when ``**Step N:** title``, variants 2, 4)
 _RE_STEP = re.compile(
-    r"^- \[([x \-])\] \*\*Step (\d+(?:\.\d+)*):\s*(.+?)\*\*[ \t]*(.*?)[ \t]*$",
+    r"^(?:- \[([x \-])\] )?"  # 1: optional checkbox
+    r"\*\*Step (\d+(?:\.\d+)*):"  # 2: step number
+    r"(?:"
+    r"\s*(.+?)\*\*[ \t]*(.*?)"  # 3,4: title inside bold + trailing
+    r"|"
+    r"\*\*[ \t]*(.*?)"  # 5: title after closing **
+    r")[ \t]*$",
     re.MULTILINE,
 )
 _RE_TRACKING = re.compile(r"^<!-- Tracking:\s*(https?://\S+)\s*-->", re.MULTILINE)
@@ -374,9 +390,14 @@ def _parse_steps(text: str) -> list[Step]:
         state_char = sm.group(1)
         state = state_char if state_char in (" ", "x", "-") else " "
 
-        bold_title = sm.group(3).strip()
-        trailing = sm.group(4).strip()
-        title = f"{bold_title} {trailing}".strip() if trailing else bold_title
+        # Either variant A (``**Step N: title**``) populates groups 3+4,
+        # or variant B (``**Step N:** title``) populates group 5.
+        if sm.group(3) is not None:
+            bold_title = sm.group(3).strip()
+            trailing = (sm.group(4) or "").strip()
+            title = f"{bold_title} {trailing}".strip() if trailing else bold_title
+        else:
+            title = (sm.group(5) or "").strip()
 
         raw_label = sm.group(2)
         # For dotted labels (``"0.1"``), the leading integer is what downstream
