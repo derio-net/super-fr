@@ -2,6 +2,7 @@
 
 from importlib.metadata import version
 
+from vk import bridge as bridge  # noqa: F401 — public sub-package for the live VK bridge
 from vk.parser import Plan, PlanSchemaError, parse
 from vk.types import (
     Completion,
@@ -30,5 +31,6 @@ __all__ = [
     "StepState",
     "Task",
     "__version__",
+    "bridge",
     "parse",
 ]

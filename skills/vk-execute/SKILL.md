@@ -96,6 +96,13 @@ take the PR out of draft.
 - Step IDs: `P<n>.T<n>.S<n>`.
 - Migration from v1 (.md) plans is a separate concern — see `vk migrate v1-to-v2`.
 
+## Bridge integration
+
+`vk.bridge.discover_plans` + `vk.bridge.tick` are the library surface
+the live cron bridge (`agent-images/kali/scripts/vk-issue-bridge.py`)
+imports — NOT operator CLI commands. Agents executing a phase never call
+them. See spec §"Bridge integration — `vk.bridge.*`".
+
 ## v1 plan migration
 
 If you encounter a `.md` plan file (not a folder), it's a v1 plan that needs

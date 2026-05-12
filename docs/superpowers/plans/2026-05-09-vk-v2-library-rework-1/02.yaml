@@ -3,7 +3,8 @@ phase:
   number: 2
   title: '`vk.bridge` library: discover_plans + tick'
   tag: agentic
-  depends_on: [1]
+  depends_on:
+  - 1
   tracking_issue: null
 tasks:
 - number: 1
@@ -216,17 +217,47 @@ tasks:
       Run `uv run pytest tests/ -x --no-cov` for the full suite; expect green.
 state:
   steps:
-    P2.T1.S1: {state: ' ', ticked_at: null, note: null}
-    P2.T1.S2: {state: ' ', ticked_at: null, note: null}
-    P2.T2.S1: {state: ' ', ticked_at: null, note: null}
-    P2.T2.S2: {state: ' ', ticked_at: null, note: null}
-    P2.T2.S3: {state: ' ', ticked_at: null, note: null}
-    P2.T3.S1: {state: ' ', ticked_at: null, note: null}
-    P2.T3.S2: {state: ' ', ticked_at: null, note: null}
-    P2.T3.S3: {state: ' ', ticked_at: null, note: null}
-    P2.T4.S1: {state: ' ', ticked_at: null, note: null}
-    P2.T4.S2: {state: ' ', ticked_at: null, note: null}
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-05-12T16:21:43+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-05-12T16:22:33+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-05-12T16:23:09+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-05-12T16:23:32+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-05-12T16:23:32+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-05-12T16:24:04+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-05-12T16:24:28+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-05-12T16:25:00+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-05-12T16:25:37+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-05-12T16:26:47+00:00'
+      note: null
   completion:
-    at: null
+    at: '2026-05-12T16:26:51+00:00'
     note: null
     observed_prs: []
