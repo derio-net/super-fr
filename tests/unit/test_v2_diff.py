@@ -63,6 +63,55 @@ def test_diff_emits_issuebodychange_when_body_drifts():
     assert body_changes[0].issue_number == 142
 
 
+def test_diff_passes_phase_to_issue_map_to_render():
+    """End-to-end: when Phase 1 has a tracking_issue ending in /issues/100
+    and Phase 2 depends_on=[1] but has no Issue yet, the IssueCreate body
+    for Phase 2 must contain `- Blocked by #100`, NOT `- Blocked by #1`.
+    """
+    from dataclasses import replace as dc_replace
+    from pathlib import Path
+
+    from vk import parse
+    from vk.diff import IssueCreate, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+    phase1 = next(p for p in plan.phases if p.phase.number == 1)
+    phase1_with_issue = phase1.model_copy(
+        update={
+            "phase": phase1.phase.model_copy(
+                update={
+                    "tracking_issue": "https://github.com/derio-net/superpowers-for-vk/issues/100"
+                }
+            )
+        }
+    )
+    # Replace phase 1; leave phase 2 (depends_on=[1]) and phase 10 untouched
+    new_phases = tuple(phase1_with_issue if p.phase.number == 1 else p for p in plan.phases)
+    new_plan = dc_replace(plan, phases=new_phases)
+
+    # Phase 1's Issue exists; Phase 2 + Phase 10 don't yet exist.
+    observed = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(),
+                issue_assignees=(),
+                linked_prs=(),
+            )
+        }
+    )
+    rendered = render(new_plan, observed)
+    d = diff(rendered, observed, plan=new_plan)
+
+    creates = [m for m in d.mutations if isinstance(m, IssueCreate)]
+    phase2_create = next(m for m in creates if m.phase_number == 2)
+    assert "- Blocked by #100" in phase2_create.body
+    assert "- Blocked by #1\n" not in phase2_create.body
+
+
 def test_diff_observed_matches_rendered_yields_minimal_diff():
     """Already-dispatched, labels match → only RepoLabelEnsure (always emitted)."""
     from dataclasses import replace as dc_replace

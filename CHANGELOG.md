@@ -8,6 +8,29 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 2.0.5 — renderer translates phase numbers to tracking-issue numbers
+
+- **`render`: `- Blocked by #N` now uses the predecessor's tracking-Issue
+  number, not its phase number.** v2's renderer was writing
+  `- Blocked by #{phase_number}` in the `## Dependencies` block, but the
+  bridge parses `#N` as a GitHub Issue number — so any v2 plan with
+  cross-phase deps was silently mis-gated. Single-phase plans (the bulk of
+  what shipped pre-rework) were unaffected, which is why the bug stayed
+  invisible. Fix lives in `vk/render.py`: `_render_body` and `render()` now
+  accept an explicit `phase_to_issue` map, which `render()` builds from
+  each phase's `tracking_issue` URL.
+- **`apply`: in-flight predecessors are propagated forward.** When two
+  dependent phases are created in the same `apply()` run, the second
+  phase's `IssueCreate` body is re-rendered after the first phase's Issue
+  lands, so `- Blocked by #N` uses the just-assigned Issue number rather
+  than the phase-number fallback. Opt in by passing the new `plan=` kwarg
+  to `apply()`; callers that omit it get the legacy fallback (the
+  operator sees a broken `#<phase-number>` ref and re-dispatches).
+- Forward-compat: `_render_body` also accepts a `phase_to_repo` map so
+  cross-repo deps render as `owner/repo#N` (the form the bridge already
+  parses). v2 is single-target_repo today so the map stays empty in
+  practice, but the wiring is in place.
+
 ## 2.0.4 — stop silently dropping non-canonical step formats during migration
 
 - **`migrate`: bold-paragraph and bold-prefix step formats now parse.**

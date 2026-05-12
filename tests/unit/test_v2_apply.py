@@ -189,6 +189,60 @@ def test_fakegh_failed_mutation_not_recorded_in_calls():
     assert gh.attempted_mutations == 1
 
 
+def test_apply_in_flight_dep_body_uses_predecessor_issue_number():
+    """Two phases both being created in the same apply() run. After Phase 1's
+    IssueCreate succeeds and returns URL .../issues/N, the IssueCreate that
+    creates Phase 2 must use a body containing `- Blocked by #N` — the real
+    Issue number, not the phase-number fallback.
+
+    diff() ran when neither Phase had a tracking_issue, so the diff's
+    initial Phase 2 IssueCreate body says `- Blocked by #1` (phase-number
+    fallback). apply() must re-render that body after Phase 1's create
+    lands and before Phase 2's create runs.
+    """
+    from pathlib import Path
+
+    from tests.unit.fakes import FakeGhClient
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import IssueCreate, diff
+    from vk.render import render
+    from vk.states import GhState
+
+    # Use the multi-phase fixture: Phase 2 depends on Phase 1.
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+
+    rendered = render(plan, GhState(phases={}))
+    d = diff(rendered, GhState(phases={}), plan=plan)
+
+    # Sanity: diff currently emits Phase 2 IssueCreate with the broken
+    # phase-number fallback body, because no tracking_issue is set yet.
+    creates_pre = [m for m in d.mutations if isinstance(m, IssueCreate)]
+    phase2_pre = next(m for m in creates_pre if m.phase_number == 2)
+    assert "- Blocked by #1" in phase2_pre.body, "fixture precondition"
+
+    gh = FakeGhClient()
+    # Make Phase 1's issue number ≠ 1 so the assertion isn't ambiguous with
+    # the phase-number fallback `#1`.
+    gh._next_issue_number[plan.meta.target_repo] = 50
+    result = apply(d, gh, plan=plan)
+
+    assert result.failures == ()
+    phase1_url = result.created_issues[1]
+    phase1_issue_n = int(phase1_url.rsplit("/", 1)[-1])
+    assert phase1_issue_n == 50
+
+    # The body Phase 2 was actually CREATED with (look at the create_issue
+    # call recorded by the fake) must reference Phase 1's real Issue number.
+    create_calls = [c for c in gh.calls if c[0] == "create_issue"]
+    # Phase 1 is created first, Phase 2 second (mutations preserve order).
+    phase2_create_call = next(c for c in create_calls if "Phase 2" in c[1]["title"])
+    body_used = phase2_create_call[1]["body"]
+    assert "- Blocked by #50" in body_used
+    assert "- Blocked by #1" not in body_used
+
+
 def test_apply_accumulates_failures_continues_past_one_bad_mutation():
     """Mutation N fails — mutation N+1 still runs; failure is recorded."""
     from tests.unit.fakes import FakeGhClient
