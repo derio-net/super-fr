@@ -388,3 +388,51 @@ def test_render_body_blocked_by_missing_predecessor_falls_back_to_phase_number()
     body = render_body(phase2, plan, phase_to_issue={})
 
     assert "- Blocked by #1" in body
+
+
+def test_render_preserves_vk_synced_label_from_observed():
+    """`vk-synced` is set by the bridge; the renderer doesn't manage it.
+    Without explicit preservation it would be stripped by diff() because
+    the `vk-` managed prefix sweep wouldn't see it in rendered.labels.
+    """
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    obs = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset({"vk-ready", "vk-synced", "phase:1"}),
+                issue_assignees=(),
+                linked_prs=(),
+                body="",
+            )
+        }
+    )
+    rendered = render(plan, obs)
+    assert "vk-synced" in rendered.issue_per_phase[1].labels
+
+
+def test_render_omits_vk_synced_when_not_observed():
+    """The renderer only preserves vk-synced when it's already on the
+    Issue — it never adds the marker on its own."""
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    obs = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset({"vk-ready", "phase:1"}),
+                issue_assignees=(),
+                linked_prs=(),
+                body="",
+            )
+        }
+    )
+    rendered = render(plan, obs)
+    assert "vk-synced" not in rendered.issue_per_phase[1].labels
