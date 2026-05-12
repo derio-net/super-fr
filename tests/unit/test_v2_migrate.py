@@ -540,6 +540,74 @@ def test_migrate_force_re_migrates_existing_folder(tmp_path):
     assert "TAMPERED" not in (folder / "01.yaml").read_text()
 
 
+def test_migrate_task_body_fallback_with_phase_tag_suffix(tmp_path):
+    """`### Task N: title [agentic]` — tag suffix doesn't break body lookup.
+
+    The parsed `task.title` strips the `[agentic]` suffix while the raw
+    `### Task` header in md_text retains it. Body lookup must ignore the
+    suffix or the fallback never finds the task body.
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-tagged-task.md"
+    p.write_text(
+        "# Tagged Task\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 1: Stage [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Task 1: Bootstrap [agentic]\n\n"
+        "Plain prose body, no recognised step markers.\n"
+    )
+    migrate_repo(repo, dry_run=False)
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-tagged-task")
+    task = plan.phases[0].tasks[0]
+    assert task.title == "Bootstrap"
+    # Fallback must find the body even though md_text has `[agentic]` suffix
+    assert len(task.steps) == 1
+    assert "Plain prose body" in task.steps[0].text
+
+
+def test_migrate_fallback_ignores_fenced_code_block_examples(tmp_path):
+    """`### Task N:` inside a fenced code block must not register as a real task.
+
+    Plans that document the plan format frequently include fenced examples.
+    Without fence-stripping the body-extraction regex would treat those as
+    real headers and emit spurious synthetic tasks.
+    """
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-fenced-examples.md"
+    p.write_text(
+        "# Fenced Examples\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 0: Documentation [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Step 1: Document the format\n\n"
+        "Plans use this format:\n\n"
+        "```markdown\n"
+        "### Task 1: Example task\n"
+        "### Step 2: Example step\n"
+        "```\n\n"
+        "End of section.\n"
+    )
+    migrate_repo(repo, dry_run=False)
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-fenced-examples")
+    phase = plan.phases[0]
+    # Only ONE synthetic task — the fenced examples must not register.
+    assert len(phase.tasks) == 1, (
+        f"fence-stripping failed: got {len(phase.tasks)} tasks, expected 1"
+    )
+    assert phase.tasks[0].title == "Document the format"
+    # And the code block content survives in the step body
+    assert "Example task" in phase.tasks[0].steps[0].text
+
+
 def test_migrate_force_dry_run_does_not_destroy(tmp_path):
     """`--force` in dry-run mode reports re-migration but doesn't touch disk."""
     from vk.migrate import migrate_repo

@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from vk._yaml import LiteralStr, dump_plan_yaml
+from vk.plan.parser import _strip_fenced_regions
 from vk.plan.parser import parse_plan as _parse_v1
 
 
@@ -58,9 +59,16 @@ _REWORK_SLUG_RE = re.compile(r"-rework-\d+$")
 # parsed steps, or a phase with zero parsed tasks, the migrator falls back
 # to splicing the raw markdown into the v2 yaml as a single step body so
 # nothing is silently dropped.
+#
+# The `(?:\s+\[(?:agentic|manual)\])?` tail mirrors `_RE_TASK` in the parser:
+# both ignore optional task-level tag suffixes so group(2) captures the bare
+# title. Without this, title-based body lookup would compare `"Bootstrap"`
+# from the parsed `Task` model against `"Bootstrap [agentic]"` in raw md_text
+# and silently miss.
 _BODY_PHASE_RE = re.compile(r"^## Phase\s+(\S+):", re.MULTILINE)
 _BODY_TASKLIKE_RE = re.compile(
-    r"^### (?:Task|Step)\s+(\d+(?:\.\d+)*[a-z]?):\s*(.+?)\s*$",
+    r"^### (?:Task|Step)\s+(\d+(?:\.\d+)*[a-z]?):"
+    r"\s*(.+?)(?:\s+\[(?:agentic|manual)\])?\s*$",
     re.MULTILINE,
 )
 
@@ -336,8 +344,14 @@ def _extract_phase_body(md_text: str, phase_number: int) -> str:
     string when no `## Phase` header for `phase_number` exists (e.g. flat-format
     plans). Used as a fallback content source when the parser couldn't extract
     any tasks for a phase.
+
+    Fence-stripping prevents `## Phase N:` examples embedded in fenced code
+    blocks (plans that document the plan format) from registering as real
+    phase headers. Offsets line up because `_strip_fenced_regions` preserves
+    length; content slicing uses the original `md_text`.
     """
-    matches = list(_BODY_PHASE_RE.finditer(md_text))
+    scan_text = _strip_fenced_regions(md_text)
+    matches = list(_BODY_PHASE_RE.finditer(scan_text))
     for i, m in enumerate(matches):
         if m.group(1) == str(phase_number):
             start = m.end()
@@ -353,7 +367,8 @@ def _extract_sub_sections(body: str) -> list[tuple[str, str, str]]:
     instead of `### Task N:`). Each captured sub-section becomes a synthetic
     task in the v2 yaml so its content survives the migration.
     """
-    matches = list(_BODY_TASKLIKE_RE.finditer(body))
+    scan_text = _strip_fenced_regions(body)
+    matches = list(_BODY_TASKLIKE_RE.finditer(scan_text))
     out: list[tuple[str, str, str]] = []
     for i, m in enumerate(matches):
         label = m.group(1)
@@ -364,19 +379,34 @@ def _extract_sub_sections(body: str) -> list[tuple[str, str, str]]:
     return out
 
 
-def _find_task_body_by_title(md_text: str, task_title: str) -> str:
-    """Return the body of `### Task|Step <N>: <task_title>` in md_text.
+def _find_task_body(md_text: str, phase_number: int, task_number: int) -> str:
+    """Return the body of `### Task|Step <T>:` in phase `<P>` of md_text.
 
     Used when a parsed task ended up with zero steps and we need to splice
-    the raw markdown back in as a fallback. The match is keyed on exact
-    title (after strip) because phase numbering is lost on flat plans.
+    the raw markdown back in as a fallback. Scoping by phase first avoids
+    matching the wrong task when the same task number appears in multiple
+    phases (e.g. `Task 1` under each `## Phase N`).
+
+    For flat-format plans the synthetic phase has number 1 but md_text has
+    no `## Phase 1:` header — the fallback scans the whole md_text in that
+    case, which is correct because flat plans have a single namespace of
+    `### Task N:` headers.
     """
-    matches = list(_BODY_TASKLIKE_RE.finditer(md_text))
+    phase_body = _extract_phase_body(md_text, phase_number) or md_text
+    scan_text = _strip_fenced_regions(phase_body)
+    matches = list(_BODY_TASKLIKE_RE.finditer(scan_text))
     for i, m in enumerate(matches):
-        if m.group(2).strip() == task_title.strip():
+        label = m.group(1)
+        # Strip any trailing letter on dotted labels (e.g. `5b` → `5`) so we
+        # match the integer task.number that `_RE_TASK` exposes on the model.
+        try:
+            num = int(re.match(r"^\d+", label).group())  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            continue
+        if num == task_number:
             start = m.end()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(md_text)
-            return md_text[start:end].strip()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(phase_body)
+            return phase_body[start:end].strip()
     return ""
 
 
@@ -444,8 +474,10 @@ def _build_phase_doc_from_v1(phase: Any, md_text: str = "") -> dict[str, Any]:
         if not steps_out:
             fallback = getattr(task, "_fallback_body", None)
             if fallback is None and md_text:
-                # Look up this task's body by scanning md_text for its title.
-                fallback = _find_task_body_by_title(md_text, task.title)
+                # Look up this task's body by phase + task number so repeated
+                # task numbers across phases (e.g. each phase's Task 1) don't
+                # collide.
+                fallback = _find_task_body(md_text, phase.number, task.number)
             if fallback and fallback.strip():
                 step_id = f"P{phase.number}.T{task.number}.S1"
                 steps_out.append({"id": step_id, "text": LiteralStr(fallback.strip())})
