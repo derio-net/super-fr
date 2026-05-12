@@ -8,6 +8,27 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 2.0.4 — stop silently dropping non-canonical step formats during migration
+
+- **`migrate`: bold-paragraph and bold-prefix step formats now parse.**
+  The v1 step regex required `- [x] **Step N: title**` (checkbox + title-inside-bold).
+  Plans using bare `**Step N: title**` paragraphs (frank's argocd, openrgb,
+  observability) or `- [x] **Step N:** title` (willikins/stoa-goals-entry,
+  title-outside-bold) silently parsed as `steps: []` and migration emitted
+  empty phase yamls. The regex now accepts all four variants in one shot.
+- **`migrate`: raw-body fallback when the parser can't extract structure.**
+  When a parsed task ends up with zero steps, the migrator splices the task's
+  raw markdown body in as a single synthetic step so content is preserved.
+  When a parsed phase ends up with zero tasks (e.g. content-factory's
+  `### Step N:` h3 headers instead of `### Task N:`), each sub-section
+  becomes a synthetic task with the same body-preservation rule. The bug
+  fix in 2.0.4 also covers any other quirks the parser doesn't recognise,
+  since the fallback is regex-agnostic.
+- **`migrate --force`: re-migrate plans whose v2 folder already exists.**
+  Required for repairing plans that were migrated by pre-2.0.4 vk versions
+  with the silent-drop bug. Tears down the existing folder, restores the
+  paired `.md.v1-archive`, and runs migration fresh.
+
 ## 2.0.3 — consistent `|-` for all step text fields in migrated plans
 
 - **`migrate`: step `text:` values now always use YAML literal block scalar.**
