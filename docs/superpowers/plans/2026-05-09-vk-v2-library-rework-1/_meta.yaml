@@ -1,0 +1,18 @@
+schema_version: 2
+plan: 2026-05-09-vk-v2-library-rework-1
+spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md
+target_repo: derio-net/superpowers-for-vk
+vk_version: '>=1.0.0,<3.0.0'
+created: '2026-05-12'
+parent_plan: docs/superpowers/archived-plans/2026-05-09-vk-v2-library/
+origin_items:
+- id: 1
+  item: 'Renderer writes phase numbers as Issue numbers in ''- Blocked by #N'' — bridge
+    mis-gates dependent phases'
+  source: self-review during migration sweep, 2026-05-12
+  track: development
+- id: 2
+  item: vk.bridge.discover_plans + vk.bridge.tick library (spec §Bridge integration)
+    was never implemented — bridge in agent-images still maintains its own parser
+  source: spec re-read, 2026-05-12
+  track: decision → development

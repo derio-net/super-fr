@@ -1,0 +1,98 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Release v2.1.0
+  tag: manual
+  depends_on: [2]
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Version bumps in lockstep
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Bump the three source-of-truth version files
+
+      Edit each, replacing `2.0.4` with `2.1.0`:
+        - `pyproject.toml` (`[project].version`)
+        - `.claude-plugin/plugin.json` (`.version`)
+        - `.claude-plugin/marketplace.json` (`.plugins[0].version`)
+
+      Run `uv sync` to refresh `uv.lock` with the new editable install.
+      Run `uv run vk --version`, expect `vk 2.1.0`.
+- number: 2
+  title: CHANGELOG entry
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Add 2.1.0 section to CHANGELOG.md
+
+      Top of file, above 2.0.4:
+
+      ```
+      ## 2.1.0 — `vk.bridge` library + renderer phase→issue translation
+
+      - **`render`: `- Blocked by #N` now writes the predecessor's Issue number,
+        not its phase number.** Pre-2.1.0 the renderer wrote phase numbers,
+        which the bridge silently mis-interpreted as Issue numbers — any v2
+        plan with cross-phase deps was wrongly gated. Renderer now accepts a
+        `phase_to_issue` map built from each phase's `tracking_issue` plus
+        the in-flight `created_issues` of the current `apply()` run.
+
+      - **New: `vk.bridge` sub-package.** Exposes `discover_plans()` and
+        `tick()` for cron consumers (the live bridge in agent-images). NOT
+        part of the operator CLI. Replaces hand-rolled parsing + dispatch
+        loops with the same library projection chain `vk apply` uses.
+        Spec §"Bridge integration — `vk.bridge.*`".
+      ```
+- number: 3
+  title: Final validation
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Run the full local pipeline
+
+      ```
+      uv run ruff check src/ tests/
+      uv run ruff format --check src/ tests/
+      uv run mypy src/
+      uv run pytest tests/ --no-cov
+      ```
+
+      All four must pass. Note pytest count in the commit body.
+- number: 4
+  title: Tag, push, install
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Tag and push the release
+
+      After the merge of this plan's PR(s):
+      ```
+      git checkout main && git pull
+      git tag -a v2.1.0 -m "v2.1.0 — vk.bridge library + renderer phase→issue translation"
+      git push origin v2.1.0
+      ```
+  - id: P3.T4.S2
+    text: |-
+      Local plugin install + smoke check
+
+      ```
+      bash scripts/install.sh
+      vk --version    # expect: vk 2.1.0
+      python -c "from vk import bridge; print(bridge.tick.__doc__[:60])"
+      ```
+
+      Update memory with a project entry noting v2.1.0 is the gate for
+      Plan B (agent-images bridge refactor) and the renderer fix.
+state:
+  steps:
+    P3.T1.S1: {state: ' ', ticked_at: null, note: null}
+    P3.T2.S1: {state: ' ', ticked_at: null, note: null}
+    P3.T3.S1: {state: ' ', ticked_at: null, note: null}
+    P3.T4.S1: {state: ' ', ticked_at: null, note: null}
+    P3.T4.S2: {state: ' ', ticked_at: null, note: null}
+  completion:
+    at: null
+    note: null
+    observed_prs: []

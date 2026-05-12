@@ -1,0 +1,232 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '`vk.bridge` library: discover_plans + tick'
+  tag: agentic
+  depends_on: [1]
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Module skeleton + TickResult dataclass
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Create the package + failing import test
+
+      ```
+      mkdir -p src/vk/bridge
+      touch src/vk/bridge/__init__.py
+      ```
+
+      In `tests/unit/test_vk_bridge.py`:
+      ```python
+      def test_bridge_module_importable():
+          from vk.bridge import discover_plans, tick, TickResult, VkMcpClient
+          assert callable(discover_plans)
+          assert callable(tick)
+      ```
+
+      Run: `uv run pytest tests/unit/test_vk_bridge.py -x --no-cov`
+      Expect: red — names don't resolve yet.
+  - id: P2.T1.S2
+    text: |-
+      Add TickResult dataclass + VkMcpClient Protocol
+
+      In `src/vk/bridge/__init__.py`:
+      ```python
+      from __future__ import annotations
+      from dataclasses import dataclass, field
+      from typing import Protocol
+
+      @dataclass(frozen=True)
+      class TickResult:
+          synced: int = 0
+          errors: int = 0
+          skipped: int = 0
+          failures: tuple[str, ...] = ()
+
+      class VkMcpClient(Protocol):
+          """Subset of the MCP client surface the bridge needs.
+
+          The live implementation lives in agent-images/kali/scripts/
+          vk_mcp_client.py; we only describe what we call here so tests
+          can stub it without dragging the MCP wire format in."""
+          def create_card(self, *, title: str, body: str, issue_url: str) -> str: ...
+          def update_card(self, *, card_id: str, status: str) -> None: ...
+      ```
+
+      Add placeholder `discover_plans` and `tick` raising `NotImplementedError`
+      so the import test goes green. Run import test, expect green.
+- number: 2
+  title: '`discover_plans` — walk a repo checkout, return `vk-ready` plans'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Spec the contract with a fixture-driven test
+
+      In `tests/unit/test_vk_bridge_discover.py`, set up a tmp_path with
+      two v2 plan folders. Plan A has a phase whose Issue (looked up via
+      a stub GhClient) carries the `vk-ready` label; Plan B doesn't.
+
+      `discover_plans("derio-net/test", gh_stub)` returns exactly Plan A.
+
+      Use `vk.parse()` to construct the expected Plans so the test pins
+      the structure tooling actually receives.
+
+      Run: pytest tests/unit/test_vk_bridge_discover.py -x --no-cov
+      Expect: red (NotImplementedError).
+  - id: P2.T2.S2
+    text: |-
+      Implement discover_plans
+
+      ```python
+      def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
+          """Walk docs/superpowers/plans/ in repo, return plans where at
+          least one phase Issue carries the `vk-ready` label."""
+          repo_root = _repo_checkout_root(repo)
+          plans_dir = repo_root / "docs" / "superpowers" / "plans"
+          out: list[Plan] = []
+          for plan_dir in sorted(plans_dir.iterdir()):
+              if not (plan_dir / "_meta.yaml").exists():
+                  continue
+              plan = parse(plan_dir)
+              if _any_phase_is_vk_ready(plan, gh):
+                  out.append(plan)
+          return out
+      ```
+
+      `_repo_checkout_root` resolves `repo` ("owner/name") to a path under
+      `~/repos/<name>` (matching the existing bridge's REPOS_DIR
+      convention — env-overridable via `VK_REPOS_DIR`).
+
+      Re-run the test, expect green.
+  - id: P2.T2.S3
+    text: |-
+      Edge cases: missing checkout, missing plans dir, parse errors
+
+      Add three more tests covering:
+        - `repo` not present on disk → return `[]`, no exception
+        - `docs/superpowers/plans/` absent → return `[]`
+        - one plan_dir has invalid `_meta.yaml` → skip it, log, continue
+          (don't take down the whole tick over one bad plan)
+
+      Implement the catches. Verify with pytest -x.
+- number: 3
+  title: '`tick` — one cron iteration'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Failing happy-path test
+
+      In `tests/unit/test_vk_bridge_tick.py`, build a plan with one phase
+      whose Issue is labelled `vk-ready` but not yet `vk-synced`. Use
+      stub GhClient + stub VkMcpClient.
+
+      Assert that after `tick(plan, gh_stub, mcp_stub)`:
+        - `mcp_stub.create_card` was called with the issue URL
+        - `gh_stub.add_label(... 'vk-synced' ...)` was called
+        - The returned TickResult has `synced=1, errors=0`
+
+      Run, expect red.
+  - id: P2.T3.S2
+    text: |-
+      Implement tick — observe / render / diff / apply / VK update
+
+      ```python
+      def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
+          observed = observe(plan, gh)
+          rendered = render(plan, observed)
+          d = diff(plan, observed, rendered)
+          # GH-side mutations first (Issues + labels)
+          result = apply(d, gh)
+          failures = [f.error for f in result.failures]
+
+          # Now sync VK board cards from the rendered state — one card
+          # per phase whose Issue is vk-ready & not yet vk-synced.
+          synced = 0
+          for phase in plan.phases:
+              ph_obs = observed.phases.get(phase.phase.number)
+              if ph_obs is None: continue
+              if "vk-ready" in ph_obs.labels and "vk-synced" not in ph_obs.labels:
+                  try:
+                      vk_mcp.create_card(
+                          title=phase.phase.title,
+                          body=rendered.issue_per_phase[phase.phase.number].body,
+                          issue_url=ph_obs.url,
+                      )
+                      gh.edit_issue_labels(plan.meta.target_repo, ph_obs.number,
+                                           add={"vk-synced"}, remove=set())
+                      synced += 1
+                  except Exception as e:
+                      failures.append(f"phase {phase.phase.number}: {e}")
+          return TickResult(
+              synced=synced,
+              errors=len(failures),
+              skipped=0,
+              failures=tuple(failures),
+          )
+      ```
+
+      Re-run, expect green.
+  - id: P2.T3.S3
+    text: |-
+      Failure-path tests
+
+      Add tests for:
+        - MCP `create_card` raises → counted in `errors`, not `synced`;
+          GH label `vk-synced` NOT added (so we retry next tick)
+        - GH apply has a failure → still attempt VK syncs for unaffected
+          phases; failures list contains both
+        - Plan with zero `vk-ready` phases → `TickResult(skipped=1)`
+
+      Implement the branches. Run full bridge test file, expect green.
+- number: 4
+  title: Wire `vk.bridge` into the public surface
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Re-export from `vk.__init__`
+
+      Add to `src/vk/__init__.py`:
+      ```python
+      from vk import bridge as bridge  # noqa: F401 — public sub-package
+      ```
+
+      So callers can either `from vk.bridge import tick` or `import vk;
+      vk.bridge.tick(...)`. Verify `python -c "from vk import bridge;
+      print(bridge.tick)"` works.
+
+      Add a public-API regression test:
+      ```python
+      def test_public_bridge_api_stable():
+          import vk
+          assert hasattr(vk.bridge, "discover_plans")
+          assert hasattr(vk.bridge, "tick")
+          assert hasattr(vk.bridge, "TickResult")
+          assert hasattr(vk.bridge, "VkMcpClient")
+      ```
+  - id: P2.T4.S2
+    text: |-
+      Document the bridge API in vk-execute skill (NOT vk-dispatch)
+
+      Add a "Bridge integration" subsection to `skills/vk-execute/SKILL.md`
+      noting that `vk.bridge.*` exists for cron consumers and is NOT part
+      of the operator CLI. Cross-link to spec §"Bridge integration".
+
+      Run `uv run pytest tests/ -x --no-cov` for the full suite; expect green.
+state:
+  steps:
+    P2.T1.S1: {state: ' ', ticked_at: null, note: null}
+    P2.T1.S2: {state: ' ', ticked_at: null, note: null}
+    P2.T2.S1: {state: ' ', ticked_at: null, note: null}
+    P2.T2.S2: {state: ' ', ticked_at: null, note: null}
+    P2.T2.S3: {state: ' ', ticked_at: null, note: null}
+    P2.T3.S1: {state: ' ', ticked_at: null, note: null}
+    P2.T3.S2: {state: ' ', ticked_at: null, note: null}
+    P2.T3.S3: {state: ' ', ticked_at: null, note: null}
+    P2.T4.S1: {state: ' ', ticked_at: null, note: null}
+    P2.T4.S2: {state: ' ', ticked_at: null, note: null}
+  completion:
+    at: null
+    note: null
+    observed_prs: []

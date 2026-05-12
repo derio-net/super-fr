@@ -32,8 +32,8 @@ tasks:
 
       Run: red.
   - id: P3.T1.S4
-    text: 'Implement `--all` — find plan folders under `docs/superpowers/plans/`,
-      apply each. Run: green.'
+    text: |-
+      Implement `--all` — find plan folders under `docs/superpowers/plans/`, apply each. Run: green.
 - number: 2
   title: '`vk plan create / edit / rework / rework-add / rework-list`'
   steps:
@@ -545,6 +545,6 @@ state:
       ticked_at: null
       note: null
   completion:
-    at: null
+    at: '2026-05-12T07:13:16+00:00'
     note: null
     observed_prs: []

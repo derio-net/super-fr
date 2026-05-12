@@ -113,8 +113,8 @@ tasks:
       - `vk progress sync` / `audit` / `transition` / `board` / `create` → ALL DELETED
       - Replace with `vk apply --dry-run` (audit), `vk plan edit --complete-phase` (transition), `vk spec status --all` (board)
   - id: P4.T2.S5
-    text: Verify skills are coherent — read each SKILL.md after edits, ensure no dangling
-      references
+    text: |-
+      Verify skills are coherent — read each SKILL.md after edits, ensure no dangling references
 - number: 3
   title: Confirm final state
   steps:
@@ -124,7 +124,8 @@ tasks:
 
       Expected: zero matches.
   - id: P4.T3.S2
-    text: '`vk --help` — confirm only v2 commands shown.'
+    text: |-
+      `vk --help` — confirm only v2 commands shown.
   - id: P4.T3.S3
     text: |-
       Commit Phase 4
@@ -202,6 +203,6 @@ state:
       ticked_at: null
       note: null
   completion:
-    at: null
+    at: '2026-05-12T07:13:18+00:00'
     note: null
     observed_prs: []
