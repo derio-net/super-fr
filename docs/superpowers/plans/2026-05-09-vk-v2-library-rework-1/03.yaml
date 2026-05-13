@@ -101,14 +101,18 @@ state:
       ticked_at: '2026-05-12T17:05:05+00:00'
       note: null
     P3.T4.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-05-13T04:04:08+00:00'
       note: null
     P3.T4.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-05-13T04:06:41+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-05-13T04:06:52+00:00'
+    note: 'Released as v2.1.0 (commit b99983e, tag v2.1.0). Tag pushed; bash scripts/install.sh
+      succeeded; smoke checks pass (vk --version → 2.1.0; from vk import bridge →
+      tick.__doc__ readable). Phase contents shipped earlier as patches: 2.0.5 (renderer
+      phase→issue, #113), 2.0.6 (vk.bridge library, #114). 2.1.0 is the gate for agent-images
+      bridge refactor (Plan B).'
     observed_prs: []
