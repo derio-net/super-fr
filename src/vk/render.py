@@ -21,6 +21,7 @@ from vk.labels import (
     MANUAL,
     PR_READY,
     VK_READY,
+    VK_SYNCED,
     LabelDef,
     phase_label,
     plan_label,
@@ -284,8 +285,8 @@ def render(
         # shares the `vk-` managed prefix, so without explicit preservation
         # `diff()` would strip it on every tick after the bridge added it.
         # Carry it forward from observed so apply() sees no drift.
-        if obs is not None and "vk-synced" in obs.issue_labels:
-            labels.add("vk-synced")
+        if obs is not None and VK_SYNCED.name in obs.issue_labels:
+            labels.add(VK_SYNCED)
         state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
         issues[n] = RenderedIssue(
             body=render_body(

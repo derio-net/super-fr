@@ -417,7 +417,7 @@ def test_render_preserves_vk_synced_label_from_observed():
         }
     )
     rendered = render(plan, obs)
-    assert "vk-synced" in rendered.issue_per_phase[1].labels
+    assert "vk-synced" in {ld.name for ld in rendered.issue_per_phase[1].labels}
 
 
 def test_render_omits_vk_synced_when_not_observed():
@@ -440,4 +440,4 @@ def test_render_omits_vk_synced_when_not_observed():
         }
     )
     rendered = render(plan, obs)
-    assert "vk-synced" not in rendered.issue_per_phase[1].labels
+    assert "vk-synced" not in {ld.name for ld in rendered.issue_per_phase[1].labels}

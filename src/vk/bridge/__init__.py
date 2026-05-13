@@ -21,6 +21,7 @@ from vk._urls import parse_issue_url
 from vk.apply import apply
 from vk.diff import diff
 from vk.ghclient import GhClient
+from vk.labels import VK_READY, VK_SYNCED
 from vk.observe import observe
 from vk.parser import Plan, PlanSchemaError, parse
 from vk.render import render
@@ -160,7 +161,7 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
         if ri is None or not tracking:  # pragma: no cover — defensive guard
             continue
         rlabels = ri.labels
-        if "vk-ready" not in rlabels or "vk-synced" in rlabels:
+        if VK_READY not in rlabels or VK_SYNCED in rlabels:
             continue
         eligible += 1
         try:
