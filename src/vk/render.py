@@ -16,6 +16,16 @@ from pathlib import Path
 from typing import Literal
 
 from vk._urls import issue_number as _issue_number_from_url
+from vk.labels import (
+    IN_PROGRESS,
+    MANUAL,
+    PR_READY,
+    VK_READY,
+    LabelDef,
+    phase_label,
+    plan_label,
+    spec_label,
+)
 from vk.parser import Plan
 from vk.states import (
     GhState,
@@ -37,28 +47,28 @@ def _spec_slug(spec_path: str | None) -> str | None:
     return _DATE_PREFIX_RE.sub("", stem)
 
 
-def _lifecycle_label(phase: PhaseDoc, obs: PhaseObservation | None) -> str | None:
-    """Compute the single lifecycle label for a phase.
+def _lifecycle_label(phase: PhaseDoc, obs: PhaseObservation | None) -> LabelDef | None:
+    """Compute the single lifecycle LabelDef for a phase.
 
     Returns None when the Issue should be closed (phase complete).
     """
     if _phase_complete(phase, obs):
         return None  # closed; no lifecycle label
     if phase.phase.tag == "manual":
-        return "manual"
+        return MANUAL
     if obs is None:
-        return "vk-ready"
+        return VK_READY
     has_open_pr_nondraft = any(
         pr.state == "OPEN" and not pr.draft and not pr.merged for pr in obs.linked_prs
     )
     if has_open_pr_nondraft:
-        return "pr-ready"
+        return PR_READY
     has_assignee_or_draft_pr = bool(obs.issue_assignees) or any(
         pr.state == "OPEN" and pr.draft for pr in obs.linked_prs
     )
     if has_assignee_or_draft_pr:
-        return "in-progress"
-    return "vk-ready"
+        return IN_PROGRESS
+    return VK_READY
 
 
 def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
@@ -158,12 +168,15 @@ def render_body(
     )
 
 
-def _phase_labels(phase: PhaseDoc, plan: Plan) -> frozenset[str]:
-    """Taxonomy + lifecycle label set for a phase."""
+def _phase_labels(phase: PhaseDoc, plan: Plan) -> frozenset[LabelDef]:
+    """Taxonomy LabelDef set for a phase (factory-resolved, registry-colored)."""
+    labels: set[LabelDef] = {
+        plan_label(plan.meta.plan),
+        phase_label(phase.phase.number),
+    }
     spec_slug = _spec_slug(plan.meta.spec)
-    labels: set[str] = {f"plan:{plan.meta.plan}", f"phase:{phase.phase.number}"}
     if spec_slug:
-        labels.add(f"spec:{spec_slug}")
+        labels.add(spec_label(spec_slug))
     return frozenset(labels)
 
 
@@ -263,7 +276,7 @@ def render(
     for phase in plan.phases:
         n = phase.phase.number
         obs = observed.phases.get(n)
-        labels = set(_phase_labels(phase, plan))
+        labels: set[LabelDef] = set(_phase_labels(phase, plan))
         lifecycle = _lifecycle_label(phase, obs)
         if lifecycle is not None:
             labels.add(lifecycle)

@@ -63,7 +63,8 @@ def _format_diff(d: Diff) -> str:
     lines: list[str] = []
     for m in d.mutations:
         if isinstance(m, RepoLabelEnsure):
-            lines.append(f"  ensure labels on {m.repo}: {sorted(m.labels)}")
+            label_names = sorted(ld.name for ld in m.labels)
+            lines.append(f"  ensure labels on {m.repo}: {label_names}")
         elif isinstance(m, IssueCreate):
             lines.append(f"  create Issue on {m.repo} for phase {m.phase_number}: {m.title!r}")
         elif isinstance(m, IssueLabelChange):
@@ -80,7 +81,11 @@ def _format_diff(d: Diff) -> str:
 def _mutation_to_json(m: Any) -> dict[str, Any]:
     """Serialise a mutation dataclass to a plain JSON-friendly dict."""
     if isinstance(m, RepoLabelEnsure):
-        return {"kind": "RepoLabelEnsure", "repo": m.repo, "labels": sorted(m.labels)}
+        return {
+            "kind": "RepoLabelEnsure",
+            "repo": m.repo,
+            "labels": sorted(ld.name for ld in m.labels),
+        }
     if isinstance(m, IssueCreate):
         return {
             "kind": "IssueCreate",
