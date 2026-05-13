@@ -64,6 +64,54 @@ def test_apply_creates_issue_and_returns_url():
     assert result.created_issues[1].startswith("https://github.com/")
 
 
+def test_apply_ensures_labels_with_registry_colors():
+    """E2E: LabelDef objects with registry colors survive the trip through
+    render → diff → apply → gh.ensure_labels. Diff-layer coverage is in
+    test_v2_diff.test_repo_label_ensure_carries_registry_colors; this test
+    catches a future regression where apply() or its sort/projection
+    strips the colors off before handing them to the GhClient.
+    """
+    from tests.unit.fakes import FakeGhClient
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import diff
+    from vk.labels import (
+        PHASE_LABEL_COLOR,
+        PLAN_LABEL_COLOR,
+        SPEC_LABEL_COLOR,
+        VK_READY,
+        LabelDef,
+    )
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    rendered = render(plan, GhState(phases={}))
+    d = diff(rendered, GhState(phases={}), plan=plan)
+
+    gh = FakeGhClient()
+    apply(d, gh)
+
+    ensure_calls = [c for c in gh.calls if c[0] == "ensure_labels"]
+    assert len(ensure_calls) == 1
+    [(_, kwargs)] = ensure_calls
+    passed = kwargs["labels"]
+
+    assert passed, "apply() called ensure_labels with an empty label list"
+    non_defs = [ld for ld in passed if not isinstance(ld, LabelDef)]
+    assert not non_defs, f"non-LabelDef in ensure_labels call: {non_defs}"
+
+    by_name = {ld.name: ld for ld in passed}
+    assert by_name["vk-ready"].color == VK_READY.color
+    assert by_name["phase:1"].color == PHASE_LABEL_COLOR
+    assert by_name["plan:2026-05-09-fixture-minimal"].color == PLAN_LABEL_COLOR
+    assert by_name["spec:vk-rebuild-state-machine-design"].color == SPEC_LABEL_COLOR
+
+    # Sort key invariant: apply() sorts by name (LabelDef has no natural order).
+    passed_names = [ld.name for ld in passed]
+    assert passed_names == sorted(passed_names)
+
+
 def test_apply_managed_labels_only_does_not_touch_operator_labels():
     """Pre-existing operator label like 'good-first-issue' must survive apply."""
     from tests.unit.fakes import FakeGhClient
