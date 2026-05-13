@@ -68,7 +68,7 @@ def _execute_one(m: Mutation, gh: GhClient, created: dict[int, str]) -> None:
     `_UnhandledMutationError` if the type isn't handled (programmer error).
     """
     if isinstance(m, RepoLabelEnsure):
-        gh.ensure_labels(m.repo, sorted(m.labels))
+        gh.ensure_labels(m.repo, sorted(m.labels, key=lambda ld: ld.name))
     elif isinstance(m, IssueCreate):
         url = gh.create_issue(m.repo, title=m.title, body=m.body, labels=m.labels)
         created[m.phase_number] = url

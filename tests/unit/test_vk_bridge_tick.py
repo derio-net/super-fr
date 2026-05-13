@@ -178,8 +178,9 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     mcp = StubMcpClient()
     result = tick(plan, gh, mcp)
 
-    assert "in-progress" in rendered.issue_per_phase[1].labels
-    assert "vk-ready" not in rendered.issue_per_phase[1].labels
+    rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
+    assert "in-progress" in rlabel_names
+    assert "vk-ready" not in rlabel_names
     assert result.synced == 0
     assert result.skipped == 1
     assert result.errors == 0
@@ -201,7 +202,8 @@ def test_tick_skipped_when_phase_already_vk_synced():
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    assert "vk-synced" in rendered.issue_per_phase[1].labels  # preservation
+    rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
+    assert "vk-synced" in rlabel_names  # preservation
     mcp = StubMcpClient()
     result = tick(plan, gh, mcp)
 

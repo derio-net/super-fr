@@ -22,7 +22,7 @@ def test_diff_undispatched_yields_create():
 
     ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
     assert len(ensures) == 1
-    assert "vk-ready" in ensures[0].labels
+    assert "vk-ready" in {ld.name for ld in ensures[0].labels}
 
 
 def test_diff_emits_issuebodychange_when_body_drifts():
@@ -110,6 +110,64 @@ def test_diff_passes_phase_to_issue_map_to_render():
     phase2_create = next(m for m in creates if m.phase_number == 2)
     assert "- Blocked by #100" in phase2_create.body
     assert "- Blocked by #1\n" not in phase2_create.body
+
+
+def test_repo_label_ensure_carries_registry_colors():
+    """RepoLabelEnsure must carry LabelDef objects with the canonical registry
+    colors / descriptions so gh.ensure_labels can paint each label correctly.
+
+    Regression: v2 dispatch was creating every label as grey (`ededed`) with
+    empty description because the diff layer passed plain strings to
+    ensure_labels and the GhClient fallback wrapped them as default-grey
+    LabelDefs.
+    """
+    from vk import parse
+    from vk.diff import RepoLabelEnsure, diff
+    from vk.labels import (
+        IN_PROGRESS,
+        MANUAL,
+        PHASE_LABEL_COLOR,
+        PLAN_LABEL_COLOR,
+        PR_READY,
+        SPEC_LABEL_COLOR,
+        VK_READY,
+        LabelDef,
+    )
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    rendered = render(plan, GhState(phases={}))
+    d = diff(rendered, GhState(phases={}), plan=plan)
+
+    ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+    assert len(ensures) == 1
+    [ensure] = ensures
+
+    # Every label flowing into ensure_labels must be a fully-typed LabelDef,
+    # not a bare string (which would force the GhClient to default to grey).
+    assert all(isinstance(ld, LabelDef) for ld in ensure.labels), (
+        f"non-LabelDef entries: {[ld for ld in ensure.labels if not isinstance(ld, LabelDef)]}"
+    )
+
+    by_name = {ld.name: ld for ld in ensure.labels}
+
+    # Templated labels resolve through the factories: registry colors.
+    assert by_name["phase:1"].color == PHASE_LABEL_COLOR
+    assert "1" in by_name["phase:1"].description
+
+    assert by_name["plan:2026-05-09-fixture-minimal"].color == PLAN_LABEL_COLOR
+    assert "fixture-minimal" in by_name["plan:2026-05-09-fixture-minimal"].description
+
+    assert by_name["spec:vk-rebuild-state-machine-design"].color == SPEC_LABEL_COLOR
+
+    # Lifecycle constant: matches the registry singleton's color exactly.
+    assert by_name["vk-ready"].color == VK_READY.color
+    assert by_name["vk-ready"].description == VK_READY.description
+
+    # Registry constants for unused lifecycle slots are not pulled in.
+    for unused in (MANUAL, IN_PROGRESS, PR_READY):
+        assert unused.name not in by_name
 
 
 def test_diff_observed_matches_rendered_yields_minimal_diff():

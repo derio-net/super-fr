@@ -32,10 +32,11 @@ def test_render_undispatched_phase_yields_create_intent():
     assert 1 in rendered.issue_per_phase
     issue = rendered.issue_per_phase[1]
     assert issue.state == "OPEN"
-    assert "spec:vk-rebuild-state-machine-design" in issue.labels
-    assert "plan:2026-05-09-fixture-minimal" in issue.labels
-    assert "phase:1" in issue.labels
-    assert "vk-ready" in issue.labels  # agentic, no assignee, no PR, not complete
+    label_names = {ld.name for ld in issue.labels}
+    assert "spec:vk-rebuild-state-machine-design" in label_names
+    assert "plan:2026-05-09-fixture-minimal" in label_names
+    assert "phase:1" in label_names
+    assert "vk-ready" in label_names  # agentic, no assignee, no PR, not complete
     assert rendered.archive_decision is False
 
 
@@ -105,7 +106,9 @@ def test_lifecycle_label_projection(obs_kwargs, expected_label):
             issue_assignees=obs_kwargs["issue_assignees"],
             linked_prs=prs,
         )
-    assert _lifecycle_label(plan.phases[0], obs) == expected_label
+    result = _lifecycle_label(plan.phases[0], obs)
+    assert result is not None
+    assert result.name == expected_label
 
 
 def test_agentic_phase_complete_when_all_steps_ticked_and_pr_merged():
@@ -319,7 +322,9 @@ def test_manual_phase_label_is_manual():
     plan = parse(multi)
     # Phase 10 in this fixture is tagged manual
     manual_phase = next(p for p in plan.phases if p.phase.tag == "manual")
-    assert _lifecycle_label(manual_phase, None) == "manual"
+    result = _lifecycle_label(manual_phase, None)
+    assert result is not None
+    assert result.name == "manual"
 
 
 def test_render_body_blocked_by_uses_issue_number_not_phase_number():
@@ -412,7 +417,7 @@ def test_render_preserves_vk_synced_label_from_observed():
         }
     )
     rendered = render(plan, obs)
-    assert "vk-synced" in rendered.issue_per_phase[1].labels
+    assert "vk-synced" in {ld.name for ld in rendered.issue_per_phase[1].labels}
 
 
 def test_render_omits_vk_synced_when_not_observed():
@@ -435,4 +440,4 @@ def test_render_omits_vk_synced_when_not_observed():
         }
     )
     rendered = render(plan, obs)
-    assert "vk-synced" not in rendered.issue_per_phase[1].labels
+    assert "vk-synced" not in {ld.name for ld in rendered.issue_per_phase[1].labels}

@@ -8,6 +8,25 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 2.1.1 — registry label colors land on GitHub again
+
+- **`vk apply` paints labels with their registry color / description.**
+  Since the v2 collapse (#101) the render → diff → apply pipeline carried
+  label names as plain strings; only the `RealGhClient` boundary wrapped
+  them into `LabelDef`, defaulting every name to grey (`ededed`) with
+  empty description. Every label `vk apply` created — `spec:<slug>`,
+  `plan:<slug>`, `phase:<N>`, `vk-ready`, `manual` — was silently
+  stranded grey, regardless of what `vk/labels.py` defined. Fix flows
+  `frozenset[LabelDef]` end-to-end: `render._phase_labels` /
+  `_lifecycle_label` return registry-resolved `LabelDef`s, `RenderedIssue
+  .labels` and `RepoLabelEnsure.labels` carry `LabelDef`, and `IssueCreate
+  .labels` / `IssueLabelChange.{add,remove}` project to name strings only
+  at the gh-wire boundary.
+- **Stranded labels self-heal on next `vk apply --yes`.** `gh label create
+  --force` is idempotent and updates color + description on existing
+  labels — so previously grey labels get repainted automatically the next
+  time their plan is reconciled.
+
 ## 2.1.0 — `vk.bridge` library + renderer phase→issue translation
 
 Release marker promoting the patch work in 2.0.5 (renderer fix) and

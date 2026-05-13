@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from vk._urls import parse_issue_url
+from vk.labels import LabelDef
 from vk.parser import Plan
 from vk.states import GhState, RenderedState
 
@@ -75,7 +76,7 @@ class IssueCreate:
 @dataclass(frozen=True)
 class RepoLabelEnsure:
     repo: str
-    labels: frozenset[str]
+    labels: frozenset[LabelDef]
 
 
 Mutation = IssueLabelChange | IssueStateChange | IssueBodyChange | IssueCreate | RepoLabelEnsure
@@ -101,10 +102,13 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
     mutations: list[Mutation] = []
     repo = plan.meta.target_repo
 
-    # Always ensure managed labels exist on the repo before any Issue ops
-    all_managed_labels: set[str] = set()
+    # Always ensure managed labels exist on the repo before any Issue ops.
+    # Rendered labels are LabelDefs (registry-colored); we filter by name
+    # against the managed-prefix allowlist and pass LabelDefs straight to
+    # the GhClient so colors/descriptions survive the trip.
+    all_managed_labels: set[LabelDef] = set()
     for issue in rendered.issue_per_phase.values():
-        all_managed_labels.update(lbl for lbl in issue.labels if _is_managed(lbl))
+        all_managed_labels.update(ld for ld in issue.labels if _is_managed(ld.name))
     if all_managed_labels:
         mutations.append(RepoLabelEnsure(repo=repo, labels=frozenset(all_managed_labels)))
 
@@ -114,13 +118,14 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
         obs = observed.phases.get(phase_n)
 
         if tracking is None or obs is None:
-            # Undispatched: create the Issue
+            # Undispatched: create the Issue. gh.create_issue takes label
+            # names — project the rendered LabelDefs to their .name.
             mutations.append(
                 IssueCreate(
                     repo=repo,
                     title=_build_title(plan, phase_n),
                     body=ri.body,
-                    labels=ri.labels,
+                    labels=frozenset(ld.name for ld in ri.labels),
                     phase_number=phase_n,
                 )
             )
@@ -128,8 +133,9 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
 
         issue_repo, issue_number = parse_issue_url(tracking)
 
-        # Label diff (managed labels only)
-        rendered_managed = frozenset(lbl for lbl in ri.labels if _is_managed(lbl))
+        # Label diff (managed labels only). Observed labels come back as
+        # plain strings from GitHub; rendered are LabelDefs — compare by name.
+        rendered_managed = frozenset(ld.name for ld in ri.labels if _is_managed(ld.name))
         observed_managed = frozenset(lbl for lbl in obs.issue_labels if _is_managed(lbl))
         to_add = rendered_managed - observed_managed
         to_remove = observed_managed - rendered_managed

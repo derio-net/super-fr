@@ -28,6 +28,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from vk.labels import LabelDef
+
 
 @dataclass(frozen=True)
 class PrObservation:
@@ -56,7 +58,7 @@ class GhState:
 @dataclass(frozen=True)
 class RenderedIssue:
     body: str
-    labels: frozenset[str]
+    labels: frozenset[LabelDef]
     state: Literal["OPEN", "CLOSED"]
 
 
