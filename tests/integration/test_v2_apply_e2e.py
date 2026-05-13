@@ -47,12 +47,19 @@ def test_vk_v2_apply_default_is_dry_run(fake_gh_factory):
     assert called.isdisjoint(write_methods), f"unexpected writes: {called & write_methods}"
 
 
-def test_vk_v2_apply_yes_actually_calls_gh(fake_gh_factory):
+def test_vk_v2_apply_yes_actually_calls_gh(fake_gh_factory, tmp_path):
     """vk apply <plan> --yes actually mutates via the fake gh."""
+    import shutil
+
     from vk.cli import app
 
+    # Apply --yes now writes `tracking_issue` back into the plan yaml, so
+    # use a tmp copy to keep the shared fixture clean for other tests.
+    plan_copy = tmp_path / "v2_plan_minimal"
+    shutil.copytree(FIXTURE, plan_copy)
+
     runner = CliRunner()
-    result = runner.invoke(app, ["apply", str(FIXTURE), "--yes"])
+    result = runner.invoke(app, ["apply", str(plan_copy), "--yes"])
     assert result.exit_code == 0, result.output
     # Should have created at least the Issue + ensured labels
     methods = [c[0] for c in fake_gh_factory.calls]

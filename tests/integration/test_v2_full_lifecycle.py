@@ -64,11 +64,9 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
     assert new_url.startswith("https://github.com/")
 
     # 3. Inject the URL back, simulate plan-side commit
-    import yaml
+    from vk import plan_ops
 
-    raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
-    raw["phase"]["tracking_issue"] = new_url
-    (plan_dir / "01.yaml").write_text(yaml.safe_dump(raw, sort_keys=False))
+    plan_ops.set_tracking_issue(plan_dir, 1, new_url)
 
     # 4. TICK the step
     tick(plan_dir, "P1.T1.S1")
@@ -130,11 +128,10 @@ def test_full_lifecycle_manual_phase(tmp_repo):
 
     # Operator finishes runbook
     new_url = list(gh.issues.keys())[0]
-    import yaml
+    from vk import plan_ops
 
-    raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
-    raw["phase"]["tracking_issue"] = f"https://github.com/{new_url[0]}/issues/{new_url[1]}"
-    (plan_dir / "01.yaml").write_text(yaml.safe_dump(raw, sort_keys=False))
+    url = f"https://github.com/{new_url[0]}/issues/{new_url[1]}"
+    plan_ops.set_tracking_issue(plan_dir, 1, url)
     complete_phase(plan_dir, 1, note="ran the runbook")
 
     # Re-apply: Issue closes

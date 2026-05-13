@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 import typer
 from rich.console import Console
 
+from vk import plan_ops
 from vk.apply import apply
 from vk.diff import (
     Diff,
@@ -36,6 +37,7 @@ from vk.diff import (
 )
 from vk.observe import observe
 from vk.parser import PlanSchemaError, parse
+from vk.plan_ops import PlanEditError
 from vk.render import render
 
 if TYPE_CHECKING:
@@ -146,21 +148,38 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
         "applied": False,
         "failures": [],
         "created_issues": {},
+        "tracking_issue_writeback_failures": [],
     }
 
     if not yes:
         return 0, "\n".join(parts), json_out
 
     result = apply(d, gh)
+    writeback_failures: list[dict[str, Any]] = []
+    for phase_n, url in result.created_issues.items():
+        try:
+            plan_ops.set_tracking_issue(plan_dir, phase_n, url)
+        except (PlanEditError, OSError, PlanSchemaError) as e:
+            writeback_failures.append({"phase_number": phase_n, "url": url, "error": str(e)})
     json_out["applied"] = True
     json_out["failures"] = [
         {"mutation": type(f.mutation).__name__, "error": f.error} for f in result.failures
     ]
     json_out["created_issues"] = {str(k): v for k, v in result.created_issues.items()}
+    json_out["tracking_issue_writeback_failures"] = writeback_failures
     if result.failures:
         parts.append(f"\n{len(result.failures)} failure(s):")
         for f in result.failures:
             parts.append(f"  {type(f.mutation).__name__}: {f.error}")
+    if writeback_failures:
+        parts.append(f"\n{len(writeback_failures)} writeback failure(s):")
+        for wf in writeback_failures:
+            parts.append(
+                f"  phase {wf['phase_number']}: writeback of "
+                f"{wf['url']} failed: {wf['error']} "
+                "(backfill `phase.tracking_issue` manually or re-run apply)"
+            )
+    if result.failures or writeback_failures:
         return 4, "\n".join(parts), json_out
     if result.created_issues:
         parts.append("\ncreated:")

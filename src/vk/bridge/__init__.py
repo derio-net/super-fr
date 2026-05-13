@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from vk import plan_ops
 from vk._urls import parse_issue_url
 from vk.apply import apply
 from vk.diff import diff
@@ -24,6 +25,7 @@ from vk.ghclient import GhClient
 from vk.labels import VK_READY, VK_SYNCED
 from vk.observe import observe
 from vk.parser import Plan, PlanSchemaError, parse
+from vk.plan_ops import PlanEditError
 from vk.render import render
 
 __all__ = ["TickResult", "VkMcpClient", "discover_plans", "tick"]
@@ -150,6 +152,11 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
     d = diff(rendered, observed, plan=plan)
     apply_result = apply(d, gh, plan=plan)
     failures: list[str] = [f.error for f in apply_result.failures]
+    for phase_n, url in apply_result.created_issues.items():
+        try:
+            plan_ops.set_tracking_issue(plan.dir, phase_n, url)
+        except (PlanEditError, OSError, PlanSchemaError) as e:
+            failures.append(f"phase {phase_n}: writeback failed: {e}")
 
     synced = 0
     eligible = 0

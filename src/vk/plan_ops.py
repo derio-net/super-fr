@@ -330,6 +330,28 @@ def complete_phase(plan_dir: Path, phase_n: int, *, note: str | None = None) -> 
     _stage(plan.repo_root, [phase_path])
 
 
+def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
+    """Persist phase.tracking_issue back to <plan_dir>/<NN>.yaml.
+
+    Idempotent on same url; overwrites on different. Stages but does
+    not commit.
+    """
+    plan = parse(plan_dir)
+    phase_path = plan_dir / f"{phase_n:02d}.yaml"
+    if not phase_path.exists():
+        raise PlanEditError(f"phase {phase_n} yaml not found: {phase_path}")
+    raw = yaml.safe_load(phase_path.read_text())
+    if raw["phase"].get("tracking_issue") == url:
+        return
+    raw["phase"]["tracking_issue"] = url
+    phase_path.write_text(_yaml_dump(raw))
+    try:
+        parse(plan_dir)
+    except PlanSchemaError as e:
+        raise PlanEditError(f"post-write schema validation failed: {e}") from e
+    _stage(plan.repo_root, [phase_path])
+
+
 # ---------------------------------------------------------------------------
 # vk.plan.rework_create / rework_add_origin / rework_list
 
