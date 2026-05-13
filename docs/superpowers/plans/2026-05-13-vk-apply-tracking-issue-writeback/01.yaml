@@ -4,7 +4,7 @@ phase:
   title: Wire tracking_issue writeback through CLI and bridge
   tag: agentic
   depends_on: []
-  tracking_issue: null
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/120
 tasks:
 - number: 1
   title: Add `set_tracking_issue` helper to `plan_ops.py`
