@@ -8,6 +8,31 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 2.1.0 — `vk.bridge` library + renderer phase→issue translation
+
+Release marker promoting the patch work in 2.0.5 (renderer fix) and
+2.0.6 (`vk.bridge` library) to the stable minor surface. No new code
+beyond the version bump and CHANGELOG.
+
+- **`render`: `- Blocked by #N` writes the predecessor's Issue number,
+  not its phase number** (shipped 2.0.5). The renderer previously wrote
+  phase numbers, which the bridge silently mis-interpreted as Issue
+  numbers — any v2 plan with cross-phase deps was wrongly gated. Renderer
+  now accepts a `phase_to_issue` map built from each phase's
+  `tracking_issue` plus the in-flight `created_issues` of the current
+  `apply()` run.
+
+- **`vk.bridge` sub-package** (shipped 2.0.6). Exposes `discover_plans()`
+  and `tick()` for cron consumers (the live bridge in agent-images). NOT
+  part of the operator CLI. Replaces hand-rolled parsing + dispatch loops
+  with the same library projection chain `vk apply` uses. Spec §"Bridge
+  integration — `vk.bridge.*`".
+
+## 2.0.6 — `vk.bridge` library
+
+- **New: `vk.bridge` sub-package.** First shipped here as a patch; see
+  the 2.1.0 entry above for the full description.
+
 ## 2.0.5 — renderer translates phase numbers to tracking-issue numbers
 
 - **`render`: `- Blocked by #N` now uses the predecessor's tracking-Issue
