@@ -1,6 +1,7 @@
 # Parallel Dispatch via Explicit Phase DAG
 
-**Status:** Complete
+**Status:** Complete — superseded and absorbed into [v2.0.0 single state machine rebuild](2026-05-06-vk-rebuild-state-machine-design.md). Per-phase `depends_on:` is now the default plan-schema field; `vk apply` does DAG-aware parallel dispatch without a separate flag. The two implementation plans below were archived after their substantive steps shipped (see "Implementation Plans" table); `vk spec status` may report them as "in progress" because per-phase `completion.at` was not backfilled — the work is genuinely done.
+**Out-of-scope (still a gap):** cross-plan / cross-repo `depends_on` references. v1 enforced plan-local deps; v2 inherits the constraint. A future spec could lift it (e.g., `depends_on: ["agent-images#42"]`).
 **Date:** 2026-04-20
 **Repos affected:** `derio-net/superpowers-for-vk`, `derio-net/agent-images` (bridge audit)
 
@@ -367,4 +368,4 @@ None at spec time. Phase A's unit tests will surface any grammar edge cases miss
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
 | Parallel Dispatch DAG Implementation Plan | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag/` | — |
-| Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag-bridge-audit.md` | Phase 2 of the superpowers-for-vk plan |
+| Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag-bridge-audit/` | Phase 2 of the superpowers-for-vk plan |

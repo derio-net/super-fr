@@ -1073,6 +1073,8 @@ state:
       ticked_at: null
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-05-13T06:58:35+00:00'
+    note: 'Superseded by v2.0.0 single-state-machine rebuild (commit 06fabef, 2026-05-10).
+      DAG dispatch via per-phase depends_on: shipped as foundational v2 behavior;
+      this plan archived after Phase 1 + P2.T1 substantive work landed.'
     observed_prs: []
