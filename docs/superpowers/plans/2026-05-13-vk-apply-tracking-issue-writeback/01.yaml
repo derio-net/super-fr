@@ -1,0 +1,498 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Wire tracking_issue writeback through CLI and bridge
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Add `set_tracking_issue` helper to `plan_ops.py`
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing tests for the happy path and idempotency of
+      `vk.plan_ops.set_tracking_issue`.
+
+      Create `tests/unit/test_plan_ops.py` (new file). Copy the
+      `tests/unit/fixtures/v2_plan_minimal/` plan into a `tmp_path` via
+      `shutil.copytree`, then `git init` + `git add -A` + `git commit -m
+      init` inside `tmp_path` so `_stage` has a repo to add to.
+
+      Tests to add:
+
+      - `test_set_tracking_issue_writes_url_and_stages`: call
+        `plan_ops.set_tracking_issue(plan_dir, 1, "https://github.com/derio-net/test/issues/42")`;
+        assert `yaml.safe_load((plan_dir / "01.yaml").read_text())["phase"]["tracking_issue"]`
+        equals the URL; assert `subprocess.run(["git", "-C", repo_root,
+        "diff", "--cached", "--name-only"], capture_output=True,
+        text=True).stdout` contains the relative path to `01.yaml`.
+      - `test_set_tracking_issue_idempotent_on_same_url`: call twice
+        with the same URL; assert the second call does not raise; assert
+        the file bytes are identical between the two calls (capture
+        `phase_path.read_bytes()` before and after the second call).
+
+      Run: `uv run pytest tests/unit/test_plan_ops.py -x -q --no-cov`
+      Expect: red — `vk.plan_ops` does not yet expose `set_tracking_issue`
+      (AttributeError at import or first call).
+  - id: P1.T1.S2
+    text: |-
+      Extend `tests/unit/test_plan_ops.py` with the remaining unit tests:
+
+      - `test_set_tracking_issue_overwrites_different_non_null_url`: write
+        URL_A, then write URL_B against the same phase. Assert no
+        exception. Assert the yaml ends up with URL_B.
+      - `test_set_tracking_issue_raises_when_phase_yaml_missing`: call
+        with `phase_n=99` (no `99.yaml` in fixture). Assert
+        `pytest.raises(PlanEditError)` with a message mentioning the
+        missing file path.
+      - `test_set_tracking_issue_works_for_manual_phase`: copy the
+        minimal fixture, then before any test call edit `01.yaml` to set
+        `phase.tag: manual` (via `yaml.safe_load` + dump). Call
+        `set_tracking_issue`; assert the same yaml-mutation outcome (URL
+        present in the file, file staged).
+      - `test_set_tracking_issue_raises_on_post_write_schema_invalid`:
+        construct a plan dir whose `_meta.yaml` validates pre-write but
+        where mutating the phase yaml is sufficient to break a schema
+        invariant. The simplest path is to monkeypatch
+        `vk.plan_ops.parse` to raise `PlanSchemaError` only on the
+        *second* call (post-write); use `unittest.mock.patch` with a
+        `side_effect` list. Assert `pytest.raises(PlanEditError)`.
+
+      Run: `uv run pytest tests/unit/test_plan_ops.py -x -q --no-cov`
+      Expect: red on all four new tests (same AttributeError).
+  - id: P1.T1.S3
+    text: |-
+      Implement `set_tracking_issue` in `src/vk/plan_ops.py`. Place it in
+      the `# vk.plan.tick / vk.plan.complete_phase` section, between
+      `complete_phase` and the `# vk.plan.rework_*` section header.
+
+      Implementation:
+
+      ```python
+      def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
+          """Persist phase.tracking_issue back to <plan_dir>/<NN>.yaml.
+
+          Idempotent on same url; overwrites on different. Stages but does
+          not commit.
+          """
+          plan = parse(plan_dir)  # pre-write validation + repo_root capture
+          phase_path = plan_dir / f"{phase_n:02d}.yaml"
+          if not phase_path.exists():
+              raise PlanEditError(f"phase {phase_n} yaml not found: {phase_path}")
+          raw = yaml.safe_load(phase_path.read_text())
+          if raw["phase"].get("tracking_issue") == url:
+              return
+          raw["phase"]["tracking_issue"] = url
+          phase_path.write_text(_yaml_dump(raw))
+          try:
+              parse(plan_dir)
+          except PlanSchemaError as e:
+              raise PlanEditError(f"post-write schema validation failed: {e}") from e
+          _stage(plan.repo_root, [phase_path])
+      ```
+
+      No other changes to `plan_ops.py`.
+  - id: P1.T1.S4
+    text: |-
+      Confirm all unit tests for the helper are green.
+
+      Run: `uv run pytest tests/unit/test_plan_ops.py -v --no-cov`
+      Expect: 6 passed.
+
+      If any test fails, fix the implementation or test until all pass
+      before proceeding to T2.
+- number: 2
+  title: Wire CLI writeback in `apply_cmd.py`
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write failing tests in `tests/unit/test_v2_apply.py` for the CLI
+      writeback. Match the existing test style — those tests call the
+      library `apply()` directly. For the CLI-level tests, invoke
+      `apply_cmd.apply_command(...)` directly with arguments, after
+      monkeypatching `apply_cmd._make_gh_client` to return a
+      `FakeGhClient` (the file's docstring at the top of `apply_cmd.py`
+      explicitly documents this as the test seam).
+
+      Tests to add:
+
+      - `test_apply_command_writes_tracking_issue_back`: with `yes=True`,
+        run apply_command against a tmp plan whose phase has
+        `tracking_issue: null`. After the call, re-read `01.yaml` and
+        assert `phase.tracking_issue` equals the URL the FakeGhClient
+        minted.
+      - `test_apply_command_second_run_emits_no_issue_create`: run
+        apply_command with `yes=True` twice in a row against the same
+        plan. Inspect the second run's dry-run preview (capture stdout
+        or json) and assert it contains zero `IssueCreate` mutations.
+      - `test_apply_command_dry_run_does_not_write_back`: run
+        apply_command with `yes=False`. Assert phase yaml still has
+        `tracking_issue: null`.
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -k writeback -x -q --no-cov`
+      Expect: red — the CLI does not yet invoke the writeback.
+  - id: P1.T2.S2
+    text: |-
+      Extend `tests/unit/test_v2_apply.py` with the remaining CLI tests:
+
+      - `test_apply_command_partial_failure_isolates_writeback`: prepare
+        a 2-phase plan. Monkeypatch `FakeGhClient.create_issue` to raise
+        for phase 2 (e.g. check the title) but succeed for phase 1.
+        Assert phase 1's yaml has the new URL; phase 2's yaml is still
+        `null`; the result's `failures` contains a phase-2 entry.
+      - `test_apply_command_writeback_failure_surfaced_in_json_and_text`:
+        monkeypatch `vk.commands.apply_cmd.plan_ops.set_tracking_issue`
+        to raise `PlanEditError("disk full")`. Run with
+        `output_format="json"`. Assert the exit code is 4 (catch
+        `typer.Exit` or check via the Typer CliRunner). Assert the JSON
+        output's `tracking_issue_writeback_failures` is non-empty with
+        the expected `phase_number`, `url`, `error` fields. Assert the
+        text output (run separately) contains a "writeback failed"
+        message naming the URL.
+      - `test_apply_command_all_isolates_writeback_per_plan`: create two
+        plans in the tmp repo. Monkeypatch `set_tracking_issue` to raise
+        only when the path contains the second plan's slug (inspect the
+        arg). Run with `all_plans=True, yes=True`. Assert the first
+        plan's yaml has its URL; the second plan's yaml does not.
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -k writeback -x -q --no-cov`
+      Expect: red on the three new tests.
+  - id: P1.T2.S3
+    text: |-
+      Add new imports to `src/vk/commands/apply_cmd.py`. In the existing
+      import block (lines 27-39), add:
+
+      ```python
+      from vk import plan_ops
+      from vk.plan_ops import PlanEditError
+      ```
+
+      Place them alphabetically with the existing `vk.*` imports — after
+      `from vk.parser import PlanSchemaError, parse` and before
+      `from vk.render import render`.
+  - id: P1.T2.S4
+    text: |-
+      Insert the writeback loop in `_apply_one`. After the existing line
+      `result = apply(d, gh)` (around line 154), add:
+
+      ```python
+      writeback_failures: list[dict[str, Any]] = []
+      for phase_n, url in result.created_issues.items():
+          try:
+              plan_ops.set_tracking_issue(plan_dir, phase_n, url)
+          except (PlanEditError, OSError, PlanSchemaError) as e:
+              writeback_failures.append(
+                  {"phase_number": phase_n, "url": url, "error": str(e)}
+              )
+      ```
+
+      Extend the failure-display block (around lines 160-163) to print
+      writeback failures after `result.failures`:
+
+      ```python
+      if writeback_failures:
+          parts.append(f"\n{len(writeback_failures)} writeback failure(s):")
+          for wf in writeback_failures:
+              parts.append(
+                  f"  phase {wf['phase_number']}: writeback of "
+                  f"{wf['url']} failed: {wf['error']} "
+                  "(backfill `phase.tracking_issue` manually or re-run apply)"
+              )
+      ```
+
+      Adjust the exit-code logic so the function returns 4 if EITHER
+      `result.failures` OR `writeback_failures` is non-empty. Replace
+      the existing `if result.failures: ... return 4, ...` block with a
+      unified check that handles both lists.
+  - id: P1.T2.S5
+    text: |-
+      Extend the JSON output in `_apply_one`. After the existing
+      `json_out["created_issues"] = ...` line, add:
+
+      ```python
+      json_out["tracking_issue_writeback_failures"] = writeback_failures
+      ```
+
+      Also initialise the key in the dry-run JSON path (around line 142)
+      as an empty list, so consumers can always read the key without
+      feature-detecting:
+
+      ```python
+      json_out: dict[str, Any] = {
+          ...
+          "created_issues": {},
+          "tracking_issue_writeback_failures": [],
+      }
+      ```
+  - id: P1.T2.S6
+    text: |-
+      Confirm all CLI tests are green.
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -v --no-cov`
+      Expect: existing tests still pass + 6 new writeback tests green.
+
+      If anything fails, fix and re-run before proceeding to T3.
+- number: 3
+  title: Wire bridge writeback in `bridge/__init__.py`
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Write failing tests in `tests/unit/test_vk_bridge_tick.py` for the
+      bridge writeback. Match the existing test pattern — `FakeGhClient`
+      plus a stub `VkMcpClient` defined inline in the test.
+
+      Tests to add:
+
+      - `test_tick_writes_tracking_issue_back_after_issue_create`: build
+        a plan whose phase 1 has `tracking_issue: null` and projects
+        `vk-ready` (the existing fixture/setup). Call
+        `tick(plan, gh, vk_mcp_stub)`. Re-read `01.yaml` and assert
+        `phase.tracking_issue` equals the URL `gh.create_issue` returned
+        for phase 1.
+      - `test_tick_writeback_failure_appended_to_failures_as_string`:
+        monkeypatch `vk.bridge.plan_ops.set_tracking_issue` to raise
+        `PlanEditError("disk full")`. Call `tick(...)`. Assert
+        `TickResult.failures` contains a string mentioning the phase
+        number and "disk full"; assert `TickResult.errors` >= 1.
+
+      Run: `uv run pytest tests/unit/test_vk_bridge_tick.py -x -q --no-cov`
+      Expect: red on the two new tests.
+  - id: P1.T3.S2
+    text: |-
+      Add imports to `src/vk/bridge/__init__.py`. Check whether
+      `plan_ops` and `PlanEditError` are imported; if not, add at the
+      top:
+
+      ```python
+      from vk import plan_ops
+      from vk.plan_ops import PlanEditError
+      ```
+
+      `PlanSchemaError` is already imported via
+      `from vk.parser import Plan, PlanSchemaError, parse` at line 26.
+
+      Insert the writeback loop in `tick()`. After the existing line
+      `apply_result = apply(d, gh, plan=plan)` (line 151), add:
+
+      ```python
+      for phase_n, url in apply_result.created_issues.items():
+          try:
+              plan_ops.set_tracking_issue(plan.dir, phase_n, url)
+          except (PlanEditError, OSError, PlanSchemaError) as e:
+              failures.append(f"phase {phase_n}: writeback failed: {e}")
+      ```
+
+      Place the loop immediately after `failures: list[str] = [...]`
+      (line 152) and before the per-phase MCP sync loop (line 154).
+  - id: P1.T3.S3
+    text: |-
+      Confirm all bridge tests are green.
+
+      Run: `uv run pytest tests/unit/test_vk_bridge_tick.py -v --no-cov`
+      Expect: existing tests still pass + 2 new writeback tests green.
+
+      If anything fails, fix and re-run before proceeding to T4.
+- number: 4
+  title: Integration test cleanup, vk-dispatch skill update, version bump, full check
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Replace the manual yaml stamp at
+      `tests/integration/test_v2_full_lifecycle.py:67-71`.
+
+      Currently the test does:
+
+      ```python
+      import yaml
+
+      raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
+      raw["phase"]["tracking_issue"] = new_url
+      (plan_dir / "01.yaml").write_text(yaml.safe_dump(raw, sort_keys=False))
+      ```
+
+      Replace with:
+
+      ```python
+      from vk import plan_ops
+      plan_ops.set_tracking_issue(plan_dir, 1, new_url)
+      ```
+
+      Remove the local `import yaml` line (line 67) and the three
+      mutation lines. Verify no other code in the test function still
+      needs `yaml` — if it does, leave the import.
+  - id: P1.T4.S2
+    text: |-
+      Replace the manual yaml stamp at
+      `tests/integration/test_v2_full_lifecycle.py:133-137` in
+      `test_full_lifecycle_manual_phase`. In that test, `new_url` is a
+      tuple `(repo, number)` from `list(gh.issues.keys())[0]`; the URL
+      must be reconstructed.
+
+      Replace:
+
+      ```python
+      import yaml
+
+      raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
+      raw["phase"]["tracking_issue"] = f"https://github.com/{new_url[0]}/issues/{new_url[1]}"
+      (plan_dir / "01.yaml").write_text(yaml.safe_dump(raw, sort_keys=False))
+      ```
+
+      With:
+
+      ```python
+      from vk import plan_ops
+      url = f"https://github.com/{new_url[0]}/issues/{new_url[1]}"
+      plan_ops.set_tracking_issue(plan_dir, 1, url)
+      ```
+  - id: P1.T4.S3
+    text: |-
+      Confirm both integration tests still pass.
+
+      Run: `uv run pytest tests/integration/test_v2_full_lifecycle.py -v --no-cov`
+      Expect: 2 passed. The whole point of this task is that the
+      production path (the new helper) produces the same yaml state as
+      the hand-written mutation did.
+  - id: P1.T4.S4
+    text: |-
+      Update `skills/vk-dispatch/SKILL.md`. In the Procedure section
+      (currently 5 numbered steps), insert a new step 5 after step 4
+      ("Relay the Issue URLs from the apply output (`created:` block)."):
+
+      ```markdown
+      5. **Commit the staged writeback.** `vk apply --yes` stages the
+         `tracking_issue` line into each affected `<plan>/<NN>.yaml`.
+         Commit and push (or open a PR — operator's convention) so the
+         bridge's checkout can see the URLs on its next tick. Suggested
+         message: `vk apply: persist tracking_issue for <plan>`.
+      ```
+
+      Renumber the existing step 5 ("On refusal, stop. Wait for
+      instructions.") to step 6.
+  - id: P1.T4.S5
+    text: |-
+      Bump the version triple from `2.1.1` to `2.1.2`.
+
+      Files (lockstep update):
+
+      - `pyproject.toml`: the line `version = "2.1.1"` in the `[project]`
+        section.
+      - `.claude-plugin/plugin.json`: the top-level `"version": "2.1.1"`.
+      - `.claude-plugin/marketplace.json`: `.plugins[0].version`
+        (`"version": "2.1.1"` inside the first plugin entry).
+
+      Run: `uv sync` to refresh `uv.lock`.
+
+      Verify: `uv run vk --version`
+      Expect: `vk 2.1.2`.
+  - id: P1.T4.S6
+    text: |-
+      Run formatters.
+
+      Run: `uv run ruff format src/ tests/`
+      Expect: any reformatted files re-stage; no substantive changes
+      beyond whitespace / quote-style normalisation. Inspect the diff to
+      confirm nothing surprising landed.
+  - id: P1.T4.S7
+    text: |-
+      Run the full check suite. All three must pass for the phase to be
+      complete.
+
+      Run: `uv run ruff check`
+      Expect: no errors.
+
+      Run: `uv run mypy src/`
+      Expect: no errors.
+
+      Run: `uv run pytest -q --no-cov`
+      Expect: full suite green (existing + new tests).
+
+      If any check fails, fix and re-run before marking the phase
+      complete.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S7:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
