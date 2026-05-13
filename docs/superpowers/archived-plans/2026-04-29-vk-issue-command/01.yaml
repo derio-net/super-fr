@@ -336,30 +336,57 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-13T07:16:34+00:00'
+      note: Shipped in v1.4.3 (commits adbbe44 + 8a6ea16, 2026-04-30); retired in
+        v2.0.0 single-state-machine rebuild (commit 12365db, 2026-05-10). The vk issue
+        create/convert subcommands no longer exist; per-phase ticks were lost during
+        v1→v2 plan-format migration but the work itself is in git history. Skip-marking
+        with this note for accurate spec status.
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-13T07:16:36+00:00'
+      note: Shipped in v1.4.3 (commits adbbe44 + 8a6ea16, 2026-04-30); retired in
+        v2.0.0 single-state-machine rebuild (commit 12365db, 2026-05-10). The vk issue
+        create/convert subcommands no longer exist; per-phase ticks were lost during
+        v1→v2 plan-format migration but the work itself is in git history. Skip-marking
+        with this note for accurate spec status.
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-13T07:16:37+00:00'
+      note: Shipped in v1.4.3 (commits adbbe44 + 8a6ea16, 2026-04-30); retired in
+        v2.0.0 single-state-machine rebuild (commit 12365db, 2026-05-10). The vk issue
+        create/convert subcommands no longer exist; per-phase ticks were lost during
+        v1→v2 plan-format migration but the work itself is in git history. Skip-marking
+        with this note for accurate spec status.
     P1.T3.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-13T07:16:39+00:00'
+      note: Shipped in v1.4.3 (commits adbbe44 + 8a6ea16, 2026-04-30); retired in
+        v2.0.0 single-state-machine rebuild (commit 12365db, 2026-05-10). The vk issue
+        create/convert subcommands no longer exist; per-phase ticks were lost during
+        v1→v2 plan-format migration but the work itself is in git history. Skip-marking
+        with this note for accurate spec status.
     P1.T3.S5:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-13T07:16:40+00:00'
+      note: Shipped in v1.4.3 (commits adbbe44 + 8a6ea16, 2026-04-30); retired in
+        v2.0.0 single-state-machine rebuild (commit 12365db, 2026-05-10). The vk issue
+        create/convert subcommands no longer exist; per-phase ticks were lost during
+        v1→v2 plan-format migration but the work itself is in git history. Skip-marking
+        with this note for accurate spec status.
     P1.T3.S6:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-13T07:16:42+00:00'
+      note: Shipped in v1.4.3 (commits adbbe44 + 8a6ea16, 2026-04-30); retired in
+        v2.0.0 single-state-machine rebuild (commit 12365db, 2026-05-10). The vk issue
+        create/convert subcommands no longer exist; per-phase ticks were lost during
+        v1→v2 plan-format migration but the work itself is in git history. Skip-marking
+        with this note for accurate spec status.
   completion:
-    at: null
-    note: null
+    at: '2026-05-13T07:16:43+00:00'
+    note: Shipped in v1.4.3 (Apr 30 2026), retired in v2.0.0 (May 10 2026). Both vk
+      issue create (Phase 1) and vk issue convert (Phase 2) shipped before being deleted
+      as part of the v1 subcommand collapse. Plan archived as superseded by the v2
+      rebuild.
     observed_prs: []
