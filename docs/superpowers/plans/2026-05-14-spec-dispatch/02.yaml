@@ -1,0 +1,853 @@
+schema_version: 2
+phase:
+  number: 2
+  title: vk.spec.dispatch + CLI + bridge library hook
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Dataclasses + `SpecValidationError`
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write a failing test for the new types. Create
+      `tests/unit/test_spec_dispatch_types.py`:
+
+      ```python
+      from vk.spec import (
+          PlanDispatchOutcome,
+          SpecDispatchResult,
+          SpecValidationError,
+      )
+
+
+      def test_outcome_states_match_spec():
+          # Spec §3.1 enumerates these exactly.
+          allowed = {
+              "dispatched", "already_dispatched", "blocked",
+              "skipped_manual", "unreachable", "parse_error",
+          }
+          import typing
+          hints = typing.get_type_hints(PlanDispatchOutcome, include_extras=True)
+          state_type = hints["state"]
+          literal_args = set(typing.get_args(state_type))
+          assert literal_args == allowed
+
+
+      def test_validation_error_is_exception():
+          assert issubclass(SpecValidationError, Exception)
+      ```
+
+      Run: `uv run pytest tests/unit/test_spec_dispatch_types.py -x -q --no-cov`
+      Expect: red — none of these exist yet.
+  - id: P2.T1.S2
+    text: |-
+      Add the new types to `src/vk/spec.py`. Place them above
+      `compute_status` and below existing dataclasses.
+
+      ```python
+      class SpecValidationError(Exception):
+          """Raised by vk.spec.dispatch when self-review fails."""
+
+
+      @dataclass(frozen=True)
+      class PlanDispatchOutcome:
+          plan_ref: PlanRef
+          state: Literal[
+              "dispatched",
+              "already_dispatched",
+              "blocked",
+              "skipped_manual",
+              "unreachable",
+              "parse_error",
+          ]
+          blocking_deps: tuple[str, ...] = ()
+          issues_created: int = 0
+          apply_failures: tuple[str, ...] = ()
+          note: str | None = None
+
+
+      @dataclass(frozen=True)
+      class SpecDispatchResult:
+          spec: SpecMeta
+          outcomes: tuple[PlanDispatchOutcome, ...]
+          dispatched: int
+          already_dispatched: int
+          blocked: int
+          errors: int
+          failures: tuple[str, ...]
+      ```
+
+      Re-run the test. Expect: green.
+- number: 2
+  title: '`_validate_spec` — all 7 grammar checks from spec §1.3'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Write tests for each validation rule. Append to
+      `tests/unit/test_spec_validation.py` (new file). Pattern:
+
+      ```python
+      import pytest
+      from vk.spec import _validate_spec, SpecValidationError, parse_spec
+
+
+      def _spec_with_table(tmp_path, table_md: str):
+          spec = tmp_path / "s.md"
+          spec.write_text(f"# s\n\n## Implementation Plans\n\n{table_md}")
+          return parse_spec(spec)
+
+
+      def test_duplicate_plan_column_rejected(tmp_path):
+          meta = _spec_with_table(tmp_path, textwrap.dedent("""
+              | Plan | Repo | File | Depends on |
+              |------|------|------|------------|
+              | a | r1 | p1/ | — |
+              | a | r1 | p2/ | — |
+          """).strip())
+          with pytest.raises(SpecValidationError, match="duplicate"):
+              _validate_spec(meta)
+
+
+      def test_unknown_ref_rejected(tmp_path): ...
+      def test_forward_ref_rejected(tmp_path): ...
+      def test_self_ref_rejected(tmp_path): ...
+      def test_manual_row_ref_rejected(tmp_path): ...
+      def test_empty_depends_on_cell_rejected(tmp_path): ...
+      def test_blank_plan_column_rejected(tmp_path): ...
+      ```
+
+      Fill in each test with the table that triggers the error and
+      an assertion that the message format matches spec §1.3 (use
+      `match=` regex). For `manual_row_ref`, the upstream row has
+      `File = —` and the downstream row depends on it.
+
+      Run: `uv run pytest tests/unit/test_spec_validation.py -x -q --no-cov`
+      Expect: red — `_validate_spec` doesn't exist.
+  - id: P2.T2.S2
+    text: |-
+      Implement `_validate_spec(spec: SpecMeta) -> None` in
+      `src/vk/spec.py`. Place above `dispatch`.
+
+      Walk `spec.plans` in order, tracking a `seen: dict[str, int]`
+      mapping Plan ID → row index. For each row, run the 7 checks
+      in this order and raise on the first failure:
+
+      1. Blank Plan column → raise with `row N is blank`.
+      2. Duplicate Plan column → raise with `appears in rows {a, b}`.
+      3. For each `ref` in `row.depends_on`:
+         - `ref == row.name` → self-ref error.
+         - `ref not in seen` → unknown ref (could be forward or
+           typo; distinguish by checking if it's in *later* rows).
+         - if found at later index → forward ref.
+         - if found and that row has `File == "—"` → manual-row ref.
+      4. Empty depends_on cell (depends_on_raw is "" or only WS, but
+         depends_on parsed empty AND raw isn't a root sentinel) →
+         empty-cell error.
+
+      Error messages must match spec §1.3 verbatim (validation table
+      in the design doc). Add this comment above the function
+      referencing the design doc section.
+
+      Re-run: `uv run pytest tests/unit/test_spec_validation.py -x -q --no-cov`
+      Expect: all 7 green.
+- number: 3
+  title: '`_load_plan_for_dispatch` helper (local or cross-repo)'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write tests for both paths.
+
+      `tests/unit/test_spec_dispatch_loader.py`:
+
+      ```python
+      def test_load_plan_local_path(tmp_path):
+          # Build a real plan in tmp_path/docs/.../plans/foo/
+          ...
+          ref = PlanRef(name="foo", repo="me/repo",
+                        file="docs/superpowers/plans/foo/",
+                        depends_on=(), depends_on_raw="—")
+          plan = _load_plan_for_dispatch(ref, tmp_path, gh=None)
+          assert plan.meta.plan == "foo"
+
+
+      def test_load_plan_cross_repo_via_gh(tmp_path):
+          gh = FakeGhClient(repo_files={
+              # ...as in T4.S1 of Phase 1...
+          })
+          ref = PlanRef(name="up", repo="derio-net/other",
+                        file="docs/superpowers/plans/up/",
+                        depends_on=(), depends_on_raw="—")
+          plan = _load_plan_for_dispatch(ref, tmp_path, gh=gh)
+          assert plan.meta.plan == "up"
+      ```
+
+      Run pytest. Expect red.
+  - id: P2.T3.S2
+    text: |-
+      Implement `_load_plan_for_dispatch` in `src/vk/spec.py`.
+
+      Reuse the cross-repo materialiser from Phase 1 T4. The
+      function:
+
+      ```python
+      def _load_plan_for_dispatch(
+          ref: PlanRef,
+          repo_root: Path,
+          gh: GhClient | None,
+      ) -> Plan:
+          local = _resolve_local_plan_dir(ref, repo_root)
+          if local and local.is_dir():
+              return parse(local)
+          if gh is None:
+              raise FileNotFoundError(
+                  f"plan {ref.name!r} not resolvable locally and no gh client"
+              )
+          tmpdir = _materialise_cross_repo_plan(ref, gh)
+          if tmpdir is None:
+              raise FileNotFoundError(
+                  f"plan {ref.name!r} not resolvable via gh contents: {ref.file}"
+              )
+          try:
+              return parse(tmpdir)
+          finally:
+              shutil.rmtree(tmpdir, ignore_errors=True)
+              # NOTE: the parse holds in-memory references; tempdir
+              # contents are no longer needed after parse returns.
+      ```
+
+      Tests green. Run: `uv run pytest tests/unit/test_spec_dispatch_loader.py -x -q --no-cov`
+- number: 4
+  title: '`vk.spec.dispatch` — core algorithm (validation + dep gate)'
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Write the happy-path test for `dispatch`. Create
+      `tests/unit/test_spec_dispatch.py`:
+
+      ```python
+      from vk.spec import dispatch, parse_spec
+
+
+      def test_dispatch_root_plan_unblocked(tmp_path, gh_with_root_plan):
+          spec = _spec_with_table(tmp_path, textwrap.dedent("""
+              | Plan | Repo | File | Depends on |
+              |------|------|------|------------|
+              | only | me/repo | docs/superpowers/plans/only/ | — |
+          """).strip())
+          # Build a local plan folder at docs/.../plans/only/
+          _scaffold_plan(tmp_path / "docs/superpowers/plans/only")
+          meta = parse_spec(spec)
+          result = dispatch(meta, gh_with_root_plan, yes=False,
+                            repo_root=tmp_path)
+          assert result.dispatched == 0   # dry-run, but issues are
+                                           # in the diff
+          assert result.outcomes[0].state == "dispatched"
+          assert result.outcomes[0].note == "(dry-run)"
+
+
+      def test_dispatch_blocked_plan_emits_blocked(...):
+          # upstream plan In Progress; downstream stays blocked
+          ...
+      ```
+
+      Run pytest. Expect: red.
+  - id: P2.T4.S2
+    text: |-
+      Implement the skeleton of `dispatch`:
+
+      ```python
+      def dispatch(
+          spec: SpecMeta,
+          gh: GhClient,
+          *,
+          yes: bool = False,
+          repo_root: Path | None = None,
+      ) -> SpecDispatchResult:
+          _validate_spec(spec)
+          repo_root = repo_root or Path.cwd()
+          status = compute_status(spec, repo_root, gh=gh)
+          by_id = {ps.plan_ref.name: ps for ps in status.plans}
+          outcomes: list[PlanDispatchOutcome] = []
+          for row in spec.plans:
+              outcome = _dispatch_one_row(row, by_id, repo_root, gh, yes=yes)
+              outcomes.append(outcome)
+              # Partial-failure stop: see spec §3.4
+              if outcome.apply_failures:
+                  break
+          return _summarise(spec, outcomes)
+      ```
+
+      Add `_dispatch_one_row` that handles all six outcome states
+      EXCEPT the apply-dispatched branch (next step). For now have
+      it return `state="blocked"` etc. for the gate cases and a
+      placeholder `state="dispatched"` for the unblocked case.
+
+      Re-run the blocked-plan test from S1. Expect: green.
+  - id: P2.T4.S3
+    text: |-
+      Implement the apply-dispatched branch inside
+      `_dispatch_one_row` per spec §3.2.
+
+      For unblocked, non-manual, reachable rows:
+
+      ```python
+      plan = _load_plan_for_dispatch(row, repo_root, gh)
+      observed = observe(plan, gh)
+      rendered = render(plan, observed)
+      d = diff(rendered, observed, plan=plan)
+
+      if not yes:
+          issues_created = sum(
+              1 for m in d.mutations if isinstance(m, IssueCreate)
+          )
+          if issues_created == 0:
+              return PlanDispatchOutcome(
+                  plan_ref=row, state="already_dispatched")
+          return PlanDispatchOutcome(
+              plan_ref=row, state="dispatched",
+              issues_created=issues_created, note="(dry-run)")
+
+      result = apply(d, gh, plan=plan)
+      issues_created = len(result.created_issues)
+      failures = tuple(f.error for f in result.failures)
+      if issues_created == 0 and not failures:
+          return PlanDispatchOutcome(
+              plan_ref=row, state="already_dispatched")
+      return PlanDispatchOutcome(
+          plan_ref=row, state="dispatched",
+          issues_created=issues_created, apply_failures=failures)
+      ```
+
+      Imports: `from vk.observe import observe`,
+      `from vk.render import render`,
+      `from vk.diff import diff, IssueCreate`,
+      `from vk.apply import apply`.
+
+      Run the happy-path test from S1. Expect green.
+- number: 5
+  title: '`dispatch` — already_dispatched + partial-failure'
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Add the already-dispatched test. The plan already has issues
+      in `observed`, so `diff` returns 0 `IssueCreate` mutations.
+
+      ```python
+      def test_dispatch_already_dispatched_plan_emits_state(tmp_path,
+                                                            gh_with_existing_issues):
+          # plan whose every phase has tracking_issue already
+          ...
+          result = dispatch(meta, gh_with_existing_issues, yes=True,
+                            repo_root=tmp_path)
+          assert result.outcomes[0].state == "already_dispatched"
+          assert result.outcomes[0].issues_created == 0
+          # No gh.create_issue calls
+          assert gh_with_existing_issues.create_issue_calls == []
+      ```
+
+      Run. Expect green (since the diff produces no IssueCreate
+      mutations, the `issues_created == 0 and not failures` branch
+      fires).
+  - id: P2.T5.S2
+    text: |-
+      Add the partial-failure stop-iteration test:
+
+      ```python
+      def test_dispatch_partial_failure_stops_iteration(tmp_path,
+                                                        gh_failing_create):
+          # Spec: A (root) → B (deps: A) → C (deps: A)
+          # gh.create_issue raises on the SECOND call (B's first issue).
+          # Expected: A.outcomes.state == "dispatched", B.state ==
+          # "dispatched" with apply_failures non-empty, C does NOT appear
+          # in outcomes (iteration stopped).
+          ...
+          result = dispatch(...)
+          outcome_names = [o.plan_ref.name for o in result.outcomes]
+          assert "C" not in outcome_names
+          assert any(o.apply_failures for o in result.outcomes)
+          assert result.errors >= 1
+      ```
+
+      Run. Expect green — the `break` in `dispatch`'s loop is what
+      ensures C is not processed.
+- number: 6
+  title: '`vk.bridge.discover_specs(repo)`'
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Write a test in `tests/unit/test_bridge_discover_specs.py`:
+
+      ```python
+      from vk.bridge import discover_specs
+
+      def test_discover_specs_walks_specs_dir(tmp_path, monkeypatch):
+          monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))
+          repo_root = tmp_path / "myrepo"
+          specs_dir = repo_root / "docs" / "superpowers" / "specs"
+          specs_dir.mkdir(parents=True)
+          (specs_dir / "alpha.md").write_text(
+              "# alpha\n\n## Implementation Plans\n\n"
+              "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+              "| a | r | p/ | — |\n"
+          )
+          (specs_dir / "beta.md").write_text(
+              "# beta\n\n## Implementation Plans\n\n"
+              "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+              "| b | r | q/ | — |\n"
+          )
+          specs = discover_specs("derio-net/myrepo")
+          titles = {s.title for s in specs}
+          assert titles == {"alpha", "beta"}
+
+
+      def test_discover_specs_missing_dir_returns_empty(tmp_path, monkeypatch):
+          monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))
+          assert discover_specs("derio-net/nonexistent") == []
+
+
+      def test_discover_specs_skips_unparseable(tmp_path, monkeypatch, caplog):
+          # bad markdown → parse_spec raises → log warning and continue
+          ...
+      ```
+
+      Run. Expect red.
+  - id: P2.T6.S2
+    text: |-
+      Implement `discover_specs` in `src/vk/bridge/__init__.py`:
+
+      ```python
+      from vk.spec import parse_spec, SpecMeta
+
+
+      def discover_specs(repo: str) -> list[SpecMeta]:
+          """Walk docs/superpowers/specs/*.md in repo's checkout."""
+          repo_root = _repo_checkout_root(repo)
+          specs_dir = repo_root / "docs" / "superpowers" / "specs"
+          if not specs_dir.is_dir():
+              return []
+          out: list[SpecMeta] = []
+          for spec_path in sorted(specs_dir.glob("*.md")):
+              try:
+                  out.append(parse_spec(spec_path))
+              except Exception as e:  # noqa: BLE001
+                  logger.warning(
+                      "bridge: skipping unparseable spec %s: %s",
+                      spec_path, e,
+                  )
+          return out
+      ```
+
+      Add `discover_specs` to `__all__`.
+
+      Run tests. Expect green.
+- number: 7
+  title: '`vk spec apply` CLI subcommand'
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      Write CLI tests. Append to `tests/unit/test_spec_cli.py`:
+
+      ```python
+      from typer.testing import CliRunner
+      from vk.cli import app
+
+      def test_spec_apply_dry_run_exits_0(tmp_path, monkeypatch):
+          # Fixture spec with one root plan present locally.
+          # No --yes flag → dry-run; exit 0; no gh mutations.
+          ...
+          result = CliRunner().invoke(app, ["spec", "apply", str(spec)])
+          assert result.exit_code == 0
+          assert "dispatched" in result.stdout or "already_dispatched" in result.stdout
+
+
+      def test_spec_apply_validation_error_exits_2(tmp_path, monkeypatch):
+          # Spec with a cycle / bad grammar → SpecValidationError → exit 2.
+          ...
+          result = CliRunner().invoke(app, ["spec", "apply", str(bad_spec)])
+          assert result.exit_code == 2
+
+
+      def test_spec_apply_unreachable_cross_repo_exits_6(...):
+          # Spec references cross-repo plan that 404s. Exit 6.
+          ...
+
+
+      def test_spec_apply_apply_failure_exits_4(...):
+          # apply() raises mid-dispatch. Exit 4.
+          ...
+
+
+      def test_spec_apply_parse_error_exits_5(...):
+          # Cross-repo plan exists but yaml is malformed. Exit 5.
+          ...
+      ```
+
+      Run. Expect red.
+  - id: P2.T7.S2
+    text: |-
+      Implement `apply_cmd` inside `spec_cmd.py`:
+
+      ```python
+      @spec_app.command("apply")
+      def apply_cmd(
+          spec_path: Path | None = typer.Argument(None, ...),
+          all_specs: bool = typer.Option(False, "--all", ...),
+          yes: bool = typer.Option(False, "--yes", ...),
+          output_format: str = typer.Option("text", "--format", ...),
+      ) -> None:
+          ...
+          gh = _make_gh_client()
+          overall_rc = 0
+          for sp in targets:
+              meta = parse_spec(sp)
+              try:
+                  result = dispatch(meta, gh, yes=yes,
+                                    repo_root=repo_root)
+              except SpecValidationError as e:
+                  err_console.print(f"spec validation: {e}")
+                  overall_rc = max(overall_rc, 2)
+                  continue
+              except PlanSchemaError as e:
+                  err_console.print(f"plan parse error: {e}")
+                  overall_rc = max(overall_rc, 5)
+                  continue
+              # Map outcome states to exit codes (spec §3.6).
+              if any(o.apply_failures for o in result.outcomes):
+                  overall_rc = max(overall_rc, 4)
+              if any(o.state == "unreachable" for o in result.outcomes):
+                  overall_rc = max(overall_rc, 6)
+              _render(result, output_format)
+          if overall_rc:
+              raise typer.Exit(overall_rc)
+      ```
+
+      Implement `_render(result, fmt)` to format text per spec §4.2
+      and JSON per spec §4.3.
+
+      Re-run the CLI tests. Expect green for each exit-code case.
+  - id: P2.T7.S3
+    text: |-
+      Add a JSON-output test:
+
+      ```python
+      def test_spec_apply_format_json_matches_schema(tmp_path, ...):
+          result = CliRunner().invoke(
+              app, ["spec", "apply", str(spec), "--format", "json"]
+          )
+          assert result.exit_code == 0
+          payload = json.loads(result.stdout)
+          assert set(payload) >= {"spec", "applied", "outcomes", "summary"}
+          assert set(payload["summary"]) == {
+              "dispatched", "already_dispatched", "blocked", "errors",
+          }
+          for outcome in payload["outcomes"]:
+              assert set(outcome) >= {
+                  "plan", "state", "issues_created", "blocking_deps",
+              }
+      ```
+
+      Expect green.
+- number: 8
+  title: '`vk spec self-review` CLI subcommand'
+  steps:
+  - id: P2.T8.S1
+    text: |-
+      Write tests in `tests/unit/test_spec_cli.py`:
+
+      ```python
+      def test_spec_self_review_clean_exits_0(tmp_path, ...):
+          # Spec with valid grammar → exit 0, prints "ok"
+          ...
+
+      def test_spec_self_review_bad_grammar_exits_2(tmp_path, ...):
+          # Spec with a cycle → exit 2, message names the offending row
+          ...
+
+      def test_spec_self_review_makes_no_gh_calls(tmp_path, monkeypatch):
+          called = []
+          monkeypatch.setattr(
+              "vk.commands.spec_cmd._make_gh_client",
+              lambda: (called.append(1), None)[1],
+          )
+          CliRunner().invoke(app, ["spec", "self-review", str(spec)])
+          assert called == []
+      ```
+
+      Run. Expect red.
+  - id: P2.T8.S2
+    text: |-
+      Implement `self_review_cmd`:
+
+      ```python
+      @spec_app.command("self-review")
+      def self_review_cmd(
+          spec_path: Path | None = typer.Argument(None, ...),
+          all_specs: bool = typer.Option(False, "--all", ...),
+      ) -> None:
+          ...
+          overall_rc = 0
+          for sp in targets:
+              meta = parse_spec(sp)
+              try:
+                  _validate_spec(meta)
+                  console.print(f"ok: {sp}")
+              except SpecValidationError as e:
+                  err_console.print(f"{sp}: {e}")
+                  overall_rc = max(overall_rc, 2)
+          if overall_rc:
+              raise typer.Exit(overall_rc)
+      ```
+
+      No gh client instantiated. Re-run tests. Expect green.
+- number: 9
+  title: Version bump 2.1.1 → 2.2.0
+  steps:
+  - id: P2.T9.S1
+    text: |-
+      Edit the three lockstep files:
+
+      - `pyproject.toml`: `version = "2.1.1"` → `version = "2.2.0"`.
+      - `.claude-plugin/plugin.json`: bump `.version` to `"2.2.0"`.
+      - `.claude-plugin/marketplace.json`: bump `.plugins[0].version` to `"2.2.0"`.
+
+      Use the Edit tool for each, with old_string containing enough
+      surrounding context to make the match unique.
+  - id: P2.T9.S2
+    text: |-
+      Sync uv.lock and verify CLI version output.
+
+      ```
+      uv sync
+      uv run vk --version
+      ```
+
+      Expect: `vk, version 2.2.0` (or whatever the existing version
+      output format prints — match it).
+
+      Also verify CHANGELOG.md gets a new entry:
+
+      ```
+      ## 2.2.0 — 2026-05-14
+
+      ### Added
+      - `vk spec apply` CLI for spec-level dispatch with plan DAG.
+        See docs/superpowers/specs/2026-05-13-spec-dispatch-design.md.
+      - `vk spec self-review` CLI for grammar validation.
+      - `vk.spec.dispatch()` library primitive.
+      - `vk.bridge.discover_specs()` for bridge cron integration.
+      - `GhClient.read_repo_file()` Protocol method (cross-repo file reads).
+      - `vk spec status` now resolves cross-repo plans via gh contents API;
+        `--no-gh` retains the offline behaviour.
+
+      ### Changed
+      - `PlanRef.depends_on` is now `tuple[str, ...]` (parsed refs);
+        free-form prose is preserved in the new `depends_on_raw` field.
+        Old specs with prose-style cells continue to render under
+        `vk spec status` unchanged.
+      ```
+
+      Use Edit on CHANGELOG.md.
+- number: 10
+  title: Skill doc updates
+  steps:
+  - id: P2.T10.S1
+    text: |-
+      Update `skills/vk-dispatch/SKILL.md`:
+
+      Add a section near the end (before any "Integration" footer):
+
+      ```
+      ## Spec-level dispatch
+
+      For specs whose plans declare inter-plan deps via the spec
+      table's `Depends on` column (grammar in
+      docs/superpowers/specs/2026-05-13-spec-dispatch-design.md §1.1),
+      use `vk spec apply <spec> --yes` instead of dispatching each
+      plan manually. The command gates downstream plans on upstream
+      completion and the bridge auto-advances on subsequent ticks.
+
+      Run `vk spec self-review <spec>` first to catch grammar errors.
+      ```
+
+      Update `skills/vk-plan/SKILL.md`:
+
+      In the "Dependency declarations" section (which today covers
+      intra-plan phase deps), add at the bottom:
+
+      ```
+      ## Spec-level (inter-plan) deps
+
+      A spec's `## Implementation Plans` table has a `Depends on`
+      column for cross-plan ordering. Grammar:
+      `—` for root, `;`-separated Plan-column refs for non-root.
+      Run `vk spec self-review <spec>` to validate.
+      ```
+
+      Use Edit on each SKILL.md.
+  - id: P2.T10.S2
+    text: |-
+      Update `skills/vk-progress/SKILL.md`:
+
+      Find the section that mentions cross-repo plans (likely under
+      "Cross-repo status" or similar). Update the note about
+      cross-repo plans showing as `Unreachable`:
+
+      ```
+      With vk ≥ 2.2.0, cross-repo plans resolve via the gh contents
+      API and report their real status. The legacy `Unreachable`
+      behaviour is available behind `vk spec status --no-gh` for
+      offline runs.
+      ```
+
+      Use Edit.
+- number: 11
+  title: Quality gates + open PR
+  steps:
+  - id: P2.T11.S1
+    text: |-
+      Run the full quality suite:
+
+      ```
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      uv run pytest -q --no-cov
+      uv run pytest --cov=src --cov-report=term-missing
+      uv run vk --version          # confirm 2.2.0
+      uv run vk plan self-review docs/superpowers/plans/2026-05-14-spec-dispatch/
+      uv run vk spec self-review docs/superpowers/specs/2026-05-13-spec-dispatch-design.md
+      ```
+
+      Expect everything clean / 2.2.0 / no validation errors.
+      Coverage ≥ 85%.
+  - id: P2.T11.S2
+    text: |-
+      Open the PR for Phase 2.
+
+      ```
+      git checkout -b feat/spec-dispatch-phase-2-dispatch-cli
+      git add src/ tests/ skills/ CHANGELOG.md \
+              pyproject.toml .claude-plugin/plugin.json \
+              .claude-plugin/marketplace.json uv.lock
+      git status
+      git commit -m "feat(spec): vk.spec.dispatch + vk spec apply / self-review CLI
+
+      Phase 2 of spec-dispatch (see 2026-05-13-spec-dispatch-design.md
+      §7.1 Phase B). Adds the dispatch primitive, the two new CLI
+      commands, the bridge library hook (vk.bridge.discover_specs),
+      and bumps the plugin to 2.2.0 across the three lockstep files.
+
+      Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+      git push -u origin feat/spec-dispatch-phase-2-dispatch-cli
+      gh pr create --title "feat(spec): vk.spec.dispatch + CLI (phase 2, v2.2.0)" \
+                   --body "Phase 2 of spec-dispatch. See spec §7.1 Phase B."
+      ```
+
+      Wait for CI green. After merge, version 2.2.0 is live on the
+      marketplace and Plan 2 (bridge integration in agent-images)
+      becomes dispatchable.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T8.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T9.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T10.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T10.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T11.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T11.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

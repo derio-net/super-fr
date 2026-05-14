@@ -1,0 +1,6 @@
+schema_version: 2
+plan: 2026-05-14-spec-dispatch
+spec: docs/superpowers/specs/2026-05-13-spec-dispatch-design.md
+target_repo: derio-net/superpowers-for-vk
+vk_version: '>=2.0.0,<3.0.0'
+created: '2026-05-14'

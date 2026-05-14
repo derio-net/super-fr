@@ -811,4 +811,5 @@ None at spec time. The following are explicit deferrals, not unknowns:
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| _to be filled in when phase plans are written via `vk-plan`_ | | | |
+| 2026-05-14-spec-dispatch | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-14-spec-dispatch/` | — |
+| 2026-05-14-spec-dispatch-bridge | `derio-net/agent-images` | `docs/superpowers/plans/2026-05-14-spec-dispatch-bridge/` | 2026-05-14-spec-dispatch |
