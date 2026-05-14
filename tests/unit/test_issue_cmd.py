@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch
+from subprocess import CalledProcessError
+from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from vk.cli import app
-from vk.commands.issue_cmd import _build_issue_body, _resolve_repo  # noqa: F401
+from vk.commands.issue_cmd import _build_issue_body, _resolve_repo
 
 runner = CliRunner()
 
@@ -76,8 +77,38 @@ class TestBuildIssueBody:
         validate_issue_body(body, phase_number=0)
 
 
+class TestResolveRepo:
+    def test_explicit_repo_returned_unchanged(self) -> None:
+        assert _resolve_repo("derio-net/frank") == "derio-net/frank"
+
+    def test_ssh_url_parsed(self) -> None:
+        mock = MagicMock()
+        mock.stdout = "git@github.com:derio-net/frank.git\n"
+        with patch("subprocess.run", return_value=mock):
+            assert _resolve_repo(None) == "derio-net/frank"
+
+    def test_https_url_parsed(self) -> None:
+        mock = MagicMock()
+        mock.stdout = "https://github.com/derio-net/frank.git\n"
+        with patch("subprocess.run", return_value=mock):
+            assert _resolve_repo(None) == "derio-net/frank"
+
+    def test_https_url_without_dotgit_suffix(self) -> None:
+        mock = MagicMock()
+        mock.stdout = "https://github.com/derio-net/frank\n"
+        with patch("subprocess.run", return_value=mock):
+            assert _resolve_repo(None) == "derio-net/frank"
+
+    def test_git_failure_raises_exit(self) -> None:
+        import click
+
+        with patch("subprocess.run", side_effect=CalledProcessError(128, "git")):
+            with pytest.raises(click.exceptions.Exit):
+                _resolve_repo(None)
+
+
 class TestCreateDryRun:
-    def test_dry_run_prints_title_and_body(self, tmp_path: Path) -> None:
+    def test_dry_run_prints_title_and_body(self) -> None:
         result = runner.invoke(
             app,
             [

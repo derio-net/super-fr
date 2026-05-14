@@ -8,12 +8,12 @@ import sys
 import typer
 from rich.console import Console
 
-from vk.commands.dispatch_body_validator import validate_issue_body
+from vk.commands.dispatch_body_validator import BodyValidationError, validate_issue_body
 
 console = Console()
 err_console = Console(stderr=True)
 
-issue_app = typer.Typer(help="Author bridge-compatible GitHub Issues.")
+issue_app = typer.Typer(help="Author bridge-compatible GitHub Issues.", no_args_is_help=True)
 
 
 def _resolve_repo(repo: str | None) -> str:
@@ -101,7 +101,7 @@ def create(
 
     try:
         validate_issue_body(body, phase_number=0)
-    except Exception as exc:
+    except BodyValidationError as exc:
         err_console.print(f"Error: generated body failed validation: {exc}")
         raise typer.Exit(1)
 
