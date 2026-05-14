@@ -18,7 +18,6 @@ import typer
 
 from vk import __version__
 from vk.commands.apply_cmd import apply_command
-from vk.commands.issue_cmd import issue_app
 from vk.commands.migrate_cmd import migrate_app
 from vk.commands.pickup_cmd import pickup_command
 from vk.commands.plan_cmd import plan_app
@@ -36,7 +35,6 @@ app.command(name="pickup", help="Output phase scope (markdown) for an agent.")(p
 app.add_typer(plan_app, name="plan")
 app.add_typer(spec_app, name="spec")
 app.add_typer(migrate_app, name="migrate")
-app.add_typer(issue_app, name="issue")
 app.command(name="skills")(skills_command)
 
 
