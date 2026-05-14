@@ -291,6 +291,244 @@ def test_apply_in_flight_dep_body_uses_predecessor_issue_number():
     assert "- Blocked by #1" not in body_used
 
 
+## ---------------------------------------------------------------------------
+## tracking_issue writeback (CLI integration)
+## ---------------------------------------------------------------------------
+
+
+def _writeback_repo(tmp_path: Path, fixture_name: str = "v2_plan_minimal") -> Path:
+    """Copy a fixture into a fresh git repo so apply_command can stage writes."""
+    import shutil
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
+    plan_dir = tmp_path / "docs" / "superpowers" / "plans" / fixture_name
+    plan_dir.parent.mkdir(parents=True)
+    src = Path(__file__).parent / "fixtures" / fixture_name
+    shutil.copytree(src, plan_dir)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"], check=True)
+    return plan_dir
+
+
+def test_apply_command_writes_tracking_issue_back(tmp_path):
+    import yaml
+
+    from tests.unit.fakes import FakeGhClient
+    from vk.commands import apply_cmd
+
+    plan_dir = _writeback_repo(tmp_path)
+    fake = FakeGhClient()
+
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=True, output_format="text")
+
+    raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
+    assert raw["phase"]["tracking_issue"], "tracking_issue should be written"
+    assert raw["phase"]["tracking_issue"].startswith("https://github.com/")
+
+
+def test_apply_command_second_run_emits_no_issue_create(tmp_path, capsys):
+    """Second `apply_command --yes` must NOT emit another IssueCreate."""
+    import json
+
+    from tests.unit.fakes import FakeGhClient
+    from vk.commands import apply_cmd
+    from vk.diff import IssueCreate
+
+    plan_dir = _writeback_repo(tmp_path)
+    fake = FakeGhClient()
+
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+        # First run — creates the Issue and writes back the URL.
+        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=True, output_format="json")
+        capsys.readouterr()  # discard first-run output
+        # Second run — must be a no-op for IssueCreate.
+        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=True, output_format="json")
+        out = capsys.readouterr().out
+
+    parsed = json.loads(out)
+    [plan_result] = parsed["plans"]
+    issue_creates = [m for m in plan_result["mutations"] if m["kind"] == IssueCreate.__name__]
+    assert issue_creates == [], f"second run should emit zero IssueCreate; got: {issue_creates}"
+
+
+def test_apply_command_dry_run_does_not_write_back(tmp_path):
+    import yaml
+
+    from tests.unit.fakes import FakeGhClient
+    from vk.commands import apply_cmd
+
+    plan_dir = _writeback_repo(tmp_path)
+    fake = FakeGhClient()
+
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=False, output_format="text")
+
+    raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
+    assert raw["phase"]["tracking_issue"] is None
+
+
+def test_apply_command_partial_failure_isolates_writeback(tmp_path):
+    """Phase 1 IssueCreate succeeds, Phase 2's fails — Phase 1 writeback lands."""
+    import yaml
+
+    from tests.unit.fakes import FakeGhClient, FakeGhError
+    from vk.commands import apply_cmd
+
+    plan_dir = _writeback_repo(tmp_path, fixture_name="v2_plan_multi_phase")
+    fake = FakeGhClient()
+
+    orig_create = fake.create_issue
+
+    def selective_create_issue(repo, *, title, body, labels):
+        if "Phase 2" in title or "Second" in title:
+            fake.attempted_mutations += 1
+            raise FakeGhError("simulated phase-2 failure")
+        return orig_create(repo, title=title, body=body, labels=labels)
+
+    fake.create_issue = selective_create_issue  # type: ignore[method-assign]
+
+    import pytest as _pytest
+    import typer
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+        with _pytest.raises(typer.Exit):
+            apply_cmd.apply_command(
+                plan_dir=plan_dir, all_plans=False, yes=True, output_format="text"
+            )
+
+    p1 = yaml.safe_load((plan_dir / "01.yaml").read_text())
+    p2 = yaml.safe_load((plan_dir / "02.yaml").read_text())
+    assert p1["phase"]["tracking_issue"], "phase 1 must have its writeback"
+    assert p1["phase"]["tracking_issue"].startswith("https://github.com/")
+    assert p2["phase"]["tracking_issue"] is None, "phase 2 must NOT have a writeback"
+
+
+def test_apply_command_writeback_failure_surfaced_in_json_and_text(tmp_path, capsys):
+    """If set_tracking_issue raises, both JSON and text output must surface it."""
+    import json
+
+    import pytest as _pytest
+    import typer
+
+    from tests.unit.fakes import FakeGhClient
+    from vk import plan_ops
+    from vk.commands import apply_cmd
+
+    plan_dir = _writeback_repo(tmp_path)
+    fake = FakeGhClient()
+
+    def boom(*a, **kw):
+        raise plan_ops.PlanEditError("disk full")
+
+    # JSON run
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+        mp.setattr(apply_cmd.plan_ops, "set_tracking_issue", boom)
+        with _pytest.raises(typer.Exit) as ei:
+            apply_cmd.apply_command(
+                plan_dir=plan_dir, all_plans=False, yes=True, output_format="json"
+            )
+        assert ei.value.exit_code == 4
+        json_out = capsys.readouterr().out
+
+    parsed = json.loads(json_out)
+    [plan_result] = parsed["plans"]
+    wf = plan_result["tracking_issue_writeback_failures"]
+    assert wf, "writeback failure must appear in JSON output"
+    assert wf[0]["error"].startswith("disk full") or "disk full" in wf[0]["error"]
+    assert "url" in wf[0]
+    assert "phase_number" in wf[0]
+
+    # Text run — fresh state (re-init fixture + fake)
+    plan_dir2 = _writeback_repo(tmp_path / "second")
+    fake2 = FakeGhClient()
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apply_cmd, "_make_gh_client", lambda: fake2)
+        mp.setattr(apply_cmd.plan_ops, "set_tracking_issue", boom)
+        with _pytest.raises(typer.Exit):
+            apply_cmd.apply_command(
+                plan_dir=plan_dir2, all_plans=False, yes=True, output_format="text"
+            )
+        text_out = capsys.readouterr().out
+
+    assert "writeback" in text_out
+    assert "disk full" in text_out
+
+
+def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
+    """`--all`: one plan's writeback failure must not nullify another's success."""
+    import shutil
+    import subprocess
+
+    import pytest as _pytest
+    import typer
+    import yaml
+
+    from tests.unit.fakes import FakeGhClient
+    from vk import plan_ops
+    from vk.commands import apply_cmd
+
+    # Build a repo with TWO plans.
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
+    plans_dir = tmp_path / "docs" / "superpowers" / "plans"
+    plans_dir.mkdir(parents=True)
+    src = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan_a = plans_dir / "plan-a-first"
+    plan_b = plans_dir / "plan-b-second"
+    shutil.copytree(src, plan_a)
+    shutil.copytree(src, plan_b)
+    # Distinct plan slugs in _meta — to keep the labels distinct on gh.
+    for plan_dir, slug in ((plan_a, "plan-a-first"), (plan_b, "plan-b-second")):
+        raw = yaml.safe_load((plan_dir / "_meta.yaml").read_text())
+        raw["plan"] = slug
+        (plan_dir / "_meta.yaml").write_text(yaml.safe_dump(raw, sort_keys=False))
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"], check=True)
+
+    monkeypatch.chdir(tmp_path)
+    fake = FakeGhClient()
+
+    real_set = plan_ops.set_tracking_issue
+
+    def conditional_set(plan_dir, phase_n, url):
+        if "plan-b-second" in str(plan_dir):
+            raise plan_ops.PlanEditError("simulated B-only writeback failure")
+        return real_set(plan_dir, phase_n, url)
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+        mp.setattr(apply_cmd.plan_ops, "set_tracking_issue", conditional_set)
+        with _pytest.raises(typer.Exit) as ei:
+            apply_cmd.apply_command(plan_dir=None, all_plans=True, yes=True, output_format="text")
+        assert ei.value.exit_code == 4
+
+    raw_a = yaml.safe_load((plan_a / "01.yaml").read_text())
+    raw_b = yaml.safe_load((plan_b / "01.yaml").read_text())
+    assert raw_a["phase"]["tracking_issue"], "plan A writeback should have landed"
+    assert raw_b["phase"]["tracking_issue"] is None, "plan B writeback must NOT have landed"
+
+
 def test_apply_accumulates_failures_continues_past_one_bad_mutation():
     """Mutation N fails — mutation N+1 still runs; failure is recorded."""
     from tests.unit.fakes import FakeGhClient

@@ -28,7 +28,12 @@ ongoing reconciliation — there's no separate "first dispatch" verb in v2.
    vk apply <plan-dir> --yes
    ```
 4. **Relay the Issue URLs** from the apply output (`created:` block).
-5. **On refusal, stop.** Wait for instructions.
+5. **Commit the staged writeback.** `vk apply --yes` stages the
+   `tracking_issue` line into each affected `<plan>/<NN>.yaml`.
+   Commit and push (or open a PR — operator's convention) so the
+   bridge's checkout can see the URLs on its next tick. Suggested
+   message: `vk apply: persist tracking_issue for <plan>`.
+6. **On refusal, stop.** Wait for instructions.
 
 For machine-parseable output:
 
