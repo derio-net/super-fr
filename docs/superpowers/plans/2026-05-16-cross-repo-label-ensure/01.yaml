@@ -4,7 +4,7 @@ phase:
   title: Group RepoLabelEnsure by destination repo
   tag: agentic
   depends_on: []
-  tracking_issue: null
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/134
 tasks:
 - number: 1
   title: Add cross-repo fixture and reproduction-first diff tests
