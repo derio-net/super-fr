@@ -83,7 +83,9 @@ spec.
 | D10 | `vk.spec.dispatch` derives outcome from `vk.apply`'s result, not a pre-flight "already-dispatched" check. | Pre-check `all(phase.tracking_issue for phase in plan.phases)` before calling apply. |
 | D11 | `GhClient.read_repo_file(repo, path, *, ref="main") → bytes` added to the Protocol. `RealGhClient` implements via `gh api ... /contents/...`. `FakeGhClient` gains an in-memory dict. | Read via `gh api git/trees/main?recursive=1`. Shell out to `git archive`. |
 | D12 | Rollout in three PRs (parser+status / dispatch+CLI / bridge integration in agent-images). Each independently revertible. | Single PR; two PRs (combine bridge with CLI). |
-| D13 | Minor version bump `2.1.1 → 2.2.0`. New user-visible CLI commands and library surface. | Patch (too small for new commands). Major (no breaking API). |
+| D13 | Minor version bump `2.1.4 → 2.2.0`. New user-visible CLI commands and library surface. | Patch (too small for new commands). Major (no breaking API). |
+| D14 | `vk.spec.dispatch` is **repo-aware**: it dispatches only plans whose `plan_ref.repo` resolves to a locally-writable checkout (`Path.cwd()` for the operator CLI; `VK_REPOS_DIR/<repo>` for the bridge). Cross-repo plans without a local writable checkout emit a new `deferred_cross_repo` outcome — they'll be dispatched the next time `dispatch` runs in a context that has that repo checked out. Same writeback story as `vk apply` and `vk.bridge.tick`: dispatch is local-fs to allow `plan_ops.set_tracking_issue` to persist. | Cross-repo dispatch via gh contents API materialised into a tempdir (writeback lost when tempdir deleted → reintroduces the duplicate-Issue regression PR #122 fixed). gh PUT contents API for upstream writeback (adds write-side gh complexity, deferred until v2.3+). |
+| D15 | After `apply()` succeeds, `vk.spec.dispatch` runs the same `plan_ops.set_tracking_issue(plan.dir, phase_n, url)` writeback loop that `apply_cmd._apply_one` and `bridge.tick` already do. Same guard against the duplicate-Issue regression. | Skip writeback (would reintroduce duplicates on every re-run). Rely on `phase:<N>` label matching in observe (orthogonal — observe also reads `phase.tracking_issue`, so writeback is still required). |
 
 ## What stays unchanged
 
@@ -307,12 +309,14 @@ distinct from generic gh errors (which raise and propagate, killing the run).
 class PlanDispatchOutcome:
     plan_ref: PlanRef
     state: Literal[
-        "dispatched",          # at least one IssueCreate mutation this run
-        "already_dispatched",  # vk.apply returned zero IssueCreate mutations
-        "blocked",             # one or more deps are not Complete
-        "skipped_manual",      # this row IS a manual-action row
-        "unreachable",         # cross-repo plan file 404 via gh contents
-        "parse_error",         # plan files exist but don't parse
+        "dispatched",            # at least one IssueCreate mutation this run
+        "already_dispatched",    # vk.apply returned zero IssueCreate mutations
+        "blocked",               # one or more deps are not Complete
+        "skipped_manual",        # this row IS a manual-action row
+        "unreachable",           # cross-repo plan file 404 via gh contents
+        "parse_error",           # plan files exist but don't parse
+        "deferred_cross_repo",   # plan's repo isn't locally writable (D14);
+                                 # the bridge picks it up when it visits that repo
     ]
     blocking_deps: tuple[str, ...] = ()      # plan IDs blocking this row
     issues_created: int = 0                  # count of new IssueCreate mutations
@@ -327,6 +331,7 @@ class SpecDispatchResult:
     dispatched: int
     already_dispatched: int
     blocked: int
+    deferred_cross_repo: int                  # plans whose repo wasn't locally writable
     errors: int                               # apply failures + unreachable + parse_error
     failures: tuple[str, ...]
 
@@ -345,9 +350,17 @@ def dispatch(
     """Dispatch every unblocked plan in `spec` that isn't already dispatched.
 
     Topologically walks the spec table (backward-only refs make table order
-    a valid topological order). For each plan whose deps are all 'Complete',
-    runs the standard observe→render→diff→apply pipeline. Cross-repo plans
-    are materialised via gh contents API.
+    a valid topological order). For each plan whose deps are all 'Complete'
+    AND whose repo resolves to a locally-writable checkout, runs the standard
+    observe→render→diff→apply pipeline followed by the same
+    `plan_ops.set_tracking_issue` writeback that `apply_cmd._apply_one` and
+    `bridge.tick` perform — guarding against the duplicate-Issue regression
+    PR #122 fixed.
+
+    Plans whose repo is not locally writable (i.e., no checkout under
+    `repo_root` for same-repo or `VK_REPOS_DIR/<repo>` for cross-repo) emit
+    a `deferred_cross_repo` outcome and wait for the bridge to dispatch them
+    when it visits their repo (D14).
 
     Validates the spec first; raises SpecValidationError on bad grammar.
     """
@@ -394,8 +407,17 @@ def dispatch(spec, gh, *, yes=False, repo_root=None):
                 plan_ref=row, state="blocked", blocking_deps=tuple(blocking)))
             continue
 
-        # Load the plan (local or cross-repo, same code path compute_status used).
-        plan = _load_plan_for_dispatch(row, repo_root, gh)
+        # Resolve plan.dir to a locally-writable checkout (D14).
+        # Same-repo: <repo_root>/<file>. Cross-repo: VK_REPOS_DIR/<repo>/<file>.
+        local_dir = _resolve_writable_plan_dir(row, repo_root)
+        if local_dir is None:
+            outcomes.append(PlanDispatchOutcome(
+                plan_ref=row, state="deferred_cross_repo",
+                note=f"no local checkout for {row.repo}; bridge will pick up"))
+            continue
+
+        # Parse from the local checkout (cross-repo plans live in VK_REPOS_DIR).
+        plan = parse(local_dir)
 
         # Run the standard pipeline — apply is idempotent.
         observed = observe(plan, gh)
@@ -416,10 +438,17 @@ def dispatch(spec, gh, *, yes=False, repo_root=None):
                     note="(dry-run)"))
             continue
 
-        # Yes: actually apply.
+        # Yes: actually apply, then write tracking_issue back per D15
+        # (same loop apply_cmd._apply_one and bridge.tick run).
         result = apply(d, gh, plan=plan)
         issues_created = len(result.created_issues)
-        failures = tuple(f.error for f in result.failures)
+        failures = list(f.error for f in result.failures)
+        for phase_n, url in result.created_issues.items():
+            try:
+                plan_ops.set_tracking_issue(plan.dir, phase_n, url)
+            except (PlanEditError, OSError, PlanSchemaError) as e:
+                failures.append(f"phase {phase_n}: writeback failed: {e}")
+        failures = tuple(failures)
 
         if issues_created == 0 and not failures:
             outcomes.append(PlanDispatchOutcome(
@@ -440,18 +469,52 @@ def dispatch(spec, gh, *, yes=False, repo_root=None):
     return _summarise(spec, outcomes)
 ```
 
+`_resolve_writable_plan_dir(ref, repo_root)`:
+
+```python
+def _resolve_writable_plan_dir(
+    ref: PlanRef,
+    repo_root: Path,
+) -> Path | None:
+    """Return a path to a locally-writable plan directory, or None.
+
+    Order of resolution:
+    1. Same-repo: `repo_root / ref.file` if it exists.
+    2. Cross-repo: `VK_REPOS_DIR / <name(ref.repo)> / ref.file` if it exists.
+       Mirrors `vk.bridge._repo_checkout_root` convention.
+    Returns None if no local checkout has the file — caller emits
+    deferred_cross_repo.
+    """
+    same_repo = (repo_root / ref.file).resolve()
+    if same_repo.is_dir():
+        return same_repo
+    base = os.environ.get("VK_REPOS_DIR")
+    if not base:
+        return None
+    name = ref.repo.split("/", 1)[1] if "/" in ref.repo else ref.repo
+    cross = (Path(base) / name / ref.file).resolve()
+    return cross if cross.is_dir() else None
+```
+
 ### 3.3 Idempotency
 
-`vk.apply` is already idempotent at the issue level: phases that already have
-a `tracking_issue` produce no `IssueCreate` mutation during diff. So
-`vk.spec.dispatch` is idempotent by composition — re-running on a fully-
-dispatched spec produces only `already_dispatched` outcomes and makes zero
-GH calls.
+`vk.apply` is idempotent at the issue level: phases whose plan yaml already
+carries a `tracking_issue` produce no `IssueCreate` mutation during diff.
+The idempotency depends on the `tracking_issue` writeback that
+`apply_cmd._apply_one` and `bridge.tick` perform after `apply()` succeeds
+(D15) — `vk.spec.dispatch` runs the same writeback loop for the same
+reason. Without it, every re-run of `dispatch` would re-emit `IssueCreate`
+for every phase — exactly the regression PR #122 (commit `421cec7`) fixed.
 
-The outcome distinction `dispatched` vs `already_dispatched` is **derived from
-apply's result**, not pre-computed. A partial-failure recovery run (where
-plan B had 3 of 5 phases dispatched on a prior tick) reports `dispatched`
-with `issues_created=2` on the next run — accurate, not misleading.
+So `vk.spec.dispatch` is idempotent by composition: re-running on a fully-
+dispatched spec produces only `already_dispatched` outcomes and makes zero
+issue-creating GH calls.
+
+The outcome distinction `dispatched` vs `already_dispatched` is **derived
+from apply's result**, not pre-computed. A partial-failure recovery run
+(where plan B had 3 of 5 phases dispatched on a prior tick) reports
+`dispatched` with `issues_created=2` on the next run — accurate, not
+misleading.
 
 ### 3.4 Partial-failure policy
 
@@ -614,18 +677,30 @@ dispatched mid-tick gets its issues created with `vk-ready` labels; the
 same tick's `discover_plans` then picks it up and runs `tick(plan)` to
 project labels and sync the VK board card.
 
-### 5.3 Cross-repo dispatch from a single repo's tick
+### 5.3 Cross-repo dispatch via the bridge's per-repo checkouts
 
-A spec lives in one repo (typically `superpowers-for-vk`). When the bridge
-visits that repo and calls `vk.spec.dispatch(spec, gh)`, the dispatcher
-creates issues in whatever repos the spec's plans reference — using
-`gh issue create --repo <target>`, which `vk.apply` already does today.
+A spec lives in one repo (typically `superpowers-for-vk`). Per D14,
+`vk.spec.dispatch` only dispatches plans whose repo has a locally-writable
+checkout — so `set_tracking_issue` can persist the writeback that prevents
+the duplicate-Issue regression PR #122 fixed.
 
-The newly-created issues in repo B get picked up on a *subsequent* bridge
-tick when the bridge visits repo B. If the bridge walks repos alphabetically
-and visits B before A (where A holds the spec), there is a one-tick delay
-(≤ 60 s) between the dispatcher creating issues in B and `discover_plans(B)`
-seeing them. Acceptable for the gated-dispatch use case.
+For the **operator** running `vk spec apply` locally, this typically means
+only same-repo plans dispatch; cross-repo plans emit `deferred_cross_repo`
+in the output (the operator sees clearly which plans need to be dispatched
+elsewhere or wait for the bridge).
+
+For the **bridge**, all managed repos are checked out under `VK_REPOS_DIR`
+already (see `vk.bridge._repo_checkout_root`). `_resolve_writable_plan_dir`
+finds the upstream plan there and dispatches normally. The writeback
+(`set_tracking_issue` staging the change in the upstream checkout) follows
+the same pattern `vk.bridge.tick` uses today — same persistence story,
+same operator-driven commit path.
+
+The newly-created issues in repo B get picked up by `discover_plans(B)`
+on the SAME bridge tick (the per-repo loop visits each repo's plans dir
+after the spec dispatch in that repo runs). Same-repo: zero-tick handoff.
+Cross-repo: when the bridge later visits repo B for its own per-repo work,
+`discover_plans(B)` picks up the new plan (≤ 60 s delay).
 
 ### 5.4 Failure isolation
 
@@ -725,9 +800,9 @@ Per `CLAUDE.md`, three-file lockstep:
 
 | File | Field | Target |
 |------|-------|--------|
-| `pyproject.toml` | `[project].version` | `2.1.1 → 2.2.0` |
-| `.claude-plugin/plugin.json` | `.version` | `2.1.1 → 2.2.0` |
-| `.claude-plugin/marketplace.json` | `.plugins[0].version` | `2.1.1 → 2.2.0` |
+| `pyproject.toml` | `[project].version` | `2.1.4 → 2.2.0` |
+| `.claude-plugin/plugin.json` | `.version` | `2.1.4 → 2.2.0` |
+| `.claude-plugin/marketplace.json` | `.plugins[0].version` | `2.1.4 → 2.2.0` |
 
 Minor bump — new user-visible CLI commands (`vk spec apply`,
 `vk spec self-review`), new library surface (`vk.spec.dispatch`,

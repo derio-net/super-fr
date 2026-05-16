@@ -28,6 +28,7 @@ tasks:
           allowed = {
               "dispatched", "already_dispatched", "blocked",
               "skipped_manual", "unreachable", "parse_error",
+              "deferred_cross_repo",
           }
           import typing
           hints = typing.get_type_hints(PlanDispatchOutcome, include_extras=True)
@@ -62,6 +63,7 @@ tasks:
               "skipped_manual",
               "unreachable",
               "parse_error",
+              "deferred_cross_repo",   # plan's repo not locally writable (D14)
           ]
           blocking_deps: tuple[str, ...] = ()
           issues_created: int = 0
@@ -76,6 +78,7 @@ tasks:
           dispatched: int
           already_dispatched: int
           blocked: int
+          deferred_cross_repo: int   # D14: plans whose repo wasn't locally writable
           errors: int
           failures: tuple[str, ...]
       ```
@@ -154,71 +157,94 @@ tasks:
       Re-run: `uv run pytest tests/unit/test_spec_validation.py -x -q --no-cov`
       Expect: all 7 green.
 - number: 3
-  title: '`_load_plan_for_dispatch` helper (local or cross-repo)'
+  title: '`_resolve_writable_plan_dir` helper (D14: dispatch needs local writable checkout)'
   steps:
   - id: P2.T3.S1
     text: |-
-      Write tests for both paths.
-
+      Write tests for the resolver in
       `tests/unit/test_spec_dispatch_loader.py`:
 
       ```python
-      def test_load_plan_local_path(tmp_path):
-          # Build a real plan in tmp_path/docs/.../plans/foo/
-          ...
+      def test_resolve_writable_same_repo(tmp_path):
+          (tmp_path / "docs/superpowers/plans/foo").mkdir(parents=True)
           ref = PlanRef(name="foo", repo="me/repo",
                         file="docs/superpowers/plans/foo/",
                         depends_on=(), depends_on_raw="—")
-          plan = _load_plan_for_dispatch(ref, tmp_path, gh=None)
-          assert plan.meta.plan == "foo"
+          got = _resolve_writable_plan_dir(ref, tmp_path)
+          assert got == (tmp_path / "docs/superpowers/plans/foo").resolve()
 
 
-      def test_load_plan_cross_repo_via_gh(tmp_path):
-          gh = FakeGhClient(repo_files={
-              # ...as in T4.S1 of Phase 1...
-          })
+      def test_resolve_writable_cross_repo_via_vk_repos_dir(tmp_path, monkeypatch):
+          monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))
+          (tmp_path / "other/docs/superpowers/plans/up").mkdir(parents=True)
           ref = PlanRef(name="up", repo="derio-net/other",
                         file="docs/superpowers/plans/up/",
                         depends_on=(), depends_on_raw="—")
-          plan = _load_plan_for_dispatch(ref, tmp_path, gh=gh)
-          assert plan.meta.plan == "up"
+          got = _resolve_writable_plan_dir(ref, tmp_path)
+          assert got == (tmp_path / "other/docs/superpowers/plans/up").resolve()
+
+
+      def test_resolve_writable_cross_repo_no_checkout_returns_none(tmp_path, monkeypatch):
+          monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))
+          # No checkout for derio-net/missing under tmp_path.
+          ref = PlanRef(name="m", repo="derio-net/missing",
+                        file="docs/superpowers/plans/m/",
+                        depends_on=(), depends_on_raw="—")
+          assert _resolve_writable_plan_dir(ref, tmp_path) is None
+
+
+      def test_resolve_writable_no_vk_repos_dir_returns_none(tmp_path, monkeypatch):
+          monkeypatch.delenv("VK_REPOS_DIR", raising=False)
+          ref = PlanRef(name="x", repo="derio-net/other",
+                        file="docs/superpowers/plans/x/",
+                        depends_on=(), depends_on_raw="—")
+          assert _resolve_writable_plan_dir(ref, tmp_path) is None
       ```
 
       Run pytest. Expect red.
   - id: P2.T3.S2
     text: |-
-      Implement `_load_plan_for_dispatch` in `src/vk/spec.py`.
-
-      Reuse the cross-repo materialiser from Phase 1 T4. The
-      function:
+      Implement `_resolve_writable_plan_dir` in `src/vk/spec.py`. This
+      replaces the v0 draft helper `_load_plan_for_dispatch` — per spec
+      D14, dispatch operates only on locally-writable checkouts so the
+      `plan_ops.set_tracking_issue` writeback can persist. Cross-repo
+      plans with no writable checkout emit `deferred_cross_repo`.
 
       ```python
-      def _load_plan_for_dispatch(
+      import os
+      from pathlib import Path
+
+
+      def _resolve_writable_plan_dir(
           ref: PlanRef,
           repo_root: Path,
-          gh: GhClient | None,
-      ) -> Plan:
-          local = _resolve_local_plan_dir(ref, repo_root)
-          if local and local.is_dir():
-              return parse(local)
-          if gh is None:
-              raise FileNotFoundError(
-                  f"plan {ref.name!r} not resolvable locally and no gh client"
-              )
-          tmpdir = _materialise_cross_repo_plan(ref, gh)
-          if tmpdir is None:
-              raise FileNotFoundError(
-                  f"plan {ref.name!r} not resolvable via gh contents: {ref.file}"
-              )
-          try:
-              return parse(tmpdir)
-          finally:
-              shutil.rmtree(tmpdir, ignore_errors=True)
-              # NOTE: the parse holds in-memory references; tempdir
-              # contents are no longer needed after parse returns.
+      ) -> Path | None:
+          """Return a locally-writable plan directory path, or None.
+
+          1. Same-repo: `repo_root / ref.file` if it's a directory.
+          2. Cross-repo: `$VK_REPOS_DIR / <name(ref.repo)> / ref.file`
+             if it's a directory. Mirrors bridge `_repo_checkout_root`.
+
+          Returns None when no local writable checkout has the dir —
+          caller emits `deferred_cross_repo` outcome.
+          """
+          same_repo = (repo_root / ref.file).resolve()
+          if same_repo.is_dir():
+              return same_repo
+          base = os.environ.get("VK_REPOS_DIR")
+          if not base:
+              return None
+          name = ref.repo.split("/", 1)[1] if "/" in ref.repo else ref.repo
+          cross = (Path(base) / name / ref.file).resolve()
+          return cross if cross.is_dir() else None
       ```
 
-      Tests green. Run: `uv run pytest tests/unit/test_spec_dispatch_loader.py -x -q --no-cov`
+      Note: this helper is for the **write side** only. The
+      cross-repo read side (`compute_status` resolving completion via gh
+      contents API) lives in Phase 1 T4 and is unchanged.
+
+      Run: `uv run pytest tests/unit/test_spec_dispatch_loader.py -x -q --no-cov`
+      Expect: all 4 green.
 - number: 4
   title: '`vk.spec.dispatch` — core algorithm (validation + dep gate)'
   steps:
@@ -289,12 +315,20 @@ tasks:
   - id: P2.T4.S3
     text: |-
       Implement the apply-dispatched branch inside
-      `_dispatch_one_row` per spec §3.2.
+      `_dispatch_one_row` per spec §3.2. Includes the
+      `plan_ops.set_tracking_issue` writeback (D15) and the
+      `_resolve_writable_plan_dir` guard (D14).
 
       For unblocked, non-manual, reachable rows:
 
       ```python
-      plan = _load_plan_for_dispatch(row, repo_root, gh)
+      local_dir = _resolve_writable_plan_dir(row, repo_root)
+      if local_dir is None:
+          return PlanDispatchOutcome(
+              plan_ref=row, state="deferred_cross_repo",
+              note=f"no local checkout for {row.repo}")
+
+      plan = parse(local_dir)
       observed = observe(plan, gh)
       rendered = render(plan, observed)
       d = diff(rendered, observed, plan=plan)
@@ -312,19 +346,34 @@ tasks:
 
       result = apply(d, gh, plan=plan)
       issues_created = len(result.created_issues)
-      failures = tuple(f.error for f in result.failures)
+      failures: list[str] = [f.error for f in result.failures]
+
+      # D15 writeback: same loop apply_cmd._apply_one and bridge.tick do.
+      # Without it, re-running dispatch would re-emit IssueCreate per
+      # phase (the duplicate-Issue regression PR #122 fixed).
+      for phase_n, url in result.created_issues.items():
+          try:
+              plan_ops.set_tracking_issue(plan.dir, phase_n, url)
+          except (PlanEditError, OSError, PlanSchemaError) as e:
+              failures.append(f"phase {phase_n}: writeback failed: {e}")
+
       if issues_created == 0 and not failures:
           return PlanDispatchOutcome(
               plan_ref=row, state="already_dispatched")
       return PlanDispatchOutcome(
           plan_ref=row, state="dispatched",
-          issues_created=issues_created, apply_failures=failures)
+          issues_created=issues_created,
+          apply_failures=tuple(failures))
       ```
 
-      Imports: `from vk.observe import observe`,
-      `from vk.render import render`,
-      `from vk.diff import diff, IssueCreate`,
-      `from vk.apply import apply`.
+      Imports needed:
+      - `from vk.observe import observe`
+      - `from vk.render import render`
+      - `from vk.diff import diff, IssueCreate`
+      - `from vk.apply import apply`
+      - `from vk import plan_ops`
+      - `from vk.plan_ops import PlanEditError`
+      - `from vk.parser import parse, PlanSchemaError`
 
       Run the happy-path test from S1. Expect green.
 - number: 5
@@ -541,7 +590,8 @@ tasks:
           payload = json.loads(result.stdout)
           assert set(payload) >= {"spec", "applied", "outcomes", "summary"}
           assert set(payload["summary"]) == {
-              "dispatched", "already_dispatched", "blocked", "errors",
+              "dispatched", "already_dispatched", "blocked",
+              "deferred_cross_repo", "errors",
           }
           for outcome in payload["outcomes"]:
               assert set(outcome) >= {
@@ -603,13 +653,13 @@ tasks:
 
       No gh client instantiated. Re-run tests. Expect green.
 - number: 9
-  title: Version bump 2.1.1 → 2.2.0
+  title: Version bump 2.1.4 → 2.2.0
   steps:
   - id: P2.T9.S1
     text: |-
       Edit the three lockstep files:
 
-      - `pyproject.toml`: `version = "2.1.1"` → `version = "2.2.0"`.
+      - `pyproject.toml`: `version = "2.1.4"` → `version = "2.2.0"`.
       - `.claude-plugin/plugin.json`: bump `.version` to `"2.2.0"`.
       - `.claude-plugin/marketplace.json`: bump `.plugins[0].version` to `"2.2.0"`.
 
@@ -630,7 +680,7 @@ tasks:
       Also verify CHANGELOG.md gets a new entry:
 
       ```
-      ## 2.2.0 — 2026-05-14
+      ## 2.2.0 — <release date in YYYY-MM-DD>
 
       ### Added
       - `vk spec apply` CLI for spec-level dispatch with plan DAG.
