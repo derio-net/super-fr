@@ -122,7 +122,7 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
         mutations.append(RepoLabelEnsure(repo=dest_repo, labels=frozenset(labels)))
 
     for phase_n, ri in rendered.issue_per_phase.items():
-        phase = next(p for p in plan.phases if p.phase.number == phase_n)
+        phase = phase_by_number[phase_n]
         tracking = phase.phase.tracking_issue
         obs = observed.phases.get(phase_n)
 

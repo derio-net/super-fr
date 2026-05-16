@@ -244,17 +244,16 @@ def test_diff_cross_repo_emits_one_ensure_per_repo():
     from vk.diff import RepoLabelEnsure, diff
     from vk.render import render
     from vk.states import GhState, PhaseObservation
+    from vk.types import PhaseDoc
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
 
     # Phase 1 → repo-B, Phase 2 → repo-B (target_repo is repo-A via fixture).
     # Phase 10 has no tracking_issue → will land on target_repo (repo-A).
-    def _with_tracking(p: object, issue_n: int) -> object:
+    def _with_tracking(p: PhaseDoc, issue_n: int) -> PhaseDoc:
         url = f"https://github.com/derio-net/repo-b/issues/{issue_n}"
-        return p.model_copy(  # type: ignore[union-attr]
-            update={"phase": p.phase.model_copy(update={"tracking_issue": url})}  # type: ignore[union-attr]
-        )
+        return p.model_copy(update={"phase": p.phase.model_copy(update={"tracking_issue": url})})
 
     new_phases = tuple(
         _with_tracking(p, 10 + p.phase.number) if p.phase.number in (1, 2) else p
@@ -283,16 +282,22 @@ def test_diff_cross_repo_emits_one_ensure_per_repo():
     d = diff(rendered, observed, plan=new_plan)
 
     ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+    assert len(ensures) == 2, f"expected 2 RepoLabelEnsure, got {[e.repo for e in ensures]}"
     repos = {e.repo for e in ensures}
 
     # repo-b gets labels for phases 1+2; target_repo gets labels for phase 10 (undispatched).
     assert "derio-net/repo-b" in repos
     assert "derio-net/superpowers-for-vk" in repos  # target_repo for phase 10
 
-    # No single ensure carries labels that belong to a different repo's phases.
+    # Each ensure carries only labels that belong to its repo's phases.
     repo_b_ensure = next(e for e in ensures if e.repo == "derio-net/repo-b")
-    assert "phase:1" in {ld.name for ld in repo_b_ensure.labels}
-    assert "phase:2" in {ld.name for ld in repo_b_ensure.labels}
+    repo_b_label_names = {ld.name for ld in repo_b_ensure.labels}
+    assert "phase:1" in repo_b_label_names
+    assert "phase:2" in repo_b_label_names
+    assert "phase:10" not in repo_b_label_names
 
     target_ensure = next(e for e in ensures if e.repo == "derio-net/superpowers-for-vk")
-    assert "phase:10" in {ld.name for ld in target_ensure.labels}
+    target_label_names = {ld.name for ld in target_ensure.labels}
+    assert "phase:10" in target_label_names
+    assert "phase:1" not in target_label_names
+    assert "phase:2" not in target_label_names
