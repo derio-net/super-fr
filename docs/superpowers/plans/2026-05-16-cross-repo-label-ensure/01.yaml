@@ -1,0 +1,703 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Group RepoLabelEnsure by destination repo
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Add cross-repo fixture and reproduction-first diff tests
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create the new cross-repo test fixture so subsequent tests have
+      a plan whose phases span two repos.
+
+      Create directory `tests/unit/fixtures/v2_plan_cross_repo/`.
+
+      Write `tests/unit/fixtures/v2_plan_cross_repo/_meta.yaml`:
+
+      ```yaml
+      schema_version: 2
+      plan: 2026-05-16-fixture-cross-repo
+      spec: docs/superpowers/specs/2026-05-16-cross-repo-label-ensure-design.md
+      target_repo: derio-net/repo-a
+      vk_version: ">=2.0.0,<3.0.0"
+      created: 2026-05-16
+      ```
+
+      Write `tests/unit/fixtures/v2_plan_cross_repo/_prose.md` (one line
+      is fine — the renderer never parses it):
+
+      ```markdown
+      # Cross-repo fixture for issue #132 regression coverage.
+      ```
+
+      Write `tests/unit/fixtures/v2_plan_cross_repo/01.yaml` (phase 1 is
+      dispatched on `repo-b`, a different repo from `target_repo`):
+
+      ```yaml
+      schema_version: 2
+      phase:
+        number: 1
+        title: Cross-repo phase
+        tag: agentic
+        depends_on: []
+        tracking_issue: https://github.com/derio-net/repo-b/issues/100
+      tasks:
+        - number: 1
+          title: Cross-repo task
+          steps:
+            - id: P1.T1.S1
+              text: Cross-repo step
+      state:
+        steps:
+          P1.T1.S1:
+            state: " "
+            ticked_at: null
+            note: null
+        completion:
+          at: null
+          note: null
+          observed_prs: []
+      ```
+
+      Write `tests/unit/fixtures/v2_plan_cross_repo/02.yaml` (phase 2 is
+      undispatched — will create on `target_repo`):
+
+      ```yaml
+      schema_version: 2
+      phase:
+        number: 2
+        title: Same-repo phase
+        tag: agentic
+        depends_on: []
+        tracking_issue: null
+      tasks:
+        - number: 1
+          title: Same-repo task
+          steps:
+            - id: P2.T1.S1
+              text: Same-repo step
+      state:
+        steps:
+          P2.T1.S1:
+            state: " "
+            ticked_at: null
+            note: null
+        completion:
+          at: null
+          note: null
+          observed_prs: []
+      ```
+
+      Verify the fixture parses cleanly:
+
+      ```
+      uv run python -c "from vk.parser import parse; from pathlib import Path; p = parse(Path('tests/unit/fixtures/v2_plan_cross_repo')); print(p.meta.plan, [ph.phase.number for ph in p.phases])"
+      ```
+
+      Expect: `2026-05-16-fixture-cross-repo [1, 2]`
+  - id: P1.T1.S2
+    text: |-
+      Write the failing diff() test that documents the bug. This is the
+      single red test in this phase; it goes green when T3 lands the fix.
+
+      Add to `tests/unit/test_v2_diff.py`:
+
+      ```python
+      def test_diff_emits_ensure_per_destination_repo():
+          """Issue #132 regression. A plan with target_repo=A and a phase
+          tracking-issue on repo B must emit RepoLabelEnsure for BOTH repos
+          so the subsequent IssueLabelChange against B doesn't fail with
+          'label not found'.
+          """
+          from pathlib import Path
+
+          from vk import parse
+          from vk.diff import RepoLabelEnsure, diff
+          from vk.render import render
+          from vk.states import GhState, PhaseObservation
+
+          FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
+          plan = parse(FIXTURE)
+
+          # Phase 1 is dispatched on repo-b; phase 2 has no tracking_issue.
+          observed = GhState(
+              phases={
+                  1: PhaseObservation(
+                      issue_state="OPEN",
+                      issue_labels=frozenset(),
+                      issue_assignees=(),
+                      linked_prs=(),
+                  )
+              }
+          )
+          rendered = render(plan, observed)
+          d = diff(rendered, observed, plan=plan)
+
+          ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+          repos = {m.repo for m in ensures}
+          assert repos == {"derio-net/repo-a", "derio-net/repo-b"}, (
+              f"expected ensures on both repos, got: {repos}"
+          )
+      ```
+
+      Run: `uv run pytest tests/unit/test_v2_diff.py::test_diff_emits_ensure_per_destination_repo -x -q --no-cov`
+      Expect: red — assertion fails with `repos == {"derio-net/repo-a"}`
+      because `diff()` still emits only one RepoLabelEnsure on
+      `target_repo`. Note the failure message and continue — this is the
+      documented bug repro.
+  - id: P1.T1.S3
+    text: |-
+      Write the passing regression-guard test that locks down the
+      already-correct per-issue routing. This test must pass before AND
+      after the fix; if it ever fails in the future, the issue-comment
+      wider-scope claim has resurfaced as a real bug.
+
+      Add to `tests/unit/test_v2_diff.py`:
+
+      ```python
+      def test_diff_routes_per_issue_mutations_to_tracking_repo():
+          """Regression guard. IssueLabelChange/IssueStateChange/IssueBodyChange
+          for a dispatched phase must carry the tracking_issue's repo,
+          never plan.meta.target_repo. Issue #132 comment thread claimed
+          these paths were broken; reading diff.py:134-171 shows they
+          already use parse_issue_url(tracking).repo. This test pins it.
+          """
+          from pathlib import Path
+
+          from vk import parse
+          from vk.diff import (
+              IssueBodyChange,
+              IssueLabelChange,
+              IssueStateChange,
+              diff,
+          )
+          from vk.render import render
+          from vk.states import GhState, PhaseObservation
+
+          FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
+          plan = parse(FIXTURE)
+
+          # Observed state for phase 1 (on repo-b): OPEN with vk-ready,
+          # body drifted, so all three mutation kinds will be emitted.
+          observed = GhState(
+              phases={
+                  1: PhaseObservation(
+                      issue_state="OPEN",
+                      issue_labels=frozenset({"vk-ready", "stale-label"}),
+                      issue_assignees=(),
+                      linked_prs=(),
+                      body="stale body that doesn't match render output",
+                  )
+              }
+          )
+          rendered = render(plan, observed)
+          d = diff(rendered, observed, plan=plan)
+
+          phase1_muts = [
+              m for m in d.mutations
+              if isinstance(m, (IssueLabelChange, IssueStateChange, IssueBodyChange))
+          ]
+          assert phase1_muts, "expected per-issue mutations for phase 1"
+          for m in phase1_muts:
+              assert m.repo == "derio-net/repo-b", (
+                  f"{type(m).__name__} routed to {m.repo!r}, expected derio-net/repo-b"
+              )
+      ```
+
+      Run: `uv run pytest tests/unit/test_v2_diff.py::test_diff_routes_per_issue_mutations_to_tracking_repo -x -q --no-cov`
+      Expect: green. This proves the comment's wider-scope claim does
+      not match the current code.
+  - id: P1.T1.S4
+    text: |-
+      Run the full unit test suite to confirm only the one documented
+      red remains.
+
+      Run: `uv run pytest tests/unit/ -q --no-cov`
+      Expect: exactly one failure —
+      `test_diff_emits_ensure_per_destination_repo`. Every other test
+      green. If any other test fails, stop and investigate; do not
+      proceed to T2 until the only red is the documented repro.
+- number: 2
+  title: Tighten FakeGhClient to model gh's "label must exist" rule
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Update `tests/unit/fakes.py` so `edit_issue_labels` raises
+      `FakeGhError` when the `add` set contains a label that has not
+      been ensured on the destination repo. Without this, the
+      cross-repo bug would not be unit-test-catchable in the future.
+
+      Edit `FakeGhClient.edit_issue_labels` (around line 99-112):
+
+      ```python
+      def edit_issue_labels(
+          self,
+          repo: str,
+          number: int,
+          *,
+          add: frozenset[str],
+          remove: frozenset[str],
+      ) -> None:
+          self._gate()
+          missing = set(add) - self.repo_labels.get(repo, set())
+          if missing:
+              raise FakeGhError(
+                  f"label(s) not found on {repo}: {sorted(missing)}"
+              )
+          self.calls.append(
+              ("edit_issue_labels", {"repo": repo, "number": number, "add": add, "remove": remove})
+          )
+          i = self.issues[(repo, number)]
+          i.labels = (i.labels | set(add)) - set(remove)
+      ```
+
+      Note: `remove` is intentionally NOT checked. Real `gh issue edit
+      --remove-label X` succeeds even if X isn't currently applied or
+      defined on the repo; matching that lenient behavior keeps the
+      fake honest.
+
+      No new tests yet — the rule fires only when an existing test
+      relies on previously-silent behavior.
+  - id: P1.T2.S2
+    text: |-
+      Update `FakeGhClient.create_issue` with the same label-existence
+      rule:
+
+      ```python
+      def create_issue(
+          self,
+          repo: str,
+          *,
+          title: str,
+          body: str,
+          labels: frozenset[str],
+      ) -> str:
+          self._gate()
+          missing = set(labels) - self.repo_labels.get(repo, set())
+          if missing:
+              raise FakeGhError(
+                  f"label(s) not found on {repo}: {sorted(missing)}"
+              )
+          self.calls.append(
+              ("create_issue", {"repo": repo, "title": title, "body": body, "labels": labels})
+          )
+          n = self._next_issue_number.get(repo, 1)
+          self._next_issue_number[repo] = n + 1
+          self.issues[(repo, n)] = FakeIssue(number=n, body=body, labels=set(labels))
+          return f"https://github.com/{repo}/issues/{n}"
+      ```
+  - id: P1.T2.S3
+    text: |-
+      Run the full unit test suite. Any test that used to pass by
+      relying on the fake's leniency will now fail. For each such
+      failure, fix the test setup — either call `ensure_labels` first
+      (the standard pattern) or preload `fake.repo_labels[repo]`
+      directly with the expected names.
+
+      Run: `uv run pytest tests/unit/ -q --no-cov`
+      Expect: the one documented red from T1 plus possibly a small
+      number of additional reds in tests that mutate labels without
+      calling `ensure_labels` first.
+
+      For each unexpected failure: read the test, locate the missing
+      precondition, and add either an `apply()` call (which emits
+      `RepoLabelEnsure` automatically) or an explicit
+      `fake.repo_labels.setdefault(repo, set()).update({...})`
+      preload. Re-run until only the documented T1 red remains.
+
+      Hypothesis from reading the fixture surface: zero or one
+      unrelated failures. If more than two unrelated tests break, stop
+      and surface the surface before proceeding — that suggests a
+      wider hidden coupling worth discussing.
+  - id: P1.T2.S4
+    text: |-
+      Final gate for T2: confirm the only red is the documented T1
+      repro.
+
+      Run: `uv run pytest tests/unit/ -q --no-cov`
+      Expect: exactly one failure
+      (`test_diff_emits_ensure_per_destination_repo`).
+- number: 3
+  title: Implement the diff() fix and add downstream regression tests
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Land the diff() fix per spec § Decision.
+
+      Edit `src/vk/diff.py`:
+
+      1. Add `from collections import defaultdict` after the existing
+         `from dataclasses import dataclass` import (group with stdlib).
+      2. Replace the leading-emission block at the current
+         `diff.py:108-113` with the per-repo grouping. Specifically,
+         replace:
+
+         ```python
+             # Always ensure managed labels exist on the repo before any Issue ops.
+             # Rendered labels are LabelDefs (registry-colored); we filter by name
+             # against the managed-prefix allowlist and pass LabelDefs straight to
+             # the GhClient so colors/descriptions survive the trip.
+             all_managed_labels: set[LabelDef] = set()
+             for issue in rendered.issue_per_phase.values():
+                 all_managed_labels.update(ld for ld in issue.labels if _is_managed(ld.name))
+             if all_managed_labels:
+                 mutations.append(RepoLabelEnsure(repo=repo, labels=frozenset(all_managed_labels)))
+         ```
+
+         With:
+
+         ```python
+             # Ensure managed labels exist on every destination repo before
+             # any Issue ops. Group by destination so cross-repo plans
+             # (target_repo != tracking_issue repo) get labels on the
+             # repo where the IssueLabelChange will land. Issue #132.
+             labels_per_repo: dict[str, set[LabelDef]] = defaultdict(set)
+             for phase_n, ri in rendered.issue_per_phase.items():
+                 phase = next(p for p in plan.phases if p.phase.number == phase_n)
+                 tracking = phase.phase.tracking_issue
+                 dest = parse_issue_url(tracking)[0] if tracking else repo
+                 labels_per_repo[dest].update(
+                     ld for ld in ri.labels if _is_managed(ld.name)
+                 )
+             for dest_repo in sorted(labels_per_repo):
+                 labels = labels_per_repo[dest_repo]
+                 if labels:
+                     mutations.append(
+                         RepoLabelEnsure(repo=dest_repo, labels=frozenset(labels))
+                     )
+         ```
+
+      Note: `repo` is the local variable already bound at the top of
+      `diff()` to `plan.meta.target_repo`. Using it for the
+      undispatched-phase fallback keeps the call shape minimal.
+
+      Run: `uv run pytest tests/unit/test_v2_diff.py::test_diff_emits_ensure_per_destination_repo -x -q --no-cov`
+      Expect: green. The previously-red test now passes.
+  - id: P1.T3.S2
+    text: |-
+      Confirm the fix didn't break any existing diff() tests.
+
+      Run: `uv run pytest tests/unit/test_v2_diff.py -q --no-cov`
+      Expect: all green. If the existing
+      `test_diff_undispatched_yields_create`,
+      `test_repo_label_ensure_carries_registry_colors`, or
+      `test_diff_observed_matches_rendered_yields_minimal_diff`
+      breaks, the fix has changed shape for single-repo plans —
+      investigate (they should all be unaffected since the union for
+      a one-repo plan is identical to today).
+  - id: P1.T3.S3
+    text: |-
+      Add the apply()-level end-to-end regression test.
+
+      Add to `tests/unit/test_v2_apply.py`:
+
+      ```python
+      def test_apply_executes_cross_repo_mutations_through_correct_repo():
+          """Issue #132 end-to-end. With the cross-repo fixture, apply()
+          must ensure labels on repo-b (where phase 1 lives), then
+          successfully apply IssueLabelChange/IssueStateChange/
+          IssueBodyChange against repo-b — never accidentally
+          target_repo (repo-a).
+          """
+          from pathlib import Path
+
+          from tests.unit.fakes import FakeGhClient
+          from vk import parse
+          from vk.apply import apply
+          from vk.diff import diff
+          from vk.render import render
+          from vk.states import GhState, PhaseObservation
+
+          FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
+          plan = parse(FIXTURE)
+
+          fake = FakeGhClient()
+          # Preload repo-b#100 as OPEN with vk-ready. Body drifted so an
+          # IssueBodyChange is emitted too.
+          fake.add_issue(
+              "derio-net/repo-b",
+              100,
+              state="OPEN",
+              labels={"vk-ready"},
+              body="stale body",
+          )
+
+          observed = GhState(
+              phases={
+                  1: PhaseObservation(
+                      issue_state="OPEN",
+                      issue_labels=frozenset({"vk-ready"}),
+                      issue_assignees=(),
+                      linked_prs=(),
+                      body="stale body",
+                  )
+              }
+          )
+          rendered = render(plan, observed)
+          d = diff(rendered, observed, plan=plan)
+          result = apply(d, fake, plan=plan)
+
+          # No failures — labels were ensured on the right repo, so
+          # every per-issue mutation against repo-b succeeded.
+          assert result.failures == (), f"unexpected failures: {result.failures}"
+
+          # repo-b#100 actually mutated:
+          issue_b = fake.issues[("derio-net/repo-b", 100)]
+          assert "vk-ready" in fake.repo_labels.get("derio-net/repo-b", set())
+          assert issue_b.body != "stale body", "body update never landed on repo-b"
+
+          # repo-a (target_repo) got its own ensure for the undispatched
+          # phase 2 that diff() emitted an IssueCreate for.
+          assert "vk-ready" in fake.repo_labels.get("derio-net/repo-a", set())
+      ```
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py::test_apply_executes_cross_repo_mutations_through_correct_repo -x -q --no-cov`
+      Expect: green.
+  - id: P1.T3.S4
+    text: |-
+      Add the bridge-tick regression test so the post-MCP
+      `gh.edit_issue_labels(issue_repo, add={"vk-synced"})` path at
+      `bridge/__init__.py:181` is covered for cross-repo plans.
+
+      Read `tests/unit/test_vk_bridge_tick.py` to find the existing
+      `_FakeVkMcpClient` or equivalent stub. If it doesn't exist as a
+      reusable helper, inline a minimal one inside the new test.
+
+      Add a new test (place near the other tick tests):
+
+      ```python
+      def test_tick_post_mcp_label_add_lands_on_tracking_repo():
+          """Issue #132 bridge regression. After apply() succeeds, the
+          bridge adds `vk-synced` to the phase Issue. For a cross-repo
+          plan that label add must target the tracking_issue's repo,
+          not plan.meta.target_repo.
+          """
+          from pathlib import Path
+
+          from tests.unit.fakes import FakeGhClient
+          from vk import parse
+          from vk.bridge import tick
+
+          class _StubMcp:
+              def __init__(self) -> None:
+                  self.created: list[dict] = []
+
+              def create_card(self, *, title, body, issue_url):
+                  self.created.append({"title": title, "issue_url": issue_url})
+                  return "card-1"
+
+              def update_card(self, *, card_id, status):
+                  pass
+
+          FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
+          plan = parse(FIXTURE)
+
+          fake = FakeGhClient()
+          fake.add_issue(
+              "derio-net/repo-b",
+              100,
+              state="OPEN",
+              labels={"vk-ready"},
+              body="",  # body drift handled by render
+          )
+
+          result = tick(plan, fake, _StubMcp())
+          assert result.errors == 0, f"unexpected failures: {result.failures}"
+
+          # The post-MCP add-vk-synced call must have landed on repo-b,
+          # never repo-a (target_repo).
+          adds_to_repo_b = [
+              c for c in fake.calls
+              if c[0] == "edit_issue_labels"
+              and c[1]["repo"] == "derio-net/repo-b"
+              and "vk-synced" in c[1]["add"]
+          ]
+          assert adds_to_repo_b, "vk-synced was never added to repo-b#100"
+
+          adds_to_repo_a = [
+              c for c in fake.calls
+              if c[0] == "edit_issue_labels"
+              and c[1]["repo"] == "derio-net/repo-a"
+              and "vk-synced" in c[1]["add"]
+          ]
+          assert not adds_to_repo_a, (
+              f"vk-synced incorrectly added to target_repo: {adds_to_repo_a}"
+          )
+      ```
+
+      Run: `uv run pytest tests/unit/test_vk_bridge_tick.py::test_tick_post_mcp_label_add_lands_on_tracking_repo -x -q --no-cov`
+      Expect: green.
+  - id: P1.T3.S5
+    text: |-
+      Final T3 gate: full unit suite is green.
+
+      Run: `uv run pytest tests/unit/ -q --no-cov`
+      Expect: all green, zero failures. If anything is red, stop and
+      investigate before moving to T4 — the fix is incomplete or has
+      a side effect we haven't covered.
+- number: 4
+  title: Version bump and full pre-push verification
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Bump the version triple per CLAUDE.md § Release / version bumping.
+
+      Edit three files, changing `2.1.4` → `2.1.5` in each:
+
+      1. `pyproject.toml` — `version = "2.1.4"` → `version = "2.1.5"`
+         under the `[project]` table.
+      2. `.claude-plugin/plugin.json` — `"version": "2.1.4"` →
+         `"version": "2.1.5"`.
+      3. `.claude-plugin/marketplace.json` — `"version": "2.1.4"` →
+         `"version": "2.1.5"` inside the first entry of `.plugins`.
+
+      Verify all three are aligned:
+
+      ```
+      grep -nE 'version' pyproject.toml | head -3
+      grep -nE 'version' .claude-plugin/plugin.json
+      grep -nE 'version' .claude-plugin/marketplace.json
+      ```
+
+      Expect: every reported `version` line shows `2.1.5`.
+  - id: P1.T4.S2
+    text: |-
+      Run `uv sync` so `uv.lock` picks up the new `vk==2.1.5` entry,
+      then confirm the CLI reports the new version.
+
+      Run: `uv sync`
+      Expect: `uv.lock` updated; no errors.
+
+      Run: `uv run vk --version`
+      Expect: `vk 2.1.5`.
+
+      Stage the lock file alongside the three version files:
+
+      ```
+      git add pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json uv.lock
+      ```
+  - id: P1.T4.S3
+    text: |-
+      Run the full pre-push verification suite per CLAUDE.md § PR
+      workflow expectations.
+
+      Run each (sequentially — easier to triage a single failure):
+
+      ```
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      uv run pytest -q --no-cov
+      ```
+
+      Expect:
+      - `ruff format` reports no files reformatted (or reformats and
+        you stage the result).
+      - `ruff check` exits 0.
+      - `mypy` exits 0.
+      - `pytest` reports all green.
+
+      If `ruff format` modifies any file, stage and re-run `ruff
+      check` before proceeding. If anything else fails, stop and fix
+      the underlying cause; do not commit broken state.
+  - id: P1.T4.S4
+    text: |-
+      Final integration check: the fix actually changes mutation
+      shape for the cross-repo fixture when run through the CLI.
+
+      Run:
+
+      ```
+      uv run vk apply tests/unit/fixtures/v2_plan_cross_repo
+      ```
+
+      Expect (in the diff preview): two `ensure labels on …` lines —
+      one for `derio-net/repo-a`, one for `derio-net/repo-b`. The
+      existing assertion test covers this, but doing it via the CLI
+      confirms the end-to-end pipeline (parse → render → diff →
+      _format_diff) is consistent with what the unit tests assert.
+      Exit code should be 0 (no `--yes`, so it's dry-run).
+
+      Note: the fixture won't pass `vk apply --yes` against real
+      GitHub because `derio-net/repo-a` / `repo-b` don't exist as
+      repos — `--dry-run` (the default) is what we want here. If the
+      CLI errors out before the diff (parse error, etc.), stop and
+      fix; don't proceed to commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

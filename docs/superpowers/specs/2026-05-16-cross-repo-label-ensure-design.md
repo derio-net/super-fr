@@ -235,3 +235,9 @@ cross-repo plan accumulates failures per tick indefinitely until someone
 manually creates labels. With the fix, the bridge becomes self-healing for
 cross-repo dispatch — a property the codebase otherwise claims (idempotent,
 deterministic, no manual intervention needed).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-05-16-cross-repo-label-ensure | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-16-cross-repo-label-ensure/` | — |
