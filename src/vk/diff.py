@@ -102,18 +102,27 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
     mutations: list[Mutation] = []
     repo = plan.meta.target_repo
 
-    # Always ensure managed labels exist on the repo before any Issue ops.
-    # Rendered labels are LabelDefs (registry-colored); we filter by name
-    # against the managed-prefix allowlist and pass LabelDefs straight to
-    # the GhClient so colors/descriptions survive the trip.
-    all_managed_labels: set[LabelDef] = set()
-    for issue in rendered.issue_per_phase.values():
-        all_managed_labels.update(ld for ld in issue.labels if _is_managed(ld.name))
-    if all_managed_labels:
-        mutations.append(RepoLabelEnsure(repo=repo, labels=frozenset(all_managed_labels)))
+    # Ensure managed labels exist on every destination repo before any Issue ops.
+    # For dispatched phases the destination is parsed from tracking_issue; for
+    # undispatched phases it is plan.meta.target_repo (where IssueCreate will fire).
+    # Rendered labels are LabelDefs (registry-colored); we filter by name against the
+    # managed-prefix allowlist and pass LabelDefs straight to the GhClient so
+    # colors/descriptions survive the trip.
+    labels_by_repo: dict[str, set[LabelDef]] = {}
+    phase_by_number = {p.phase.number: p for p in plan.phases}
+    for phase_n, issue in rendered.issue_per_phase.items():
+        managed = {ld for ld in issue.labels if _is_managed(ld.name)}
+        if not managed:
+            continue
+        phase = phase_by_number[phase_n]
+        tracking = phase.phase.tracking_issue
+        dest_repo = parse_issue_url(tracking)[0] if tracking else repo
+        labels_by_repo.setdefault(dest_repo, set()).update(managed)
+    for dest_repo, labels in sorted(labels_by_repo.items()):
+        mutations.append(RepoLabelEnsure(repo=dest_repo, labels=frozenset(labels)))
 
     for phase_n, ri in rendered.issue_per_phase.items():
-        phase = next(p for p in plan.phases if p.phase.number == phase_n)
+        phase = phase_by_number[phase_n]
         tracking = phase.phase.tracking_issue
         obs = observed.phases.get(phase_n)
 
