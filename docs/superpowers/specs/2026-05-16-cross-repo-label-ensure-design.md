@@ -67,6 +67,8 @@ Replace the existing single-emission block (`diff.py:108-113`) with a
 per-repo grouping:
 
 ```python
+from collections import defaultdict  # new import at top of diff.py
+
 labels_per_repo: dict[str, set[LabelDef]] = defaultdict(set)
 for phase_n, ri in rendered.issue_per_phase.items():
     phase = next(p for p in plan.phases if p.phase.number == phase_n)
@@ -82,6 +84,29 @@ for repo in sorted(labels_per_repo):
 
 Sorted iteration keeps mutation ordering deterministic — existing tests in
 `test_v2_diff.py` and `test_v2_apply.py` assert on mutation order.
+
+#### Behavior shifts vs. today
+
+- **Single-repo plans (the common case):** unchanged — `labels_per_repo`
+  has exactly one key (`target_repo`), so one `RepoLabelEnsure` is emitted,
+  identical to today.
+- **Mixed plans (some phases on `target_repo`, others elsewhere):** one
+  `RepoLabelEnsure` per distinct repo — fixes the bug.
+- **Fully-cross-repo plans (every phase dispatched on a foreign repo, no
+  undispatched phases):** `target_repo` no longer receives a
+  `RepoLabelEnsure`. This is strictly more correct — no phases live there,
+  so no labels are needed — but it's a behavior change to note. If an
+  operator later adds an undispatched phase to such a plan, the next
+  `apply()` re-introduces a `target_repo` ensure on its own (the new phase
+  contributes the destination), so no manual remediation is ever required.
+
+#### Malformed `tracking_issue` URLs
+
+The new grouping block calls `parse_issue_url(tracking)` for every
+dispatched phase, mirroring the existing call at `diff.py:134`. A malformed
+URL raises `ValueError` in both spots; the fix preserves that behavior
+(fail-loud at diff time rather than fail-quiet at apply time). No new
+error-handling surface introduced.
 
 ### No other code changes
 
@@ -189,10 +214,12 @@ workflow.
       against the fixture path).
 - [ ] `test_diff_emits_ensure_per_destination_repo` fails on `main`, passes
       after the `diff()` change.
-- [ ] `test_diff_routes_per_issue_mutations_to_tracking_repo` passes both
-      before and after the change.
-- [ ] `test_apply_executes_cross_repo_mutations_through_correct_repo` passes
-      both before and after the change.
+- [ ] `test_diff_routes_per_issue_mutations_to_tracking_repo` passes on
+      pre-fix HEAD (locks down already-correct routing) and continues to
+      pass after the change.
+- [ ] `test_apply_executes_cross_repo_mutations_through_correct_repo`
+      passes on pre-fix HEAD (state/body routing was already correct) and
+      continues to pass after the change.
 - [ ] `FakeGhClient` tightening: full suite still green after the fake learns
       the label-existence rule.
 - [ ] `uv run ruff format src/ tests/`, `uv run ruff check src/ tests/`,
