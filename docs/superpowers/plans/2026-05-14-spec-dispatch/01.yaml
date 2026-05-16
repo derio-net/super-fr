@@ -1,0 +1,609 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Parser grammar + cross-repo compute_status
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Extend `GhClient` Protocol with `read_repo_file`
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing tests for `FakeGhClient.read_repo_file` and the
+      Protocol shape.
+
+      Append to `tests/unit/test_ghclient.py` (create if missing):
+
+      - `test_fake_read_repo_file_returns_bytes`: instantiate
+        `FakeGhClient(repo_files={("owner/repo", "path/x.yaml", "main"): b"hello"})`;
+        assert `gh.read_repo_file("owner/repo", "path/x.yaml") == b"hello"`.
+      - `test_fake_read_repo_file_default_ref_is_main`: same fixture;
+        calling without `ref=` uses `"main"`.
+      - `test_fake_read_repo_file_404_raises_filenotfound`: empty
+        fixture; `pytest.raises(FileNotFoundError)` with the offending
+        path in the message.
+      - `test_ghclient_protocol_has_read_repo_file`: `assert hasattr(GhClient, "read_repo_file")`.
+
+      Run: `uv run pytest tests/unit/test_ghclient.py -x -q --no-cov`
+      Expect: red — `FakeGhClient` has no `read_repo_file` method
+      and the Protocol lacks the attribute.
+  - id: P1.T1.S2
+    text: |-
+      Add the Protocol method to `src/vk/ghclient.py` and implement
+      it on `FakeGhClient`.
+
+      In `src/vk/ghclient.py`, add to the `GhClient(Protocol)` class:
+
+      ```python
+      def read_repo_file(
+          self,
+          repo: str,
+          path: str,
+          *,
+          ref: str = "main",
+      ) -> bytes:
+          """Fetch a file's contents from `repo` at `ref`. Bytes; caller decodes.
+
+          Raises FileNotFoundError if the path doesn't exist at that ref.
+          Other gh failures raise the wrapper's existing error type.
+          """
+          ...
+      ```
+
+      In `tests/unit/conftest.py` (or wherever `FakeGhClient` lives —
+      grep `class FakeGhClient`), extend the constructor with
+      `repo_files: dict[tuple[str, str, str], bytes] | None = None`
+      and add:
+
+      ```python
+      def read_repo_file(self, repo, path, *, ref="main"):
+          try:
+              return self._repo_files[(repo, path, ref)]
+          except KeyError as e:
+              raise FileNotFoundError(
+                  f"FakeGhClient: no file at {repo}:{ref}:{path}"
+              ) from e
+      ```
+
+      Re-run: `uv run pytest tests/unit/test_ghclient.py -x -q --no-cov`
+      Expect: green.
+  - id: P1.T1.S3
+    text: |-
+      Implement `RealGhClient.read_repo_file` in
+      `src/vk/real_ghclient.py`.
+
+      Use `gh api repos/{repo}/contents/{path}?ref={ref}` with header
+      `Accept: application/vnd.github.raw` to return the raw bytes
+      without base64 round-trip.
+
+      ```python
+      def read_repo_file(self, repo, path, *, ref="main"):
+          proc = subprocess.run(
+              ["gh", "api",
+               f"repos/{repo}/contents/{path}",
+               "-H", "Accept: application/vnd.github.raw",
+               "-f", f"ref={ref}"],
+              capture_output=True,
+          )
+          if proc.returncode != 0:
+              stderr = proc.stderr.decode("utf-8", errors="replace")
+              if "Not Found" in stderr or "404" in stderr:
+                  raise FileNotFoundError(
+                      f"gh contents 404: {repo}:{ref}:{path}"
+                  )
+              raise RealGhClientError(f"gh api failed: {stderr.strip()}")
+          return proc.stdout
+      ```
+
+      Note: keep using the existing `_run_gh` / subprocess helper if
+      this module already has one — match local conventions. Add the
+      method directly under `create_issue` for proximity to other
+      file-shaped operations.
+
+      Add `tests/unit/test_real_ghclient.py::test_read_repo_file_404_translates_to_filenotfound`
+      using `monkeypatch.setattr(subprocess, "run", ...)` to fake a
+      404 stderr; assert `FileNotFoundError`.
+
+      Run: `uv run pytest tests/unit/test_real_ghclient.py -x -q --no-cov`
+      Expect: green.
+- number: 2
+  title: Update `PlanRef` dataclass shape for parsed deps + raw text
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write a failing test in `tests/unit/test_spec.py` (extending
+      the existing file).
+
+      ```python
+      def test_planref_carries_parsed_and_raw_depends_on(tmp_path):
+          spec = tmp_path / "spec.md"
+          spec.write_text(textwrap.dedent("""
+              # Test spec
+
+              ## Implementation Plans
+
+              | Plan | Repo | File | Depends on |
+              |------|------|------|------------|
+              | a | r1 | p1/ | — |
+              | b | r1 | p2/ | a |
+              | c | r1 | p3/ | a; b |
+          """).strip())
+          meta = parse_spec(spec)
+          assert meta.plans[0].depends_on == ()
+          assert meta.plans[0].depends_on_raw == "—"
+          assert meta.plans[1].depends_on == ("a",)
+          assert meta.plans[1].depends_on_raw == "a"
+          assert meta.plans[2].depends_on == ("a", "b")
+          assert meta.plans[2].depends_on_raw == "a; b"
+      ```
+
+      Run: `uv run pytest tests/unit/test_spec.py -x -q --no-cov`
+      Expect: red — `PlanRef.depends_on` is currently `str`, no
+      `depends_on_raw` field exists.
+  - id: P1.T2.S2
+    text: |-
+      Update `PlanRef` in `src/vk/spec.py`:
+
+      ```python
+      @dataclass(frozen=True)
+      class PlanRef:
+          name: str
+          repo: str
+          file: str
+          depends_on: tuple[str, ...]
+          depends_on_raw: str
+      ```
+
+      Hold off on changing `parse_spec` to populate these — that's
+      the next task. For now, in `parse_spec`, temporarily fill:
+      `depends_on=()`, `depends_on_raw=<cell text verbatim>`.
+
+      Re-run pytest: `uv run pytest tests/unit/test_spec.py -x -q --no-cov`
+      Expect: the new test still fails (refs not parsed yet),
+      existing tests pass.
+
+      Run mypy: `uv run mypy src/vk/spec.py`
+      Expect: any callers that read `.depends_on` as a `str` break.
+      Update them (likely just `vk.spec.compute_status` if it
+      references the field — grep first).
+- number: 3
+  title: Implement `_parse_deps_cell` + wire into `parse_spec`
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Write tests for the deps-cell parser. Append to
+      `tests/unit/test_spec.py`:
+
+      ```python
+      from vk.spec import _parse_deps_cell
+
+      @pytest.mark.parametrize("cell,expected", [
+          ("—", ()),
+          ("-", ()),
+          ("None", ()),
+          ("  —  ", ()),
+          ("a", ("a",)),
+          ("a; b", ("a", "b")),
+          (" a ;  b ; c ", ("a", "b", "c")),
+          ("plan-with-dashes; another-one", ("plan-with-dashes", "another-one")),
+          ("", ()),   # empty cell — validation catches this elsewhere
+      ])
+      def test_parse_deps_cell(cell, expected):
+          assert _parse_deps_cell(cell) == expected
+      ```
+
+      Run: `uv run pytest tests/unit/test_spec.py::test_parse_deps_cell -x -q --no-cov`
+      Expect: red — `_parse_deps_cell` doesn't exist.
+  - id: P1.T3.S2
+    text: |-
+      Implement `_parse_deps_cell` in `src/vk/spec.py`. Place it
+      above `parse_spec`.
+
+      ```python
+      _ROOT_SENTINELS: frozenset[str] = frozenset({"—", "-", "None", ""})
+
+
+      def _parse_deps_cell(cell: str) -> tuple[str, ...]:
+          """Split a Depends-on cell into ref tuple. No validation; bad
+          refs survive untouched (validation runs separately at apply
+          time, see spec §1.3)."""
+          s = cell.strip()
+          if s in _ROOT_SENTINELS:
+              return ()
+          return tuple(part.strip() for part in s.split(";") if part.strip())
+      ```
+
+      Re-run: `uv run pytest tests/unit/test_spec.py::test_parse_deps_cell -x -q --no-cov`
+      Expect: green.
+  - id: P1.T3.S3
+    text: |-
+      Wire `_parse_deps_cell` into `parse_spec`. Change the row
+      assembly to:
+
+      ```python
+      rows.append(
+          PlanRef(
+              name=cells[0],
+              repo=cells[1],
+              file=cells[2],
+              depends_on=_parse_deps_cell(cells[3]),
+              depends_on_raw=cells[3].strip(),
+          )
+      )
+      ```
+
+      Run: `uv run pytest tests/unit/test_spec.py -x -q --no-cov`
+      Expect: every test from T2.S1 + T3 passes. Then run the full
+      unit suite to check nothing else broke:
+      `uv run pytest tests/unit -x -q --no-cov`.
+
+      Add a regression test for "old specs still render under
+      `vk spec status`" — use a free-form prose cell:
+
+      ```python
+      def test_parse_spec_tolerates_freeform_depends_on(tmp_path):
+          spec = tmp_path / "old.md"
+          spec.write_text(textwrap.dedent("""
+              # Old spec
+              ## Implementation Plans
+              | Plan | Repo | File | Depends on |
+              |------|------|------|------------|
+              | a | r1 | p1/ | superpowers-for-vk plan |
+          """).strip())
+          meta = parse_spec(spec)
+          # Free-form prose split on ; produces a single (unresolvable) ref.
+          # parse_spec does NOT raise; resolution happens at validation time.
+          assert meta.plans[0].depends_on == ("superpowers-for-vk plan",)
+          assert meta.plans[0].depends_on_raw == "superpowers-for-vk plan"
+      ```
+- number: 4
+  title: Cross-repo `compute_status` via gh contents API
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Write a failing test for cross-repo plan resolution. Create
+      `tests/unit/test_spec_cross_repo.py`:
+
+      ```python
+      import textwrap
+      from pathlib import Path
+      from tests.unit.fakes import FakeGhClient   # adjust import to repo layout
+      from vk.spec import parse_spec, compute_status
+
+
+      def _make_phase_yaml(phase_n: int, complete: bool) -> bytes:
+          completion = "completion:\n  at: 2026-05-14T00:00:00Z" if complete else "completion:\n  at: null"
+          return textwrap.dedent(f"""
+              schema_version: 2
+              phase:
+                number: {phase_n}
+                title: t
+                tag: agentic
+                depends_on: []
+              tasks: []
+              state:
+                steps: {{}}
+                {completion}
+          """).strip().encode()
+
+
+      def test_compute_status_resolves_cross_repo_via_gh(tmp_path):
+          spec = tmp_path / "spec.md"
+          spec.write_text(textwrap.dedent("""
+              # Cross-repo spec
+              ## Implementation Plans
+              | Plan | Repo | File | Depends on |
+              |------|------|------|------------|
+              | upstream | derio-net/other | docs/superpowers/plans/up/ | — |
+          """).strip())
+          gh = FakeGhClient(repo_files={
+              ("derio-net/other", "docs/superpowers/plans/up/_meta.yaml", "main"):
+                  b"schema_version: 2\nplan: up\nspec: x.md\ntarget_repo: derio-net/other\nvk_version: '>=2.0.0,<3.0.0'\ncreated: '2026-05-14'\n",
+              ("derio-net/other", "docs/superpowers/plans/up/01.yaml", "main"):
+                  _make_phase_yaml(1, complete=True),
+          })
+          meta = parse_spec(spec)
+          status = compute_status(meta, tmp_path, gh=gh)
+          up = status.plans[0]
+          assert up.state == "Complete"
+          assert up.phases_complete == 1
+      ```
+
+      Run: `uv run pytest tests/unit/test_spec_cross_repo.py -x -q --no-cov`
+      Expect: red — `compute_status` signature doesn't accept `gh`,
+      and cross-repo path is not implemented.
+  - id: P1.T4.S2
+    text: |-
+      Extend `compute_status` in `src/vk/spec.py`:
+
+      ```python
+      def compute_status(
+          spec: SpecMeta,
+          repo_root: Path,
+          gh: GhClient | None = None,
+      ) -> SpecStatus:
+          ...
+      ```
+
+      In the per-row loop, when `_resolve_local_plan_dir` returns
+      None AND `gh is not None`, materialise the plan via gh
+      contents API into a temp directory and parse it from there.
+      Add a helper:
+
+      ```python
+      def _materialise_cross_repo_plan(
+          ref: PlanRef,
+          gh: GhClient,
+      ) -> Path | None:
+          """Fetch plan files from gh into a temp dir; return the
+          dir. Returns None on 404; caller emits Unreachable."""
+          import tempfile, yaml
+          tmpdir = Path(tempfile.mkdtemp(prefix="vk-spec-xrepo-"))
+          base = ref.file.rstrip("/")
+          try:
+              meta_bytes = gh.read_repo_file(ref.repo, f"{base}/_meta.yaml")
+          except FileNotFoundError:
+              return None
+          (tmpdir / "_meta.yaml").write_bytes(meta_bytes)
+          # Walk phase yamls — they're named NN.yaml (zero-padded 2-digit).
+          # We don't know N a priori; probe 01..99 and stop at first 404.
+          for n in range(1, 100):
+              fname = f"{n:02d}.yaml"
+              try:
+                  phase_bytes = gh.read_repo_file(ref.repo, f"{base}/{fname}")
+              except FileNotFoundError:
+                  if n == 1:
+                      return None  # no phase yamls — malformed plan
+                  break
+              (tmpdir / fname).write_bytes(phase_bytes)
+          # Optional _prose.md — best-effort.
+          try:
+              prose = gh.read_repo_file(ref.repo, f"{base}/_prose.md")
+              (tmpdir / "_prose.md").write_bytes(prose)
+          except FileNotFoundError:
+              pass
+          return tmpdir
+      ```
+
+      Wire into `compute_status`: when `_resolve_local_plan_dir`
+      returns None for a cross-repo row AND `gh is not None`, call
+      `_materialise_cross_repo_plan`. If it returns None → emit
+      `state="Unreachable"` with note `gh contents 404: <path>`. If
+      non-None → parse the tempdir via the existing `parse(local)`
+      flow.
+
+      Clean up the tempdir with `shutil.rmtree` after the parse, in
+      a try/finally inside the row loop. (Don't accumulate temp
+      dirs.)
+
+      Re-run: `uv run pytest tests/unit/test_spec_cross_repo.py -x -q --no-cov`
+      Expect: green.
+  - id: P1.T4.S3
+    text: |-
+      Add a regression test for the 404 → Unreachable path.
+
+      Append to `tests/unit/test_spec_cross_repo.py`:
+
+      ```python
+      def test_compute_status_cross_repo_404_emits_unreachable(tmp_path):
+          spec = tmp_path / "spec.md"
+          spec.write_text(textwrap.dedent("""
+              # spec
+              ## Implementation Plans
+              | Plan | Repo | File | Depends on |
+              |------|------|------|------------|
+              | gone | derio-net/other | docs/superpowers/plans/gone/ | — |
+          """).strip())
+          gh = FakeGhClient(repo_files={})   # empty — every read 404s
+          meta = parse_spec(spec)
+          status = compute_status(meta, tmp_path, gh=gh)
+          gone = status.plans[0]
+          assert gone.state == "Unreachable"
+          assert "404" in (gone.note or "")
+      ```
+
+      Also verify the no-gh path stays as today (returns
+      Unreachable without 404 in the note):
+
+      ```python
+      def test_compute_status_cross_repo_no_gh_emits_unreachable(tmp_path):
+          spec = tmp_path / "spec.md"
+          spec.write_text(textwrap.dedent("""
+              # spec
+              ## Implementation Plans
+              | Plan | Repo | File | Depends on |
+              |------|------|------|------------|
+              | x | derio-net/other | docs/superpowers/plans/x/ | — |
+          """).strip())
+          meta = parse_spec(spec)
+          status = compute_status(meta, tmp_path, gh=None)   # explicit
+          assert status.plans[0].state == "Unreachable"
+      ```
+
+      Run all spec tests:
+      `uv run pytest tests/unit/test_spec.py tests/unit/test_spec_cross_repo.py -x -q --no-cov`
+      Expect: green.
+- number: 5
+  title: Update `vk spec status` CLI for cross-repo + `--no-gh`
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Update `src/vk/commands/spec_cmd.py::status_cmd` to
+      instantiate a gh client and pass it to `compute_status`.
+
+      Mirror the factory pattern from `apply_cmd._make_gh_client`:
+
+      ```python
+      def _make_gh_client() -> GhClient:
+          from vk.real_ghclient import RealGhClient
+          return RealGhClient()
+
+
+      @spec_app.command("status")
+      def status_cmd(
+          spec_path: Path | None = typer.Argument(None, ...),
+          all_specs: bool = typer.Option(False, "--all", ...),
+          no_gh: bool = typer.Option(
+              False,
+              "--no-gh",
+              help="Skip cross-repo gh lookups; cross-repo plans show as Unreachable.",
+          ),
+      ) -> None:
+          ...
+          gh = None if no_gh else _make_gh_client()
+          for sp in targets:
+              meta = parse_spec(sp)
+              st = compute_status(meta, repo_root, gh=gh)
+              blocks.append(render_status_md(st))
+          ...
+      ```
+
+      Add unit test in `tests/unit/test_spec_cli.py` (create or
+      extend) that monkeypatches `_make_gh_client` to return a
+      `FakeGhClient` and runs the CLI via `CliRunner`. Assert that
+      cross-repo plans no longer show as Unreachable when the fake
+      has their files.
+  - id: P1.T5.S2
+    text: |-
+      Add an integration test for `--no-gh` mode:
+
+      `tests/integration/test_spec_cli_no_gh.py`:
+
+      ```python
+      from typer.testing import CliRunner
+      from vk.cli import app
+
+      def test_spec_status_no_gh_does_not_instantiate_gh(monkeypatch, tmp_path):
+          called = []
+          def boom():
+              called.append(True)
+              raise RuntimeError("must not instantiate")
+          monkeypatch.setattr("vk.commands.spec_cmd._make_gh_client", boom)
+          # ...write a fixture spec with no cross-repo plans...
+          result = CliRunner().invoke(app, ["spec", "status", str(spec), "--no-gh"])
+          assert result.exit_code == 0
+          assert not called
+      ```
+
+      Run: `uv run pytest tests/integration/test_spec_cli_no_gh.py -x -q --no-cov`
+      Expect: green.
+- number: 6
+  title: Quality gates + open PR
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Run the full test suite and quality gates:
+
+      ```
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      uv run pytest -q --no-cov
+      uv run pytest --cov=src --cov-report=term-missing
+      ```
+
+      Expect: format clean, lint clean, mypy clean, pytest green,
+      coverage ≥ 85%. Fix any regressions before proceeding.
+
+      Run `vk plan self-review` against this plan folder:
+      `uv run vk plan self-review docs/superpowers/plans/2026-05-14-spec-dispatch/`
+
+      Expect: no errors, no warnings about Phase 1 (Phase 2's
+      tracking comment / dispatch state is checked separately).
+  - id: P1.T6.S2
+    text: |-
+      Open the PR for Phase 1.
+
+      On a feature branch (e.g.
+      `feat/spec-dispatch-phase-1-parser-status`):
+
+      ```
+      git checkout -b feat/spec-dispatch-phase-1-parser-status
+      git add src/vk/ghclient.py src/vk/real_ghclient.py src/vk/spec.py \
+              src/vk/commands/spec_cmd.py tests/
+      git status
+      git commit -m "feat(spec): grammar parser + cross-repo compute_status
+
+      Phase 1 of spec-dispatch (see 2026-05-13-spec-dispatch-design.md).
+      Adds GhClient.read_repo_file, PlanRef.depends_on as tuple plus
+      depends_on_raw verbatim, _parse_deps_cell with em-dash/hyphen/None
+      sentinels, and compute_status cross-repo resolution via gh contents
+      API. Validation gates land in Phase 2; this PR is read-side only.
+
+      Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+      git push -u origin feat/spec-dispatch-phase-1-parser-status
+      gh pr create --title "feat(spec): grammar parser + cross-repo compute_status (phase 1)" \
+                   --body "Phase 1 of spec-dispatch. See docs/superpowers/specs/2026-05-13-spec-dispatch-design.md §7.1 Phase A."
+      ```
+
+      Wait for CI green. After merge, tick the tracking-issue
+      writeback for Phase 1 (via the merged-PR machinery) and
+      proceed to Phase 2.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
