@@ -233,3 +233,66 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
     assert not any(isinstance(m, IssueCreate) for m in d.mutations)
     assert not any(isinstance(m, IssueLabelChange) for m in d.mutations)
     assert not any(isinstance(m, IssueStateChange) for m in d.mutations)
+
+
+def test_diff_cross_repo_emits_one_ensure_per_repo():
+    """Phases dispatched to different repos → one RepoLabelEnsure per destination."""
+    from dataclasses import replace as dc_replace
+    from pathlib import Path
+
+    from vk import parse
+    from vk.diff import RepoLabelEnsure, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+
+    # Phase 1 → repo-B, Phase 2 → repo-B (target_repo is repo-A via fixture).
+    # Phase 10 has no tracking_issue → will land on target_repo (repo-A).
+    def _with_tracking(p: object, issue_n: int) -> object:
+        url = f"https://github.com/derio-net/repo-b/issues/{issue_n}"
+        return p.model_copy(  # type: ignore[union-attr]
+            update={"phase": p.phase.model_copy(update={"tracking_issue": url})}  # type: ignore[union-attr]
+        )
+
+    new_phases = tuple(
+        _with_tracking(p, 10 + p.phase.number) if p.phase.number in (1, 2) else p
+        for p in plan.phases
+    )
+    new_plan = dc_replace(plan, phases=new_phases)
+
+    # Phase 1 and Phase 2 both have observed state so no IssueCreate is emitted.
+    observed = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(),
+                issue_assignees=(),
+                linked_prs=(),
+            ),
+            2: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(),
+                issue_assignees=(),
+                linked_prs=(),
+            ),
+        }
+    )
+    rendered = render(new_plan, observed)
+    d = diff(rendered, observed, plan=new_plan)
+
+    ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+    repos = {e.repo for e in ensures}
+
+    # repo-b gets labels for phases 1+2; target_repo gets labels for phase 10 (undispatched).
+    assert "derio-net/repo-b" in repos
+    assert "derio-net/superpowers-for-vk" in repos  # target_repo for phase 10
+
+    # No single ensure carries labels that belong to a different repo's phases.
+    repo_b_ensure = next(e for e in ensures if e.repo == "derio-net/repo-b")
+    assert "phase:1" in {ld.name for ld in repo_b_ensure.labels}
+    assert "phase:2" in {ld.name for ld in repo_b_ensure.labels}
+
+    target_ensure = next(e for e in ensures if e.repo == "derio-net/superpowers-for-vk")
+    assert "phase:10" in {ld.name for ld in target_ensure.labels}
