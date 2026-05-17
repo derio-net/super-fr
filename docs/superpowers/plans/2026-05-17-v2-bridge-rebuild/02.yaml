@@ -38,6 +38,15 @@ tasks:
       `npx vibe-kanban@latest --mcp`) is NOT modified — only the file
       moves.
 
+      Verify the agent-images source class names before relying on them:
+      ```bash
+      grep -nE "^class |^[A-Z][a-zA-Z]+ = " \
+        ~/Docs/projects/DERIO_NET/agent-images/kali/scripts/vk_mcp_client.py
+      ```
+      Expected: `VkMcpClient` (the main client class) and `VkMcpError`
+      (its exception). If the class name differs in the actual source,
+      rename it during the move so test B3 (P2.T1.S1) passes verbatim.
+
       Run: `uv run pytest tests/unit/test_mcp_client.py -x --no-cov`
       Expect: GREEN — import works.
   - id: P2.T1.S3
@@ -61,7 +70,28 @@ tasks:
   steps:
   - id: P2.T2.S1
     text: |-
-      Failing test B4 — `FakeMcpClient` exists and implements protocol.
+      Failing test B4 — `FakeMcpClient` exists and implements the full
+      MCP client surface (not the narrow 2-method Protocol).
+
+      The spec B4 (`2026-05-17-v2-bridge-rebuild-design.md:671-678`)
+      asserts FakeMcpClient implements "vk.bridge.VkMcpClient Protocol
+      (create_card, update_card)" — a 2-method shape carried over from
+      the v1 library scaffold at `src/vk/bridge/__init__.py:56-66`. That
+      Protocol is too narrow for the consolidated dispatch (you can't
+      drive `start_workspace` / `link_workspace_issue` / `list_repos` /
+      etc. through it). The plan deliberately deviates: the new
+      `vk._mcp_client.VkMcpClient` (Phase 2 / P2.T1) is the full surface,
+      and FakeMcpClient implements that full surface.
+
+      Concrete actions for this step:
+        1. Delete the 2-method `class VkMcpClient(Protocol)` at
+           `src/vk/bridge/__init__.py:56-66` — superseded by the real
+           class moved into `vk._mcp_client` in P2.T1.S2.
+        2. Update any imports that referenced the narrow Protocol (likely
+           inside `src/vk/bridge/__init__.py` itself — search `grep -n
+           VkMcpClient src/vk/bridge/__init__.py`).
+        3. Write FakeMcpClient per the surface below (matches the moved
+           `vk._mcp_client.VkMcpClient`).
 
       Append to `tests/unit/test_fakes.py`:
       ```python
@@ -85,10 +115,12 @@ tasks:
       def test_fake_mcp_client_failure_injection():
           import pytest
           from tests.unit.fakes import FakeMcpClient
-          fc = FakeMcpClient(fail_on_call=2)
-          fc.create_issue(title="t", description="d")
+          # fail_on_call is 0-indexed (matches FakeGhClient.fail_on_mutation
+          # at tests/unit/fakes.py:47). Setting to 1 fails on the SECOND call.
+          fc = FakeMcpClient(fail_on_call=1)
+          fc.create_issue(title="t", description="d")  # call 0 — succeeds
           with pytest.raises(Exception, match="injected"):
-              fc.update_issue("card-1", status="In progress")
+              fc.update_issue("card-1", status="In progress")  # call 1 — fails
       ```
 
       Run: `uv run pytest tests/unit/test_fakes.py -k fake_mcp -x --no-cov`
@@ -108,8 +140,11 @@ tasks:
               self.workspaces: dict[str, dict] = {}  # ws_id -> data
 
           def _record(self, name: str, args: dict):
+              # 0-indexed counter — matches FakeGhClient.fail_on_mutation
+              # convention at tests/unit/fakes.py:47-97.
+              idx = len(self.calls)
               self.calls.append((name, args))
-              if self._fail_on and len(self.calls) == self._fail_on:
+              if self._fail_on is not None and idx == self._fail_on:
                   raise Exception("injected MCP failure")
 
           def create_issue(self, *, title, description, **kw):

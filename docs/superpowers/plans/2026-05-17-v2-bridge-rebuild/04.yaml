@@ -4,7 +4,7 @@ phase:
   title: Slots + dedup + metrics + prompt + config + lifecycle hook
   tag: agentic
   depends_on:
-  - 2
+  - 3
   tracking_issue: null
 tasks:
 - number: 1
@@ -20,9 +20,15 @@ tasks:
       create_card calls.
 
       D2 pre-loads a card with title `gh#42: [...]` matching what
-      dispatch would build for issue #42; tick calls dispatch, dispatch
-      detects the existing title via `vk.bridge.dedup.fetch_existing_titles`
-      and skips `create_card` but still adds `vk-synced` to the gh issue.
+      dispatch would build for issue #42; tick checks dedup via
+      `vk.bridge.dedup.fetch_existing_titles` BEFORE calling
+      `dispatch_phase`, skips dispatch when the title already exists,
+      and still adds `vk-synced` to the gh issue itself.
+
+      Dedup detection and `vk-synced` stamping both live in
+      `vk.bridge.tick` — NOT in `dispatch_phase`. `dispatch_phase`'s
+      signature `(plan, phase, mcp)` has no `gh` parameter, so it can't
+      stamp gh labels even if asked. Tick has both `gh` and `mcp`.
 
       Run: red — modules don't exist.
   - id: P4.T1.S2
@@ -46,10 +52,19 @@ tasks:
           return title in existing
       ```
 
-      Wire `vk.bridge.dispatch.dispatch_phase` to check dedup before
-      `create_issue`; if dispatched, skip create but still stamp
-      `vk-synced` on the gh issue. Wire `vk.bridge.tick` to check
-      slot budget before iterating phases.
+      Wire `vk.bridge.tick` (NOT dispatch_phase) to:
+        1. Check slot budget via `count_active_ws(mcp)` before iterating
+           phases; if 0, return early with `TickResult.skipped += N`.
+        2. For each vk-ready phase, compute the would-be card title via
+           the helper extracted from `vk.bridge.dispatch._build_title`
+           (Phase 2). If title in `fetch_existing_titles(mcp)`, skip
+           `dispatch_phase` and just stamp `vk-synced` on the gh issue
+           via `gh.edit_issue_labels`. Otherwise call `dispatch_phase`.
+
+      Why tick and not dispatch_phase: dispatch_phase signature is
+      `(plan, phase, mcp)` — no `gh` client. Tick is the only place that
+      has both `gh` and `mcp`; the dedup decision needs both (to read
+      MCP titles and to write the gh label).
 
       Run: `uv run pytest tests/unit/test_bridge_slots.py tests/unit/test_bridge_dedup.py -x --no-cov`
       Expect: GREEN.

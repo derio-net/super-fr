@@ -35,9 +35,9 @@ specific phase below. Test IDs (`A1`-`I8`) reference the spec's
 | 1 | Renderer dep gating + cross-repo `RepoLabelEnsure` | A1-A6, H1-H6, H8, I7 | 2.1.6 → 2.1.7 | — |
 | 2 | `vk._mcp_client` + `vk.bridge.dispatch` | B1-B4, H9 | 2.1.7 → 2.1.8 | 1 |
 | 3 | Workspaces + lifecycle + PR state | C1-C5, I5 | 2.1.8 → 2.1.9 | 2 |
-| 4 | Slots + dedup + metrics + prompt + config | D1-D5 | 2.1.9 → 2.1.10 | 2 |
-| 5 | `vk.bridge.cli` + `__main__` + wrapper + install.sh + resilience | E1-E4, G1, G5, I1-I4, I6 | 2.1.10 → 2.1.11 | 3, 4 |
-| 6 | Cutover (delete fat bridge; end-to-end) | F1-F2, F4-F5, G2, G4, H7, I8 | 2.1.11 → **2.2.0** | 5 |
+| 4 | Slots + dedup + metrics + prompt + config | D1-D5 | 2.1.9 → 2.1.10 | 3 |
+| 5 | `vk.bridge.cli` + `__main__` + wrapper + install.sh + resilience | E1-E4, G1, G5, I1-I4, I6 | 2.1.10 → 2.1.11 | 4 |
+| 6 | Cutover (delete fat bridge; end-to-end) | F1-F2, F4-F5, G2, G3, G4, H7, I8 | 2.1.11 → **2.2.0** | 5 |
 
 Phase 6 minor-bumps because `--install-bridge` is a user-visible install
 flag and the fat-bridge retirement is a deployment-shape change.

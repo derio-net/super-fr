@@ -102,10 +102,20 @@ tasks:
         OPEN; assert an `IssueStateChange(new_state="CLOSED")` mutation
         is emitted.
 
-      Run: likely already GREEN — the renderer already projects CLOSED
-      state for complete phases (spec §"State-machine surface gains"
-      notes this is already wired). If red, the renderer needs the
-      missing projection. Treat as pin if green; implement if red.
+      Verify the existing renderer projection before writing the test.
+      Read `src/vk/render.py:290` — `state` is set to `"CLOSED"` when
+      `_phase_complete(phase, obs)` returns True. So the assertion
+      `rendered.issue_per_phase[N].state == "CLOSED"` SHOULD already
+      pass; this step is a pin/regression-guard for the existing
+      behavior, not new code.
+
+      If the assertion is red despite the existing projection: the test
+      setup is wrong (missing `state.completion.at`, or the merged-PR
+      observation isn't shaped per `_phase_complete`'s contract at
+      `src/vk/render.py:75-96`). Fix the test fixture, not the renderer.
+
+      The IssueStateChange diff emission is at `src/vk/diff.py` — same
+      argument: existing code, test pins it.
   - id: P3.T3.S2
     text: |-
       Verify lifecycle hook integration point (D5 deferred to Phase 4).

@@ -184,14 +184,24 @@ tasks:
       )
       ```
 
-      Add it to `_LIFECYCLE_BY_KEY` (whatever the lookup dict is called
-      in `labels.py` — see the existing `vk_ready`/`manual`/etc. mapping
-      at line ~70):
+      Add it to the existing `LIFECYCLE` dict at `src/vk/labels.py:69`
+      (NOT `_LIFECYCLE_BY_KEY` or `MANAGED_LIFECYCLE_LABELS` — neither
+      name exists). The dict keys are snake_case role names; the
+      `LabelDef.name` is the kebab-case GitHub string:
       ```python
-      "vk_blocked": VK_BLOCKED,
+      LIFECYCLE: dict[str, LabelDef] = {
+          "vk_ready": VK_READY,
+          "vk_blocked": VK_BLOCKED,   # NEW — after vk_ready, before manual
+          "manual": MANUAL,
+          "in_progress": IN_PROGRESS,
+          "pr_ready": PR_READY,
+      }
       ```
 
-      Add to any `MANAGED_LIFECYCLE_LABELS` export if one exists.
+      Note: the spec's "Verification checklist" mentions a
+      `MANAGED_LIFECYCLE_LABELS` export — that's a spec error, the symbol
+      doesn't exist in the codebase. Don't try to add it. (Captured as a
+      spec-followup in this PR's description.)
 
       Run: `uv run pytest tests/unit/test_labels.py -x --no-cov`
       Expect: green (new label doesn't break existing label tests).
