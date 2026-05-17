@@ -1,3 +1,11 @@
+# ✅ SHIPPED 2026-05-13 via PR #122
+
+This plan is complete (all steps ticked `x`, phase `completion.at` set on the date above). consumed by v2 bridge rebuild (#147) as foundational infrastructure (writeback persists tracking_issue back to plan yaml; bridge depends on this for idempotency)
+
+Original content preserved below.
+
+---
+
 # vk apply tracking_issue writeback
 
 Closes the duplicate-Issue regression where re-running `vk apply --yes` (or

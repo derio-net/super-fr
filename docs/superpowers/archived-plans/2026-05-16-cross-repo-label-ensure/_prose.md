@@ -1,3 +1,17 @@
+# ⚠️ ARCHIVED 2026-05-17 — folded into v2 bridge rebuild
+
+The design that lived here is now part of the v2 bridge rebuild spec:
+`docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md` (see
+"Multi-repo concerns" section + acceptance-tests Group H). Plan was
+never executed standalone.
+
+Tracking issue #147 is the anchor; original cross-repo bug #132 is
+now closed by the rebuild's Phase 1.
+
+Original content preserved below.
+
+---
+
 # Cross-repo `RepoLabelEnsure` fix
 
 Closes issue [#132](https://github.com/derio-net/superpowers-for-vk/issues/132).
