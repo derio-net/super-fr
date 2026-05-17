@@ -119,9 +119,10 @@ five byte-identical phase dispatches of a willikins plan into
 superpowers-for-vk Issue workspace, with phantom `Blocked by #161, #162,
 #163` refs that don't exist in this repo) revealed that cross-repo
 dispatch is being attempted ad-hoc today without spec-level
-orchestration. That gap is the subject of a separate RFC at
-`docs/superpowers/specs/2026-05-13-spec-dispatch-design.md` and is
-out of scope for this decision.
+orchestration. That gap was the subject of a separate RFC at
+`docs/superpowers/archived-specs/2026-05-13-spec-dispatch-design.md`
+(archived 2026-05-17, superseded by [#147](https://github.com/derio-net/superpowers-for-vk/issues/147))
+and is out of scope for this decision.
 
 ## Implementation Plans
 

@@ -255,10 +255,12 @@ new command.)
   (`agent-images/kali/Dockerfile:59-61`), which creates a separate
   drift class: image rebuilds out of sync with plugin updates. A
   runtime version-check guard was briefly folded into this spec then
-  removed — the real fix is architectural (kali bridge venv from
-  shared PV, mirroring vk-local). Tackled separately at
-  `docs/superpowers/specs/2026-05-17-kali-bridge-venv-shared-pv-design.md`
-  (skeleton); orthogonal to this dispatch-reachability gate.
+  removed. A skeleton spec for "make the kali venv hot-swappable"
+  was filed then archived 2026-05-17 — the 2026-05-17 bridge audit
+  found the right fix is the v2 bridge rebuild ([#147](https://github.com/derio-net/superpowers-for-vk/issues/147)),
+  which makes the venv-pinning problem moot (once the bridge is the
+  ~7-line thin wrapper v2 originally specced, hot-swap is trivial at
+  the consumer-image level).
 - **No redesign of the writeback flow.** The "derive `tracking_issue`
   from gh labels (e.g., `plan:<slug>` + `phase:N`)" v3 idea that
   would eliminate the writeback entirely stays out — file separately

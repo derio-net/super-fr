@@ -1,3 +1,21 @@
+> **⚠️ SUPERSEDED 2026-05-17 — see issue [#147](https://github.com/derio-net/superpowers-for-vk/issues/147)**
+>
+> This skeleton spec assumed the kali bridge stays fat (current shape) and
+> proposed making its `vk` venv hot-swappable from the shared PV. The
+> 2026-05-17 audit revealed the broader architectural error: v2 promised
+> the bridge would become a thin wrapper, never delivered. The right fix
+> is the v2 bridge rebuild (#147), which makes the venv-pinning problem
+> moot — once the bridge is thin (~7 lines), the Dockerfile pin becomes
+> trivial to manage at the consumer-image level.
+>
+> The drift-class-2 finding (shared-PV source checkouts don't auto-pull,
+> surfaced in the 2026-05-17 #143/frank-#271 incident) IS still real and
+> gets folded into #147's brainstorm.
+>
+> Original content preserved below for historical reference.
+>
+> ---
+>
 # Shared-PV freshness redesign (kali bridge venv + agent source checkouts) — Design (skeleton)
 
 > **Status:** skeleton. Captures context and the options space discovered

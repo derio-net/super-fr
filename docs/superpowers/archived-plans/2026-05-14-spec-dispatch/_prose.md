@@ -1,3 +1,14 @@
+# ⚠️ ARCHIVED 2026-05-17 — see issue [#147](https://github.com/derio-net/superpowers-for-vk/issues/147)
+
+This plan was the superpowers-for-vk half of the spec-dispatch design.
+Never executed. Archived as superseded by the v2 bridge rebuild (#147).
+The agent-images sibling plan (`2026-05-14-spec-dispatch-bridge`) is
+archived in that repo with the same banner.
+
+Original content preserved below.
+
+---
+
 # Plan — spec-dispatch (superpowers-for-vk)
 
 ## What this plan delivers

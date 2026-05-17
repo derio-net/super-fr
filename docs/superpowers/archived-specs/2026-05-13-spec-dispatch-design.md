@@ -1,3 +1,17 @@
+> **⚠️ SUPERSEDED 2026-05-17 — see issue [#147](https://github.com/derio-net/superpowers-for-vk/issues/147)**
+>
+> This spec proposed spec-level DAG dispatch + cross-repo plan resolution
+> as a feature added on top of the existing v2 bridge surface. The
+> 2026-05-17 audit found that the responsibility this spec tried to add
+> ALREADY lives in the legacy bridge (`agent-images/kali/scripts/vk-issue-bridge.py`'s
+> `check_blockers` + body-text dep parsing), and the v2 rebuild was
+> supposed to absorb it but never did. The fix is the v2 bridge rebuild
+> (#147), not another patch layer on top of the half-rebuilt bridge.
+>
+> Original content preserved below for historical reference.
+>
+> ---
+>
 # Spec-Level Dispatch with Plan DAG
 
 **Status:** Proposed
