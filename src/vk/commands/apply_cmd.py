@@ -35,6 +35,7 @@ from vk.diff import (
     RepoLabelEnsure,
     diff,
 )
+from vk.git import file_on_ref
 from vk.observe import observe
 from vk.parser import Plan, PlanSchemaError, parse
 from vk.plan_ops import PlanEditError
@@ -67,8 +68,6 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
     Raises if origin/HEAD isn't resolvable locally — caller catches
     and re-raises with a setup hint.
     """
-    from vk.git import file_on_ref
-
     missing: list[Path] = []
     plan_dir = plan.dir
     for path in sorted(plan_dir.rglob("*")):
@@ -189,7 +188,6 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
             "can't verify the plan is reachable to the bridge or "
             "implementing agents.",
         ]
-        json_out["unreachable_paths"] = []
         return 2, "\n".join(lines), json_out
 
     try:
@@ -203,7 +201,6 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
             "If origin/HEAD isn't set locally, run:",
             "  git remote set-head origin --auto",
         ]
-        json_out["unreachable_paths"] = []
         json_out["origin_head_error"] = str(e)
         return 2, "\n".join(lines), json_out
     if missing:
@@ -221,7 +218,6 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
         lines.append("(If origin/HEAD isn't set locally: `git remote set-head origin --auto`.)")
         json_out["unreachable_paths"] = [str(p) for p in missing]
         return 2, "\n".join(lines), json_out
-    json_out["unreachable_paths"] = []
 
     result = apply(d, gh)
     writeback_failures: list[dict[str, Any]] = []
