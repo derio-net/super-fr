@@ -5,7 +5,7 @@ phase:
   tag: agentic
   depends_on:
   - 2
-  tracking_issue: null
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/154
 tasks:
 - number: 1
   title: Workspace lifecycle (C1, C2, I5)
