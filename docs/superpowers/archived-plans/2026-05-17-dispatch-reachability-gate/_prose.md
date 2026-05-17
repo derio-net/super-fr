@@ -1,3 +1,11 @@
+# ✅ SHIPPED 2026-05-17 via PR #146
+
+This plan is complete (all steps ticked `x`, phase `completion.at` set on the date above). orthogonal operator-side guard; not subsumed by the rebuild
+
+Original content preserved below.
+
+---
+
 # Dispatch-reachability gate for `vk apply --yes`
 
 Closes the race that allowed PR #135 to ship a cross-repo fix

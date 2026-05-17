@@ -124,15 +124,15 @@ result, return `(2, error_text, json_with_unreachable_paths)`.
 
 ### Failure shape
 
-Text output:
+Text output (example):
 
 ```
-plan: 2026-05-16-cross-repo-label-ensure
+plan: <some-plan-slug>
 refuse to dispatch: 4 file(s) not at origin/HEAD:
-  docs/superpowers/plans/2026-05-16-cross-repo-label-ensure/_meta.yaml
-  docs/superpowers/plans/2026-05-16-cross-repo-label-ensure/_prose.md
-  docs/superpowers/plans/2026-05-16-cross-repo-label-ensure/01.yaml
-  docs/superpowers/specs/2026-05-16-cross-repo-label-ensure-design.md
+  docs/superpowers/plans/<some-plan-slug>/_meta.yaml
+  docs/superpowers/plans/<some-plan-slug>/_prose.md
+  docs/superpowers/plans/<some-plan-slug>/01.yaml
+  docs/superpowers/specs/<spec-file>.md
 
 Merge the plan + spec to the default branch first, then re-run
 `vk apply --yes`.
@@ -206,6 +206,10 @@ step 1:
 expectations" pointing at the gate.
 
 ### Concrete: resolving the in-flight cross-repo bug after gate ships
+
+> **Updated 2026-05-17:** This section originally described how to resume the cross-repo bug fix after the gate landed. That plan was subsequently folded into the v2 bridge rebuild (#147 + spec at `docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md`'s "Multi-repo concerns" section + acceptance-tests Group H). The walkthrough below is preserved as historical context only.
+>
+> #134 was retired in the rebuild's cleanup. #132 closes when Phase 1 of the rebuild ships.
 
 The cross-repo bug (#132) is still open. Its plan + spec live on
 local branch `2026-05-16-cross-repo-label-ensure`; #134 is the
@@ -319,4 +323,4 @@ consumers act on stale or partial information.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| 2026-05-17-dispatch-reachability-gate | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-17-dispatch-reachability-gate/` | — |
+| 2026-05-17-dispatch-reachability-gate | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-05-17-dispatch-reachability-gate/` (shipped via PR #146, archived 2026-05-17) | — |

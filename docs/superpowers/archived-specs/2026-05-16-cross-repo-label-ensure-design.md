@@ -1,3 +1,21 @@
+> **⚠️ SUPERSEDED 2026-05-17 — folded into v2 bridge rebuild**
+>
+> This spec's design (group `RepoLabelEnsure` by destination repo;
+> v2_plan_cross_repo fixture; FakeGhClient tightening; cross-repo
+> acceptance tests) is now part of
+> `docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md`
+> (see "Multi-repo concerns" section + acceptance-tests Group H).
+> The companion plan `2026-05-16-cross-repo-label-ensure/` is
+> archived in `archived-plans/` with the same banner.
+>
+> Tracking issue [#147](https://github.com/derio-net/superpowers-for-vk/issues/147)
+> is the anchor; original cross-repo bug [#132](https://github.com/derio-net/superpowers-for-vk/issues/132)
+> is now closed by the rebuild's Phase 1.
+>
+> Original content preserved below for historical reference.
+>
+> ---
+>
 # Cross-repo `RepoLabelEnsure` fix — Design
 
 ## Problem
