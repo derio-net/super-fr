@@ -77,7 +77,6 @@ def test_renderer_reverses_manual_label_change():
 
     # apply restores it
     gh = FakeGhClient()
-    gh.ensure_labels("derio-net/superpowers-for-vk", ["vk-ready"])
     gh.add_issue(
         "derio-net/superpowers-for-vk", 500, state="OPEN", labels=ref_labels - {"vk-ready"}
     )

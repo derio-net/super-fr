@@ -56,7 +56,7 @@ def _deps_satisfied(phase: PhaseDoc, plan: Plan, observed: GhState) -> bool:
         dep_phase = phase_by_number.get(dep_n)
         if dep_phase is None:
             return False
-        dep_obs = observed.phases.get(dep_n) if observed else None
+        dep_obs = observed.phases.get(dep_n)
         if not _phase_complete(dep_phase, dep_obs):
             return False
     return True
