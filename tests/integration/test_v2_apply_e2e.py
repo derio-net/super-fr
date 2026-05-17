@@ -49,14 +49,44 @@ def test_vk_v2_apply_default_is_dry_run(fake_gh_factory):
 
 def test_vk_v2_apply_yes_actually_calls_gh(fake_gh_factory, tmp_path):
     """vk apply <plan> --yes actually mutates via the fake gh."""
+    # Apply --yes now writes `tracking_issue` back into the plan yaml, so
+    # use a tmp copy inside a proper git repo (with origin) to keep the
+    # shared fixture clean and satisfy the reachability gate.
     import shutil
+    import subprocess
+
+    import yaml
 
     from vk.cli import app
 
-    # Apply --yes now writes `tracking_issue` back into the plan yaml, so
-    # use a tmp copy to keep the shared fixture clean for other tests.
-    plan_copy = tmp_path / "v2_plan_minimal"
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+    work = tmp_path / "work"
+    subprocess.run(["git", "clone", "-q", str(origin), str(work)], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "t@x"], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "T"], check=True)
+
+    plan_copy = work / "v2_plan_minimal"
     shutil.copytree(FIXTURE, plan_copy)
+    # Seed the spec referenced by the fixture.
+    meta = yaml.safe_load((plan_copy / "_meta.yaml").read_text())
+    if meta.get("spec"):
+        spec_path = work / meta["spec"]
+        spec_path.parent.mkdir(parents=True, exist_ok=True)
+        spec_path.write_text("# stub spec\n")
+
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "init"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "-u", "origin", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(work), "remote", "set-head", "origin", "--auto"],
+        check=True,
+        capture_output=True,
+    )
 
     runner = CliRunner()
     result = runner.invoke(app, ["apply", str(plan_copy), "--yes"])

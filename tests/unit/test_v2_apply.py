@@ -1,3 +1,4 @@
+import subprocess
 from dataclasses import replace as dc_replace
 from pathlib import Path
 
@@ -297,22 +298,48 @@ def test_apply_in_flight_dep_body_uses_predecessor_issue_number():
 
 
 def _writeback_repo(tmp_path: Path, fixture_name: str = "v2_plan_minimal") -> Path:
-    """Copy a fixture into a fresh git repo so apply_command can stage writes."""
-    import shutil
-    import subprocess
+    """Copy a fixture into a fresh git repo with a bare origin so the reachability
+    gate (origin/HEAD) has a remote to resolve against.
 
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    subprocess.run(
-        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"],
-        check=True,
-    )
-    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
-    plan_dir = tmp_path / "docs" / "superpowers" / "plans" / fixture_name
+    Also seeds a stub spec file matching the one referenced by v2_plan_minimal so
+    the gate's spec-reachability check passes.
+    """
+    import shutil
+
+    import yaml
+
+    # Create bare origin so origin/HEAD resolves.
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+    work = tmp_path / "work"
+    subprocess.run(["git", "clone", "-q", str(origin), str(work)], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "Test"], check=True)
+
+    plan_dir = work / "docs" / "superpowers" / "plans" / fixture_name
     plan_dir.parent.mkdir(parents=True)
     src = Path(__file__).parent / "fixtures" / fixture_name
     shutil.copytree(src, plan_dir)
-    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"], check=True)
+
+    # Seed any spec file referenced by the fixture so the reachability gate passes.
+    meta = yaml.safe_load((plan_dir / "_meta.yaml").read_text())
+    if meta.get("spec"):
+        spec_path = work / meta["spec"]
+        spec_path.parent.mkdir(parents=True, exist_ok=True)
+        spec_path.write_text("# stub spec\n")
+
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "init"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "-u", "origin", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(work), "remote", "set-head", "origin", "--auto"],
+        check=True,
+        capture_output=True,
+    )
     return plan_dir
 
 
@@ -475,7 +502,6 @@ def test_apply_command_writeback_failure_surfaced_in_json_and_text(tmp_path, cap
 def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
     """`--all`: one plan's writeback failure must not nullify another's success."""
     import shutil
-    import subprocess
 
     import pytest as _pytest
     import typer
@@ -485,13 +511,14 @@ def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
     from vk import plan_ops
     from vk.commands import apply_cmd
 
-    # Build a repo with TWO plans.
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    subprocess.run(
-        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"], check=True
-    )
-    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
-    plans_dir = tmp_path / "docs" / "superpowers" / "plans"
+    # Build a repo with TWO plans + a bare origin so origin/HEAD resolves.
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+    work = tmp_path / "work"
+    subprocess.run(["git", "clone", "-q", str(origin), str(work)], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "Test"], check=True)
+    plans_dir = work / "docs" / "superpowers" / "plans"
     plans_dir.mkdir(parents=True)
     src = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     plan_a = plans_dir / "plan-a-first"
@@ -503,10 +530,26 @@ def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
         raw = yaml.safe_load((plan_dir / "_meta.yaml").read_text())
         raw["plan"] = slug
         (plan_dir / "_meta.yaml").write_text(yaml.safe_dump(raw, sort_keys=False))
-    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"], check=True)
+    # Seed the spec so the reachability gate passes for both plans.
+    sample_meta = yaml.safe_load((plan_a / "_meta.yaml").read_text())
+    if sample_meta.get("spec"):
+        spec_path = work / sample_meta["spec"]
+        spec_path.parent.mkdir(parents=True, exist_ok=True)
+        spec_path.write_text("# stub spec\n")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "init"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "-u", "origin", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(work), "remote", "set-head", "origin", "--auto"],
+        check=True,
+        capture_output=True,
+    )
 
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(work)
     fake = FakeGhClient()
 
     real_set = plan_ops.set_tracking_issue
@@ -551,3 +594,285 @@ def test_apply_accumulates_failures_continues_past_one_bad_mutation():
     assert len(result.failures) == 1
     # Other mutations still applied
     assert len(result.applied) == len(d.mutations) - 1
+
+
+# ---------------------------------------------------------------------------
+# Reachability gate tests
+# ---------------------------------------------------------------------------
+
+
+def _make_repo_with_origin(tmp_path):
+    """Create a working tree + bare 'origin' remote, return (work, origin) paths.
+
+    Test fixture for gate tests. Initial commit + push so origin/HEAD
+    is set automatically.
+    """
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+    work = tmp_path / "work"
+    subprocess.run(["git", "clone", "-q", str(origin), str(work)], check=True)
+    for k, v in (("user.email", "t@x"), ("user.name", "T")):
+        subprocess.run(["git", "-C", str(work), "config", k, v], check=True)
+    # Initial commit so we have a HEAD to push.
+    (work / "README.md").write_text("seed\n")
+    subprocess.run(["git", "-C", str(work), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "seed"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "-u", "origin", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(work), "remote", "set-head", "origin", "--auto"],
+        check=True,
+        capture_output=True,
+    )
+    return work, origin
+
+
+def test_gate_passes_when_plan_and_spec_on_origin_head(tmp_path):
+    """All files committed and pushed → empty missing-paths list."""
+    import shutil
+
+    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from vk.parser import parse
+
+    work, _ = _make_repo_with_origin(tmp_path)
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    dest_plan.parent.mkdir(parents=True)
+    shutil.copytree(src_fixture, dest_plan)
+    spec_dir = work / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True)
+    spec_path = spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md"
+    spec_path.write_text("# stub spec\n")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land plan"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "origin", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+
+    plan = parse(dest_plan)
+    missing = _check_plan_reachable_on_origin_head(plan, work)
+    assert missing == [], f"expected empty, got {missing}"
+
+
+def test_gate_reports_missing_plan_files(tmp_path):
+    """Plan files committed locally but NOT pushed → returned in missing list."""
+    import shutil
+
+    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from vk.parser import parse
+
+    work, _ = _make_repo_with_origin(tmp_path)
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    dest_plan.parent.mkdir(parents=True)
+    shutil.copytree(src_fixture, dest_plan)
+    spec_dir = work / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md").write_text("# stub\n")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "local only"], check=True)
+    # NOTE: no push — files are local-only.
+
+    plan = parse(dest_plan)
+    missing = _check_plan_reachable_on_origin_head(plan, work)
+    assert len(missing) >= 3, f"expected plan files in missing list, got {missing}"
+    assert any("_meta.yaml" in str(p) for p in missing)
+    assert any("_prose.md" in str(p) for p in missing)
+    assert any("01.yaml" in str(p) for p in missing)
+
+
+def test_gate_reports_missing_spec(tmp_path):
+    """Plan committed and pushed, but spec NOT pushed → spec in missing list."""
+    import shutil
+
+    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from vk.parser import parse
+
+    work, _ = _make_repo_with_origin(tmp_path)
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    dest_plan.parent.mkdir(parents=True)
+    shutil.copytree(src_fixture, dest_plan)
+    # Push the plan first.
+    subprocess.run(["git", "-C", str(work), "add", "docs/superpowers/plans/"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land plan only"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "origin", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+    # Create the spec locally; do NOT commit it.
+    spec_dir = work / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md").write_text("# stub\n")
+
+    plan = parse(dest_plan)
+    missing = _check_plan_reachable_on_origin_head(plan, work)
+    assert any("2026-05-06-vk-rebuild-state-machine-design.md" in str(p) for p in missing), (
+        f"expected spec in missing list, got {missing}"
+    )
+
+
+def test_gate_skips_spec_check_when_meta_spec_is_none(tmp_path):
+    """Plan with no spec field → gate doesn't fail on missing spec."""
+    import shutil
+
+    import yaml
+
+    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from vk.parser import parse
+
+    work, _ = _make_repo_with_origin(tmp_path)
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    dest_plan.parent.mkdir(parents=True)
+    shutil.copytree(src_fixture, dest_plan)
+    # Strip the spec field from _meta.yaml.
+    meta_path = dest_plan / "_meta.yaml"
+    meta = yaml.safe_load(meta_path.read_text())
+    meta.pop("spec", None)
+    meta_path.write_text(yaml.safe_dump(meta, sort_keys=False))
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "plan no spec"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "origin", "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+
+    plan = parse(dest_plan)
+    missing = _check_plan_reachable_on_origin_head(plan, work)
+    assert missing == [], f"expected empty (no spec to check), got {missing}"
+
+
+# ---------------------------------------------------------------------------
+# Gate wiring integration tests (_apply_one)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_one_rejects_when_gate_returns_missing(tmp_path, monkeypatch):
+    """vk apply --yes refuses dispatch when the gate reports missing files."""
+    import shutil
+
+    from vk.commands import apply_cmd
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan_dir = tmp_path / "v2_plan_minimal"
+    shutil.copytree(src_fixture, plan_dir)
+
+    stubbed_missing = [
+        Path("docs/superpowers/plans/v2_plan_minimal/_meta.yaml"),
+        Path("docs/superpowers/plans/v2_plan_minimal/01.yaml"),
+    ]
+    monkeypatch.setattr(
+        apply_cmd,
+        "_check_plan_reachable_on_origin_head",
+        lambda plan, repo_root: stubbed_missing,
+    )
+
+    from tests.unit.fakes import FakeGhClient
+
+    fake = FakeGhClient()
+    monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+    rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True)
+    assert rc == 2, f"expected exit 2, got {rc}"
+    assert "refuse to dispatch" in text
+    assert "_meta.yaml" in text
+    assert "01.yaml" in text
+    assert json_out.get("unreachable_paths") == [str(p) for p in stubbed_missing]
+    assert fake.calls == [], f"unexpected gh calls: {fake.calls}"
+
+
+def test_apply_one_refuses_when_plan_not_in_git_checkout(tmp_path, monkeypatch):
+    """No `.git/` anywhere above the plan dir → refuse early with a clear message."""
+    import shutil
+
+    from vk.commands import apply_cmd
+
+    # NO `git init` — tmp_path is not a git checkout.
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan_dir = tmp_path / "v2_plan_minimal"
+    shutil.copytree(src_fixture, plan_dir)
+
+    from tests.unit.fakes import FakeGhClient
+
+    fake = FakeGhClient()
+    monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+    called = {"count": 0}
+
+    def _spy(plan, repo_root):
+        called["count"] += 1
+        return []
+
+    monkeypatch.setattr(apply_cmd, "_check_plan_reachable_on_origin_head", _spy)
+
+    rc, text, _ = apply_cmd._apply_one(plan_dir, fake, yes=True)
+    assert rc == 2, f"expected exit 2, got {rc}\noutput:\n{text}"
+    assert "not in a git checkout" in text
+    assert called["count"] == 0, "gate should NOT run when plan.repo_root is None"
+    assert fake.calls == [], f"unexpected gh calls: {fake.calls}"
+
+
+def test_apply_one_passes_through_when_gate_returns_empty(tmp_path, monkeypatch):
+    """Gate passes → normal apply flow runs."""
+    import shutil
+
+    from vk.commands import apply_cmd
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan_dir = tmp_path / "v2_plan_minimal"
+    shutil.copytree(src_fixture, plan_dir)
+
+    monkeypatch.setattr(
+        apply_cmd,
+        "_check_plan_reachable_on_origin_head",
+        lambda plan, repo_root: [],
+    )
+
+    from tests.unit.fakes import FakeGhClient
+
+    fake = FakeGhClient()
+    monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+    rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True)
+    assert rc == 0, f"expected exit 0, got {rc}\noutput:\n{text}"
+    assert any(c[0] == "create_issue" for c in fake.calls), (
+        f"expected an IssueCreate, got calls={fake.calls}"
+    )
+
+
+def test_apply_one_dry_run_skips_gate(tmp_path, monkeypatch):
+    """vk apply <plan-dir> (no --yes) doesn't invoke the gate — preview unaffected."""
+    import shutil
+
+    from vk.commands import apply_cmd
+
+    src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan_dir = tmp_path / "v2_plan_minimal"
+    shutil.copytree(src_fixture, plan_dir)
+
+    called = {"count": 0}
+
+    def _spy(plan, repo_root):
+        called["count"] += 1
+        return []
+
+    monkeypatch.setattr(apply_cmd, "_check_plan_reachable_on_origin_head", _spy)
+
+    from tests.unit.fakes import FakeGhClient
+
+    fake = FakeGhClient()
+    monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+    rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=False)
+    assert rc == 0
+    assert called["count"] == 0, "gate should NOT be invoked on dry-run"

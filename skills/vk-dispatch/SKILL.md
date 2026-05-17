@@ -12,6 +12,19 @@ GitHub state, diffs, and emits the mutations needed to bring GitHub in line
 with the plan. Works for first-time creation, incremental updates, and
 ongoing reconciliation — there's no separate "first dispatch" verb in v2.
 
+## Pre-flight (mandatory)
+
+The plan and its referenced spec MUST be merged to the default
+branch before running `vk apply --yes`. The CLI refuses with
+exit 2 otherwise, listing the unreachable paths. If you've just
+written the plan, open a PR for spec+plan and merge it before
+running this workflow. The dispatch + writeback is then a
+separate (small) PR — see step 5.
+
+If `git remote set-head origin --auto` has never been run on
+your checkout, `vk apply --yes` will tell you to run it before
+anything else.
+
 **Announce at start:** "I'm using vk-dispatch to reconcile this plan via `vk apply`."
 
 ## Procedure

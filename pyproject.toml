@@ -1,6 +1,6 @@
 [project]
 name = "vk"
-version = "2.1.5"
+version = "2.1.6"
 description = "VK toolchain: v2 plan-as-folder, render → observe → diff → apply"
 requires-python = ">=3.11"
 dependencies = [

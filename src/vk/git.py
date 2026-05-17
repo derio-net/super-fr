@@ -41,3 +41,15 @@ def commit(message: str, cwd: Path | None = None) -> None:
 def status(cwd: Path | None = None) -> str:
     """Return porcelain status output."""
     return _run_git(["status", "--porcelain"], cwd=cwd)
+
+
+def file_on_ref(ref: str, path: str, cwd: Path | None = None) -> bool:
+    """True iff `path` exists at the given git `ref`.
+
+    Thin wrapper around `git ls-tree`. Used by the dispatch
+    reachability gate to verify plan files are reachable on
+    origin/HEAD before `vk apply --yes` creates an Issue.
+    Raises if the ref doesn't exist locally.
+    """
+    output = _run_git(["ls-tree", ref, "--", path], cwd=cwd)
+    return bool(output.strip())
