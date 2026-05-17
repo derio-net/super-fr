@@ -80,20 +80,39 @@ tasks:
 
       def test_fake_gh_client_rejects_unensured_labels_on_edit():
           gh = FakeGhClient()
-          gh.create_issue(repo="derio-net/repo-a", title="t", body="b", labels=[])
+          gh.add_issue("derio-net/repo-a", 1)  # preload an issue to edit
           with pytest.raises(FakeGhError, match="label not found"):
-              gh.edit_issue_labels("derio-net/repo-a", 1, add={"vk-ready"}, remove=set())
+              gh.edit_issue_labels(
+                  "derio-net/repo-a", 1,
+                  add=frozenset({"vk-ready"}), remove=frozenset(),
+              )
 
       def test_fake_gh_client_rejects_unensured_labels_on_create():
           gh = FakeGhClient()
           with pytest.raises(FakeGhError, match="label not found"):
-              gh.create_issue(repo="derio-net/repo-a", title="t", body="b", labels={"vk-ready"})
+              gh.create_issue(
+                  "derio-net/repo-a",
+                  title="t", body="b", labels=frozenset({"vk-ready"}),
+              )
 
       def test_fake_gh_client_accepts_labels_after_ensure():
           gh = FakeGhClient()
-          gh.ensure_labels("derio-net/repo-a", [{"name": "vk-ready", "color": "0E8AE6"}])
-          gh.create_issue(repo="derio-net/repo-a", title="t", body="b", labels={"vk-ready"})
+          gh.ensure_labels("derio-net/repo-a", ["vk-ready"])
+          gh.create_issue(
+              "derio-net/repo-a",
+              title="t", body="b", labels=frozenset({"vk-ready"}),
+          )
       ```
+
+      Notes on signatures:
+        - `ensure_labels(repo, labels)` accepts strings OR LabelDef objects
+          (see `tests/unit/fakes.py:150-156`). Dicts are NOT supported.
+        - `create_issue` takes `repo` positionally, then keyword-only
+          `title`, `body`, `labels: frozenset[str]` (lines 133-148).
+        - `edit_issue_labels` takes `repo, number` positionally, then
+          keyword-only `add`/`remove` as `frozenset[str]` (lines 99-112).
+        - Use `gh.add_issue(repo, n)` to preload an issue without going
+          through `create_issue` (lines 51-71).
 
       Run: `uv run pytest tests/unit/test_fakes.py -x --no-cov`
       Expect: red — FakeGhClient currently accepts labels without ensure.
@@ -101,18 +120,16 @@ tasks:
     text: |-
       Tighten FakeGhClient to enforce label pre-ensure.
 
-      Edit `tests/unit/fakes.py`. Track ensured labels per repo:
-      ```python
-      # in __init__
-      self._ensured_labels: dict[str, set[str]] = {}
-      ```
+      Edit `tests/unit/fakes.py`. The class ALREADY tracks ensured labels
+      per repo via `self.repo_labels: dict[str, set[str]]` (line 41); the
+      gap is that `edit_issue_labels` and `create_issue` don't consult
+      it. Do NOT introduce a parallel field — reuse `self.repo_labels`.
 
-      In `ensure_labels(repo, labels)`, add every label name to the set.
       In `edit_issue_labels(repo, number, add, remove)` and
       `create_issue(repo, ..., labels=...)`, raise FakeGhError if any
-      `add` (or `labels`) name isn't in `self._ensured_labels.get(repo, set())`:
+      `add` (or `labels`) name isn't in `self.repo_labels.get(repo, set())`:
       ```python
-      unknown = set(add or set()) - self._ensured_labels.get(repo, set())
+      unknown = set(add or set()) - self.repo_labels.get(repo, set())
       if unknown:
           raise FakeGhError(f"label not found on {repo}: {sorted(unknown)}")
       ```
@@ -255,15 +272,23 @@ tasks:
       Each test's Given/When/Then is in the spec at
       `docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md`
       §"Acceptance tests → Group H". Use the `v2_plan_cross_repo` fixture
-      loaded via `load_plan_dir(Path("tests/unit/fixtures/v2_plan_cross_repo"))`.
+      loaded via `parse(Path("tests/unit/fixtures/v2_plan_cross_repo"))`.
 
-      Implementation pattern:
+      Implementation pattern (imports as you'd write them — `parse` is
+      the v2 plan-folder loader at `src/vk/parser.py:89`):
       ```python
+      from pathlib import Path
+      from vk.parser import parse
+      from vk.render import render
+      from vk.diff import diff, RepoLabelEnsure
+      from vk.states import GhState
+
       def test_diff_emits_ensure_per_destination_repo(tmp_path):
-          plan = load_plan_dir(Path("tests/unit/fixtures/v2_plan_cross_repo"))
+          plan = parse(Path("tests/unit/fixtures/v2_plan_cross_repo"))
           observed = GhState(phases={})  # empty — all undispatched / fresh
           rendered = render(plan, observed)
-          mutations = diff(rendered, observed, plan).mutations
+          # diff() signature: diff(rendered, observed, *, plan) — kwarg-only.
+          mutations = diff(rendered, observed, plan=plan).mutations
           ensures = [m for m in mutations if isinstance(m, RepoLabelEnsure)]
           ensure_repos = {m.repo for m in ensures}
           assert ensure_repos == {"derio-net/repo-a", "derio-net/repo-b"}
@@ -315,28 +340,35 @@ tasks:
       function that emits `RepoLabelEnsure` — likely top of `diff()` or
       a helper like `_label_ensures(...)`.
 
-      Replace its single-repo emission with grouping:
+      Replace its single-repo emission with grouping. `parse_issue_url`
+      already exists at `src/vk/_urls.py` and is already imported by
+      `src/vk/diff.py` (used at line ~134 for per-issue routing). It
+      returns `(repo, number)` — a tuple, not an object with `.repo`.
+
       ```python
       # Build labels_per_repo: {dest_repo: set[LabelDef]} from rendered.
       labels_per_repo: dict[str, set[LabelDef]] = {}
       for phase in plan.phases:
           ri = rendered.issue_per_phase[phase.phase.number]
-          dest_repo = (
-              _parse_issue_url(phase.phase.tracking_issue).repo
-              if phase.phase.tracking_issue
-              else plan.meta.target_repo
-          )
+          if phase.phase.tracking_issue:
+              dest_repo, _ = parse_issue_url(phase.phase.tracking_issue)
+          else:
+              dest_repo = plan.meta.target_repo
           labels_per_repo.setdefault(dest_repo, set()).update(
               ld for ld in ri.labels if _is_managed(ld.name)
           )
+      # RepoLabelEnsure.labels is frozenset[LabelDef] (see diff.py:79).
+      # Sort the OUTER iteration for deterministic mutation order.
       ensures = [
-          RepoLabelEnsure(repo=repo, labels=sorted(labels, key=lambda ld: ld.name))
+          RepoLabelEnsure(repo=repo, labels=frozenset(labels))
           for repo, labels in sorted(labels_per_repo.items())
       ]
+      mutations.extend(ensures)
       ```
 
-      `_parse_issue_url` may already exist in `vk.gh` or `vk.parser`; if
-      not, add it locally as a 3-line regex helper.
+      Replace the existing single-repo emission block at `diff.py:109-113`
+      with the above. The per-issue routing at `diff.py:134-171` already
+      uses `parse_issue_url` correctly — leave it alone.
 
       Run: `uv run pytest tests/unit/test_v2_diff.py -k 'ensure or cross_repo' -x --no-cov`
       Expect: H1, H2, H3, H4 all GREEN.

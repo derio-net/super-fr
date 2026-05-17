@@ -174,7 +174,7 @@ tasks:
       ```python
       from pathlib import Path
       from tests.unit.fakes import FakeMcpClient
-      from vk.parser import load_plan_dir
+      from vk.parser import parse as load_plan_dir
 
       def test_dispatch_creates_card_and_workspace():
           from vk.bridge.dispatch import dispatch_phase
@@ -236,9 +236,12 @@ tasks:
       ```
 
       Implementation extracts the merged behavior of legacy `sync_issue`
-      and the v2 `_McpAdapter.create_card`:
-      1. Build title: `gh#{N}: [{repo}]` where N = issue number from
-         `phase.tracking_issue`, repo = `parse_issue_url(...).repo`.
+      and the v2 `_McpAdapter.create_card`. Use the existing helper:
+      `from vk._urls import parse_issue_url` — returns `(repo, number)`
+      tuple (not an object with `.repo`).
+
+      1. Build title: `gh#{N}: [{repo}]` where
+         `repo, N = parse_issue_url(phase.phase.tracking_issue)`.
       2. Build description (newline-joined):
          - `plan.meta.plan`
          - `f"Phase {phase.phase.number}/{len(plan.phases)}"`
