@@ -348,6 +348,630 @@ Each invariant gets one owner. If the owner's signature can't enforce the invari
 - [ ] CLAUDE.md updated with the bridge-audit rule
 - [ ] Version bump applied; `uv.lock` updated
 
+## Acceptance tests (BDD-style, executable as pytest)
+
+The complete feature spectrum, framed as capabilities. Each capability becomes one (or a small handful of) executable pytest test(s) with a Given/When/Then docstring. Phase annotations (`implementation: Phase N`) are implementation-tracking comments only — they do not change what's asserted.
+
+Test discovery convention: each capability lives at the indicated test file path. CI runs all of these on every PR; an acceptance test failing means the rebuild has regressed against its specced behavior.
+
+### Group A — Renderer + dep gating
+
+#### A1: Phase with unsatisfied deps projects `vk-blocked`
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_render_deps.py::test_phase_with_unsatisfied_deps_projects_vk_blocked`
+
+```python
+def test_phase_with_unsatisfied_deps_projects_vk_blocked(tmp_path):
+    """
+    GIVEN a plan with two phases — phase 1 (depends_on=[]) and phase 2
+          (depends_on=[1]) — neither dispatched
+    WHEN  render(plan, observed=empty) is called
+    THEN  rendered.issue_per_phase[1].labels contains 'vk-ready'
+    AND   rendered.issue_per_phase[2].labels contains 'vk-blocked'
+    AND   rendered.issue_per_phase[2].labels does NOT contain 'vk-ready'
+    """
+```
+
+#### A2: Phase with satisfied deps projects `vk-ready`
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_render_deps.py::test_phase_with_satisfied_deps_projects_vk_ready`
+
+```python
+def test_phase_with_satisfied_deps_projects_vk_ready(tmp_path):
+    """
+    GIVEN a plan with phases 1 (depends_on=[]) and 2 (depends_on=[1])
+    AND   phase 1's tracking_issue is observed as CLOSED with a merged PR
+    AND   phase 1's state.completion.at is set
+    WHEN  render(plan, observed) is called
+    THEN  rendered.issue_per_phase[2].labels contains 'vk-ready'
+    AND   does NOT contain 'vk-blocked'
+    """
+```
+
+#### A3: Blocked→ready transition when dep completes
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_render_deps.py::test_blocked_to_ready_transition_when_dep_completes`
+
+```python
+def test_blocked_to_ready_transition_when_dep_completes(tmp_path):
+    """
+    GIVEN phase 2 currently labelled vk-blocked (because phase 1 was incomplete)
+    WHEN  phase 1 completes (observed: closed + merged PR; state.completion.at set)
+    AND   diff(rendered, observed, plan) is computed
+    THEN  the mutation list contains an IssueLabelChange that removes
+          'vk-blocked' AND adds 'vk-ready' on phase 2's tracking issue
+    """
+```
+
+#### A4: Fan-in DAG — phase blocked until ALL deps complete
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_render_deps.py::test_fan_in_phase_blocked_until_all_deps_complete`
+
+```python
+def test_fan_in_phase_blocked_until_all_deps_complete(tmp_path):
+    """
+    GIVEN a plan where phase 4 has depends_on=[1, 2, 3]
+    AND   phases 1 and 2 are complete; phase 3 is in-progress
+    WHEN  render(plan, observed) is called
+    THEN  rendered.issue_per_phase[4].labels contains 'vk-blocked'
+
+    GIVEN the same state but with phase 3 now complete
+    WHEN  render(plan, observed) is called again
+    THEN  rendered.issue_per_phase[4].labels contains 'vk-ready'
+    """
+```
+
+#### A5: Manual phase unaffected by dep gating
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_render_deps.py::test_manual_phase_unaffected_by_dep_gating`
+
+```python
+def test_manual_phase_unaffected_by_dep_gating():
+    """
+    GIVEN a manual-tagged phase with depends_on=[1] and phase 1 incomplete
+    WHEN  render() is called
+    THEN  the phase projects 'manual' lifecycle label (not 'vk-blocked')
+    """
+```
+
+#### A6: Bad dep reference treated as blocked
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_render_deps.py::test_bad_dep_reference_treated_as_blocked`
+
+```python
+def test_bad_dep_reference_treated_as_blocked(tmp_path):
+    """
+    GIVEN a plan with phase 2 having depends_on=[99] (no phase 99 exists)
+    WHEN  render(plan, observed) is called
+    THEN  rendered.issue_per_phase[2].labels contains 'vk-blocked'
+          (conservative: bad reference = treat as never-satisfiable)
+    """
+```
+
+### Group B — Dispatch consolidation + MCP move
+
+#### B1: `vk.bridge.dispatch` is the single canonical dispatcher
+<!-- implementation: Phase 2 -->
+
+**Location:** `tests/unit/test_bridge_dispatch.py::test_dispatch_creates_card_and_workspace`
+
+```python
+def test_dispatch_creates_card_and_workspace():
+    """
+    GIVEN a vk-ready phase with tracking_issue set, no existing VK card
+    AND   a FakeMcpClient configured to record calls
+    WHEN  vk.bridge.dispatch.dispatch_phase(phase, plan, mcp_client, ...) is called
+    THEN  mcp_client received a create_issue call with title 'gh#<n>: <phase title>'
+    AND   mcp_client received an update_issue call setting status 'In progress'
+    AND   mcp_client received a list_repos call
+    AND   mcp_client received a start_workspace call with executor='CLAUDE_CODE'
+          and the correct branch
+    AND   mcp_client received a link_workspace_issue call
+    AND   the function returned a DispatchResult with card_id and workspace_id
+    """
+```
+
+#### B2: Both legacy and v2 call sites use the same dispatch implementation
+<!-- implementation: Phase 2 -->
+
+**Location:** `tests/unit/test_bridge_dispatch.py::test_no_duplicate_dispatch_implementations`
+
+```python
+def test_no_duplicate_dispatch_implementations():
+    """
+    GIVEN the rebuilt codebase
+    WHEN  grep for VK MCP orchestration sequences (create_issue → update_issue →
+          list_repos → start_workspace → link_workspace_issue)
+    THEN  only one such sequence exists, in vk.bridge.dispatch
+    (Regression guard: the duplication between sync_issue and _McpAdapter.create_card
+    in the legacy bridge is what motivated the consolidation.)
+    """
+```
+
+#### B3: MCP client lives in vk package
+<!-- implementation: Phase 2 -->
+
+**Location:** `tests/unit/test_mcp_client.py::test_mcp_client_importable_from_vk`
+
+```python
+def test_mcp_client_importable_from_vk():
+    """
+    GIVEN the rebuilt vk package
+    WHEN  importing vk._mcp_client
+    THEN  the VkMcpClient class is available
+    AND   the VkMcpError exception is available
+    AND   agent-images/kali/scripts/vk_mcp_client.py no longer exists
+    """
+```
+
+#### B4: FakeMcpClient exists for tests
+<!-- implementation: Phase 2 -->
+
+**Location:** `tests/unit/fakes.py::FakeMcpClient` (existence test)
+
+```python
+def test_fake_mcp_client_implements_protocol():
+    """
+    GIVEN FakeMcpClient from tests/unit/fakes.py
+    THEN  it implements vk.bridge.VkMcpClient Protocol (create_card, update_card)
+    AND   it records all calls in a `calls` list
+    AND   it supports configurable failure injection (fail_on_call=N)
+    """
+```
+
+### Group C — Workspace lifecycle + PR state
+
+#### C1: Workspace archives when card reaches Done
+<!-- implementation: Phase 3 -->
+
+**Location:** `tests/unit/test_bridge_workspaces.py::test_workspace_archives_on_card_done`
+
+```python
+def test_workspace_archives_on_card_done():
+    """
+    GIVEN a FakeMcpClient with workspace 'ws-1' linked to card 'card-1'
+          whose name follows the bridge convention '<simple_id> -> gh#<N>'
+    AND   card 'card-1' has just transitioned to status 'Done'
+    WHEN  vk.bridge.workspaces.archive_for_card(client, simple_id) is called
+    THEN  client.update_workspace('ws-1', archived=True) was called
+    """
+```
+
+#### C2: Orphan workspace reaping
+<!-- implementation: Phase 3 -->
+
+**Location:** `tests/unit/test_bridge_workspaces.py::test_reap_orphans_archives_workspaces_with_no_live_card`
+
+```python
+def test_reap_orphans_archives_workspaces_with_no_live_card():
+    """
+    GIVEN three workspaces named '5 -> gh#100', '6 -> gh#101', '7 -> gh#102'
+    AND   cards exist for simple_ids 5 and 6 (5 is In-progress, 6 is Done);
+          no card exists for simple_id 7
+    AND   no workspace is pinned
+    WHEN  vk.bridge.workspaces.reap_orphans(client) is called
+    THEN  workspaces for simple_ids 6 (card Done) and 7 (no card) are archived
+    AND   workspace for simple_id 5 (card In-progress) is NOT archived
+    """
+```
+
+#### C3: PR open → card In-progress → In-review
+<!-- implementation: Phase 3 -->
+
+**Location:** `tests/unit/test_bridge_pr_state.py::test_in_progress_transitions_to_in_review_when_pr_opens`
+
+```python
+def test_in_progress_transitions_to_in_review_when_pr_opens():
+    """
+    GIVEN a VK card currently 'In progress'
+    AND   the card's latest_pr_status is 'open' (non-draft PR exists)
+    WHEN  vk.bridge.pr_state.tick(client) is called
+    THEN  client.update_issue(card_id, status='In review') was called
+    """
+```
+
+#### C4: PR merged → card In-review → Done, cascades archive + close
+<!-- implementation: Phase 3 -->
+
+**Location:** `tests/unit/test_bridge_pr_state.py::test_in_review_transitions_to_done_when_pr_merges`
+
+```python
+def test_in_review_transitions_to_done_when_pr_merges():
+    """
+    GIVEN a VK card currently 'In review'
+    AND   the card's latest_pr_status is 'merged'
+    WHEN  vk.bridge.pr_state.tick(client) is called
+    THEN  client.update_issue(card_id, status='Done') was called
+    AND   client.update_workspace(linked_ws_id, archived=True) was called
+    AND   a gh issue close request was made for the linked Issue (if PR body
+          omitted Fixes #N; otherwise gh auto-close fired earlier)
+    """
+```
+
+#### C5: Phase complete → renderer projects CLOSED state → diff emits IssueStateChange
+<!-- implementation: Phase 3 (folds bridge's belt-and-braces close into renderer) -->
+
+**Location:** `tests/unit/test_render.py::test_complete_phase_projects_closed_state`
+
+```python
+def test_complete_phase_projects_closed_state():
+    """
+    GIVEN a phase with state.completion.at set, all steps ticked,
+          and observed: 1 merged PR, no open non-draft PRs
+    WHEN  render(plan, observed) is called
+    THEN  rendered.issue_per_phase[N].state == 'CLOSED'
+
+    GIVEN diff(rendered, observed_with_open_issue, plan) is computed
+    THEN  an IssueStateChange(repo=..., issue_number=N, new_state='CLOSED')
+          mutation is emitted
+    """
+```
+
+### Group D — Operational concerns
+
+#### D1: Tick respects MAX_CONCURRENT
+<!-- implementation: Phase 4 -->
+
+**Location:** `tests/unit/test_bridge_slots.py::test_tick_defers_excess_phases_when_slots_exhausted`
+
+```python
+def test_tick_defers_excess_phases_when_slots_exhausted(monkeypatch):
+    """
+    GIVEN MAX_CONCURRENT=2 and 3 currently-active workspaces (slots = 0)
+    AND   a plan with 2 vk-ready phases (none synced yet)
+    WHEN  vk.bridge.tick(plan, gh, mcp_client) is called
+    THEN  no create_card calls were made
+    AND   TickResult.skipped >= 2 (or 'deferred', depending on naming)
+
+    GIVEN the same setup but MAX_CONCURRENT=5 (slots = 2)
+    WHEN  tick() is called
+    THEN  exactly 2 create_card calls were made
+    """
+```
+
+#### D2: Tick dedups by card title
+<!-- implementation: Phase 4 -->
+
+**Location:** `tests/unit/test_bridge_dedup.py::test_existing_card_just_stamps_vk_synced`
+
+```python
+def test_existing_card_just_stamps_vk_synced():
+    """
+    GIVEN a vk-ready Issue #42 with title fragment 'gh#42: Foo'
+    AND   a VK card already exists with title 'gh#42: Foo' (somehow created
+          out-of-band, e.g. manual)
+    WHEN  vk.bridge.tick(plan, gh, mcp_client) is called
+    THEN  NO create_card call was made (dedup detected by title)
+    AND   the Issue was labelled 'vk-synced' (idempotency stamp)
+    """
+```
+
+#### D3: Metrics emit on success / failure / heartbeat
+<!-- implementation: Phase 4 -->
+
+**Location:** `tests/unit/test_bridge_metrics.py`
+
+```python
+def test_metrics_emit_on_dispatch_success(monkeypatch):
+    """
+    GIVEN a fake Pushgateway HTTP endpoint that records pushed metrics
+    WHEN  vk.bridge.tick() successfully syncs one phase
+    THEN  exactly one 'willikins_vk_bridge_sync_total' increment was pushed
+    """
+
+def test_metrics_emit_on_dispatch_failure(monkeypatch):
+    """
+    GIVEN a FakeMcpClient configured to fail on create_card
+    WHEN  vk.bridge.tick() attempts to sync one phase and fails
+    THEN  a 'willikins_vk_bridge_failure_total' metric was pushed with
+          reason matching the failure mode
+    """
+
+def test_heartbeat_pushed_at_end_of_tick():
+    """
+    GIVEN a successful tick
+    THEN  a 'willikins_heartbeat_last_success_timestamp' gauge was pushed
+    """
+```
+
+#### D4: Unknown-repo phases skipped with metric
+<!-- implementation: Phase 4 -->
+
+**Location:** `tests/unit/test_bridge_config.py::test_unknown_repo_skipped_with_metric`
+
+```python
+def test_unknown_repo_skipped_with_metric(monkeypatch):
+    """
+    GIVEN VK's known repos = {'frank', 'willikins'}
+    AND   a plan with target_repo='unknown-repo' AND a phase with vk-ready
+    WHEN  vk.bridge.tick() runs
+    THEN  no MCP calls were made for that phase
+    AND   a 'willikins_vk_bridge_failure_total{reason="unknown_repo"}' metric
+          was pushed
+    """
+```
+
+#### D5: Configurable lifecycle hook
+<!-- implementation: Phase 4 -->
+
+**Location:** `tests/unit/test_bridge_lifecycle.py::test_lifecycle_hook_invoked_when_configured`
+
+```python
+def test_lifecycle_hook_invoked_when_configured(tmp_path, monkeypatch):
+    """
+    GIVEN VK_LIFECYCLE_HOOK_SCRIPT=/path/to/hook.sh (a test script that
+          records its args)
+    WHEN  vk.bridge.dispatch successfully creates a card
+    THEN  the hook script was invoked with args (issue_url, 'in-progress')
+
+    GIVEN VK_LIFECYCLE_HOOK_SCRIPT is unset
+    WHEN  vk.bridge.dispatch successfully creates a card
+    THEN  no external script was invoked
+    """
+```
+
+### Group E — CLI + install
+
+#### E1: vk public CLI has no `bridge` verb
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/unit/test_cli.py::test_no_bridge_verb_exposed`
+
+```python
+def test_no_bridge_verb_exposed():
+    """
+    GIVEN the public vk CLI
+    WHEN  invoking `vk --help`
+    THEN  'bridge' does NOT appear in the command list
+    (Bridge is invoked via `python -m vk.bridge` from a wrapper, never as
+    a public verb.)
+    """
+```
+
+#### E2: `python -m vk.bridge --dry-run` exits 0
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/integration/test_bridge_entry_point.py::test_python_dash_m_dry_run_exits_zero`
+
+```python
+def test_python_dash_m_dry_run_exits_zero():
+    """
+    GIVEN the rebuilt vk package installed
+    WHEN  subprocess.run(['python', '-m', 'vk.bridge', '--dry-run']) is invoked
+          in an env with no MCP / gh access (purely import-only)
+    THEN  the process exits 0
+    AND   no GH/MCP side effects occurred
+    """
+```
+
+#### E3: install.sh `--install-bridge` writes wrapper + prints cron line
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/integration/test_install_bridge.py::test_install_bridge_flag_writes_wrapper`
+
+```python
+def test_install_bridge_flag_writes_wrapper(tmp_path, monkeypatch):
+    """
+    GIVEN a temp HOME with vk already installed via `uv tool install`
+    AND   VK_BRIDGE_WRAPPER_PATH=/tmp/test-wrapper/run.sh
+    WHEN  bash scripts/install.sh --install-bridge is run
+    THEN  /tmp/test-wrapper/run.sh exists and is executable
+    AND   its contents exec the active vk venv's `python -m vk.bridge "$@"`
+    AND   stdout contains a recommended crontab line referencing the wrapper path
+    """
+```
+
+#### E4: Stale-checkout auto-pull before plan read
+<!-- implementation: Phase 5 (folds in drift-class-2 from the now-archived kali-pv spec) -->
+
+**Location:** `tests/integration/test_bridge_cli.py::test_tick_pulls_managed_repos_before_discover`
+
+```python
+def test_tick_pulls_managed_repos_before_discover(tmp_path):
+    """
+    GIVEN a managed repo checkout at <tmp>/repos/foo whose origin/main is
+          ahead by 2 commits (the local working tree is stale)
+    AND   the new commits add a plan dir docs/superpowers/plans/new-plan/
+    WHEN  vk.bridge.cli.main() runs a tick
+    THEN  before discover_plans(repo='foo', ...) is called, the bridge ran
+          `git fetch && git checkout main && git pull --ff-only` (or equivalent)
+          in <tmp>/repos/foo
+    AND   discover_plans then finds the new-plan/ directory
+    """
+```
+
+### Group F — End-to-end + cutover
+
+#### F1: Full tick produces same end-state as legacy bridge for a known fixture
+<!-- implementation: Phase 6 -->
+
+**Location:** `tests/integration/test_bridge_e2e.py::test_tick_end_state_matches_legacy_for_fixture`
+
+```python
+def test_tick_end_state_matches_legacy_for_fixture(tmp_path):
+    """
+    GIVEN a fixture multi-phase plan with mixed depends_on shape
+    AND   a FakeMcpClient + FakeGhClient pre-loaded with the dispatched Issues
+    WHEN  vk.bridge.tick() runs one tick
+    THEN  the resulting label state on every Issue matches the documented
+          expectation:
+          - root phases (depends_on=[]) → vk-ready + vk-synced
+          - blocked phases (deps not done) → vk-blocked (no vk-ready, no vk-synced)
+          - completed phases → no lifecycle label, state CLOSED
+          - manual phases → manual label
+    AND   the resulting workspace count == count of root phases just synced
+    """
+```
+
+#### F2: agent-images bridge files no longer exist
+<!-- implementation: Phase 6 -->
+
+**Location:** `tests/integration/test_cutover.py::test_agent_images_bridge_files_deleted`
+
+```python
+def test_agent_images_bridge_files_deleted():
+    """
+    GIVEN a clean checkout of derio-net/agent-images at origin/main HEAD
+    WHEN  checking the file system
+    THEN  kali/scripts/vk-issue-bridge.py does NOT exist
+    AND   kali/scripts/vk_mcp_client.py does NOT exist
+    (Test runs cross-repo via `gh api repos/derio-net/agent-images/contents/...`
+    in CI; locally falls back to checking a pinned ref via git.)
+    """
+```
+
+#### F3: Kali container smoke test
+<!-- implementation: Phase 6 -->
+
+**Location:** `agent-images/kali/tests/test_bridge_smoke.py::test_python_m_vk_bridge_dry_run_in_container`
+
+```python
+def test_python_m_vk_bridge_dry_run_in_container():
+    """
+    GIVEN the kali Docker image just built
+    WHEN  invoking `docker run --rm <kali-image> python -m vk.bridge --dry-run`
+    THEN  the process exits 0
+    AND   stdout contains 'vk.bridge: dry-run complete' (or equivalent sentinel)
+    """
+```
+
+#### F4: Idempotency — re-running tick yields no further mutations
+<!-- implementation: spans Phase 1 + Phase 6 -->
+
+**Location:** `tests/integration/test_bridge_e2e.py::test_tick_is_idempotent`
+
+```python
+def test_tick_is_idempotent():
+    """
+    GIVEN a plan in a steady-state (all phases dispatched, labels match
+          renderer projection)
+    WHEN  vk.bridge.tick() runs once
+    AND   vk.bridge.tick() runs again immediately after
+    THEN  the second run made no MCP mutations
+    AND   the second run made no GH label changes
+    AND   the second run made no GH Issue state changes
+    """
+```
+
+#### F5: Legacy body-text-driven dispatch retired
+<!-- implementation: Phase 6 -->
+
+**Location:** `tests/integration/test_bridge_e2e.py::test_standalone_vk_ready_issue_without_plan_is_ignored`
+
+```python
+def test_standalone_vk_ready_issue_without_plan_is_ignored():
+    """
+    GIVEN a vk-ready GitHub Issue that is NOT backed by any v2 plan
+          (manual `gh issue create --label vk-ready` outside the plan workflow)
+    AND   no plan in any managed repo references it as tracking_issue
+    WHEN  vk.bridge.tick() runs
+    THEN  no MCP calls were made for this Issue
+    AND   no labels were changed on this Issue
+    (Legacy bridge would have parsed the body and dispatched; new bridge ignores.)
+    """
+```
+
+#### F6: Cross-repo dispatch — cards land on the right repo
+<!-- implementation: validated end-to-end in Phase 6 (independently fixed earlier via #132/#140) -->
+
+**Location:** `tests/integration/test_bridge_e2e.py::test_cross_repo_phase_dispatches_to_correct_repo`
+
+```python
+def test_cross_repo_phase_dispatches_to_correct_repo():
+    """
+    GIVEN a plan with target_repo='derio-net/foo' and a phase with
+          tracking_issue='https://github.com/derio-net/bar/issues/100'
+    WHEN  vk.bridge.tick() runs
+    THEN  the create_card MCP call passes the correct repo ('derio-net/bar')
+          for workspace branch lookup
+    AND   the vk-synced label is added on bar#100 (not foo)
+    """
+```
+
+### Group G — Cross-cutting / contract
+
+#### G1: Logging uses standard `logging` module
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/unit/test_bridge_cli.py::test_logging_uses_stdlib_logging`
+
+```python
+def test_logging_uses_stdlib_logging(caplog):
+    """
+    GIVEN vk.bridge.cli configured with logging at INFO level
+    WHEN  the tick runs and emits a status message
+    THEN  caplog.records contains the message (proving stdlib logging is used,
+          not bare print)
+    """
+```
+
+#### G2: CLAUDE.md contains the bridge-audit rule
+<!-- implementation: Phase 6 (or earlier — docs-only sub-task) -->
+
+**Location:** `tests/integration/test_repo_invariants.py::test_claude_md_has_bridge_audit_rule`
+
+```python
+def test_claude_md_has_bridge_audit_rule():
+    """
+    GIVEN CLAUDE.md in the repo root
+    WHEN  searching its content
+    THEN  it contains a section/paragraph mentioning 'bridge audit rule'
+          AND references vk.bridge.* as the canonical read-target post-rebuild
+    """
+```
+
+#### G3: Architectural ownership section in this spec (regression guard for the pattern)
+<!-- implementation: docs-only, validated in this spec itself -->
+
+**Location:** `tests/integration/test_repo_invariants.py::test_v2_bridge_rebuild_spec_has_architectural_ownership_section`
+
+```python
+def test_v2_bridge_rebuild_spec_has_architectural_ownership_section():
+    """
+    GIVEN this spec doc on disk
+    WHEN  searching for the '## Architectural ownership' section
+    THEN  the section exists
+    AND   contains a table mapping every contract-level invariant to one
+          owner module + the signature that lets it enforce
+    (Regression guard so the pattern isn't dropped from future specs that
+    copy this one as a template.)
+    """
+```
+
+#### G4: All inventory concerns A-P map to a new home (no orphans)
+<!-- implementation: Phase 6 (verification step) -->
+
+**Location:** `tests/integration/test_cutover.py::test_all_inventory_concerns_have_a_new_home`
+
+```python
+def test_all_inventory_concerns_have_a_new_home():
+    """
+    GIVEN the bridge inventory in this spec (concerns A through P)
+    AND   the migration table mapping each to a new location (or DELETED)
+    WHEN  iterating the migration table after Phase 6 lands
+    THEN  every non-DELETED concern's new home module is importable
+    AND   every DELETED concern is genuinely absent (no dead code shim)
+    """
+```
+
+### Running the acceptance suite
+
+Locally (during development of any phase):
+
+```
+uv run pytest tests/unit/test_render_deps.py tests/unit/test_bridge_*.py tests/integration/test_bridge_*.py tests/integration/test_cutover.py -v
+```
+
+In CI: included in the standard `uv run pytest -q --no-cov` invocation. The acceptance tests are NOT marked or gated separately — they're first-class unit/integration tests that happen to map 1:1 to spec capabilities.
+
+Test traceability: each capability's test docstring repeats the Given/When/Then. `pytest -v` output then reads like a BDD report; `grep -r "implementation: Phase N" tests/` lists every test associated with a given delivery phase, so you can confirm a phase's tests are landing alongside the phase's code.
+
 ## Implementation Plans
 
 | Plan | Repo | File | Depends on |
