@@ -36,7 +36,7 @@ from vk.diff import (
     diff,
 )
 from vk.observe import observe
-from vk.parser import PlanSchemaError, parse
+from vk.parser import Plan, PlanSchemaError, parse
 from vk.plan_ops import PlanEditError
 from vk.render import render
 
@@ -56,6 +56,32 @@ def _make_gh_client() -> GhClient:
     from vk.real_ghclient import RealGhClient
 
     return RealGhClient()
+
+
+def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Path]:
+    """Return plan files (and spec, if set) NOT present on origin/HEAD.
+
+    Empty list = gate passes. Caller (`_apply_one`) refuses `--yes`
+    when this returns non-empty.
+
+    Raises if origin/HEAD isn't resolvable locally — caller catches
+    and re-raises with a setup hint.
+    """
+    from vk.git import file_on_ref
+
+    missing: list[Path] = []
+    plan_dir = plan.dir
+    for path in sorted(plan_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(repo_root)
+        if not file_on_ref("origin/HEAD", str(rel), cwd=repo_root):
+            missing.append(rel)
+    if plan.meta.spec:
+        spec_rel = Path(plan.meta.spec)
+        if not file_on_ref("origin/HEAD", str(spec_rel), cwd=repo_root):
+            missing.append(spec_rel)
+    return missing
 
 
 def _format_diff(d: Diff) -> str:
@@ -149,10 +175,53 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
         "failures": [],
         "created_issues": {},
         "tracking_issue_writeback_failures": [],
+        "unreachable_paths": [],
     }
 
     if not yes:
         return 0, "\n".join(parts), json_out
+
+    if plan.repo_root is None:
+        lines = [
+            parts[0],
+            "",
+            "refuse to dispatch: plan is not in a git checkout — "
+            "can't verify the plan is reachable to the bridge or "
+            "implementing agents.",
+        ]
+        json_out["unreachable_paths"] = []
+        return 2, "\n".join(lines), json_out
+
+    try:
+        missing = _check_plan_reachable_on_origin_head(plan, plan.repo_root)
+    except Exception as e:  # noqa: BLE001 — wrap origin/HEAD errors with setup hint
+        lines = [
+            parts[0],
+            "",
+            f"refuse to dispatch: could not resolve origin/HEAD: {e}",
+            "",
+            "If origin/HEAD isn't set locally, run:",
+            "  git remote set-head origin --auto",
+        ]
+        json_out["unreachable_paths"] = []
+        json_out["origin_head_error"] = str(e)
+        return 2, "\n".join(lines), json_out
+    if missing:
+        lines = [
+            parts[0],
+            "",
+            f"refuse to dispatch: {len(missing)} file(s) not at origin/HEAD:",
+        ]
+        for p in missing:
+            lines.append(f"  {p}")
+        lines.append("")
+        lines.append(
+            "Merge the plan + spec to the default branch first, then re-run `vk apply --yes`."
+        )
+        lines.append("(If origin/HEAD isn't set locally: `git remote set-head origin --auto`.)")
+        json_out["unreachable_paths"] = [str(p) for p in missing]
+        return 2, "\n".join(lines), json_out
+    json_out["unreachable_paths"] = []
 
     result = apply(d, gh)
     writeback_failures: list[dict[str, Any]] = []

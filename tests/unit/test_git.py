@@ -57,3 +57,52 @@ class TestRunGitError:
         ):
             with pytest.raises(subprocess.CalledProcessError):
                 repo_root()
+
+
+def _git(args: list[str], cwd: Path) -> None:
+    """Test helper: run git with check=True; raises on failure."""
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+def _init_repo_with_commit(tmp_path: Path) -> Path:
+    """Init a git repo at tmp_path and commit a single file. Returns repo path."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(["init", "-q"], repo)
+    _git(["config", "user.email", "test@example.com"], repo)
+    _git(["config", "user.name", "Test"], repo)
+    (repo / "tracked.txt").write_text("hi\n")
+    _git(["add", "tracked.txt"], repo)
+    _git(["commit", "-q", "-m", "init"], repo)
+    return repo
+
+
+def test_file_on_ref_true_for_committed_path(tmp_path):
+    from vk.git import file_on_ref
+
+    repo = _init_repo_with_commit(tmp_path)
+    assert file_on_ref("HEAD", "tracked.txt", cwd=repo) is True
+
+
+def test_file_on_ref_false_for_uncommitted_path(tmp_path):
+    from vk.git import file_on_ref
+
+    repo = _init_repo_with_commit(tmp_path)
+    (repo / "untracked.txt").write_text("not committed\n")
+    assert file_on_ref("HEAD", "untracked.txt", cwd=repo) is False
+
+
+def test_file_on_ref_false_for_nonexistent_path(tmp_path):
+    from vk.git import file_on_ref
+
+    repo = _init_repo_with_commit(tmp_path)
+    assert file_on_ref("HEAD", "nope/missing.txt", cwd=repo) is False
+
+
+def test_file_on_ref_raises_on_unknown_ref(tmp_path):
+    """Unknown refs surface a GhError-equivalent — caller catches."""
+    repo = _init_repo_with_commit(tmp_path)
+    from vk.git import file_on_ref
+
+    with pytest.raises(Exception):
+        file_on_ref("origin/HEAD", "tracked.txt", cwd=repo)

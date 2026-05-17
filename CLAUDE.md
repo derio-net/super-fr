@@ -82,6 +82,11 @@ created specifically to propagate that work.
   --check`, `mypy src/`, and `pytest`. Before pushing, run
   `uv run ruff format src/ tests/` and `uv run pytest -q --no-cov` yourself —
   CI is slow to fail-loud.
+- `vk apply --yes` enforces the "plan and spec must be on
+  `origin/HEAD`" contract before dispatching a GitHub Issue.
+  See `docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md`
+  for the rationale and `skills/vk-dispatch/SKILL.md`
+  (Pre-flight) for the operator workflow.
 
 ## Follow-up candidates (not urgent)
 
