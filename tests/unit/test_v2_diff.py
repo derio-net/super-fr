@@ -1,6 +1,7 @@
 from pathlib import Path
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+CROSS_REPO = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
 
 
 def test_diff_undispatched_yields_create():
@@ -233,3 +234,192 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
     assert not any(isinstance(m, IssueCreate) for m in d.mutations)
     assert not any(isinstance(m, IssueLabelChange) for m in d.mutations)
     assert not any(isinstance(m, IssueStateChange) for m in d.mutations)
+
+
+# ---------------------------------------------------------------------------
+# Group H — Multi-repo (cross-repo dispatch)
+# ---------------------------------------------------------------------------
+
+
+def test_diff_emits_ensure_per_destination_repo():
+    """
+    GIVEN a plan with target_repo='derio-net/repo-a'
+    AND   phase 2 has tracking_issue='https://github.com/derio-net/repo-b/issues/100'
+    AND   phase 1 and 3 have no tracking_issue (undispatched)
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  exactly two RepoLabelEnsure mutations are emitted
+    AND   one targets 'derio-net/repo-a' (for undispatched phases)
+    AND   one targets 'derio-net/repo-b' (for phase 2's tracking issue)
+    """
+    from vk import parse
+    from vk.diff import RepoLabelEnsure, diff
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(CROSS_REPO)
+    observed = GhState(phases={})
+    rendered = render(plan, observed)
+    mutations = diff(rendered, observed, plan=plan).mutations
+
+    ensures = [m for m in mutations if isinstance(m, RepoLabelEnsure)]
+    ensure_repos = {m.repo for m in ensures}
+    assert ensure_repos == {"derio-net/repo-a", "derio-net/repo-b"}
+
+
+def test_diff_routes_per_issue_mutations_to_tracking_repo():
+    """
+    GIVEN a plan with target_repo='derio-net/repo-a'
+    AND   phase 2 dispatched to 'derio-net/repo-b' with a drifted body,
+          vk-ready, and an extra stale label
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  every IssueLabelChange / IssueBodyChange for phase 2
+          carries repo='derio-net/repo-b' (NEVER 'derio-net/repo-a')
+    """
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.diff import IssueBodyChange, IssueLabelChange, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    plan = parse(CROSS_REPO)
+
+    # Phase 1 needs to be complete so phase 2's deps are satisfied
+    p1 = next(p for p in plan.phases if p.phase.number == 1)
+    p1_complete = p1.model_copy(
+        update={
+            "state": p1.state.model_copy(
+                update={
+                    "completion": p1.state.completion.model_copy(
+                        update={"at": "2026-05-17T10:00:00Z", "note": "done"}
+                    )
+                }
+            )
+        }
+    )
+    plan = dc_replace(
+        plan,
+        phases=tuple(p1_complete if p.phase.number == 1 else p for p in plan.phases),
+    )
+
+    # Phase 2 is already dispatched on repo-b (in the fixture).
+    # Observe it with a stale extra label and stale body.
+    observed = GhState(
+        phases={
+            2: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset({"vk-ready", "stale-label"}),
+                issue_assignees=(),
+                linked_prs=(),
+                body="stale body",
+            )
+        }
+    )
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    label_changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
+    body_changes = [m for m in d.mutations if isinstance(m, IssueBodyChange)]
+
+    # All per-issue mutations for phase 2 must target repo-b
+    for m in label_changes + body_changes:
+        assert m.repo == "derio-net/repo-b", f"expected repo-b, got {m.repo!r} in {m}"
+        assert m.repo != "derio-net/repo-a"
+
+
+def test_diff_single_repo_plan_emits_one_ensure():
+    """
+    GIVEN a single-repo plan (target_repo == every phase's tracking_issue repo)
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  exactly one RepoLabelEnsure mutation is emitted
+    AND   its repo == plan.meta.target_repo
+    """
+    from vk import parse
+    from vk.diff import RepoLabelEnsure, diff
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    observed = GhState(phases={})
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+    assert len(ensures) == 1
+    assert ensures[0].repo == plan.meta.target_repo
+
+
+def test_diff_fully_cross_repo_plan_skips_target_repo_ensure():
+    """
+    GIVEN a plan where every phase is dispatched on a foreign repo
+          (none on plan.meta.target_repo) and no phases are undispatched
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  no RepoLabelEnsure mutation targets plan.meta.target_repo
+    AND   one RepoLabelEnsure exists per distinct foreign destination repo
+    """
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.diff import RepoLabelEnsure, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation, PrObservation
+
+    plan = parse(CROSS_REPO)
+
+    # Mark phase 1 complete and give it a tracking_issue on repo-b too
+    # so ALL phases are dispatched on repo-b (none on target_repo repo-a)
+    foreign_url_p1 = "https://github.com/derio-net/repo-b/issues/99"
+    foreign_url_p3 = "https://github.com/derio-net/repo-b/issues/101"
+
+    phases = []
+    for p in plan.phases:
+        if p.phase.number == 1:
+            p = p.model_copy(
+                update={
+                    "phase": p.phase.model_copy(update={"tracking_issue": foreign_url_p1}),
+                    "state": p.state.model_copy(
+                        update={
+                            "completion": p.state.completion.model_copy(
+                                update={"at": "2026-05-17T10:00:00Z", "note": "done"}
+                            )
+                        }
+                    ),
+                }
+            )
+        elif p.phase.number == 3:
+            p = p.model_copy(
+                update={"phase": p.phase.model_copy(update={"tracking_issue": foreign_url_p3})}
+            )
+        phases.append(p)
+    plan = dc_replace(plan, phases=tuple(phases))
+
+    merged_pr = PrObservation(
+        url="https://github.com/derio-net/repo-b/pull/1",
+        state="CLOSED",
+        merged=True,
+        draft=False,
+        ci="PASS",
+    )
+    obs_closed = PhaseObservation(
+        issue_state="CLOSED",
+        issue_labels=frozenset(),
+        issue_assignees=(),
+        linked_prs=(merged_pr,),
+    )
+    obs_open = PhaseObservation(
+        issue_state="OPEN",
+        issue_labels=frozenset({"vk-ready"}),
+        issue_assignees=(),
+        linked_prs=(),
+    )
+    observed = GhState(phases={1: obs_closed, 2: obs_open, 3: obs_open})
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+    ensure_repos = {m.repo for m in ensures}
+
+    # No ensure for target_repo (repo-a) — all phases on repo-b
+    assert "derio-net/repo-a" not in ensure_repos
+    # Only repo-b gets an ensure
+    assert "derio-net/repo-b" in ensure_repos

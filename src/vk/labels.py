@@ -34,6 +34,11 @@ class LabelDef:
 
 # Lifecycle states (mutually exclusive — at most one on a given Issue)
 VK_READY = LabelDef("vk-ready", "0E8AE6", "Queued for an agent to pick up")
+VK_BLOCKED = LabelDef(
+    "vk-blocked",
+    "aaaaaa",
+    "Blocked on dependency — waiting for predecessor phase(s) to complete",
+)
 MANUAL = LabelDef("manual", "BFBFBF", "Human-only; not routable to an agent")
 IN_PROGRESS = LabelDef("in-progress", "D93F0B", "An agent is actively working on this")
 PR_READY = LabelDef("pr-ready", "0E8A16", "PR is open; awaiting review")
@@ -68,6 +73,7 @@ def phase_label(n: int) -> LabelDef:
 # label transitions.
 LIFECYCLE: dict[str, LabelDef] = {
     "vk_ready": VK_READY,
+    "vk_blocked": VK_BLOCKED,
     "manual": MANUAL,
     "in_progress": IN_PROGRESS,
     "pr_ready": PR_READY,

@@ -94,7 +94,7 @@ def test_render_undispatched_phase_yields_create_intent():
 def test_lifecycle_label_projection(obs_kwargs, expected_label):
     from vk import parse
     from vk.render import _lifecycle_label
-    from vk.states import PhaseObservation, PrObservation
+    from vk.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     obs = None
@@ -106,7 +106,7 @@ def test_lifecycle_label_projection(obs_kwargs, expected_label):
             issue_assignees=obs_kwargs["issue_assignees"],
             linked_prs=prs,
         )
-    result = _lifecycle_label(plan.phases[0], obs)
+    result = _lifecycle_label(plan.phases[0], obs, plan, GhState(phases={}))
     assert result is not None
     assert result.name == expected_label
 
@@ -317,12 +317,13 @@ def test_manual_phase_label_is_manual():
     """A phase with tag=manual gets the manual lifecycle label, not vk-ready."""
     from vk import parse
     from vk.render import _lifecycle_label
+    from vk.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
     # Phase 10 in this fixture is tagged manual
     manual_phase = next(p for p in plan.phases if p.phase.tag == "manual")
-    result = _lifecycle_label(manual_phase, None)
+    result = _lifecycle_label(manual_phase, None, plan, GhState(phases={}))
     assert result is not None
     assert result.name == "manual"
 

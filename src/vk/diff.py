@@ -102,15 +102,24 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
     mutations: list[Mutation] = []
     repo = plan.meta.target_repo
 
-    # Always ensure managed labels exist on the repo before any Issue ops.
-    # Rendered labels are LabelDefs (registry-colored); we filter by name
-    # against the managed-prefix allowlist and pass LabelDefs straight to
-    # the GhClient so colors/descriptions survive the trip.
-    all_managed_labels: set[LabelDef] = set()
-    for issue in rendered.issue_per_phase.values():
-        all_managed_labels.update(ld for ld in issue.labels if _is_managed(ld.name))
-    if all_managed_labels:
-        mutations.append(RepoLabelEnsure(repo=repo, labels=frozenset(all_managed_labels)))
+    # Group managed labels by destination repo so each repo gets exactly one
+    # RepoLabelEnsure. For undispatched phases (no tracking_issue) the
+    # destination falls back to target_repo (where IssueCreate will fire).
+    # For dispatched phases the destination is parse_issue_url(tracking_issue).
+    labels_per_repo: dict[str, set[LabelDef]] = {}
+    for phase in plan.phases:
+        ri = rendered.issue_per_phase[phase.phase.number]
+        if phase.phase.tracking_issue:
+            dest_repo, _ = parse_issue_url(phase.phase.tracking_issue)
+        else:
+            dest_repo = repo
+        labels_per_repo.setdefault(dest_repo, set()).update(
+            ld for ld in ri.labels if _is_managed(ld.name)
+        )
+    # Sorted outer iteration for deterministic mutation order.
+    for dest_repo, labels in sorted(labels_per_repo.items()):
+        if labels:
+            mutations.append(RepoLabelEnsure(repo=dest_repo, labels=frozenset(labels)))
 
     for phase_n, ri in rendered.issue_per_phase.items():
         phase = next(p for p in plan.phases if p.phase.number == phase_n)
@@ -118,8 +127,13 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
         obs = observed.phases.get(phase_n)
 
         if tracking is None or obs is None:
-            # Undispatched: create the Issue. gh.create_issue takes label
-            # names — project the rendered LabelDefs to their .name.
+            # Undispatched: create the Issue on target_repo. v2 does not yet
+            # support first-dispatch to a foreign repo; that would require
+            # knowing the intended destination before a tracking_issue exists.
+            # When cross-repo first-dispatch is added, update both here AND the
+            # `phase_to_repo` surface in render.render() — the two coupling
+            # points must move together. gh.create_issue takes label names —
+            # project the rendered LabelDefs to their .name.
             mutations.append(
                 IssueCreate(
                     repo=repo,

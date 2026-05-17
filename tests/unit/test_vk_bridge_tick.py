@@ -148,7 +148,9 @@ def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
     result = tick(plan, gh, mcp)
 
     assert result.synced == 1
-    assert result.errors == 1  # the apply-side failure
+    # ensure_labels fails (mutation 0) + subsequent label-change fails because
+    # labels weren't ensured = 2 apply-side failures. VK sync still lands.
+    assert result.errors == 2
     assert any("configured failure" in f for f in result.failures)
 
 
