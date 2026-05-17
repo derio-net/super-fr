@@ -354,8 +354,11 @@ tasks:
 
           from vk.commands import apply_cmd
 
-          # Use a plan fixture in-place; no need for a real git repo here —
-          # we're testing _apply_one's wiring, not the gate function itself.
+          # Copy fixture into a git repo so plan.repo_root resolves.
+          # The new gate wiring refuses early (exit 2, "not in a git
+          # checkout") if plan.repo_root is None — which would short-
+          # circuit before the stubbed gate function ever runs.
+          subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
           src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
           plan_dir = tmp_path / "v2_plan_minimal"
           shutil.copytree(src_fixture, plan_dir)
@@ -388,6 +391,39 @@ tasks:
           assert fake.calls == [], f"unexpected gh calls: {fake.calls}"
 
 
+      def test_apply_one_refuses_when_plan_not_in_git_checkout(tmp_path, monkeypatch):
+          """No `.git/` anywhere above the plan dir → refuse early with a clear message."""
+          import shutil
+          from pathlib import Path
+
+          from vk.commands import apply_cmd
+
+          # NO `git init` — tmp_path is not a git checkout.
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          plan_dir = tmp_path / "v2_plan_minimal"
+          shutil.copytree(src_fixture, plan_dir)
+
+          from tests.unit.fakes import FakeGhClient
+          fake = FakeGhClient()
+          monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+          # Stub the gate so we can detect that it never gets called
+          # (it shouldn't — the None-check returns first).
+          called = {"count": 0}
+          def _spy(plan, repo_root):
+              called["count"] += 1
+              return []
+          monkeypatch.setattr(
+              apply_cmd, "_check_plan_reachable_on_origin_head", _spy
+          )
+
+          rc, text, _ = apply_cmd._apply_one(plan_dir, fake, yes=True)
+          assert rc == 2, f"expected exit 2, got {rc}\noutput:\n{text}"
+          assert "not in a git checkout" in text
+          assert called["count"] == 0, "gate should NOT run when plan.repo_root is None"
+          assert fake.calls == [], f"unexpected gh calls: {fake.calls}"
+
+
       def test_apply_one_passes_through_when_gate_returns_empty(tmp_path, monkeypatch):
           """Gate passes → normal apply flow runs."""
           import shutil
@@ -395,6 +431,8 @@ tasks:
 
           from vk.commands import apply_cmd
 
+          # git init so plan.repo_root resolves (see test_apply_one_rejects_when_gate_returns_missing).
+          subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
           src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
           plan_dir = tmp_path / "v2_plan_minimal"
           shutil.copytree(src_fixture, plan_dir)
@@ -456,22 +494,32 @@ tasks:
       `src/vk/commands/apply_cmd.py` to find the current
       `_apply_one` function (around line 124).
 
-      Add a `repo_root` resolution and a gate call at the top of the
-      `if not yes:` / `if yes:` decision. Specifically, replace the
-      block that starts with `if not yes:` (around line 154) with:
+      Use `plan.repo_root` directly — it's already resolved during
+      parsing (see `src/vk/parser.py:38-59`). If it's `None`, the
+      operator ran `vk apply --yes` outside a git checkout; refuse
+      with a clear message rather than masking via a fallback.
+
+      Replace the block that starts with `if not yes:` (around line
+      154) with:
 
       ```python
           if not yes:
               return 0, "\n".join(parts), json_out
 
-          from vk.git import repo_root as _repo_root
+          if plan.repo_root is None:
+              lines = [
+                  parts[0],
+                  "",
+                  "refuse to dispatch: plan is not in a git checkout — "
+                  "can't verify the plan is reachable to the bridge or "
+                  "implementing agents.",
+              ]
+              json_out["unreachable_paths"] = []
+              return 2, "\n".join(lines), json_out
+
           try:
-              rr = _repo_root(cwd=plan_dir)
-          except Exception:
-              rr = plan_dir  # not a git checkout — gate becomes no-op
-          try:
-              missing = _check_plan_reachable_on_origin_head(plan, rr)
-          except Exception as e:
+              missing = _check_plan_reachable_on_origin_head(plan, plan.repo_root)
+          except Exception as e:  # noqa: BLE001 — wrap origin/HEAD errors with setup hint
               lines = [
                   parts[0],
                   "",
@@ -641,52 +689,28 @@ tasks:
       the underlying cause; do not commit broken state.
   - id: P1.T4.S4
     text: |-
-      CLI sanity check: confirm the gate actually rejects an
-      unreachable plan and passes a reachable one. Done against
-      real fixtures + real git state, no monkeypatch.
+      CLI sanity check: confirm the dry-run path is unaffected by
+      the new wiring. (The reject and accept paths are already
+      covered by the T3 integration tests with full repo setup;
+      this step verifies the production CLI still produces the
+      same dry-run output it always has.)
 
-      Sub-step A — reject path. Pick an existing plan whose files
-      are committed locally on this branch but NOT yet on
-      `origin/main` (the current `2026-05-17-dispatch-reachability-gate`
-      branch has its OWN spec at
-      `docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md`
-      which IS on this branch but not yet on origin/HEAD — but the
-      plan we're authoring here is NOT yet committed at all, so
-      creating a plan dir on this branch and then trying `vk apply
-      --yes` against it should hit the gate).
-
-      Skip this sub-step in practice for now: the plan we're
-      executing here lives on a branch that hasn't been merged.
-      Trying to dispatch THIS plan via `vk apply --yes` would
-      correctly fail the gate (proving the gate works for our
-      actual workflow).
-
-      Sub-step B — pass path. Pick `docs/superpowers/plans/2026-05-13-vk-apply-tracking-issue-writeback/`
-      (already on `origin/main`):
+      Pick `docs/superpowers/plans/2026-05-13-vk-apply-tracking-issue-writeback/`
+      (already merged to `origin/main`; safe to dry-run against
+      without any chance of dispatching):
 
       ```
       uv run vk apply docs/superpowers/plans/2026-05-13-vk-apply-tracking-issue-writeback
       ```
 
-      Expect: dry-run preview output, no error. (No --yes, so the
-      gate isn't invoked — but this confirms the dry-run path is
-      unaffected by our wiring.)
+      Expect: dry-run preview output ending with `(dry-run; pass
+      --yes to apply)`. Exit code 0. No mention of "refuse to
+      dispatch" or "unreachable_paths" — the gate is not invoked
+      on dry-run.
 
-      Sub-step C — actually invoke the gate. Run against a plan
-      whose tracking_issue refers to an already-resolved Issue
-      (so no real gh side-effects are at risk). Sub-step in
-      practice: deferred to PR review — the integration tests in
-      T3 cover the wiring behavior, so a manual CLI invocation
-      adds little beyond confirming the help text and exit codes.
-
-      If you want to verify the reject path manually before
-      committing: temporarily create a new file inside one of
-      `docs/superpowers/plans/2026-05-13-vk-apply-tracking-issue-writeback/`,
-      run `vk apply <that-plan> --yes`, observe exit 2 + the
-      unreachable-paths message, then delete the temp file.
-
-      No required output for this step beyond confirming the dry-run
-      path works.
+      If the dry-run path errors out or mentions the gate at all,
+      stop — the wiring in T3.S2 has accidentally added work to the
+      non-`--yes` branch and needs to be moved.
   - id: P1.T4.S5
     text: |-
       Final gate: full test suite + linters green, version triple
