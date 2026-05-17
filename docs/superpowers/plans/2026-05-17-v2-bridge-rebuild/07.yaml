@@ -1,0 +1,200 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Fix apply_cmd plan-propagation (orthogonal v2-surface bug)
+  tag: agentic
+  depends_on:
+  - 6
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Propagate plan into apply() from the operator CLI
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      Pin the bug with a failing test.
+
+      Background (`docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md`
+      doesn't cover this; surfaced during the rebuild's own dispatch on
+      2026-05-17): `src/vk/commands/apply_cmd.py:222` calls
+      `apply(d, gh)` without the `plan=plan` kwarg. Without `plan`,
+      `apply()` skips `_rerender_dependent_creates` and every
+      `IssueCreate` mutation keeps the phase-number-fallback body
+      (`- Blocked by #1` instead of `- Blocked by #<actual-issue-N>`).
+
+      The legacy bridge then body-parses `#1` etc., queries gh, finds
+      old long-closed Issues, "satisfies" the deps, and dispatches
+      phases out of order. This is exactly what happened to this very
+      plan: Phases 2/3/6 dispatched ahead of Phase 1.
+
+      Phase 1's renderer fix (vk-blocked projection) masks the damage
+      because label-gating becomes authoritative — but the body-render
+      bug remains, and any consumer that body-parses (the legacy bridge
+      in `agent-images` until Phase 6, plus any future tool) is still
+      misled. This phase removes the latent risk entirely.
+
+      Add `tests/unit/test_apply_cmd.py` (new file) with:
+
+      ```python
+      """Regression guard for the apply_cmd → apply(plan=...) propagation bug
+      surfaced during the v2-bridge-rebuild dispatch on 2026-05-17."""
+      from pathlib import Path
+      from unittest.mock import MagicMock
+
+      from vk.apply import ApplyResult
+      from vk.commands import apply_cmd
+      from vk.parser import parse
+
+
+      def test_apply_cmd_propagates_plan_to_apply(monkeypatch, tmp_path):
+          """
+          GIVEN a multi-phase plan loaded via vk.parser.parse
+          WHEN  apply_cmd's apply() invocation runs (mocked to capture kwargs)
+          THEN  the call includes plan=<plan-instance>, ensuring the renderer's
+                phase_to_issue map is built and dependent bodies are re-rendered
+                with the correct issue numbers (NOT the phase-number fallback).
+          """
+          plan = parse(Path("tests/unit/fixtures/v2_plan_multi_phase"))
+
+          captured: dict = {}
+
+          def fake_apply(d, gh, **kwargs):
+              captured["kwargs"] = kwargs
+              return ApplyResult(
+                  applied=(), failures=(), created_issues={}, dry_run=False,
+              )
+
+          monkeypatch.setattr(apply_cmd, "apply", fake_apply)
+          # Stub the gh client + reachability gate so we exercise just the
+          # apply() call site. Reuse the project's existing CliRunner shape
+          # or call _apply_one directly with mocked dependencies.
+          # (Implementing agent: read apply_cmd.py first to choose the
+          # tightest test boundary — _apply_one is the natural seam.)
+
+          # ... arrange + act here, then ...
+          assert "plan" in captured["kwargs"], (
+              "apply_cmd must pass plan= to apply() so dependent bodies "
+              "re-render with correct issue numbers"
+          )
+          assert captured["kwargs"]["plan"] is plan
+      ```
+
+      The "arrange + act" middle is left for the implementing agent —
+      read `src/vk/commands/apply_cmd.py` first to pick the right seam.
+      `_apply_one(plan_dir, gh, ..., yes=True, dry_run=False)` is the
+      natural function to invoke; everything upstream is reachability
+      gate + typer plumbing.
+
+      Run: `uv run pytest tests/unit/test_apply_cmd.py -k propagates_plan -x --no-cov`
+      Expect: RED — apply_cmd.py:222 calls `apply(d, gh)` with no kwargs.
+  - id: P7.T1.S2
+    text: |-
+      Make the test green.
+
+      Edit `src/vk/commands/apply_cmd.py:222`. Change:
+      ```python
+      result = apply(d, gh)
+      ```
+      to:
+      ```python
+      result = apply(d, gh, plan=plan)
+      ```
+
+      That's the entire functional change. `plan` is already in scope at
+      that point (loaded by `_apply_one` earlier in the same function via
+      `vk.parser.parse(plan_dir)`). The `apply()` signature already
+      accepts `plan: Plan | None = None` as a keyword-only arg; the
+      `_rerender_dependent_creates` helper is already wired and tested
+      in `tests/unit/test_v2_apply.py`. Phase 1 of this plan didn't
+      touch any of this — it's a pure operator-CLI fix.
+
+      Run: `uv run pytest tests/unit/test_apply_cmd.py tests/unit/test_v2_apply.py -x --no-cov`
+      Expect: GREEN.
+  - id: P7.T1.S3
+    text: |-
+      Integration smoke for the end-to-end behavior.
+
+      Add to `tests/integration/test_apply_cmd.py` (or wherever the
+      existing CliRunner-based integration tests live — check
+      `tests/integration/test_apply_cmd_dispatch_gate.py` for a working
+      pattern):
+
+      ```python
+      def test_apply_cmd_produces_correct_dep_refs_for_multi_phase_plan(tmp_path):
+          """
+          GIVEN a multi-phase plan with phase 2 depending on phase 1,
+                neither dispatched
+          WHEN  `vk apply --yes <plan>` runs against a FakeGhClient
+          THEN  the IssueCreate mutation for phase 2 carries a body that
+                says `- Blocked by #<phase-1-issue-number>` (NOT
+                `- Blocked by #1`).
+          (Regression guard for the 2026-05-17 dispatch incident — broken
+           bodies referenced old closed Issues and triggered out-of-order
+           dispatch.)
+          """
+          # ... set up tmp_path plan, run CliRunner against the apply
+          # subcommand with --yes, capture the FakeGhClient.calls,
+          # find the create_issue call for phase 2, parse "Blocked by"
+          # from its body kwarg.
+      ```
+
+      Run: `uv run pytest tests/integration/test_apply_cmd.py -k dep_refs -x --no-cov`
+      Expect: GREEN (with S2's fix in place).
+  - id: P7.T1.S4
+    text: |-
+      Version bump 2.2.0 → 2.2.1 + verification + PR.
+
+      Bump the three files (`pyproject.toml`, `.claude-plugin/plugin.json`,
+      `.claude-plugin/marketplace.json`). Run `uv sync`. Pre-push verify
+      per CLAUDE.md (ruff format + check, mypy, pytest).
+
+      Open PR with title:
+      `fix(apply): propagate plan to apply() so dep refs render correctly (Phase 7 of #147)`
+
+      PR body must include:
+      - Link to the 2026-05-17 dispatch incident as the originating
+        evidence (the conversation summary stored at
+        `/Users/derio/.claude/projects/.../jsonl` if useful, or just a
+        descriptive paragraph)
+      - Reference #147 (tracking)
+      - Note that Phase 1's renderer fix made this latent — the
+        label-gating that landed in v2.1.7 prevents the dispatch
+        damage, but the body-render bug itself remained until now
+      - The before/after for the one-line change
+  - id: P7.T1.S5
+    text: |-
+      Final close-out.
+
+      After the PR merges and v2.2.1 is published, the v2 bridge rebuild
+      tracking issue #147 can be closed (Phase 6's PR may have closed it
+      already; if so, no action). Update CLAUDE.md if needed to note
+      that `vk apply --yes` is now safe for multi-phase plans without
+      reliance on Phase 1's renderer gating as the failsafe.
+
+      No further work.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
