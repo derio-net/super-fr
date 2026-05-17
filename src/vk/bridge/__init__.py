@@ -178,6 +178,7 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
                 body=ri.body,
                 issue_url=tracking,
             )
+            gh.ensure_labels(issue_repo, [VK_SYNCED])
             gh.edit_issue_labels(
                 issue_repo,
                 issue_number,

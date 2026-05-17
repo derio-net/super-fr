@@ -1,0 +1,17 @@
+schema_version: 2
+phase:
+  number: 1
+  title: First (undispatched on target_repo)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+  - number: 1
+    title: t
+    steps:
+      - id: P1.T1.S1
+        text: s
+state:
+  steps:
+    P1.T1.S1: { state: "-", ticked_at: null, note: null }
+  completion: { at: null, note: null, observed_prs: [] }

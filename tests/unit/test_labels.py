@@ -86,6 +86,7 @@ class TestRegistryLookup:
     def test_lifecycle_dict_keys_are_role_names(self) -> None:
         assert set(labels.LIFECYCLE.keys()) == {
             "vk_ready",
+            "vk_blocked",
             "manual",
             "in_progress",
             "pr_ready",
@@ -93,6 +94,7 @@ class TestRegistryLookup:
 
     def test_lifecycle_values_match_module_constants(self) -> None:
         assert labels.LIFECYCLE["vk_ready"] is labels.VK_READY
+        assert labels.LIFECYCLE["vk_blocked"] is labels.VK_BLOCKED
         assert labels.LIFECYCLE["manual"] is labels.MANUAL
         assert labels.LIFECYCLE["in_progress"] is labels.IN_PROGRESS
         assert labels.LIFECYCLE["pr_ready"] is labels.PR_READY

@@ -105,6 +105,9 @@ class FakeGhClient:
         remove: frozenset[str],
     ) -> None:
         self._gate()
+        unknown = set(add or set()) - self.repo_labels.get(repo, set())
+        if unknown:
+            raise FakeGhError(f"label not found on {repo}: {sorted(unknown)}")
         self.calls.append(
             ("edit_issue_labels", {"repo": repo, "number": number, "add": add, "remove": remove})
         )
@@ -139,6 +142,9 @@ class FakeGhClient:
         labels: frozenset[str],
     ) -> str:
         self._gate()
+        unknown = set(labels or set()) - self.repo_labels.get(repo, set())
+        if unknown:
+            raise FakeGhError(f"label not found on {repo}: {sorted(unknown)}")
         self.calls.append(
             ("create_issue", {"repo": repo, "title": title, "body": body, "labels": labels})
         )

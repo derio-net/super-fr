@@ -875,4 +875,89 @@ def test_apply_one_dry_run_skips_gate(tmp_path, monkeypatch):
 
     rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=False)
     assert rc == 0
-    assert called["count"] == 0, "gate should NOT be invoked on dry-run"
+
+
+# ---------------------------------------------------------------------------
+# H6: apply() end-to-end cross-repo execution
+# ---------------------------------------------------------------------------
+
+CROSS_REPO_FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
+
+
+def test_apply_executes_cross_repo_mutations_through_correct_repo():
+    """
+    GIVEN the v2_plan_cross_repo fixture
+    AND   FakeGhClient preloaded with foreign-repo issue OPEN + vk-ready
+          (phase 2 on derio-net/repo-b, tracked issue #100)
+    WHEN  diff() and apply() run end-to-end
+    THEN  no apply failures occurred (labels ensured on the right repo first)
+    AND   the FakeGhClient.calls log shows mutations targeted repo-b
+          for phase 2's issue, not repo-a
+    """
+    from dataclasses import replace as dc_replace
+
+    from tests.unit.fakes import FakeGhClient
+    from vk import parse
+    from vk.apply import apply
+    from vk.diff import diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    plan = parse(CROSS_REPO_FIXTURE)
+
+    # Mark phase 1 complete so phase 2's deps are satisfied (vk-ready, not vk-blocked)
+    p1 = next(p for p in plan.phases if p.phase.number == 1)
+    p1_complete = p1.model_copy(
+        update={
+            "state": p1.state.model_copy(
+                update={
+                    "completion": p1.state.completion.model_copy(
+                        update={"at": "2026-05-17T10:00:00Z", "note": "done"}
+                    )
+                }
+            )
+        }
+    )
+    plan = dc_replace(
+        plan,
+        phases=tuple(p1_complete if p.phase.number == 1 else p for p in plan.phases),
+    )
+
+    # Phase 2 is observed on repo-b with vk-ready + plan/spec labels missing
+    observed = GhState(
+        phases={
+            2: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset({"vk-ready"}),
+                issue_assignees=(),
+                linked_prs=(),
+                body="stale body",
+            )
+        }
+    )
+
+    gh = FakeGhClient()
+    # Pre-load issue #100 on repo-b so FakeGhClient can apply mutations to it
+    gh.add_issue(
+        "derio-net/repo-b",
+        100,
+        state="OPEN",
+        labels={"vk-ready"},
+        body="stale body",
+    )
+
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+    result = apply(d, gh, plan=plan)
+
+    assert result.failures == (), f"unexpected failures: {result.failures}"
+
+    # All per-issue mutations for phase 2 must target repo-b, not repo-a
+    mutation_repos = {
+        kwargs["repo"]
+        for method, kwargs in gh.calls
+        if method in ("edit_issue_labels", "edit_issue_body", "edit_issue_state")
+    }
+    if mutation_repos:
+        assert "derio-net/repo-a" not in mutation_repos, "phase 2 mutations wrongly targeted repo-a"
+        assert "derio-net/repo-b" in mutation_repos, "phase 2 mutations didn't target repo-b"

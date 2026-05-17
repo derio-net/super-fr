@@ -1,0 +1,17 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Third (undispatched, blocked on phase 2)
+  tag: agentic
+  depends_on: [2]
+  tracking_issue: null
+tasks:
+  - number: 1
+    title: t
+    steps:
+      - id: P3.T1.S1
+        text: s
+state:
+  steps:
+    P3.T1.S1: { state: "-", ticked_at: null, note: null }
+  completion: { at: null, note: null, observed_prs: [] }

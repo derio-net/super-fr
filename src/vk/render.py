@@ -20,6 +20,7 @@ from vk.labels import (
     IN_PROGRESS,
     MANUAL,
     PR_READY,
+    VK_BLOCKED,
     VK_READY,
     VK_SYNCED,
     LabelDef,
@@ -48,7 +49,25 @@ def _spec_slug(spec_path: str | None) -> str | None:
     return _DATE_PREFIX_RE.sub("", stem)
 
 
-def _lifecycle_label(phase: PhaseDoc, obs: PhaseObservation | None) -> LabelDef | None:
+def _deps_satisfied(phase: PhaseDoc, plan: Plan, observed: GhState) -> bool:
+    """True iff every phase in `phase.depends_on` is complete."""
+    phase_by_number = {p.phase.number: p for p in plan.phases}
+    for dep_n in phase.phase.depends_on:
+        dep_phase = phase_by_number.get(dep_n)
+        if dep_phase is None:
+            return False
+        dep_obs = observed.phases.get(dep_n) if observed else None
+        if not _phase_complete(dep_phase, dep_obs):
+            return False
+    return True
+
+
+def _lifecycle_label(
+    phase: PhaseDoc,
+    obs: PhaseObservation | None,
+    plan: Plan,
+    observed: GhState,
+) -> LabelDef | None:
     """Compute the single lifecycle LabelDef for a phase.
 
     Returns None when the Issue should be closed (phase complete).
@@ -57,6 +76,8 @@ def _lifecycle_label(phase: PhaseDoc, obs: PhaseObservation | None) -> LabelDef 
         return None  # closed; no lifecycle label
     if phase.phase.tag == "manual":
         return MANUAL
+    if not _deps_satisfied(phase, plan, observed):
+        return VK_BLOCKED
     if obs is None:
         return VK_READY
     has_open_pr_nondraft = any(
@@ -278,7 +299,7 @@ def render(
         n = phase.phase.number
         obs = observed.phases.get(n)
         labels: set[LabelDef] = set(_phase_labels(phase, plan))
-        lifecycle = _lifecycle_label(phase, obs)
+        lifecycle = _lifecycle_label(phase, obs, plan, observed)
         if lifecycle is not None:
             labels.add(lifecycle)
         # `vk-synced` is bridge-owned: the renderer doesn't set it, but it
