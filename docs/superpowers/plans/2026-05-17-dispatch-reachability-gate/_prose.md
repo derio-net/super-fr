@@ -14,11 +14,12 @@ analysis (2-PR-per-dispatch becomes mandatory rather than
 convention), and the concrete sequence for resuming the in-flight
 cross-repo bug fix (#132 / #134) once this gate ships.
 
-The sibling spec for the kali-bridge venv architecture redesign
-lives at
-`docs/superpowers/specs/2026-05-17-kali-bridge-venv-shared-pv-design.md`
-(skeleton); it addresses a different drift class and isn't
-prerequisite to this plan.
+A skeleton spec for the kali-bridge venv architecture redesign was
+briefly opened then archived 2026-05-17 — the audit found the right
+fix is the broader v2 bridge rebuild
+([#147](https://github.com/derio-net/superpowers-for-vk/issues/147)),
+not a patch on the fat bridge's venv. This gate-fix plan is
+orthogonal and not prerequisite to that rebuild.
 
 ## Shape
 
