@@ -127,8 +127,13 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
         obs = observed.phases.get(phase_n)
 
         if tracking is None or obs is None:
-            # Undispatched: create the Issue. gh.create_issue takes label
-            # names — project the rendered LabelDefs to their .name.
+            # Undispatched: create the Issue on target_repo. v2 does not yet
+            # support first-dispatch to a foreign repo; that would require
+            # knowing the intended destination before a tracking_issue exists.
+            # When cross-repo first-dispatch is added, update both here AND the
+            # `phase_to_repo` surface in render.render() — the two coupling
+            # points must move together. gh.create_issue takes label names —
+            # project the rendered LabelDefs to their .name.
             mutations.append(
                 IssueCreate(
                     repo=repo,
