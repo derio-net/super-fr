@@ -42,6 +42,36 @@ After this rebuild:
 5. The renderer's `_lifecycle_label` knows about dependencies and projects a new `vk-blocked` label for phases whose `depends_on` predecessors aren't complete. Labels stop lying.
 6. The cross-repo orchestration duplication between legacy `sync_issue` and the v2 `_McpAdapter.create_card` is consolidated into ONE canonical dispatch implementation.
 
+## Multi-repo concerns (cross-repo dispatch)
+
+A plan's `_meta.target_repo` and a phase's `tracking_issue` repo CAN differ. Concrete in-use example from `willikins/docs/superpowers/plans/2026-05-03-agent-followup-sweep`:
+
+- `target_repo: derio-net/superpowers-for-vk`
+- Phases 1–4, 6 tracked on `derio-net/willikins`
+
+This shape isn't an edge case — it's how operators decompose plans whose work spans repos. **The bridge rebuild treats multi-repo as a first-class concern** because it touches every migrated module:
+
+| Module | Multi-repo concern |
+|---|---|
+| `vk.render` (dep gating, lifecycle projection) | The dep referenced by `phase.depends_on=[N]` is itself a phase — its observation comes from gh-side observation of its own `tracking_issue`, on whatever repo that points at |
+| `vk.diff` (RepoLabelEnsure, label changes) | Label ensures must group by destination repo; per-issue label/state/body mutations must route to `parse_issue_url(phase.tracking_issue).repo` |
+| `vk.bridge.dispatch` | The workspace branches off the repo of the phase's tracking issue, not `target_repo` |
+| `vk.bridge.lifecycle` | Issue close fires on the phase's repo |
+| `vk.bridge.pr_state` | PR observation queries the phase's repo |
+| `vk.bridge.workspaces` | Workspace name keyed by `gh#<N>` — repo info elsewhere |
+| `vk.bridge.prompt` | Prompt's `issue_url` already carries the repo (no change needed) |
+
+### Routing rule
+
+- **Per-phase mutations** (IssueLabelChange, IssueStateChange, IssueBodyChange, IssueClose, workspace creation, vk-synced add): repo is `parse_issue_url(phase.tracking_issue).repo`. The existing code at `src/vk/diff.py:134-171` already does this for the diff-emitted mutations; the rebuild ensures every NEW module follows the same rule.
+- **Repo-wide concerns** (RepoLabelEnsure): group by destination repo. Union of managed labels per repo. Sorted iteration for deterministic mutation order. For undispatched phases (no tracking_issue), the destination falls back to `plan.meta.target_repo` (where their `IssueCreate` will fire).
+- **Single-repo plans (the common case):** behavior bit-identical to today — `labels_per_repo` has one key.
+- **Fully-cross-repo plans (every phase dispatched on a foreign repo):** `target_repo` receives NO RepoLabelEnsure. Strictly more correct — no phases live there. If an operator later adds an undispatched phase to such a plan, the next `apply()` re-introduces the `target_repo` ensure on its own.
+
+### Folded from the cross-repo `RepoLabelEnsure` spec
+
+This section absorbs the design that previously lived in `docs/superpowers/specs/2026-05-16-cross-repo-label-ensure-design.md` (now archived). The diff() change (group RepoLabelEnsure by destination repo) lands in Phase 1 alongside the dep-gating signature change — both are state-machine projection fixes in the same module surface. Reference tracking issue #132; defused tracking #134.
+
 ## Bridge inventory (the empirical read that should have happened before any prior spec)
 
 Read of `agent-images/kali/scripts/vk-issue-bridge.py` end-to-end, organized by concern:
@@ -269,12 +299,16 @@ Also: every spec should include an explicit "Architectural ownership" section na
 
 Detail belongs in the plan (vk-plan after this spec is approved). Rough shape:
 
-- **Phase 1 — Renderer dep gating** (smallest, most contained)
-  - Signature change to `_lifecycle_label`
+- **Phase 1 — Renderer dep gating + cross-repo RepoLabelEnsure fix** (smallest, most contained — both are state-machine / projection-layer changes)
+  - Signature change to `_lifecycle_label` (accepts plan + observed)
   - New `VK_BLOCKED` label
   - `_deps_satisfied` helper
-  - Tests + version bump + ships independently
-  - Validates the labels-now-honest assumption end-to-end
+  - **Group RepoLabelEnsure by destination repo** in `vk.diff` (the cross-repo `#132` fix, folded from the archived cross-repo spec)
+  - **`v2_plan_cross_repo` fixture** under `tests/unit/fixtures/`
+  - **FakeGhClient tightening** (label-must-exist-on-repo rule, regression guard)
+  - Tests cover both dep gating AND cross-repo routing
+  - Version bump + ships independently
+  - Validates the labels-now-honest assumption AND closes the cross-repo silent-failure mode end-to-end
 
 - **Phase 2 — `vk._mcp_client` + `vk.bridge.dispatch`**
   - Move MCP wire client into vk package
@@ -313,7 +347,6 @@ Each phase is one PR (per the repo's "one phase = one PR" convention). Phase 6 s
 - **Changes to the VK MCP API.** Wire protocol stays as-is.
 - **The willikins lifecycle-transition script itself.** Just becomes configurable; the script's content / location is the operator's concern.
 - **Dispatch-reachability gate** (`docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md` — already shipped via PR #146). Orthogonal; stays as-is.
-- **Cross-repo `RepoLabelEnsure` bug** (#132 / PR #140). Orthogonal; re-implementation continues independently.
 - **`vk plan create` non-transactional bug** (#133). Orthogonal.
 - **Shared-PV stale-checkout auto-pull** (drift class 2 from the now-archived kali-pv spec). Folded into Phase 5's `vk.bridge.cli` — the tick can `git fetch && git checkout main` per managed repo as a precondition. Out-of-scope for explicit design here but the implementation will handle it.
 
@@ -331,12 +364,17 @@ Each invariant gets one owner. If the owner's signature can't enforce the invari
 | "MAX_CONCURRENT workspaces never exceeded" | `vk.bridge.slots` (gate at `vk.bridge.tick`) | Current `count_active_ws` + max from config |
 | "Bridge tick is idempotent (re-running yields same end state)" | `vk.bridge.tick` (delegates to `apply()` for label/state, and to `dispatch` which dedups) | Plan + observed state |
 | "Plan + spec are reachable to dispatch consumers" | `vk.commands.apply_cmd._check_plan_reachable_on_origin_head` (already shipped) | Plan + repo_root |
+| "Per-phase mutations route to the phase's `tracking_issue` repo (not `target_repo`)" | `vk.diff` (existing per-issue routing at `diff.py:134-171`) + `vk.bridge.dispatch` (workspace branch repo) | The full `Plan` object (so each emitter can resolve per-phase repos) |
+| "Repo-wide concerns (label ensure) group by destination repo" | `vk.diff` (one `RepoLabelEnsure` per distinct destination repo, union of managed labels) | `Plan` + projected labels per phase |
 
 ## Verification checklist (apply during execution)
 
 - [ ] Renderer `_lifecycle_label` accepts plan + observed in its signature
 - [ ] `VK_BLOCKED` label exists in `vk.labels` and is part of `MANAGED_LIFECYCLE_LABELS`
 - [ ] Dep-gating tests: phase with unsatisfied deps projects `vk-blocked`; phase with satisfied deps projects `vk-ready`; transitions both directions
+- [ ] `RepoLabelEnsure` groups by destination repo (cross-repo `#132` fix folded into Phase 1)
+- [ ] `tests/unit/fixtures/v2_plan_cross_repo/` exists with at least one phase on a foreign repo
+- [ ] `FakeGhClient.edit_issue_labels` and `create_issue` raise when add-labels aren't pre-ensured on the destination repo (regression guard)
 - [ ] `vk.bridge.dispatch` exists; `sync_issue` and `_McpAdapter.create_card` are deleted; both old call sites use `vk.bridge.dispatch`
 - [ ] `vk._mcp_client` exists; `agent-images/.../vk_mcp_client.py` deleted
 - [ ] `python -m vk.bridge --dry-run` exits 0 (no side effects) when run inside the Kali container
@@ -877,8 +915,124 @@ def test_standalone_vk_ready_issue_without_plan_is_ignored():
     """
 ```
 
-#### F6: Cross-repo dispatch — cards land on the right repo
-<!-- implementation: validated end-to-end in Phase 6 (independently fixed earlier via #132/#140) -->
+### Group H — Multi-repo (cross-repo dispatch)
+
+This group folds in the acceptance surface previously specced under the now-archived `docs/superpowers/specs/2026-05-16-cross-repo-label-ensure-design.md`. The capabilities below cover both the `RepoLabelEnsure` bug fix and the broader multi-repo architectural rule that every per-phase mutation routes to `parse_issue_url(phase.tracking_issue).repo`.
+
+#### H1: `RepoLabelEnsure` groups by destination repo
+<!-- implementation: Phase 1 (folded from #132 / archived cross-repo spec) -->
+
+**Location:** `tests/unit/test_v2_diff.py::test_diff_emits_ensure_per_destination_repo`
+
+```python
+def test_diff_emits_ensure_per_destination_repo(tmp_path):
+    """
+    GIVEN a plan with target_repo='derio-net/repo-a'
+    AND   phase 1 has tracking_issue='https://github.com/derio-net/repo-b/issues/100'
+    AND   phase 2 has no tracking_issue (undispatched)
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  exactly two RepoLabelEnsure mutations are emitted
+    AND   one targets 'derio-net/repo-a' (for phase 2's projected IssueCreate)
+    AND   one targets 'derio-net/repo-b' (for phase 1's existing tracking issue)
+    """
+```
+
+#### H2: Per-issue mutations route to `tracking_issue.repo` (regression guard)
+<!-- implementation: Phase 1 (locks down already-correct behavior at diff.py:134-171) -->
+
+**Location:** `tests/unit/test_v2_diff.py::test_diff_routes_per_issue_mutations_to_tracking_repo`
+
+```python
+def test_diff_routes_per_issue_mutations_to_tracking_repo(tmp_path):
+    """
+    GIVEN a plan with target_repo='derio-net/repo-a'
+    AND   phase 1 dispatched to 'derio-net/repo-b' with a drifted body, vk-ready,
+          and an extra stale label
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  every IssueLabelChange / IssueStateChange / IssueBodyChange for phase 1
+          carries repo='derio-net/repo-b' (NEVER 'derio-net/repo-a')
+    (Regression guard: the per-issue routing at diff.py:134-171 is already
+    correct; this pins it so no future refactor regresses to target_repo-only.)
+    """
+```
+
+#### H3: Single-repo plans produce one ensure (regression guard)
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_v2_diff.py::test_diff_single_repo_plan_emits_one_ensure`
+
+```python
+def test_diff_single_repo_plan_emits_one_ensure(tmp_path):
+    """
+    GIVEN a single-repo plan (target_repo == every phase's tracking_issue repo)
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  exactly one RepoLabelEnsure mutation is emitted
+    AND   its repo == plan.meta.target_repo
+    (Common-case regression guard — the rebuild must not change single-repo behavior.)
+    """
+```
+
+#### H4: Fully-cross-repo plans don't ensure on `target_repo`
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_v2_diff.py::test_diff_fully_cross_repo_plan_skips_target_repo_ensure`
+
+```python
+def test_diff_fully_cross_repo_plan_skips_target_repo_ensure(tmp_path):
+    """
+    GIVEN a plan where every phase is dispatched on a foreign repo
+          (none on plan.meta.target_repo) and no phases are undispatched
+    WHEN  diff(rendered, observed, plan) is computed
+    THEN  no RepoLabelEnsure mutation targets plan.meta.target_repo
+    AND   one RepoLabelEnsure exists per distinct foreign destination repo
+    (Strictly more correct than today: no phases live on target_repo, so no
+    labels are needed there.)
+    """
+```
+
+#### H5: `FakeGhClient` tightening — label must exist on repo before applying
+<!-- implementation: Phase 1 (regression-prevention test infrastructure) -->
+
+**Location:** `tests/unit/test_fakes.py::test_fake_gh_client_rejects_unensured_labels`
+
+```python
+def test_fake_gh_client_rejects_unensured_labels():
+    """
+    GIVEN a FakeGhClient that has NOT received an `ensure_labels` call for
+          a given label on a given repo
+    WHEN  edit_issue_labels(repo, number, add={label}) is invoked
+    THEN  FakeGhError is raised with a 'label not found' message
+
+    GIVEN the same setup
+    WHEN  create_issue(repo, ..., labels={label}) is invoked
+    THEN  FakeGhError is raised similarly
+    (Models real gh's actual constraint. Without this, the cross-repo bug
+    would not be unit-test-catchable — labels would 'just work' in tests
+    even though prod would fail.)
+    """
+```
+
+#### H6: `apply()` end-to-end cross-repo execution
+<!-- implementation: Phase 1 -->
+
+**Location:** `tests/unit/test_v2_apply.py::test_apply_executes_cross_repo_mutations_through_correct_repo`
+
+```python
+def test_apply_executes_cross_repo_mutations_through_correct_repo(tmp_path):
+    """
+    GIVEN the v2_plan_cross_repo fixture
+    AND   FakeGhClient preloaded with foreign-repo issue OPEN + vk-ready
+    WHEN  diff() and apply() run end-to-end
+    THEN  no apply failures occurred (labels ensured on the right repo first)
+    AND   the foreign repo's issue is now CLOSED in the fake's state
+    AND   the foreign repo's body was updated (no stale body)
+    AND   the FakeGhClient.calls log shows the mutations targeted the
+          tracking_issue repo, not target_repo
+    """
+```
+
+#### H7: Cross-repo bridge tick — `vk-synced` lands on tracking-issue repo
+<!-- implementation: Phase 6 (full bridge tick, supersedes the earlier F6) -->
 
 **Location:** `tests/integration/test_bridge_e2e.py::test_cross_repo_phase_dispatches_to_correct_repo`
 
@@ -888,9 +1042,26 @@ def test_cross_repo_phase_dispatches_to_correct_repo():
     GIVEN a plan with target_repo='derio-net/foo' and a phase with
           tracking_issue='https://github.com/derio-net/bar/issues/100'
     WHEN  vk.bridge.tick() runs
-    THEN  the create_card MCP call passes the correct repo ('derio-net/bar')
-          for workspace branch lookup
-    AND   the vk-synced label is added on bar#100 (not foo)
+    THEN  vk.bridge.dispatch is called with workspace branch repo='derio-net/bar'
+    AND   the vk-synced label is added on derio-net/bar#100 (NOT derio-net/foo)
+    AND   the workspace name follows '<simple_id> -> gh#100' convention
+    """
+```
+
+#### H8: Cross-repo fixture present
+<!-- implementation: Phase 1 (fixture infrastructure) -->
+
+**Location:** `tests/integration/test_repo_invariants.py::test_v2_plan_cross_repo_fixture_exists`
+
+```python
+def test_v2_plan_cross_repo_fixture_exists():
+    """
+    GIVEN the repo
+    THEN  tests/unit/fixtures/v2_plan_cross_repo/_meta.yaml exists
+    AND   at least one phase yaml has tracking_issue pointing at a
+          repo different from _meta.target_repo
+    AND   at least one phase yaml has tracking_issue=null (undispatched)
+    (Without this fixture, multi-repo tests have no canonical input.)
     """
 ```
 
