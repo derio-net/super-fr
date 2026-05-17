@@ -304,8 +304,17 @@ real review confusion. The gate is ~30 LOC of source change + ~100
 LOC of tests. Strict cost/benefit: the gate prevents a recurring
 silent-failure mode for ~130 LOC of effort.
 
-It also pairs naturally with the upcoming bridge-side version-check
-spec — both are "make silent drift loud" guards at different layers.
-Together they harden the dispatch pipeline against the class of
-failures where "everything looks fine" but downstream consumers act
-on stale or partial information.
+It also pairs naturally with the sibling kali-bridge venv shared-PV
+redesign spec — both target silent-drift failure modes at different
+layers of the dispatch pipeline. The gate prevents Issues being
+created with unreachable plans; the venv redesign prevents the kali
+container from running a vk version different from the plugin
+manifest. Together they harden the dispatch pipeline against the
+class of failures where "everything looks fine" but downstream
+consumers act on stale or partial information.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-05-17-dispatch-reachability-gate | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-17-dispatch-reachability-gate/` | — |

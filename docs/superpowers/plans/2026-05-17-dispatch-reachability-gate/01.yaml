@@ -1,0 +1,771 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Pre-flight gate refusing vk apply --yes when plan/spec aren't on origin/HEAD
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Add `file_on_ref` git primitive
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing tests for the new `file_on_ref` helper. Tests
+      live in `tests/unit/test_git.py` (new file).
+
+      Setup pattern: `tmp_path` + `git init`, commit a file, assert
+      the helper reports True for the committed path, False for an
+      uncommitted path, and False for an unknown ref.
+
+      Create `tests/unit/test_git.py` with the following:
+
+      ```python
+      from __future__ import annotations
+
+      import subprocess
+      from pathlib import Path
+
+
+      def _git(args: list[str], cwd: Path) -> None:
+          """Test helper: run git with check=True; raises on failure."""
+          subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+      def _init_repo_with_commit(tmp_path: Path) -> Path:
+          """Init a git repo at tmp_path and commit a single file. Returns repo path."""
+          repo = tmp_path / "repo"
+          repo.mkdir()
+          _git(["init", "-q"], repo)
+          _git(["config", "user.email", "test@example.com"], repo)
+          _git(["config", "user.name", "Test"], repo)
+          (repo / "tracked.txt").write_text("hi\n")
+          _git(["add", "tracked.txt"], repo)
+          _git(["commit", "-q", "-m", "init"], repo)
+          return repo
+
+
+      def test_file_on_ref_true_for_committed_path(tmp_path):
+          from vk.git import file_on_ref
+          repo = _init_repo_with_commit(tmp_path)
+          assert file_on_ref("HEAD", "tracked.txt", cwd=repo) is True
+
+
+      def test_file_on_ref_false_for_uncommitted_path(tmp_path):
+          from vk.git import file_on_ref
+          repo = _init_repo_with_commit(tmp_path)
+          (repo / "untracked.txt").write_text("not committed\n")
+          assert file_on_ref("HEAD", "untracked.txt", cwd=repo) is False
+
+
+      def test_file_on_ref_false_for_nonexistent_path(tmp_path):
+          from vk.git import file_on_ref
+          repo = _init_repo_with_commit(tmp_path)
+          assert file_on_ref("HEAD", "nope/missing.txt", cwd=repo) is False
+
+
+      def test_file_on_ref_raises_on_unknown_ref(tmp_path):
+          """Unknown refs surface a GhError-equivalent — caller catches."""
+          import pytest
+          from vk.git import file_on_ref
+          repo = _init_repo_with_commit(tmp_path)
+          with pytest.raises(Exception):
+              file_on_ref("origin/HEAD", "tracked.txt", cwd=repo)
+      ```
+
+      Run: `uv run pytest tests/unit/test_git.py -x -q --no-cov`
+      Expect: red — `vk.git.file_on_ref` does not yet exist
+      (AttributeError on import).
+  - id: P1.T1.S2
+    text: |-
+      Implement `file_on_ref` in `src/vk/git.py`. Add at the end of
+      the existing file, after the `status` helper.
+
+      ```python
+      def file_on_ref(ref: str, path: str, cwd: Path | None = None) -> bool:
+          """True iff `path` exists at the given git `ref`.
+
+          Thin wrapper around `git ls-tree`. Used by the dispatch
+          reachability gate to verify plan files are reachable on
+          origin/HEAD before `vk apply --yes` creates an Issue.
+          Raises if the ref doesn't exist locally.
+          """
+          output = _run_git(["ls-tree", ref, "--", path], cwd=cwd)
+          return bool(output.strip())
+      ```
+
+      Run: `uv run pytest tests/unit/test_git.py -x -q --no-cov`
+      Expect: all four tests green.
+- number: 2
+  title: Add `_check_plan_reachable_on_origin_head` gate function
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write failing tests for the gate function. Tests live in
+      `tests/unit/test_v2_apply.py`.
+
+      Setup pattern: tmp_path containing a bare `origin.git`, a
+      clone (working tree), commit some plan/spec files, push, and
+      verify the gate returns the right missing-paths list.
+
+      Read `tests/unit/test_v2_apply.py` to find the existing import
+      block and fixture pattern. Add a shared helper near the top
+      (after existing imports):
+
+      ```python
+      def _make_repo_with_origin(tmp_path):
+          """Create a working tree + bare 'origin' remote, return (work, origin) paths.
+
+          Test fixture for gate tests. Initial commit + push so origin/HEAD
+          is set automatically.
+          """
+          import subprocess
+
+          origin = tmp_path / "origin.git"
+          subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+          work = tmp_path / "work"
+          subprocess.run(
+              ["git", "clone", "-q", str(origin), str(work)], check=True
+          )
+          for k, v in (("user.email", "t@x"), ("user.name", "T")):
+              subprocess.run(
+                  ["git", "-C", str(work), "config", k, v], check=True
+              )
+          # Initial commit so we have a HEAD to push.
+          (work / "README.md").write_text("seed\n")
+          subprocess.run(["git", "-C", str(work), "add", "README.md"], check=True)
+          subprocess.run(
+              ["git", "-C", str(work), "commit", "-q", "-m", "seed"], check=True
+          )
+          subprocess.run(
+              ["git", "-C", str(work), "push", "-q", "-u", "origin", "HEAD"],
+              check=True,
+              capture_output=True,
+          )
+          subprocess.run(
+              ["git", "-C", str(work), "remote", "set-head", "origin", "--auto"],
+              check=True,
+              capture_output=True,
+          )
+          return work, origin
+      ```
+
+      Then add four gate-function tests:
+
+      ```python
+      def test_gate_passes_when_plan_and_spec_on_origin_head(tmp_path):
+          """All files committed and pushed → empty missing-paths list."""
+          import shutil
+          from pathlib import Path
+
+          from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+          from vk.parser import parse
+
+          work, _ = _make_repo_with_origin(tmp_path)
+          # Copy minimal fixture into the work tree, commit, push.
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+          dest_plan.parent.mkdir(parents=True)
+          shutil.copytree(src_fixture, dest_plan)
+          # Also seed the spec the fixture references so the gate's spec check passes.
+          spec_dir = work / "docs" / "superpowers" / "specs"
+          spec_dir.mkdir(parents=True)
+          spec_path = spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md"
+          spec_path.write_text("# stub spec\n")
+          subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+          subprocess.run(
+              ["git", "-C", str(work), "commit", "-q", "-m", "land plan"], check=True
+          )
+          subprocess.run(
+              ["git", "-C", str(work), "push", "-q", "origin", "HEAD"],
+              check=True, capture_output=True,
+          )
+
+          plan = parse(dest_plan)
+          missing = _check_plan_reachable_on_origin_head(plan, work)
+          assert missing == [], f"expected empty, got {missing}"
+
+
+      def test_gate_reports_missing_plan_files(tmp_path):
+          """Plan files committed locally but NOT pushed → returned in missing list."""
+          import shutil
+          from pathlib import Path
+
+          from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+          from vk.parser import parse
+
+          work, _ = _make_repo_with_origin(tmp_path)
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+          dest_plan.parent.mkdir(parents=True)
+          shutil.copytree(src_fixture, dest_plan)
+          spec_dir = work / "docs" / "superpowers" / "specs"
+          spec_dir.mkdir(parents=True)
+          (spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md").write_text("# stub\n")
+          subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+          subprocess.run(
+              ["git", "-C", str(work), "commit", "-q", "-m", "local only"], check=True
+          )
+          # NOTE: no push — files are local-only.
+
+          plan = parse(dest_plan)
+          missing = _check_plan_reachable_on_origin_head(plan, work)
+          assert len(missing) >= 3, (
+              f"expected plan files in missing list, got {missing}"
+          )
+          assert any("_meta.yaml" in str(p) for p in missing)
+          assert any("_prose.md" in str(p) for p in missing)
+          assert any("01.yaml" in str(p) for p in missing)
+
+
+      def test_gate_reports_missing_spec(tmp_path):
+          """Plan committed and pushed, but spec NOT pushed → spec in missing list."""
+          import shutil
+          from pathlib import Path
+
+          from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+          from vk.parser import parse
+
+          work, _ = _make_repo_with_origin(tmp_path)
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+          dest_plan.parent.mkdir(parents=True)
+          shutil.copytree(src_fixture, dest_plan)
+          # Push the plan first.
+          subprocess.run(["git", "-C", str(work), "add", "docs/superpowers/plans/"], check=True)
+          subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land plan only"], check=True)
+          subprocess.run(
+              ["git", "-C", str(work), "push", "-q", "origin", "HEAD"],
+              check=True, capture_output=True,
+          )
+          # Create the spec locally; do NOT commit it.
+          spec_dir = work / "docs" / "superpowers" / "specs"
+          spec_dir.mkdir(parents=True)
+          (spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md").write_text("# stub\n")
+
+          plan = parse(dest_plan)
+          missing = _check_plan_reachable_on_origin_head(plan, work)
+          assert any(
+              "2026-05-06-vk-rebuild-state-machine-design.md" in str(p)
+              for p in missing
+          ), f"expected spec in missing list, got {missing}"
+
+
+      def test_gate_skips_spec_check_when_meta_spec_is_none(tmp_path):
+          """Plan with no spec field → gate doesn't fail on missing spec."""
+          import shutil
+          import yaml
+          from pathlib import Path
+
+          from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
+          from vk.parser import parse
+
+          work, _ = _make_repo_with_origin(tmp_path)
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          dest_plan = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+          dest_plan.parent.mkdir(parents=True)
+          shutil.copytree(src_fixture, dest_plan)
+          # Strip the spec field from _meta.yaml.
+          meta_path = dest_plan / "_meta.yaml"
+          meta = yaml.safe_load(meta_path.read_text())
+          meta.pop("spec", None)
+          meta_path.write_text(yaml.safe_dump(meta, sort_keys=False))
+          subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+          subprocess.run(
+              ["git", "-C", str(work), "commit", "-q", "-m", "plan no spec"], check=True
+          )
+          subprocess.run(
+              ["git", "-C", str(work), "push", "-q", "origin", "HEAD"],
+              check=True, capture_output=True,
+          )
+
+          plan = parse(dest_plan)
+          missing = _check_plan_reachable_on_origin_head(plan, work)
+          assert missing == [], f"expected empty (no spec to check), got {missing}"
+      ```
+
+      Make sure `import subprocess` is present at the top of the
+      file if it isn't already.
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -x -q --no-cov -k "gate_"`
+      Expect: red — `_check_plan_reachable_on_origin_head` doesn't
+      exist yet (ImportError or AttributeError).
+  - id: P1.T2.S2
+    text: |-
+      Implement `_check_plan_reachable_on_origin_head` in
+      `src/vk/commands/apply_cmd.py`. Add as a module-level helper
+      between `_make_gh_client` and `_format_diff`.
+
+      ```python
+      def _check_plan_reachable_on_origin_head(
+          plan: Plan, repo_root: Path
+      ) -> list[Path]:
+          """Return plan files (and spec, if set) NOT present on origin/HEAD.
+
+          Empty list = gate passes. Caller (`_apply_one`) refuses `--yes`
+          when this returns non-empty.
+
+          Raises if origin/HEAD isn't resolvable locally — caller catches
+          and re-raises with a setup hint.
+          """
+          from vk.git import file_on_ref
+
+          missing: list[Path] = []
+          plan_dir = plan.dir
+          for path in sorted(plan_dir.rglob("*")):
+              if not path.is_file():
+                  continue
+              rel = path.relative_to(repo_root)
+              if not file_on_ref("origin/HEAD", str(rel), cwd=repo_root):
+                  missing.append(rel)
+          if plan.meta.spec:
+              spec_rel = Path(plan.meta.spec)
+              if not file_on_ref("origin/HEAD", str(spec_rel), cwd=repo_root):
+                  missing.append(spec_rel)
+          return missing
+      ```
+
+      Add `from pathlib import Path` to the top of the file if it
+      isn't already imported (it's already used via `plan_dir: Path`
+      in `_apply_one`).
+
+      Add `from vk.parser import Plan` to the top of the file
+      (already imported as `from vk.parser import PlanSchemaError,
+      parse` — extend to `Plan, PlanSchemaError, parse`).
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -x -q --no-cov -k "gate_"`
+      Expect: all four gate function tests green.
+- number: 3
+  title: Wire gate into `_apply_one`; update docs
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Write failing integration tests for the wired-in gate. These
+      confirm the gate is actually called from the `--yes` path and
+      produces the right exit code + error structure.
+
+      Add to `tests/unit/test_v2_apply.py`:
+
+      ```python
+      def test_apply_one_rejects_when_gate_returns_missing(tmp_path, monkeypatch):
+          """vk apply --yes refuses dispatch when the gate reports missing files."""
+          import shutil
+          from pathlib import Path
+
+          from vk.commands import apply_cmd
+
+          # Use a plan fixture in-place; no need for a real git repo here —
+          # we're testing _apply_one's wiring, not the gate function itself.
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          plan_dir = tmp_path / "v2_plan_minimal"
+          shutil.copytree(src_fixture, plan_dir)
+
+          # Stub the gate to return a list of "missing" paths.
+          stubbed_missing = [
+              Path("docs/superpowers/plans/v2_plan_minimal/_meta.yaml"),
+              Path("docs/superpowers/plans/v2_plan_minimal/01.yaml"),
+          ]
+          monkeypatch.setattr(
+              apply_cmd,
+              "_check_plan_reachable_on_origin_head",
+              lambda plan, repo_root: stubbed_missing,
+          )
+
+          # Stub the gh client factory to make sure nothing reaches gh.
+          from tests.unit.fakes import FakeGhClient
+          fake = FakeGhClient()
+          monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+          rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True)
+          assert rc == 2, f"expected exit 2, got {rc}"
+          assert "refuse to dispatch" in text
+          assert "_meta.yaml" in text
+          assert "01.yaml" in text
+          assert json_out.get("unreachable_paths") == [
+              str(p) for p in stubbed_missing
+          ]
+          # No gh mutations should have been attempted.
+          assert fake.calls == [], f"unexpected gh calls: {fake.calls}"
+
+
+      def test_apply_one_passes_through_when_gate_returns_empty(tmp_path, monkeypatch):
+          """Gate passes → normal apply flow runs."""
+          import shutil
+          from pathlib import Path
+
+          from vk.commands import apply_cmd
+
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          plan_dir = tmp_path / "v2_plan_minimal"
+          shutil.copytree(src_fixture, plan_dir)
+
+          monkeypatch.setattr(
+              apply_cmd,
+              "_check_plan_reachable_on_origin_head",
+              lambda plan, repo_root: [],
+          )
+
+          from tests.unit.fakes import FakeGhClient
+          fake = FakeGhClient()
+          monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+          rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True)
+          # rc == 0 means apply succeeded; the minimal fixture has one undispatched
+          # phase so an IssueCreate happened against the fake.
+          assert rc == 0, f"expected exit 0, got {rc}\noutput:\n{text}"
+          assert any(c[0] == "create_issue" for c in fake.calls), (
+              f"expected an IssueCreate, got calls={fake.calls}"
+          )
+
+
+      def test_apply_one_dry_run_skips_gate(tmp_path, monkeypatch):
+          """vk apply <plan-dir> (no --yes) doesn't invoke the gate — preview unaffected."""
+          import shutil
+          from pathlib import Path
+
+          from vk.commands import apply_cmd
+
+          src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+          plan_dir = tmp_path / "v2_plan_minimal"
+          shutil.copytree(src_fixture, plan_dir)
+
+          called = {"count": 0}
+          def _spy(plan, repo_root):
+              called["count"] += 1
+              return []
+          monkeypatch.setattr(
+              apply_cmd, "_check_plan_reachable_on_origin_head", _spy
+          )
+
+          from tests.unit.fakes import FakeGhClient
+          fake = FakeGhClient()
+          monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+          rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=False)
+          assert rc == 0
+          assert called["count"] == 0, "gate should NOT be invoked on dry-run"
+      ```
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -x -q --no-cov -k "apply_one"`
+      Expect: red — `_apply_one` doesn't call the gate yet, so the
+      first test fails (rc=0 instead of 2, gh calls present), and
+      the unreachable_paths field is missing from JSON output.
+  - id: P1.T3.S2
+    text: |-
+      Wire the gate into `_apply_one`. Read
+      `src/vk/commands/apply_cmd.py` to find the current
+      `_apply_one` function (around line 124).
+
+      Add a `repo_root` resolution and a gate call at the top of the
+      `if not yes:` / `if yes:` decision. Specifically, replace the
+      block that starts with `if not yes:` (around line 154) with:
+
+      ```python
+          if not yes:
+              return 0, "\n".join(parts), json_out
+
+          from vk.git import repo_root as _repo_root
+          try:
+              rr = _repo_root(cwd=plan_dir)
+          except Exception:
+              rr = plan_dir  # not a git checkout — gate becomes no-op
+          try:
+              missing = _check_plan_reachable_on_origin_head(plan, rr)
+          except Exception as e:
+              lines = [
+                  parts[0],
+                  "",
+                  f"refuse to dispatch: could not resolve origin/HEAD: {e}",
+                  "",
+                  "If origin/HEAD isn't set locally, run:",
+                  "  git remote set-head origin --auto",
+              ]
+              json_out["unreachable_paths"] = []
+              json_out["origin_head_error"] = str(e)
+              return 2, "\n".join(lines), json_out
+          if missing:
+              lines = [
+                  parts[0],
+                  "",
+                  f"refuse to dispatch: {len(missing)} file(s) not at origin/HEAD:",
+              ]
+              for p in missing:
+                  lines.append(f"  {p}")
+              lines.append("")
+              lines.append(
+                  "Merge the plan + spec to the default branch first, "
+                  "then re-run `vk apply --yes`."
+              )
+              lines.append(
+                  "(If origin/HEAD isn't set locally: "
+                  "`git remote set-head origin --auto`.)"
+              )
+              json_out["unreachable_paths"] = [str(p) for p in missing]
+              return 2, "\n".join(lines), json_out
+          json_out["unreachable_paths"] = []
+
+          result = apply(d, gh)
+      ```
+
+      Also ensure `json_out["unreachable_paths"]` is initialized as
+      an empty list when the json structure is built earlier in
+      `_apply_one`. Find the existing `json_out: dict[str, Any] = {`
+      block (around line 144) and add the field:
+
+      ```python
+          json_out: dict[str, Any] = {
+              "plan": plan.meta.plan,
+              "mutations": [...],
+              "warnings": [...],
+              "applied": False,
+              "failures": [],
+              "created_issues": {},
+              "tracking_issue_writeback_failures": [],
+              "unreachable_paths": [],
+          }
+      ```
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -x -q --no-cov -k "apply_one"`
+      Expect: all three integration tests green.
+  - id: P1.T3.S3
+    text: |-
+      Update the `vk-dispatch` skill to document the new pre-flight.
+
+      Read `skills/vk-dispatch/SKILL.md`. Insert a new paragraph
+      BEFORE the existing "## Procedure" section's step 1:
+
+      ```markdown
+      ## Pre-flight (mandatory)
+
+      The plan and its referenced spec MUST be merged to the default
+      branch before running `vk apply --yes`. The CLI refuses with
+      exit 2 otherwise, listing the unreachable paths. If you've just
+      written the plan, open a PR for spec+plan and merge it before
+      running this workflow. The dispatch + writeback is then a
+      separate (small) PR — see step 5.
+
+      If `git remote set-head origin --auto` has never been run on
+      your checkout, `vk apply --yes` will tell you to run it before
+      anything else.
+      ```
+
+      Place between the existing `Wraps the vk apply CLI...` intro
+      paragraph and the "**Announce at start:**" line.
+  - id: P1.T3.S4
+    text: |-
+      Add a one-line cross-reference in `CLAUDE.md` under "## PR
+      workflow expectations".
+
+      Read `CLAUDE.md`. Find the section "## PR workflow
+      expectations" (currently around line 79). After the last
+      bullet, append:
+
+      ```markdown
+      - `vk apply --yes` enforces the "plan and spec must be on
+        `origin/HEAD`" contract before dispatching a GitHub Issue.
+        See `docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md`
+        for the rationale and `skills/vk-dispatch/SKILL.md`
+        (Pre-flight) for the operator workflow.
+      ```
+  - id: P1.T3.S5
+    text: |-
+      Confirm all unit tests are still green.
+
+      Run: `uv run pytest tests/unit/ -q --no-cov`
+      Expect: all green, zero failures. If any unrelated test
+      breaks, stop and investigate before moving to T4.
+- number: 4
+  title: Version bump + pre-push verification + CLI sanity check
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Bump the version triple per CLAUDE.md § Release / version bumping.
+
+      Edit three files, changing `2.1.5` → `2.1.6` in each:
+
+      1. `pyproject.toml` — `version = "2.1.5"` → `version = "2.1.6"`
+         under the `[project]` table.
+      2. `.claude-plugin/plugin.json` — `"version": "2.1.5"` →
+         `"version": "2.1.6"`.
+      3. `.claude-plugin/marketplace.json` — `"version": "2.1.5"` →
+         `"version": "2.1.6"` inside the first entry of `.plugins`.
+
+      Verify all three are aligned:
+
+      ```
+      grep -nE 'version' pyproject.toml | head -3
+      grep '"version"' .claude-plugin/plugin.json
+      grep '"version"' .claude-plugin/marketplace.json
+      ```
+
+      Expect: every reported `version` line shows `2.1.6`.
+  - id: P1.T4.S2
+    text: |-
+      Run `uv sync` so `uv.lock` picks up the new `vk==2.1.6`
+      entry, then confirm the CLI reports the new version.
+
+      Run: `uv sync`
+      Expect: `uv.lock` updated; no errors.
+
+      Run: `uv run vk --version`
+      Expect: `vk 2.1.6`.
+
+      Stage the lock file alongside the three version files:
+
+      ```
+      git add pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json uv.lock
+      ```
+  - id: P1.T4.S3
+    text: |-
+      Run the full pre-push verification suite per CLAUDE.md § PR
+      workflow expectations.
+
+      Run each sequentially:
+
+      ```
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      uv run pytest -q --no-cov
+      ```
+
+      Expect:
+      - `ruff format` reports no files reformatted (or reformats and
+        you stage the result).
+      - `ruff check` exits 0.
+      - `mypy` exits 0.
+      - `pytest` reports all green.
+
+      If `ruff format` modifies any file, stage and re-run `ruff
+      check` before proceeding. If anything else fails, stop and fix
+      the underlying cause; do not commit broken state.
+  - id: P1.T4.S4
+    text: |-
+      CLI sanity check: confirm the gate actually rejects an
+      unreachable plan and passes a reachable one. Done against
+      real fixtures + real git state, no monkeypatch.
+
+      Sub-step A — reject path. Pick an existing plan whose files
+      are committed locally on this branch but NOT yet on
+      `origin/main` (the current `2026-05-17-dispatch-reachability-gate`
+      branch has its OWN spec at
+      `docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md`
+      which IS on this branch but not yet on origin/HEAD — but the
+      plan we're authoring here is NOT yet committed at all, so
+      creating a plan dir on this branch and then trying `vk apply
+      --yes` against it should hit the gate).
+
+      Skip this sub-step in practice for now: the plan we're
+      executing here lives on a branch that hasn't been merged.
+      Trying to dispatch THIS plan via `vk apply --yes` would
+      correctly fail the gate (proving the gate works for our
+      actual workflow).
+
+      Sub-step B — pass path. Pick `docs/superpowers/plans/2026-05-13-vk-apply-tracking-issue-writeback/`
+      (already on `origin/main`):
+
+      ```
+      uv run vk apply docs/superpowers/plans/2026-05-13-vk-apply-tracking-issue-writeback
+      ```
+
+      Expect: dry-run preview output, no error. (No --yes, so the
+      gate isn't invoked — but this confirms the dry-run path is
+      unaffected by our wiring.)
+
+      Sub-step C — actually invoke the gate. Run against a plan
+      whose tracking_issue refers to an already-resolved Issue
+      (so no real gh side-effects are at risk). Sub-step in
+      practice: deferred to PR review — the integration tests in
+      T3 cover the wiring behavior, so a manual CLI invocation
+      adds little beyond confirming the help text and exit codes.
+
+      If you want to verify the reject path manually before
+      committing: temporarily create a new file inside one of
+      `docs/superpowers/plans/2026-05-13-vk-apply-tracking-issue-writeback/`,
+      run `vk apply <that-plan> --yes`, observe exit 2 + the
+      unreachable-paths message, then delete the temp file.
+
+      No required output for this step beyond confirming the dry-run
+      path works.
+  - id: P1.T4.S5
+    text: |-
+      Final gate: full test suite + linters green, version triple
+      bumped, lock file refreshed.
+
+      Run: `uv run pytest -q --no-cov && uv run ruff check src/ tests/ && uv run mypy src/`
+      Expect: clean exit, no failures.
+
+      Confirm staged files include exactly what changed (no stray
+      files):
+
+      ```
+      git diff --cached --stat
+      ```
+
+      Expect: shows changes to `src/vk/git.py`, `src/vk/commands/apply_cmd.py`,
+      `tests/unit/test_git.py` (new), `tests/unit/test_v2_apply.py`,
+      `skills/vk-dispatch/SKILL.md`, `CLAUDE.md`, `pyproject.toml`,
+      `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
+      `uv.lock`. Nothing else.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
