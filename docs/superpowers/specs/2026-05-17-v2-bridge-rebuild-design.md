@@ -70,7 +70,7 @@ This shape isn't an edge case — it's how operators decompose plans whose work 
 
 ### Folded from the cross-repo `RepoLabelEnsure` spec
 
-This section absorbs the design that previously lived in `docs/superpowers/specs/2026-05-16-cross-repo-label-ensure-design.md` (now archived). The diff() change (group RepoLabelEnsure by destination repo) lands in Phase 1 alongside the dep-gating signature change — both are state-machine projection fixes in the same module surface. Reference tracking issue #132; defused tracking #134.
+This section absorbs the design that previously lived in `docs/superpowers/archived-specs/2026-05-16-cross-repo-label-ensure-design.md` (archived 2026-05-17 via PR #149). The diff() change (group RepoLabelEnsure by destination repo) lands in Phase 1 alongside the dep-gating signature change — both are state-machine projection fixes in the same module surface. Reference tracking issue #132; defused tracking #134.
 
 ## Bridge inventory (the empirical read that should have happened before any prior spec)
 
@@ -917,7 +917,7 @@ def test_standalone_vk_ready_issue_without_plan_is_ignored():
 
 ### Group H — Multi-repo (cross-repo dispatch)
 
-This group folds in the acceptance surface previously specced under the now-archived `docs/superpowers/specs/2026-05-16-cross-repo-label-ensure-design.md`. The capabilities below cover both the `RepoLabelEnsure` bug fix and the broader multi-repo architectural rule that every per-phase mutation routes to `parse_issue_url(phase.tracking_issue).repo`.
+This group folds in the acceptance surface previously specced under the now-archived `docs/superpowers/archived-specs/2026-05-16-cross-repo-label-ensure-design.md` (archived 2026-05-17 via PR #149). The capabilities below cover both the `RepoLabelEnsure` bug fix and the broader multi-repo architectural rule that every per-phase mutation routes to `parse_issue_url(phase.tracking_issue).repo`.
 
 #### H1: `RepoLabelEnsure` groups by destination repo
 <!-- implementation: Phase 1 (folded from #132 / archived cross-repo spec) -->
