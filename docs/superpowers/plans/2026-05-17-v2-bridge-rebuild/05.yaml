@@ -1,0 +1,271 @@
+schema_version: 2
+phase:
+  number: 5
+  title: vk.bridge.cli + __main__ + wrapper + install.sh + resilience
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: vk.bridge.__main__ + main() skeleton + tick log + no public verb
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Failing tests E1, E2, G1, G5 in `tests/unit/test_bridge_cli.py`
+      and `tests/integration/test_bridge_entry_point.py`.
+
+      E1: `vk --help` output (subprocess.run) does NOT contain 'bridge'.
+
+      E2: `python -m vk.bridge --dry-run` exits 0 with no MCP/gh side
+      effects (use a clean environment that lacks VK_ORG_ID etc. so
+      --dry-run is the only mode that can succeed).
+
+      G1: caplog captures log records during a tick — proves stdlib
+      logging is wired.
+
+      G5: caplog's first record matches regex
+      `^\[bridge\] - v\d+\.\d+\.\d+ - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC - tick$`.
+
+      Run: red — `vk.bridge.cli` doesn't exist.
+  - id: P5.T1.S2
+    text: |-
+      Create `src/vk/bridge/__main__.py`:
+      ```python
+      from vk.bridge.cli import main
+      if __name__ == "__main__":
+          raise SystemExit(main())
+      ```
+
+      Create `src/vk/bridge/cli.py` with stdlib `logging` setup +
+      version-stamped tick banner:
+      ```python
+      import argparse
+      import datetime
+      import logging
+      import sys
+      from importlib.metadata import version as _pkg_version
+
+      def main(argv: list[str] | None = None) -> int:
+          parser = argparse.ArgumentParser(prog="vk.bridge")
+          parser.add_argument("--dry-run", action="store_true")
+          args = parser.parse_args(argv)
+
+          logging.basicConfig(level=logging.INFO, format="%(message)s")
+          log = logging.getLogger("vk.bridge")
+
+          vk_ver = _pkg_version("vk")
+          now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+          log.info(f"[bridge] - v{vk_ver} - {now} - tick")
+
+          if args.dry_run:
+              log.info("vk.bridge: dry-run complete")
+              return 0
+
+          # ... real tick logic added in T5.T1.S3
+          log.info("vk.bridge: tick complete")
+          return 0
+      ```
+
+      Run: `uv run pytest tests/unit/test_bridge_cli.py tests/integration/test_bridge_entry_point.py -x --no-cov`
+      Expect: E1, E2, G1, G5 all GREEN.
+  - id: P5.T1.S3
+    text: |-
+      Wire the real tick into `main()`. Roughly:
+      ```python
+      from vk._mcp_client import VkMcpClient
+      from vk.gh import RealGhClient
+      from vk.bridge import tick
+      from vk.bridge.workspaces import reap_orphans
+      from vk.bridge.pr_state import tick as pr_state_tick
+      from vk.bridge import discover_plans
+      ...
+      gh = RealGhClient()
+      mcp = VkMcpClient.start()
+      try:
+          for repo in _configured_repos():
+              for plan in discover_plans(repo, gh):
+                  tick(plan, gh, mcp)
+          pr_state_tick(mcp, _gather_pr_observations(...))
+          reap_orphans(mcp)
+      finally:
+          mcp.close()
+      ```
+
+      Exact wiring TBD by what `vk.bridge.tick` already accepts. Read
+      `src/vk/bridge/__init__.py` and adapt.
+
+      Run: full unit suite. Expect green.
+- number: 2
+  title: Stale-checkout auto-pull (E4)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Failing test E4 in `tests/integration/test_bridge_cli.py`. Uses
+      tmp_path with a bare origin repo + clone; pushes a commit to
+      origin that local doesn't have; runs `main()` configured to
+      manage that repo; asserts `discover_plans` finds the new plan
+      (proving the pull happened first).
+
+      Run: red.
+  - id: P5.T2.S2
+    text: |-
+      In `vk.bridge.cli`, before iterating `discover_plans` for each
+      repo, run:
+      ```python
+      subprocess.run(["git", "-C", repo_path, "fetch"], check=True)
+      subprocess.run(["git", "-C", repo_path, "checkout", "main"], check=True)
+      subprocess.run(["git", "-C", repo_path, "pull", "--ff-only"], check=True)
+      ```
+
+      Wrap in try/except — if pull fails (conflicts), log warning and
+      continue with stale checkout (defensive — better stale dispatch
+      than no dispatch).
+
+      Run: E4 GREEN.
+- number: 3
+  title: Resilience guards (I1, I2, I3, I4, I6)
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      Failing tests I1, I2, I3, I4, I6 in
+      `tests/integration/test_bridge_resilience.py` (append to existing
+      file from Phase 1).
+
+      I1: missing `vibe-kanban-mcp` AND `npx` → exit non-zero, stderr
+      names binary + install fix.
+      I2: MCP subprocess dies mid-tick → tick aborts cleanly, metric
+      pushed.
+      I3: gh returns 403 rate-limit → backoff, no MCP mutations, metric.
+      I4: lock file at `/var/run/vk-bridge.lock` (or VK_BRIDGE_LOCK_PATH)
+      → second concurrent invocation exits 0 with 'tick already in
+      progress'.
+      I6: plan disappears between ticks → cards left intact, single
+      warning logged.
+
+      Run: red.
+  - id: P5.T3.S2
+    text: |-
+      Implement resilience:
+
+      - I1: In `_construct_mcp_client()`, check `shutil.which('npx')` and
+        `shutil.which('vibe-kanban-mcp')`. If both absent, write to
+        stderr: `error: vibe-kanban-mcp and npx both missing. Install via
+        'apt install nodejs npm' then 'npm install -g vibe-kanban'` and
+        return non-zero exit.
+
+      - I2: Catch `BrokenPipeError` / `subprocess.CalledProcessError` in
+        the tick loop. Push failure metric, return cleanly.
+
+      - I3: In the gh-call wrapper, detect 403 + 'rate limit'. Log
+        backoff, return early. Metric.
+
+      - I4: At start of `main()`, `flock(open(LOCK_PATH, 'w'), LOCK_EX |
+        LOCK_NB)`. On `BlockingIOError`, log 'tick already in progress,
+        skipping' and return 0.
+
+      - I6: When `discover_plans` returns nothing for a managed repo
+        that had cards in the previous tick, log once per tick:
+        `f"plan <slug> no longer on disk; cards left intact for manual
+        review"`. Maintain a `_seen_plans.json` sidecar in
+        `~/.willikins-agent/` (or similar) to track previously-seen
+        plans across ticks. Do NOT auto-archive.
+
+      Run: `uv run pytest tests/integration/test_bridge_resilience.py -x --no-cov`
+      Expect: GREEN.
+- number: 4
+  title: install.sh --install-bridge (E3)
+  steps:
+  - id: P5.T4.S1
+    text: |-
+      Failing test E3 in `tests/integration/test_install_bridge.py`.
+
+      Temp HOME with vk installed (use `uv tool install vk` against the
+      in-repo source if possible, OR mock it). Set
+      VK_BRIDGE_WRAPPER_PATH=/tmp/test-wrapper/run.sh. Run
+      `bash scripts/install.sh --install-bridge`. Assert wrapper exists,
+      is executable, content references the venv python. Assert stdout
+      contains a cron line.
+
+      Run: red — flag doesn't exist.
+  - id: P5.T4.S2
+    text: |-
+      Edit `scripts/install.sh`. Add `--install-bridge` handling:
+      ```bash
+      if [ "$1" = "--install-bridge" ]; then
+          wrapper_path="${VK_BRIDGE_WRAPPER_PATH:-/opt/vk-bridge/run.sh}"
+          mkdir -p "$(dirname "$wrapper_path")"
+          # Resolve the active vk venv's python interpreter.
+          vk_python="$(uv run which python 2>/dev/null || command -v python3)"
+          cat > "$wrapper_path" <<EOF
+      #!/bin/bash
+      exec "$vk_python" -m vk.bridge "\$@"
+      EOF
+          chmod +x "$wrapper_path"
+          echo "Wrapper installed at $wrapper_path"
+          echo ""
+          echo "To schedule the bridge, add to your cron config:"
+          echo "*/2 * * * * $wrapper_path"
+          exit 0
+      fi
+      ```
+
+      Run: `uv run pytest tests/integration/test_install_bridge.py -x --no-cov`
+      Expect: E3 GREEN.
+- number: 5
+  title: Version bump 2.1.10 → 2.1.11 + verification + PR
+  steps:
+  - id: P5.T5.S1
+    text: |-
+      Bump version. `uv sync`. Pre-push verify.
+
+      Open PR: `feat(bridge): cli + __main__ + wrapper + install.sh +
+      resilience (Phase 5 of #147)`. References #147; acceptance set:
+      E1-E4, G1, G5, I1-I4, I6.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

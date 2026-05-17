@@ -1,0 +1,161 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Workspaces + lifecycle + PR state
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Workspace lifecycle (C1, C2, I5)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Failing tests C1, C2, I5 in `tests/unit/test_bridge_workspaces.py`.
+
+      Each test's Given/When/Then is in the spec at §"Acceptance tests".
+      Tests construct a `FakeMcpClient` with pre-loaded workspaces /
+      issues, then call the function-under-test and assert on
+      `mcp.calls`.
+
+      I5 (card-without-workspace recovery): both branches —
+      `VK_BRIDGE_RECOVER_ORPHAN_CARDS=1` re-creates workspace;
+      unset leaves card alone but logs a warning.
+
+      Run: `uv run pytest tests/unit/test_bridge_workspaces.py -x --no-cov`
+      Expect: red — module doesn't exist.
+  - id: P3.T1.S2
+    text: |-
+      Implement `src/vk/bridge/workspaces.py`:
+      ```python
+      def archive_for_card(mcp: VkMcpClient, simple_id: str) -> bool:
+          """Archive the workspace whose name starts with f'{simple_id} ->'.
+          Returns True iff a workspace was archived."""
+          ...
+
+      def reap_orphans(mcp: VkMcpClient, pinned: set[str] | None = None) -> int:
+          """Archive any workspace whose card is Done or doesn't exist,
+          unless its workspace name is in `pinned`. Returns count archived."""
+          ...
+
+      def recover_orphan_card(mcp: VkMcpClient, card_id: str, simple_id: str) -> str | None:
+          """Re-create a workspace for a card that lost its link.
+          Only runs if VK_BRIDGE_RECOVER_ORPHAN_CARDS=1; returns new ws_id or None."""
+          ...
+      ```
+
+      Port logic from `agent-images/kali/scripts/vk-issue-bridge.py`:
+      - `archive_workspace_for_card:276-308` → `archive_for_card`
+      - `reap_orphan_workspaces:344-399` → `reap_orphans`
+      - I5 logic is new — `recover_orphan_card` is the inverse the
+        legacy bridge lacks
+
+      Run: `uv run pytest tests/unit/test_bridge_workspaces.py -x --no-cov`
+      Expect: GREEN.
+- number: 2
+  title: PR state transitions (C3, C4)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Failing tests C3, C4 in `tests/unit/test_bridge_pr_state.py`.
+
+      Use FakeMcpClient with pre-loaded cards in `In progress` /
+      `In review` states; the test sets a `latest_pr_status` field on
+      the card data (or passes it in via a stubbed PR-observation
+      helper).
+
+      Run: red — module missing.
+  - id: P3.T2.S2
+    text: |-
+      Implement `src/vk/bridge/pr_state.py`:
+      ```python
+      def tick(mcp: VkMcpClient, pr_observations: dict[str, str]) -> int:
+          """Transition cards based on their linked PR's status.
+          Returns count of cards transitioned.
+
+          Transitions:
+            In progress + PR open (non-draft)  → In review
+            In review   + PR merged            → Done (+ archive workspace
+                                                 + close issue if needed)
+          """
+          ...
+      ```
+
+      Port `poll_pr_status:402-445` from the legacy bridge. The PR
+      observation source is left as a parameter; Phase 5's
+      `vk.bridge.cli` wires the actual `vk.observe` call.
+
+      Run: `uv run pytest tests/unit/test_bridge_pr_state.py -x --no-cov`
+      Expect: GREEN.
+- number: 3
+  title: Renderer projects CLOSED state (C5)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Failing test C5 in `tests/unit/test_render.py` (existing file).
+
+      Given a phase with `state.completion.at` set, all steps ticked,
+      one merged PR and no open non-draft PRs:
+      - Assert `rendered.issue_per_phase[N].state == "CLOSED"`
+      - Then diff against an observed state where the issue is still
+        OPEN; assert an `IssueStateChange(new_state="CLOSED")` mutation
+        is emitted.
+
+      Run: likely already GREEN — the renderer already projects CLOSED
+      state for complete phases (spec §"State-machine surface gains"
+      notes this is already wired). If red, the renderer needs the
+      missing projection. Treat as pin if green; implement if red.
+  - id: P3.T3.S2
+    text: |-
+      Verify lifecycle hook integration point (D5 deferred to Phase 4).
+
+      Add a `_lifecycle_hook(...)` stub function in
+      `src/vk/bridge/lifecycle.py` that does nothing if
+      `VK_LIFECYCLE_HOOK_SCRIPT` is unset. Phase 4 fleshes it out.
+
+      Run: `uv run pytest tests/ -x --no-cov` (full)
+      Expect: green.
+- number: 4
+  title: Version bump 2.1.8 → 2.1.9 + verification + PR
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Bump version. `uv sync`. Pre-push verify.
+
+      Open PR: `feat(bridge): workspaces + lifecycle + pr-state (Phase 3
+      of #147)`. References #147; acceptance set: C1-C5 + I5.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

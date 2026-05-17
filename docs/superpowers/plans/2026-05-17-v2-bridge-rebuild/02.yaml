@@ -1,0 +1,362 @@
+schema_version: 2
+phase:
+  number: 2
+  title: vk._mcp_client + vk.bridge.dispatch
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Move vk_mcp_client.py into vk package
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Failing test B3 — `vk._mcp_client` importable.
+
+      Create `tests/unit/test_mcp_client.py`:
+      ```python
+      def test_mcp_client_importable_from_vk():
+          from vk._mcp_client import VkMcpClient, VkMcpError
+          assert VkMcpClient is not None
+          assert issubclass(VkMcpError, Exception)
+      ```
+
+      Run: `uv run pytest tests/unit/test_mcp_client.py -x --no-cov`
+      Expect: red — module doesn't exist yet.
+  - id: P2.T1.S2
+    text: |-
+      Copy `agent-images/kali/scripts/vk_mcp_client.py` into
+      `src/vk/_mcp_client.py` (single underscore prefix = private).
+
+      Use `gh api repos/derio-net/agent-images/contents/kali/scripts/vk_mcp_client.py`
+      if the user doesn't have agent-images checked out locally; otherwise
+      copy from `~/Docs/projects/DERIO_NET/agent-images/kali/scripts/`.
+
+      Adjust imports: any `from kali_scripts...` becomes a stdlib import.
+      The wire protocol (JSON-RPC over stdin/stdout to
+      `npx vibe-kanban@latest --mcp`) is NOT modified — only the file
+      moves.
+
+      Run: `uv run pytest tests/unit/test_mcp_client.py -x --no-cov`
+      Expect: GREEN — import works.
+  - id: P2.T1.S3
+    text: |-
+      Port the existing test cases for `vk_mcp_client.py` from
+      `agent-images/kali/tests/` (if any) into
+      `tests/unit/test_mcp_client.py`. Look for tests of:
+      - `create_issue` / `update_issue` / `get_issue` / `list_issues`
+      - `start_workspace` / `list_workspaces` / `update_workspace`
+      - `list_repos` / `link_workspace_issue` / `close`
+      - JSON-RPC envelope parsing / error handling
+      - Subprocess lifecycle (start, crash, shutdown)
+
+      Each ported test uses subprocess stubs (no real npx call) — see
+      existing pattern in the source repo if any tests pre-exist.
+
+      Run: `uv run pytest tests/unit/test_mcp_client.py -x --no-cov`
+      Expect: green.
+- number: 2
+  title: FakeMcpClient
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Failing test B4 — `FakeMcpClient` exists and implements protocol.
+
+      Append to `tests/unit/test_fakes.py`:
+      ```python
+      def test_fake_mcp_client_implements_protocol():
+          from tests.unit.fakes import FakeMcpClient
+          fc = FakeMcpClient()
+          assert hasattr(fc, "create_issue")
+          assert hasattr(fc, "update_issue")
+          assert hasattr(fc, "start_workspace")
+          assert hasattr(fc, "update_workspace")
+          assert hasattr(fc, "list_repos")
+          assert hasattr(fc, "link_workspace_issue")
+          assert fc.calls == []
+
+      def test_fake_mcp_client_records_calls():
+          from tests.unit.fakes import FakeMcpClient
+          fc = FakeMcpClient()
+          fc.create_issue(title="t", description="d")
+          assert fc.calls == [("create_issue", {"title": "t", "description": "d"})]
+
+      def test_fake_mcp_client_failure_injection():
+          import pytest
+          from tests.unit.fakes import FakeMcpClient
+          fc = FakeMcpClient(fail_on_call=2)
+          fc.create_issue(title="t", description="d")
+          with pytest.raises(Exception, match="injected"):
+              fc.update_issue("card-1", status="In progress")
+      ```
+
+      Run: `uv run pytest tests/unit/test_fakes.py -k fake_mcp -x --no-cov`
+      Expect: red — `FakeMcpClient` not defined.
+  - id: P2.T2.S2
+    text: |-
+      Implement `FakeMcpClient` in `tests/unit/fakes.py`.
+
+      ```python
+      class FakeMcpClient:
+          def __init__(self, fail_on_call: int | None = None):
+              self.calls: list[tuple[str, dict]] = []
+              self._fail_on = fail_on_call
+              self._next_card_id = 0
+              self._next_ws_id = 0
+              self.issues: dict[str, dict] = {}      # card_id -> data
+              self.workspaces: dict[str, dict] = {}  # ws_id -> data
+
+          def _record(self, name: str, args: dict):
+              self.calls.append((name, args))
+              if self._fail_on and len(self.calls) == self._fail_on:
+                  raise Exception("injected MCP failure")
+
+          def create_issue(self, *, title, description, **kw):
+              self._record("create_issue", {"title": title, "description": description, **kw})
+              self._next_card_id += 1
+              cid = f"card-{self._next_card_id}"
+              self.issues[cid] = {"id": cid, "title": title, "description": description, "status": "Todo"}
+              return self.issues[cid]
+
+          def update_issue(self, card_id, **changes):
+              self._record("update_issue", {"card_id": card_id, **changes})
+              self.issues.setdefault(card_id, {"id": card_id}).update(changes)
+              return self.issues[card_id]
+
+          def start_workspace(self, *, name, repo, executor, branch, **kw):
+              self._record("start_workspace", {"name": name, "repo": repo, "executor": executor, "branch": branch, **kw})
+              self._next_ws_id += 1
+              wid = f"ws-{self._next_ws_id}"
+              self.workspaces[wid] = {"id": wid, "name": name, "archived": False, "linked_issue": None}
+              return self.workspaces[wid]
+
+          def update_workspace(self, ws_id, **changes):
+              self._record("update_workspace", {"ws_id": ws_id, **changes})
+              self.workspaces.setdefault(ws_id, {"id": ws_id}).update(changes)
+              return self.workspaces[ws_id]
+
+          def list_repos(self):
+              self._record("list_repos", {})
+              return [{"name": "derio-net/frank"}, {"name": "derio-net/willikins"}, {"name": "derio-net/superpowers-for-vk"}]
+
+          def link_workspace_issue(self, ws_id, card_id):
+              self._record("link_workspace_issue", {"ws_id": ws_id, "card_id": card_id})
+              if ws_id in self.workspaces:
+                  self.workspaces[ws_id]["linked_issue"] = card_id
+
+          def list_workspaces(self):
+              self._record("list_workspaces", {})
+              return list(self.workspaces.values())
+
+          def list_issues(self):
+              self._record("list_issues", {})
+              return list(self.issues.values())
+
+          def get_issue(self, card_id):
+              self._record("get_issue", {"card_id": card_id})
+              return self.issues.get(card_id)
+
+          def close(self):
+              self._record("close", {})
+      ```
+
+      Run: `uv run pytest tests/unit/test_fakes.py -k fake_mcp -x --no-cov`
+      Expect: GREEN.
+- number: 3
+  title: vk.bridge.dispatch — failing tests
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Failing tests B1, H9 for `vk.bridge.dispatch.dispatch_phase`.
+
+      Create `tests/unit/test_bridge_dispatch.py`:
+      ```python
+      from pathlib import Path
+      from tests.unit.fakes import FakeMcpClient
+      from vk.parser import load_plan_dir
+
+      def test_dispatch_creates_card_and_workspace():
+          from vk.bridge.dispatch import dispatch_phase
+          plan = load_plan_dir(Path("tests/unit/fixtures/v2_plan_multi_phase"))
+          phase = plan.phases[0]
+          mcp = FakeMcpClient()
+          result = dispatch_phase(plan, phase, mcp)
+          names = [c[0] for c in mcp.calls]
+          assert "create_issue" in names
+          assert "update_issue" in names    # sets status In progress
+          assert "list_repos" in names
+          assert "start_workspace" in names
+          assert "link_workspace_issue" in names
+          assert result.card_id is not None
+          assert result.workspace_id is not None
+
+      def test_card_title_is_minimal_and_description_is_structured():
+          from vk.bridge.dispatch import dispatch_phase
+          plan = load_plan_dir(Path("tests/unit/fixtures/v2_plan_cross_repo"))
+          phase = plan.phases[1]  # dispatched on derio-net/repo-b/issues/100
+          mcp = FakeMcpClient()
+          dispatch_phase(plan, phase, mcp)
+          (create_call,) = [c for c in mcp.calls if c[0] == "create_issue"]
+          args = create_call[1]
+          assert args["title"] == "gh#100: [derio-net/repo-b]"
+          expected_desc = "\n".join([
+              "v2_plan_cross_repo",
+              "Phase 2/3",
+              phase.phase.title,
+              "https://github.com/derio-net/repo-b/issues/100",
+          ])
+          assert args["description"] == expected_desc
+      ```
+
+      Run: `uv run pytest tests/unit/test_bridge_dispatch.py -x --no-cov`
+      Expect: red — `vk.bridge.dispatch` doesn't exist yet.
+- number: 4
+  title: vk.bridge.dispatch — implementation
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Create `src/vk/bridge/dispatch.py`.
+
+      Public surface:
+      ```python
+      from dataclasses import dataclass
+      from vk.parser import Plan, PhaseDoc
+      from vk._mcp_client import VkMcpClient
+
+      @dataclass(frozen=True)
+      class DispatchResult:
+          card_id: str
+          workspace_id: str | None
+
+      def dispatch_phase(plan: Plan, phase: PhaseDoc, mcp: VkMcpClient) -> DispatchResult:
+          """Create VK card + workspace for a vk-ready phase. The ONE canonical
+          dispatch implementation. Both legacy and v2 call sites converge here."""
+          ...
+      ```
+
+      Implementation extracts the merged behavior of legacy `sync_issue`
+      and the v2 `_McpAdapter.create_card`:
+      1. Build title: `gh#{N}: [{repo}]` where N = issue number from
+         `phase.tracking_issue`, repo = `parse_issue_url(...).repo`.
+      2. Build description (newline-joined):
+         - `plan.meta.plan`
+         - `f"Phase {phase.phase.number}/{len(plan.phases)}"`
+         - `phase.phase.title`
+         - `phase.tracking_issue` (issue URL)
+      3. `card = mcp.create_issue(title=..., description=...)`
+      4. `mcp.update_issue(card['id'], status='In progress')`
+      5. `repos = mcp.list_repos()`; resolve target by name
+      6. `ws = mcp.start_workspace(name=f"{simple_id} -> gh#{N}", repo=..., executor='CLAUDE_CODE', branch=f"vk/gh-{N}")`
+      7. `mcp.link_workspace_issue(ws['id'], card['id'])`
+      8. Optional: invoke `VK_LIFECYCLE_HOOK_SCRIPT` if env var set
+         (deferred to Phase 4 — leave a hook point but don't implement).
+      9. Return `DispatchResult(card_id=card['id'], workspace_id=ws['id'])`
+
+      Run: `uv run pytest tests/unit/test_bridge_dispatch.py -x --no-cov`
+      Expect: both tests GREEN.
+  - id: P2.T4.S2
+    text: |-
+      Wire `vk.bridge.tick` (the existing library function) to call the
+      new `dispatch_phase`. Find where `tick` does its dispatching today
+      in `src/vk/bridge/__init__.py`. Replace any inline MCP create/start
+      sequence with a call to `dispatch_phase(plan, phase, mcp)`.
+
+      If the existing `vk.bridge.tick` already returns a `TickResult`,
+      keep that contract; `dispatch_phase` becomes an internal helper.
+
+      Run: `uv run pytest tests/ -x --no-cov`
+      Expect: green. Any pre-existing bridge tick tests that asserted
+      specific MCP call sequences may need to be relaxed to match the
+      new dispatch implementation — confirm assertions reflect the new
+      title/description format.
+- number: 5
+  title: B2 — regression guard against duplicate dispatch
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Add B2 to `tests/unit/test_bridge_dispatch.py`:
+      ```python
+      def test_no_duplicate_dispatch_implementations():
+          """
+          GIVEN the rebuilt vk package
+          WHEN  grepping src/ for the dispatch sequence
+          THEN  the create_issue + update_issue + list_repos + start_workspace
+                + link_workspace_issue chain appears in exactly ONE module:
+                vk.bridge.dispatch.
+          """
+          import subprocess
+          from pathlib import Path
+          # Grep src/ for files that call all 5 MCP methods.
+          files_with_create = subprocess.check_output(
+              ["git", "grep", "-l", "create_issue", "src/"], text=True
+          ).splitlines()
+          culprits = []
+          for f in files_with_create:
+              content = Path(f).read_text()
+              if all(name in content for name in ("create_issue", "update_issue", "list_repos", "start_workspace", "link_workspace_issue")):
+                  culprits.append(f)
+          assert culprits == ["src/vk/bridge/dispatch.py"], (
+              f"Dispatch sequence appears in unexpected files: {culprits}"
+          )
+      ```
+
+      Run: `uv run pytest tests/unit/test_bridge_dispatch.py -k no_duplicate -x --no-cov`
+      Expect: green. (If red, find the second file and migrate its
+      dispatch into `vk.bridge.dispatch`.)
+- number: 6
+  title: Version bump 2.1.7 → 2.1.8 + verification + PR
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Bump version in the three files. `uv sync`. Pre-push verify.
+
+      Open PR: `feat(bridge): vk._mcp_client + vk.bridge.dispatch
+      (Phase 2 of #147)`. Body references #147, lists tests B1-B4 + H9
+      as the acceptance set.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

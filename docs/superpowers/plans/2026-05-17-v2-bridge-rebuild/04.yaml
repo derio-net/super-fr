@@ -1,0 +1,190 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Slots + dedup + metrics + prompt + config + lifecycle hook
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Slots + dedup (D1, D2)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Failing tests D1, D2 in `tests/unit/test_bridge_slots.py` and
+      `tests/unit/test_bridge_dedup.py`.
+
+      D1 stubs `vk.bridge.slots.count_active_ws(mcp)` to return 3, sets
+      MAX_CONCURRENT=2, then asserts `tick(plan, gh, mcp)` makes zero
+      create_card calls.
+
+      D2 pre-loads a card with title `gh#42: [...]` matching what
+      dispatch would build for issue #42; tick calls dispatch, dispatch
+      detects the existing title via `vk.bridge.dedup.fetch_existing_titles`
+      and skips `create_card` but still adds `vk-synced` to the gh issue.
+
+      Run: red — modules don't exist.
+  - id: P4.T1.S2
+    text: |-
+      Implement `src/vk/bridge/slots.py`:
+      ```python
+      def count_active_ws(mcp: VkMcpClient) -> int:
+          """Count non-archived workspaces. Slot budget = MAX_CONCURRENT - this."""
+          return sum(1 for ws in mcp.list_workspaces() if not ws.get("archived"))
+
+      def max_concurrent() -> int:
+          return int(os.environ.get("MAX_CONCURRENT", "8"))
+      ```
+
+      Implement `src/vk/bridge/dedup.py`:
+      ```python
+      def fetch_existing_titles(mcp: VkMcpClient) -> set[str]:
+          return {issue["title"] for issue in mcp.list_issues()}
+
+      def is_dispatched(title: str, existing: set[str]) -> bool:
+          return title in existing
+      ```
+
+      Wire `vk.bridge.dispatch.dispatch_phase` to check dedup before
+      `create_issue`; if dispatched, skip create but still stamp
+      `vk-synced` on the gh issue. Wire `vk.bridge.tick` to check
+      slot budget before iterating phases.
+
+      Run: `uv run pytest tests/unit/test_bridge_slots.py tests/unit/test_bridge_dedup.py -x --no-cov`
+      Expect: GREEN.
+- number: 2
+  title: Metrics + config (D3, D4)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Failing tests D3 (three sub-cases), D4 in
+      `tests/unit/test_bridge_metrics.py` and
+      `tests/unit/test_bridge_config.py`.
+
+      Tests use `monkeypatch` to inject a fake Pushgateway endpoint that
+      records the metric name + labels of each push.
+
+      Run: red.
+  - id: P4.T2.S2
+    text: |-
+      Implement `src/vk/bridge/metrics.py`. Port `_push_metric:483-495`
+      and the three `push_*` helpers from the legacy bridge. Use the
+      stdlib `urllib.request` (no `requests` dep). Pushgateway URL from
+      `PUSHGATEWAY_URL` env.
+
+      Implement `src/vk/bridge/config.py`. Port `fetch_repo_names:470-478`
+      — calls `mcp.list_repos()` once per tick, caches result. Exposes
+      `is_known_repo(repo: str, mcp) -> bool`.
+
+      Wire `vk.bridge.tick` to:
+      1. Call `config.is_known_repo` before dispatching; if unknown,
+         push `willikins_vk_bridge_failure_total{reason="unknown_repo"}`
+         and skip.
+      2. Push `willikins_vk_bridge_sync_total` on dispatch success.
+      3. Push `willikins_vk_bridge_failure_total{reason=...}` on dispatch
+         failure.
+      4. Push `willikins_heartbeat_last_success_timestamp` at end of tick.
+
+      Run: `uv run pytest tests/unit/test_bridge_metrics.py tests/unit/test_bridge_config.py -x --no-cov`
+      Expect: GREEN.
+- number: 3
+  title: Lifecycle hook + prompt (D5 + spec §"K prompt construction")
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Failing test D5 in `tests/unit/test_bridge_lifecycle.py`.
+
+      Uses tmp_path to write a hook script that records its args, sets
+      VK_LIFECYCLE_HOOK_SCRIPT to its path, dispatches a phase, then
+      asserts the script was invoked with (issue_url, 'in-progress').
+      Second sub-case: env unset → no script invocation.
+
+      Run: red.
+  - id: P4.T3.S2
+    text: |-
+      Implement `src/vk/bridge/lifecycle.py`:
+      ```python
+      def invoke_lifecycle_hook(issue_url: str, transition: str) -> None:
+          script = os.environ.get("VK_LIFECYCLE_HOOK_SCRIPT")
+          if not script:
+              return
+          try:
+              subprocess.run([script, issue_url, transition], check=False, timeout=30)
+          except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+              logging.getLogger("vk.bridge").warning(
+                  "lifecycle hook failed: %s", e
+              )
+      ```
+
+      Wire `vk.bridge.dispatch` to call `invoke_lifecycle_hook` after
+      successful card create. Hook failure must NOT break dispatch.
+
+      Run: `uv run pytest tests/unit/test_bridge_lifecycle.py -x --no-cov`
+      Expect: GREEN.
+  - id: P4.T3.S3
+    text: |-
+      Implement `src/vk/bridge/prompt.py` (concern K in inventory).
+
+      Port `build_prompt:605-639` from the legacy bridge. CRITICAL
+      change: the deps preamble comes from `phase.phase.depends_on`,
+      NOT from body-text parsing. Look up each dep's tracking_issue +
+      gh status; include them in the preamble.
+
+      Add `tests/unit/test_bridge_prompt.py` with at least:
+      - Phase with no deps: no deps preamble
+      - Phase with one satisfied dep: preamble references the dep's PR/issue
+      - Phase with one unsatisfied dep: preamble notes the block (though
+        this code path shouldn't normally fire — `vk-blocked` would have
+        prevented dispatch in the first place)
+
+      Run: `uv run pytest tests/unit/test_bridge_prompt.py -x --no-cov`
+      Expect: GREEN.
+- number: 4
+  title: Version bump 2.1.9 → 2.1.10 + verification + PR
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Bump version. `uv sync`. Pre-push verify.
+
+      Open PR: `feat(bridge): slots + dedup + metrics + prompt + config
+      + lifecycle hook (Phase 4 of #147)`. References #147; acceptance
+      set: D1-D5.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
