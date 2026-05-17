@@ -250,11 +250,15 @@ new command.)
   agent. With the operator-side gate enforced, that becomes
   belt-and-suspenders. Leave for a follow-up if the operator-side
   gate proves insufficient.
-- **No bridge-side version check.** Adjacent work to detect when the
-  bridge's plugin manifest version drifts from its installed `vk`
-  python package version — same "make silent drift loud" pattern,
-  different layer (cron daemon, not CLI). Filed as a separate spec
-  after this one lands.
+- **No kali-bridge venv architecture changes.** The kali bridge's
+  `vk` venv is currently Dockerfile-pinned
+  (`agent-images/kali/Dockerfile:59-61`), which creates a separate
+  drift class: image rebuilds out of sync with plugin updates. A
+  runtime version-check guard was briefly folded into this spec then
+  removed — the real fix is architectural (kali bridge venv from
+  shared PV, mirroring vk-local). Tackled separately at
+  `docs/superpowers/specs/2026-05-17-kali-bridge-venv-shared-pv-design.md`
+  (skeleton); orthogonal to this dispatch-reachability gate.
 - **No redesign of the writeback flow.** The "derive `tracking_issue`
   from gh labels (e.g., `plan:<slug>` + `phase:N`)" v3 idea that
   would eliminate the writeback entirely stays out — file separately
