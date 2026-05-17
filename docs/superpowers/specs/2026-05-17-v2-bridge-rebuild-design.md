@@ -72,6 +72,53 @@ This shape isn't an edge case — it's how operators decompose plans whose work 
 
 This section absorbs the design that previously lived in `docs/superpowers/archived-specs/2026-05-16-cross-repo-label-ensure-design.md` (archived 2026-05-17 via PR #149). The diff() change (group RepoLabelEnsure by destination repo) lands in Phase 1 alongside the dep-gating signature change — both are state-machine projection fixes in the same module surface. Reference tracking issue #132; defused tracking #134.
 
+## Deployment constraints (what stays in agent-images and why)
+
+A pre-implementation feasibility audit (2026-05-17) confirmed the rebuild is technically possible, but surfaced explicit runtime constraints that need to be in the spec — not just in the implementer's head — to avoid the next "we forgot what the bridge actually needed" incident.
+
+### Container-level dependencies the rebuilt bridge still requires
+
+The MCP client (`vk_mcp_client.py`, moving to `vk._mcp_client`) is a **thin Python wrapper around a Node.js subprocess**. It spawns `vibe-kanban-mcp --mode global` (or falls back to `npx vibe-kanban@latest --mcp`) and communicates via JSON-RPC 2.0 over stdin/stdout. This means the rebuilt bridge ONLY runs in environments where:
+
+- **Node.js + npx are installed** and on `PATH`
+- The `vibe-kanban` package is installable (or `vibe-kanban-mcp` binary is on `PATH`)
+- The MCP server's HTTP backend is reachable via `VIBE_BACKEND_URL` (default `http://localhost:8081`)
+
+These are SYSTEM-LEVEL dependencies provided by the Kali container today. After the rebuild they STILL must be provided by whatever container runs the bridge — the vk package cannot bundle Node.js.
+
+### PEP 668 venv isolation
+
+Debian's apt-managed `python3-click` collides with vk's transitive deps (typer pulls a newer click). The Kali Dockerfile creates `/opt/vk-bridge-venv/` for isolation:
+
+```dockerfile
+RUN python3 -m venv /opt/vk-bridge-venv \
+    && /opt/vk-bridge-venv/bin/pip install --no-cache-dir \
+        'vk @ git+https://github.com/derio-net/superpowers-for-vk@<version>'
+```
+
+The rebuild keeps this venv pattern. The wrapper script written by `install.sh --install-bridge` MUST point at `/opt/vk-bridge-venv/bin/python -m vk.bridge` (not at any system Python). This is encoded in the wrapper template — the install path is a config variable, but the interpreter must be the venv's.
+
+### What STAYS in agent-images after the rebuild
+
+| Artifact | Why it stays |
+|---|---|
+| `kali/Dockerfile` | Container build recipe — sets up venv, installs vk, system tooling (gh, mosh, supercronic, npx, locale) |
+| `kali/config-templates/crontab.txt` | Supercronic schedule; bridge cron line points at the new wrapper. Tick frequency unchanged from current `*/2 * * * *`. Supercronic supports sub-minute via a 6th seconds field if needed later. |
+| `kali/scripts/*.{sh,py}` (18 other files) | Audit, exercise, guardrails, push-heartbeat, session-manager, wrap-claude, etc. — unrelated to the bridge |
+| `kali/etc/cont-init.d/` | Container init scripts (crontab seeding etc.) |
+| All env vars (`VK_ORG_ID`, `VK_DERIO_OPS_PROJECT_ID`, `VIBE_BACKEND_URL`, `PUSHGATEWAY_URL`, `MAX_CONCURRENT`) | Deployment config — set by k8s manifests or container env |
+
+### What MOVES to superpowers-for-vk
+
+| File today | After |
+|---|---|
+| `kali/scripts/vk-issue-bridge.py` (1089 LOC) | DELETED; all logic in `vk.bridge.*` modules |
+| `kali/scripts/vk_mcp_client.py` (194 LOC) | DELETED; moved to `vk._mcp_client` |
+
+### The Willikins lifecycle-transition hook is ALREADY silently broken
+
+The current bridge calls `~/repos/willikins/scripts/hooks/vk-lifecycle-transition.sh` from `sync_issue:752` via subprocess. **That script no longer exists in `willikins/scripts/hooks/`** (verified 2026-05-17 — directory contains `exercise-nudge.sh`, `plan-archive-check.sh`, `pre-compact.sh`, etc.; no `vk-lifecycle-transition.sh`). The subprocess fails silently — the try/except logs a warning but continues. The rebuild's `VK_LIFECYCLE_HOOK_SCRIPT` env var defaults to "nothing called" — which is structurally correct (matches today's de-facto behavior) and operator-overridable when a real hook script is needed.
+
 ## Bridge inventory (the empirical read that should have happened before any prior spec)
 
 Read of `agent-images/kali/scripts/vk-issue-bridge.py` end-to-end, organized by concern:
@@ -221,6 +268,74 @@ The rebuild folds two concerns currently in the bridge into the renderer's proje
 
 - **Issue close on done** (E in inventory): `vk.render` already projects `state: CLOSED` when a phase is complete. `vk.diff` already emits `IssueStateChange`. `vk.apply` already executes it. **The legacy `close_gh_issue_for_card` is therefore mostly redundant** — it exists as a belt-and-braces close when the agent's PR body omits `Fixes #N`. In the rebuild, this is captured by the v2 path's existing close-on-complete; the belt-and-braces becomes a config-driven "force-close-on-card-Done" option in `vk.bridge.lifecycle` for the rare case.
 - **PR state → card status** (F in inventory): currently legacy polls in-progress/in-review cards. In the rebuild, `vk.observe` already reads `linked_prs`; `vk.render._lifecycle_label` already projects `IN_PROGRESS`/`PR_READY` from PR state. The bridge's job becomes "project card status from rendered phase status," not "poll PRs independently." The PR state machine is collapsed into the existing renderer.
+
+### Label removal is automatic via the existing diff layer
+
+The renderer returns a SINGLE lifecycle label per phase from `_lifecycle_label` (or `None` for complete phases). The renderer's main loop combines it with static labels (`plan:*`, `spec:*`, `phase:N`) into a set. The diff layer at `src/vk/diff.py:138-150` then computes:
+
+```python
+rendered_managed = frozenset(ld.name for ld in ri.labels if _is_managed(ld.name))
+observed_managed = frozenset(lbl for lbl in obs.issue_labels if _is_managed(lbl))
+to_add = rendered_managed - observed_managed
+to_remove = observed_managed - rendered_managed
+```
+
+So when a dep completes and `_lifecycle_label` switches from `VK_BLOCKED` to `VK_READY`:
+
+- `rendered_managed` contains `vk-ready` but not `vk-blocked`
+- `observed_managed` contains `vk-blocked` but not `vk-ready`
+- Diff emits `IssueLabelChange(add={vk-ready}, remove={vk-blocked})`
+
+Adding `VK_BLOCKED` to the lifecycle vocabulary therefore only requires the renderer change — the diff layer handles all transitions automatically because `vk-blocked` starts with `vk-` (already in `MANAGED_LABEL_PREFIXES`). The same auto-management applies to every lifecycle transition (vk-ready ↔ vk-blocked, vk-ready → in-progress, in-progress → pr-ready, pr-ready → closed).
+
+**One special case: `vk-synced`** is bridge-owned, not renderer-projected. The renderer explicitly preserves it from observed labels (`render.py:288-289`) so diff doesn't strip it. The rebuild keeps this pattern — `vk-synced` is added by `vk.bridge.dispatch` after MCP card creation, preserved by the renderer's projection, never managed by `_lifecycle_label`.
+
+## Bridge log shape (operator-facing)
+
+Every tick's FIRST log line is a timestamped version banner:
+
+```
+[bridge] - v2.1.7 - 2026-05-17 14:32:00 UTC - tick
+```
+
+Format: `[bridge] - v<vk.__version__> - <YYYY-MM-DD HH:MM:SS UTC> - tick`. UTC timestamp (avoids timezone confusion when operators tail logs from anywhere). Uses Python's standard `datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")`.
+
+Implemented in `vk.bridge.cli.main()` at the top, before any other work. The version comes from `vk.__version__` (already exposed via `importlib.metadata.version("vk")`), so the banner auto-updates with releases. Subsequent log lines stay as-is (the existing `log(...)` helper becomes a stdlib-logging configuration).
+
+Why first thing per tick: when operators investigate a "what was the bridge doing at 14:30?" question, the per-tick banner is the index. Today the existing legacy bridge has only `[bridge] starting — dry_run=False`, no version, no timestamp — incident debugging requires correlating against cron's own logging.
+
+## VK card title and description format
+
+Today the dispatch builds:
+
+- Title: `gh#{N}: {gh_issue_title}` — where `gh_issue_title` is the full renderer-built `[repo] slug · Phase N/M · subject`
+- Description: just `{issue_url}`
+
+Result: the VK board's title column is overwhelmed by the long gh issue title, while the description field contains only a URL.
+
+The rebuilt `vk.bridge.dispatch` builds:
+
+- Title: `gh#{N}: [{repo}]` — minimal identifier (issue number + repo)
+- Description (multi-line):
+  ```
+  {plan.meta.plan}
+  Phase {phase.phase.number}/{len(plan.phases)}
+  {phase.phase.title}
+  {issue_url}
+  ```
+
+Concrete example:
+
+| Field | Today | After rebuild |
+|---|---|---|
+| Title | `gh#272: [derio-net/frank] 2026-05-17--orch--paperclip-litellm-agents · Phase 2/6 · opencode_local — declarative wiring` | `gh#272: [derio-net/frank]` |
+| Description | `https://github.com/derio-net/frank/issues/272` | `2026-05-17--orch--paperclip-litellm-agents`<br>`Phase 2/6`<br>`opencode_local — declarative wiring`<br>`https://github.com/derio-net/frank/issues/272` |
+
+Why: the title becomes scannable in the VK board (just identifies which issue, on which repo); the description carries the full structured context that operators need to understand the phase without clicking through to gh.
+
+Data sourcing: `vk.bridge.dispatch.dispatch_phase` already has access to the `Plan` and the specific `PhaseDoc` (the function signature takes both). `len(plan.phases)` gives the total phase count. `repo` comes from `parse_issue_url(phase.tracking_issue).repo`. The gh issue title (today's source of the long card title) is no longer needed for the card — `dispatch_phase` builds the card's title + description from plan structure directly.
+
+The gh issue title itself stays unchanged — the renderer still produces `[repo] slug · Phase N/M · subject` via `vk.render._build_title`. Operators reading gh see the full context; operators reading VK get the minimal card.
 
 ## CLI / install / cron shape
 
@@ -1048,6 +1163,28 @@ def test_cross_repo_phase_dispatches_to_correct_repo():
     """
 ```
 
+#### H9: VK card title and description follow the new format
+<!-- implementation: Phase 2 (vk.bridge.dispatch) -->
+
+**Location:** `tests/unit/test_bridge_dispatch.py::test_card_title_is_minimal_and_description_is_structured`
+
+```python
+def test_card_title_is_minimal_and_description_is_structured():
+    """
+    GIVEN a plan with meta.plan='2026-05-17--orch--paperclip-litellm-agents'
+    AND   phase 2 of 6 with title='opencode_local — declarative wiring'
+    AND   tracking_issue='https://github.com/derio-net/frank/issues/272'
+    WHEN  vk.bridge.dispatch.dispatch_phase(plan, phase, ...) calls create_card
+    THEN  the MCP create_issue call's title argument equals:
+          'gh#272: [derio-net/frank]'
+    AND   the description argument equals (newline-joined):
+          '2026-05-17--orch--paperclip-litellm-agents'
+          'Phase 2/6'
+          'opencode_local — declarative wiring'
+          'https://github.com/derio-net/frank/issues/272'
+    """
+```
+
 #### H8: Cross-repo fixture present
 <!-- implementation: Phase 1 (fixture infrastructure) -->
 
@@ -1115,6 +1252,23 @@ def test_v2_bridge_rebuild_spec_has_architectural_ownership_section():
     """
 ```
 
+#### G5: Bridge tick log shape (timestamped version banner)
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/unit/test_bridge_cli.py::test_tick_first_log_line_has_version_and_timestamp`
+
+```python
+def test_tick_first_log_line_has_version_and_timestamp(caplog):
+    """
+    GIVEN vk.bridge.cli.main() is invoked
+    WHEN  the tick starts
+    THEN  the first log line matches the regex:
+          ^\[bridge\] - v\d+\.\d+\.\d+ - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC - tick$
+    AND   the version equals vk.__version__
+    AND   the timestamp is within the last second when the test runs
+    """
+```
+
 #### G4: All inventory concerns A-P map to a new home (no orphans)
 <!-- implementation: Phase 6 (verification step) -->
 
@@ -1128,6 +1282,166 @@ def test_all_inventory_concerns_have_a_new_home():
     WHEN  iterating the migration table after Phase 6 lands
     THEN  every non-DELETED concern's new home module is importable
     AND   every DELETED concern is genuinely absent (no dead code shim)
+    """
+```
+
+### Group I — Operational resilience
+
+End-to-end failure modes the bridge must survive without manual operator intervention. Surfaced during the 2026-05-17 feasibility audit as gaps in the original capability list.
+
+#### I1: MCP subprocess startup failure → loud exit
+<!-- implementation: Phase 5 (vk.bridge.cli) -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_bridge_exits_loud_when_mcp_subprocess_fails_to_start`
+
+```python
+def test_bridge_exits_loud_when_mcp_subprocess_fails_to_start(monkeypatch):
+    """
+    GIVEN an environment where `vibe-kanban-mcp` and `npx` are both missing
+    WHEN  vk.bridge.cli.main() attempts to construct the MCP client
+    THEN  process exits non-zero
+    AND   stderr contains a message naming the missing binary AND the install
+          fix ('apt install nodejs npm' OR 'npm install -g vibe-kanban')
+    (Don't silently spin; fail loud so the operator knows the container is
+    misconfigured rather than discovering it via stuck cards 30 minutes later.)
+    """
+```
+
+#### I2: MCP subprocess crash mid-tick → tick aborts cleanly
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_tick_aborts_cleanly_on_mcp_subprocess_death`
+
+```python
+def test_tick_aborts_cleanly_on_mcp_subprocess_death(monkeypatch):
+    """
+    GIVEN an MCP client whose subprocess dies after the first call_tool
+          (simulated via FakeMcpClient that raises BrokenPipeError on the
+          second call)
+    WHEN  vk.bridge.tick() is mid-iteration and the next MCP call fails
+    THEN  the tick aborts cleanly (no half-state)
+    AND   a failure metric is pushed with reason='mcp_subprocess_died'
+    AND   no GH labels were added that the workspace creation didn't finish
+    (Next tick re-runs from a clean state.)
+    """
+```
+
+#### I3: gh rate-limit response → backoff
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_tick_backs_off_on_gh_rate_limit`
+
+```python
+def test_tick_backs_off_on_gh_rate_limit(monkeypatch):
+    """
+    GIVEN a FakeGhClient that returns HTTP 403 with 'API rate limit exceeded'
+          on the next call
+    WHEN  vk.bridge.tick() encounters the error
+    THEN  the tick logs a backoff message AND returns (does not proceed)
+    AND   no MCP mutations were attempted
+    AND   a failure metric is pushed with reason='gh_rate_limited'
+    (Tick frequency is `*/2 * * * *` today and we're keeping it. Even at this
+    frequency, peak load can briefly burst above the per-hour rate limit for
+    repos with many vk-ready issues. Backoff prevents the bridge from
+    hammering when it should yield.)
+    """
+```
+
+#### I4: Tick overlap prevention (lock file)
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_second_concurrent_tick_aborts_early`
+
+```python
+def test_second_concurrent_tick_aborts_early(tmp_path):
+    """
+    GIVEN a long-running tick (simulated via a sleep in dispatch) holds the
+          bridge lock file at /var/run/vk-bridge.lock (or operator-configured
+          path via VK_BRIDGE_LOCK_PATH)
+    WHEN  a second `python -m vk.bridge` is invoked while the first is still
+          running
+    THEN  the second invocation logs 'tick already in progress, skipping'
+    AND   exits 0 (not an error — just a no-op)
+    AND   no MCP mutations are attempted by the second invocation
+    (Even with 2-minute cron, a slow tick could overlap. Lock file is cheap
+    insurance.)
+    """
+```
+
+#### I5: Card created without workspace → reverse-reap on next tick
+<!-- implementation: Phase 3 (extends workspace reaping) -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_card_without_workspace_logged_and_recoverable`
+
+```python
+def test_card_without_workspace_logged_and_recoverable():
+    """
+    GIVEN a VK card exists matching the bridge's title convention
+          (gh#<N>: [...]) but no workspace is linked to it
+    WHEN  vk.bridge.tick() runs and dispatch sees the duplicate-title
+          condition
+    THEN  dispatch logs a warning ('card without workspace: <simple_id>')
+    AND   either re-creates the workspace (if VK_BRIDGE_RECOVER_ORPHAN_CARDS=1)
+          OR leaves the card alone with vk-synced already on the gh issue
+    (Today's bridge has reap_orphan_workspaces but no inverse — orphan cards
+    without workspaces are silently stuck.)
+    """
+```
+
+#### I6: Plan deleted between ticks → in-flight cards left intact, logged
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_plan_deletion_between_ticks_does_not_purge_cards`
+
+```python
+def test_plan_deletion_between_ticks_does_not_purge_cards():
+    """
+    GIVEN a plan was discovered in tick N and produced VK cards
+    AND   the plan dir is deleted from disk before tick N+1
+    WHEN  vk.bridge.tick() runs at N+1
+    THEN  discover_plans no longer returns the plan
+    AND   existing cards for that plan's phases are NOT auto-archived
+    AND   a warning is logged once per missing plan: 'plan <slug> no longer
+          on disk; cards left intact for manual review'
+    (Conservative: never delete operator's work via missing-input inference.)
+    """
+```
+
+#### I7: Operator manually changes a managed label → renderer reverses
+<!-- implementation: Phase 1 (renderer projection is the source of truth) -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_renderer_reverses_manual_label_change`
+
+```python
+def test_renderer_reverses_manual_label_change():
+    """
+    GIVEN a phase whose Issue has been observed in steady state with vk-ready
+    AND   an operator manually removes vk-ready via `gh issue edit`
+    WHEN  vk.bridge.tick() runs next
+    THEN  the renderer projects vk-ready (state-machine says it's still ready)
+    AND   the diff layer emits IssueLabelChange(add={vk-ready})
+    AND   apply restores the label
+    (Renderer projection IS the source of truth. If operators want a phase
+    out of the dispatch queue, they update plan state — not labels.)
+    """
+```
+
+#### I8: `vk apply` and `vk.bridge.tick` racing for the same plan → idempotent
+<!-- implementation: Phase 6 (verification step) -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_concurrent_apply_and_tick_are_idempotent`
+
+```python
+def test_concurrent_apply_and_tick_are_idempotent():
+    """
+    GIVEN a plan with steady-state Issues
+    WHEN  an operator runs `vk apply --yes` simultaneously with the bridge's
+          tick (both call apply() on overlapping mutations)
+    THEN  the final gh state matches what either path alone would produce
+    AND   no Issue ends up with duplicate labels
+    AND   no Issue ends up with conflicting state
+    (Both paths use the same render → diff → apply chain; apply() is
+    idempotent by construction. This test is a regression guard.)
     """
 ```
 
