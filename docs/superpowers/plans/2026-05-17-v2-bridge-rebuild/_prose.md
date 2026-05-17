@@ -38,6 +38,7 @@ specific phase below. Test IDs (`A1`-`I8`) reference the spec's
 | 4 | Slots + dedup + metrics + prompt + config | D1-D5 | 2.1.9 → 2.1.10 | 3 |
 | 5 | `vk.bridge.cli` + `__main__` + wrapper + install.sh + resilience | E1-E4, G1, G5, I1-I4, I6 | 2.1.10 → 2.1.11 | 4 |
 | 6 | Cutover (delete fat bridge; end-to-end) | F1-F2, F4-F5, G2, G3, G4, H7, I8 | 2.1.11 → **2.2.0** | 5 |
+| 7 | `apply_cmd` plan-propagation fix (added post-dispatch 2026-05-17) | — *(spec failure mode #4)* | 2.2.0 → 2.2.1 | 6 |
 
 Phase 6 minor-bumps because `--install-bridge` is a user-visible install
 flag and the fat-bridge retirement is a deployment-shape change.
@@ -70,6 +71,16 @@ PRs). We're not doing that because:
    coexistence" — once Phase 6 lands, only the v2 path runs. The agent-images
    sibling plan (see "Cross-repo handoff" below) cannot start until
    `superpowers-for-vk` Phase 6 tags `v2.2.0`.
+6. **Phase 7 was added mid-rebuild** (2026-05-17) when this very plan's own
+   dispatch hit a previously-unknown bug — `vk apply --yes` mis-rendered
+   `- Blocked by #N` deps as phase numbers, the legacy bridge body-parsed
+   them against unrelated old-closed Issues, and dispatched Phases 2/3/6
+   ahead of Phase 1. Phase 1's renderer fix masks the dispatch damage (label
+   gating becomes authoritative), but the one-line CLI fix at
+   `src/vk/commands/apply_cmd.py:222` removes the latent risk entirely. It's
+   in the plan, not deferred as "later" cleanup, specifically because
+   "later" is where bugs go to die. See spec failure mode #4 for the full
+   narrative.
 
 ## Cross-repo handoff
 
