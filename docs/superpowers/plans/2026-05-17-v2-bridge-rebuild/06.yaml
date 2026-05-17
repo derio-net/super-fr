@@ -1,0 +1,222 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Cutover — full E2E + spec invariants + CLAUDE.md + minor bump to v2.2.0
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Full end-to-end acceptance (F1, F4, F5, H7, I8)
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Failing tests F1, F4, F5 in
+      `tests/integration/test_bridge_e2e.py`. Add H7 to the same file.
+      Add I8 to `tests/integration/test_bridge_resilience.py`.
+
+      Each test's body matches the Given/When/Then in the spec
+      verbatim. All use FakeGhClient + FakeMcpClient + a real
+      `vk.bridge.tick` against a tmp_path fixture plan.
+
+      Run: red (or partially green from earlier phases). Track which
+      are red — they pin gaps the rebuild still has.
+  - id: P6.T1.S2
+    text: |-
+      Implement any remaining gaps surfaced by the E2E tests. Likely
+      candidates:
+      - F1: standardize the fixture's expected end-state.
+      - F4: ensure tick is idempotent — second tick mutates nothing.
+      - F5: ensure standalone vk-ready issues without a backing plan
+        are IGNORED (legacy bridge would dispatch — new bridge must
+        not).
+      - H7: cross-repo dispatch — vk-synced lands on tracking_issue
+        repo, not target_repo.
+      - I8: `vk apply --yes` racing with `tick()` is idempotent
+        (both use the same render → diff → apply chain).
+
+      For F5 specifically: `vk.bridge.tick`'s loop iterates phases of
+      DISCOVERED plans — a free-floating vk-ready issue with no plan
+      reference simply isn't in the loop. Verify this is the case;
+      if any code path still falls back to gh-issue listing for
+      dispatch, REMOVE it (the legacy `gh_list_ready_issues:559-600`
+      path is the one to delete).
+
+      Run: full suite. Expect green.
+- number: 2
+  title: Inventory closure (F2, G4)
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Add F2 to `tests/integration/test_cutover.py` (new file).
+
+      F2 checks that `agent-images/kali/scripts/vk-issue-bridge.py` and
+      `agent-images/kali/scripts/vk_mcp_client.py` no longer exist. The
+      check runs cross-repo via
+      `gh api repos/derio-net/agent-images/contents/kali/scripts/<file>`;
+      a 404 means deleted. CI has gh auth; locally the test skips
+      gracefully if `gh auth status` fails.
+
+      Add G4 to the same file: enumerates spec's inventory concerns A-P
+      and asserts each non-DELETED one's new home module is importable
+      in the current `vk` package. Concerns marked DELETED in the
+      migration table are asserted as genuinely absent (no shim).
+
+      Run: F2 may PASS-or-FAIL depending on whether the agent-images
+      sibling plan has been merged. If unmerged, test should SKIP with
+      a clear message ('agent-images sibling plan not yet merged; F2
+      unverifiable'). G4 should PASS once all `vk.bridge.*` modules
+      from Phases 2-5 are importable.
+  - id: P6.T2.S2
+    text: |-
+      Run the full acceptance suite (every Group, every test):
+      ```
+      uv run pytest tests/unit/test_render_deps.py \
+                    tests/unit/test_bridge_*.py \
+                    tests/unit/test_mcp_client.py \
+                    tests/unit/test_v2_diff.py \
+                    tests/unit/test_v2_apply.py \
+                    tests/integration/test_bridge_*.py \
+                    tests/integration/test_cutover.py \
+                    tests/integration/test_repo_invariants.py \
+                    -v --no-cov
+      ```
+
+      Verbose output should read like a BDD report (each test docstring
+      is the Given/When/Then). All Phase 1-6 acceptance tests green.
+- number: 3
+  title: CLAUDE.md bridge-audit rule (G2)
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      Failing test G2 in `tests/integration/test_repo_invariants.py`.
+
+      Asserts CLAUDE.md contains a 'bridge audit rule' section and
+      references `vk.bridge.*` as the post-rebuild canonical read target.
+
+      Run: red.
+  - id: P6.T3.S2
+    text: |-
+      Add to `CLAUDE.md` (top-level, after "## Release / version
+      bumping"):
+      ```markdown
+      ## Bridge audit rule
+
+      For any brainstorm, spec, or plan touching dispatch / sync /
+      cron / VK card / workspace / GitHub Issue label-lifecycle
+      surfaces, the brainstorm MUST start by reading
+      `src/vk/bridge/` end-to-end. Confabulating what the bridge
+      does without reading it is the root cause documented in #147.
+
+      Before the v2 rebuild shipped this was
+      `agent-images/kali/scripts/vk-issue-bridge.py` (1089 LOC). The
+      rebuild consolidated it into `src/vk/bridge/*` — one repo's
+      code, easier to enforce.
+      ```
+
+      Also append the rule to
+      `~/.claude/rules/vk-plan-override.md` (user-level) — that file
+      is owned outside this repo, so the step here is just to flag
+      the operator-side update in the PR description.
+
+      Run: G2 GREEN.
+- number: 4
+  title: Architectural-ownership pattern test (G3)
+  steps:
+  - id: P6.T4.S1
+    text: |-
+      Add G3 to `tests/integration/test_repo_invariants.py`. Asserts
+      this spec has an `## Architectural ownership` section with a
+      table mapping invariants to owners.
+
+      Trivial check — read the spec file, regex-search for the section
+      + table header. Pin so future specs that copy this one don't
+      drop the pattern.
+
+      Run: should already be GREEN (the spec has the section).
+- number: 5
+  title: Minor version bump 2.1.11 → 2.2.0 + verification + PR
+  steps:
+  - id: P6.T5.S1
+    text: |-
+      Bump version 2.1.11 → 2.2.0 in three files. `uv sync`.
+
+      Pre-push verify (per CLAUDE.md):
+      ```
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      uv run pytest -q --no-cov
+      ```
+  - id: P6.T5.S2
+    text: |-
+      Open PR: `feat(bridge): cutover — v2.2.0 (Phase 6 of #147)`.
+
+      Body must include:
+      - Closes #147 (tracking issue)
+      - Notes that the cross-repo agent-images sibling plan
+        (`docs/superpowers/plans/2026-05-17-v2-bridge-cutover-agent-images/`
+        in derio-net/agent-images) cannot start until this PR merges
+        and the v2.2.0 tag is published.
+      - Lists the full Phase 1-6 acceptance set delivered.
+      - Notes that PR consumers should update their Dockerfile pin to
+        `vk==2.2.0` or `vk>=2.2.0,<3.0.0` and re-run
+        `install.sh --install-bridge` to install the wrapper.
+  - id: P6.T5.S3
+    text: |-
+      After merge, tag v2.2.0:
+      ```
+      git checkout main && git pull --ff-only origin main
+      git tag -a v2.2.0 -m 'v2.2.0 — v2 bridge rebuild (#147)'
+      git push origin v2.2.0
+      ```
+
+      Then the agent-images sibling plan can dispatch (Dockerfile pin
+      bumps to v2.2.0; legacy bridge files deleted; smoke test added).
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

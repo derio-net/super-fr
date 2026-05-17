@@ -1,0 +1,514 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Renderer dep gating + cross-repo RepoLabelEnsure
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Cross-repo test infrastructure (fixture + FakeGhClient tightening)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create the cross-repo plan fixture.
+
+      Create `tests/unit/fixtures/v2_plan_cross_repo/_meta.yaml` modeled on
+      `tests/unit/fixtures/v2_plan_multi_phase/_meta.yaml`:
+      ```yaml
+      schema_version: 2
+      plan: v2_plan_cross_repo
+      spec: docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md
+      target_repo: derio-net/repo-a
+      vk_version: '>=2.0.0,<3.0.0'
+      created: '2026-05-17'
+      ```
+
+      Create three phase yamls:
+      - `01.yaml`: tag `agentic`, `depends_on: []`, `tracking_issue: null`
+        (undispatched on `target_repo`)
+      - `02.yaml`: tag `agentic`, `depends_on: [1]`,
+        `tracking_issue: https://github.com/derio-net/repo-b/issues/100`
+        (dispatched on a foreign repo)
+      - `03.yaml`: tag `agentic`, `depends_on: [2]`, `tracking_issue: null`
+        (undispatched, blocked)
+
+      Each phase yaml carries one task with one trivial step ticked `-`
+      so the plan parses cleanly. Use `tests/unit/fixtures/v2_plan_multi_phase`
+      as the structural template.
+
+      Run: `uv run pytest tests/unit/test_v2_parser.py -x --no-cov`
+      Expect: existing parser tests still pass; the new fixture loads
+      without parser errors when discovered.
+  - id: P1.T1.S2
+    text: |-
+      Add `test_v2_plan_cross_repo_fixture_exists` (test H8).
+
+      Add `tests/integration/test_repo_invariants.py` (new file) with:
+      ```python
+      from pathlib import Path
+      import yaml
+
+      def test_v2_plan_cross_repo_fixture_exists():
+          """
+          GIVEN the repo
+          THEN  tests/unit/fixtures/v2_plan_cross_repo/_meta.yaml exists
+          AND   at least one phase yaml has tracking_issue pointing at a
+                repo different from _meta.target_repo
+          AND   at least one phase yaml has tracking_issue=null (undispatched)
+          """
+          fx = Path("tests/unit/fixtures/v2_plan_cross_repo")
+          meta = yaml.safe_load((fx / "_meta.yaml").read_text())
+          assert meta["target_repo"] == "derio-net/repo-a"
+          phases = [yaml.safe_load(p.read_text()) for p in sorted(fx.glob("0*.yaml"))]
+          foreign = [p for p in phases if (p["phase"].get("tracking_issue") or "").startswith("https://github.com/derio-net/repo-b")]
+          undispatched = [p for p in phases if p["phase"].get("tracking_issue") is None]
+          assert foreign, "no foreign-repo phase in fixture"
+          assert undispatched, "no undispatched phase in fixture"
+      ```
+
+      Run: `uv run pytest tests/integration/test_repo_invariants.py -k cross_repo_fixture -x --no-cov`
+      Expect: green.
+  - id: P1.T1.S3
+    text: |-
+      Failing test for FakeGhClient label-must-exist regression guard (test H5).
+
+      Create `tests/unit/test_fakes.py` (new file) with:
+      ```python
+      import pytest
+      from tests.unit.fakes import FakeGhClient, FakeGhError
+
+      def test_fake_gh_client_rejects_unensured_labels_on_edit():
+          gh = FakeGhClient()
+          gh.add_issue("derio-net/repo-a", 1)  # preload an issue to edit
+          with pytest.raises(FakeGhError, match="label not found"):
+              gh.edit_issue_labels(
+                  "derio-net/repo-a", 1,
+                  add=frozenset({"vk-ready"}), remove=frozenset(),
+              )
+
+      def test_fake_gh_client_rejects_unensured_labels_on_create():
+          gh = FakeGhClient()
+          with pytest.raises(FakeGhError, match="label not found"):
+              gh.create_issue(
+                  "derio-net/repo-a",
+                  title="t", body="b", labels=frozenset({"vk-ready"}),
+              )
+
+      def test_fake_gh_client_accepts_labels_after_ensure():
+          gh = FakeGhClient()
+          gh.ensure_labels("derio-net/repo-a", ["vk-ready"])
+          gh.create_issue(
+              "derio-net/repo-a",
+              title="t", body="b", labels=frozenset({"vk-ready"}),
+          )
+      ```
+
+      Notes on signatures:
+        - `ensure_labels(repo, labels)` accepts strings OR LabelDef objects
+          (see `tests/unit/fakes.py:150-156`). Dicts are NOT supported.
+        - `create_issue` takes `repo` positionally, then keyword-only
+          `title`, `body`, `labels: frozenset[str]` (lines 133-148).
+        - `edit_issue_labels` takes `repo, number` positionally, then
+          keyword-only `add`/`remove` as `frozenset[str]` (lines 99-112).
+        - Use `gh.add_issue(repo, n)` to preload an issue without going
+          through `create_issue` (lines 51-71).
+
+      Run: `uv run pytest tests/unit/test_fakes.py -x --no-cov`
+      Expect: red — FakeGhClient currently accepts labels without ensure.
+  - id: P1.T1.S4
+    text: |-
+      Tighten FakeGhClient to enforce label pre-ensure.
+
+      Edit `tests/unit/fakes.py`. The class ALREADY tracks ensured labels
+      per repo via `self.repo_labels: dict[str, set[str]]` (line 41); the
+      gap is that `edit_issue_labels` and `create_issue` don't consult
+      it. Do NOT introduce a parallel field — reuse `self.repo_labels`.
+
+      In `edit_issue_labels(repo, number, add, remove)` and
+      `create_issue(repo, ..., labels=...)`, raise FakeGhError if any
+      `add` (or `labels`) name isn't in `self.repo_labels.get(repo, set())`:
+      ```python
+      unknown = set(add or set()) - self.repo_labels.get(repo, set())
+      if unknown:
+          raise FakeGhError(f"label not found on {repo}: {sorted(unknown)}")
+      ```
+
+      Run: `uv run pytest tests/unit/test_fakes.py tests/unit/ -x --no-cov`
+      Expect: the three new fakes tests green. Existing tests may newly
+      fail — those callers need to call `ensure_labels` first. Audit and
+      fix any test that mutates labels without ensuring, OR pre-load
+      the standard label set in their fixtures.
+- number: 2
+  title: Failing tests for renderer dep gating (Group A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Create `tests/unit/test_render_deps.py` with all six Group A tests
+      (A1-A6) from the spec, copy/pasted from
+      `docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md`
+      §"Acceptance tests → Group A". Each test docstring is the
+      Given/When/Then from the spec; the test body imports from
+      `vk.render`, `vk.labels`, `vk.parser`, and uses helper builders
+      from `tests/unit/builders.py` (or constructs `Plan`/`PhaseDoc`
+      inline).
+
+      For each test, the assertions are:
+      - A1: `'vk-blocked' in rendered.issue_per_phase[2].labels`,
+            `'vk-ready' not in rendered.issue_per_phase[2].labels`
+      - A2: `'vk-ready' in rendered.issue_per_phase[2].labels`,
+            `'vk-blocked' not in rendered.issue_per_phase[2].labels`
+      - A3: `IssueLabelChange(add={'vk-ready'}, remove={'vk-blocked'})`
+            present in `diff(...).mutations`
+      - A4: fan-in over `[1, 2, 3]`, two-phase scenario assertion
+      - A5: manual phase projects `manual` not `vk-blocked`
+      - A6: `depends_on: [99]` with no phase 99 projects `vk-blocked`
+
+      Run: `uv run pytest tests/unit/test_render_deps.py -x --no-cov`
+      Expect: all six RED. `_lifecycle_label`'s current signature
+      `(phase, obs)` precludes seeing deps — it returns `vk-ready` for
+      every fresh phase.
+- number: 3
+  title: Implement renderer dep gating
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Add `VK_BLOCKED` to `src/vk/labels.py`.
+
+      After the existing `PR_READY` line:
+      ```python
+      VK_BLOCKED = LabelDef(
+          name="vk-blocked",
+          color="aaaaaa",
+          description="Blocked on dependency — waiting for predecessor phase(s) to complete",
+      )
+      ```
+
+      Add it to the existing `LIFECYCLE` dict at `src/vk/labels.py:69`
+      (NOT `_LIFECYCLE_BY_KEY` or `MANAGED_LIFECYCLE_LABELS` — neither
+      name exists). The dict keys are snake_case role names; the
+      `LabelDef.name` is the kebab-case GitHub string:
+      ```python
+      LIFECYCLE: dict[str, LabelDef] = {
+          "vk_ready": VK_READY,
+          "vk_blocked": VK_BLOCKED,   # NEW — after vk_ready, before manual
+          "manual": MANUAL,
+          "in_progress": IN_PROGRESS,
+          "pr_ready": PR_READY,
+      }
+      ```
+
+      Note: the spec's "Verification checklist" mentions a
+      `MANAGED_LIFECYCLE_LABELS` export — that's a spec error, the symbol
+      doesn't exist in the codebase. Don't try to add it. (Captured as a
+      spec-followup in this PR's description.)
+
+      Run: `uv run pytest tests/unit/test_labels.py -x --no-cov`
+      Expect: green (new label doesn't break existing label tests).
+  - id: P1.T3.S2
+    text: |-
+      Add `_deps_satisfied` helper in `src/vk/render.py`.
+
+      Below `_phase_complete`, add:
+      ```python
+      def _deps_satisfied(phase: PhaseDoc, plan: Plan, observed: GhState) -> bool:
+          """True iff every phase in `phase.depends_on` is complete."""
+          phase_by_number = {p.phase.number: p for p in plan.phases}
+          for dep_n in phase.phase.depends_on:
+              dep_phase = phase_by_number.get(dep_n)
+              if dep_phase is None:
+                  return False
+              dep_obs = observed.phases.get(dep_n) if observed else None
+              if not _phase_complete(dep_phase, dep_obs):
+                  return False
+          return True
+      ```
+
+      Note: the exact `GhState` / `observed.phases` shape depends on
+      `vk.parser` / `vk.observe`. If the field is named differently
+      (e.g. `observed.phase_observations`), use that. Read
+      `src/vk/observe.py` for the actual shape before writing.
+
+      Don't run pytest yet — this helper isn't wired in.
+  - id: P1.T3.S3
+    text: |-
+      Change `_lifecycle_label` signature to accept plan + observed.
+
+      Edit `src/vk/render.py` at line 51. New signature:
+      ```python
+      def _lifecycle_label(
+          phase: PhaseDoc,
+          obs: PhaseObservation | None,
+          plan: Plan,
+          observed: GhState,
+      ) -> LabelDef | None:
+          if _phase_complete(phase, obs):
+              return None
+          if phase.phase.tag == "manual":
+              return MANUAL
+          if not _deps_satisfied(phase, plan, observed):
+              return VK_BLOCKED
+          if obs is None:
+              return VK_READY
+          # existing PR/assignee logic unchanged below
+          ...
+      ```
+
+      Update the call site(s) of `_lifecycle_label` in the same module
+      (search `_lifecycle_label(` in render.py — typically one call
+      inside `render(plan, observed)`). Pass `plan` and `observed`
+      through.
+
+      Run: `uv run pytest tests/unit/test_render_deps.py -x --no-cov`
+      Expect: all six Group A tests GREEN.
+  - id: P1.T3.S4
+    text: |-
+      Run the full unit test suite to catch any other callers of
+      `_lifecycle_label` (it's prefixed with `_` so the module surface is
+      small, but tests may import it directly):
+
+      `uv run pytest tests/unit/ -x --no-cov`
+
+      Fix any breakage by passing plan + observed to the now-required
+      parameters. Existing tests for the IN_PROGRESS / PR_READY paths
+      should keep working with `_deps_satisfied=True` (empty `depends_on`).
+- number: 4
+  title: Failing tests for cross-repo RepoLabelEnsure (Group H)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Add tests H1, H2, H3, H4 to `tests/unit/test_v2_diff.py`.
+
+      Each test's Given/When/Then is in the spec at
+      `docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md`
+      §"Acceptance tests → Group H". Use the `v2_plan_cross_repo` fixture
+      loaded via `parse(Path("tests/unit/fixtures/v2_plan_cross_repo"))`.
+
+      Implementation pattern (imports as you'd write them — `parse` is
+      the v2 plan-folder loader at `src/vk/parser.py:89`):
+      ```python
+      from pathlib import Path
+      from vk.parser import parse
+      from vk.render import render
+      from vk.diff import diff, RepoLabelEnsure
+      from vk.states import GhState
+
+      def test_diff_emits_ensure_per_destination_repo(tmp_path):
+          plan = parse(Path("tests/unit/fixtures/v2_plan_cross_repo"))
+          observed = GhState(phases={})  # empty — all undispatched / fresh
+          rendered = render(plan, observed)
+          # diff() signature: diff(rendered, observed, *, plan) — kwarg-only.
+          mutations = diff(rendered, observed, plan=plan).mutations
+          ensures = [m for m in mutations if isinstance(m, RepoLabelEnsure)]
+          ensure_repos = {m.repo for m in ensures}
+          assert ensure_repos == {"derio-net/repo-a", "derio-net/repo-b"}
+      ```
+
+      Run: `uv run pytest tests/unit/test_v2_diff.py -k 'ensure or cross_repo' -x --no-cov`
+      Expect: H1, H3, H4 RED (current diff emits one ensure on target_repo
+      only). H2 may already pass if the per-issue routing at
+      `src/vk/diff.py:134-171` is correct — confirm and treat as a
+      regression guard.
+  - id: P1.T4.S2
+    text: |-
+      Add H6 (`tests/unit/test_v2_apply.py::test_apply_executes_cross_repo_mutations_through_correct_repo`).
+
+      Same Given/When/Then from the spec. Uses `FakeGhClient` preloaded
+      with `gh.ensure_labels("derio-net/repo-a", [...])` AND
+      `gh.ensure_labels("derio-net/repo-b", [...])` (i.e. the cross-repo
+      fix must result in TWO ensure calls before any issue mutation
+      attempts a label add).
+
+      Run: `uv run pytest tests/unit/test_v2_apply.py -k cross_repo -x --no-cov`
+      Expect: red — apply tries to use labels on `derio-net/repo-b`
+      without ensuring them first; the FakeGhClient tightening from
+      Task 1 raises.
+  - id: P1.T4.S3
+    text: |-
+      Add I7 (renderer-reverses-manual-label-change) to
+      `tests/integration/test_bridge_resilience.py` (new file).
+
+      Given/When/Then from spec §I7. The test pins the principle that the
+      renderer projection IS the source of truth — operator-side label
+      edits get reverted next tick.
+
+      Use `FakeGhClient` + a steady-state plan; manually delete a label
+      from the observed state; re-render; assert the diff re-adds it.
+
+      Run: `uv run pytest tests/integration/test_bridge_resilience.py -k manual_label -x --no-cov`
+      Expect: GREEN immediately if Phase 1's renderer dep gating is in —
+      the renderer already projects from authoritative state. This is a
+      pin, not a behavior change.
+- number: 5
+  title: Implement cross-repo RepoLabelEnsure grouping
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Read `src/vk/diff.py` end-to-end. The current `RepoLabelEnsure`
+      emission is single-repo; per-issue mutations at lines 134-171 are
+      already cross-repo correct (regression-guarded by H2). Find the
+      function that emits `RepoLabelEnsure` — likely top of `diff()` or
+      a helper like `_label_ensures(...)`.
+
+      Replace its single-repo emission with grouping. `parse_issue_url`
+      already exists at `src/vk/_urls.py` and is already imported by
+      `src/vk/diff.py` (used at line ~134 for per-issue routing). It
+      returns `(repo, number)` — a tuple, not an object with `.repo`.
+
+      ```python
+      # Build labels_per_repo: {dest_repo: set[LabelDef]} from rendered.
+      labels_per_repo: dict[str, set[LabelDef]] = {}
+      for phase in plan.phases:
+          ri = rendered.issue_per_phase[phase.phase.number]
+          if phase.phase.tracking_issue:
+              dest_repo, _ = parse_issue_url(phase.phase.tracking_issue)
+          else:
+              dest_repo = plan.meta.target_repo
+          labels_per_repo.setdefault(dest_repo, set()).update(
+              ld for ld in ri.labels if _is_managed(ld.name)
+          )
+      # RepoLabelEnsure.labels is frozenset[LabelDef] (see diff.py:79).
+      # Sort the OUTER iteration for deterministic mutation order.
+      ensures = [
+          RepoLabelEnsure(repo=repo, labels=frozenset(labels))
+          for repo, labels in sorted(labels_per_repo.items())
+      ]
+      mutations.extend(ensures)
+      ```
+
+      Replace the existing single-repo emission block at `diff.py:109-113`
+      with the above. The per-issue routing at `diff.py:134-171` already
+      uses `parse_issue_url` correctly — leave it alone.
+
+      Run: `uv run pytest tests/unit/test_v2_diff.py -k 'ensure or cross_repo' -x --no-cov`
+      Expect: H1, H2, H3, H4 all GREEN.
+  - id: P1.T5.S2
+    text: |-
+      Run H6 end-to-end:
+      `uv run pytest tests/unit/test_v2_apply.py -k cross_repo -x --no-cov`
+      Expect: GREEN — apply now ensures labels on `derio-net/repo-b`
+      before mutating issue #100 there.
+  - id: P1.T5.S3
+    text: |-
+      Run the full Phase 1 acceptance set:
+      ```
+      uv run pytest tests/unit/test_render_deps.py \
+                    tests/unit/test_v2_diff.py \
+                    tests/unit/test_v2_apply.py \
+                    tests/unit/test_fakes.py \
+                    tests/integration/test_repo_invariants.py \
+                    tests/integration/test_bridge_resilience.py \
+                    -x --no-cov
+      ```
+      Expect: all green. Six A tests + four H tests (H1-H4) + H5 + H6 + H8
+      + I7 — 13 total Phase-1-scoped tests, plus regression coverage from
+      pre-existing tests.
+- number: 6
+  title: Version bump + pre-push verification + close trail
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Bump version 2.1.6 → 2.1.7 in three files:
+      - `pyproject.toml` `[project].version`
+      - `.claude-plugin/plugin.json` `.version`
+      - `.claude-plugin/marketplace.json` `.plugins[0].version`
+
+      Run `uv sync` so `uv.lock` picks up `vk==2.1.7`.
+
+      Verify: `uv run vk --version` reports `2.1.7`.
+  - id: P1.T6.S2
+    text: |-
+      Pre-push verification (per CLAUDE.md):
+      ```
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      uv run pytest -q --no-cov
+      ```
+      All must pass before push.
+  - id: P1.T6.S3
+    text: |-
+      Open PR with title `feat(renderer): dep gating + cross-repo
+      RepoLabelEnsure (Phase 1 of #147)`. Body must include:
+      - "Closes #132" (cross-repo RepoLabelEnsure bug)
+      - Reference #147 as the tracking issue
+      - Bumps `2.1.6 → 2.1.7`
+      - Acceptance set: Group A (6) + Group H (5 of 9) + I7
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
