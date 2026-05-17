@@ -5,7 +5,7 @@ phase:
   tag: agentic
   depends_on:
   - 4
-  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/164
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/156
 tasks:
 - number: 1
   title: vk.bridge.__main__ + main() skeleton + tick log + no public verb

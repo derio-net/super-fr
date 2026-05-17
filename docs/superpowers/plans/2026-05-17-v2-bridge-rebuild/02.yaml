@@ -5,7 +5,7 @@ phase:
   tag: agentic
   depends_on:
   - 1
-  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/161
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/153
 tasks:
 - number: 1
   title: Move vk_mcp_client.py into vk package

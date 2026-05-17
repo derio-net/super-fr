@@ -21,11 +21,12 @@ The audit + migration table that motivated this rebuild is in tracking issue [#1
 
 ### Concrete failure modes already observed
 
-Three bugs this week trace to the same anti-pattern (critical invariant supposedly owned by v2; actually enforced only by accidental legacy compensation):
+Four bugs trace to the same anti-pattern (critical invariant supposedly owned by v2; actually enforced only by accidental legacy compensation):
 
 1. **#139 dispatch race** — `vk apply --yes` from a non-pushed branch dispatched fine because the legacy bridge has its own body-text-driven dispatch. PR #135 implementation merged without ever reading the plan. Reverted; gate added (#146 merged).
 2. **2026-05-17 stale-checkout incident (#143, frank-#271)** — plans ARE on `origin/main`, but the shared-PV checkout the agents read from never auto-pulls. Agents reported "plan doesn't exist."
 3. **Dependency gating bug (2026-05-17)** — `_lifecycle_label` returns `vk-ready` for every fresh agentic phase regardless of `depends_on`. The renderer's signature literally precludes seeing dependency state. Dep gating works only because the legacy bridge's `check_blockers` body-parses and queries gh independently. **The labels lie. Operators looking at `vk-ready` on a blocked phase have no way to know it's actually blocked.**
+4. **`apply_cmd.py` plan-propagation bug (surfaced 2026-05-17 during this plan's own dispatch)** — `src/vk/commands/apply_cmd.py:222` calls `apply(d, gh)` without `plan=plan`. Without `plan`, `apply()` skips `_rerender_dependent_creates`, so every `IssueCreate` body keeps the phase-number-fallback ref (`- Blocked by #1` instead of `- Blocked by #<actual-issue-N>`). The legacy bridge body-parses `#1`, queries gh, finds a long-closed Issue from an unrelated plan, "satisfies" the dep, and dispatches the wrong phases. **Same anti-pattern again**: the bridge-side path (`src/vk/bridge/__init__.py:153`) DOES pass `plan=`, so the bug only fires on operator-side `vk apply --yes`. Tests cover `apply()` with the kwarg; nobody tested the CLI that calls it. Discovered when this very plan dispatched Phases 2/3/6 ahead of Phase 1. Fixed in Phase 7 (added below).
 
 The user observation that triggered this rebuild:
 
@@ -450,7 +451,15 @@ Detail belongs in the plan (vk-plan after this spec is approved). Rough shape:
   - Relocate tests
   - Verify cron tick produces same end-to-end behavior
 
-Each phase is one PR (per the repo's "one phase = one PR" convention). Phase 6 spans both repos and is the only cross-repo phase.
+- **Phase 7 — `apply_cmd` plan-propagation fix** (added 2026-05-17 after this plan's own dispatch surfaced failure mode #4 above)
+  - One-line fix at `src/vk/commands/apply_cmd.py:222`: `apply(d, gh)` → `apply(d, gh, plan=plan)`
+  - Unit test pinning the call-site kwarg propagation
+  - Integration test asserting `vk apply --yes` on a multi-phase plan produces correct `- Blocked by #N` body refs (regression guard for the 2026-05-17 dispatch incident)
+  - Patch version bump (`2.2.0 → 2.2.1`)
+  - **Why a phase, not a side-PR**: keeping it inside the rebuild ensures the bug isn't forgotten as cleanup deferred to "later." Phase 1's renderer fix masks the dispatch damage by making label-gating authoritative, but the body-render bug stays latent until this phase ships — any future consumer that body-parses (or any operator who reasons about body content) gets misled.
+  - Depends on Phase 6 (sequences at the end so it doesn't add parallel in-flight work during the rebuild).
+
+Each phase is one PR (per the repo's "one phase = one PR" convention). Phase 6 spans both repos and is the only cross-repo phase. Phase 7 is single-repo and orthogonal to the bridge surface.
 
 ## Out of scope
 
