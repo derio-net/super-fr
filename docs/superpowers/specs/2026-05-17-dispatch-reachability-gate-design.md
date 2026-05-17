@@ -1,4 +1,4 @@
-# Dispatch hardening: reachability gate + bridge version guard — Design
+# Dispatch-reachability gate for `vk apply --yes` — Design
 
 ## Problem
 
@@ -243,166 +243,18 @@ new user-facing workflow verb. (User-facing impact is the workflow
 change to mandatory pre-merge — documented as a skill update, not a
 new command.)
 
-## Companion guard: bridge-side version drift check
-
-Same "make silent drift loud" pattern, different layer. Bundled into
-this spec rather than spun off as a separate cycle — it's a small
-patch with a few unit tests, not enough to justify a full
-spec/plan/implementation ceremony of its own.
-
-### Problem
-
-The bridge daemon runs inside a Kali container with its own Python
-venv that has `vk` installed via `uv pip install`
-(see `agent-images/kali/Dockerfile`). The plugin manifest
-(`.claude-plugin/plugin.json`) is installed separately at
-`~/.claude/plugins/cache/derio-net/superpowers-for-vk/<version>/`.
-These two can drift out of sync:
-
-- A plugin update lands → manifest version bumps
-- The Kali container is NOT rebuilt → venv still has the old `vk`
-- Bridge runs against the old `vk` python while users / operators
-  assume the manifest version is what's actually executing
-
-Today this drift is silent. The bridge ticks, possibly with stale
-behavior, with no indication anything is wrong.
-
-### Rule
-
-At bridge startup (top of `main()` in `vk-issue-bridge.py`), before
-any other work:
-
-1. `installed = importlib.metadata.version("vk")` — the Python
-   package version active in the bridge's venv.
-2. Enumerate subdirectories of
-   `~/.claude/plugins/cache/derio-net/superpowers-for-vk/`. Each
-   subdirectory name is a semver string. Take the highest semver.
-3. Read that directory's `.claude-plugin/plugin.json`; extract its
-   `version` field. Call this `manifest`.
-4. If `installed != manifest`: log a structured error to stderr and
-   exit with code 1.
-
-### Failure shape
-
-```
-fatal: vk plugin version mismatch.
-  Installed Python package:  vk 2.1.4 (from importlib.metadata)
-  Plugin manifest on disk:   2.1.6 (at ~/.claude/plugins/cache/derio-net/superpowers-for-vk/2.1.6/.claude-plugin/plugin.json)
-
-The bridge's Python environment has a different vk version than
-the plugin manifest expects. Likely cause: the plugin was updated
-but the Kali container's vk venv wasn't refreshed.
-
-Fix: rebuild the Kali container, OR (in the bridge's venv):
-  uv pip install --reinstall --no-deps vk
-```
-
-Exit code 1 (distinct from the apply gate's exit 2 — different
-layer, different failure class).
-
-### Architecture
-
-One new function in `vk-issue-bridge.py`, called from `main()`
-before any other initialization:
-
-```python
-def _check_plugin_version_alignment() -> None:
-    """Fail loudly if installed vk python version disagrees with
-    the latest plugin manifest on disk."""
-    from importlib.metadata import version as pkg_version
-    cache_root = Path.home() / ".claude" / "plugins" / "cache" / \
-        "derio-net" / "superpowers-for-vk"
-    if not cache_root.is_dir():
-        # No plugin manifest on disk — running outside the standard
-        # install layout. Skip the check (testing, ad-hoc invocation).
-        return
-    versions = sorted(
-        (d.name for d in cache_root.iterdir() if d.is_dir()),
-        key=_semver_key,
-    )
-    if not versions:
-        return  # Cache dir exists but empty — same as above.
-    latest = versions[-1]
-    manifest = json.loads(
-        (cache_root / latest / ".claude-plugin" / "plugin.json").read_text()
-    )["version"]
-    installed = pkg_version("vk")
-    if installed != manifest:
-        sys.stderr.write(_FORMATTED_ERROR.format(...))
-        sys.exit(1)
-```
-
-Why this lives in the bridge script (not in `vk` library code): the
-check is for a bridge-deployment-specific concern (Kali venv vs
-plugin cache). The `vk` python package itself doesn't know it's
-being run from a bridge. Putting the check in the consumer keeps
-the dependency direction right.
-
-### Skipping when running outside the standard install layout
-
-If `~/.claude/plugins/cache/derio-net/superpowers-for-vk/` doesn't
-exist (e.g., running `vk-issue-bridge.py` directly from the
-agent-images repo for local testing, or in CI), the check is a
-no-op. This is intentional — we don't want the bridge to refuse to
-start in dev/test environments where the plugin cache layout
-doesn't apply.
-
-### Edge cases
-
-- **Multiple version dirs in cache** (e.g., 2.1.4/ and 2.1.5/ both
-  present from incremental upgrades): take the highest semver as
-  "what the operator intends to run". If installed is lower,
-  mismatch — the venv lags the latest available plugin.
-- **plugin.json present but malformed JSON or missing `version`
-  field**: raise with a clear "plugin manifest at <path> is
-  malformed" message, exit 1. Same severity as version mismatch.
-- **Cache dir name doesn't parse as semver** (e.g., a leftover dev
-  symlink): skip non-parseable dirs when finding the latest. If no
-  parseable dirs exist, treat same as empty cache (no-op).
-- **Different installed vk identifier** (editable install,
-  `pip install -e .`): `importlib.metadata.version("vk")` still
-  returns whatever's in `pyproject.toml` of the editable source.
-  Comparison works the same way.
-
-### Repository impact: cross-repo
-
-The check itself lives in `agent-images/kali/scripts/vk-issue-bridge.py`
-— a **different repo** from this spec's primary subject. Because
-the patch is tiny (~30 LOC source + a few tests), it ships as a
-direct PR to `agent-images` after the gate fix lands here. The
-implementation plan for THIS spec (in this repo) covers only the
-gate fix; a brief follow-up task notes "open a small PR to
-`agent-images` for the bridge version check, per spec §Companion
-guard". No separate v2 plan folder in agent-images.
-
-### Testing approach (bridge side)
-
-In `agent-images/kali/tests/test_vk_issue_bridge.py` (existing
-file):
-
-- **Unit test:** `tmp_path` simulating
-  `<tmp>/cache/derio-net/superpowers-for-vk/2.1.5/.claude-plugin/plugin.json`
-  with `{"version": "2.1.5"}`; monkeypatch
-  `Path.home()` to return `tmp_path`; monkeypatch
-  `importlib.metadata.version` to return `"2.1.5"`; assert the
-  check returns silently.
-- **Unit test:** same setup but `importlib.metadata.version`
-  returns `"2.1.4"`; assert `SystemExit(1)` and that stderr
-  contains both versions and the fix command.
-- **Unit test:** cache dir doesn't exist; assert no-op.
-- **Unit test:** multiple version dirs (2.1.4/ and 2.1.5/); installed
-  is 2.1.5; assert the highest is picked as the comparison target
-  (passes).
-- **Unit test:** malformed plugin.json; assert `SystemExit(1)` with
-  the "manifest malformed" message.
-
 ## Out of scope
 
-- **No bridge-side defence-in-depth for the dispatch gate.** The
-  bridge's legacy loop COULD also verify plan-locally before
-  dispatching the implementing agent. With the operator-side gate
-  enforced, that becomes belt-and-suspenders. Leave for a follow-up
-  if the operator-side gate proves insufficient.
+- **No bridge-side defence-in-depth.** The bridge's legacy loop
+  COULD also verify plan-locally before dispatching the implementing
+  agent. With the operator-side gate enforced, that becomes
+  belt-and-suspenders. Leave for a follow-up if the operator-side
+  gate proves insufficient.
+- **No bridge-side version check.** Adjacent work to detect when the
+  bridge's plugin manifest version drifts from its installed `vk`
+  python package version — same "make silent drift loud" pattern,
+  different layer (cron daemon, not CLI). Filed as a separate spec
+  after this one lands.
 - **No redesign of the writeback flow.** The "derive `tracking_issue`
   from gh labels (e.g., `plan:<slug>` + `phase:N`)" v3 idea that
   would eliminate the writeback entirely stays out — file separately
@@ -412,14 +264,8 @@ file):
   similar.
 - **No retroactive cleanup of dispatched-but-unreachable Issues.**
   #134 stays as-is (re-used manually when cross-repo work resumes).
-- **No version check on `vk apply` itself.** Only the bridge does
-  the startup check. The CLI runs interactively and the operator
-  sees `uv run vk --version` if they care; the bridge is a
-  long-running daemon where stale code is the silent-failure case.
 
 ## Verification checklist (apply during execution, not now)
-
-### Gate fix (this repo)
 
 - [ ] `file_on_ref` works correctly for present and missing paths
       against arbitrary refs (unit test against `tmp_path` git repo).
@@ -446,34 +292,16 @@ file):
       src/ tests/`, `uv run mypy src/`, `uv run pytest -q --no-cov`
       all clean.
 
-### Bridge version guard (agent-images repo, follow-up PR)
-
-- [ ] `_check_plugin_version_alignment` no-ops when the plugin
-      cache dir is absent.
-- [ ] Matching versions → silent return.
-- [ ] Mismatched versions → `SystemExit(1)` with stderr containing
-      both versions, both paths, and the fix command.
-- [ ] Multiple version dirs → highest semver is picked as the
-      comparison target.
-- [ ] Malformed plugin.json → `SystemExit(1)` with manifest-error
-      message.
-- [ ] Called from `main()` before any other initialization so an
-      early-exit doesn't leave half-state.
-
 ## Why this matters
 
 The bug we hit (PR #135 incident) cost: ~1 hour of operator
 attention, a revert PR, two duplicate bug filings consolidated,
 real review confusion. The gate is ~30 LOC of source change + ~100
-LOC of tests in this repo, plus ~30 LOC + a few tests in
-`agent-images` for the companion bridge guard. Cost/benefit: ~150
-LOC total prevents a recurring silent-failure mode at the dispatch
-layer AND closes a parallel silent-drift mode at the bridge layer.
+LOC of tests. Strict cost/benefit: the gate prevents a recurring
+silent-failure mode for ~130 LOC of effort.
 
-Both pieces share a theme: **make silent drift loud at every layer
-where dispatch state could diverge from what consumers see**. The
-gate fixes operator-side drift (plan not on default branch); the
-bridge guard fixes deployment-side drift (Kali venv lags plugin
-manifest). Together they harden the dispatch pipeline against the
-class of failures where "everything looks fine" but downstream
-consumers act on stale or partial information.
+It also pairs naturally with the upcoming bridge-side version-check
+spec — both are "make silent drift loud" guards at different layers.
+Together they harden the dispatch pipeline against the class of
+failures where "everything looks fine" but downstream consumers act
+on stale or partial information.
