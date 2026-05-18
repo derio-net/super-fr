@@ -63,11 +63,13 @@ def test_dispatch_creates_card_and_workspace():  # B1
     assert update_call[1]["status"] == "In progress"
 
     # BDD: start_workspace must use CLAUDE_CODE executor and the
-    # vk/gh-<N> branch (N = issue number from tracking_issue).
+    # vk/gh-<N> branch (N = issue number from tracking_issue). VK indexes
+    # repos by short name, so dispatch resolves `derio-net/superpowers-for-vk`
+    # → "superpowers-for-vk" → the matching repo_id from list_repos.
     (start_call,) = [c for c in mcp.calls if c[0] == "start_workspace"]
     assert start_call[1]["executor"] == "CLAUDE_CODE"
     assert start_call[1]["branch"] == "vk/gh-42"
-    assert start_call[1]["repo"] == "derio-net/superpowers-for-vk"
+    assert start_call[1]["repo_id"] == "uuid-superpowers-for-vk"
 
     assert result.card_id is not None
     assert result.workspace_id is not None

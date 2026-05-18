@@ -180,20 +180,23 @@ class VkMcpClient:
         self,
         *,
         name: str,
-        repo: str,
+        repo_id: str,
         executor: str,
         branch: str,
         **kwargs: Any,
     ) -> Any:
-        # `repo` is a single owner/name; the VK MCP server expects a list at
-        # the `repositories` key. Translate at the Python layer so callers
-        # don't have to wrap a single repo themselves. Block the `repositories`
-        # kwarg explicitly so a stray `repositories=[...]` in **kwargs can't
-        # silently override the translated list (the spread order would let
-        # it win — refuse the ambiguity instead).
+        # The VK MCP server expects a list of `{repo_id, branch}` objects at
+        # the `repositories` key (see `vibe-kanban-mcp` task_attempts.rs:
+        # `repositories: Vec<McpWorkspaceRepoInput>` with fields
+        # `repo_id: Uuid, branch: String`). VK indexes repos by `id`; the
+        # caller resolves short name → repo_id via
+        # `vk.bridge.config.repo_id_for` first. Branch lives inside the
+        # repo entry — there is no top-level `branch` field. Block
+        # `repositories=` in kwargs so a stray override can't slip past
+        # spread-last semantics.
         if "repositories" in kwargs:
             raise TypeError(
-                "start_workspace: pass repo='owner/name' (singular); "
+                "start_workspace: pass repo_id='<uuid>' (singular); "
                 "the repositories list is built internally"
             )
         return self.call_tool(
@@ -201,8 +204,7 @@ class VkMcpClient:
             {
                 "name": name,
                 "executor": executor,
-                "repositories": [repo],
-                "branch": branch,
+                "repositories": [{"repo_id": repo_id, "branch": branch}],
                 **kwargs,
             },
             timeout=180.0,

@@ -50,7 +50,7 @@ def test_start_workspace_uses_180s_timeout() -> None:
     `timeout=` override on `call_tool` wins over both defaults."""
     client = _RecordingMcpClient()
 
-    client.start_workspace(name="x", repo="owner/r", executor="CLAUDE_CODE", branch="b")
+    client.start_workspace(name="x", repo_id="uuid-r", executor="CLAUDE_CODE", branch="b")
     assert client.recv_timeouts[-1] == 180.0
 
     client.get_issue("id-1")

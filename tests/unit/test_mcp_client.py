@@ -149,15 +149,19 @@ def test_list_issues_keyword_args():
 
 
 def test_start_workspace_keyword_args():
+    """Pins the real `vibe-kanban-mcp` wire shape: `repositories` is a list
+    of `{repo_id, branch}` objects, with `branch` living inside each entry
+    (no top-level `branch` field). See `crates/mcp/src/task_server/tools/
+    task_attempts.rs::McpWorkspaceRepoInput`."""
     client = _client_with('{"id": "ws-1"}')
     client.start_workspace(
-        name="my-ws", repo="owner/repo", executor="CLAUDE_CODE", branch="vk/gh-1"
+        name="my-ws", repo_id="uuid-abc-123", executor="CLAUDE_CODE", branch="vk/gh-1"
     )
     args = client._sent[0]["params"]["arguments"]
     assert args["name"] == "my-ws"
     assert args["executor"] == "CLAUDE_CODE"
-    assert args["repositories"] == ["owner/repo"]
-    assert args["branch"] == "vk/gh-1"
+    assert args["repositories"] == [{"repo_id": "uuid-abc-123", "branch": "vk/gh-1"}]
+    assert "branch" not in args, "branch must live inside the repositories entry, not at top level"
 
 
 def test_list_workspaces():
@@ -202,15 +206,15 @@ def test_delete_issue():
 
 
 def test_start_workspace_rejects_repositories_kwarg_collision():
-    """Block ambiguity: if a caller passes both `repo=` and
+    """Block ambiguity: if a caller passes both `repo_id=` and
     `repositories=` in kwargs, the spread-last semantics would silently
     let kwargs win. Raise instead so the bug surfaces at call site."""
     client = _client_with('{"id": "ws-1"}')
     with pytest.raises(TypeError, match="repositories list is built internally"):
         client.start_workspace(
             name="my-ws",
-            repo="owner/repo",
+            repo_id="uuid-abc-123",
             executor="CLAUDE_CODE",
             branch="vk/gh-1",
-            repositories=["other/repo"],
+            repositories=[{"repo_id": "uuid-other", "branch": "x"}],
         )
