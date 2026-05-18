@@ -303,42 +303,43 @@ tasks:
 state:
   steps:
     P7.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-05-18T06:41:30+00:00'
       note: null
     P7.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-05-18T06:41:30+00:00'
       note: null
     P7.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-05-18T06:41:31+00:00'
       note: null
     P7.T1.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-05-18T06:42:05+00:00'
       note: null
     P7.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-18T06:42:17+00:00'
+      note: 'post-merge runbook: operator-driven sweep across repos for affected plans'
     P7.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-18T06:42:17+00:00'
+      note: 'post-merge runbook: re-apply affected plans after fix lands on main'
     P7.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-18T06:42:18+00:00'
+      note: 'post-merge runbook: operator monitors bridge log for residual fallback
+        refs'
     P7.T2.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-18T06:42:18+00:00'
+      note: 'post-merge runbook: operator cleans up wrongly-dispatched VK cards'
     P7.T2.S5:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-18T06:42:18+00:00'
+      note: 'post-merge runbook: documentation close-out by operator'
   completion:
-    at: null
+    at: '2026-05-18T06:42:22+00:00'
     note: null
     observed_prs: []
