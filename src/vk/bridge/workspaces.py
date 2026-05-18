@@ -10,9 +10,15 @@ legacy bridge could only log the orphan. Opt-in env flag
 `VK_BRIDGE_RECOVER_ORPHAN_CARDS=1` recreates the workspace so the card
 isn't stuck silently.
 
-The MCP surface is duck-typed via the `MCPWorkspaceClient` Protocol so
-both `vk._mcp_client.VkMcpClient` and `tests.unit.fakes.FakeMcpClient`
-satisfy it without inheritance.
+The MCP surface is duck-typed via two Protocols so both
+`vk._mcp_client.VkMcpClient` and `tests.unit.fakes.FakeMcpClient`
+satisfy them without inheritance:
+
+- `MCPArchiver` — narrow: just `list_workspaces` + `update_workspace`,
+  for the `archive_for_card` primitive that `pr_state.tick` cascades to.
+- `MCPWorkspaceClient(MCPArchiver)` — full lifecycle surface adding
+  `list_issues`, `get_issue`, `start_workspace`, `link_workspace_issue`
+  for `reap_orphans` and `recover_orphan_card`.
 """
 
 from __future__ import annotations
