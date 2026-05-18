@@ -60,10 +60,6 @@ fires on the `pyproject.toml` change, creates the `vX.Y.Z` tag, and
 publishes a GitHub Release with auto-generated notes. No human action
 needed once the PR is in.
 
-`package.json` exists at the repo root but is dormant (last touched at
-`v0.2.1`). The install pipeline doesn't read it. Leave it alone unless
-you're doing a broader cleanup.
-
 ### Versioning scheme
 
 The project uses tight semver-ish iteration. In practice:
@@ -111,6 +107,3 @@ created specifically to propagate that work.
   installer scripts without a version bump on `main`. Would make this rule
   load-bearing instead of voluntary. (Drift detection is done — see
   `version-sync` job — but the "did you remember to bump?" guard isn't.)
-- Consider dropping `package.json` at the repo root if nothing reads it; it's
-  been at `1.0.4` since early plugin scaffolding and the drift is itself a
-  small "is this real?" distraction.
