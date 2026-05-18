@@ -1,0 +1,125 @@
+name: Release on Merge
+
+# Triggered when a PR is merged into main with a `release:patch|minor|major`
+# label. Bumps the three lockstep version files (pyproject.toml,
+# .claude-plugin/plugin.json, .claude-plugin/marketplace.json), refreshes
+# uv.lock, commits, tags `vX.Y.Z`, and creates a GitHub Release.
+#
+# To set up: create three repo labels — `release:patch`, `release:minor`,
+# `release:major` — and add exactly one to a PR before merging.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      github.event.pull_request.merged == true &&
+      (
+        contains(github.event.pull_request.labels.*.name, 'release:patch') ||
+        contains(github.event.pull_request.labels.*.name, 'release:minor') ||
+        contains(github.event.pull_request.labels.*.name, 'release:major')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine bump type (major > minor > patch)
+        id: bump
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          if   echo "$LABELS" | grep -q '"release:major"'; then echo "type=major" >> "$GITHUB_OUTPUT"
+          elif echo "$LABELS" | grep -q '"release:minor"'; then echo "type=minor" >> "$GITHUB_OUTPUT"
+          else                                                   echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Compute & apply version bump
+        id: ver
+        env:
+          BUMP: ${{ steps.bump.outputs.type }}
+        run: |
+          uv run --no-project python - <<'PY'
+          import json, os, pathlib, re
+
+          bump = os.environ["BUMP"]
+          py = pathlib.Path("pyproject.toml")
+          old = re.search(r'^version\s*=\s*"([^"]+)"', py.read_text(), re.M).group(1)
+          maj, mi, pa = (int(x) for x in old.split("."))
+          if   bump == "major": maj, mi, pa = maj + 1, 0, 0
+          elif bump == "minor": mi, pa = mi + 1, 0
+          else:                 pa += 1
+          new = f"{maj}.{mi}.{pa}"
+
+          py.write_text(re.sub(
+              r'(^version\s*=\s*")[^"]+(")',
+              rf'\g<1>{new}\g<2>',
+              py.read_text(),
+              count=1,
+              flags=re.M,
+          ))
+
+          for path, key_path in [
+              (".claude-plugin/plugin.json",      ("version",)),
+              (".claude-plugin/marketplace.json", ("plugins", 0, "version")),
+          ]:
+              p = pathlib.Path(path)
+              data = json.loads(p.read_text())
+              cur = data
+              for k in key_path[:-1]:
+                  cur = cur[k]
+              cur[key_path[-1]] = new
+              p.write_text(json.dumps(data, indent=4) + "\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"old={old}\nnew={new}\n")
+          print(f"{old} -> {new} ({bump})")
+          PY
+
+      - name: Refresh uv.lock
+        run: uv sync
+
+      - name: Verify CLI reports new version
+        env:
+          NEW: ${{ steps.ver.outputs.new }}
+        run: |
+          got="$(uv run vk --version)"
+          echo "vk --version → $got"
+          echo "$got" | grep -q -- "$NEW"
+
+      - name: Commit, tag, push
+        env:
+          NEW:  ${{ steps.ver.outputs.new }}
+          PR:   ${{ github.event.pull_request.number }}
+          BUMP: ${{ steps.bump.outputs.type }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml .claude-plugin/plugin.json .claude-plugin/marketplace.json uv.lock
+          git commit -m "chore(release): v${NEW} (${BUMP} bump from #${PR})"
+          git tag "v${NEW}"
+          git push origin main "v${NEW}"
+
+      - name: Create GitHub Release with auto-generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW:      ${{ steps.ver.outputs.new }}
+        run: |
+          gh release create "v${NEW}" \
+            --title "v${NEW}" \
+            --generate-notes \
+            --target main
