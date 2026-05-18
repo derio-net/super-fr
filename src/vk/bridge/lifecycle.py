@@ -13,13 +13,20 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Literal
 
-__all__ = ["lifecycle_hook"]
+__all__ = ["LifecycleState", "lifecycle_hook"]
 
 logger = logging.getLogger(__name__)
 
 
-def lifecycle_hook(issue_url: str, state: str) -> None:
+# Closed enum of the states Phase 4's script will see. Pinned at Phase 3
+# so a typo in a Phase 4 dispatch call is a static error, not a silent
+# script-arg corruption.
+LifecycleState = Literal["in-progress", "in-review", "done"]
+
+
+def lifecycle_hook(issue_url: str, state: LifecycleState) -> None:
     """Invoke the lifecycle hook script if VK_LIFECYCLE_HOOK_SCRIPT is set.
 
     No-op when the env var is unset. Phase 4 implements the actual

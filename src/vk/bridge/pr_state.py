@@ -23,23 +23,24 @@ import subprocess
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from vk.bridge.workspaces import archive_for_card
+from vk.bridge.workspaces import MCPArchiver, archive_for_card
 
 __all__ = ["tick"]
 
 logger = logging.getLogger(__name__)
 
 
-class MCPCardClient(Protocol):
-    """Structural MCP surface required by `tick`."""
+class MCPCardClient(MCPArchiver, Protocol):
+    """Structural MCP surface required by `tick`.
+
+    Extends `MCPArchiver` so a single object satisfies both `tick`'s
+    surface and the `archive_for_card` cascade — keeps the two
+    Protocols in lockstep with one place to edit.
+    """
 
     def list_issues(self, **kwargs: Any) -> Any: ...
 
     def update_issue(self, card_id: str, **changes: Any) -> Any: ...
-
-    def list_workspaces(self, **kwargs: Any) -> Any: ...
-
-    def update_workspace(self, ws_id: str, **changes: Any) -> Any: ...
 
 
 _GH_REPO_FROM_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/(?:pull|issues)/\d+")
@@ -77,12 +78,16 @@ def _default_close_gh_issue(repo: str, issue_number: str) -> None:
         stderr = (result.stderr or "").strip()
         if "already closed" in stderr.lower():
             return
+        # Truncate at 512 (was 160) so auth / rate-limit errors with
+        # longer stderr survive the WARNING line. Full text always
+        # available at DEBUG.
+        logger.debug("pr_state: close %s#%s full stderr: %s", repo, issue_number, stderr)
         logger.warning(
             "pr_state: close %s#%s failed (rc=%s): %s",
             repo,
             issue_number,
             result.returncode,
-            stderr[:160],
+            stderr[:512],
         )
         return
     logger.info("pr_state: closed %s#%s", repo, issue_number)
@@ -108,16 +113,26 @@ def tick(
     pr_observations: dict[str, str],
     *,
     close_gh_issue: Callable[[str, str], None] | None = None,
+    project_id: str | None = None,
 ) -> int:
     """Transition cards based on their linked PR's observed status.
 
     `pr_observations` is a `{card_id: "open" | "merged" | ...}` map.
-    Cards without an entry in the map are left untouched.
+    Cards without an entry in the map are left untouched. Observation
+    values outside the recognized set (e.g. "draft", "closed", "") are
+    ignored — only `"open"` (→ In review) and `"merged"` (→ Done) cause
+    a transition.
 
     `close_gh_issue(repo, issue_number)` is the side-channel that runs
     the belt-and-braces `gh issue close` for the In-review → Done
     cascade. Injectable for unit tests; defaults to a `gh` subprocess
     call.
+
+    `project_id` is forwarded to `list_issues` so the sweep only
+    considers cards in the bridge's own VK project. The legacy bridge
+    hard-coded `VK_DERIO_OPS_PROJECT`; we accept it as an explicit
+    kwarg so Phase 5 can thread it from config. When unset, the MCP
+    server's session-default scope applies.
 
     Returns the count of cards that transitioned. Per-card failures are
     logged but do not abort the sweep.
@@ -126,8 +141,11 @@ def tick(
     transitioned = 0
 
     for current_status in ("In progress", "In review"):
+        list_kwargs: dict[str, Any] = {"status": current_status}
+        if project_id is not None:
+            list_kwargs["project_id"] = project_id
         try:
-            resp = mcp.list_issues(status=current_status)
+            resp = mcp.list_issues(**list_kwargs)
         except Exception as e:  # noqa: BLE001 — non-fatal
             logger.warning("pr_state: list_issues(%s) failed: %s", current_status, e)
             continue

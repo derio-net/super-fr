@@ -220,3 +220,97 @@ def test_recover_orphan_card_returns_none_if_card_unknown(monkeypatch):
 
     assert result is None
     assert [c for c in mcp.calls if c[0] == "start_workspace"] == []
+
+
+def test_recover_orphan_card_refuses_placeholder_simple_id(monkeypatch):
+    """A placeholder sid ("?", "") must not produce a workspace name."""
+    from vk.bridge.workspaces import recover_orphan_card
+
+    monkeypatch.setenv("VK_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
+    mcp = FakeMcpClient()
+    _prime_card(mcp, "card-1", simple_id="?", title="gh#100: [derio-net/foo]")
+
+    assert recover_orphan_card(mcp, "card-1", "?") is None
+    assert recover_orphan_card(mcp, "card-1", "") is None
+    assert [c for c in mcp.calls if c[0] == "start_workspace"] == []
+
+
+def test_recover_orphan_card_is_idempotent_when_workspace_exists(monkeypatch):
+    """Racing recover calls must not create duplicate workspaces.
+
+    The legacy bridge had no inverse-reap, so a brand-new race surface:
+    if a workspace already matches `{sid} ->`, return its id and re-link
+    rather than start_workspace a duplicate.
+    """
+    from vk.bridge.workspaces import recover_orphan_card
+
+    monkeypatch.setenv("VK_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
+    mcp = FakeMcpClient()
+    _prime_workspace(mcp, "ws-existing", name="5 -> gh#100")
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        title="gh#100: [derio-net/superpowers-for-vk]",
+    )
+
+    ws_id = recover_orphan_card(mcp, "card-1", "5")
+
+    assert ws_id == "ws-existing"
+    assert [c for c in mcp.calls if c[0] == "start_workspace"] == []
+    link_calls = [c for c in mcp.calls if c[0] == "link_workspace_issue"]
+    # Re-link is best-effort idempotency — exactly one call.
+    assert len(link_calls) == 1
+    assert link_calls[0][1] == {"ws_id": "ws-existing", "card_id": "card-1"}
+
+
+def test_reap_orphans_handles_wire_shape_dict_response():
+    """Production VkMcpClient returns `{"workspaces": [...]}` /
+    `{"issues": [...]}` — the bare-list shape is only the test fake.
+    Pin the dict-shape branch of `_normalize_workspaces` /
+    `_normalize_issues` here so the port's wire compatibility doesn't
+    regress.
+    """
+    from vk.bridge.workspaces import reap_orphans
+
+    class _WireShapeMcp:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        def __init__(self) -> None:
+            self.calls = []
+
+        def list_workspaces(self, **kw: object) -> dict[str, object]:
+            self.calls.append(("list_workspaces", dict(kw)))
+            return {
+                "workspaces": [
+                    {"id": "ws-7", "name": "7 -> gh#102", "pinned": False},
+                ]
+            }
+
+        def update_workspace(self, ws_id: str, **changes: object) -> None:
+            self.calls.append(("update_workspace", {"ws_id": ws_id, **changes}))
+
+        def list_issues(self, **kw: object) -> dict[str, object]:
+            self.calls.append(("list_issues", dict(kw)))
+            return {"issues": []}  # no card with sid=7 → orphan
+
+    mcp = _WireShapeMcp()
+    count = reap_orphans(mcp)  # type: ignore[arg-type]
+    assert count == 1
+    archived = [c for c in mcp.calls if c[0] == "update_workspace"]
+    assert archived and archived[0][1]["ws_id"] == "ws-7"
+
+
+def test_reap_orphans_threads_project_id_to_list_issues():
+    """`project_id` kwarg must reach the MCP `list_issues` call so the
+    sweep is scoped to the bridge's own VK project."""
+    from vk.bridge.workspaces import reap_orphans
+
+    mcp = FakeMcpClient()
+    _prime_workspace(mcp, "ws-7", name="7 -> gh#102")
+
+    reap_orphans(mcp, project_id="proj-derio-ops")
+
+    list_calls = [c for c in mcp.calls if c[0] == "list_issues"]
+    assert list_calls
+    assert list_calls[0][1].get("project_id") == "proj-derio-ops"

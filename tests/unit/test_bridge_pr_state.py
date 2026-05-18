@@ -160,6 +160,40 @@ def test_tick_invokes_gh_issue_closer_when_pr_merged(monkeypatch):
     assert closed == [("derio-net/superpowers-for-vk", "100")]
 
 
+def test_draft_pr_does_not_transition_in_progress():
+    """Spec C3 says transition requires a NON-draft PR. The unit API
+    contract is: only the literal `"open"` value triggers In-progress →
+    In-review. Drafts (or any other observation value) must be ignored.
+    Pinning this here so a Phase 5 observation wiring that maps drafts
+    to `"open"` can't silently regress C3.
+    """
+    from vk.bridge.pr_state import tick
+
+    mcp = FakeMcpClient()
+    _prime_card(mcp, "card-1", simple_id="5", status="In progress")
+
+    count = tick(mcp, pr_observations={"card-1": "draft"})
+
+    assert count == 0
+    assert [c for c in mcp.calls if c[0] == "update_issue"] == []
+
+
+def test_tick_threads_project_id_to_list_issues():
+    """`project_id` kwarg must reach the MCP `list_issues` call so the
+    sweep is scoped to the bridge's own VK project."""
+    from vk.bridge.pr_state import tick
+
+    mcp = FakeMcpClient()
+
+    tick(mcp, pr_observations={}, project_id="proj-derio-ops")
+
+    list_calls = [c for c in mcp.calls if c[0] == "list_issues"]
+    # Two list calls (In progress + In review) — both must carry the scope.
+    assert len(list_calls) == 2
+    for _, kw in list_calls:
+        assert kw.get("project_id") == "proj-derio-ops"
+
+
 def test_default_close_gh_issue_is_invoked_via_subprocess(monkeypatch):
     """Default close_gh_issue uses subprocess.run; we patch it out."""
     import vk.bridge.pr_state as ps
