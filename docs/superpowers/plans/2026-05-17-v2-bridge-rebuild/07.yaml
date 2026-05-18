@@ -4,7 +4,7 @@ phase:
   title: Fix apply_cmd plan-propagation (orthogonal v2-surface bug)
   tag: agentic
   depends_on:
-  - 6
+  - 1
   tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/167
 tasks:
 - number: 1
@@ -142,7 +142,22 @@ tasks:
       Expect: GREEN (with S2's fix in place).
   - id: P7.T1.S4
     text: |-
-      Version bump 2.2.0 → 2.2.1 + verification + PR.
+      Version bump + verification + PR.
+
+      Re-sequenced 2026-05-18: Phase 7 now ships RIGHT AFTER Phase 1
+      (depends_on: [1]) instead of after Phase 6. Reason: the bug is
+      actively producing broken `Blocked by #<small-number>` refs in
+      multiple recently-dispatched plans across at least three repos
+      (agent-images, superpowers-for-vk, frank). Waiting until end of
+      rebuild means weeks of bad refs.
+
+      Version bump: NEXT PATCH version available when this phase ships.
+      Phase 1 shipped v2.1.7. If no other phase has shipped between
+      Phase 1 and Phase 7's PR open, this is `2.1.7 → 2.1.8`. If Phase 2
+      shipped first (also depends_on=[1], can race), this becomes
+      `2.1.8 → 2.1.9`. Implementing agent: check current
+      `pyproject.toml::[project].version` immediately before bumping —
+      don't hardcode a target.
 
       Bump the three files (`pyproject.toml`, `.claude-plugin/plugin.json`,
       `.claude-plugin/marketplace.json`). Run `uv sync`. Pre-push verify
@@ -153,23 +168,136 @@ tasks:
 
       PR body must include:
       - Link to the 2026-05-17 dispatch incident as the originating
-        evidence (the conversation summary stored at
-        `/Users/derio/.claude/projects/.../jsonl` if useful, or just a
-        descriptive paragraph)
+        evidence (Phases 2/3/6 of this very plan dispatched ahead of
+        Phase 1; recovered by manually re-running `vk apply --yes` after
+        the writeback PR merged)
       - Reference #147 (tracking)
       - Note that Phase 1's renderer fix made this latent — the
         label-gating that landed in v2.1.7 prevents the dispatch
-        damage, but the body-render bug itself remained until now
+        damage going forward, but the body-render bug itself remained
+        until now AND already-broken bodies in existing dispatched
+        Issues need manual repair (see P7.T2 — Post-merge runbook)
       - The before/after for the one-line change
-  - id: P7.T1.S5
+- number: 2
+  title: Post-merge runbook — fix already-broken bodies in existing plans
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      Identify affected plans.
+
+      The bug produced `- Blocked by #<phase-number>` instead of
+      `- Blocked by #<actual-predecessor-issue-number>` in EVERY
+      multi-phase plan dispatched via `vk apply --yes` since the v2.1.0
+      release. Known affected (as of 2026-05-17):
+
+      - `derio-net/agent-images#62`: body says "blocked by #1" (phase 1
+        fallback). Identify the plan that produced this Issue (read its
+        body's `📋 Plan:` line) and re-apply that plan.
+      - `derio-net/superpowers-for-vk#163`: body says "blocked by #3"
+      - `derio-net/superpowers-for-vk#164`: body says "blocked by #4"
+      - Possibly others — sweep with:
+        ```bash
+        for repo in derio-net/agent-images derio-net/superpowers-for-vk derio-net/frank; do
+          gh issue list --repo $repo --state open --search 'in:body "Blocked by #"' \
+                        --json number,title,body \
+                        --jq '.[] | select(.body | test("Blocked by #[1-9][0-9]?(\\D|$)")) | "\(.number)\t\(.title)"'
+        done
+        ```
+        The regex matches single/double-digit refs after "Blocked by #".
+        Most legitimate cross-issue refs are 3-4 digits (recent gh issue
+        numbers), so small-number matches are almost certainly fallback
+        artifacts.
+
+      For each match: find the plan via the gh issue body's
+      `📋 Plan:` line, record its location.
+  - id: P7.T2.S2
+    text: |-
+      Re-apply each affected plan.
+
+      For each affected plan, run:
+      ```bash
+      cd <plan's repo checkout>
+      git checkout main && git pull --ff-only origin main
+      uv run vk apply --yes <plan-dir>
+      ```
+
+      Since all the plan's Issues already exist, `apply()` emits
+      `IssueBodyChange` mutations (NOT IssueCreate) — and IssueBodyChange
+      uses the body that the renderer built upfront, which IS correct
+      now that the predecessor `tracking_issue` URLs are persisted in
+      the plan yamls. So this single `apply --yes` per plan fixes ALL
+      its broken refs in one tick.
+
+      Verify each repair:
+      ```bash
+      gh issue view <issue_number> --json body --jq '.body' | grep -A2 "Dependencies"
+      ```
+      Expect: `Blocked by #<3-4-digit-issue-number>`, not `#1` / `#3` /
+      `#4` etc.
+
+      Important: this WILL also re-emit `RepoLabelEnsure` and any
+      pending `IssueLabelChange` mutations for the plan. Dry-run first
+      (`vk apply <plan-dir>` without --yes) to preview side effects per
+      plan before committing.
+  - id: P7.T2.S3
+    text: |-
+      Audit bridge log for residual fallback refs.
+
+      Tail the bridge log on the kali pod (or wherever it runs):
+      ```bash
+      tail -f ~/.willikins-agent/vk-bridge.log
+      ```
+
+      For ~3 tick cycles after the runbook, watch for any entry of the
+      form `blocked by #<small-number>` (single or low double-digit).
+      Each such entry is a plan we missed in T2.S1 — re-apply that plan.
+
+      Stop when 3 consecutive ticks show no small-number blocked-by
+      refs. That's the signal the residual fallback state is cleared.
+  - id: P7.T2.S4
+    text: |-
+      Clean up wrongly-dispatched VK cards (if any).
+
+      During the broken-bodies era, some phases got dispatched
+      out-of-order (the apply_cmd.py bug "satisfied" their fake deps
+      against unrelated closed Issues). Those phases have VK cards +
+      possibly workspaces that did wrong work before being cancelled.
+
+      For each affected card:
+        - Archive the VK card via the Vibe Kanban UI (or `mcp.update_workspace
+          (ws_id, archived=True)` and `mcp.update_issue(card_id,
+          archived=True)`)
+        - Remove `vk-synced` label from the corresponding gh Issue:
+          `gh issue edit <N> --remove-label vk-synced`
+        - On the next bridge tick, the bridge will see vk-ready (now
+          honest via Phase 1's renderer) + no vk-synced → fresh
+          dispatch with correct context
+
+      Identified wrongly-dispatched cards from the 2026-05-17 incident:
+        - `derio-net/superpowers-for-vk#153` (Phase 2 of rebuild)
+        - `derio-net/superpowers-for-vk#154` (Phase 3 of rebuild)
+        - `derio-net/superpowers-for-vk#155` (Phase 4 — re-dispatched
+          a second time when bridge fought back during label rebalance)
+        - `derio-net/superpowers-for-vk#157` (Phase 6 of rebuild)
+
+      Operator decides per-card whether to archive-and-redispatch or
+      keep the existing card (e.g., if its agent's first ~10 messages
+      look salvageable).
+  - id: P7.T2.S5
     text: |-
       Final close-out.
 
-      After the PR merges and v2.2.1 is published, the v2 bridge rebuild
-      tracking issue #147 can be closed (Phase 6's PR may have closed it
-      already; if so, no action). Update CLAUDE.md if needed to note
-      that `vk apply --yes` is now safe for multi-phase plans without
-      reliance on Phase 1's renderer gating as the failsafe.
+      After T2.S1-S4 complete and the bridge log shows no residual
+      small-number blocked-by refs, the v2-surface body-rendering
+      problem is fully closed. Document the resolution:
+
+      - Add a CLAUDE.md note: "§Release: `git tag v<ver>` and `git push
+        origin v<ver>` are part of the version-bump checklist." (Surfaced
+        2026-05-17: Phase 1 bumped to v2.1.7 without tagging, breaking
+        downstream Dockerfile pin resolution.)
+      - If #147 (tracking) is still open, comment with a one-line
+        summary: "Phase 7 + runbook complete. Body refs restored across
+        N plans. v2 dispatch surface now honest end-to-end."
 
       No further work.
 state:
@@ -190,7 +318,23 @@ state:
       state: ' '
       ticked_at: null
       note: null
-    P7.T1.S5:
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S5:
       state: ' '
       ticked_at: null
       note: null
