@@ -1,11 +1,17 @@
 {
     "name": "superpowers-for-vk",
-    "description": "VK-aware planning and dispatch skills for Claude Code — wraps superpowers with VibeKanban integration",
-    "version": "2.1.8",
+    "description": "VK-aware planning and dispatch skills for Claude Code \u2014 wraps superpowers with VibeKanban integration",
+    "version": "2.1.9",
     "author": {
         "name": "Ioannis Dermitzakis"
     },
     "repository": "https://github.com/derio-net/superpowers-for-vk",
     "license": "MIT",
-    "keywords": ["skills", "vibekanban", "planning", "dispatch", "agentic"]
+    "keywords": [
+        "skills",
+        "vibekanban",
+        "planning",
+        "dispatch",
+        "agentic"
+    ]
 }

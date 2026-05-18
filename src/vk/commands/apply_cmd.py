@@ -219,7 +219,7 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
         json_out["unreachable_paths"] = [str(p) for p in missing]
         return 2, "\n".join(lines), json_out
 
-    result = apply(d, gh)
+    result = apply(d, gh, plan=plan)
     writeback_failures: list[dict[str, Any]] = []
     for phase_n, url in result.created_issues.items():
         try:
