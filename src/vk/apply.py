@@ -24,6 +24,7 @@ Properties enforced here:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 
 from vk.diff import (
@@ -38,6 +39,8 @@ from vk.diff import (
 from vk.ghclient import GhClient
 from vk.parser import Plan
 from vk.render import build_phase_to_issue, render_body
+
+logger = logging.getLogger(__name__)
 
 
 class _UnhandledMutationError(AssertionError):
@@ -93,6 +96,7 @@ def apply(
     *,
     dry_run: bool = False,
     plan: Plan | None = None,
+    skip_issue_create: bool = False,
 ) -> ApplyResult:
     """Execute the diff. On dry_run, return mutations without calling gh.
 
@@ -104,7 +108,17 @@ def apply(
     runs. Callers that don't pass `plan` get the legacy behaviour (the
     phase-number fallback persists, which the operator sees as a broken
     ref and can re-dispatch).
+
+    `skip_issue_create=True` strips `IssueCreate` mutations from the diff
+    before applying and emits a WARNING for each one. The bridge tick
+    uses this so the cron daemon never creates GitHub Issues — Issue
+    creation is operator-only, via `vk apply --yes`. The default
+    `False` keeps the operator path unchanged. See incident on
+    2026-05-18 (sfv#196-#214 and sfv#216-#234).
     """
+    if skip_issue_create:
+        d = _filter_issue_creates(d)
+
     if dry_run:
         return ApplyResult(
             applied=d.mutations,
@@ -141,6 +155,28 @@ def apply(
         created_issues=created,
         dry_run=False,
     )
+
+
+def _filter_issue_creates(d: Diff) -> Diff:
+    """Strip `IssueCreate` mutations from a diff; log a WARNING per skip.
+
+    Used by the bridge tick — Issue creation is operator-only. The
+    warning carries the rendered Issue title so the operator can spot
+    which dispatch work is pending (run `vk apply --yes <plan>` to
+    materialise it).
+    """
+    kept: list[Mutation] = []
+    for m in d.mutations:
+        if isinstance(m, IssueCreate):
+            logger.warning(
+                "phase %d: would have created Issue; skipping "
+                "(operator-only via `vk apply --yes`) — title=%r",
+                m.phase_number,
+                m.title,
+            )
+            continue
+        kept.append(m)
+    return Diff(mutations=tuple(kept))
 
 
 def _rerender_dependent_creates(
