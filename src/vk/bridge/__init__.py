@@ -158,7 +158,15 @@ def tick(
     to count idle plans, not idle phases.
     """
     if project_id is None:
-        project_id = os.environ.get("VK_DERIO_OPS_PROJECT") or None
+        # K8s injects `VK_DERIO_OPS_PROJECT_ID` (canonical). Legacy
+        # bridge / inline docs used the no-suffix `VK_DERIO_OPS_PROJECT`
+        # — keep it as a fallback so older bashrc exports / one-off
+        # operator overrides still work.
+        project_id = (
+            os.environ.get("VK_DERIO_OPS_PROJECT_ID")
+            or os.environ.get("VK_DERIO_OPS_PROJECT")
+            or None
+        )
 
     # Fresh repo lookup per tick so config drift propagates.
     _config.clear_repo_cache()

@@ -228,10 +228,16 @@ def main(argv: list[str] | None = None) -> int:
             # that case). Read once at tick entry and pass through. The empty-
             # string case is treated as unset so a blank shell export doesn't
             # silently swallow the failure mode.
-            project_id = os.environ.get("VK_DERIO_OPS_PROJECT") or None
+            # K8s injects `VK_DERIO_OPS_PROJECT_ID` (canonical, `_ID`-suffixed);
+            # legacy docs use the no-suffix name. Read both for forgiveness.
+            project_id = (
+                os.environ.get("VK_DERIO_OPS_PROJECT_ID")
+                or os.environ.get("VK_DERIO_OPS_PROJECT")
+                or None
+            )
             if project_id is None:
                 logger.warning(
-                    "[bridge] VK_DERIO_OPS_PROJECT unset — dispatch will be "
+                    "[bridge] VK_DERIO_OPS_PROJECT_ID unset — dispatch will be "
                     "refused for any plan with vk-ready phases (label sync "
                     "still runs)"
                 )
