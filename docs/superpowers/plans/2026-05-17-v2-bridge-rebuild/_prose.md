@@ -38,7 +38,7 @@ specific phase below. Test IDs (`A1`-`I8`) reference the spec's
 | 4 | Slots + dedup + metrics + prompt + config | D1-D5 | 2.1.9 → 2.1.10 | 3 |
 | 5 | `vk.bridge.cli` + `__main__` + wrapper + install.sh + resilience | E1-E4, G1, G5, I1-I4, I6 | 2.1.10 → 2.1.11 | 4 |
 | 6 | Cutover (delete fat bridge; end-to-end) | F1-F2, F4-F5, G2, G3, G4, H7, I8 | 2.1.11 → **2.2.0** | 5 |
-| 7 | `apply_cmd` plan-propagation fix (added post-dispatch 2026-05-17) | — *(spec failure mode #4)* | 2.2.0 → 2.2.1 | 6 |
+| 7 | `apply_cmd` plan-propagation fix + post-merge runbook | — *(spec failure mode #4)* | next patch (likely 2.1.8+) | **1** |
 
 Phase 6 minor-bumps because `--install-bridge` is a user-visible install
 flag and the fat-bridge retirement is a deployment-shape change.
@@ -81,6 +81,16 @@ PRs). We're not doing that because:
    in the plan, not deferred as "later" cleanup, specifically because
    "later" is where bugs go to die. See spec failure mode #4 for the full
    narrative.
+7. **Phase 7 was re-sequenced from `depends_on: [6]` to `depends_on: [1]`**
+   on 2026-05-18 after discovering that the bug is actively producing broken
+   `Blocked by #<small-number>` refs in MULTIPLE recently-dispatched plans
+   across at least three repos (agent-images, superpowers-for-vk, frank) —
+   not just our own rebuild. Phase 7 now ships in parallel with Phase 2 once
+   Phase 1 is in, getting the fix into operator hands within hours rather
+   than weeks. The trade-off (one more PR in flight during the rebuild) is
+   worth the immediate stop-the-bleeding effect. Phase 7 also grew a second
+   task (`P7.T2`) — a post-merge operator runbook that walks through finding
+   and fixing already-broken bodies + cleaning up wrongly-dispatched VK cards.
 
 ## Cross-repo handoff
 

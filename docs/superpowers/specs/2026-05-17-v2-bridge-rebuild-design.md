@@ -451,13 +451,12 @@ Detail belongs in the plan (vk-plan after this spec is approved). Rough shape:
   - Relocate tests
   - Verify cron tick produces same end-to-end behavior
 
-- **Phase 7 — `apply_cmd` plan-propagation fix** (added 2026-05-17 after this plan's own dispatch surfaced failure mode #4 above)
-  - One-line fix at `src/vk/commands/apply_cmd.py:222`: `apply(d, gh)` → `apply(d, gh, plan=plan)`
-  - Unit test pinning the call-site kwarg propagation
-  - Integration test asserting `vk apply --yes` on a multi-phase plan produces correct `- Blocked by #N` body refs (regression guard for the 2026-05-17 dispatch incident)
-  - Patch version bump (`2.2.0 → 2.2.1`)
-  - **Why a phase, not a side-PR**: keeping it inside the rebuild ensures the bug isn't forgotten as cleanup deferred to "later." Phase 1's renderer fix masks the dispatch damage by making label-gating authoritative, but the body-render bug stays latent until this phase ships — any future consumer that body-parses (or any operator who reasons about body content) gets misled.
-  - Depends on Phase 6 (sequences at the end so it doesn't add parallel in-flight work during the rebuild).
+- **Phase 7 — `apply_cmd` plan-propagation fix + post-merge runbook** (added 2026-05-17 after this plan's own dispatch surfaced failure mode #4 above; re-sequenced 2026-05-18 from `depends_on: [6]` to `depends_on: [1]` after evidence the bug is actively broken across multiple recently-dispatched plans in agent-images, superpowers-for-vk, frank)
+  - **Task 1** — one-line fix at `src/vk/commands/apply_cmd.py:222`: `apply(d, gh)` → `apply(d, gh, plan=plan)`. Unit test pinning the call-site kwarg propagation. Integration test asserting `vk apply --yes` on a multi-phase plan produces correct `- Blocked by #N` body refs.
+  - **Task 2 — Post-merge runbook** (NEW, added 2026-05-18). The one-line code fix only repairs FUTURE dispatches; **already-broken bodies in existing dispatched Issues need manual repair via a per-plan `vk apply --yes`**. T2 walks an operator through: (S1) identifying affected plans via a `gh issue list` sweep for `- Blocked by #<small-number>` body patterns, (S2) re-applying each affected plan to emit `IssueBodyChange` mutations that fix the refs, (S3) auditing the bridge log for residual fallback refs across ~3 ticks, (S4) cleaning up wrongly-dispatched VK cards (archive card + remove `vk-synced` so the bridge fresh-dispatches with correct context), (S5) close-out + a CLAUDE.md note that `git tag v<ver>` is part of the version-bump checklist (Phase 1 surfaced that gap too).
+  - **Why depends_on=[1], not [6]**: the original sequencing put Phase 7 at the end to avoid parallel in-flight work. After Phase 1 shipped v2.1.7, a bridge log audit (2026-05-18) revealed broken `Blocked by #1` / `#3` / `#4` refs scattered across multiple recently-dispatched plans across agent-images / superpowers-for-vk / frank. Waiting until end-of-rebuild means weeks of latent bad refs. Re-sequencing to ship right after Phase 1 trades one extra in-flight PR for immediate operator-side relief.
+  - Patch version bump — implementing agent reads current `pyproject.toml::[project].version` immediately before bumping (don't hardcode; depends on what else has shipped in the parallel-with-Phase-2 race).
+  - **Why a phase, not a side-PR**: keeping it inside the rebuild ensures the bug isn't forgotten as cleanup deferred to "later." Phase 1's renderer fix masks the dispatch damage by making label-gating authoritative going forward, but the body-render bug stays latent until this phase ships — any future consumer that body-parses (or any operator who reasons about body content) gets misled.
 
 Each phase is one PR (per the repo's "one phase = one PR" convention). Phase 6 spans both repos and is the only cross-repo phase. Phase 7 is single-repo and orthogonal to the bridge surface.
 
