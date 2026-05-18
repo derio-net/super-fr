@@ -93,7 +93,7 @@ tasks:
   steps:
   - id: P3.T3.S1
     text: |-
-      Failing test C5 in `tests/unit/test_render.py` (existing file).
+      Failing test C5 in `tests/unit/test_v2_render.py` (existing file).
 
       Given a phase with `state.completion.at` set, all steps ticked,
       one merged PR and no open non-draft PRs:
