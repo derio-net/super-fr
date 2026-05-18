@@ -110,7 +110,7 @@ def test_tick_passes_project_id_to_create_issue(tmp_path: Path) -> None:
 
 def test_tick_fails_clean_when_project_id_unset(tmp_path: Path, monkeypatch) -> None:
     """
-    GIVEN no `VK_DERIO_OPS_PROJECT` env (or empty value)
+    GIVEN no `VK_DERIO_OPS_PROJECT_ID` AND no `VK_DERIO_OPS_PROJECT` env
     WHEN  bridge.tick() runs with a vk-ready phase
     THEN  the phase is NOT dispatched (no create_issue call)
     AND   the result carries one failure naming the env var
@@ -120,6 +120,7 @@ def test_tick_fails_clean_when_project_id_unset(tmp_path: Path, monkeypatch) -> 
     from vk.bridge import tick
 
     monkeypatch.delenv("VK_DERIO_OPS_PROJECT", raising=False)
+    monkeypatch.delenv("VK_DERIO_OPS_PROJECT_ID", raising=False)
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir)
@@ -137,6 +138,43 @@ def test_tick_fails_clean_when_project_id_unset(tmp_path: Path, monkeypatch) -> 
     assert result.synced == 0
     assert any("VK_DERIO_OPS_PROJECT" in f or "project_id" in f for f in result.failures), (
         f"expected a project-id failure, got: {result.failures}"
+    )
+
+
+def test_tick_prefers_canonical_id_env_over_legacy(tmp_path: Path, monkeypatch) -> None:
+    """
+    GIVEN `VK_DERIO_OPS_PROJECT_ID` (the K8s-injected canonical name) set
+          AND `VK_DERIO_OPS_PROJECT` (legacy fallback) ALSO set, to a
+          different value
+    WHEN  bridge.tick() runs
+    THEN  create_issue receives the `VK_DERIO_OPS_PROJECT_ID` value
+
+    Pins the K8s manifest's actual env name (`_ID` suffix) as the
+    canonical reader, with the bare-name as a legacy fallback. The pod
+    we deploy to injects `VK_DERIO_OPS_PROJECT_ID` and an earlier wave
+    of this fix mis-read the bare name.
+    """
+    from vk import parse
+    from vk.bridge import tick
+
+    monkeypatch.setenv("VK_DERIO_OPS_PROJECT_ID", "uuid-canonical-from-k8s")
+    monkeypatch.setenv("VK_DERIO_OPS_PROJECT", "uuid-legacy-fallback")
+
+    plan_dir = tmp_path / "plan"
+    _write_plan(plan_dir)
+    plan = parse(plan_dir)
+
+    gh = FakeGhClient()
+    _prep_gh(gh)
+    mcp = FakeMcpClient()
+
+    tick(plan, gh, mcp)
+
+    create_calls = [c for c in mcp.calls if c[0] == "create_issue"]
+    assert len(create_calls) == 1
+    assert create_calls[0][1].get("project_id") == "uuid-canonical-from-k8s", (
+        f"VK_DERIO_OPS_PROJECT_ID must win over the legacy name; got "
+        f"{create_calls[0][1].get('project_id')!r}"
     )
 
 
