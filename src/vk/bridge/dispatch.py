@@ -213,11 +213,19 @@ def dispatch_phase(
     mcp.update_issue(card_id, status="In progress")
 
     repo_id = _resolve_repo_id(mcp, repo)
+    # `issue_id` serves a dual purpose at the server:
+    #   1. VK refuses `start_workspace` without a prompt; passing
+    #      `issue_id` lets VK derive the prompt from the linked card's
+    #      title/description (see `task_attempts.rs::start_workspace`).
+    #   2. VK auto-links the new workspace ↔ card on the server side
+    #      (we still call `link_workspace_issue` below as a no-op safety
+    #      net for any future change to the server-side link path).
     ws = mcp.start_workspace(
         name=f"{plan.meta.plan}-P{phase.phase.number} -> gh#{issue_n}",
         repo_id=repo_id,
         executor="CLAUDE_CODE",
         branch=f"vk/gh-{issue_n}",
+        issue_id=card_id,
     )
     ws_id = _expect_id(ws, "start_workspace", field="workspace_id")
 
