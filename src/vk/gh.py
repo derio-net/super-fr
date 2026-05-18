@@ -300,6 +300,33 @@ _TRANSIENT_PATTERNS = (
 )
 
 
+def _classify_error(stderr: str) -> str:
+    """Classify a `gh` stderr blob for the bridge's retry / backoff logic.
+
+    Returns one of:
+
+    - `"rate_limit"`: 403 with "API rate limit exceeded" — caller should
+      back off the whole tick rather than retrying immediately.
+    - `"info"`: 404 / "Not Found" — the target is gone, not a server
+      problem; caller can treat as success-with-no-op.
+    - `"warn"`: 5xx, network resets, timeouts — transient, may retry.
+    - `"unknown"`: anything else.
+
+    Ported from the legacy bridge's `_classify_gh_error` (concern M).
+    The bridge's I3 guard reads this to decide rate-limit backoff
+    versus raising.
+    """
+    text = (stderr or "").lower()
+    if "403" in text and "rate limit" in text:
+        return "rate_limit"
+    if "404" in text or "not found" in text:
+        return "info"
+    for pat in _TRANSIENT_PATTERNS:
+        if pat in text:
+            return "warn"
+    return "unknown"
+
+
 def is_transient(err: GhError) -> bool:
     """True if the error looks like a transient network/server failure
     that warrants retry. False for auth, 404, validation, and unknown

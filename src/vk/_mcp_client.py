@@ -106,13 +106,25 @@ class VkMcpClient:
             }
         )
 
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+    def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        timeout: float = 30.0,
+    ) -> Any:
         """Call an MCP tool and return the parsed result.
 
         Returns parsed JSON if the result text is valid JSON,
         otherwise returns the raw text string.
 
         Raises VkMcpError if the server returns an error response.
+
+        `timeout` is the per-call read deadline (in seconds). Defaults
+        to 30s — cheap RPC tools (get_issue, list_issues, list_*)
+        should never need more, and a wedged MCP server should fail
+        cheap calls fast. `start_workspace` overrides this to 180s
+        because it's legitimately slow under bridge-fed Longhorn load.
         """
         self._msg_id += 1
         msg_id = self._msg_id
@@ -124,7 +136,7 @@ class VkMcpClient:
                 "params": {"name": name, "arguments": arguments},
             }
         )
-        response = self._recv()
+        response = self._recv(timeout=timeout)
 
         if "error" in response:
             err = response["error"]
@@ -193,6 +205,7 @@ class VkMcpClient:
                 "branch": branch,
                 **kwargs,
             },
+            timeout=180.0,
         )
 
     def list_workspaces(self, **kwargs: Any) -> Any:
