@@ -34,7 +34,13 @@ SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 if [[ "${1:-}" == "--install-bridge" ]]; then
   # Write the cron wrapper that exec's `python -m vk.bridge`. Hidden by
   # design — there is no `vk bridge` public CLI verb.
-  wrapper_path="${VK_BRIDGE_WRAPPER_PATH:-/opt/vk-bridge/run.sh}"
+  # Default to a user-writable path so operators don't need sudo. The
+  # legacy default was /opt/vk-bridge/run.sh — fine for root-owned pod
+  # deployments, but painful for shared-pod setups where the bridge runs
+  # as the same user as the operator (no write access to /opt). Override
+  # with VK_BRIDGE_WRAPPER_PATH=/opt/vk-bridge/run.sh (run via sudo) for
+  # the system-path layout.
+  wrapper_path="${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}"
   mkdir -p "$(dirname "$wrapper_path")"
   # Prefer the active uv tool's interpreter so the wrapper can't pick
   # up a stale system Python that doesn't have vk installed.
