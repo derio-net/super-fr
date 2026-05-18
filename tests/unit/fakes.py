@@ -223,17 +223,25 @@ class FakeMcpClient:
         self._record("create_issue", {"title": title, "description": description, **kw})
         self._next_card_id += 1
         cid = f"card-{self._next_card_id}"
+        # Internal store keeps the full record (with `id`); the wire
+        # response matches real VK:
+        #   create_issue → `{"issue_id": "<uuid>"}`
+        # (see `vibe-kanban-mcp/.../remote_issues.rs::McpCreateIssueResponse`).
         self.issues[cid] = {"id": cid, "title": title, "description": description, "status": "Todo"}
-        return self.issues[cid]
+        return {"issue_id": cid}
 
     def update_issue(self, card_id: str, **changes: Any) -> dict[str, Any]:
         self._record("update_issue", {"card_id": card_id, **changes})
         self.issues.setdefault(card_id, {"id": card_id}).update(changes)
-        return self.issues[card_id]
+        # Wire response shape: `{"issue": {...}}` (wrapped).
+        return {"issue": dict(self.issues[card_id])}
 
     def get_issue(self, card_id: str) -> dict[str, Any] | None:
         self._record("get_issue", {"card_id": card_id})
-        return self.issues.get(card_id)
+        if card_id not in self.issues:
+            return None
+        # Wire response shape: `{"issue": {...}}` (wrapped).
+        return {"issue": dict(self.issues[card_id])}
 
     def list_issues(self, **kw: Any) -> list[dict[str, Any]]:
         self._record("list_issues", {**kw})
@@ -254,6 +262,10 @@ class FakeMcpClient:
         )
         self._next_ws_id += 1
         wid = f"ws-{self._next_ws_id}"
+        # Internal store keeps the full record (with `id`); the wire
+        # response matches real VK:
+        #   start_workspace → `{"workspace_id": "<uuid>"}`
+        # (see `vibe-kanban-mcp/.../task_attempts.rs::StartWorkspaceResponse`).
         self.workspaces[wid] = {
             "id": wid,
             "name": name,
@@ -263,7 +275,7 @@ class FakeMcpClient:
             "archived": False,
             "linked_issue": None,
         }
-        return self.workspaces[wid]
+        return {"workspace_id": wid}
 
     def update_workspace(self, ws_id: str, **changes: Any) -> dict[str, Any]:
         self._record("update_workspace", {"ws_id": ws_id, **changes})
