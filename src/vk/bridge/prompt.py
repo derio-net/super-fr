@@ -13,6 +13,7 @@ slipped through.
 
 from __future__ import annotations
 
+from vk._urls import parse_issue_url
 from vk.parser import Plan
 from vk.types import PhaseDoc
 
@@ -42,10 +43,11 @@ def _dep_ref(plan: Plan, dep_number: int) -> str:
         if p.phase.number == dep_number:
             url = p.phase.tracking_issue
             if url:
-                # Pull the issue number off the trailing `/issues/<N>`.
-                _, _, tail = url.rpartition("/")
-                if tail.isdigit():
-                    return f"#{tail}"
+                try:
+                    _, issue_n = parse_issue_url(url)
+                except ValueError:
+                    return f"Phase {dep_number}"
+                return f"#{issue_n}"
             return f"Phase {dep_number}"
     return f"Phase {dep_number}"
 
@@ -53,10 +55,11 @@ def _dep_ref(plan: Plan, dep_number: int) -> str:
 def _format_repos(plan: Plan, fallback_repo: str) -> str:
     """Best-effort multi-repo render.
 
-    The legacy bridge had only `parsed.repos[0]` to render. v2 carries a
-    `target_repo` on the plan meta and may grow `extra_repos` later. We
-    always include `target_repo` and fall back to the tracking-issue's
-    repo if meta is empty."""
+    Prefer `plan.meta.target_repo`. Fall back to the tracking-issue's
+    own owner/name so prompts never render `Repos: ` (empty) when meta
+    is sparse — a plan-without-target-repo dispatch is rare but real
+    during early plan-creation flows.
+    """
     meta_repo = getattr(plan.meta, "target_repo", None)
     return meta_repo or fallback_repo
 
@@ -65,9 +68,10 @@ def build_prompt(plan: Plan, phase: PhaseDoc) -> str:
     """Render the agent prompt for one dispatched phase.
 
     Raises:
-        ValueError: if `phase.tracking_issue` is unset — building a
-            prompt for an un-dispatched phase is a programmer error,
-            since the agent has no GH Issue URL to read.
+        ValueError: if `phase.tracking_issue` is unset OR malformed —
+            building a prompt for a non-dispatchable phase is a
+            programmer error, since the agent has no GH Issue URL to
+            anchor on.
     """
     tracking = phase.phase.tracking_issue
     if not tracking:
@@ -75,18 +79,19 @@ def build_prompt(plan: Plan, phase: PhaseDoc) -> str:
             f"phase {phase.phase.number} has no tracking_issue — "
             "cannot build a prompt without an anchoring GH Issue"
         )
-    # Pull issue number off the URL tail. We accept whatever shape parse
-    # gave us — the live bridge never sees malformed URLs because the
-    # writeback path stamps them via `apply()` → `_urls.build_issue_url`.
-    _, _, tail = tracking.rpartition("/")
-    issue_n = tail if tail.isdigit() else "?"
+    # Canonical URL parser; raises ValueError on malformed inputs. The
+    # live bridge never sees malformed URLs because the writeback path
+    # stamps them via `apply()` → `_urls.build_issue_url`, but
+    # propagating the error here surfaces test-fixture mistakes
+    # immediately rather than rendering `gh#?:` and pretending it's OK.
+    repo, issue_n = parse_issue_url(tracking)
 
     preamble = ""
     if phase.phase.depends_on:
         dep_refs = ", ".join(_dep_ref(plan, dep) for dep in phase.phase.depends_on)
         preamble = _DEPS_PREAMBLE_TEMPLATE.format(dep_refs=dep_refs)
 
-    repos = _format_repos(plan, "")
+    repos = _format_repos(plan, repo)
 
     return (
         preamble

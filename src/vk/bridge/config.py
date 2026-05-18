@@ -7,10 +7,10 @@ server-side, but the failure mode is opaque to operators ("workspace
 create returned 500"). Pre-flighting via `list_repos` gives us a
 clean failure-metric reason and keeps Pushgateway counters honest.
 
-`list_repos` is cached per-MCP-client (keyed on `id(mcp)`) so a
-tick that consults the lookup many times only pays one MCP roundtrip.
-The daemon explicitly clears the cache between ticks via
-`clear_repo_cache()`.
+The bridge runs single-MCP-per-process, so the cache is a single
+optional snapshot rather than a per-client dict. `clear_repo_cache()`
+fires once per tick (the daemon — or `vk.bridge.tick` — calls it)
+so config drift propagates without a daemon restart.
 """
 
 from __future__ import annotations
@@ -27,41 +27,49 @@ class _RepoLister(Protocol):
     def list_repos(self) -> Any: ...
 
 
-_cache: dict[int, set[str]] = {}
+# Single-slot cache: `None` means "not yet queried this tick".
+# Earlier revisions used `dict[int, set[str]]` keyed on `id(mcp)`, but
+# `id()` is reused after GC and the bridge only ever holds one MCP
+# client per process anyway — the dict added a collision surface for
+# tests that recycled FakeMcpClient instances without paying for any
+# real flexibility.
+_cache: set[str] | None = None
 
 
 def clear_repo_cache() -> None:
-    """Drop the cached `list_repos` snapshot. The daemon calls this once
-    per tick so config drift propagates."""
-    _cache.clear()
+    """Drop the cached `list_repos` snapshot. The daemon (and tick)
+    call this once per iteration so config drift propagates."""
+    global _cache
+    _cache = None
 
 
 def known_repos(mcp: _RepoLister) -> set[str]:
     """Return the cached set of repo names known to VK.
 
-    On the first call for a given MCP client, performs one `list_repos`
-    roundtrip and caches the result. Accepts both list-of-dicts and
-    dict-wrapped responses (legacy + current wire shapes).
+    On first call after `clear_repo_cache()` (or process start),
+    performs one `list_repos` roundtrip and caches the result.
+    Accepts both list-of-dicts and dict-wrapped responses (legacy +
+    current wire shapes). A `list_repos` failure is logged and
+    cached as the empty set — the bridge then refuses to dispatch
+    until the next tick clears and retries.
     """
-    key = id(mcp)
-    cached = _cache.get(key)
-    if cached is not None:
-        return cached
+    global _cache
+    if _cache is not None:
+        return _cache
     try:
         resp = mcp.list_repos()
     except Exception as e:  # noqa: BLE001 — tick must survive an MCP hiccup
         logger.warning("config: list_repos failed: %s", e)
-        _cache[key] = set()
-        return _cache[key]
+        _cache = set()
+        return _cache
     if resp is None:
         repos: list[Any] = []
     elif isinstance(resp, dict):
         repos = resp.get("repos", resp.get("workspaces", [])) or []
     else:
         repos = resp
-    names = {r["name"] for r in repos if isinstance(r, dict) and isinstance(r.get("name"), str)}
-    _cache[key] = names
-    return names
+    _cache = {r["name"] for r in repos if isinstance(r, dict) and isinstance(r.get("name"), str)}
+    return _cache
 
 
 def is_known_repo(repo: str, mcp: _RepoLister) -> bool:

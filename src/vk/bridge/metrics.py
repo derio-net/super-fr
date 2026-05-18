@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import urllib.error
 import urllib.request
 
 __all__ = ["push_failure_total", "push_heartbeat", "push_sync_total"]
@@ -49,7 +50,10 @@ def _push(text: str) -> None:
         )
         with urllib.request.urlopen(req, timeout=10):
             pass
-    except Exception as e:  # noqa: BLE001 — monitoring outage must not block dispatch
+    except (urllib.error.URLError, OSError, TimeoutError) as e:
+        # Network outages must not block dispatch. Logic bugs in our
+        # exposition formatting (TypeError, ValueError) deliberately
+        # propagate so tests catch them — they're not transient.
         logger.warning("pushgateway push failed: %s", e)
 
 
