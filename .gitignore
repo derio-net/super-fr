@@ -22,3 +22,4 @@ build/
 # scan; ignore both names so it doesn't leak into git status.
 package.json
 package-lock.json
+.claude/worktrees/
