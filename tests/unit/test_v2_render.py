@@ -111,51 +111,76 @@ def test_lifecycle_label_projection(obs_kwargs, expected_label):
     assert result.name == expected_label
 
 
-def test_agentic_phase_complete_when_all_steps_ticked_and_pr_merged():
+def test_agentic_phase_complete_requires_completion_at_and_merged_pr():
+    """Agentic phases need BOTH:
+      - `completion.at` set (agent's "I'm done" signal)
+      - merged PR observed + no open linked PR (operator's "I accepted" signal)
+    Either alone is insufficient. Pre-2026-05-18 the code OR-shortcut on
+    completion.at alone, which closed Issues prematurely when an agent
+    set completion.at before opening its PR.
+    """
     from vk import parse
     from vk.render import _phase_complete
     from vk.states import PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
-    # No PR observed → not complete
-    obs_no_pr = PhaseObservation(
-        issue_state="OPEN",
-        issue_labels=frozenset(),
-        issue_assignees=(),
-        linked_prs=(),
-    )
-    assert _phase_complete(plan.phases[0], obs_no_pr) is False
-
-    # Open PR → not complete (PR still in flight)
-    obs_open_pr = PhaseObservation(
-        issue_state="OPEN",
-        issue_labels=frozenset(),
-        issue_assignees=(),
-        linked_prs=(PrObservation(url="...", state="OPEN", merged=False, draft=False, ci="PASS"),),
-    )
-    assert _phase_complete(plan.phases[0], obs_open_pr) is False
-
-    # Steps ticked + merged PR + no open PR → complete
-    ticked = plan.phases[0].model_copy(
+    p1 = plan.phases[0]
+    # Tick the only step so we isolate the completion.at + PR variables
+    ticked = p1.model_copy(
         update={
-            "state": plan.phases[0].state.model_copy(
+            "state": p1.state.model_copy(
                 update={
                     "steps": {
-                        "P1.T1.S1": plan.phases[0]
-                        .state.steps["P1.T1.S1"]
-                        .model_copy(update={"state": "x"})
+                        "P1.T1.S1": p1.state.steps["P1.T1.S1"].model_copy(update={"state": "x"})
                     }
                 }
             )
         }
     )
+
+    # ── completion.at NOT set ───────────────────────────────────────────
     obs_merged = PhaseObservation(
         issue_state="OPEN",
         issue_labels=frozenset(),
         issue_assignees=(),
         linked_prs=(PrObservation(url="...", state="CLOSED", merged=True, draft=False, ci="PASS"),),
     )
-    assert _phase_complete(ticked, obs_merged) is True
+    # Steps ticked + merged PR but NO completion.at → not complete (was True pre-fix)
+    assert _phase_complete(ticked, obs_merged) is False
+
+    # ── completion.at SET ───────────────────────────────────────────────
+    with_completion_at = ticked.model_copy(
+        update={
+            "state": ticked.state.model_copy(
+                update={
+                    "completion": ticked.state.completion.model_copy(
+                        update={"at": "2026-05-18T12:00:00Z"}
+                    )
+                }
+            )
+        }
+    )
+
+    # completion.at set, NO PR observed → not complete (was True pre-fix; the premature-close bug)
+    obs_no_pr = PhaseObservation(
+        issue_state="OPEN",
+        issue_labels=frozenset(),
+        issue_assignees=(),
+        linked_prs=(),
+    )
+    assert _phase_complete(with_completion_at, obs_no_pr) is False
+
+    # completion.at set, OPEN PR (not merged) → not complete (was True pre-fix; same bug)
+    obs_open_pr = PhaseObservation(
+        issue_state="OPEN",
+        issue_labels=frozenset(),
+        issue_assignees=(),
+        linked_prs=(PrObservation(url="...", state="OPEN", merged=False, draft=False, ci="PASS"),),
+    )
+    assert _phase_complete(with_completion_at, obs_open_pr) is False
+
+    # completion.at set + merged PR + no open PR → complete (the only happy path)
+    assert _phase_complete(with_completion_at, obs_merged) is True
 
 
 def test_manual_phase_complete_requires_completion_at_and_note():
@@ -273,17 +298,24 @@ def test_drift_warning_issue_closed_plan_incomplete():
 
 
 def test_archive_decision_true_when_all_phases_complete():
-    """All phases complete → archive_decision True."""
+    """All phases complete → archive_decision True.
+
+    Per 2026-05-18 fix to `_phase_complete`, agentic phases need BOTH
+    `completion.at` AND a merged PR observed. Manual phases still only
+    need `completion.at` + `completion.note`. So this test now also
+    seeds an observation with a merged PR for each agentic phase.
+    """
     from dataclasses import replace as dc_replace
 
     from vk import parse
     from vk.render import render
-    from vk.states import GhState
+    from vk.states import GhState, PhaseObservation, PrObservation
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
 
     completed_phases = []
+    agentic_observations: dict[int, PhaseObservation] = {}
     for p in plan.phases:
         if p.phase.tag == "manual":
             new_completion = p.state.completion.model_copy(
@@ -291,6 +323,20 @@ def test_archive_decision_true_when_all_phases_complete():
             )
         else:
             new_completion = p.state.completion.model_copy(update={"at": "2026-05-10T12:00:00Z"})
+            agentic_observations[p.phase.number] = PhaseObservation(
+                issue_state="CLOSED",
+                issue_labels=frozenset(),
+                issue_assignees=(),
+                linked_prs=(
+                    PrObservation(
+                        url="https://github.com/x/y/pull/1",
+                        state="CLOSED",
+                        merged=True,
+                        draft=False,
+                        ci="PASS",
+                    ),
+                ),
+            )
         completed_phases.append(
             p.model_copy(
                 update={"state": p.state.model_copy(update={"completion": new_completion})}
@@ -298,7 +344,7 @@ def test_archive_decision_true_when_all_phases_complete():
         )
     new_plan = dc_replace(plan, phases=tuple(completed_phases))
 
-    rendered = render(new_plan, GhState(phases={}))
+    rendered = render(new_plan, GhState(phases=agentic_observations))
     assert rendered.archive_decision is True
 
 

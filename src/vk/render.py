@@ -97,18 +97,26 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
     """Per spec rules.
 
     - Manual phase: requires `completion.at` AND `completion.note`. Steps optional.
-    - Agentic phase: `completion.at` set OR (all steps ticked AND a merged PR
-      observed AND no open linked PR remains).
+    - Agentic phase: requires `completion.at` AND a merged PR observed AND no
+      open linked PR remains. BOTH signals required:
+        - `completion.at` is the agent's "I'm done" signal
+        - merged PR is the operator's "I accepted the work" signal
+      Either alone is insufficient. Setting `completion.at` without a merged
+      PR keeps the Issue OPEN (renderer projects pr-ready when a PR exists,
+      vk-ready otherwise) so the work surfaces correctly until merge.
+
+    Pre-2026-05-18 behavior was `completion.at OR (all_steps_ticked + merged PR)`
+    — the OR shortcut closed Issues prematurely when an agent set
+    `completion.at` before opening its PR. See 2026-05-18 incident
+    (multiple VK-spawned agents skipped `vk apply --yes` to avoid the
+    premature close).
     """
     completion = phase.state.completion
-    all_steps_ticked = all(s.state in ("x", "-") for s in phase.state.steps.values())
 
     if phase.phase.tag == "manual":
         return completion.at is not None and completion.note is not None
 
-    if completion.at is not None:
-        return True
-    if not all_steps_ticked:
+    if completion.at is None:
         return False
     if obs is None:
         return False

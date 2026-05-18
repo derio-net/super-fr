@@ -28,7 +28,7 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
     from vk.apply import apply
     from vk.diff import IssueCreate, RepoLabelEnsure, diff
     from vk.observe import observe
-    from vk.plan_ops import PhaseSpec, create, tick
+    from vk.plan_ops import PhaseSpec, complete_phase, create, tick
     from vk.render import render
 
     # 1. CREATE the plan
@@ -68,8 +68,12 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
 
     plan_ops.set_tracking_issue(plan_dir, 1, new_url)
 
-    # 4. TICK the step
+    # 4. TICK the step + mark phase complete (sets completion.at).
+    # Post 2026-05-18: completion.at is REQUIRED for _phase_complete to fire
+    # for agentic phases — merged PR alone is no longer sufficient (premature
+    # close fix).
     tick(plan_dir, "P1.T1.S1")
+    complete_phase(plan_dir, 1)
 
     # 5. Simulate a merged PR for the phase
     issue_n = int(new_url.rsplit("/", 1)[-1])
