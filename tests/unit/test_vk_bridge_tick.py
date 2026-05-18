@@ -216,10 +216,23 @@ def test_tick_skipped_when_phase_already_vk_synced():
     assert mcp.calls == []
 
 
-def _fresh_plan_on_disk(tmp_path: Path):
-    """Copy v2_plan_minimal into a fresh git repo so tick() can stage writeback."""
+def test_tick_does_not_create_issues_or_write_tracking_issue_back(tmp_path):
+    """Bridge.tick on a fresh plan (tracking_issue=null) must NOT auto-create
+    a GH Issue and must NOT write back to the plan yaml — Issue creation is
+    operator-only (via `vk apply --yes`). See 2026-05-18 incident
+    (sfv#196-#214 wave 1, sfv#216-#234 wave 2).
+
+    Full BDD coverage for this invariant lives in
+    `tests/integration/test_bridge_no_issue_create.py`; this test pins
+    the writeback contract specifically at the tick callsite.
+    """
     import shutil
     import subprocess
+
+    import yaml
+
+    from vk import parse
+    from vk.bridge import tick
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     subprocess.run(
@@ -231,19 +244,7 @@ def _fresh_plan_on_disk(tmp_path: Path):
     shutil.copytree(FIXTURE, plan_dir)
     subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"], check=True)
-    return plan_dir
 
-
-def test_tick_writes_tracking_issue_back_after_issue_create(tmp_path):
-    """Positive path: bridge.tick on a fresh plan (tracking_issue=null) creates
-    the GH Issue via apply() and writes the URL back into the phase yaml.
-    """
-    import yaml
-
-    from vk import parse
-    from vk.bridge import tick
-
-    plan_dir = _fresh_plan_on_disk(tmp_path)
     plan = parse(plan_dir)
     gh = FakeGhClient()
     mcp = FakeMcpClient()
@@ -251,37 +252,11 @@ def test_tick_writes_tracking_issue_back_after_issue_create(tmp_path):
     tick(plan, gh, mcp)
 
     raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
-    url = raw["phase"]["tracking_issue"]
-    assert url, "writeback must persist the URL into 01.yaml"
+    assert raw["phase"]["tracking_issue"] is None, (
+        "bridge tick must NOT write back tracking_issue — operator-only"
+    )
     create_calls = [c for c in gh.calls if c[0] == "create_issue"]
-    assert len(create_calls) == 1
-    assert url.startswith("https://github.com/")
-
-
-def test_tick_writeback_failure_appended_to_failures_as_string(tmp_path):
-    """If set_tracking_issue raises, TickResult.failures must include a
-    formatted-string entry that names the phase and the error."""
-    import pytest as _pytest
-
-    from vk import parse, plan_ops
-    from vk.bridge import tick
-
-    plan_dir = _fresh_plan_on_disk(tmp_path)
-    plan = parse(plan_dir)
-    gh = FakeGhClient()
-    mcp = FakeMcpClient()
-
-    def boom(*a, **kw):
-        raise plan_ops.PlanEditError("disk full")
-
-    import vk.bridge as bridge_mod
-
-    with _pytest.MonkeyPatch.context() as mp:
-        mp.setattr(bridge_mod.plan_ops, "set_tracking_issue", boom)
-        result = tick(plan, gh, mcp)
-
-    assert result.errors >= 1
-    assert any("disk full" in f and "1" in f for f in result.failures), result.failures
+    assert create_calls == [], f"bridge tick must NOT create Issues; got {len(create_calls)}"
 
 
 def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_synced():

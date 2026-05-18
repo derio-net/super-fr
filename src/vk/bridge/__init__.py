@@ -148,7 +148,12 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
     observed = observe(plan, gh)
     rendered = render(plan, observed)
     d = diff(rendered, observed, plan=plan)
-    apply_result = apply(d, gh, plan=plan)
+    # Issue creation is operator-only (via `vk apply --yes`). The bridge
+    # tick must NEVER auto-create Issues — see 2026-05-18 incident
+    # (sfv#196-#214 and sfv#216-#234). The skip emits a WARNING per
+    # filtered IssueCreate so the operator can see which dispatch work
+    # is pending.
+    apply_result = apply(d, gh, plan=plan, skip_issue_create=True)
     failures: list[str] = [f.error for f in apply_result.failures]
     for phase_n, url in apply_result.created_issues.items():
         try:
