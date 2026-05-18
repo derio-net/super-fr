@@ -85,6 +85,13 @@ def test_no_duplicate_dispatch_implementations():  # B2
     Walks `src/` directly rather than shelling out to `git grep` so the
     guard catches new files that haven't been staged yet (the most
     likely place a duplicate would first appear).
+
+    Limits (intentional): the substring match catches direct attribute
+    access (`mcp.create_issue(...)`) but not `getattr(mcp, "create_issue")(...)`
+    — if someone deliberately routes around the guard via getattr they're
+    explicitly opting out. The match is also structural, not semantic:
+    a future `gh.start_workspace(...)` (different client, same method name)
+    would be flagged. Acceptable for the regression-guard intent.
     """
     chain = (
         ".create_issue(",
@@ -100,5 +107,9 @@ def test_no_duplicate_dispatch_implementations():  # B2
         if all(call in content for call in chain):
             culprits.append(str(py.relative_to(src_root.parent)))
     assert culprits == ["src/vk/bridge/dispatch.py"], (
-        f"Dispatch sequence appears in unexpected files: {culprits}"
+        f"Dispatch sequence appears in unexpected files: {culprits}. "
+        f"If you intentionally changed the dispatch contract (e.g. removed "
+        f"a call from dispatch_phase), update the `chain` tuple at the top "
+        f"of this test. Otherwise, fold the duplicate call site into "
+        f"vk.bridge.dispatch."
     )

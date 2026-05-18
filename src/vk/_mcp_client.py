@@ -158,6 +158,9 @@ class VkMcpClient:
     def get_issue(self, issue_id: str) -> Any:
         return self.call_tool("get_issue", {"issue_id": issue_id})
 
+    def delete_issue(self, issue_id: str) -> Any:
+        return self.call_tool("delete_issue", {"issue_id": issue_id})
+
     def list_issues(self, **kwargs: Any) -> Any:
         return self.call_tool("list_issues", {**kwargs})
 
@@ -172,7 +175,15 @@ class VkMcpClient:
     ) -> Any:
         # `repo` is a single owner/name; the VK MCP server expects a list at
         # the `repositories` key. Translate at the Python layer so callers
-        # don't have to wrap a single repo themselves.
+        # don't have to wrap a single repo themselves. Block the `repositories`
+        # kwarg explicitly so a stray `repositories=[...]` in **kwargs can't
+        # silently override the translated list (the spread order would let
+        # it win — refuse the ambiguity instead).
+        if "repositories" in kwargs:
+            raise TypeError(
+                "start_workspace: pass repo='owner/name' (singular); "
+                "the repositories list is built internally"
+            )
         return self.call_tool(
             "start_workspace",
             {

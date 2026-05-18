@@ -173,6 +173,18 @@ class FakeMcpClient:
     The surface deliberately matches the calling convention
     `vk.bridge.dispatch.dispatch_phase` uses against the real client —
     keyword-only on the methods where the wire payload is structured.
+
+    Recording layer
+    ---------------
+    Calls are recorded at the **Python API layer**, NOT the wire layer.
+    For example, `start_workspace(repo="owner/repo", ...)` is recorded
+    as `("start_workspace", {"repo": "owner/repo", ...})`, but the real
+    `VkMcpClient` translates that to `{"repositories": ["owner/repo"], ...}`
+    on the JSON-RPC wire. Tests asserting against wire-shape (key
+    `repositories`, key `issue_id`) should use the `_FakeVkMcpClient`
+    fixture in `test_mcp_client.py` and inspect `._sent`. Tests
+    asserting that dispatch CALLED the right methods with the right
+    Python-level args belong here.
     """
 
     def __init__(self, fail_on_call: int | None = None) -> None:

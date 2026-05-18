@@ -40,9 +40,12 @@ class _FakeVkMcpClient(VkMcpClient):
     def _send(self, msg: dict[str, Any]) -> None:
         self._sent.append(msg)
 
-    def _recv(self, timeout: float = 5.0) -> dict[str, Any]:
+    def _recv(self, timeout: float = 0.1) -> dict[str, Any]:
+        # Default override: tests never wait on real I/O, so a tight
+        # timeout fails fast on missing queue setup. Honors the caller-
+        # supplied timeout if non-default, for parity with the parent.
         try:
-            return self._responses.get(timeout=0.1)
+            return self._responses.get(timeout=timeout)
         except queue.Empty:
             raise TimeoutError("No response queued")
 
@@ -186,3 +189,28 @@ def test_get_issue():
     args = client._sent[0]["params"]["arguments"]
     assert args["issue_id"] == "issue-1"
     assert result["title"] == "Test"
+
+
+def test_delete_issue():
+    """Parity with upstream agent-images surface — the wire protocol
+    contract preserves delete_issue even though dispatch doesn't use it."""
+    client = _client_with('{"deleted": true}')
+    client.delete_issue("issue-1")
+    args = client._sent[0]["params"]["arguments"]
+    assert client._sent[0]["params"]["name"] == "delete_issue"
+    assert args["issue_id"] == "issue-1"
+
+
+def test_start_workspace_rejects_repositories_kwarg_collision():
+    """Block ambiguity: if a caller passes both `repo=` and
+    `repositories=` in kwargs, the spread-last semantics would silently
+    let kwargs win. Raise instead so the bug surfaces at call site."""
+    client = _client_with('{"id": "ws-1"}')
+    with pytest.raises(TypeError, match="repositories list is built internally"):
+        client.start_workspace(
+            name="my-ws",
+            repo="owner/repo",
+            executor="CLAUDE_CODE",
+            branch="vk/gh-1",
+            repositories=["other/repo"],
+        )

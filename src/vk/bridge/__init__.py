@@ -18,13 +18,12 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from vk import plan_ops
 from vk._mcp_client import VkMcpClient
 from vk._urls import parse_issue_url
 from vk.apply import apply
-from vk.bridge.dispatch import dispatch_phase
+from vk.bridge.dispatch import MCPDispatch, dispatch_phase
 from vk.diff import diff
 from vk.ghclient import GhClient
 from vk.labels import VK_READY, VK_SYNCED
@@ -115,7 +114,7 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
     return out
 
 
-def tick(plan: Plan, gh: GhClient, vk_mcp: Any) -> TickResult:
+def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
     """One cron iteration for a single plan.
 
     Pipeline: observe → render → diff → apply (GH-side only) → for each
