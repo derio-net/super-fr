@@ -1,35 +1,25 @@
 """Unit tests for `vk.bridge.tick`.
 
-Every test uses `FakeGhClient` + a hand-rolled stub VkMcpClient so the
-test never touches gh or MCP. The plan structure comes from the minimal
-v2 fixture; we attach a `tracking_issue` via dataclass copies so the
+Every test uses `FakeGhClient` + `FakeMcpClient` so the test never
+touches gh or MCP. The plan structure comes from the minimal v2
+fixture; we attach a `tracking_issue` via pydantic copies so the
 phase looks dispatched.
+
+Phase 2 of the v2 bridge rebuild routed the per-phase MCP work
+through `vk.bridge.dispatch.dispatch_phase` — the assertions below
+reflect the new call surface (create_issue + update_issue + list_repos
++ start_workspace + link_workspace_issue) rather than the legacy
+single `create_card` call.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from dataclasses import replace as dc_replace
 from pathlib import Path
-from typing import Any
+
+from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
-
-
-@dataclass
-class StubMcpClient:
-    create_calls: list[dict[str, Any]] = field(default_factory=list)
-    update_calls: list[dict[str, Any]] = field(default_factory=list)
-    fail_create: bool = False
-
-    def create_card(self, *, title: str, body: str, issue_url: str) -> str:
-        self.create_calls.append({"title": title, "body": body, "issue_url": issue_url})
-        if self.fail_create:
-            raise RuntimeError("mcp create failure")
-        return "card-123"
-
-    def update_card(self, *, card_id: str, status: str) -> None:
-        self.update_calls.append({"card_id": card_id, "status": status})
 
 
 def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: int = 42):
@@ -51,23 +41,17 @@ def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: i
 
 
 def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
-    from tests.unit.fakes import FakeGhClient
     from vk.bridge import TickResult, tick
-
-    plan, repo, n = _dispatched_plan()
-    gh = FakeGhClient()
-    # Issue exists, vk-ready, NOT yet vk-synced. Body matches what render
-    # will produce so apply() emits no body-change mutation.
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
-    # Pre-populate the body so the diff doesn't churn it (apply correctness
-    # is exercised in test_v2_apply; here we focus on the MCP sync step).
     from vk.observe import observe
     from vk.render import render
 
+    plan, repo, n = _dispatched_plan()
+    gh = FakeGhClient()
+    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    mcp = StubMcpClient()
+    mcp = FakeMcpClient()
 
     result = tick(plan, gh, mcp)
 
@@ -77,10 +61,21 @@ def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
     assert result.skipped == 0
     assert result.failures == ()
 
-    assert len(mcp.create_calls) == 1
-    call = mcp.create_calls[0]
-    assert call["issue_url"] == f"https://github.com/{repo}/issues/{n}"
-    assert call["title"] == plan.phases[0].phase.title
+    # dispatch_phase emits the full sequence; assert that the canonical
+    # five names appear (order is fixed by the dispatch implementation).
+    names = [c[0] for c in mcp.calls]
+    assert names[:5] == [
+        "create_issue",
+        "update_issue",
+        "list_repos",
+        "start_workspace",
+        "link_workspace_issue",
+    ]
+    (create_call,) = [c for c in mcp.calls if c[0] == "create_issue"]
+    args = create_call[1]
+    assert args["title"] == f"gh#{n}: [{repo}]"
+    # description includes the tracking URL
+    assert f"https://github.com/{repo}/issues/{n}" in args["description"]
 
     label_calls = [c for c in gh.calls if c[0] == "edit_issue_labels"]
     add_calls = [c for c in label_calls if "vk-synced" in c[1]["add"]]
@@ -90,10 +85,9 @@ def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
 
 
 def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
-    """If MCP create_card raises, the bridge MUST NOT add `vk-synced` —
+    """If dispatch_phase raises, the bridge MUST NOT add `vk-synced` —
     otherwise the failure would silently strand the phase on the next tick.
     """
-    from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
     from vk.render import render
@@ -104,14 +98,16 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    mcp = StubMcpClient(fail_create=True)
+    # Fail on the first MCP call (create_issue) — dispatch_phase aborts
+    # before link_workspace_issue, and tick must NOT add vk-synced.
+    mcp = FakeMcpClient(fail_on_call=0)
 
     result = tick(plan, gh, mcp)
 
     assert result.synced == 0
     assert result.errors == 1
     assert len(result.failures) == 1
-    assert "mcp create failure" in result.failures[0]
+    assert "injected MCP failure" in result.failures[0]
     assert f"phase {plan.phases[0].phase.number}" in result.failures[0]
 
     add_calls = [c for c in gh.calls if c[0] == "edit_issue_labels" and "vk-synced" in c[1]["add"]]
@@ -127,7 +123,6 @@ def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
     apply-side failure shape (the label-ensure is always emitted first
     when a plan has any managed labels).
     """
-    from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
     from vk.render import render
@@ -144,7 +139,7 @@ def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
     # apply returns) free to land.
     gh.fail_on_mutation = 0
 
-    mcp = StubMcpClient()
+    mcp = FakeMcpClient()
     result = tick(plan, gh, mcp)
 
     assert result.synced == 1
@@ -158,7 +153,6 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     """An assigned phase projects `in-progress` (not `vk-ready`) — the
     bridge gates on the rendered lifecycle, not stale observed labels,
     so a phase claimed mid-tick is correctly skipped."""
-    from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
     from vk.render import render
@@ -177,7 +171,7 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    mcp = StubMcpClient()
+    mcp = FakeMcpClient()
     result = tick(plan, gh, mcp)
 
     rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
@@ -186,14 +180,13 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     assert result.synced == 0
     assert result.skipped == 1
     assert result.errors == 0
-    assert mcp.create_calls == []
+    assert mcp.calls == []
 
 
 def test_tick_skipped_when_phase_already_vk_synced():
     """vk-ready + vk-synced means the previous tick already created the
     card — leave it alone. Render preserves `vk-synced` from observed
     so the gate sees it on the projected side."""
-    from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
     from vk.render import render
@@ -206,12 +199,12 @@ def test_tick_skipped_when_phase_already_vk_synced():
 
     rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
     assert "vk-synced" in rlabel_names  # preservation
-    mcp = StubMcpClient()
+    mcp = FakeMcpClient()
     result = tick(plan, gh, mcp)
 
     assert result.synced == 0
     assert result.skipped == 1
-    assert mcp.create_calls == []
+    assert mcp.calls == []
 
 
 def _fresh_plan_on_disk(tmp_path: Path):
@@ -238,21 +231,19 @@ def test_tick_writes_tracking_issue_back_after_issue_create(tmp_path):
     """
     import yaml
 
-    from tests.unit.fakes import FakeGhClient
     from vk import parse
     from vk.bridge import tick
 
     plan_dir = _fresh_plan_on_disk(tmp_path)
     plan = parse(plan_dir)
     gh = FakeGhClient()
-    mcp = StubMcpClient()
+    mcp = FakeMcpClient()
 
     tick(plan, gh, mcp)
 
     raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
     url = raw["phase"]["tracking_issue"]
     assert url, "writeback must persist the URL into 01.yaml"
-    # Cross-check against what FakeGhClient returned to apply()
     create_calls = [c for c in gh.calls if c[0] == "create_issue"]
     assert len(create_calls) == 1
     assert url.startswith("https://github.com/")
@@ -263,14 +254,13 @@ def test_tick_writeback_failure_appended_to_failures_as_string(tmp_path):
     formatted-string entry that names the phase and the error."""
     import pytest as _pytest
 
-    from tests.unit.fakes import FakeGhClient
     from vk import parse, plan_ops
     from vk.bridge import tick
 
     plan_dir = _fresh_plan_on_disk(tmp_path)
     plan = parse(plan_dir)
     gh = FakeGhClient()
-    mcp = StubMcpClient()
+    mcp = FakeMcpClient()
 
     def boom(*a, **kw):
         raise plan_ops.PlanEditError("disk full")
@@ -299,7 +289,6 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     Together: a Plan B (agent-images) bridge running on a busy repo
     must not duplicate cards and must not undo its own sync state.
     """
-    from tests.unit.fakes import FakeGhClient
     from vk.bridge import tick
     from vk.observe import observe
     from vk.render import render
@@ -311,10 +300,10 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    mcp = StubMcpClient()
+    mcp = FakeMcpClient()
     result = tick(plan, gh, mcp)
 
     assert result.synced == 0  # no duplicate
-    assert mcp.create_calls == []
+    assert mcp.calls == []
     # vk-synced must survive the apply() in this tick.
     assert "vk-synced" in gh.issues[(repo, n)].labels

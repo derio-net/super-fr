@@ -4,9 +4,12 @@ The bridge daemon (`agent-images/kali/scripts/vk-issue-bridge.py`) consumes
 these functions. They are intentionally NOT wired into the `vk` CLI — see
 spec §"Bridge integration".
 
-`VkMcpClient` is a Protocol describing the subset of the live MCP client
-the bridge needs; the library never instantiates one. The live
-implementation lives in `agent-images/kali/scripts/vk_mcp_client.py`.
+`VkMcpClient` is re-exported from `vk._mcp_client` for backwards
+compatibility with the cross-repo bridge daemon. The per-phase MCP
+dispatch sequence is funnelled through
+`vk.bridge.dispatch.dispatch_phase` — see that module for the canonical
+chain of MCP calls. Test B2 enforces single-source by failing if the
+full chain appears in any other module under `src/`.
 """
 
 from __future__ import annotations
@@ -15,11 +18,13 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any
 
 from vk import plan_ops
+from vk._mcp_client import VkMcpClient
 from vk._urls import parse_issue_url
 from vk.apply import apply
+from vk.bridge.dispatch import dispatch_phase
 from vk.diff import diff
 from vk.ghclient import GhClient
 from vk.labels import VK_READY, VK_SYNCED
@@ -51,19 +56,6 @@ class TickResult:
     errors: int = 0
     skipped: int = 0
     failures: tuple[str, ...] = ()
-
-
-class VkMcpClient(Protocol):
-    """Subset of the MCP client surface the bridge needs.
-
-    The live implementation lives in agent-images/kali/scripts/
-    vk_mcp_client.py; we only describe what we call here so tests
-    can stub it without dragging the MCP wire format in.
-    """
-
-    def create_card(self, *, title: str, body: str, issue_url: str) -> str: ...
-
-    def update_card(self, *, card_id: str, status: str) -> None: ...
 
 
 def _repo_checkout_root(repo: str) -> Path:
@@ -123,24 +115,23 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
     return out
 
 
-def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
+def tick(plan: Plan, gh: GhClient, vk_mcp: Any) -> TickResult:
     """One cron iteration for a single plan.
 
-    Pipeline: observe → render → diff → apply (GH-side only) → sync VK
-    board cards for phases whose **rendered** labels say they're
-    `vk-ready` but not yet `vk-synced`. The gate runs against the
-    projected label set (`rendered.issue_per_phase[N].labels`), not the
-    pre-apply observation: if an agent claimed the Issue between dispatch
-    and this tick, the renderer projects `in-progress` (no `vk-ready`)
-    and the bridge correctly skips. `vk-synced` is preserved by the
-    renderer from observed labels (see `render.py`) so the gate stays
-    accurate after the first successful sync.
+    Pipeline: observe → render → diff → apply (GH-side only) → for each
+    phase whose **rendered** labels say it's `vk-ready` but not yet
+    `vk-synced`, delegate to `vk.bridge.dispatch.dispatch_phase` to
+    create the VK card + workspace, then flip `vk-synced` on the GH
+    Issue. The gate runs against the projected label set, not the
+    pre-apply observation: an agent claiming the Issue between dispatch
+    and this tick projects `in-progress` (no `vk-ready`), and the
+    bridge correctly skips.
 
     GH-side `apply()` failures are accumulated rather than raised — they
     don't block per-phase VK syncs for phases whose projected state is
-    still ready. Per-phase MCP failures are likewise accumulated; if
-    `create_card` raises, `vk-synced` is NOT added, so the next tick
-    retries.
+    still ready. Per-phase dispatch failures are likewise accumulated;
+    if `dispatch_phase` raises, `vk-synced` is NOT added, so the next
+    tick retries.
 
     Returns `skipped=1` when this plan had no phases eligible for sync
     so the cron caller can distinguish "nothing to do" from a real
@@ -173,11 +164,7 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: VkMcpClient) -> TickResult:
         eligible += 1
         try:
             issue_repo, issue_number = parse_issue_url(tracking)
-            vk_mcp.create_card(
-                title=phase.phase.title,
-                body=ri.body,
-                issue_url=tracking,
-            )
+            dispatch_phase(plan, phase, vk_mcp)
             gh.ensure_labels(issue_repo, [VK_SYNCED])
             gh.edit_issue_labels(
                 issue_repo,
