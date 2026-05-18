@@ -61,10 +61,15 @@ def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
     assert result.skipped == 0
     assert result.failures == ()
 
-    # dispatch_phase emits the full sequence; assert that the canonical
-    # five names appear (order is fixed by the dispatch implementation).
+    # dispatch_phase emits a fixed five-call sequence. Tick now does
+    # several MCP read-only lookups before dispatching:
+    #   list_workspaces (slot budget) + list_issues (dedup snapshot) +
+    #   list_repos (config repo-known gate).
+    # The dispatch block always starts with create_issue, so slice
+    # from there and assert the remaining sequence.
     names = [c[0] for c in mcp.calls]
-    assert names[:5] == [
+    start = names.index("create_issue")
+    assert names[start : start + 5] == [
         "create_issue",
         "update_issue",
         "list_repos",
@@ -98,9 +103,13 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    # Fail on the first MCP call (create_issue) — dispatch_phase aborts
-    # before link_workspace_issue, and tick must NOT add vk-synced.
-    mcp = FakeMcpClient(fail_on_call=0)
+    # Pre-dispatch tick now issues:
+    #   0 list_workspaces (slot budget)
+    #   1 list_issues (dedup snapshot)
+    #   2 list_repos (config repo-known gate)
+    # so the first create_issue is call #3. Fail there to confirm
+    # dispatch_phase aborts before link_workspace_issue.
+    mcp = FakeMcpClient(fail_on_call=3)
 
     result = tick(plan, gh, mcp)
 
