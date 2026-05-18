@@ -85,8 +85,10 @@ take the PR out of draft.
    vk apply <plan-dir>           # preview the projected mutations
    vk apply <plan-dir> --yes     # push label / state changes
    ```
-   `vk apply` is idempotent and reads the current Issue + linked PR state
-   from gh. Re-running after the PR merges closes the Issue automatically.
+   `vk apply` is idempotent. **Safe to run before your PR merges** —
+   renderer needs BOTH `completion.at` AND a merged PR observed before
+   projecting CLOSED, so this only sets `pr-ready`. Re-run after merge
+   (or let the bridge) to close.
 
 ## Constraints
 
