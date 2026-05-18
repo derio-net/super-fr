@@ -182,6 +182,24 @@ def test_agentic_phase_complete_requires_completion_at_and_merged_pr():
     # completion.at set + merged PR + no open PR → complete (the only happy path)
     assert _phase_complete(with_completion_at, obs_merged) is True
 
+    # completion.at set + merged PR + an unrelated OPEN PR (e.g., follow-up
+    # fix branched off the same Issue) → not complete. `has_open_pr` is a
+    # blocker regardless of whether a merge already happened.
+    obs_merged_plus_open = PhaseObservation(
+        issue_state="OPEN",
+        issue_labels=frozenset(),
+        issue_assignees=(),
+        linked_prs=(
+            PrObservation(url="...", state="CLOSED", merged=True, draft=False, ci="PASS"),
+            PrObservation(url="...", state="OPEN", merged=False, draft=False, ci="PASS"),
+        ),
+    )
+    assert _phase_complete(with_completion_at, obs_merged_plus_open) is False
+
+    # completion.at set + obs is None → not complete (can't verify PR state
+    # without an observation; conservative skip rather than false-True)
+    assert _phase_complete(with_completion_at, None) is False
+
 
 def test_manual_phase_complete_requires_completion_at_and_note():
     from vk import parse
