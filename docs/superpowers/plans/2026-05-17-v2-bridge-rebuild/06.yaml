@@ -209,14 +209,15 @@ state:
       ticked_at: '2026-05-18T12:34:28+00:00'
       note: null
     P6.T5.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-05-18T12:35:38+00:00'
       note: null
     P6.T5.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-05-18T12:35:39+00:00'
+      note: 'post-merge operator action: tag v2.2.0 fires automatically via .github/workflows/auto-tag.yml
+        when the version-bump in pyproject.toml lands on main'
   completion:
-    at: null
+    at: '2026-05-18T12:35:43+00:00'
     note: null
     observed_prs: []
