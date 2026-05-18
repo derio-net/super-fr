@@ -198,7 +198,7 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
     monkeypatch.setattr(
         bridge_cli,
         "_tick",
-        lambda plan, gh, mcp: TickResult(synced=2, errors=0, skipped=1, failures=()),
+        lambda plan, gh, mcp, **kw: TickResult(synced=2, errors=0, skipped=1, failures=()),
     )
 
     class _StubMcp:

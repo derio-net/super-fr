@@ -223,6 +223,19 @@ def main(argv: list[str] | None = None) -> int:
             seen_plans_before = _load_seen_plans()
             seen_plans_after: set[str] = set()
 
+            # VK requires project_id for create_issue / list_issues when the
+            # MCP server isn't inside a workspace context (the cron is exactly
+            # that case). Read once at tick entry and pass through. The empty-
+            # string case is treated as unset so a blank shell export doesn't
+            # silently swallow the failure mode.
+            project_id = os.environ.get("VK_DERIO_OPS_PROJECT") or None
+            if project_id is None:
+                logger.warning(
+                    "[bridge] VK_DERIO_OPS_PROJECT unset — dispatch will be "
+                    "refused for any plan with vk-ready phases (label sync "
+                    "still runs)"
+                )
+
             configured = _configured_repos()
             logger.info(
                 "[bridge] configured repos: %d found at %s",
@@ -266,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
                         plan_slug = plan.dir.name
                         seen_plans_after.add(plan_slug)
                         try:
-                            result = _tick(plan, gh, mcp)
+                            result = _tick(plan, gh, mcp, project_id=project_id)
                             total_plans_ticked += 1
                             total_synced += result.synced
                             total_errors += result.errors
@@ -310,13 +323,13 @@ def main(argv: list[str] | None = None) -> int:
             # by position at the call sites in those modules, so the
             # cast is the cheapest fix.
             try:
-                _pr_state_tick(cast(Any, mcp), {})
+                _pr_state_tick(cast(Any, mcp), {}, project_id=project_id)
             except Exception as e:  # noqa: BLE001
                 logger.exception("bridge: pr_state tick raised: %s", e)
                 _metrics.push_failure_total(reason="pr_state_error")
 
             try:
-                reap_orphans(cast(Any, mcp))
+                reap_orphans(cast(Any, mcp), project_id=project_id)
             except Exception as e:  # noqa: BLE001
                 logger.exception("bridge: reap_orphans raised: %s", e)
                 _metrics.push_failure_total(reason="reap_error")

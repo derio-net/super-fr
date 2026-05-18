@@ -380,7 +380,7 @@ def test_per_plan_exception_does_not_kill_daemon(
 
     ticks: list[str] = []
 
-    def fake_tick(plan: Any, gh: Any, mcp: Any) -> None:
+    def fake_tick(plan: Any, gh: Any, mcp: Any, **kw: Any) -> None:
         ticks.append(plan.dir.name)
         if plan.dir.name == "plan-b":
             raise TimeoutError("simulated MCP timeout for plan-b")

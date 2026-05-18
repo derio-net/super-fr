@@ -56,7 +56,7 @@ def test_lifecycle_hook_invoked_with_issue_url_and_transition(tmp_path, monkeypa
     plan, phase = _phase_with_tracking(repo, issue_n)
     mcp = FakeMcpClient()
 
-    dispatch_phase(plan, phase, mcp)
+    dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
 
     assert log.exists(), "hook script was not invoked"
     recorded = log.read_text().strip()
@@ -76,7 +76,7 @@ def test_lifecycle_hook_not_invoked_when_env_unset(tmp_path, monkeypatch):
     mcp = FakeMcpClient()
 
     # No script set, no external process — dispatch_phase returns cleanly.
-    dispatch_phase(plan, phase, mcp)
+    dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
 
     # Nothing was written anywhere — best we can do is sanity-check that
     # the env stays unset (the absence-of-side-effect is asserted by
@@ -98,7 +98,7 @@ def test_lifecycle_hook_failure_does_not_break_dispatch(tmp_path, monkeypatch, c
     mcp = FakeMcpClient()
 
     # No exception — dispatch swallows the hook failure.
-    result = dispatch_phase(plan, phase, mcp)
+    result = dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
     assert result.card_id  # dispatch completed normally
 
 
