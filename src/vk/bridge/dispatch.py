@@ -10,12 +10,22 @@ sequence in `src/`.
 Wire payload shape:
   - `create_issue`: title = "gh#N: [owner/repo]", description = newline-
     joined (plan, "Phase N/total", phase title, tracking_issue URL).
-  - `update_issue`: status = "In progress".
-  - `start_workspace`: name = "{plan}-P{N} -> gh#{N}",
+    Returns `{"issue_id": "<uuid>"}`.
+  - `update_issue`: status = "In progress". Returns the wrapped
+    `{"issue": {..., "simple_id": "FFE-NNN", ...}}` — the bridge
+    extracts simple_id from here to build the workspace name.
+  - `start_workspace`: name = "{simple_id} -> gh#{N}" (matches legacy
+    convention so `reap_orphans` can match workspace ↔ card by sid),
     `repo_id` = the VK Uuid resolved from the SHORT name (`owner/name`
     → `name` → VK `id`) via `vk.bridge.config.repo_id_for`,
-    executor = CLAUDE_CODE, branch = "vk/gh-{N}".
-  - `link_workspace_issue`: ties the workspace to the card.
+    executor = CLAUDE_CODE, `branch` = the BASE branch ("main") VK
+    forks the workspace branch off, `issue_id` = the freshly-created
+    card so VK derives the workspace prompt from its title/description
+    AND auto-links the workspace to the card. Returns
+    `{"workspace_id": "<uuid>"}`.
+  - `link_workspace_issue`: defensive safety net — VK already
+    auto-linked via `start_workspace.issue_id`, but the explicit call
+    documents the intent and survives any future server-side change.
 
 VK indexes repos by SHORT name (no `owner/`) with the canonical handle
 being the `repo_id` Uuid (see `vibe-kanban-mcp` task_attempts.rs).
@@ -124,6 +134,24 @@ def _resolve_repo_id(mcp: MCPDispatch, repo: str) -> str:
     return repo_id
 
 
+def _extract_simple_id(update_resp: Any) -> str | None:
+    """Pull `simple_id` out of VK's `update_issue` response.
+
+    VK returns `update_issue` wrapped: `{"issue": {"id": ..., "simple_id":
+    "FFE-NNN", ...}}`. The bridge uses `simple_id` as the workspace
+    name's sid prefix so `reap_orphans` can match workspace → card by
+    name. Returns None on an unexpected shape — callers fall back to a
+    plan-slug-derived sid (still visible to operators).
+    """
+    if not isinstance(update_resp, dict):
+        return None
+    inner = update_resp.get("issue")
+    if not isinstance(inner, dict):
+        return None
+    sid = inner.get("simple_id")
+    return sid if isinstance(sid, str) and sid else None
+
+
 def _expect_id(value: Any, op: str, *, field: str = "id") -> str:
     """Extract an id-string from an MCP tool response.
 
@@ -210,7 +238,14 @@ def dispatch_phase(
 
     card = mcp.create_issue(title=title, description=description, project_id=project_id)
     card_id = _expect_id(card, "create_issue", field="issue_id")
-    mcp.update_issue(card_id, status="In progress")
+    # Extract `simple_id` from the wrapped update_issue response so the
+    # workspace name can use it as the sid prefix — matching the legacy
+    # bridge's `{simple_id} -> gh#{N}` convention so `reap_orphans` can
+    # match workspace ↔ card. Falls back to plan-slug-PN if VK somehow
+    # omits simple_id (defensive — operator sees the legacy-shaped name
+    # in that case rather than a crash).
+    update_resp = mcp.update_issue(card_id, status="In progress")
+    simple_id = _extract_simple_id(update_resp) or (f"{plan.meta.plan}-P{phase.phase.number}")
 
     repo_id = _resolve_repo_id(mcp, repo)
     # `issue_id` serves a dual purpose at the server:
@@ -220,11 +255,15 @@ def dispatch_phase(
     #   2. VK auto-links the new workspace ↔ card on the server side
     #      (we still call `link_workspace_issue` below as a no-op safety
     #      net for any future change to the server-side link path).
+    # `branch` is the BASE branch VK forks the new workspace off — see
+    # `task_attempts.rs` which maps `r.branch -> WorkspaceRepoInput.
+    # target_branch`. It must exist in the target repo; passing the
+    # would-be workspace branch (`vk/gh-{N}`) returns 400.
     ws = mcp.start_workspace(
-        name=f"{plan.meta.plan}-P{phase.phase.number} -> gh#{issue_n}",
+        name=f"{simple_id} -> gh#{issue_n}",
         repo_id=repo_id,
         executor="CLAUDE_CODE",
-        branch=f"vk/gh-{issue_n}",
+        branch="main",
         issue_id=card_id,
     )
     ws_id = _expect_id(ws, "start_workspace", field="workspace_id")
