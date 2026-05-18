@@ -1,7 +1,7 @@
 {
     "name": "superpowers-for-vk",
     "description": "VK-aware planning and dispatch skills for Claude Code \u2014 wraps superpowers with VibeKanban integration",
-    "version": "2.1.10",
+    "version": "2.1.11",
     "author": {
         "name": "Ioannis Dermitzakis"
     },

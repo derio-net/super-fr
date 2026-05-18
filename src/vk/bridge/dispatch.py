@@ -25,21 +25,37 @@ from typing import Any, Protocol
 
 from vk._mcp_client import VkMcpError
 from vk._urls import parse_issue_url
+from vk.bridge.lifecycle import invoke_lifecycle_hook
 from vk.parser import Plan
 from vk.types import PhaseDoc
 
-__all__ = ["DispatchResult", "MCPDispatch", "dispatch_phase"]
+__all__ = ["DispatchResult", "MCPDispatch", "build_card_title", "dispatch_phase"]
 
 logger = logging.getLogger(__name__)
 
 
+def build_card_title(repo: str, issue_n: int) -> str:
+    """Canonical card-title format.
+
+    Shared with `vk.bridge.tick` so the pre-dispatch dedup check and the
+    post-dispatch create_issue payload cannot drift. Format pinned by
+    test D2 — `"gh#{n}: [{owner/repo}]"`.
+    """
+    return f"gh#{issue_n}: [{repo}]"
+
+
 class MCPDispatch(Protocol):
-    """Structural surface `dispatch_phase` requires from its MCP client.
+    """Structural surface the bridge requires from its MCP client.
+
+    Covers `dispatch_phase` (create_issue / update_issue / list_repos /
+    start_workspace / link_workspace_issue) plus the read-only helpers
+    `vk.bridge.tick` consults each iteration: `list_workspaces` for the
+    slot budget and `list_issues` for the dedup snapshot.
 
     Both `vk._mcp_client.VkMcpClient` (production) and
     `tests.unit.fakes.FakeMcpClient` (tests) satisfy this Protocol by
     duck-typing — neither has to import or inherit from it. The Protocol
-    exists so mypy can type-check the dispatch implementation itself
+    exists so mypy can type-check the bridge implementation itself
     against a checkable contract, rather than leaving `mcp: Any` and
     letting typos through.
     """
@@ -48,7 +64,11 @@ class MCPDispatch(Protocol):
 
     def update_issue(self, issue_id: str, **kwargs: Any) -> Any: ...
 
+    def list_issues(self, **kwargs: Any) -> Any: ...
+
     def list_repos(self) -> Any: ...
+
+    def list_workspaces(self, **kwargs: Any) -> Any: ...
 
     def start_workspace(
         self,
@@ -132,7 +152,7 @@ def dispatch_phase(plan: Plan, phase: PhaseDoc, mcp: MCPDispatch) -> DispatchRes
         )
     repo, issue_n = parse_issue_url(tracking)
 
-    title = f"gh#{issue_n}: [{repo}]"
+    title = build_card_title(repo, issue_n)
     description = "\n".join(
         [
             plan.meta.plan,
@@ -157,7 +177,10 @@ def dispatch_phase(plan: Plan, phase: PhaseDoc, mcp: MCPDispatch) -> DispatchRes
 
     mcp.link_workspace_issue(ws_id, card_id)
 
-    # Phase 4 will optionally invoke VK_LIFECYCLE_HOOK_SCRIPT here. The
-    # hook point is intentionally a no-op for Phase 2.
+    # D5: notify the operator-configured hook that the phase transitioned
+    # to in-progress. invoke_lifecycle_hook is fire-and-forget — failures
+    # are logged and swallowed so a broken notifier can't undo a card
+    # that has already been created.
+    invoke_lifecycle_hook(tracking, "in-progress")
 
     return DispatchResult(card_id=card_id, workspace_id=ws_id)

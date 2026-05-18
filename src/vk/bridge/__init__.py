@@ -23,7 +23,11 @@ from vk import plan_ops
 from vk._mcp_client import VkMcpClient
 from vk._urls import parse_issue_url
 from vk.apply import apply
-from vk.bridge.dispatch import MCPDispatch, dispatch_phase
+from vk.bridge import config as _config
+from vk.bridge import dedup as _dedup
+from vk.bridge import metrics as _metrics
+from vk.bridge import slots as _slots
+from vk.bridge.dispatch import MCPDispatch, build_card_title, dispatch_phase
 from vk.diff import diff
 from vk.ghclient import GhClient
 from vk.labels import VK_READY, VK_SYNCED
@@ -31,6 +35,7 @@ from vk.observe import observe
 from vk.parser import Plan, PlanSchemaError, parse
 from vk.plan_ops import PlanEditError
 from vk.render import render
+from vk.types import PhaseDoc
 
 __all__ = ["TickResult", "VkMcpClient", "discover_plans", "tick"]
 
@@ -137,6 +142,9 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
     no-op apply. The unit is **plans**, not phases — sum across plans
     to count idle plans, not idle phases.
     """
+    # Fresh repo lookup per tick so config drift propagates.
+    _config.clear_repo_cache()
+
     observed = observe(plan, gh)
     rendered = render(plan, observed)
     d = diff(rendered, observed, plan=plan)
@@ -148,8 +156,7 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
         except (PlanEditError, OSError, PlanSchemaError) as e:
             failures.append(f"phase {phase_n}: writeback failed: {e}")
 
-    synced = 0
-    eligible = 0
+    eligible_phases: list[tuple[PhaseDoc, str, int]] = []
     for phase in plan.phases:
         if phase.phase.number not in observed.phases:
             continue
@@ -157,25 +164,71 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
         tracking = phase.phase.tracking_issue
         if ri is None or not tracking:  # pragma: no cover — defensive guard
             continue
-        rlabels = ri.labels
-        if VK_READY not in rlabels or VK_SYNCED in rlabels:
+        if VK_READY not in ri.labels or VK_SYNCED in ri.labels:
             continue
-        eligible += 1
         try:
             issue_repo, issue_number = parse_issue_url(tracking)
-            dispatch_phase(plan, phase, vk_mcp)
-            gh.ensure_labels(issue_repo, [VK_SYNCED])
-            gh.edit_issue_labels(
-                issue_repo,
-                issue_number,
-                add=frozenset({"vk-synced"}),
-                remove=frozenset(),
-            )
-            synced += 1
-        except Exception as e:  # noqa: BLE001 — one bad MCP call mustn't kill the tick
+        except Exception as e:  # noqa: BLE001 — one malformed URL mustn't kill the tick
             failures.append(f"phase {phase.phase.number}: {e}")
+            continue
+        eligible_phases.append((phase, issue_repo, issue_number))
 
-    skipped = 1 if eligible == 0 else 0
+    synced = 0
+    deferred = 0
+    if eligible_phases:
+        # Slot gate: snapshot active workspaces once per tick, then
+        # decrement the remaining-budget counter as we dispatch.
+        try:
+            budget = max(0, _slots.max_concurrent() - _slots.count_active_ws(vk_mcp))
+        except Exception as e:  # noqa: BLE001 — never let slot-counting break a tick
+            failures.append(f"slot check failed: {e}")
+            budget = _slots.max_concurrent()
+
+        # Dedup snapshot: one list_issues call covers every phase in this plan.
+        try:
+            existing_titles = _dedup.fetch_existing_titles(vk_mcp)
+        except Exception as e:  # noqa: BLE001
+            failures.append(f"dedup fetch failed: {e}")
+            existing_titles = set()
+
+        for phase, issue_repo, issue_number in eligible_phases:
+            # Unknown-repo gate (D4) — dispatch against an unlisted repo
+            # always fails server-side; refuse early with a clean reason.
+            if not _config.is_known_repo(issue_repo, vk_mcp):
+                failures.append(f"phase {phase.phase.number}: unknown repo {issue_repo!r}")
+                _metrics.push_failure_total(reason="unknown_repo")
+                continue
+
+            would_be_title = build_card_title(issue_repo, issue_number)
+            already_dispatched = would_be_title in existing_titles
+
+            if not already_dispatched and budget <= 0:
+                # No slot left — defer this phase to the next tick.
+                deferred += 1
+                continue
+
+            try:
+                if not already_dispatched:
+                    dispatch_phase(plan, phase, vk_mcp)
+                    budget -= 1
+                gh.ensure_labels(issue_repo, [VK_SYNCED])
+                gh.edit_issue_labels(
+                    issue_repo,
+                    issue_number,
+                    add=frozenset({"vk-synced"}),
+                    remove=frozenset(),
+                )
+                synced += 1
+                _metrics.push_sync_total()
+            except Exception as e:  # noqa: BLE001 — one bad MCP call mustn't kill the tick
+                failures.append(f"phase {phase.phase.number}: {e}")
+                _metrics.push_failure_total(reason="mcp_error")
+
+    # `skipped` semantics: number of would-be-dispatched phases left on the
+    # floor this tick. When no phase was eligible at all, return 1 so the
+    # caller can count idle plans (legacy behavior preserved).
+    skipped = deferred if eligible_phases else 1
+    _metrics.push_heartbeat()
     return TickResult(
         synced=synced,
         errors=len(failures),
