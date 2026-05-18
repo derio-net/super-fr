@@ -232,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
                 prev_repos_dir = os.environ.get("VK_REPOS_DIR")
                 os.environ["VK_REPOS_DIR"] = str(repo_path.parent)
                 try:
+
                     def _fetch_plans(r: str = resolved_owner) -> Any:
                         return discover_plans(r, gh)
 

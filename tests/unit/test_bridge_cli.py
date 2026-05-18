@@ -1,34 +1,17 @@
-"""Unit tests for `vk.bridge.cli` — E1, G1, G5.
+"""Unit tests for `vk.bridge.cli` — G1, G5.
 
-Pins the CLI surface (no public `bridge` verb on the `vk` command) and
-the version-stamped tick banner that ships in the first INFO record of
-every tick.
+Pins the version-stamped tick banner that ships in the first INFO
+record of every tick, and that it flows through stdlib `logging`
+rather than bare `print(...)`.
+
+E1 (no public `vk bridge` verb) lives in `test_cli.py` — it asserts
+on the public `vk` CLI surface, not the private bridge module.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-import subprocess
-import sys
-
-
-def test_no_bridge_verb_exposed():  # E1
-    """`vk --help` must NOT advertise a `bridge` subcommand.
-
-    The bridge runs via `python -m vk.bridge` from a wrapper installed
-    by `install.sh --install-bridge`; surfacing it as a public verb
-    would let operators run it ad-hoc and bypass the lock-file guard.
-    """
-    result = subprocess.run(
-        [sys.executable, "-m", "vk", "--help"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-    assert "bridge" not in result.stdout.lower(), (
-        f"`bridge` must not appear in `vk --help`:\n{result.stdout}"
-    )
 
 
 def test_logging_uses_stdlib_logging(caplog):  # G1
