@@ -348,7 +348,7 @@ The gh issue title itself stays unchanged — the renderer still produces `[repo
 
 **Hidden entry:** `python -m vk.bridge` runs `src/vk/bridge/__main__.py` which calls `vk.bridge.cli.main()`. One tick across all configured repos.
 
-**Wrapper script** (`/opt/vk-bridge/run.sh`, written by `install.sh --install-bridge`):
+**Wrapper script** (default: `$HOME/.local/bin/vk-bridge`, written by `install.sh --install-bridge`):
 
 ```bash
 #!/bin/bash
@@ -357,22 +357,22 @@ The gh issue title itself stays unchanged — the renderer still produces `[repo
 exec /opt/vk-bridge-venv/bin/python -m vk.bridge "$@"
 ```
 
-(Path `/opt/vk-bridge/run.sh` is the default; `VK_BRIDGE_WRAPPER_PATH` env var overrides for non-standard deployments.)
+(Default path is `$HOME/.local/bin/vk-bridge` so operators on shared pods don't need sudo. `VK_BRIDGE_WRAPPER_PATH` env var overrides — e.g., `VK_BRIDGE_WRAPPER_PATH=/opt/vk-bridge/run.sh` for root-owned system deployments.)
 
 **install.sh `--install-bridge` flag:**
 
 1. Verify `uv tool install vk` (or `pip install vk`) has already happened.
 2. Resolve the active `vk` Python interpreter path.
-3. Write the wrapper script to `${VK_BRIDGE_WRAPPER_PATH:-/opt/vk-bridge/run.sh}`.
+3. Write the wrapper script to `${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}`.
 4. Print (NOT write) the recommended cron line to stdout for the operator:
    ```
    To schedule the bridge, add to your cron config:
-   */2 * * * * /opt/vk-bridge/run.sh
+   */2 * * * * $HOME/.local/bin/vk-bridge
    ```
 
 The actual crontab edit stays a deployment-time operation — `install.sh` doesn't mess with cron files.
 
-**Cron in agent-images:** kali's supercronic config gets `*/2 * * * * /opt/vk-bridge/run.sh` (replacing today's invocation of `/opt/vk-bridge-venv/bin/python /opt/scripts/vk-issue-bridge.py`).
+**Cron in agent-images:** kali's supercronic config gets `*/2 * * * * $HOME/.local/bin/vk-bridge` (replacing today's invocation of `/opt/vk-bridge-venv/bin/python /opt/scripts/vk-issue-bridge.py`). For root-owned deployments, override with `VK_BRIDGE_WRAPPER_PATH=/opt/vk-bridge/run.sh` and adjust the cron path accordingly.
 
 ## agent-images impact (complete delta)
 
