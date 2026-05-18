@@ -223,10 +223,26 @@ def main(argv: list[str] | None = None) -> int:
             seen_plans_before = _load_seen_plans()
             seen_plans_after: set[str] = set()
 
-            for repo_path in _configured_repos():
+            configured = _configured_repos()
+            logger.info(
+                "[bridge] configured repos: %d found at %s",
+                len(configured),
+                ",".join(str(p) for p in configured) if configured else "(empty)",
+            )
+
+            total_synced = 0
+            total_errors = 0
+            total_skipped = 0
+            total_plans_ticked = 0
+
+            for repo_path in configured:
                 _pull_managed_repo(repo_path)
                 owner_name = _repo_owner_name(repo_path)
                 if owner_name is None:
+                    logger.warning(
+                        "[bridge] repo %s skipped: could not resolve owner/name from git remote",
+                        repo_path,
+                    )
                     continue
                 resolved_owner: str = owner_name
                 prev_repos_dir = os.environ.get("VK_REPOS_DIR")
@@ -238,13 +254,32 @@ def main(argv: list[str] | None = None) -> int:
 
                     discovered = _gh_rate_limit_guard(_fetch_plans)
                     if discovered is None:
+                        # _gh_rate_limit_guard already logged the reason
                         continue
+                    logger.info(
+                        "[bridge] %s: %d discoverable plan(s)%s",
+                        resolved_owner,
+                        len(discovered),
+                        ": " + ", ".join(p.dir.name for p in discovered) if discovered else "",
+                    )
                     for plan in discovered:
                         plan_slug = plan.dir.name
                         seen_plans_after.add(plan_slug)
                         try:
-                            _tick(plan, gh, mcp)
+                            result = _tick(plan, gh, mcp)
+                            total_plans_ticked += 1
+                            total_synced += result.synced
+                            total_errors += result.errors
+                            total_skipped += result.skipped
+                            logger.info(
+                                "[bridge]   %s: synced=%d errors=%d skipped=%d",
+                                plan_slug,
+                                result.synced,
+                                result.errors,
+                                result.skipped,
+                            )
                         except Exception as e:  # noqa: BLE001 — I9 boundary
+                            total_errors += 1
                             logger.exception("bridge: plan %s tick raised; continuing", plan_slug)
                             _metrics.push_failure_total(reason=f"plan_error:{plan_slug}:{e}")
                 finally:
@@ -259,6 +294,14 @@ def main(argv: list[str] | None = None) -> int:
                     missing,
                 )
             _store_seen_plans(seen_plans_after)
+
+            logger.info(
+                "[bridge] summary: %d plan(s) ticked, %d synced, %d errors, %d skipped",
+                total_plans_ticked,
+                total_synced,
+                total_errors,
+                total_skipped,
+            )
 
             # PR state sweep — observations are wired in Phase 6.
             # The Protocol surfaces in pr_state / workspaces use the
