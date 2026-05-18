@@ -101,6 +101,20 @@ class _RealShapeMcp:
             "start_workspace",
             {"name": name, "repo_id": repo_id, "executor": executor, "branch": branch, **kw},
         )
+        # VK's server-side rule (see `task_attempts.rs::start_workspace`):
+        # the workspace MUST have a prompt — pass `prompt=` or pass
+        # `issue_id=` so VK can derive the prompt from the issue's
+        # title/description. Neither → server returns
+        # `{success: False, error: "Provide `prompt`, or `issue_id` ..."}`.
+        # The fake mirrors that so the bridge can't accidentally regress
+        # to neither.
+        if not kw.get("prompt") and not kw.get("issue_id"):
+            return {
+                "success": False,
+                "error": (
+                    "Provide `prompt`, or `issue_id` that has a non-empty title/description."
+                ),
+            }
         self._next_ws += 1
         ws_id = f"ws-uuid-{self._next_ws}"
         self.workspaces[ws_id] = {
@@ -109,6 +123,7 @@ class _RealShapeMcp:
             "repo_id": repo_id,
             "branch": branch,
             "executor": executor,
+            "linked_issue": kw.get("issue_id"),
         }
         # Real VK envelope — no top-level `id`.
         return {"workspace_id": ws_id}
@@ -226,7 +241,13 @@ def test_tick_dispatches_end_to_end_against_real_vk_envelopes(tmp_path: Path) ->
         f"update_issue should reuse create_issue's issue_id; got {update_args!r}"
     )
     assert update_args.get("status") == "In progress"
-    # `start_workspace.workspace_id` must flow into `link_workspace_issue.workspace_id`
+    # `start_workspace` must include `issue_id` so VK can derive a
+    # prompt from the linked issue's title/description (the workspace
+    # would otherwise be rejected with "Provide `prompt`, or `issue_id` ...").
     assert start_args["repo_id"] == TARGET_REPO_ID
+    assert start_args.get("issue_id") == "card-uuid-1", (
+        f"start_workspace must carry issue_id=<card_id>; got {start_args!r}"
+    )
+    # `start_workspace.workspace_id` must flow into `link_workspace_issue.workspace_id`
     assert link_args["workspace_id"] == "ws-uuid-1"
     assert link_args["issue_id"] == "card-uuid-1"
