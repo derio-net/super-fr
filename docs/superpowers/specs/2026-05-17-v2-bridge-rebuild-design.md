@@ -27,6 +27,10 @@ Four bugs trace to the same anti-pattern (critical invariant supposedly owned by
 2. **2026-05-17 stale-checkout incident (#143, frank-#271)** — plans ARE on `origin/main`, but the shared-PV checkout the agents read from never auto-pulls. Agents reported "plan doesn't exist."
 3. **Dependency gating bug (2026-05-17)** — `_lifecycle_label` returns `vk-ready` for every fresh agentic phase regardless of `depends_on`. The renderer's signature literally precludes seeing dependency state. Dep gating works only because the legacy bridge's `check_blockers` body-parses and queries gh independently. **The labels lie. Operators looking at `vk-ready` on a blocked phase have no way to know it's actually blocked.**
 4. **`apply_cmd.py` plan-propagation bug (surfaced 2026-05-17 during this plan's own dispatch)** — `src/vk/commands/apply_cmd.py:222` calls `apply(d, gh)` without `plan=plan`. Without `plan`, `apply()` skips `_rerender_dependent_creates`, so every `IssueCreate` body keeps the phase-number-fallback ref (`- Blocked by #1` instead of `- Blocked by #<actual-issue-N>`). The legacy bridge body-parses `#1`, queries gh, finds a long-closed Issue from an unrelated plan, "satisfies" the dep, and dispatches the wrong phases. **Same anti-pattern again**: the bridge-side path (`src/vk/bridge/__init__.py:153`) DOES pass `plan=`, so the bug only fires on operator-side `vk apply --yes`. Tests cover `apply()` with the kwarg; nobody tested the CLI that calls it. Discovered when this very plan dispatched Phases 2/3/6 ahead of Phase 1. Fixed in Phase 7 (added below).
+5. **2026-05-18 MCP timeout cascade incident (prod)** — 6 VK workspaces stuck `status='running'` forever; bridge log shows `TimeoutError: No response from MCP server within 30.0s` every cycle. Two layered bugs:
+   (a) `vk._mcp_client._recv` defaults `timeout=30.0`, but `start_workspace` under bridge-fed load takes 30–120s (Longhorn-backed PV contention during git worktree creation + `CLAUDE.md` import for 4–5 sibling workspaces). The 30s default fires before vk-local can respond.
+   (b) The Phase 5 daemon (not yet shipped) will iterate plans calling `tick()` for each. `tick()` catches per-phase Exception today (`src/vk/bridge/__init__.py:175`), but a tick-level explosion in any code path before the inner try-block — `observe`, `render`, `diff`, `apply`, or anything the daemon does outside `tick()` itself — would kill the daemon's entire pass over all plans. The legacy bridge's `main()` had the same exposure across N issues (one slow issue killed the rest); the new layering moves the question to "what happens between plans."
+   **Same anti-pattern as #1–#4**: a resilience invariant ("one plan's failure does not prevent other plans from running") with no named owner — until this spec, the only enforcement was the legacy bridge accidentally not crashing on issues it never reached. Root cause (vibe-kanban orphans child processes on client disconnect) is upstream and tracked separately at `derio-net/vibe-kanban#<TBD>`; once the bridge stops disconnecting prematurely the orphan path stops firing in practice. Fixed in Phase 5 via the per-call timeout knob in `vk._mcp_client` and the new per-plan `try/except` boundary in `vk.bridge.cli.main()` (see acceptance tests I2 + I9).
 
 The user observation that triggered this rebuild:
 
@@ -489,6 +493,8 @@ Each invariant gets one owner. If the owner's signature can't enforce the invari
 | "Plan + spec are reachable to dispatch consumers" | `vk.commands.apply_cmd._check_plan_reachable_on_origin_head` (already shipped) | Plan + repo_root |
 | "Per-phase mutations route to the phase's `tracking_issue` repo (not `target_repo`)" | `vk.diff` (existing per-issue routing at `diff.py:134-171`) + `vk.bridge.dispatch` (workspace branch repo) | The full `Plan` object (so each emitter can resolve per-phase repos) |
 | "Repo-wide concerns (label ensure) group by destination repo" | `vk.diff` (one `RepoLabelEnsure` per distinct destination repo, union of managed labels) | `Plan` + projected labels per phase |
+| "One plan's failure does not prevent other plans from running in the same daemon pass" | `vk.bridge.cli.main()` per-plan `try/except Exception` boundary around the `tick() + push_metrics()` pair | The plan list from `discover_plans()` |
+| "`start_workspace` MCP call gets enough time to complete under bridge-fed Longhorn load" | `vk._mcp_client.VkMcpClient.start_workspace` (passes `timeout=180.0` to `call_tool`) — cheap RPC tools keep the 30s default | The per-call `timeout` kwarg on `call_tool` / `_recv` |
 
 ## Verification checklist (apply during execution)
 
@@ -1318,7 +1324,11 @@ def test_bridge_exits_loud_when_mcp_subprocess_fails_to_start(monkeypatch):
 #### I2: MCP subprocess crash mid-tick → tick aborts cleanly
 <!-- implementation: Phase 5 -->
 
-**Location:** `tests/integration/test_bridge_resilience.py::test_tick_aborts_cleanly_on_mcp_subprocess_death`
+**Locations** (one BDD heading, three tests in two files):
+
+- `tests/integration/test_bridge_resilience.py::test_tick_aborts_cleanly_on_mcp_subprocess_death` (original)
+- `tests/integration/test_bridge_resilience.py::test_tick_continues_when_one_phase_times_out` (TimeoutError sub-case, NEW for 2026-05-18 incident — exercises the in-tick per-phase guard)
+- `tests/unit/test_mcp_client_timeout.py::test_start_workspace_uses_180s_timeout` (NEW for 2026-05-18 incident — unit-tests the `vk._mcp_client` timeout knob that prevents the incident from firing in the first place)
 
 ```python
 def test_tick_aborts_cleanly_on_mcp_subprocess_death(monkeypatch):
@@ -1331,6 +1341,43 @@ def test_tick_aborts_cleanly_on_mcp_subprocess_death(monkeypatch):
     AND   a failure metric is pushed with reason='mcp_subprocess_died'
     AND   no GH labels were added that the workspace creation didn't finish
     (Next tick re-runs from a clean state.)
+    """
+
+def test_tick_continues_when_one_phase_times_out(monkeypatch):
+    """
+    GIVEN a plan with three vk-ready phases and a FakeMcpClient whose
+          start_workspace raises TimeoutError for phase 2 but succeeds
+          for phases 1 and 3
+    WHEN  vk.bridge.tick() processes all three phases
+    THEN  phases 1 and 3 are dispatched AND gain vk-synced
+    AND   phase 2 appears in TickResult.failures with the TimeoutError text
+    AND   tick() does NOT re-raise (the existing per-phase `except Exception`
+          guard at src/vk/bridge/__init__.py:175 must catch TimeoutError,
+          not just BrokenPipeError / CalledProcessError)
+    (Empirically observed 2026-05-18: legacy bridge died on the first slow
+    start_workspace, orphaning sibling phases that had nothing wrong with
+    them. The new per-phase boundary must explicitly cover TimeoutError —
+    `start_workspace` is legitimately slow under bridge-fed Longhorn load
+    and `TimeoutError` is its expected failure mode, not an anomaly.)
+    """
+
+def test_start_workspace_uses_180s_timeout(monkeypatch):
+    """
+    GIVEN a real VkMcpClient with `_recv` monkeypatched to record the
+          timeout it's called with
+    WHEN  client.start_workspace(name=..., repo=..., executor=..., branch=...)
+          is invoked
+    THEN  the recorded timeout for the start_workspace call is 180.0
+    AND   a separate client.get_issue(...) call records 30.0 (default
+          unchanged)
+    AND   client.call_tool('custom', {}, timeout=5.0) records 5.0
+          (explicit override wins over both defaults)
+    (Cheap RPC tools — get_issue, list_issues, list_workspaces — stay
+    snappy on a wedged MCP server. The one slow operation declares its
+    own timeout in code, so the next reader doesn't have to know
+    `start_workspace` can take 2 minutes. Per-call beats blanket bump
+    because a wedged server would otherwise wait 3 minutes on every
+    cheap call.)
     """
 ```
 
@@ -1450,6 +1497,36 @@ def test_concurrent_apply_and_tick_are_idempotent():
     AND   no Issue ends up with conflicting state
     (Both paths use the same render → diff → apply chain; apply() is
     idempotent by construction. This test is a regression guard.)
+    """
+```
+
+#### I9: One plan's tick raising does not kill the daemon
+<!-- implementation: Phase 5 -->
+
+**Location:** `tests/integration/test_bridge_resilience.py::test_per_plan_exception_does_not_kill_daemon`
+
+```python
+def test_per_plan_exception_does_not_kill_daemon(monkeypatch):
+    """
+    GIVEN three discoverable plans (A, B, C) and a monkeypatched
+          vk.bridge.tick that raises TimeoutError for plan B but succeeds
+          for A and C
+    WHEN  vk.bridge.cli.main() runs one daemon pass over discover_plans()
+    THEN  tick was called for all three plans (B's exception did NOT abort
+          the daemon's iteration over the plan list)
+    AND   plan A and plan C produced their TickResult metrics
+    AND   a failure metric was pushed for plan B with the plan slug AND
+          reason=str(exception)
+    AND   the daemon exits 0 (the per-plan guard converts the exception to
+          a metric, not a process exit)
+    (The per-phase guard inside tick() catches dispatch-layer failures —
+    that's what I2 covers. The per-plan guard here catches anything that
+    bypasses tick's inner try-block: observe/render/diff/apply raising on
+    malformed plan state, metric-push throwing, or any non-tick() code in
+    the daemon loop. Two layers, two failure-mode categories. Without
+    this guard, a single plan with a corrupt _meta.yaml could prevent
+    every other plan in every other repo from being dispatched until an
+    operator notices.)
     """
 ```
 

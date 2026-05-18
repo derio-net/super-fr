@@ -139,11 +139,11 @@ tasks:
 
       Run: E4 GREEN.
 - number: 3
-  title: Resilience guards (I1, I2, I3, I4, I6)
+  title: Resilience guards (I1, I2, I3, I4, I6, I9) + MCP timeout knob
   steps:
   - id: P5.T3.S1
     text: |-
-      Failing tests I1, I2, I3, I4, I6 in
+      Failing tests I1, I2, I3, I4, I6, I9 in
       `tests/integration/test_bridge_resilience.py` (append to existing
       file from Phase 1).
 
@@ -151,12 +151,23 @@ tasks:
       names binary + install fix.
       I2: MCP subprocess dies mid-tick → tick aborts cleanly, metric
       pushed.
+      I2 (TimeoutError sub-case, NEW for 2026-05-18 incident):
+      `test_tick_continues_when_one_phase_times_out` — plan with three
+      vk-ready phases; FakeMcpClient.start_workspace raises TimeoutError
+      for phase 2; assert phases 1 and 3 are dispatched, phase 2
+      surfaces in TickResult.failures, tick() does not re-raise.
       I3: gh returns 403 rate-limit → backoff, no MCP mutations, metric.
       I4: lock file at `/var/run/vk-bridge.lock` (or VK_BRIDGE_LOCK_PATH)
       → second concurrent invocation exits 0 with 'tick already in
       progress'.
       I6: plan disappears between ticks → cards left intact, single
       warning logged.
+      I9 (NEW for 2026-05-18 incident):
+      `test_per_plan_exception_does_not_kill_daemon` — three discoverable
+      plans (A, B, C); monkeypatch `vk.bridge.tick` to raise TimeoutError
+      for plan B; assert tick was invoked for all three, A and C produced
+      TickResult metrics, failure metric pushed for plan B with reason,
+      daemon exits 0.
 
       Run: red.
   - id: P5.T3.S2
@@ -171,6 +182,13 @@ tasks:
 
       - I2: Catch `BrokenPipeError` / `subprocess.CalledProcessError` in
         the tick loop. Push failure metric, return cleanly.
+
+      - I2 (TimeoutError sub-case): NO code change needed. The existing
+        `except Exception as e` guard at
+        `src/vk/bridge/__init__.py:175` already catches TimeoutError
+        (TimeoutError is a subclass of Exception). The new test pins
+        this behaviour against regressions — if anyone tightens the
+        guard to a narrower exception type in future, the test fails.
 
       - I3: In the gh-call wrapper, detect 403 + 'rate limit'. Log
         backoff, return early. Metric. Use the new `_classify_error`
@@ -187,6 +205,16 @@ tasks:
         review"`. Maintain a `_seen_plans.json` sidecar in
         `~/.willikins-agent/` (or similar) to track previously-seen
         plans across ticks. Do NOT auto-archive.
+
+      - I9: In `vk.bridge.cli.main()`, the loop that iterates
+        `discover_plans()` wraps its per-plan body in
+        `try/except Exception`. On exception: `logger.exception(...)`,
+        push failure metric with `plan=plan.dir.name` and
+        `reason=str(e)`, then `continue` to the next plan. Do NOT
+        re-raise. This is the OUTER boundary; `tick()`'s inner per-phase
+        guard handles dispatch-layer failures, this catches anything that
+        bypasses the inner try-block (observe/render/diff/apply raising,
+        metric push throwing, or any non-tick() code in the daemon loop).
 
       Run: `uv run pytest tests/integration/test_bridge_resilience.py -x --no-cov`
       Expect: GREEN.
@@ -218,6 +246,74 @@ tasks:
 
       Run: `uv run pytest tests/unit/test_gh_classify.py -x --no-cov`
       Expect: GREEN.
+  - id: P5.T3.S4
+    text: |-
+      Failing test for the MCP per-call timeout knob (the 2026-05-18
+      incident's Bug 1). New unit test
+      `tests/unit/test_mcp_client_timeout.py::test_start_workspace_uses_180s_timeout`
+      — see the third location listed under spec section I2.
+
+      Construct a real VkMcpClient (or a minimally-stubbed subclass that
+      doesn't actually spawn the MCP subprocess), monkeypatch `_recv` to
+      record the `timeout` kwarg it was invoked with, then assert:
+
+      - `client.start_workspace(name=..., repo='owner/r', executor='X',
+        branch='b')` records `timeout=180.0`.
+      - `client.get_issue('id-1')` records `timeout=30.0` (default
+        unchanged for cheap RPC tools).
+      - `client.call_tool('custom', {}, timeout=5.0)` records
+        `timeout=5.0` (explicit override wins).
+
+      Add a second test
+      `test_existing_tool_wrappers_inherit_30s_default` asserting
+      `update_issue`, `list_issues`, `list_workspaces`, `list_repos`,
+      `link_workspace_issue` all record `timeout=30.0`. This pins the
+      "only start_workspace opts up" guarantee against future drift.
+
+      Run: red — `call_tool` today doesn't accept `timeout`;
+      `start_workspace` doesn't pass one.
+  - id: P5.T3.S5
+    text: |-
+      Implement the per-call timeout knob in `src/vk/_mcp_client.py`:
+
+      ```python
+      def call_tool(
+          self,
+          name: str,
+          arguments: dict[str, Any],
+          *,
+          timeout: float = 30.0,
+      ) -> Any:
+          ...
+          self._send({...})
+          response = self._recv(timeout=timeout)
+          ...
+
+      def start_workspace(self, *, name, repo, executor, branch, **kwargs):
+          if "repositories" in kwargs:
+              raise TypeError(...)  # unchanged guard
+          return self.call_tool(
+              "start_workspace",
+              {
+                  "name": name,
+                  "executor": executor,
+                  "repositories": [repo],
+                  "branch": branch,
+                  **kwargs,
+              },
+              timeout=180.0,
+          )
+      ```
+
+      Leave `_recv`'s signature (`timeout: float = 30.0`), the wire
+      protocol, and every other tool wrapper untouched. The change is
+      purely additive: existing tool wrappers' callers do not need to
+      change because they don't pass `timeout` — they inherit the 30s
+      default.
+
+      Run: `uv run pytest tests/unit/test_mcp_client_timeout.py
+      tests/unit/test_mcp_client.py -x --no-cov`
+      Expect: new tests GREEN, existing _mcp_client tests still GREEN.
 - number: 4
   title: install.sh --install-bridge (E3)
   steps:
@@ -266,7 +362,9 @@ tasks:
 
       Open PR: `feat(bridge): cli + __main__ + wrapper + install.sh +
       resilience (Phase 5 of #147)`. References #147; acceptance set:
-      E1-E4, G1, G5, I1-I4, I6.
+      E1-E4, G1, G5, I1-I4, I6, I9. PR description must mention the
+      2026-05-18 MCP timeout cascade incident as the motivation for the
+      I2 TimeoutError sub-cases and the new I9 per-plan boundary.
 state:
   steps:
     P5.T1.S1:
@@ -298,6 +396,14 @@ state:
       ticked_at: null
       note: null
     P5.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S5:
       state: ' '
       ticked_at: null
       note: null
