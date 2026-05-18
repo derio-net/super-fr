@@ -7,6 +7,14 @@ on:
 # closures — GitHub doesn't expose a "merged-only" trigger. Filter at
 # the job level so unmerged PRs don't queue a reusable-workflow run we
 # don't care about.
+#
+# Reusable workflows can only request permissions up to what the caller
+# grants. vk-spec-status.yml needs `pull-requests: write` to post the
+# comment, so we declare it here too.
+permissions:
+  pull-requests: write
+  contents: read
+
 jobs:
   status:
     if: github.event.pull_request.merged == true
