@@ -160,3 +160,115 @@ class FakeGhClient:
         for lbl in labels:
             name = lbl if isinstance(lbl, str) else lbl.name
             bag.add(name)
+
+
+class FakeMcpClient:
+    """In-memory fake of `vk._mcp_client.VkMcpClient` for unit tests.
+
+    Records every call as a `("method", kwargs_dict)` tuple in `.calls`
+    so tests can assert on call sequence and payload shape. Failure
+    injection mirrors `FakeGhClient.fail_on_mutation`: pass
+    `fail_on_call=N` to make the (0-indexed) Nth call raise.
+
+    The surface deliberately matches the calling convention
+    `vk.bridge.dispatch.dispatch_phase` uses against the real client —
+    keyword-only on the methods where the wire payload is structured.
+
+    Recording layer
+    ---------------
+    Calls are recorded at the **Python API layer**, NOT the wire layer.
+    For example, `start_workspace(repo="owner/repo", ...)` is recorded
+    as `("start_workspace", {"repo": "owner/repo", ...})`, but the real
+    `VkMcpClient` translates that to `{"repositories": ["owner/repo"], ...}`
+    on the JSON-RPC wire. Tests asserting against wire-shape (key
+    `repositories`, key `issue_id`) should use the `_FakeVkMcpClient`
+    fixture in `test_mcp_client.py` and inspect `._sent`. Tests
+    asserting that dispatch CALLED the right methods with the right
+    Python-level args belong here.
+    """
+
+    def __init__(self, fail_on_call: int | None = None) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self._fail_on = fail_on_call
+        self._next_card_id = 0
+        self._next_ws_id = 0
+        self.issues: dict[str, dict[str, Any]] = {}
+        self.workspaces: dict[str, dict[str, Any]] = {}
+
+    def _record(self, name: str, args: dict[str, Any]) -> None:
+        # 0-indexed counter to match FakeGhClient.fail_on_mutation.
+        idx = len(self.calls)
+        self.calls.append((name, args))
+        if self._fail_on is not None and idx == self._fail_on:
+            raise Exception("injected MCP failure")
+
+    def create_issue(self, *, title: str, description: str = "", **kw: Any) -> dict[str, Any]:
+        self._record("create_issue", {"title": title, "description": description, **kw})
+        self._next_card_id += 1
+        cid = f"card-{self._next_card_id}"
+        self.issues[cid] = {"id": cid, "title": title, "description": description, "status": "Todo"}
+        return self.issues[cid]
+
+    def update_issue(self, card_id: str, **changes: Any) -> dict[str, Any]:
+        self._record("update_issue", {"card_id": card_id, **changes})
+        self.issues.setdefault(card_id, {"id": card_id}).update(changes)
+        return self.issues[card_id]
+
+    def get_issue(self, card_id: str) -> dict[str, Any] | None:
+        self._record("get_issue", {"card_id": card_id})
+        return self.issues.get(card_id)
+
+    def list_issues(self, **kw: Any) -> list[dict[str, Any]]:
+        self._record("list_issues", {**kw})
+        return list(self.issues.values())
+
+    def start_workspace(
+        self,
+        *,
+        name: str,
+        repo: str,
+        executor: str,
+        branch: str,
+        **kw: Any,
+    ) -> dict[str, Any]:
+        self._record(
+            "start_workspace",
+            {"name": name, "repo": repo, "executor": executor, "branch": branch, **kw},
+        )
+        self._next_ws_id += 1
+        wid = f"ws-{self._next_ws_id}"
+        self.workspaces[wid] = {
+            "id": wid,
+            "name": name,
+            "repo": repo,
+            "executor": executor,
+            "branch": branch,
+            "archived": False,
+            "linked_issue": None,
+        }
+        return self.workspaces[wid]
+
+    def update_workspace(self, ws_id: str, **changes: Any) -> dict[str, Any]:
+        self._record("update_workspace", {"ws_id": ws_id, **changes})
+        self.workspaces.setdefault(ws_id, {"id": ws_id}).update(changes)
+        return self.workspaces[ws_id]
+
+    def list_workspaces(self, **kw: Any) -> list[dict[str, Any]]:
+        self._record("list_workspaces", {**kw})
+        return list(self.workspaces.values())
+
+    def list_repos(self) -> list[dict[str, str]]:
+        self._record("list_repos", {})
+        return [
+            {"name": "derio-net/frank"},
+            {"name": "derio-net/willikins"},
+            {"name": "derio-net/superpowers-for-vk"},
+        ]
+
+    def link_workspace_issue(self, ws_id: str, card_id: str) -> None:
+        self._record("link_workspace_issue", {"ws_id": ws_id, "card_id": card_id})
+        if ws_id in self.workspaces:
+            self.workspaces[ws_id]["linked_issue"] = card_id
+
+    def close(self) -> None:
+        self._record("close", {})
