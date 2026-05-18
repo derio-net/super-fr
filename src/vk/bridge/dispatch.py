@@ -11,10 +11,17 @@ Wire payload shape:
   - `create_issue`: title = "gh#N: [owner/repo]", description = newline-
     joined (plan, "Phase N/total", phase title, tracking_issue URL).
   - `update_issue`: status = "In progress".
-  - `start_workspace`: name = "{plan}-P{N} -> gh#{N}", repo from the
-    phase's tracking_issue (so cross-repo phases route to their dest),
+  - `start_workspace`: name = "{plan}-P{N} -> gh#{N}",
+    `repo_id` = the VK Uuid resolved from the SHORT name (`owner/name`
+    → `name` → VK `id`) via `vk.bridge.config.repo_id_for`,
     executor = CLAUDE_CODE, branch = "vk/gh-{N}".
   - `link_workspace_issue`: ties the workspace to the card.
+
+VK indexes repos by SHORT name (no `owner/`) with the canonical handle
+being the `repo_id` Uuid (see `vibe-kanban-mcp` task_attempts.rs).
+The bridge resolves the short name from the `tracking_issue` URL's
+`owner/name`, then looks up the repo_id via the cached `list_repos`
+snapshot.
 """
 
 from __future__ import annotations
@@ -25,6 +32,7 @@ from typing import Any, Protocol
 
 from vk._mcp_client import VkMcpError
 from vk._urls import parse_issue_url
+from vk.bridge import config as _config
 from vk.bridge.lifecycle import invoke_lifecycle_hook
 from vk.parser import Plan
 from vk.types import PhaseDoc
@@ -74,7 +82,7 @@ class MCPDispatch(Protocol):
         self,
         *,
         name: str,
-        repo: str,
+        repo_id: str,
         executor: str,
         branch: str,
         **kwargs: Any,
@@ -89,38 +97,31 @@ class DispatchResult:
     workspace_id: str | None
 
 
-def _warmup_repo_listing(mcp: MCPDispatch, repo: str) -> None:
-    """Issue the mandated `list_repos` call before `start_workspace`.
+def _resolve_repo_id(mcp: MCPDispatch, repo: str) -> str:
+    """Issue the mandated `list_repos` call and resolve `repo` → VK repo_id.
 
-    The dispatch contract requires this call (see test B2 + the legacy
-    `sync_issue` behavior it replaces). We use the result as a soft
-    sanity check: if VK reports a known set of repos and the target
-    isn't in it, we log a warning and proceed. We don't hard-fail —
-    cross-repo dispatch can target repos not yet known to VK's local
-    project list, and the subsequent `start_workspace` call surfaces
-    a clearer server-side error than us swallowing here.
+    The dispatch contract requires this `list_repos` call (test B2) — kept
+    even though `vk.bridge.config.repo_id_for` would cache it, because the
+    call site here documents the per-dispatch read for any future caller
+    bypassing the tick path. The lookup goes through `vk.bridge.config` so
+    the per-tick cache populates whichever entry point sees VK first.
 
-    A `list_repos` failure is logged at warning level but not raised:
-    the downstream `start_workspace` call will fail with the actionable
-    error message; suppressing it here would lose that context.
+    Raises `VkMcpError` if VK has no repo registered for `repo`'s short
+    name — `start_workspace` would 4xx otherwise with an opaque server-
+    side error.
     """
     try:
-        repos = mcp.list_repos()
-    except Exception as e:  # noqa: BLE001 — see docstring
+        mcp.list_repos()
+    except Exception as e:  # noqa: BLE001 — let _config swallow it consistently
         logger.warning("dispatch: list_repos failed (%s); proceeding", e)
-        return
-    known: set[str] = {
-        name
-        for entry in (repos or [])
-        if isinstance(entry, dict) and isinstance((name := entry.get("name")), str)
-    }
-    if repo not in known:
-        logger.warning(
-            "dispatch: repo %r not in list_repos result %s; "
-            "start_workspace will surface a server-side error if the repo is unknown",
-            repo,
-            sorted(known),
+    repo_id = _config.repo_id_for(repo, mcp)
+    if repo_id is None:
+        known = sorted(_config.known_repos(mcp).keys())
+        raise VkMcpError(
+            f"dispatch: VK has no repo registered for {repo!r}; "
+            f"register the repo in VK first (known short names: {known})"
         )
+    return repo_id
 
 
 def _expect_id(value: Any, op: str) -> str:
@@ -166,10 +167,10 @@ def dispatch_phase(plan: Plan, phase: PhaseDoc, mcp: MCPDispatch) -> DispatchRes
     card_id = _expect_id(card, "create_issue")
     mcp.update_issue(card_id, status="In progress")
 
-    _warmup_repo_listing(mcp, repo)
+    repo_id = _resolve_repo_id(mcp, repo)
     ws = mcp.start_workspace(
         name=f"{plan.meta.plan}-P{phase.phase.number} -> gh#{issue_n}",
-        repo=repo,
+        repo_id=repo_id,
         executor="CLAUDE_CODE",
         branch=f"vk/gh-{issue_n}",
     )

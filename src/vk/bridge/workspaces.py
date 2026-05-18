@@ -56,11 +56,13 @@ class MCPWorkspaceClient(MCPArchiver, Protocol):
 
     def get_issue(self, card_id: str) -> Any: ...
 
+    def list_repos(self) -> Any: ...
+
     def start_workspace(
         self,
         *,
         name: str,
-        repo: str,
+        repo_id: str,
         executor: str,
         branch: str,
         **kwargs: Any,
@@ -301,10 +303,25 @@ def recover_orphan_card(
     issue_num = m.group(1)
     repo = m.group(2)
 
+    # VK indexes repos by SHORT name (no `owner/`); resolve here so the
+    # start_workspace call carries the canonical repo_id Uuid. If VK
+    # has no entry for this repo's short name the recovery bails cleanly
+    # — the next operator action will see the orphan in the metrics.
+    from vk.bridge import config as _config
+
+    repo_id = _config.repo_id_for(repo, mcp)
+    if repo_id is None:
+        logger.warning(
+            "workspaces: recover skip — VK has no repo registered for %r; card %s left orphan",
+            repo,
+            card_id,
+        )
+        return None
+
     try:
         ws = mcp.start_workspace(
             name=f"{simple_id} -> gh#{issue_num}",
-            repo=repo,
+            repo_id=repo_id,
             executor="CLAUDE_CODE",
             branch=f"vk/gh-{issue_num}",
         )

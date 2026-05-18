@@ -207,7 +207,9 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     assert result.synced == 1, f"expected synced=1 got {result.synced} (failures={result.failures})"
     workspaces = [c for c in mcp.calls if c[0] == "start_workspace"]
     assert len(workspaces) == 1
-    assert workspaces[0][1]["repo"] == repo
+    # VK indexes by short name; the bridge resolves derio-net/superpowers-for-vk
+    # → "superpowers-for-vk" → the matching uuid from list_repos.
+    assert workspaces[0][1]["repo_id"] == "uuid-superpowers-for-vk"
 
 
 # ── F4: Idempotency — re-running tick yields no further mutations ──────
@@ -419,25 +421,27 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
         foreign_repo, 100, state="OPEN", labels={"vk-ready", "phase:1", "plan:e2e-fixture"}
     )
 
-    class _CrossRepoMcp(FakeMcpClient):
-        """FakeMcpClient that advertises the cross-repo destination so
-        `vk.bridge.config.is_known_repo` accepts the dispatch."""
-
-        def list_repos(self) -> list[dict[str, str]]:
-            self._record("list_repos", {})
-            return [{"name": target_repo}, {"name": foreign_repo}]
-
-    mcp = _CrossRepoMcp()
+    # Advertise both repos in VK's registry (short names, with ids) so
+    # `vk.bridge.config.is_known_repo` accepts the dispatch and
+    # `repo_id_for` returns the canonical Uuid. VK indexes by short name
+    # only — no `owner/`.
+    mcp = FakeMcpClient()
+    mcp._repos = [
+        {"id": "uuid-foo", "name": "foo"},
+        {"id": "uuid-bar", "name": "bar"},
+    ]
     result = tick(plan, gh, mcp)
 
     assert result.synced == 1, f"expected synced=1 got {result.synced} ({result.failures})"
 
-    # The workspace went to the FOREIGN repo, not target_repo.
+    # The workspace went to the FOREIGN repo, not target_repo. After the
+    # 2026-05-18 wire-shape fix, this means start_workspace was called
+    # with repo_id pointing at `bar`, not `foo`.
     ws_calls = [c for c in mcp.calls if c[0] == "start_workspace"]
     assert len(ws_calls) == 1
     args = ws_calls[0][1]
-    assert args["repo"] == foreign_repo, (
-        f"workspace dispatched to wrong repo: {args['repo']!r} (want {foreign_repo!r})"
+    assert args["repo_id"] == "uuid-bar", (
+        f"workspace dispatched to wrong repo: repo_id={args['repo_id']!r} (want 'uuid-bar')"
     )
 
     # Workspace name follows the canonical `<plan>-P<n> -> gh#<n>` convention.

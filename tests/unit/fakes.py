@@ -177,14 +177,20 @@ class FakeMcpClient:
     Recording layer
     ---------------
     Calls are recorded at the **Python API layer**, NOT the wire layer.
-    For example, `start_workspace(repo="owner/repo", ...)` is recorded
-    as `("start_workspace", {"repo": "owner/repo", ...})`, but the real
-    `VkMcpClient` translates that to `{"repositories": ["owner/repo"], ...}`
-    on the JSON-RPC wire. Tests asserting against wire-shape (key
-    `repositories`, key `issue_id`) should use the `_FakeVkMcpClient`
-    fixture in `test_mcp_client.py` and inspect `._sent`. Tests
-    asserting that dispatch CALLED the right methods with the right
-    Python-level args belong here.
+    For example, `start_workspace(repo_id="<uuid>", ...)` is recorded
+    as `("start_workspace", {"repo_id": "<uuid>", ...})`, while the
+    real `VkMcpClient` translates that to
+    `{"repositories": [{"repo_id": "<uuid>", "branch": ...}], ...}`
+    on the JSON-RPC wire. Tests asserting against wire-shape (the
+    `repositories` envelope, `issue_id`) should use the
+    `_FakeVkMcpClient` fixture in `test_mcp_client.py` and inspect
+    `._sent`. Tests asserting that dispatch CALLED the right methods
+    with the right Python-level args belong here.
+
+    Default repo registry mirrors the real `vibe-kanban-mcp` shape:
+    each entry is `{"id": <uuid-like-str>, "name": <short>}`. VK
+    indexes repos by short name; the bridge dispatch resolves
+    `owner/name` → short name → repo_id.
     """
 
     def __init__(self, fail_on_call: int | None = None) -> None:
@@ -194,6 +200,17 @@ class FakeMcpClient:
         self._next_ws_id = 0
         self.issues: dict[str, dict[str, Any]] = {}
         self.workspaces: dict[str, dict[str, Any]] = {}
+        # Default registry mirrors the real vibe-kanban-mcp wire shape:
+        # short names + Uuid-shaped ids. Tests that need a custom set
+        # mutate `self._repos` post-construction.
+        self._repos: list[dict[str, str]] = [
+            {"id": "uuid-frank", "name": "frank"},
+            {"id": "uuid-willikins", "name": "willikins"},
+            {"id": "uuid-superpowers-for-vk", "name": "superpowers-for-vk"},
+            {"id": "uuid-repo-b", "name": "repo-b"},
+            {"id": "uuid-vibe-kanban", "name": "vibe-kanban"},
+            {"id": "uuid-agent-images", "name": "agent-images"},
+        ]
 
     def _record(self, name: str, args: dict[str, Any]) -> None:
         # 0-indexed counter to match FakeGhClient.fail_on_mutation.
@@ -226,21 +243,21 @@ class FakeMcpClient:
         self,
         *,
         name: str,
-        repo: str,
+        repo_id: str,
         executor: str,
         branch: str,
         **kw: Any,
     ) -> dict[str, Any]:
         self._record(
             "start_workspace",
-            {"name": name, "repo": repo, "executor": executor, "branch": branch, **kw},
+            {"name": name, "repo_id": repo_id, "executor": executor, "branch": branch, **kw},
         )
         self._next_ws_id += 1
         wid = f"ws-{self._next_ws_id}"
         self.workspaces[wid] = {
             "id": wid,
             "name": name,
-            "repo": repo,
+            "repo_id": repo_id,
             "executor": executor,
             "branch": branch,
             "archived": False,
@@ -257,13 +274,9 @@ class FakeMcpClient:
         self._record("list_workspaces", {**kw})
         return list(self.workspaces.values())
 
-    def list_repos(self) -> list[dict[str, str]]:
+    def list_repos(self) -> dict[str, Any]:
         self._record("list_repos", {})
-        return [
-            {"name": "derio-net/frank"},
-            {"name": "derio-net/willikins"},
-            {"name": "derio-net/superpowers-for-vk"},
-        ]
+        return {"repos": [dict(r) for r in self._repos], "count": len(self._repos)}
 
     def link_workspace_issue(self, ws_id: str, card_id: str) -> None:
         self._record("link_workspace_issue", {"ws_id": ws_id, "card_id": card_id})
