@@ -31,6 +31,30 @@ KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
 INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
 SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
+if [[ "${1:-}" == "--install-bridge" ]]; then
+  # Write the cron wrapper that exec's `python -m vk.bridge`. Hidden by
+  # design — there is no `vk bridge` public CLI verb.
+  wrapper_path="${VK_BRIDGE_WRAPPER_PATH:-/opt/vk-bridge/run.sh}"
+  mkdir -p "$(dirname "$wrapper_path")"
+  # Prefer the active uv tool's interpreter so the wrapper can't pick
+  # up a stale system Python that doesn't have vk installed.
+  vk_python="$(uv tool dir 2>/dev/null)/vk/bin/python"
+  if [ ! -x "$vk_python" ]; then
+    # Fallback chain: any `uv run` env, then plain `python3`.
+    vk_python="$(uv run --no-project which python 2>/dev/null || command -v python3 || echo /usr/bin/python3)"
+  fi
+  cat > "$wrapper_path" <<EOF
+#!/bin/bash
+exec "$vk_python" -m vk.bridge "\$@"
+EOF
+  chmod +x "$wrapper_path"
+  echo "Wrapper installed at $wrapper_path"
+  echo ""
+  echo "To schedule the bridge, add this line to your crontab:"
+  echo "*/2 * * * * $wrapper_path"
+  exit 0
+fi
+
 if [[ "${1:-}" == "--uninstall" ]]; then
   echo "Uninstalling superpowers-for-vk extras..."
   rm -f "$RULES_DIR/vk-plan-override.md"
