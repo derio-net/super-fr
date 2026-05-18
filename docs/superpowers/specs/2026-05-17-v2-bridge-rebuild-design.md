@@ -703,10 +703,10 @@ def test_fake_mcp_client_implements_protocol():
 #### C1: Workspace archives when card reaches Done
 <!-- implementation: Phase 3 -->
 
-**Location:** `tests/unit/test_bridge_workspaces.py::test_workspace_archives_on_card_done`
+**Location:** `tests/unit/test_bridge_workspaces.py::test_archive_for_card_archives_matching_workspace`
 
 ```python
-def test_workspace_archives_on_card_done():
+def test_archive_for_card_archives_matching_workspace():
     """
     GIVEN a FakeMcpClient with workspace 'ws-1' linked to card 'card-1'
           whose name follows the bridge convention '<simple_id> -> gh#<N>'
@@ -770,7 +770,7 @@ def test_in_review_transitions_to_done_when_pr_merges():
 #### C5: Phase complete → renderer projects CLOSED state → diff emits IssueStateChange
 <!-- implementation: Phase 3 (folds bridge's belt-and-braces close into renderer) -->
 
-**Location:** `tests/unit/test_render.py::test_complete_phase_projects_closed_state`
+**Location:** `tests/unit/test_v2_render.py::test_complete_phase_projects_closed_state`
 
 ```python
 def test_complete_phase_projects_closed_state():
@@ -791,10 +791,10 @@ def test_complete_phase_projects_closed_state():
 #### D1: Tick respects MAX_CONCURRENT
 <!-- implementation: Phase 4 -->
 
-**Location:** `tests/unit/test_bridge_slots.py::test_tick_defers_excess_phases_when_slots_exhausted`
+**Location:** `tests/unit/test_bridge_slots.py::test_tick_defers_when_active_workspaces_saturate_budget`
 
 ```python
-def test_tick_defers_excess_phases_when_slots_exhausted(monkeypatch):
+def test_tick_defers_when_active_workspaces_saturate_budget(monkeypatch):
     """
     GIVEN MAX_CONCURRENT=2 and 3 currently-active workspaces (slots = 0)
     AND   a plan with 2 vk-ready phases (none synced yet)
@@ -811,10 +811,10 @@ def test_tick_defers_excess_phases_when_slots_exhausted(monkeypatch):
 #### D2: Tick dedups by card title
 <!-- implementation: Phase 4 -->
 
-**Location:** `tests/unit/test_bridge_dedup.py::test_existing_card_just_stamps_vk_synced`
+**Location:** `tests/unit/test_bridge_dedup.py::test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced`
 
 ```python
-def test_existing_card_just_stamps_vk_synced():
+def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
     """
     GIVEN a vk-ready Issue #42 with title fragment 'gh#42: Foo'
     AND   a VK card already exists with title 'gh#42: Foo' (somehow created
@@ -856,10 +856,10 @@ def test_heartbeat_pushed_at_end_of_tick():
 #### D4: Unknown-repo phases skipped with metric
 <!-- implementation: Phase 4 -->
 
-**Location:** `tests/unit/test_bridge_config.py::test_unknown_repo_skipped_with_metric`
+**Location:** `tests/unit/test_bridge_config.py::test_tick_skips_unknown_repo_and_pushes_failure_metric`
 
 ```python
-def test_unknown_repo_skipped_with_metric(monkeypatch):
+def test_tick_skips_unknown_repo_and_pushes_failure_metric(monkeypatch):
     """
     GIVEN VK's known repos = {'frank', 'willikins'}
     AND   a plan with target_repo='unknown-repo' AND a phase with vk-ready
@@ -873,10 +873,10 @@ def test_unknown_repo_skipped_with_metric(monkeypatch):
 #### D5: Configurable lifecycle hook
 <!-- implementation: Phase 4 -->
 
-**Location:** `tests/unit/test_bridge_lifecycle.py::test_lifecycle_hook_invoked_when_configured`
+**Location:** `tests/unit/test_bridge_lifecycle.py::test_lifecycle_hook_invoked_with_issue_url_and_transition`
 
 ```python
-def test_lifecycle_hook_invoked_when_configured(tmp_path, monkeypatch):
+def test_lifecycle_hook_invoked_with_issue_url_and_transition(tmp_path, monkeypatch):
     """
     GIVEN VK_LIFECYCLE_HOOK_SCRIPT=/path/to/hook.sh (a test script that
           records its args)
@@ -1432,18 +1432,34 @@ def test_second_concurrent_tick_aborts_early(tmp_path):
 #### I5: Card created without workspace → reverse-reap on next tick
 <!-- implementation: Phase 3 (extends workspace reaping) -->
 
-**Location:** `tests/integration/test_bridge_resilience.py::test_card_without_workspace_logged_and_recoverable`
+**Locations** (Phase 3 split the BDD scenario's two branches into separate
+unit tests, both tagged `# I5`):
+
+- `tests/unit/test_bridge_workspaces.py::test_recover_orphan_card_disabled_by_default`
+  — the default-off branch ("leaves the card alone, logs a warning").
+- `tests/unit/test_bridge_workspaces.py::test_recover_orphan_card_recreates_workspace_when_enabled`
+  — the opt-in branch (`VK_BRIDGE_RECOVER_ORPHAN_CARDS=1` → workspace recreated).
 
 ```python
-def test_card_without_workspace_logged_and_recoverable():
+def test_recover_orphan_card_disabled_by_default(monkeypatch, caplog):
     """
     GIVEN a VK card exists matching the bridge's title convention
           (gh#<N>: [...]) but no workspace is linked to it
-    WHEN  vk.bridge.tick() runs and dispatch sees the duplicate-title
-          condition
-    THEN  dispatch logs a warning ('card without workspace: <simple_id>')
-    AND   either re-creates the workspace (if VK_BRIDGE_RECOVER_ORPHAN_CARDS=1)
-          OR leaves the card alone with vk-synced already on the gh issue
+    AND   VK_BRIDGE_RECOVER_ORPHAN_CARDS is unset (default)
+    WHEN  vk.bridge.workspaces.recover_orphan_card(client, card_id, sid)
+          is called
+    THEN  a warning is logged naming the card + simple_id and the
+          opt-in env flag, and no workspace is created
+    """
+
+
+def test_recover_orphan_card_recreates_workspace_when_enabled(monkeypatch):
+    """
+    GIVEN the same orphan-card setup
+    AND   VK_BRIDGE_RECOVER_ORPHAN_CARDS=1
+    WHEN  recover_orphan_card runs
+    THEN  start_workspace + link_workspace_issue are invoked and the
+          new workspace id is returned
     (Today's bridge has reap_orphan_workspaces but no inverse — orphan cards
     without workspaces are silently stuck.)
     """
