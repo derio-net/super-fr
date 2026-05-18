@@ -77,9 +77,19 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
         if not file_on_ref("origin/HEAD", str(rel), cwd=repo_root):
             missing.append(rel)
     if plan.meta.spec:
-        spec_rel = Path(plan.meta.spec)
-        if not file_on_ref("origin/HEAD", str(spec_rel), cwd=repo_root):
-            missing.append(spec_rel)
+        # Cross-repo spec refs use `<owner>/<repo>:path/to/spec.md` notation
+        # (e.g., the v2-bridge-cutover plan in agent-images references the
+        # spec in superpowers-for-vk). The reachability check operates on
+        # the LOCAL repo's git tree only; checking a file in a different
+        # repo's tree from this repo's git is not meaningful — `git
+        # ls-tree` would always return empty for the literal cross-repo
+        # path. Skip the check for cross-repo specs; the operator is
+        # trusted to keep the upstream spec correct.
+        is_cross_repo = ":" in plan.meta.spec and "/" in plan.meta.spec.split(":", 1)[0]
+        if not is_cross_repo:
+            spec_rel = Path(plan.meta.spec)
+            if not file_on_ref("origin/HEAD", str(spec_rel), cwd=repo_root):
+                missing.append(spec_rel)
     return missing
 
 
