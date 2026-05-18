@@ -1,0 +1,228 @@
+schema_version: 2
+phase:
+  number: 8
+  title: Agent dispatch prompt — merged "BEFORE YOU BEGIN" preamble
+  tag: agentic
+  depends_on:
+  - 6
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Combine repo-sync + deps into one laconic numbered preamble
+  steps:
+  - id: P8.T1.S1
+    text: |-
+      Pin the desired prompt shape with a failing unit test.
+
+      Background (surfaced 2026-05-18, post-Phase-4-merge): the bridge
+      pod's `~/repos/<repo>` checkouts are NOT auto-refreshed and are
+      shared with the operator (so the bridge can't `git pull` either —
+      would clobber operator's in-progress work). After Phase 4 shipped,
+      the bridge kept projecting Phase 5 as `vk-blocked` because its
+      plan checkout was 9 hours stale and didn't see Phase 4's
+      `completion.at` timestamp. Once a workspace IS dispatched, its
+      branch is based on stale `main`, so the agent's work risks
+      rebasing on top of already-merged code (silent regression) or
+      producing PR-time conflicts.
+
+      The fix lives **agent-side**, not bridge-side: add a sync
+      instruction to the dispatch prompt. Operator's preferred shape
+      (kept laconic — agents are noisier with longer preambles, and the
+      existing deps block was already verbose):
+
+      ```
+      BEFORE YOU BEGIN:
+      1. Fetch and rebase your worktree on origin/main: `git fetch origin && git rebase origin/main`. If rebase produces conflicts, STOP and report.
+      2. This Issue declares dependencies: #155. Verify each is CLOSED via `gh issue view <n> --repo <owner/repo> --json state`. If any is OPEN, STOP and exit with: 'Blocked on <open_blocker>, not starting.'
+
+      ---
+      ```
+
+      The sync step ALWAYS fires (item 1, unconditional). The deps step
+      ONLY fires when `phase.depends_on` is non-empty (item 2). When
+      deps are empty, the preamble is just:
+
+      ```
+      BEFORE YOU BEGIN:
+      1. Fetch and rebase your worktree on origin/main: `git fetch origin && git rebase origin/main`. If rebase produces conflicts, STOP and report.
+
+      ---
+      ```
+
+      Add to `tests/unit/test_bridge_prompt.py` (or wherever
+      `build_prompt` is unit-tested — check `src/vk/bridge/prompt.py`
+      for the existing test file location):
+
+      ```python
+      def test_preamble_always_includes_sync_step(plan_factory, phase_factory):
+          """The sync step (item 1) appears unconditionally — even when
+          the phase has no deps."""
+          plan = plan_factory(...)
+          phase = phase_factory(..., depends_on=())
+          prompt = build_prompt(plan, phase)
+
+          assert "BEFORE YOU BEGIN:" in prompt
+          assert "1. Fetch and rebase your worktree on origin/main" in prompt
+          assert "git fetch origin && git rebase origin/main" in prompt
+          # No item 2 (no deps)
+          assert "2. This Issue declares dependencies" not in prompt
+
+      def test_preamble_adds_deps_step_when_phase_has_deps(plan_factory, phase_factory):
+          """When the phase has deps, item 2 appears AFTER item 1."""
+          plan = plan_factory(...)  # plan with Phase 2 depending on Phase 1
+          phase = plan.phases[1]    # Phase 2
+
+          prompt = build_prompt(plan, phase)
+          sync_idx = prompt.index("1. Fetch and rebase")
+          deps_idx = prompt.index("2. This Issue declares dependencies")
+          assert sync_idx < deps_idx
+
+      def test_preamble_dep_refs_render_from_tracking_issue(...):
+          """Item 2 still renders dep refs from `_dep_ref(plan, dep)`
+          (i.e., prefers `#N` over `Phase N` fallback). Preserves
+          existing _DEPS_PREAMBLE behavior."""
+          # ... existing dep-ref test logic, just adapted to the new
+          # combined preamble shape
+      ```
+
+      Run: `uv run pytest tests/unit/test_bridge_prompt.py -x --no-cov`
+      Expect: RED (existing template still emits the old verbose multi-
+      line preambles).
+  - id: P8.T1.S2
+    text: |-
+      Make the tests green — replace the existing preamble logic with
+      the combined numbered-list shape.
+
+      Edit `src/vk/bridge/prompt.py`. Replace the existing
+      `_DEPS_PREAMBLE_TEMPLATE` constant with a small builder that
+      composes the numbered list:
+
+      ```python
+      _SYNC_LINE = (
+          "1. Fetch and rebase your worktree on origin/main: "
+          "`git fetch origin && git rebase origin/main`. "
+          "If rebase produces conflicts, STOP and report."
+      )
+
+      def _deps_line(dep_refs: str) -> str:
+          return (
+              f"2. This Issue declares dependencies: {dep_refs}. "
+              "Verify each is CLOSED via "
+              "`gh issue view <n> --repo <owner/repo> --json state`. "
+              "If any is OPEN, STOP and exit with: "
+              "'Blocked on <open_blocker>, not starting.'"
+          )
+
+
+      def _build_preamble(plan: Plan, phase: PhaseDoc) -> str:
+          items = [_SYNC_LINE]
+          if phase.phase.depends_on:
+              dep_refs = ", ".join(
+                  _dep_ref(plan, dep) for dep in phase.phase.depends_on
+              )
+              items.append(_deps_line(dep_refs))
+          return "BEFORE YOU BEGIN:\n" + "\n".join(items) + "\n\n---\n\n"
+      ```
+
+      Then in `build_prompt()` replace:
+
+      ```python
+      preamble = ""
+      if phase.phase.depends_on:
+          dep_refs = ", ".join(_dep_ref(plan, dep) for dep in phase.phase.depends_on)
+          preamble = _DEPS_PREAMBLE_TEMPLATE.format(dep_refs=dep_refs)
+      ```
+
+      with:
+
+      ```python
+      preamble = _build_preamble(plan, phase)
+      ```
+
+      Remove the old `_DEPS_PREAMBLE_TEMPLATE` constant (no longer
+      referenced).
+
+      Run: `uv run pytest tests/unit/test_bridge_prompt.py -x --no-cov`
+      Expect: GREEN.
+
+      Run the full unit + integration suites — golden-prompt fixtures
+      WILL break because the preamble shape changed:
+      `uv run pytest tests/ -x --no-cov`
+      Update each broken fixture to the new combined shape. The change
+      is intentional and operator-visible; reviewers will compare the
+      before/after in the PR body.
+  - id: P8.T1.S3
+    text: |-
+      Update the module docstring + remove stale references.
+
+      `src/vk/bridge/prompt.py`'s module docstring currently mentions
+      the "dependency preamble". Update it to describe the combined
+      numbered "BEFORE YOU BEGIN" block, explicitly noting:
+
+      - Item 1 (sync) is **unconditional** — fires every dispatch
+      - Item 2 (deps) is **conditional** on `phase.depends_on`
+      - The sync step exists because the bridge pod's checkout is
+        shared with the operator and can't be auto-pulled; agent-side
+        rebase compensates without violating shared-pod ownership
+      - Added in Phase 8 of #147 after the 2026-05-18 stale-checkout
+        incident
+
+      Also grep for any other docstring/comment that references
+      `_DEPS_PREAMBLE_TEMPLATE` or implies a single-item preamble shape;
+      update those too. The new shape is "numbered list of pre-flight
+      checks; the bridge prepends; agents self-gate on each item."
+
+      No source-code change in this step — docs only.
+  - id: P8.T1.S4
+    text: |-
+      Version bump + verification + PR.
+
+      Bump to the next patch version available when this phase ships.
+      Phase 6 (cutover) bumps to v2.2.0; if Phase 8 ships after Phase
+      6, this is `2.2.0 → 2.2.1`. Implementing agent: read
+      `pyproject.toml::[project].version` immediately before bumping —
+      don't hardcode.
+
+      Bump the three files (`pyproject.toml`,
+      `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`).
+      Run `uv sync`. Pre-push verify per CLAUDE.md (ruff format +
+      check, mypy, pytest).
+
+      Open PR with title:
+      `feat(bridge): merged "BEFORE YOU BEGIN" preamble — sync + deps (Phase 8 of #147)`
+
+      PR body must include:
+      - Link to the 2026-05-18 stale-checkout incident (bridge kept
+        projecting Phase 5 vk-blocked because its plan yaml was 9
+        hours out of date; operator had to manually `git pull` in the
+        pod to unblock dispatch)
+      - Reference #147 (tracking)
+      - Explicit note: this is the operator-shared-pod-shape
+        compensation, NOT a fix to the underlying "bridge doesn't
+        auto-pull" issue (which is intentional — pod is shared, so
+        auto-pull would clobber operator state)
+      - The before/after for the rendered prompt — paste the full
+        string for a phase WITH deps and WITHOUT deps so reviewers
+        can scan the new shape at a glance
+state:
+  steps:
+    P8.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -39,6 +39,7 @@ specific phase below. Test IDs (`A1`-`I8`) reference the spec's
 | 5 | `vk.bridge.cli` + `__main__` + wrapper + install.sh + resilience | E1-E4, G1, G5, I1-I4, I6 | 2.1.10 → 2.1.11 | 4 |
 | 6 | Cutover (delete fat bridge; end-to-end) | F1-F2, F4-F5, G2, G3, G4, H7, I8 | 2.1.11 → **2.2.0** | 5 |
 | 7 | `apply_cmd` plan-propagation fix + post-merge runbook | — *(spec failure mode #4)* | next patch (likely 2.1.8+) | **1** |
+| 8 | Agent dispatch prompt — pre-flight repo sync preamble | — *(post-Phase-4 stale-checkout incident)* | next patch after Phase 6 | 6 |
 
 Phase 6 minor-bumps because `--install-bridge` is a user-visible install
 flag and the fat-bridge retirement is a deployment-shape change.
@@ -91,6 +92,16 @@ PRs). We're not doing that because:
    worth the immediate stop-the-bleeding effect. Phase 7 also grew a second
    task (`P7.T2`) — a post-merge operator runbook that walks through finding
    and fixing already-broken bodies + cleaning up wrongly-dispatched VK cards.
+8. **Phase 8 was added 2026-05-18 after the stale-checkout incident.** Once
+   Phase 4 merged, the bridge kept projecting Phase 5 as `vk-blocked` because
+   its pod's plan checkout was 9 hours out of date (Phase 4's `completion.at`
+   timestamp wasn't visible). Operator had to manually `git pull` in the pod
+   to unblock the bridge. We **can't** have the bridge auto-pull — the pod is
+   shared with the operator, who runs their own work there; an auto-pull would
+   clobber operator state. So the fix is agent-side: every dispatched workspace
+   gets a "SYNC YOUR REPO CHECKOUT FIRST" preamble in its prompt, telling the
+   agent to `git fetch origin && git rebase origin/main` before any work.
+   Cheap, targeted, doesn't violate the shared-pod ownership model.
 
 ## Cross-repo handoff
 
