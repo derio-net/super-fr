@@ -693,7 +693,7 @@ wheels = [
 
 [[package]]
 name = "vk"
-version = "2.1.12"
+version = "2.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "packaging" },

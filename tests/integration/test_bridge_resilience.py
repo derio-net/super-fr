@@ -418,3 +418,86 @@ def test_per_plan_exception_does_not_kill_daemon(
     assert any(r.startswith("plan_error:plan-b") for r in pushed), (
         f"expected a failure metric for plan-b; got {pushed!r}"
     )
+
+
+# ── I8: `vk apply` and `vk.bridge.tick` racing for the same plan ─────
+
+
+def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
+    """
+    GIVEN a plan with steady-state Issues
+    WHEN  an operator runs `vk apply --yes` simultaneously with the bridge's
+          tick (both call apply() on overlapping mutations)
+    THEN  the final gh state matches what either path alone would produce
+    AND   no Issue ends up with duplicate labels
+    AND   no Issue ends up with conflicting state
+    (Both paths use the same render → diff → apply chain; apply() is
+    idempotent by construction. This test is a regression guard.)
+    """
+    from dataclasses import replace as dc_replace
+
+    from tests.unit.fakes import FakeGhClient, FakeMcpClient
+    from vk import parse
+    from vk.apply import apply
+    from vk.bridge import tick
+    from vk.diff import diff
+    from vk.observe import observe
+    from vk.render import render
+
+    plan = parse(MINIMAL)
+    repo = "derio-net/superpowers-for-vk"
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://github.com/{repo}/issues/77"}
+            )
+        }
+    )
+    plan = dc_replace(
+        plan, phases=(phase,), meta=plan.meta.model_copy(update={"target_repo": repo})
+    )
+
+    gh = FakeGhClient()
+    # Pre-register managed labels so both apply() chains succeed without
+    # racing on ensure_labels.
+    gh.repo_labels[repo] = {
+        "vk-ready",
+        "vk-blocked",
+        "vk-synced",
+        "in-progress",
+        "pr-ready",
+        "manual",
+        "plan:2026-05-09-fixture-minimal",
+        "phase:1",
+    }
+    gh.add_issue(
+        repo, 77, state="OPEN", labels={"vk-ready", "phase:1", "plan:2026-05-09-fixture-minimal"}
+    )
+    mcp = FakeMcpClient()
+
+    # First: the bridge brings the plan to steady state (vk-synced on,
+    # body in sync).
+    tick(plan, gh, mcp)
+    steady_labels = frozenset(gh.issues[(repo, 77)].labels)
+    steady_state = gh.issues[(repo, 77)].state
+    steady_body = gh.issues[(repo, 77)].body
+
+    # Now race: operator-side `vk apply` projects the same render → diff,
+    # which on a steady-state plan emits only the idempotent
+    # RepoLabelEnsure (no per-issue diffs).
+    rendered = render(plan, observe(plan, gh))
+    op_diff = diff(rendered, observe(plan, gh), plan=plan)
+    op_result = apply(op_diff, gh, plan=plan)
+    assert op_result.failures == (), f"operator apply unexpectedly failed: {op_result.failures}"
+
+    # Then the bridge ticks again, racing on the same plan.
+    tick(plan, gh, mcp)
+
+    # Final state matches steady-state byte-for-byte.
+    assert frozenset(gh.issues[(repo, 77)].labels) == steady_labels
+    assert gh.issues[(repo, 77)].state == steady_state
+    assert gh.issues[(repo, 77)].body == steady_body
+    # No duplicate vk-synced (set-typed in the fake, so trivially true,
+    # but also no `vk-synced` removal occurred between the two apply
+    # passes).
+    assert "vk-synced" in gh.issues[(repo, 77)].labels

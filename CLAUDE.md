@@ -85,6 +85,24 @@ This has bitten us before — PR #21 (flat-plan deprecation) and #22 (archive
 housekeeping) both merged without a bump. The 1.0.11 release (this PR) was
 created specifically to propagate that work.
 
+## Bridge audit rule
+
+For any brainstorm, spec, or plan touching dispatch / sync / cron / VK card /
+workspace / GitHub Issue label-lifecycle surfaces, the brainstorm MUST start
+by reading `vk.bridge.*` (rooted at `src/vk/bridge/`) end-to-end.
+Confabulating what the bridge does without reading it is the root cause
+documented in #147.
+
+Before the v2 rebuild shipped this was
+`agent-images/kali/scripts/vk-issue-bridge.py` (1089 LOC). The rebuild
+consolidated it into `vk.bridge.*` — one repo's code, easier to enforce.
+After this PR ships, `vk.bridge.*` is the canonical read-target for any
+agent investigating bridge behavior.
+
+The user-level mirror of this rule lives in `~/.claude/rules/vk-plan-override.md`
+(operator-owned, outside this repo). When this section changes, flag the
+operator-side update in the PR description so the two stay in sync.
+
 ## PR workflow expectations
 
 - Feature branch → PR → review → merge. Direct commits to `main` are not
