@@ -31,6 +31,18 @@ def _patch_tracking(plan, phase_idx: int, url: str):
 
 
 def test_dispatch_creates_card_and_workspace():  # B1
+    """BDD scenario (spec §B1):
+    GIVEN a vk-ready phase with tracking_issue set, no existing VK card
+    AND   a FakeMcpClient configured to record calls
+    WHEN  dispatch_phase(plan, phase, mcp) is called
+    THEN  mcp received a create_issue call
+    AND   an update_issue call setting status='In progress'
+    AND   a list_repos call
+    AND   a start_workspace call with executor='CLAUDE_CODE' and
+          the correct branch (vk/gh-<N>)
+    AND   a link_workspace_issue call
+    AND   the function returned a DispatchResult with card_id and workspace_id
+    """
     from vk.bridge.dispatch import dispatch_phase
 
     plan = load_plan_dir(MULTI_PHASE)
@@ -41,10 +53,22 @@ def test_dispatch_creates_card_and_workspace():  # B1
     result = dispatch_phase(plan, phase, mcp)
     names = [c[0] for c in mcp.calls]
     assert "create_issue" in names
-    assert "update_issue" in names  # sets status In progress
+    assert "update_issue" in names
     assert "list_repos" in names
     assert "start_workspace" in names
     assert "link_workspace_issue" in names
+
+    # BDD: update_issue must set status='In progress'.
+    (update_call,) = [c for c in mcp.calls if c[0] == "update_issue"]
+    assert update_call[1]["status"] == "In progress"
+
+    # BDD: start_workspace must use CLAUDE_CODE executor and the
+    # vk/gh-<N> branch (N = issue number from tracking_issue).
+    (start_call,) = [c for c in mcp.calls if c[0] == "start_workspace"]
+    assert start_call[1]["executor"] == "CLAUDE_CODE"
+    assert start_call[1]["branch"] == "vk/gh-42"
+    assert start_call[1]["repo"] == "derio-net/superpowers-for-vk"
+
     assert result.card_id is not None
     assert result.workspace_id is not None
 
