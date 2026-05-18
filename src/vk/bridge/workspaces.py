@@ -1,0 +1,256 @@
+"""Workspace lifecycle: archive on card-Done, reap orphans, recover orphan cards.
+
+Ported from the legacy `agent-images/kali/scripts/vk-issue-bridge.py`:
+
+- `archive_workspace_for_card` → `archive_for_card`
+- `reap_orphan_workspaces`    → `reap_orphans`
+
+I5 adds the inverse — when a VK card exists without a workspace, the
+legacy bridge could only log the orphan. Opt-in env flag
+`VK_BRIDGE_RECOVER_ORPHAN_CARDS=1` recreates the workspace so the card
+isn't stuck silently.
+
+The MCP surface is duck-typed via the `MCPWorkspaceClient` Protocol so
+both `vk._mcp_client.VkMcpClient` and `tests.unit.fakes.FakeMcpClient`
+satisfy it without inheritance.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+from typing import Any, Protocol
+
+__all__ = ["archive_for_card", "reap_orphans", "recover_orphan_card"]
+
+logger = logging.getLogger(__name__)
+
+
+_BRIDGE_WS_NAME_RE = re.compile(r"^(?P<sid>\S+)\s*->\s*gh#(?P<num>\d+)\s*$")
+
+
+class MCPArchiver(Protocol):
+    """Minimal surface for `archive_for_card`.
+
+    A narrow Protocol so callers that only need the archive primitive
+    (e.g. `vk.bridge.pr_state.tick`) don't have to satisfy the larger
+    `MCPWorkspaceClient` surface.
+    """
+
+    def list_workspaces(self, **kwargs: Any) -> Any: ...
+
+    def update_workspace(self, ws_id: str, **changes: Any) -> Any: ...
+
+
+class MCPWorkspaceClient(MCPArchiver, Protocol):
+    """Full workspace-lifecycle surface."""
+
+    def list_issues(self, **kwargs: Any) -> Any: ...
+
+    def get_issue(self, card_id: str) -> Any: ...
+
+    def start_workspace(
+        self,
+        *,
+        name: str,
+        repo: str,
+        executor: str,
+        branch: str,
+        **kwargs: Any,
+    ) -> Any: ...
+
+    def link_workspace_issue(self, ws_id: str, card_id: str) -> Any: ...
+
+
+def _normalize_workspaces(resp: Any) -> list[dict[str, Any]]:
+    """Accept both wire shape `{"workspaces": [...]}` and bare list."""
+    if isinstance(resp, dict):
+        items = resp.get("workspaces", [])
+    elif isinstance(resp, list):
+        items = resp
+    else:
+        return []
+    return [w for w in items if isinstance(w, dict)]
+
+
+def _normalize_issues(resp: Any) -> list[dict[str, Any]]:
+    if isinstance(resp, dict):
+        items = resp.get("issues", [])
+    elif isinstance(resp, list):
+        items = resp
+    else:
+        return []
+    return [c for c in items if isinstance(c, dict)]
+
+
+def archive_for_card(mcp: MCPArchiver, simple_id: str) -> bool:
+    """Archive the workspace whose name starts with f'{simple_id} ->'.
+
+    Returns True iff a workspace was archived. Empty / placeholder
+    `simple_id` is a silent no-op. Per-workspace archive failures are
+    logged but don't abort — the card has already transitioned to Done,
+    so the cleanup is best-effort.
+    """
+    if not simple_id or simple_id == "?":
+        return False
+    try:
+        resp = mcp.list_workspaces(archived=False, limit=200)
+    except Exception as e:  # noqa: BLE001 — non-fatal, see docstring
+        logger.warning("workspaces: list_workspaces failed for %s: %s", simple_id, e)
+        return False
+    prefix = f"{simple_id} ->"
+    archived_any = False
+    for w in _normalize_workspaces(resp):
+        name = w.get("name") or ""
+        if not name.startswith(prefix):
+            continue
+        ws_id = w.get("id")
+        if not ws_id:
+            continue
+        try:
+            mcp.update_workspace(ws_id, archived=True)
+            archived_any = True
+            logger.info("workspaces: archived %s for card %s", ws_id, simple_id)
+        except Exception as e:  # noqa: BLE001 — non-fatal
+            logger.warning("workspaces: archive %s failed: %s", ws_id, e)
+    return archived_any
+
+
+def reap_orphans(
+    mcp: MCPWorkspaceClient,
+    pinned: set[str] | None = None,
+) -> int:
+    """Archive bridge-created workspaces whose card is Done or missing.
+
+    Only workspaces matching the `<simple_id> -> gh#<n>` naming
+    convention are candidates. Workspaces whose name is in `pinned`
+    (or that carry `pinned=True` in their MCP payload) are skipped.
+
+    Returns count of workspaces archived.
+    """
+    pinned_names = pinned or set()
+    try:
+        ws_resp = mcp.list_workspaces(archived=False, limit=200)
+    except Exception as e:  # noqa: BLE001 — non-fatal
+        logger.warning("workspaces: reap list_workspaces failed: %s", e)
+        return 0
+    workspaces = _normalize_workspaces(ws_resp)
+    if not workspaces:
+        return 0
+
+    try:
+        cards_resp = mcp.list_issues(limit=500)
+    except Exception as e:  # noqa: BLE001 — non-fatal
+        logger.warning("workspaces: reap list_issues failed: %s", e)
+        return 0
+
+    card_status: dict[str, str] = {}
+    for c in _normalize_issues(cards_resp):
+        sid = c.get("simple_id")
+        if sid is not None:
+            card_status[str(sid)] = str(c.get("status", ""))
+
+    archived = 0
+    for w in workspaces:
+        if w.get("pinned"):
+            continue
+        name = w.get("name") or ""
+        if name in pinned_names:
+            continue
+        m = _BRIDGE_WS_NAME_RE.match(name)
+        if not m:
+            continue
+        sid = m.group("sid")
+        status = card_status.get(sid)
+        if status is not None and status != "Done":
+            continue
+        ws_id = w.get("id")
+        if not ws_id:
+            continue
+        try:
+            mcp.update_workspace(ws_id, archived=True)
+            archived += 1
+            reason = "no card" if status is None else "card Done"
+            logger.info("workspaces: reaped %s (sid=%s, %s)", ws_id, sid, reason)
+        except Exception as e:  # noqa: BLE001 — non-fatal
+            logger.warning("workspaces: reap %s failed: %s", ws_id, e)
+    return archived
+
+
+def recover_orphan_card(
+    mcp: MCPWorkspaceClient,
+    card_id: str,
+    simple_id: str,
+) -> str | None:
+    """Recreate a workspace for a card that has none.
+
+    Opt-in via `VK_BRIDGE_RECOVER_ORPHAN_CARDS=1`. With the flag unset,
+    the call logs a warning so the orphan is at least visible in the
+    cron log — matching the spec I5 "leaves the card alone but logs"
+    branch.
+
+    The new workspace name follows the bridge convention so the next
+    `reap_orphans` tick can recognize it. The card's title (set during
+    dispatch as `gh#<N>: [<owner/repo>]`) carries the GH Issue number
+    and repo; we parse them out to drive the workspace branch + repo.
+
+    Returns the new workspace id, or None if the flag is off or
+    recovery wasn't possible.
+    """
+    if os.environ.get("VK_BRIDGE_RECOVER_ORPHAN_CARDS") != "1":
+        logger.warning(
+            "workspaces: card without workspace (card=%s sid=%s); "
+            "set VK_BRIDGE_RECOVER_ORPHAN_CARDS=1 to recreate",
+            card_id,
+            simple_id,
+        )
+        return None
+
+    try:
+        card = mcp.get_issue(card_id)
+    except Exception as e:  # noqa: BLE001 — non-fatal
+        logger.warning("workspaces: recover get_issue(%s) failed: %s", card_id, e)
+        return None
+    if not isinstance(card, dict):
+        logger.warning("workspaces: recover got non-dict card for %s; bailing", card_id)
+        return None
+
+    title = card.get("title") or ""
+    m = re.search(r"gh#(\d+):\s*\[([\w./-]+)\]", title)
+    if not m:
+        logger.warning(
+            "workspaces: recover can't parse card title %r for sid %s; bailing",
+            title,
+            simple_id,
+        )
+        return None
+    issue_num = m.group(1)
+    repo = m.group(2)
+
+    try:
+        ws = mcp.start_workspace(
+            name=f"{simple_id} -> gh#{issue_num}",
+            repo=repo,
+            executor="CLAUDE_CODE",
+            branch=f"vk/gh-{issue_num}",
+        )
+    except Exception as e:  # noqa: BLE001 — non-fatal
+        logger.warning("workspaces: recover start_workspace failed: %s", e)
+        return None
+    if not isinstance(ws, dict):
+        logger.warning("workspaces: recover got non-dict workspace; bailing")
+        return None
+    ws_id = ws.get("id")
+    if not isinstance(ws_id, str) or not ws_id:
+        logger.warning("workspaces: recover workspace missing id; bailing")
+        return None
+
+    try:
+        mcp.link_workspace_issue(ws_id, card_id)
+    except Exception as e:  # noqa: BLE001 — non-fatal
+        logger.warning("workspaces: recover link_workspace_issue failed: %s", e)
+        return None
+
+    logger.info("workspaces: recovered orphan card %s with workspace %s", card_id, ws_id)
+    return ws_id

@@ -442,3 +442,72 @@ def test_render_omits_vk_synced_when_not_observed():
     )
     rendered = render(plan, obs)
     assert "vk-synced" not in {ld.name for ld in rendered.issue_per_phase[1].labels}
+
+
+def test_complete_phase_projects_closed_state():  # C5
+    """BDD scenario (spec §C5):
+    GIVEN a phase with state.completion.at set, all steps ticked,
+          and observed: 1 merged PR, no open non-draft PRs
+    WHEN  render(plan, observed) is called
+    THEN  rendered.issue_per_phase[N].state == 'CLOSED'
+
+    GIVEN diff(rendered, observed_with_open_issue, plan) is computed
+    THEN  an IssueStateChange(repo=..., issue_number=N, new_state='CLOSED')
+          mutation is emitted
+
+    Pin-test for the renderer's existing CLOSED projection at
+    src/vk/render.py:311 + diff.py's IssueStateChange emission at
+    src/vk/diff.py:177. Phase 3 folds the legacy bridge's
+    belt-and-braces close into the renderer projection.
+    """
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.diff import IssueStateChange, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation, PrObservation
+
+    plan = parse(FIXTURE)
+    # Set completion.at and tick the only step so _phase_complete fires.
+    p1 = plan.phases[0]
+    completed = p1.model_copy(
+        update={
+            "state": p1.state.model_copy(
+                update={
+                    "completion": p1.state.completion.model_copy(
+                        update={"at": "2026-05-17T12:00:00Z"}
+                    ),
+                    "steps": {
+                        "P1.T1.S1": p1.state.steps["P1.T1.S1"].model_copy(update={"state": "x"})
+                    },
+                }
+            ),
+            "phase": p1.phase.model_copy(
+                update={
+                    "tracking_issue": "https://github.com/derio-net/superpowers-for-vk/issues/154"
+                }
+            ),
+        }
+    )
+    new_plan = dc_replace(plan, phases=(completed,))
+
+    obs_merged = PhaseObservation(
+        issue_state="OPEN",
+        issue_labels=frozenset(),
+        issue_assignees=(),
+        linked_prs=(PrObservation(url="...", state="CLOSED", merged=True, draft=False, ci="PASS"),),
+        body="",
+    )
+    observed = GhState(phases={1: obs_merged})
+
+    rendered = render(new_plan, observed)
+    assert rendered.issue_per_phase[1].state == "CLOSED"
+
+    # And the diff layer must emit an IssueStateChange against an
+    # observation that still shows the Issue OPEN.
+    d = diff(rendered, observed, plan=new_plan)
+    state_changes = [m for m in d.mutations if isinstance(m, IssueStateChange)]
+    assert len(state_changes) == 1
+    assert state_changes[0].new_state == "CLOSED"
+    assert state_changes[0].issue_number == 154
+    assert state_changes[0].repo == "derio-net/superpowers-for-vk"
