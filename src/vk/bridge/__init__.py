@@ -207,10 +207,21 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
                 deferred += 1
                 continue
 
-            try:
-                if not already_dispatched:
+            # Split MCP-side and GH-side error paths so the `reason` label
+            # on the failure metric points at the actually-broken system.
+            # A dedup hit skips the MCP block entirely; the GH stamp still
+            # runs so the next tick won't retry. In both cases we report a
+            # `synced` outcome only when the GH stamp lands.
+            if not already_dispatched:
+                try:
                     dispatch_phase(plan, phase, vk_mcp)
                     budget -= 1
+                except Exception as e:  # noqa: BLE001 — one bad MCP call mustn't kill the tick
+                    failures.append(f"phase {phase.phase.number}: {e}")
+                    _metrics.push_failure_total(reason="mcp_error")
+                    continue
+
+            try:
                 gh.ensure_labels(issue_repo, [VK_SYNCED])
                 gh.edit_issue_labels(
                     issue_repo,
@@ -220,9 +231,9 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
                 )
                 synced += 1
                 _metrics.push_sync_total()
-            except Exception as e:  # noqa: BLE001 — one bad MCP call mustn't kill the tick
-                failures.append(f"phase {phase.phase.number}: {e}")
-                _metrics.push_failure_total(reason="mcp_error")
+            except Exception as e:  # noqa: BLE001 — GH outage mustn't kill the tick
+                failures.append(f"phase {phase.phase.number}: gh stamp failed: {e}")
+                _metrics.push_failure_total(reason="gh_error")
 
     # `skipped` semantics: number of would-be-dispatched phases left on the
     # floor this tick. When no phase was eligible at all, return 1 so the

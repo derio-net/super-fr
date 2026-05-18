@@ -9,10 +9,6 @@ Failure modes:
   - Script missing / not executable / non-zero exit / timeout → warn,
     swallow. The bridge survives even when the notification chain
     crumbles — dispatch is the load-bearing path, not lifecycle.
-
-`lifecycle_hook` is kept as a back-compat alias for the Phase 3 stub
-callers in `dispatch` / `pr_state`. New code should use
-`invoke_lifecycle_hook` for clarity.
 """
 
 from __future__ import annotations
@@ -22,7 +18,7 @@ import os
 import subprocess
 from typing import Literal
 
-__all__ = ["LifecycleState", "invoke_lifecycle_hook", "lifecycle_hook"]
+__all__ = ["LifecycleState", "invoke_lifecycle_hook"]
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +61,3 @@ def invoke_lifecycle_hook(issue_url: str, transition: LifecycleState) -> None:
             )
     except (subprocess.TimeoutExpired, FileNotFoundError, PermissionError, OSError) as e:
         logger.warning("lifecycle hook %s failed: %s", script, e)
-
-
-def lifecycle_hook(issue_url: str, state: LifecycleState) -> None:
-    """Back-compat alias of `invoke_lifecycle_hook`.
-
-    Phase 3 introduced this as a stub on a different signature noun
-    (`state` vs `transition`). Phase 4 unifies the implementation but
-    keeps both names so callers from the Phase 3 churn don't break.
-    """
-    invoke_lifecycle_hook(issue_url, state)

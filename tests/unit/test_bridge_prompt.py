@@ -143,6 +143,21 @@ def test_prompt_with_dep_whose_tracking_issue_is_unset_falls_back_to_phase_numbe
     assert "Phase 1" in text or "phase 1" in text
 
 
+def test_prompt_cross_repo_shows_both_target_and_tracking():
+    """When the phase's tracking_issue lives in a repo other than
+    `plan.meta.target_repo`, the prompt's `Repos:` line must list both
+    so the agent isn't misled about where the work lands."""
+    from vk.bridge.prompt import build_prompt
+
+    plan, phase = _plan_with_phase(
+        tracking_issue="https://github.com/derio-net/willikins/issues/9",
+        target_repo="derio-net/superpowers-for-vk",
+    )
+    text = build_prompt(plan, phase)
+    # Both repos appear, target_repo first (matches the meta intent).
+    assert "Repos: derio-net/superpowers-for-vk, derio-net/willikins" in text
+
+
 def test_prompt_with_no_tracking_issue_raises():
     """A phase with no tracking_issue can't be dispatched — building a
     prompt for it is a programmer error, not a runtime fallback."""

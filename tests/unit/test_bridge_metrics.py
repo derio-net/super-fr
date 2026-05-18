@@ -127,6 +127,17 @@ def test_tick_emits_sync_metric_on_dispatch_success(fake_pushgateway):
 
 
 def test_tick_emits_failure_metric_on_dispatch_error(fake_pushgateway):
+    """D3 — when `create_issue` (the first dispatch-side MCP call) raises,
+    the failure metric must fire with `reason="mcp_error"`.
+
+    Pre-dispatch tick now issues:
+      0 list_workspaces (slot budget)
+      1 list_issues     (dedup snapshot)
+      2 list_repos      (config repo-known gate)
+    So the first create_issue is call #3 — fail there to actually exercise
+    the dispatch-error metric path (not the unknown-repo path that
+    `list_repos` failure routes through).
+    """
     from vk.bridge import tick
     from vk.observe import observe
     from vk.render import render
@@ -137,14 +148,51 @@ def test_tick_emits_failure_metric_on_dispatch_error(fake_pushgateway):
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
-    # Fail create_issue (call #2 — list_workspaces + list_issues precede it).
-    mcp = FakeMcpClient(fail_on_call=2)
+    mcp = FakeMcpClient(fail_on_call=3)
     result = tick(plan, gh, mcp)
 
     assert result.synced == 0
     assert result.errors >= 1
     body = _bodies(fake_pushgateway)
     assert "willikins_vk_bridge_failure_total" in body
+    # The reason label discriminates dispatch errors from the
+    # unknown-repo gate — pin it so a future refactor that collapses
+    # the two paths back together regresses this test.
+    assert 'reason="mcp_error"' in body
+    assert 'reason="unknown_repo"' not in body
+
+
+def test_tick_emits_gh_error_metric_when_label_stamp_fails(fake_pushgateway):
+    """When `gh.ensure_labels` / `gh.edit_issue_labels` fails after a
+    successful dispatch, the failure metric must use `reason="gh_error"`,
+    NOT `reason="mcp_error"` — operators paged on MCP must not chase a
+    GH outage.
+    """
+    from vk.bridge import tick
+    from vk.observe import observe
+    from vk.render import render
+
+    plan, repo, n = _dispatched_plan()
+    gh = FakeGhClient()
+    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    rendered = render(plan, observe(plan, gh))
+    gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
+
+    # GH mutation order for one vk-ready phase:
+    #   0 ensure_labels      (apply's RepoLabelEnsure at the top)
+    #   1 edit_issue_labels  (apply's per-issue label diff)
+    #   2 ensure_labels      (tick's post-dispatch — ensure vk-synced)
+    #   3 edit_issue_labels  (tick's post-dispatch — add vk-synced)
+    # Fail #3 — that's inside tick's GH-stamp try-block, so the failure
+    # should route through `reason="gh_error"`.
+    gh.fail_on_mutation = 3
+
+    mcp = FakeMcpClient()
+    result = tick(plan, gh, mcp)
+
+    body = _bodies(fake_pushgateway)
+    assert 'reason="gh_error"' in body, body
+    assert result.synced == 0
 
 
 def test_tick_emits_heartbeat_even_on_idle_plan(fake_pushgateway):

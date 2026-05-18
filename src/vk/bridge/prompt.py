@@ -52,16 +52,23 @@ def _dep_ref(plan: Plan, dep_number: int) -> str:
     return f"Phase {dep_number}"
 
 
-def _format_repos(plan: Plan, fallback_repo: str) -> str:
-    """Best-effort multi-repo render.
+def _format_repos(plan: Plan, tracking_repo: str) -> str:
+    """Render the `Repos:` line for the prompt.
 
-    Prefer `plan.meta.target_repo`. Fall back to the tracking-issue's
-    own owner/name so prompts never render `Repos: ` (empty) when meta
-    is sparse — a plan-without-target-repo dispatch is rare but real
-    during early plan-creation flows.
+    For a same-repo phase we list the one repo. For a cross-repo phase
+    (`plan.meta.target_repo` ≠ the phase's `tracking_issue` repo) we
+    list both so the agent reading the prompt isn't misled about where
+    the work lands.
+
+    Fallback chain: meta.target_repo + tracking_repo (deduped, ordered),
+    then tracking_repo alone if meta is unset, then "" only if both are
+    missing (shouldn't happen at dispatch time — `build_prompt` already
+    requires `tracking_issue`).
     """
     meta_repo = getattr(plan.meta, "target_repo", None)
-    return meta_repo or fallback_repo
+    if meta_repo and meta_repo != tracking_repo:
+        return f"{meta_repo}, {tracking_repo}"
+    return meta_repo or tracking_repo
 
 
 def build_prompt(plan: Plan, phase: PhaseDoc) -> str:
