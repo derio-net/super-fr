@@ -5,7 +5,7 @@ phase:
   tag: agentic
   depends_on:
   - 6
-  tracking_issue: null
+  tracking_issue: https://github.com/derio-net/superpowers-for-vk/issues/187
 tasks:
 - number: 1
   title: Combine repo-sync + deps into one laconic numbered preamble
