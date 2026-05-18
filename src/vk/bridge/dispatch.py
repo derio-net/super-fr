@@ -124,12 +124,44 @@ def _resolve_repo_id(mcp: MCPDispatch, repo: str) -> str:
     return repo_id
 
 
-def _expect_id(value: Any, op: str) -> str:
-    """Coerce an MCP result to its id-string, or raise with context."""
+def _expect_id(value: Any, op: str, *, field: str = "id") -> str:
+    """Extract an id-string from an MCP tool response.
+
+    VK's MCP tools use tool-specific envelope keys, not a generic `id`
+    (see `vibe-kanban-mcp/.../remote_issues.rs` +
+    `.../task_attempts.rs`):
+
+    - `create_issue`    → `{"issue_id": "<uuid>"}`
+    - `start_workspace` → `{"workspace_id": "<uuid>"}`
+
+    Pass `field=` to name the key the tool actually uses. Falls back
+    to a wrapped shape (`{"issue": {"id": ...}}`) and to a bare `id`
+    for forward-compat with tools whose response shape is unchanged.
+    Raises `VkMcpError` (with the offending payload in the message)
+    if nothing matches — better than letting a `None` id propagate.
+
+    Pre-2026-05-18 this only checked the bare `id` key, so the bridge
+    raised on `create_issue` / `start_workspace` AFTER VK had already
+    created the card → cards stranded in default "To do" with no
+    workspace. The fix lets the full dispatch chain land.
+    """
     if isinstance(value, dict):
-        candidate = value.get("id")
+        # Primary key for the tool (e.g. issue_id, workspace_id).
+        candidate = value.get(field)
         if isinstance(candidate, str) and candidate:
             return candidate
+        # Some tools return `{"<entity>": {"id": ...}}` — try the wrapped
+        # form derived from the field name (`issue_id` → `issue`).
+        wrap_key = field[:-3] if field.endswith("_id") else field
+        wrapped = value.get(wrap_key)
+        if isinstance(wrapped, dict):
+            wrap_id = wrapped.get("id")
+            if isinstance(wrap_id, str) and wrap_id:
+                return wrap_id
+        # Last-ditch: bare `id` (legacy convention; unused by VK today).
+        bare = value.get("id")
+        if isinstance(bare, str) and bare:
+            return bare
     raise VkMcpError(f"{op} returned unexpected shape: {value!r}")
 
 
@@ -177,7 +209,7 @@ def dispatch_phase(
     )
 
     card = mcp.create_issue(title=title, description=description, project_id=project_id)
-    card_id = _expect_id(card, "create_issue")
+    card_id = _expect_id(card, "create_issue", field="issue_id")
     mcp.update_issue(card_id, status="In progress")
 
     repo_id = _resolve_repo_id(mcp, repo)
@@ -187,7 +219,7 @@ def dispatch_phase(
         executor="CLAUDE_CODE",
         branch=f"vk/gh-{issue_n}",
     )
-    ws_id = _expect_id(ws, "start_workspace")
+    ws_id = _expect_id(ws, "start_workspace", field="workspace_id")
 
     mcp.link_workspace_issue(ws_id, card_id)
 

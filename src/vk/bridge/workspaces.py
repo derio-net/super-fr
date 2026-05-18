@@ -290,6 +290,10 @@ def recover_orphan_card(
     if not isinstance(card, dict):
         logger.warning("workspaces: recover got non-dict card for %s; bailing", card_id)
         return None
+    # VK's `get_issue` returns `{"issue": {...}}` (wrapped). Unwrap to the
+    # inner record so `.get("title")` / `.get("simple_id")` work.
+    if "issue" in card and isinstance(card["issue"], dict):
+        card = card["issue"]
 
     title = card.get("title") or ""
     m = re.search(r"gh#(\d+):\s*\[([\w./-]+)\]", title)
@@ -331,7 +335,11 @@ def recover_orphan_card(
     if not isinstance(ws, dict):
         logger.warning("workspaces: recover got non-dict workspace; bailing")
         return None
-    ws_id = ws.get("id")
+    # VK's start_workspace returns `{"workspace_id": "<uuid>"}` (NOT `id`).
+    # Accept `id` as a forward-compat fallback in case the wire shape
+    # changes; both pre-fix tests and the FakeMcpClient happened to use
+    # `id`, so the legacy form stays valid even though VK doesn't emit it.
+    ws_id = ws.get("workspace_id") or ws.get("id")
     if not isinstance(ws_id, str) or not ws_id:
         logger.warning("workspaces: recover workspace missing id; bailing")
         return None
