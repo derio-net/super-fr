@@ -133,14 +133,27 @@ def _expect_id(value: Any, op: str) -> str:
     raise VkMcpError(f"{op} returned unexpected shape: {value!r}")
 
 
-def dispatch_phase(plan: Plan, phase: PhaseDoc, mcp: MCPDispatch) -> DispatchResult:
+def dispatch_phase(
+    plan: Plan,
+    phase: PhaseDoc,
+    mcp: MCPDispatch,
+    *,
+    project_id: str,
+) -> DispatchResult:
     """Create VK card + workspace for a vk-ready phase.
+
+    `project_id` is the VK project Uuid the card lands in. Required
+    because the cron bridge runs outside any workspace context, so
+    `create_issue` can't infer it server-side (see VK MCP's
+    `remote_issues.rs::create_issue`). The caller — typically
+    `vk.bridge.tick` — reads `VK_DERIO_OPS_PROJECT` and forwards it.
 
     Raises:
         ValueError: if the phase has no `tracking_issue` (dispatch
             requires an anchoring GH Issue).
         VkMcpError: if the MCP server returns an unexpected payload
-            shape (no `id` on create_issue / start_workspace).
+            shape (no `id` on create_issue / start_workspace) or VK
+            has no repo registered for the tracking_issue's owner/name.
         Any: propagates exceptions from MCP calls (the caller — typically
             `vk.bridge.tick` — is responsible for swallowing one-phase
             failures so they don't kill the whole tick).
@@ -163,7 +176,7 @@ def dispatch_phase(plan: Plan, phase: PhaseDoc, mcp: MCPDispatch) -> DispatchRes
         ]
     )
 
-    card = mcp.create_issue(title=title, description=description)
+    card = mcp.create_issue(title=title, description=description, project_id=project_id)
     card_id = _expect_id(card, "create_issue")
     mcp.update_issue(card_id, status="In progress")
 

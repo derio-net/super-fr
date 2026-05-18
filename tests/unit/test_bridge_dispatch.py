@@ -34,7 +34,7 @@ def test_dispatch_creates_card_and_workspace():  # B1
     """BDD scenario (spec §B1):
     GIVEN a vk-ready phase with tracking_issue set, no existing VK card
     AND   a FakeMcpClient configured to record calls
-    WHEN  dispatch_phase(plan, phase, mcp) is called
+    WHEN  dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id") is called
     THEN  mcp received a create_issue call
     AND   an update_issue call setting status='In progress'
     AND   a list_repos call
@@ -50,7 +50,7 @@ def test_dispatch_creates_card_and_workspace():  # B1
         plan, 0, "https://github.com/derio-net/superpowers-for-vk/issues/42"
     )
     mcp = FakeMcpClient()
-    result = dispatch_phase(plan, phase, mcp)
+    result = dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
     names = [c[0] for c in mcp.calls]
     assert "create_issue" in names
     assert "update_issue" in names
@@ -81,7 +81,7 @@ def test_card_title_is_minimal_and_description_is_structured():  # H9
     plan = load_plan_dir(CROSS_REPO)
     phase = plan.phases[1]  # dispatched on derio-net/repo-b/issues/100
     mcp = FakeMcpClient()
-    dispatch_phase(plan, phase, mcp)
+    dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
     (create_call,) = [c for c in mcp.calls if c[0] == "create_issue"]
     args = create_call[1]
     assert args["title"] == "gh#100: [derio-net/repo-b]"

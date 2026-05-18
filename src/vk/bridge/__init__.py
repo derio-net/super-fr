@@ -119,7 +119,13 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
     return out
 
 
-def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
+def tick(
+    plan: Plan,
+    gh: GhClient,
+    vk_mcp: MCPDispatch,
+    *,
+    project_id: str | None = None,
+) -> TickResult:
     """One cron iteration for a single plan.
 
     Pipeline: observe → render → diff → apply (GH-side only) → for each
@@ -130,6 +136,15 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
     pre-apply observation: an agent claiming the Issue between dispatch
     and this tick projects `in-progress` (no `vk-ready`), and the
     bridge correctly skips.
+
+    `project_id` is the VK project Uuid the bridge dispatches into. When
+    None, falls back to `VK_DERIO_OPS_PROJECT` env (legacy bridge's
+    convention). Required for `create_issue` and `list_issues` calls
+    because the cron runs outside a VK workspace context. If neither is
+    set AND a phase is eligible for dispatch, every such phase
+    accumulates a clean "project_id missing" failure rather than the
+    opaque server-side `{"success": False, "error": "project_id is
+    required"}` payload.
 
     GH-side `apply()` failures are accumulated rather than raised — they
     don't block per-phase VK syncs for phases whose projected state is
@@ -142,6 +157,9 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
     no-op apply. The unit is **plans**, not phases — sum across plans
     to count idle plans, not idle phases.
     """
+    if project_id is None:
+        project_id = os.environ.get("VK_DERIO_OPS_PROJECT") or None
+
     # Fresh repo lookup per tick so config drift propagates.
     _config.clear_repo_cache()
 
@@ -181,6 +199,28 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
     synced = 0
     deferred = 0
     if eligible_phases:
+        # project_id gate: VK's create_issue / list_issues both require it
+        # when the MCP server isn't running inside a workspace context
+        # (the cron bridge is exactly that case — see
+        # `vibe-kanban-mcp/.../remote_issues.rs::create_issue`). Without
+        # it, the server returns an opaque
+        # `{"success": False, "error": "project_id is required ..."}` —
+        # fail clean here instead.
+        if not project_id:
+            for phase, _, _ in eligible_phases:
+                failures.append(
+                    f"phase {phase.phase.number}: VK_DERIO_OPS_PROJECT unset; "
+                    "cannot dispatch (set the env or pass project_id explicitly)"
+                )
+                _metrics.push_failure_total(reason="project_id_missing")
+            _metrics.push_heartbeat()
+            return TickResult(
+                synced=0,
+                errors=len(failures),
+                skipped=len(eligible_phases),
+                failures=tuple(failures),
+            )
+
         # Slot gate: snapshot active workspaces once per tick, then
         # decrement the remaining-budget counter as we dispatch.
         try:
@@ -191,7 +231,7 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
 
         # Dedup snapshot: one list_issues call covers every phase in this plan.
         try:
-            existing_titles = _dedup.fetch_existing_titles(vk_mcp)
+            existing_titles = _dedup.fetch_existing_titles(vk_mcp, project_id=project_id)
         except Exception as e:  # noqa: BLE001
             failures.append(f"dedup fetch failed: {e}")
             existing_titles = set()
@@ -219,7 +259,7 @@ def tick(plan: Plan, gh: GhClient, vk_mcp: MCPDispatch) -> TickResult:
             # `synced` outcome only when the GH stamp lands.
             if not already_dispatched:
                 try:
-                    dispatch_phase(plan, phase, vk_mcp)
+                    dispatch_phase(plan, phase, vk_mcp, project_id=project_id)
                     budget -= 1
                 except Exception as e:  # noqa: BLE001 — one bad MCP call mustn't kill the tick
                     failures.append(f"phase {phase.phase.number}: {e}")

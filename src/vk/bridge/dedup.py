@@ -25,7 +25,7 @@ class _IssueLister(Protocol):
     def list_issues(self, **kwargs: Any) -> Any: ...
 
 
-def fetch_existing_titles(mcp: _IssueLister) -> set[str]:
+def fetch_existing_titles(mcp: _IssueLister, *, project_id: str | None = None) -> set[str]:
     """Return the set of card titles currently visible in VK.
 
     Accepts the bare-list or dict-wrapped shape — same defensive
@@ -33,8 +33,16 @@ def fetch_existing_titles(mcp: _IssueLister) -> set[str]:
     treated as the empty set so a transient list_issues hiccup
     can't trip a duplicate-card creation: dispatch will surface its
     own server-side conflict if a real collision exists.
+
+    When `project_id` is supplied, the call is scoped to that VK
+    project — both for correctness (VK requires `project_id` when the
+    MCP server isn't running in a workspace context) and to avoid
+    matching unrelated cards from other projects.
     """
-    resp = mcp.list_issues()
+    kwargs: dict[str, str] = {}
+    if project_id:
+        kwargs["project_id"] = project_id
+    resp = mcp.list_issues(**kwargs)
     if resp is None:
         return set()
     items = resp.get("issues", []) if isinstance(resp, dict) else resp
