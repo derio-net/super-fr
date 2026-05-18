@@ -75,30 +75,43 @@ def _repo_checkout_root(repo: str) -> Path:
     return root / name
 
 
-def _any_phase_is_vk_ready(plan: Plan, gh: GhClient) -> bool:
-    """True iff at least one phase Issue carries `vk-ready`."""
-    for phase in plan.phases:
-        url = phase.phase.tracking_issue
-        if not url:
-            continue
-        try:
-            repo, number = parse_issue_url(url)
-            info = gh.view_issue(repo, number)
-        except Exception as e:  # noqa: BLE001 — bridge must survive one bad phase
-            logger.warning("bridge: failed to view %s: %s", url, e)
-            continue
-        if "vk-ready" in set(info.get("labels", [])):
-            return True
-    return False
+def _any_phase_incomplete(plan: Plan) -> bool:
+    """True iff at least one phase is not yet complete (per plan yaml).
+
+    Yaml-only check — no gh API call. Skips fully-shipped plans where
+    every phase has `state.completion.at` set; keeps plans where at
+    least one phase is still in flight (either never dispatched, in
+    progress, or PR-pending) so the bridge's tick can self-heal label
+    drift on them.
+
+    Pre-2026-05-18 used `_any_phase_is_vk_ready(plan, gh)` — required
+    an observed `vk-ready` label on at least one Issue. That
+    optimization had two failure modes:
+      1. Operator stripping `vk-ready` (e.g., as race protection
+         during a writeback PR) quarantined the plan from the bridge
+         — tick never ran, so the label could never be re-projected.
+      2. A freshly-dispatched plan whose writeback hadn't merged yet
+         had `tracking_issue: None` for every phase → skipped here →
+         no chance for tick to re-render.
+    Switching to a yaml-only "incomplete" check fixes both, and is
+    strictly cheaper (no gh API calls per plan).
+    """
+    return any(p.state.completion.at is None for p in plan.phases)
 
 
 def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
-    """Walk `docs/superpowers/plans/` in `repo`, return plans with a vk-ready phase.
+    """Walk `docs/superpowers/plans/` in `repo`, return plans with at least
+    one incomplete phase.
 
     Returns `[]` (no exception) if the checkout is missing or the plans
     directory is absent. Individual unparseable plan folders are logged
     and skipped so a single malformed plan can't take down the cron tick.
+
+    The `gh` parameter is kept for backward compatibility but no longer
+    consulted — discovery is yaml-only since 2026-05-18 (see
+    `_any_phase_incomplete` docstring for the bug-history).
     """
+    del gh  # unused; kept in signature for backward compat
     repo_root = _repo_checkout_root(repo)
     plans_dir = repo_root / "docs" / "superpowers" / "plans"
     if not plans_dir.is_dir():
@@ -114,7 +127,9 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
         except PlanSchemaError as e:
             logger.warning("bridge: skipping unparseable plan %s: %s", plan_dir, e)
             continue
-        if _any_phase_is_vk_ready(plan, gh):
+        # Yaml-only filter since 2026-05-18 — see _any_phase_incomplete.__doc__
+        # for the chicken-and-egg bug-history that motivated the switch.
+        if _any_phase_incomplete(plan):
             out.append(plan)
     return out
 
