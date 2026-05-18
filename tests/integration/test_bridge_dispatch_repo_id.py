@@ -209,7 +209,7 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
         f"start_workspace must use the uuid from list_repos, not the owner/name; "
         f"got repo_id={start_args['repo_id']!r}"
     )
-    assert start_args["branch"] == "vk/gh-42"
+    assert start_args["branch"] == "main"  # base branch (VK forks off this)
     assert start_args["executor"] == "CLAUDE_CODE"
     # No `repo=` kwarg should slip through.
     assert "repo" not in start_args, (

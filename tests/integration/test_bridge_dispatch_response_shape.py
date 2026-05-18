@@ -73,8 +73,14 @@ class _RealShapeMcp:
         self._record("create_issue", {"title": title, "description": description, **kw})
         self._next_card += 1
         card_id = f"card-uuid-{self._next_card}"
+        # Real VK assigns a `simple_id` (e.g. "FFE-196") at creation
+        # and surfaces it on subsequent reads. The bridge uses simple_id
+        # as the sid prefix in workspace names so `reap_orphans` can
+        # match workspace → card.
+        simple_id = f"FFE-{self._next_card}"
         self.cards[card_id] = {
             "id": card_id,
+            "simple_id": simple_id,
             "title": title,
             "description": description,
             "status": "To do",  # VK's default
@@ -85,7 +91,8 @@ class _RealShapeMcp:
     def update_issue(self, card_id: str, **changes: Any) -> dict[str, Any]:
         self._record("update_issue", {"card_id": card_id, **changes})
         self.cards.setdefault(card_id, {"id": card_id}).update(changes)
-        # Real VK envelope — wrapped.
+        # Real VK envelope — wrapped. Includes `simple_id` so callers
+        # can extract it post-update without a separate `get_issue`.
         return {"issue": dict(self.cards[card_id])}
 
     def start_workspace(
@@ -106,13 +113,25 @@ class _RealShapeMcp:
         # `issue_id=` so VK can derive the prompt from the issue's
         # title/description. Neither → server returns
         # `{success: False, error: "Provide `prompt`, or `issue_id` ..."}`.
-        # The fake mirrors that so the bridge can't accidentally regress
-        # to neither.
         if not kw.get("prompt") and not kw.get("issue_id"):
             return {
                 "success": False,
                 "error": (
                     "Provide `prompt`, or `issue_id` that has a non-empty title/description."
+                ),
+            }
+        # The `branch` field is the BASE branch (target_branch in the
+        # internal payload — see `task_attempts.rs::start_workspace`
+        # mapping `r.branch -> WorkspaceRepoInput.target_branch`). VK
+        # forks the new workspace branch off this one, so it must
+        # exist in the target repo. The bridge sending `vk/gh-{N}`
+        # (the fork name) triggers a 400. Pin the contract here.
+        if branch not in {"main", "master", "trunk"}:
+            return {
+                "success": False,
+                "error": (
+                    f"VK API returned error status: 400 Bad Request "
+                    f"(base branch {branch!r} not found in target repo)"
                 ),
             }
         self._next_ws += 1
@@ -248,6 +267,24 @@ def test_tick_dispatches_end_to_end_against_real_vk_envelopes(tmp_path: Path) ->
     assert start_args.get("issue_id") == "card-uuid-1", (
         f"start_workspace must carry issue_id=<card_id>; got {start_args!r}"
     )
+    # `branch` must be the BASE branch (target_branch in VK's internal
+    # payload), not the workspace branch name. VK forks off this branch;
+    # passing `vk/gh-{N}` triggers a 400 because that branch doesn't
+    # exist in the target repo.
+    assert start_args.get("branch") == "main", (
+        f"start_workspace.branch must be the BASE branch (e.g. 'main'), "
+        f"not the workspace branch name; got {start_args.get('branch')!r}"
+    )
+    # Workspace name uses the freshly-created card's `simple_id` as the
+    # sid prefix so `reap_orphans` can match workspace ↔ card on the
+    # next tick. Plan-slug-PN as the sid wouldn't match card simple_ids
+    # in `card_status` and the workspace would be archived right after
+    # creation (observed live 2026-05-18 21:38).
+    assert start_args["name"].startswith("FFE-1 -> "), (
+        f"start_workspace.name must use the card's simple_id as sid "
+        f"prefix so reap_orphans can match; got {start_args['name']!r}"
+    )
+    assert "-> gh#42" in start_args["name"]
     # `start_workspace.workspace_id` must flow into `link_workspace_issue.workspace_id`
     assert link_args["workspace_id"] == "ws-uuid-1"
     assert link_args["issue_id"] == "card-uuid-1"
