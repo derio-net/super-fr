@@ -32,20 +32,37 @@ Mixed PRs (some of each) bump, because at least one file that matters changed.
 
 ### How to bump
 
-Three files are the source of truth. They must stay in lockstep:
+`pyproject.toml` `[project].version` is the **single canonical source**.
+The two plugin JSONs (`.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json`) must match it byte-for-byte; the
+Python code reads its version dynamically via `importlib.metadata`
+(`src/vk/__init__.py`), so it follows pyproject automatically.
 
-| File | Field |
-|---|---|
-| `pyproject.toml` | `[project].version` |
-| `.claude-plugin/plugin.json` | `.version` |
-| `.claude-plugin/marketplace.json` | `.plugins[0].version` |
+Use the helper, not a manual three-file edit:
 
-After editing, run `uv sync` so `uv.lock` picks up the new `vk==<version>`
-entry, then `uv run vk --version` to confirm the CLI reports the new number.
+```bash
+scripts/bump-version.py patch       # 2.1.7 -> 2.1.8 (most common)
+scripts/bump-version.py minor       # 2.1.7 -> 2.2.0
+scripts/bump-version.py major       # 2.1.7 -> 3.0.0
+scripts/bump-version.py 2.3.1       # set explicitly
+scripts/bump-version.py --check     # verify all three agree (also runs in CI)
+```
+
+The script updates all three files, runs `uv sync` to refresh `uv.lock`,
+and verifies `uv run vk --version` reports the new number. Commit the
+four changed files (three sources + `uv.lock`) together in your PR.
+
+CI runs `bump-version.py --check` on every PR (`version-sync` job in
+`ci.yml`) — drift between the three files fails the build.
+
+When the version-bump PR merges to `main`, `.github/workflows/auto-tag.yml`
+fires on the `pyproject.toml` change, creates the `vX.Y.Z` tag, and
+publishes a GitHub Release with auto-generated notes. No human action
+needed once the PR is in.
 
 `package.json` exists at the repo root but is dormant (last touched at
-`v0.2.1`). The install pipeline doesn't read it. Leave it alone unless you're
-doing a broader cleanup.
+`v0.2.1`). The install pipeline doesn't read it. Leave it alone unless
+you're doing a broader cleanup.
 
 ### Versioning scheme
 
@@ -92,9 +109,8 @@ created specifically to propagate that work.
 
 - Add a CI guard that fails PRs touching `skills/`, `src/`, `rules/`, or
   installer scripts without a version bump on `main`. Would make this rule
-  load-bearing instead of voluntary.
-- Add a `make bump` / `vk release bump` helper so the three-file update stops
-  being a tripping hazard. Should also update `uv.lock` via `uv sync`.
+  load-bearing instead of voluntary. (Drift detection is done — see
+  `version-sync` job — but the "did you remember to bump?" guard isn't.)
 - Consider dropping `package.json` at the repo root if nothing reads it; it's
   been at `1.0.4` since early plugin scaffolding and the drift is itself a
   small "is this real?" distraction.

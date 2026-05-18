@@ -26,3 +26,11 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
       - run: uv run pytest
+
+  version-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: pyproject.toml / plugin.json / marketplace.json agree
+        run: uv run --no-project python scripts/bump-version.py --check
