@@ -6,9 +6,20 @@ structured plan field), NOT from the GH Issue body. Body-text parsing
 is gone in v2 — the plan is authoritative.
 
 The bridge writes this prompt to the workspace's initial agent message.
-The deps preamble fires whenever `depends_on` is non-empty so the agent
-self-gates on blockers even if the dispatch-side `vk-blocked` projection
-slipped through.
+The "BEFORE YOU BEGIN" block is a numbered list of pre-flight checks
+the bridge prepends; the agent self-gates on each item:
+
+  1. Sync step — UNCONDITIONAL. Tells the agent to fetch+rebase its
+     worktree on `origin/main` before starting. Added in Phase 8 of
+     #147 (the 2026-05-18 stale-checkout incident) because the
+     bridge pod's `~/repos/<repo>` checkout is shared with the
+     operator and can't be auto-pulled by the bridge (would clobber
+     in-progress work). The fix is agent-side compensation, NOT a
+     change to the underlying shared-pod ownership model.
+  2. Deps step — CONDITIONAL on `phase.depends_on` being non-empty.
+     Tells the agent to verify each blocker Issue is CLOSED. Still a
+     defense in depth even after the dispatch-side `vk-blocked`
+     projection gates dispatch.
 """
 
 from __future__ import annotations
@@ -20,19 +31,29 @@ from vk.types import PhaseDoc
 __all__ = ["build_prompt"]
 
 
-_DEPS_PREAMBLE_TEMPLATE = (
-    "BEFORE YOU BEGIN: This Issue declares dependencies: {dep_refs}.\n"
-    "Verify each is CLOSED via `gh issue view <n> --repo <owner/repo> --json state`.\n"
-    "If any is OPEN:\n"
-    "  - STOP. Do not start work.\n"
-    "  - Do not duplicate the upstream work.\n"
-    "  - Do not start 'parts that don't depend on it'.\n"
-    "  - Exit with message: 'Blocked on <open_blocker>, not starting.'\n"
-    "The bridge should have deferred this workspace if a blocker were "
-    "open — if you see this and blockers are open, report it to the "
-    "operator.\n\n"
-    "---\n\n"
+_SYNC_LINE = (
+    "1. Fetch and rebase your worktree on origin/main: "
+    "`git fetch origin && git rebase origin/main`. "
+    "If rebase produces conflicts, STOP and report."
 )
+
+
+def _deps_line(dep_refs: str) -> str:
+    return (
+        f"2. This Issue declares dependencies: {dep_refs}. "
+        "Verify each is CLOSED via "
+        "`gh issue view <n> --repo <owner/repo> --json state`. "
+        "If any is OPEN, STOP and exit with: "
+        "'Blocked on <open_blocker>, not starting.'"
+    )
+
+
+def _build_preamble(plan: Plan, phase: PhaseDoc) -> str:
+    items = [_SYNC_LINE]
+    if phase.phase.depends_on:
+        dep_refs = ", ".join(_dep_ref(plan, dep) for dep in phase.phase.depends_on)
+        items.append(_deps_line(dep_refs))
+    return "BEFORE YOU BEGIN:\n" + "\n".join(items) + "\n\n---\n\n"
 
 
 def _dep_ref(plan: Plan, dep_number: int) -> str:
@@ -93,10 +114,7 @@ def build_prompt(plan: Plan, phase: PhaseDoc) -> str:
     # immediately rather than rendering `gh#?:` and pretending it's OK.
     repo, issue_n = parse_issue_url(tracking)
 
-    preamble = ""
-    if phase.phase.depends_on:
-        dep_refs = ", ".join(_dep_ref(plan, dep) for dep in phase.phase.depends_on)
-        preamble = _DEPS_PREAMBLE_TEMPLATE.format(dep_refs=dep_refs)
+    preamble = _build_preamble(plan, phase)
 
     repos = _format_repos(plan, repo)
 

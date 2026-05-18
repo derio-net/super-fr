@@ -5,9 +5,15 @@ The legacy bridge built its agent prompt from the GH Issue body text
 critical change that the dependency preamble is derived from the
 parsed phase's `depends_on` field, NOT from body-text parsing.
 
-The deps preamble fires whenever the phase declares dependencies —
-the operator still wants to see the gate fire if `vk-blocked` somehow
-slipped through. When the deps list is empty, no preamble appears.
+The "BEFORE YOU BEGIN" preamble is a numbered list:
+
+  1. Unconditional sync step — always present. Tells the agent to
+     fetch+rebase its worktree on `origin/main` before starting. Added
+     in Phase 8 of #147 because the bridge pod's checkouts are shared
+     with the operator and can't be auto-pulled.
+  2. Conditional deps step — present only when `phase.depends_on` is
+     non-empty. Tells the agent to verify each blocker Issue is CLOSED
+     before starting.
 """
 
 from __future__ import annotations
@@ -55,13 +61,55 @@ def test_prompt_includes_issue_url_repo_and_skill():
     assert "superpowers-for-vk:vk-execute" in text
 
 
-def test_prompt_without_deps_has_no_preamble():
-    """No `depends_on` → no `BEFORE YOU BEGIN` preamble."""
+def test_prompt_without_deps_still_has_sync_preamble():
+    """Even with no `depends_on`, the preamble still appears — the
+    sync step (item 1) is unconditional. The deps step (item 2) is
+    omitted."""
     from vk.bridge.prompt import build_prompt
 
     plan, phase = _plan_with_phase(depends_on=())
     text = build_prompt(plan, phase)
-    assert "BEFORE YOU BEGIN" not in text
+    assert "BEFORE YOU BEGIN:" in text
+    assert "1. Fetch and rebase your worktree on origin/main" in text
+    assert "git fetch origin && git rebase origin/main" in text
+    # No item 2 (no deps).
+    assert "2. This Issue declares dependencies" not in text
+
+
+def test_prompt_sync_step_appears_before_deps_step():
+    """When the phase has deps, item 2 appears AFTER item 1 in the
+    numbered list."""
+    from vk import parse
+    from vk.bridge.prompt import build_prompt
+
+    plan = parse(FIXTURE)
+    blocker = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={
+                    "number": 1,
+                    "tracking_issue": "https://github.com/owner/repo/issues/100",
+                }
+            )
+        }
+    )
+    dependent = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={
+                    "number": 2,
+                    "depends_on": (1,),
+                    "tracking_issue": "https://github.com/owner/repo/issues/200",
+                }
+            )
+        }
+    )
+    plan = dc_replace(plan, phases=(blocker, dependent))
+
+    text = build_prompt(plan, dependent)
+    sync_idx = text.index("1. Fetch and rebase")
+    deps_idx = text.index("2. This Issue declares dependencies")
+    assert sync_idx < deps_idx
 
 
 def test_prompt_with_one_dep_includes_preamble_referencing_dep_issue():
