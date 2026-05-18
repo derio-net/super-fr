@@ -127,6 +127,8 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
         except PlanSchemaError as e:
             logger.warning("bridge: skipping unparseable plan %s: %s", plan_dir, e)
             continue
+        # Yaml-only filter since 2026-05-18 — see _any_phase_incomplete.__doc__
+        # for the chicken-and-egg bug-history that motivated the switch.
         if _any_phase_incomplete(plan):
             out.append(plan)
     return out

@@ -185,6 +185,10 @@ def test_discover_plans_returns_incomplete_plan_when_tracking_issue_null(
 def test_discover_plans_skips_fully_complete_plan(repo_layout: Path) -> None:
     """All phases complete → plan is shipped → no tick needed → skip.
     Perf optimization that doesn't regress in the new yaml-only filter.
+
+    Also pins the "no gh API calls during discovery" contract: future
+    refactors that re-introduce a per-phase `gh.view_issue` would fail
+    this test even if the filter outcome stayed correct.
     """
     from tests.unit.fakes import FakeGhClient
     from vk.bridge import discover_plans
@@ -196,7 +200,24 @@ def test_discover_plans_skips_fully_complete_plan(repo_layout: Path) -> None:
         completion_at="2026-05-10T12:00:00Z",
     )
 
-    assert discover_plans("derio-net/test", FakeGhClient()) == []
+    gh = FakeGhClient()
+    # Wrap view_issue to count calls — discover_plans must make ZERO
+    # gh API calls (yaml-only) regardless of plan state.
+    view_issue_calls = 0
+    original_view_issue = gh.view_issue
+
+    def counting_view_issue(repo: str, number: int) -> dict[str, object]:
+        nonlocal view_issue_calls
+        view_issue_calls += 1
+        return original_view_issue(repo, number)
+
+    gh.view_issue = counting_view_issue  # type: ignore[method-assign]
+
+    assert discover_plans("derio-net/test", gh) == []
+    assert view_issue_calls == 0, (
+        f"discover_plans MUST be yaml-only (zero gh API calls); "
+        f"got {view_issue_calls} view_issue calls"
+    )
 
 
 def test_discover_plans_returns_empty_when_checkout_missing(
