@@ -14,3 +14,11 @@ build/
 
 # Local git worktrees.
 .worktrees/
+
+# Dormant npm scaffolding. PR #173 removed package.json and
+# package-lock.json (nothing reads them since the 2026-04-13
+# installer rewrite that switched to .claude-plugin/*.json). Some
+# editor / IDE tooling regenerates an empty package-lock.json on
+# scan; ignore both names so it doesn't leak into git status.
+package.json
+package-lock.json
