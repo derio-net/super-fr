@@ -1570,3 +1570,12 @@ Test traceability: each capability's test docstring repeats the Given/When/Then.
 |------|------|------|------------|
 | 2026-05-17-v2-bridge-rebuild | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-17-v2-bridge-rebuild/` | — |
 | 2026-05-17-v2-bridge-cutover | `derio-net/agent-images` | `docs/superpowers/plans/2026-05-17-v2-bridge-cutover/` | `2026-05-17-v2-bridge-rebuild` (`v2.2.0` tag) |
+
+## Post-deploy gaps
+
+Seven structural mismatches between this design's wire-shape assumptions
+and the real `vibe-kanban-mcp` server were caught only after the rebuild
+shipped — they were invisible to the test suite because `FakeMcpClient`
+codified the *intended* shape, not VK's actual shape. Fixes landed across
+PRs #236–#242 (v2.2.5 → v2.2.11) on 2026-05-18. Full timeline, root causes,
+and follow-up items: [`audits/2026-05-18-bridge-dispatch-rebuild-gap.md`](../audits/2026-05-18-bridge-dispatch-rebuild-gap.md).
