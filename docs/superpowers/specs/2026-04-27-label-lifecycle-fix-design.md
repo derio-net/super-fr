@@ -489,7 +489,7 @@ edge cases in repos with hand-curated label sets; per-repo errors from
 | Phase 1 — Lifecycle in vk-execute | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-27-label-lifecycle-fix-phase-1/` | — |
 | Label Lifecycle Fix Phase 2 Implementation Plan: Project-Board Excision | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-27-label-lifecycle-fix-phase-2-project-board-excision/` | — |
 | Label Lifecycle Fix Phase 3 Implementation Plan: `vk admin labels-sync` | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-27-label-lifecycle-fix-phase-3-labels-sync/` | Phase 1 |
-| Phase 4 — Operator-driven org sweep | (operator action across `derio-net/*`) | — | Phase 3 deployed |
+| ~~Phase 4 — Operator-driven org sweep~~ — superseded by the v2 rebuild: the one-shot `vk admin labels-sync` was removed (`admin_cmd.py` deleted) and managed labels are now ensured per-plan by `vk apply` (`RepoLabelEnsure`). There is no separate org-wide label sweep in v2; label drift is reconciled continuously on every `vk apply`. | ~~(operator action across `derio-net/*`)~~ | — | Phase 3 deployed |
 
 Phase 1 and Phase 2 are independent — both touch `config.py`,
 `dispatch_cmd.py`, and `gh.py`, but at different lines (Phase 1 adds dict
