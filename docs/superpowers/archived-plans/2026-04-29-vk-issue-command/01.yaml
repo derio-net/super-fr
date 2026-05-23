@@ -361,7 +361,8 @@ state:
       note: null
   completion:
     at: '2026-05-14T06:06:16+00:00'
-    note: Re-implemented for v2 in PR #128 (v2.1.2). The v1 implementation shipped
+    note: >-
+      Re-implemented for v2 in PR #128 (v2.1.2). The v1 implementation shipped
       in v1.4.3 (Apr 30 2026) and was retired with v2.0.0 (May 10 2026). Phase 1
       re-added vk issue create + dispatch_body_validator for the v2 CLI.
     observed_prs: []
