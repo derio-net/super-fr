@@ -1,5 +1,14 @@
 # VK CLI Toolchain Design Spec
 
+> **Archived 2026-05-23 — superseded by the v2 rebuild.** P0 (scaffolding) and
+> P1 (core modules) shipped under this spec; P2–P6 (dispatch, progress,
+> plan+execute, skill rewrites, migration) were never ticked here — that work
+> was redesigned and delivered through the later specs
+> (`2026-05-06-vk-rebuild-state-machine-design`,
+> `2026-05-09-vk-v2-library-rework`, `2026-04-27-label-lifecycle-fix`,
+> `2026-04-18-deprecate-flat-plans`, `2026-04-22-vk-plan-rework`). The `vk` CLI
+> this spec proposed now ships at v2.2.x. Kept for historical context.
+
 ## Summary
 
 Convert the vk-* skills from prose-with-embedded-bash into a real Python toolchain: one `vk` CLI with subcommands, installed via `uv tool install`, covered by pytest, with SKILL.md files reduced to thin decision-layer wrappers. In doing so, fix two foundational issues: dispatch defaults to fail-closed (opt-in only), and local-mode repos get a flat plan format instead of vestigial phases.
