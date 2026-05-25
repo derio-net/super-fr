@@ -715,6 +715,29 @@ def test_migrate_recovers_multi_phase_prose_depends_on(tmp_path):
     assert deps[4] == [0, 3], deps
 
 
+def test_migrate_prose_depends_on_ignores_unrelated_digits(tmp_path):
+    """#245 review: 'Blocked by Phase N' recovery must capture only the phase
+    list, not version numbers / day counts / years in the surrounding prose."""
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = _plans(repo) / "2026-05-10-noisy-deps.md"
+    p.write_text(
+        "# Noisy Deps\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 0: A [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: a** d.\n\n"
+        "## Phase 1: B [agentic]\n\n### Task 1: t\n\n- [x] **Step 1: b** d.\n\n"
+        "## Dependencies\n\nBlocked by Phase 0 which took 5 days (v2.1 rollout in 2026).\n"
+    )
+
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    plan = parse(_plans(repo) / "2026-05-10-noisy-deps")
+    deps = {ph.phase.number: sorted(ph.phase.depends_on) for ph in plan.phases}
+    assert deps[1] == [0], f"over-captured unrelated digits: {deps}"
+
+
 def test_migrate_preserves_task_intro_with_manual_operation_block(tmp_path):
     """#245 Bug 3: task intro prose + a fenced `# manual-operation` block before
     the first step must survive even when the task HAS parsed steps."""

@@ -145,6 +145,33 @@ def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
     assert spec_path.read_text().count("| 2026-05-10-repair |") == 1
 
 
+def test_create_rejects_existing_folder_with_stale_extra_phase(tmp_path):
+    """#133 review: a re-run that DROPS a phase must not silently 'repair' and
+    leave the orphaned phase file behind — that's a real content mismatch, so
+    it must raise rather than yield a plan with a phase the operator removed."""
+    from vk.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    base = dict(
+        repo_root=repo,
+        slug="2026-05-10-stale",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=1.0.0,<3.0.0",
+        prose="# x\n",
+    )
+    create(
+        **base,
+        phases=[PhaseSpec(number=1, title="a", tasks=()), PhaseSpec(number=2, title="b", tasks=())],
+    )
+    folder = repo / "docs" / "superpowers" / "plans" / "2026-05-10-stale"
+    assert (folder / "02.yaml").exists()
+    # Re-run for phase 1 only — 02.yaml would become a stale orphan.
+    with pytest.raises(PlanEditError, match="already exists"):
+        create(**base, phases=[PhaseSpec(number=1, title="a", tasks=())])
+
+
 # ---------------------------------------------------------------------------
 # vk.plan.tick
 

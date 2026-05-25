@@ -306,8 +306,15 @@ def apply_command(
         # their already-closed Issues (agentic phases executed inline can never
         # satisfy the merged-PR completion signal). `--all` already walks only
         # plans/, so this guards the one remaining entry point — an explicit
-        # `vk apply docs/superpowers/archived-plans/<plan>`.
-        if "archived-plans" in plan_dir.resolve().parts:
+        # `vk apply docs/superpowers/archived-plans/<plan>`. Anchored to the
+        # canonical `superpowers/archived-plans` location so an unrelated dir
+        # that merely happens to be named "archived-plans" isn't refused.
+        resolved_parts = plan_dir.resolve().parts
+        under_archived = any(
+            resolved_parts[i] == "superpowers" and resolved_parts[i + 1] == "archived-plans"
+            for i in range(len(resolved_parts) - 1)
+        )
+        if under_archived:
             err_console.print(
                 f"refusing to apply archived plan: {plan_dir}\n"
                 "Archived plans are terminal; applying one would reopen its closed "

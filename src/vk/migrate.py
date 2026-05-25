@@ -435,7 +435,13 @@ def _find_task_body(md_text: str, phase_number: int, task_number: int) -> str:
 
 # Prose dependency convention the structured `**Depends on:**` parser misses:
 # a phase body that says "Blocked by Phase 0" / "Blocked by Phases 0 and 3".
-_BLOCKED_BY_RE = re.compile(r"Blocked by Phases?\b([^.\n]*)", re.IGNORECASE)
+# The capture is anchored to a numeric list grammar (digits / "," / "and") so it
+# stops at the first non-number token — without this, a trailing clause like
+# "... which took 5 days (v2.1 rollout)" would leak phantom dependencies.
+_BLOCKED_BY_RE = re.compile(
+    r"Blocked by Phases?\s+(\d+(?:\s*(?:,|and)\s*\d+)*)",
+    re.IGNORECASE,
+)
 
 
 def _extract_prose_depends_on(md_text: str, phase_number: int) -> tuple[int, ...]:
@@ -444,6 +450,12 @@ def _extract_prose_depends_on(md_text: str, phase_number: int) -> tuple[int, ...
     Scans the phase body (fenced code stripped so examples don't match) for the
     'Blocked by Phase N[, M and K]' convention and returns the referenced phase
     numbers. Self-references are dropped. Empty when no such prose exists.
+
+    Heuristic, not authoritative — the per-plan migration warning tells the
+    operator to verify. Note a standalone `## Dependencies` H2 placed after the
+    last `## Phase` falls into the LAST phase's body (`_extract_phase_body`
+    slices to the next `## Phase` header or EOF), so a plan-level dependencies
+    section is attributed to the final phase.
     """
     body = _extract_phase_body(md_text, phase_number)
     if not body:

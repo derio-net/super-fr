@@ -211,6 +211,11 @@ def _folder_matches(
     prose_p = folder / "_prose.md"
     if not prose_p.exists() or prose_p.read_text() != prose_text:
         return False
+    # The on-disk phase files must be EXACTLY the expected set — not just a
+    # superset. A re-run that drops a phase would otherwise "repair" the folder
+    # while leaving the removed phase's `NN.yaml` behind as a silent orphan.
+    if {p.name for p in folder.glob("[0-9]*.yaml")} != set(phase_files):
+        return False
     for name, text in phase_files.items():
         p = folder / name
         if not p.exists() or p.read_text() != text:
