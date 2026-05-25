@@ -76,18 +76,27 @@ def _repo_checkout_root(repo: str) -> Path:
 
 
 def _any_phase_is_vk_ready(plan: Plan, gh: GhClient) -> bool:
-    """True iff at least one phase Issue carries `vk-ready`."""
+    """True iff rendering the plan projects a phase as vk-ready, not vk-synced.
+
+    Uses the RENDERED projection (observe -> render), NOT the observed GitHub
+    label, and mirrors `tick()`'s dispatch gate (`VK_READY in ri.labels and
+    VK_SYNCED not in ri.labels`) exactly.
+
+    Why not the observed label: a phase whose dependency just completed should
+    become vk-ready, but its on-Issue label is still the stale `vk-blocked`
+    until a tick applies the flip. Gating discovery on the observed label
+    created a deadlock — the plan was never discovered, so the tick never ran,
+    so the label was never updated, stranding every multi-phase plan after a
+    phase completed. Rendering here means discovery sees what the tick would
+    do, so the blocked->ready transition (and the dispatch) actually happens.
+    """
+    observed = observe(plan, gh)
+    rendered = render(plan, observed)
     for phase in plan.phases:
-        url = phase.phase.tracking_issue
-        if not url:
+        ri = rendered.issue_per_phase.get(phase.phase.number)
+        if ri is None:
             continue
-        try:
-            repo, number = parse_issue_url(url)
-            info = gh.view_issue(repo, number)
-        except Exception as e:  # noqa: BLE001 — bridge must survive one bad phase
-            logger.warning("bridge: failed to view %s: %s", url, e)
-            continue
-        if "vk-ready" in set(info.get("labels", [])):
+        if VK_READY in ri.labels and VK_SYNCED not in ri.labels:
             return True
     return False
 
@@ -114,7 +123,12 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
         except PlanSchemaError as e:
             logger.warning("bridge: skipping unparseable plan %s: %s", plan_dir, e)
             continue
-        if _any_phase_is_vk_ready(plan, gh):
+        try:
+            ready = _any_phase_is_vk_ready(plan, gh)
+        except Exception as e:  # noqa: BLE001 — one bad plan mustn't kill the tick
+            logger.warning("bridge: discovery check failed for %s: %s", plan_dir, e)
+            continue
+        if ready:
             out.append(plan)
     return out
 

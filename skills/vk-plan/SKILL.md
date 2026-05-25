@@ -19,6 +19,13 @@ A plan is a directory under `docs/superpowers/plans/<slug>/` containing:
 - `_meta.yaml` — schema_version, plan slug, spec ref, target_repo, vk_version,
   created date, optional rework metadata (`parent_plan`, `prior_rework`,
   `origin_items`).
+  - **`spec` ref notation:** a same-repo spec is a plain repo-relative path
+    (`docs/superpowers/specs/<file>.md`). A spec that lives in **another repo**
+    MUST use the cross-repo form `<owner>/<repo>:<path-in-that-repo>` (e.g.
+    `derio-net/frank:docs/superpowers/specs/<file>.md`). Without the
+    `owner/repo:` prefix, `vk apply`'s reachability gate treats it as a missing
+    same-repo file and refuses to dispatch. `vk plan self-review` warns when a
+    same-repo-form spec doesn't resolve locally (#248).
 - `_prose.md` — the human-readable narrative. Tooling never parses this; it's
   for humans (and the implementing agent).
 - `NN.yaml` (one file per phase, two-digit zero-padded: `01.yaml`, `02.yaml`,
