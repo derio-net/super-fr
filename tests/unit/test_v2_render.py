@@ -201,6 +201,52 @@ def test_agentic_phase_complete_requires_completion_at_and_merged_pr():
     assert _phase_complete(with_completion_at, None) is False
 
 
+def test_agentic_phase_complete_respects_operator_close_for_inline_work():
+    """#246: an agentic phase whose Issue the operator CLOSED, with completion.at
+    set and no open linked PR, is complete even without a GitHub-linked merged PR.
+
+    Inline-executed plans (direct commits) never produce a closing-keyword PR, so
+    the merged-PR signal is unsatisfiable. Without this, `vk apply` recomputes the
+    desired state as OPEN and reopens the already-closed Issue on every run.
+    """
+    from vk import parse
+    from vk.render import _phase_complete
+    from vk.states import PhaseObservation, PrObservation
+
+    plan = parse(FIXTURE)
+    p1 = plan.phases[0]
+    done = p1.model_copy(
+        update={
+            "state": p1.state.model_copy(
+                update={
+                    "completion": p1.state.completion.model_copy(
+                        update={"at": "2026-05-20T00:00:00Z"}
+                    )
+                }
+            )
+        }
+    )
+
+    # CLOSED issue, completion.at set, NO linked PRs (inline-executed) → complete.
+    obs_closed_no_pr = PhaseObservation(
+        issue_state="CLOSED", issue_labels=frozenset(), issue_assignees=(), linked_prs=()
+    )
+    assert _phase_complete(done, obs_closed_no_pr) is True
+
+    # CLOSED issue but an OPEN linked PR still pending → NOT complete (work remains).
+    obs_closed_open_pr = PhaseObservation(
+        issue_state="CLOSED",
+        issue_labels=frozenset(),
+        issue_assignees=(),
+        linked_prs=(PrObservation(url="...", state="OPEN", merged=False, draft=False, ci="PASS"),),
+    )
+    assert _phase_complete(done, obs_closed_open_pr) is False
+
+    # CLOSED issue but completion.at NOT set → operator closed before the agent
+    # signalled done → still incomplete (don't silently accept; drift warning fires).
+    assert _phase_complete(p1, obs_closed_no_pr) is False
+
+
 def test_manual_phase_complete_requires_completion_at_and_note():
     from vk import parse
     from vk.render import _phase_complete

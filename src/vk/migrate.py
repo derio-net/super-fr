@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from vk._yaml import LiteralStr, dump_plan_yaml
-from vk.plan.parser import _strip_fenced_regions
+from vk.plan.parser import _RE_STEP, _strip_fenced_regions
 from vk.plan.parser import parse_plan as _parse_v1
 
 
@@ -40,6 +40,7 @@ class MigrationOutcome:
     plan_path: Path
     new_folder: Path | None  # None = skipped
     reason: str  # "migrated" | "skipped (in-progress)" | "skipped (already migrated)"
+    warnings: tuple[str, ...] = ()  # non-fatal lossy-migration notices (#245)
 
 
 _REWORK_PARENT_RE = re.compile(r"^\*\*Parent plan:\*\*\s*`?([^`\n]+)`?", re.MULTILINE)
@@ -79,6 +80,7 @@ def migrate_repo(
     dry_run: bool = True,
     include_in_progress: bool = False,
     force: bool = False,
+    target_repo: str | None = None,
 ) -> list[MigrationOutcome]:
     """Migrate every v1 plan in repo_root. Returns per-plan outcomes.
 
@@ -112,6 +114,7 @@ def migrate_repo(
                     dry_run=dry_run,
                     include_in_progress=include_in_progress,
                     force=force,
+                    target_repo=target_repo,
                 )
             )
 
@@ -135,6 +138,7 @@ def _migrate_one(
     dry_run: bool,
     include_in_progress: bool,
     force: bool = False,
+    target_repo: str | None = None,
 ) -> MigrationOutcome:
     """Migrate a single .md plan."""
     slug = md_path.stem
@@ -182,16 +186,32 @@ def _migrate_one(
             reason=f"skipped (in-progress; status={v1plan.status!r})",
         )
 
-    # Loud-fail if v1 phases declare conflicting target repos
+    # Resolve the target repo. Precedence:
+    #   1. A single per-phase `**Target repo:**` declaration (explicit in plan).
+    #   2. The operator-supplied --target-repo (resolves the empty case AND a
+    #      multi-repo conflict).
+    # Never silently default to the plugin's own repo — that filed Issues
+    # against the wrong repo for ~45/71 of frank's migrated plans (#245 Bug 1).
     target_repos: set[str] = {
         tr for p in v1plan.phases if (tr := getattr(p, "target_repo", None)) is not None
     }
     if len(target_repos) > 1:
+        if target_repo is None:
+            raise MigrationError(
+                f"{md_path}: phases declare different target repos {sorted(target_repos)}. "
+                f"Split into one plan per target repo, or pass --target-repo to override."
+            )
+        resolved_target = target_repo
+    elif len(target_repos) == 1:
+        resolved_target = next(iter(target_repos))
+    elif target_repo is not None:
+        resolved_target = target_repo
+    else:
         raise MigrationError(
-            f"{md_path}: phases declare different target repos {sorted(target_repos)}. "
-            f"Split into one plan per target repo before migrating."
+            f"{md_path}: no target repo. The v1 plan declares no '**Target repo:**' "
+            f"line and no --target-repo was given. Re-run with "
+            f"--target-repo owner/repo (the repo Issues should be filed against)."
         )
-    target_repo = next(iter(target_repos)) if target_repos else "derio-net/superpowers-for-vk"
 
     if not re.match(r"^\d{4}-\d{2}-\d{2}-", slug):
         raise MigrationError(
@@ -228,8 +248,9 @@ def _migrate_one(
         "schema_version": 2,
         "plan": slug,
         "spec": v1plan.spec,
-        "target_repo": target_repo,
-        "vk_version": ">=1.0.0,<3.0.0",
+        "target_repo": resolved_target,
+        # Match `vk plan create`'s default — migrated plans are v2 plans (#245).
+        "vk_version": ">=2.0.0,<3.0.0",
         "created": slug[:10],  # YYYY-MM-DD prefix is enforced above
     }
     if parent_plan:
@@ -274,8 +295,9 @@ def _migrate_one(
     # Per-phase yaml. md_text is passed through so the body-preservation
     # fallback can splice raw markdown into phases/tasks the parser left
     # empty (non-canonical step formats, `### Step N:` h3 headers, etc.).
+    warnings: list[str] = []
     for phase in phases_to_emit:
-        phase_doc = _build_phase_doc_from_v1(phase, md_text=md_text)
+        phase_doc = _build_phase_doc_from_v1(phase, md_text=md_text, warnings=warnings)
         (new_folder / f"{phase.number:02d}.yaml").write_text(dump_plan_yaml(phase_doc))
 
     # Move original .md to .v1-archive sibling
@@ -286,6 +308,7 @@ def _migrate_one(
         plan_path=md_path,
         new_folder=new_folder,
         reason="migrated",
+        warnings=tuple(warnings),
     )
 
 
@@ -410,7 +433,76 @@ def _find_task_body(md_text: str, phase_number: int, task_number: int) -> str:
     return ""
 
 
-def _build_phase_doc_from_v1(phase: Any, md_text: str = "") -> dict[str, Any]:
+# Prose dependency convention the structured `**Depends on:**` parser misses:
+# a phase body that says "Blocked by Phase 0" / "Blocked by Phases 0 and 3".
+# The capture is anchored to a numeric list grammar (digits / "," / "and") so it
+# stops at the first non-number token — without this, a trailing clause like
+# "... which took 5 days (v2.1 rollout)" would leak phantom dependencies.
+_BLOCKED_BY_RE = re.compile(
+    r"Blocked by Phases?\s+(\d+(?:\s*(?:,|and)\s*\d+)*)",
+    re.IGNORECASE,
+)
+
+
+def _extract_prose_depends_on(md_text: str, phase_number: int) -> tuple[int, ...]:
+    """Recover phase dependencies expressed as prose (#245 Bug 2).
+
+    Scans the phase body (fenced code stripped so examples don't match) for the
+    'Blocked by Phase N[, M and K]' convention and returns the referenced phase
+    numbers. Self-references are dropped. Empty when no such prose exists.
+
+    Heuristic, not authoritative — the per-plan migration warning tells the
+    operator to verify. Note a standalone `## Dependencies` H2 placed after the
+    last `## Phase` falls into the LAST phase's body (`_extract_phase_body`
+    slices to the next `## Phase` header or EOF), so a plan-level dependencies
+    section is attributed to the final phase.
+    """
+    body = _extract_phase_body(md_text, phase_number)
+    if not body:
+        return ()
+    scan = _strip_fenced_regions(body)
+    deps: list[int] = []
+    for m in _BLOCKED_BY_RE.finditer(scan):
+        for tok in re.findall(r"\d+", m.group(1)):
+            n = int(tok)
+            if n != phase_number and n not in deps:
+                deps.append(n)
+    return tuple(deps)
+
+
+def _find_task_intro(md_text: str, phase_number: int, task_number: int) -> str:
+    """Return the body between `### Task <T>:` and its first step marker (#245 Bug 3).
+
+    Captures intro prose and fenced blocks (e.g. ``# manual-operation``) that sit
+    before the first ``**Step**``. Returns '' when the task has no pre-step body
+    (or no parsed steps — that case is handled by the task-level S1 fallback).
+
+    Fence-stripping locates the first step without letting a fenced step example
+    truncate the intro; the returned slice comes from the ORIGINAL text so the
+    fenced blocks survive intact.
+    """
+    phase_body = _extract_phase_body(md_text, phase_number) or md_text
+    scan_text = _strip_fenced_regions(phase_body)
+    matches = list(_BODY_TASKLIKE_RE.finditer(scan_text))
+    for i, m in enumerate(matches):
+        try:
+            num = int(re.match(r"^\d+", m.group(1)).group())  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            continue
+        if num == task_number:
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(phase_body)
+            region_scan = scan_text[start:end]
+            step_m = _RE_STEP.search(region_scan)
+            if step_m is None:
+                return ""
+            return phase_body[start : start + step_m.start()].strip()
+    return ""
+
+
+def _build_phase_doc_from_v1(
+    phase: Any, md_text: str = "", warnings: list[str] | None = None
+) -> dict[str, Any]:
     """Convert a v1 Phase model into the v2 phase yaml dict.
 
     v1 steps have `number`/`title`/`body` (no `id`). We synthesize the
@@ -482,17 +574,49 @@ def _build_phase_doc_from_v1(phase: Any, md_text: str = "") -> dict[str, Any]:
                 step_id = f"P{phase.number}.T{task.number}.S1"
                 steps_out.append({"id": step_id, "text": LiteralStr(fallback.strip())})
                 state_steps[step_id] = {"state": " ", "ticked_at": None, "note": None}
+        elif md_text:
+            # Task-intro fallback (#245 Bug 3): a task WITH parsed steps may still
+            # carry intro prose + a fenced `# manual-operation` block before its
+            # first step. Preserve it as a synthetic leading step (`.S0`) so the
+            # block — discovered by /sync-runbook — isn't silently dropped.
+            intro = _find_task_intro(md_text, phase.number, task.number)
+            if intro:
+                step_id0 = f"P{phase.number}.T{task.number}.S0"
+                steps_out.insert(0, {"id": step_id0, "text": LiteralStr(intro)})
+                state_steps[step_id0] = {"state": " ", "ticked_at": None, "note": None}
 
         tasks.append({"number": task.number, "title": task.title, "steps": steps_out})
     tag = "manual" if getattr(phase, "tag", None) == "manual" else "agentic"
     tracking = getattr(phase, "tracking_url", None)
+
+    # depends_on: prefer the structured `**Depends on:**` value; if empty, try to
+    # recover the 'Blocked by Phase N' prose convention (#245 Bug 2) so the
+    # dependency graph isn't silently flattened to parallel roots.
+    depends_on = list(getattr(phase, "depends_on", ()) or [])
+    if not depends_on and md_text:
+        recovered = _extract_prose_depends_on(md_text, phase.number)
+        if recovered:
+            depends_on = list(recovered)
+            if warnings is not None:
+                warnings.append(
+                    f"Phase {phase.number}: recovered depends_on {depends_on} from "
+                    f"'Blocked by Phase' prose — verify the dependency graph."
+                )
+        elif warnings is not None:
+            body = _extract_phase_body(md_text, phase.number)
+            if body and re.search(r"Blocked by Phase", _strip_fenced_regions(body), re.IGNORECASE):
+                warnings.append(
+                    f"Phase {phase.number}: body mentions 'Blocked by Phase' but no "
+                    f"dependency could be extracted — set depends_on manually."
+                )
+
     return {
         "schema_version": 2,
         "phase": {
             "number": phase.number,
             "title": phase.title,
             "tag": tag,
-            "depends_on": list(getattr(phase, "depends_on", ()) or []),
+            "depends_on": depends_on,
             "tracking_issue": tracking,
         },
         "tasks": tasks,

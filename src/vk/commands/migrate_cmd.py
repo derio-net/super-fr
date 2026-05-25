@@ -36,6 +36,15 @@ def v1_to_v2_cmd(
             "versions (pre-2.0.4) that silently dropped non-canonical step formats."
         ),
     ),
+    target_repo: str | None = typer.Option(
+        None,
+        "--target-repo",
+        help=(
+            "owner/repo Issues should be filed against. Required for plans that "
+            "declare no '**Target repo:**' line (never defaults to the plugin's "
+            "own repo). Also resolves plans whose phases declare conflicting repos."
+        ),
+    ),
 ) -> None:
     """Convert every v1 .md plan in this repo to a v2 folder + rewrite spec tables.
 
@@ -48,6 +57,7 @@ def v1_to_v2_cmd(
             dry_run=not yes,
             include_in_progress=include_in_progress,
             force=force,
+            target_repo=target_repo,
         )
     except MigrationError as e:
         err_console.print(f"[red]migration error:[/red] {e}")
@@ -55,6 +65,8 @@ def v1_to_v2_cmd(
 
     for o in outcomes:
         console.print(f"  {o.plan_path.name}: {o.reason}")
+        for w in o.warnings:
+            err_console.print(f"    [yellow]warning:[/yellow] {w}")
     n_migrated = sum(1 for o in outcomes if "migrated" in o.reason)
     n_skipped = sum(1 for o in outcomes if o.reason.startswith("skipped"))
     suffix = "" if yes else " (dry-run; pass --yes to apply)"

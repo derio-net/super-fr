@@ -123,13 +123,25 @@ def create(
     """
     if plans_dir is None:
         plans_dir = repo_root / "docs" / "superpowers" / "plans"
-    plans_dir.mkdir(parents=True, exist_ok=True)
     folder = plans_dir / slug
-    if folder.exists():
-        raise PlanEditError(f"plan folder already exists: {folder}")
-    folder.mkdir()
 
     spec_str = str(spec) if spec is not None else None
+
+    # Pre-flight: validate every external precondition BEFORE mutating the
+    # filesystem. A spec missing its '## Implementation Plans' section must
+    # fail loud here — not after the folder is half-built — so a re-run after
+    # adding the section isn't blocked by a stranded folder (#133). Mirrors how
+    # `vk apply` validates the diff before `--yes` touches GitHub.
+    spec_path: Path | None = None
+    if spec_str:
+        candidate = (repo_root / spec_str).resolve()
+        if candidate.exists():
+            _validate_spec_section(candidate)
+            spec_path = candidate
+        # If the spec file doesn't exist yet, we skip the row — the operator
+        # can add it by hand when they create the spec file.
+
+    # Build the expected folder contents in memory (no side effects yet).
     meta = {
         "schema_version": 2,
         "plan": slug,
@@ -138,34 +150,82 @@ def create(
         "vk_version": vk_version,
         "created": _dt.date.today().isoformat(),
     }
-    (folder / "_meta.yaml").write_text(_yaml_dump(meta))
-    (folder / "_prose.md").write_text(prose if prose.endswith("\n") else prose + "\n")
+    meta_text = _yaml_dump(meta)
+    prose_text = prose if prose.endswith("\n") else prose + "\n"
+    phase_files = {f"{ps.number:02d}.yaml": _yaml_dump(_build_phase_doc(ps)) for ps in phases}
 
-    for ps in phases:
-        phase_doc = _build_phase_doc(ps)
-        (folder / f"{ps.number:02d}.yaml").write_text(_yaml_dump(phase_doc))
+    written: list[Path] = []
+    if folder.exists():
+        # Idempotent repair (#133): a prior run may have created the folder but
+        # failed before appending the spec row. If the on-disk content matches
+        # what we would write, finish the job (append the row below) instead of
+        # dead-ending at "already exists". Mismatched content — a slug reused
+        # for a different plan — is a real collision and still rejected.
+        if not _folder_matches(
+            folder, meta_text=meta_text, prose_text=prose_text, phase_files=phase_files
+        ):
+            raise PlanEditError(f"plan folder already exists: {folder}")
+    else:
+        plans_dir.mkdir(parents=True, exist_ok=True)
+        folder.mkdir()
+        (folder / "_meta.yaml").write_text(meta_text)
+        (folder / "_prose.md").write_text(prose_text)
+        for name, text in phase_files.items():
+            (folder / name).write_text(text)
+        written.extend([folder / "_meta.yaml", folder / "_prose.md"])
+        written.extend(folder / name for name in phase_files)
 
-    written: list[Path] = [folder / "_meta.yaml", folder / "_prose.md"]
-    written.extend(folder / f"{ps.number:02d}.yaml" for ps in phases)
+    if spec_path is not None:
+        _append_spec_row(
+            spec_path,
+            plan_name=slug,
+            repo=target_repo,
+            file=str(folder.resolve().relative_to(repo_root)) + "/",
+            depends_on="—",
+        )
+        written.append(spec_path)
 
-    if spec_str:
-        spec_path = (repo_root / spec_str).resolve()
-        if spec_path.exists():
-            _append_spec_row(
-                spec_path,
-                plan_name=slug,
-                repo=target_repo,
-                file=str(folder.resolve().relative_to(repo_root)) + "/",
-                depends_on="—",
-            )
-            written.append(spec_path)
-        # If spec doesn't exist, we silently skip — the operator can
-        # add the row by hand when they create the spec file.
-
-    _stage(repo_root, written)
+    if written:
+        _stage(repo_root, written)
 
     # Re-parse to confirm schema integrity
     return parse(folder)
+
+
+def _folder_matches(
+    folder: Path,
+    *,
+    meta_text: str,
+    prose_text: str,
+    phase_files: dict[str, str],
+) -> bool:
+    """True iff `folder` already holds exactly the content `create()` would write.
+
+    Used to distinguish a repairable partial-success state (re-run with the same
+    inputs) from a genuine slug collision. `_meta.yaml`'s `created:` date is
+    ignored so a repair the next day still matches.
+    """
+    meta_p = folder / "_meta.yaml"
+    if not meta_p.exists() or _strip_created(meta_p.read_text()) != _strip_created(meta_text):
+        return False
+    prose_p = folder / "_prose.md"
+    if not prose_p.exists() or prose_p.read_text() != prose_text:
+        return False
+    # The on-disk phase files must be EXACTLY the expected set — not just a
+    # superset. A re-run that drops a phase would otherwise "repair" the folder
+    # while leaving the removed phase's `NN.yaml` behind as a silent orphan.
+    if {p.name for p in folder.glob("[0-9]*.yaml")} != set(phase_files):
+        return False
+    for name, text in phase_files.items():
+        p = folder / name
+        if not p.exists() or p.read_text() != text:
+            return False
+    return True
+
+
+def _strip_created(meta_text: str) -> str:
+    """Drop the `created:` line so meta comparison ignores the scaffold date."""
+    return "\n".join(line for line in meta_text.splitlines() if not line.startswith("created:"))
 
 
 def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
@@ -200,6 +260,24 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
 
 
 _SPEC_TABLE_HEADER_RE = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE)
+
+
+def _validate_spec_section(spec_path: Path) -> None:
+    """Pre-flight: confirm the spec has an appendable Implementation Plans table.
+
+    Read-only. Raises the same errors `_append_spec_row` would, but BEFORE any
+    folder is created so a failed `create` leaves no stranded state (#133).
+    """
+    text = spec_path.read_text()
+    m = _SPEC_TABLE_HEADER_RE.search(text)
+    if not m:
+        raise PlanEditError(
+            f"{spec_path}: no '## Implementation Plans' section found. "
+            f"Add the section (with a 4-column table header) before scaffolding plans."
+        )
+    after = text[m.end() :]
+    if not any(line.strip().startswith("|") for line in after.splitlines()):
+        raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
 
 
 def _append_spec_row(

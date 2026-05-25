@@ -128,3 +128,21 @@ def test_check_plan_reachable_still_checks_same_repo_spec(monkeypatch):
     assert same_repo_spec in checked_paths, (
         f"Same-repo spec MUST be checked via file_on_ref; got checks: {checked_paths}"
     )
+
+
+def test_apply_refuses_archived_plan(tmp_path, monkeypatch):
+    """#246: an explicit `vk apply` against a plan under archived-plans/ must
+    refuse — applying a terminal plan would reopen its already-closed Issues.
+    (`vk apply --all` already walks only plans/, so this is the remaining hole.)
+    """
+    from typer.testing import CliRunner
+
+    from vk.cli import app
+
+    archived = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-done"
+    archived.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["apply", "docs/superpowers/archived-plans/2026-05-10-done"])
+    assert result.exit_code == 2, result.output
+    assert "archived" in result.output.lower()

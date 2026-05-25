@@ -105,6 +105,15 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
       PR keeps the Issue OPEN (renderer projects pr-ready when a PR exists,
       vk-ready otherwise) so the work surfaces correctly until merge.
 
+      Exception (#246): once the Issue is already CLOSED and `completion.at`
+      is set with no open linked PR, treat the phase as complete even without
+      a GitHub-linked merged PR. Inline-executed plans (direct commits) and
+      PRs that didn't use a closing keyword never produce an observable merged
+      PR, so the merged-PR signal would be permanently unsatisfiable and apply
+      would reopen the operator's deliberately-closed Issue on every run. This
+      cannot resurrect an OPEN issue — it only honours a close that already
+      happened, so it does not reintroduce the premature-close bug below.
+
     Pre-2026-05-18 behavior was `completion.at OR (all_steps_ticked + merged PR)`
     — the OR shortcut closed Issues prematurely when an agent set
     `completion.at` before opening its PR. See 2026-05-18 incident
@@ -122,7 +131,10 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
         return False
     has_merged_pr = any(pr.merged for pr in obs.linked_prs)
     has_open_pr = any(pr.state == "OPEN" and not pr.merged for pr in obs.linked_prs)
-    return has_merged_pr and not has_open_pr
+    if has_merged_pr and not has_open_pr:
+        return True
+    # Respect a deliberate operator close for terminal work (#246).
+    return obs.issue_state == "CLOSED" and not has_open_pr
 
 
 def render_body(
