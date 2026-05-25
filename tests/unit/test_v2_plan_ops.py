@@ -68,7 +68,8 @@ def test_create_scaffolds_folder_and_appends_spec_row(tmp_path):
     assert plan.meta.plan in spec_path.read_text()
 
 
-def test_create_rejects_existing_folder(tmp_path):
+def test_create_rejects_existing_folder_with_mismatched_content(tmp_path):
+    """A slug reused for *different* content is a real collision — still rejected."""
     from vk.plan_ops import PhaseSpec, PlanEditError, create
 
     repo = _make_repo(tmp_path)
@@ -83,8 +84,65 @@ def test_create_rejects_existing_folder(tmp_path):
         prose="# x\n",
     )
     create(**args)
+    # Same slug, different prose → not the same plan → collision.
     with pytest.raises(PlanEditError, match="already exists"):
-        create(**args)
+        create(**{**args, "prose": "# totally different\n"})
+
+
+def test_create_preflight_validates_spec_before_creating_folder(tmp_path):
+    """#133: a spec missing '## Implementation Plans' must fail BEFORE any
+    folder is created, so a re-run isn't blocked by a half-built folder."""
+    from vk.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    # Spec exists but has NO '## Implementation Plans' section.
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-no-section.md"
+    spec_path.write_text("# Test spec\n\nSome prose but no plans table.\n")
+
+    slug = "2026-05-10-preflight"
+    with pytest.raises(PlanEditError, match="Implementation Plans"):
+        create(
+            repo_root=repo,
+            slug=slug,
+            spec=str(spec_path.relative_to(repo)),
+            target_repo="derio-net/test",
+            vk_version=">=1.0.0,<3.0.0",
+            phases=[PhaseSpec(number=1, title="t", tasks=())],
+            prose="# x\n",
+        )
+    # The crux of #133: no folder was created, so a fixed re-run is unblocked.
+    assert not (repo / "docs" / "superpowers" / "plans" / slug).exists()
+
+
+def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
+    """#133: re-running create with matching content finishes the job (appends
+    the missing spec row) instead of dead-ending at 'already exists'."""
+    from vk.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    args = dict(
+        repo_root=repo,
+        slug="2026-05-10-repair",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=1.0.0,<3.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    create(**args)
+    # Simulate a partial-success state: folder exists, but the spec row is gone.
+    spec_path.write_text(
+        "# Test spec\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+    # Re-run must succeed (idempotent repair), not raise.
+    plan = create(**args)
+    assert plan.meta.plan == "2026-05-10-repair"
+    # The missing row was re-appended exactly once (no duplicate rows).
+    assert spec_path.read_text().count("| 2026-05-10-repair |") == 1
 
 
 # ---------------------------------------------------------------------------

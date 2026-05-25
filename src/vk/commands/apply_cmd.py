@@ -302,6 +302,18 @@ def apply_command(
             return
     else:
         assert plan_dir is not None
+        # Refuse archived plans (#246): they are terminal, and apply would reopen
+        # their already-closed Issues (agentic phases executed inline can never
+        # satisfy the merged-PR completion signal). `--all` already walks only
+        # plans/, so this guards the one remaining entry point — an explicit
+        # `vk apply docs/superpowers/archived-plans/<plan>`.
+        if "archived-plans" in plan_dir.resolve().parts:
+            err_console.print(
+                f"refusing to apply archived plan: {plan_dir}\n"
+                "Archived plans are terminal; applying one would reopen its closed "
+                "Issues. (`vk apply --all` already skips archived-plans/.)"
+            )
+            raise typer.Exit(2)
         targets = [plan_dir]
 
     gh = _make_gh_client()

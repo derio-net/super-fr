@@ -36,7 +36,7 @@ def test_migrate_dry_run_lists_outcomes_without_writing(tmp_path):
     repo = _make_repo(tmp_path)
     md = _write_v1_plan(repo, slug="2026-05-10-fixture-v1")
 
-    outcomes = migrate_repo(repo, dry_run=True)
+    outcomes = migrate_repo(repo, dry_run=True, target_repo="derio-net/test")
     assert len(outcomes) == 1
     assert outcomes[0].reason == "migrated (dry run)"
     # Original .md still in place; no folder created
@@ -51,7 +51,7 @@ def test_migrate_apply_creates_v2_folder_and_archives_md(tmp_path):
     repo = _make_repo(tmp_path)
     md = _write_v1_plan(repo, slug="2026-05-10-fixture-v1")
 
-    outcomes = migrate_repo(repo, dry_run=False)
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     assert len(outcomes) == 1
     assert outcomes[0].reason == "migrated"
 
@@ -81,7 +81,7 @@ def test_migrate_skips_in_progress_by_default(tmp_path):
     _write_v1_plan(repo, slug="2026-05-10-complete", status="Complete")
     _write_v1_plan(repo, slug="2026-05-10-in-progress", status="In Progress")
 
-    outcomes = migrate_repo(repo, dry_run=False)
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     by_name = {o.plan_path.stem: o.reason for o in outcomes}
     assert by_name["2026-05-10-complete"] == "migrated"
     assert by_name["2026-05-10-in-progress"].startswith("skipped (in-progress")
@@ -93,7 +93,9 @@ def test_migrate_include_in_progress_flag(tmp_path):
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-in-progress", status="In Progress")
 
-    outcomes = migrate_repo(repo, dry_run=False, include_in_progress=True)
+    outcomes = migrate_repo(
+        repo, dry_run=False, include_in_progress=True, target_repo="derio-net/test"
+    )
     assert outcomes[0].reason == "migrated"
 
 
@@ -110,7 +112,7 @@ def test_migrate_rewrites_spec_table_drops_status_column(tmp_path):
         "| Some plan | `derio-net/x` | `docs/superpowers/plans/x/` | Complete | — |\n"
     )
 
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     new_text = spec_path.read_text()
     assert "Status" not in new_text.splitlines()[2]  # header line no longer has Status
     # The data row should have 4 cells now, no Status
@@ -136,7 +138,7 @@ def test_migrate_rewrites_file_cells_md_to_folder(tmp_path):
         "| `docs/superpowers/plans/2026-05-10-cells-fixture.md` | Complete | — |\n"
     )
 
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     new_text = spec_path.read_text()
     assert "2026-05-10-cells-fixture/" in new_text
     assert "2026-05-10-cells-fixture.md" not in new_text
@@ -158,7 +160,7 @@ def test_migrate_leaves_file_cells_when_folder_does_not_exist(tmp_path):
         "| Cross-repo | `derio-net/y` | `docs/superpowers/plans/never-here.md` | Complete | — |\n"
     )
 
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     new_text = spec_path.read_text()
     # Status column is dropped; File cell is unchanged because folder doesn't exist
     assert "never-here.md" in new_text
@@ -173,7 +175,7 @@ def test_migrate_rejects_non_iso_date_slug(tmp_path):
     _write_v1_plan(repo, slug="legacy-plan-no-date")
 
     with pytest.raises(MigrationError, match="YYYY-MM-DD"):
-        migrate_repo(repo, dry_run=False)
+        migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
 
 
 def test_migrate_preserves_freeform_track(tmp_path):
@@ -202,7 +204,7 @@ def test_migrate_preserves_freeform_track(tmp_path):
         "- [ ] **Step 1: Do the work** Details.\n"
     )
 
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-2"
     plan = parse(new)
     assert plan.meta.origin_items[0].track == "development (future-triggered)"
@@ -234,7 +236,7 @@ def test_migrate_does_not_treat_rework_substring_as_rework(tmp_path):
         "- [x] **Step 1: x** d.\n"
     )
 
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-vk-plan-rework-feature"
     plan = parse(new)
     assert plan.meta.parent_plan is None, (
@@ -268,7 +270,7 @@ def test_migrate_rework_extracts_origin_table(tmp_path):
         "- [ ] **Step 1: Do the work** Details.\n"
     )
 
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-1"
     plan = parse(new)
     assert plan.meta.parent_plan is not None
@@ -286,7 +288,7 @@ def test_migrate_skips_already_migrated(tmp_path):
     # Pre-create the v2 folder to simulate prior migration
     (repo / "docs" / "superpowers" / "plans" / "2026-05-10-already").mkdir()
 
-    outcomes = migrate_repo(repo, dry_run=False)
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     assert outcomes[0].reason.startswith("skipped (folder already exists)")
 
 
@@ -326,7 +328,7 @@ def test_migrate_cli_default_is_dry_run(tmp_path, monkeypatch):
     md = _write_v1_plan(repo, slug="2026-05-10-cli-default")
     monkeypatch.chdir(repo)
     runner = CliRunner()
-    result = runner.invoke(app, ["migrate", "v1-to-v2"])
+    result = runner.invoke(app, ["migrate", "v1-to-v2", "--target-repo", "derio-net/test"])
     assert result.exit_code == 0, result.output
     assert "(dry-run; pass --yes to apply)" in result.output
     # Original .md still in place
@@ -357,7 +359,7 @@ def test_migrate_flat_plan_emits_single_phase_yaml(tmp_path):
         "- [ ] **Step 1: Clean up** Remove temp files.\n"
     )
 
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-flat-plan"
     assert (new / "01.yaml").exists(), "flat plan must produce 01.yaml"
 
@@ -381,7 +383,7 @@ def test_migrate_cli_apply_yes(tmp_path, monkeypatch):
     _write_v1_plan(repo, slug="2026-05-10-cli-test")
     monkeypatch.chdir(repo)
     runner = CliRunner()
-    result = runner.invoke(app, ["migrate", "v1-to-v2", "--yes"])
+    result = runner.invoke(app, ["migrate", "v1-to-v2", "--yes", "--target-repo", "derio-net/test"])
     assert result.exit_code == 0, result.output
     assert "1 migrated" in result.output
     # Hint suffix should NOT appear when --yes was given
@@ -410,7 +412,7 @@ def test_migrate_step_bold_paragraph_format(tmp_path):
         "**Step 2: Do the second**\n\n"
         "More body.\n"
     )
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-paragraph")
     task = plan.phases[0].tasks[0]
     assert len(task.steps) == 2
@@ -437,7 +439,7 @@ def test_migrate_step_bold_prefix_format(tmp_path):
         "### Task 1: Enter goal\n\n"
         "- [x] **Step 1:** Create goal verbatim from spec — `level: company`, `status: active`.\n"
     )
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-prefix")
     task = plan.phases[0].tasks[0]
     assert len(task.steps) == 1
@@ -471,7 +473,7 @@ def test_migrate_phase_with_step_subsections_fallback(tmp_path):
         "### Step 2: Add files\n\n"
         "- [x] **Add .gitignore**\n"
     )
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-step-subsections")
     phase = plan.phases[0]
     assert len(phase.tasks) == 2, "fallback should synthesize a task per ### Step"
@@ -499,7 +501,7 @@ def test_migrate_task_with_no_parseable_steps_fallback(tmp_path):
         "Evaluated: ElevenLabs, XTTS, Bark. Tested with sample content.\n"
         "Documented in `docs/decisions/tts-evaluation.md`.\n"
     )
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-task-body-fallback")
     task = plan.phases[0].tasks[0]
     assert len(task.steps) == 1, "task with no parseable steps must get one synthetic step"
@@ -515,7 +517,7 @@ def test_migrate_force_re_migrates_existing_folder(tmp_path):
     _write_v1_plan(repo, slug="2026-05-10-force-target")
 
     # First migration succeeds normally.
-    out1 = migrate_repo(repo, dry_run=False)
+    out1 = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     assert out1[0].reason == "migrated"
     folder = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-target"
     archive = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-target.md.v1-archive"
@@ -533,7 +535,7 @@ def test_migrate_force_re_migrates_existing_folder(tmp_path):
     )
 
     # Second run with --force re-migrates from the archive.
-    out2 = migrate_repo(repo, dry_run=False, force=True)
+    out2 = migrate_repo(repo, dry_run=False, force=True, target_repo="derio-net/test")
     by_name = {o.plan_path.stem: o.reason for o in out2}
     assert by_name["2026-05-10-force-target"] == "migrated"
     # Fresh yaml — no longer tampered.
@@ -561,7 +563,7 @@ def test_migrate_task_body_fallback_with_phase_tag_suffix(tmp_path):
         "### Task 1: Bootstrap [agentic]\n\n"
         "Plain prose body, no recognised step markers.\n"
     )
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-tagged-task")
     task = plan.phases[0].tasks[0]
     assert task.title == "Bootstrap"
@@ -596,7 +598,7 @@ def test_migrate_fallback_ignores_fenced_code_block_examples(tmp_path):
         "```\n\n"
         "End of section.\n"
     )
-    migrate_repo(repo, dry_run=False)
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-fenced-examples")
     phase = plan.phases[0]
     # Only ONE synthetic task — the fenced examples must not register.
@@ -614,15 +616,143 @@ def test_migrate_force_dry_run_does_not_destroy(tmp_path):
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-force-dryrun")
-    migrate_repo(repo, dry_run=False)  # initial migration
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")  # initial migration
 
     folder = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-dryrun"
     archive = repo / "docs" / "superpowers" / "plans" / "2026-05-10-force-dryrun.md.v1-archive"
     yaml_before = (folder / "01.yaml").read_text()
 
-    outcomes = migrate_repo(repo, dry_run=True, force=True)
+    outcomes = migrate_repo(repo, dry_run=True, force=True, target_repo="derio-net/test")
     assert any("dry run" in o.reason for o in outcomes)
     # Folder + archive both still in place; yaml unchanged
     assert folder.is_dir()
     assert archive.exists()
     assert (folder / "01.yaml").read_text() == yaml_before
+
+
+# ---------------------------------------------------------------------------
+# #245 — migrator lossiness fixes
+
+
+def _plans(repo: Path) -> Path:
+    return repo / "docs" / "superpowers" / "plans"
+
+
+def test_migrate_fails_loud_without_target_repo(tmp_path):
+    """#245 Bug 1: a plan with no per-phase '**Target repo:**' and no
+    --target-repo must fail loud — never silently default to the plugin repo."""
+    from vk.migrate import MigrationError, migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-no-target")  # helper declares no target
+
+    with pytest.raises(MigrationError, match="--target-repo"):
+        migrate_repo(repo, dry_run=False)
+
+
+def test_migrate_uses_explicit_target_repo(tmp_path):
+    """#245 Bug 1: an explicit target_repo is honored (and recorded in meta)."""
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-with-flag")
+
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/frank")
+    plan = parse(_plans(repo) / "2026-05-10-with-flag")
+    assert plan.meta.target_repo == "derio-net/frank"
+
+
+def test_migrate_recovers_prose_depends_on(tmp_path):
+    """#245 Bug 2: a '## Dependencies' / 'Blocked by Phase N' prose convention
+    is recovered into depends_on instead of being flattened to []."""
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = _plans(repo) / "2026-05-10-prose-deps.md"
+    p.write_text(
+        "# Prose Deps\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 0: Bootstrap [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Task 1: t\n\n- [x] **Step 1: x** d.\n\n"
+        "## Phase 1: Build [agentic]\n\n"
+        "### Task 1: t\n\n- [x] **Step 1: y** d.\n\n"
+        "## Dependencies\n\n"
+        "Blocked by Phase 0.\n"
+    )
+
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    plan = parse(_plans(repo) / "2026-05-10-prose-deps")
+    deps = {ph.phase.number: list(ph.phase.depends_on) for ph in plan.phases}
+    assert deps[1] == [0], deps
+    # The recovery is surfaced as a warning so lossy migrations aren't silent.
+    assert any("depends_on" in w.lower() for o in outcomes for w in o.warnings)
+
+
+def test_migrate_recovers_multi_phase_prose_depends_on(tmp_path):
+    """'Blocked by Phase 0 and 3' → depends_on == [0, 3]."""
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = _plans(repo) / "2026-05-10-multi-prose-deps.md"
+    p.write_text(
+        "# Multi Prose Deps\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 0: A [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: a** d.\n\n"
+        "## Phase 3: B [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: b** d.\n\n"
+        "## Phase 4: C [agentic]\n\n### Task 1: t\n\n- [x] **Step 1: c** d.\n\n"
+        "## Dependencies\n\nBlocked by Phase 0 and 3.\n"
+    )
+
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    plan = parse(_plans(repo) / "2026-05-10-multi-prose-deps")
+    deps = {ph.phase.number: sorted(ph.phase.depends_on) for ph in plan.phases}
+    assert deps[4] == [0, 3], deps
+
+
+def test_migrate_preserves_task_intro_with_manual_operation_block(tmp_path):
+    """#245 Bug 3: task intro prose + a fenced `# manual-operation` block before
+    the first step must survive even when the task HAS parsed steps."""
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = _plans(repo) / "2026-05-10-manual-op.md"
+    p.write_text(
+        "# Manual Op\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 1: Bootstrap [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Task 3: Bootstrap Secret (Manual Operation)\n\n"
+        "The GitHub App credentials must exist as a Secret before the runner registers.\n\n"
+        "```yaml\n# manual-operation\nid: arc-github-app-secret\n```\n\n"
+        "- [ ] **Step 1: Create secrets directory** Follow the manual-operation block above.\n"
+    )
+
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    plan = parse(_plans(repo) / "2026-05-10-manual-op")
+    task = plan.phases[0].tasks[0]
+    all_text = "\n".join(s.text for s in task.steps)
+    assert "# manual-operation" in all_text, "manual-operation block was dropped"
+    assert "arc-github-app-secret" in all_text
+    # The original parsed step is still present alongside the preserved intro.
+    assert "Create secrets directory" in all_text
+
+
+def test_migrate_aligns_vk_version_with_create_default(tmp_path):
+    """#245 Minor: migrated plans get the same vk_version as freshly-created ones."""
+    from vk import parse
+    from vk.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-vkver")
+
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    plan = parse(_plans(repo) / "2026-05-10-vkver")
+    assert plan.meta.vk_version == ">=2.0.0,<3.0.0"
