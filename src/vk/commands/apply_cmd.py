@@ -25,6 +25,7 @@ import typer
 from rich.console import Console
 
 from vk import plan_ops
+from vk._urls import is_cross_repo_spec
 from vk.apply import apply
 from vk.diff import (
     Diff,
@@ -85,8 +86,7 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
         # ls-tree` would always return empty for the literal cross-repo
         # path. Skip the check for cross-repo specs; the operator is
         # trusted to keep the upstream spec correct.
-        is_cross_repo = ":" in plan.meta.spec and "/" in plan.meta.spec.split(":", 1)[0]
-        if not is_cross_repo:
+        if not is_cross_repo_spec(plan.meta.spec):
             spec_rel = Path(plan.meta.spec)
             if not file_on_ref("origin/HEAD", str(spec_rel), cwd=repo_root):
                 missing.append(spec_rel)

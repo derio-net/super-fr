@@ -98,3 +98,32 @@ class TestRegistryLookup:
         assert labels.LIFECYCLE["manual"] is labels.MANUAL
         assert labels.LIFECYCLE["in_progress"] is labels.IN_PROGRESS
         assert labels.LIFECYCLE["pr_ready"] is labels.PR_READY
+
+
+class TestBoundedLabelNames:
+    """#249: GitHub caps label names at 50 chars. Slug-derived labels must
+    stay within that, truncating with a stable hash so long slugs don't 422."""
+
+    def test_long_plan_slug_label_bounded_to_50(self) -> None:
+        slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1"  # 50 -> 'plan:'+slug = 55
+        lab = labels.plan_label(slug)
+        assert len(lab.name) <= 50, f"label too long: {lab.name!r} ({len(lab.name)})"
+        assert lab.name.startswith("plan:")
+        # deterministic across calls
+        assert labels.plan_label(slug).name == lab.name
+        # distinct long slugs -> distinct labels (hash prevents collision)
+        assert labels.plan_label(slug + "-extra").name != lab.name
+        # full slug preserved in the human-readable description
+        assert slug in lab.description
+
+    def test_short_slug_labels_unchanged(self) -> None:
+        assert labels.plan_label("2026-05-09-short").name == "plan:2026-05-09-short"
+        assert labels.spec_label("vk-rebuild-design").name == "spec:vk-rebuild-design"
+
+    def test_long_spec_slug_label_bounded_to_50(self) -> None:
+        lab = labels.spec_label("x" * 60)
+        assert len(lab.name) <= 50 and lab.name.startswith("spec:")
+
+    def test_labeldef_rejects_name_over_50_chars(self) -> None:
+        with pytest.raises(ValueError, match="50"):
+            labels.LabelDef("plan:" + "x" * 50, "B60205", "too long")

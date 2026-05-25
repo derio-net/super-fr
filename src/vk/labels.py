@@ -14,10 +14,14 @@ preserved for compat). phase:<n> is yellow (attribute, not state).
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
+
+# GitHub rejects label names longer than this with a 422 at create time (#249).
+MAX_LABEL_NAME_LEN = 50
 
 
 @dataclass(frozen=True)
@@ -30,6 +34,34 @@ class LabelDef:
         if not _HEX_COLOR_RE.match(self.color):
             msg = f"LabelDef({self.name!r}): color {self.color!r} is not a 6-char hex string"
             raise ValueError(msg)
+        # GitHub caps label names at 50 chars; a longer name 422s at
+        # `gh label create`. Fail loud here rather than at dispatch (#249).
+        # Slug-derived labels go through `_bounded_label_name`, so this guard
+        # only trips on a bug that bypasses it.
+        if len(self.name) > MAX_LABEL_NAME_LEN:
+            msg = (
+                f"LabelDef: name {self.name!r} is {len(self.name)} chars "
+                f"(max {MAX_LABEL_NAME_LEN}). Use _bounded_label_name for slug-derived labels."
+            )
+            raise ValueError(msg)
+
+
+def _bounded_label_name(prefix: str, value: str) -> str:
+    """Return `<prefix><value>` capped at GitHub's 50-char label limit.
+
+    When the full name fits, it's returned verbatim (no behavior change for
+    short slugs). When it would overflow, the value is truncated and a short
+    deterministic hash of the *full* value is appended so distinct long values
+    don't collide. The label is an opaque routing key for the bridge, so a
+    stable shortened form is fine — stable across runs because the hash is
+    content-derived (#249).
+    """
+    name = f"{prefix}{value}"
+    if len(name) <= MAX_LABEL_NAME_LEN:
+        return name
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:6]
+    keep = MAX_LABEL_NAME_LEN - len(prefix) - 1 - len(digest)  # room for "-" + hash
+    return f"{prefix}{value[:keep]}-{digest}"
 
 
 # Lifecycle states (mutually exclusive — at most one on a given Issue)
@@ -53,13 +85,13 @@ PHASE_LABEL_COLOR = "FBCA04"
 
 
 def spec_label(slug: str) -> LabelDef:
-    """Return the LabelDef for `spec:<slug>`."""
-    return LabelDef(f"spec:{slug}", SPEC_LABEL_COLOR, f"Spec {slug}")
+    """Return the LabelDef for `spec:<slug>` (name capped at 50 chars; #249)."""
+    return LabelDef(_bounded_label_name("spec:", slug), SPEC_LABEL_COLOR, f"Spec {slug}")
 
 
 def plan_label(slug: str) -> LabelDef:
-    """Return the LabelDef for `plan:<slug>`."""
-    return LabelDef(f"plan:{slug}", PLAN_LABEL_COLOR, f"Part of plan {slug}")
+    """Return the LabelDef for `plan:<slug>` (name capped at 50 chars; #249)."""
+    return LabelDef(_bounded_label_name("plan:", slug), PLAN_LABEL_COLOR, f"Part of plan {slug}")
 
 
 def phase_label(n: int) -> LabelDef:

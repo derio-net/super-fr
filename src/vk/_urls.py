@@ -25,6 +25,17 @@ def parse_issue_url(url: str) -> tuple[str, int]:
     return m.group(1), int(m.group(2))
 
 
+def is_cross_repo_spec(spec: str) -> bool:
+    """True iff `spec` uses the cross-repo `<owner>/<repo>:<path>` notation.
+
+    Same-repo specs are plain repo-relative paths (no colon). A spec is
+    cross-repo iff it contains a ':' AND the part before the first ':' looks
+    like 'owner/repo' (contains a '/'). Single source for this check so apply's
+    reachability gate and `vk plan self-review` agree on it (#248).
+    """
+    return ":" in spec and "/" in spec.split(":", 1)[0]
+
+
 def issue_number(url: str | None) -> int | None:
     """Extract the trailing Issue number from a URL or path. None if absent."""
     if not url:

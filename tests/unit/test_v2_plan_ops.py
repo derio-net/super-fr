@@ -448,3 +448,94 @@ def test_self_review_detects_manual_complete_without_note(tmp_path):
     issues = self_review(plan)
     assert any("manual" in issue.message and "note" in issue.message for issue in issues)
     assert any(issue.severity == "error" for issue in issues)
+
+
+def test_self_review_warns_on_overlong_plan_label(tmp_path):
+    """#249: a slug long enough to push `plan:<slug>` past GitHub's 50-char
+    label limit must surface a self-review warning (it's auto-truncated, but
+    the operator should know to shorten the slug)."""
+    from vk.plan_ops import PhaseSpec, create, self_review
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1"  # 50 chars -> label 55
+    plan = create(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=2.0.0,<3.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    issues = self_review(plan)
+    assert any(
+        i.severity == "warn" and "50" in i.message and "label" in i.message.lower() for i in issues
+    ), [str(i) for i in issues]
+
+
+def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):
+    """#248: a spec in same-repo form (no owner/repo: prefix) that doesn't
+    resolve locally is likely a malformed cross-repo ref."""
+    from vk import parse
+    from vk.plan_ops import PhaseSpec, create, self_review
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    create(
+        repo_root=repo,
+        slug="2026-05-10-specwarn",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=2.0.0,<3.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    meta = repo / "docs" / "superpowers" / "plans" / "2026-05-10-specwarn" / "_meta.yaml"
+    meta.write_text(
+        meta.read_text().replace(
+            f"spec: {spec_path.relative_to(repo)}",
+            "spec: willikins/docs/superpowers/specs/nope.md",
+        )
+    )
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-specwarn")
+    issues = self_review(plan)
+    assert any(i.severity == "warn" and "cross-repo" in i.message.lower() for i in issues), [
+        str(i) for i in issues
+    ]
+
+
+def test_self_review_no_spec_warning_for_valid_cross_repo_form(tmp_path):
+    """A correctly-formatted cross-repo spec (owner/repo:path) must NOT warn."""
+    from vk import parse
+    from vk.plan_ops import PhaseSpec, create, self_review
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    create(
+        repo_root=repo,
+        slug="2026-05-10-xrepo",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=2.0.0,<3.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    meta = repo / "docs" / "superpowers" / "plans" / "2026-05-10-xrepo" / "_meta.yaml"
+    meta.write_text(
+        meta.read_text().replace(
+            f"spec: {spec_path.relative_to(repo)}",
+            "spec: derio-net/frank:docs/superpowers/specs/x-design.md",
+        )
+    )
+    plan = parse(repo / "docs" / "superpowers" / "plans" / "2026-05-10-xrepo")
+    issues = self_review(plan)
+    assert not any("cross-repo" in i.message.lower() for i in issues), [str(i) for i in issues]
+
+
+def test_is_cross_repo_spec_helper():
+    from vk._urls import is_cross_repo_spec
+
+    assert is_cross_repo_spec("derio-net/frank:docs/superpowers/specs/x.md") is True
+    assert is_cross_repo_spec("docs/superpowers/specs/x.md") is False
+    assert is_cross_repo_spec("willikins/docs/specs/x.md") is False  # no colon

@@ -25,6 +25,8 @@ from typing import Any, Literal, TypedDict
 
 import yaml
 
+from vk._urls import is_cross_repo_spec
+from vk.labels import MAX_LABEL_NAME_LEN
 from vk.parser import Plan, PlanSchemaError, parse
 
 
@@ -709,6 +711,45 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                     ),
                 )
             )
+
+    # Same-repo-form spec that doesn't resolve locally (#248): almost always a
+    # malformed cross-repo ref missing the `owner/repo:` prefix, which apply's
+    # reachability gate treats as a missing same-repo file and flags unreachable.
+    spec = plan.meta.spec
+    if (
+        spec
+        and spec not in ("none", "null", "—", "-")
+        and plan.repo_root is not None
+        and not is_cross_repo_spec(spec)
+        and ("/" in spec or spec.endswith(".md"))
+        and not (plan.repo_root / spec).exists()
+    ):
+        issues.append(
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"spec {spec!r} does not resolve under the repo root. If the spec "
+                    f"lives in another repo, use the cross-repo form "
+                    f"'owner/repo:path/to/spec.md' (#248); otherwise create the file."
+                ),
+            )
+        )
+
+    # Over-long plan label (#249): `plan:<slug>` past GitHub's 50-char label
+    # cap is auto-truncated+hashed at dispatch, but the operator should know —
+    # a hashed routing key is opaque; a shorter slug reads better on the board.
+    raw_plan_label = f"plan:{plan.meta.plan}"
+    if len(raw_plan_label) > MAX_LABEL_NAME_LEN:
+        issues.append(
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"plan label {raw_plan_label!r} is {len(raw_plan_label)} chars "
+                    f"(>{MAX_LABEL_NAME_LEN}); it will be truncated + hashed for GitHub. "
+                    f"Consider a shorter slug (rework suffixes push long slugs over)."
+                ),
+            )
+        )
 
     return issues
 
