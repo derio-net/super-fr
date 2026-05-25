@@ -127,3 +127,13 @@ class TestBoundedLabelNames:
     def test_labeldef_rejects_name_over_50_chars(self) -> None:
         with pytest.raises(ValueError, match="50"):
             labels.LabelDef("plan:" + "x" * 50, "B60205", "too long")
+
+    def test_bounded_name_stays_within_50_for_any_prefix(self) -> None:
+        # Even a pathological (over-long) prefix must not slice the value from
+        # the end or overflow — the result is unconditionally clamped to 50.
+        from vk.labels import _bounded_label_name
+
+        out = _bounded_label_name("x" * 45 + ":", "some-long-value-here")
+        assert len(out) <= 50
+        out2 = _bounded_label_name("plan:", "y" * 200)
+        assert len(out2) == 50 and out2.startswith("plan:")

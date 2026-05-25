@@ -60,8 +60,14 @@ def _bounded_label_name(prefix: str, value: str) -> str:
     if len(name) <= MAX_LABEL_NAME_LEN:
         return name
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:6]
-    keep = MAX_LABEL_NAME_LEN - len(prefix) - 1 - len(digest)  # room for "-" + hash
-    return f"{prefix}{value[:keep]}-{digest}"
+    # `max(0, …)` guards a pathologically long prefix making `keep` negative —
+    # `value[:negative]` slices from the END, silently producing an over-length
+    # label. Today only the 5-char `plan:`/`spec:` prefixes call this; the
+    # LabelDef.__post_init__ length guard is the loud backstop otherwise.
+    keep = max(0, MAX_LABEL_NAME_LEN - len(prefix) - 1 - len(digest))  # room for "-" + hash
+    # Final clamp makes the ≤50 invariant hold for ANY prefix (a no-op for the
+    # 5-char `plan:`/`spec:` callers, where the build is already exactly 50).
+    return f"{prefix}{value[:keep]}-{digest}"[:MAX_LABEL_NAME_LEN]
 
 
 # Lifecycle states (mutually exclusive — at most one on a given Issue)

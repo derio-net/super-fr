@@ -252,3 +252,61 @@ def test_discover_plans_includes_phase_unblocked_by_completed_dependency(
     found = discover_plans("derio-net/test", gh)
     assert len(found) == 1, "phase unblocked by a completed dependency must be discoverable"
     assert found[0].meta.plan == "2026-05-09-twophase"
+
+
+def test_discover_plans_skips_whole_plan_when_a_phase_issue_unviewable(
+    repo_layout: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Discovery renders (observe -> render); observe raises on the first
+    unviewable phase Issue, so the WHOLE plan is skipped for this tick (logged,
+    not crashed). This is intentional and consistent with `tick()`, which also
+    calls bare `observe()` and would fail to observe the same plan — so a
+    per-phase 'continue' here would only let discovery surface a plan that tick
+    then can't process. Transient: the next tick retries once the Issue is
+    viewable again.
+    """
+    from tests.unit.fakes import FakeGhClient
+    from vk.bridge import discover_plans
+
+    plans_dir = repo_layout / "docs" / "superpowers" / "plans"
+    pdir = plans_dir / "2026-05-09-twophase-badissue"
+    pdir.mkdir(parents=True)
+    (pdir / "_meta.yaml").write_text(
+        "schema_version: 2\n"
+        "plan: 2026-05-09-twophase-badissue\n"
+        "spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md\n"
+        "target_repo: derio-net/test\n"
+        'vk_version: ">=1.0.0,<3.0.0"\n'
+        "created: 2026-05-09\n"
+    )
+    (pdir / "_prose.md").write_text("prose\n")
+    # Phase 1: tracking Issue #1 — registered and would render vk-ready.
+    (pdir / "01.yaml").write_text(
+        "schema_version: 2\n"
+        "phase:\n  number: 1\n  title: one\n  tag: agentic\n  depends_on: []\n"
+        "  tracking_issue: 'https://github.com/derio-net/test/issues/1'\n"
+        "tasks:\n- number: 1\n  title: t\n  steps:\n  - id: P1.T1.S1\n    text: s\n"
+        "state:\n  steps:\n    P1.T1.S1:\n      state: ' '\n      ticked_at: null\n"
+        "      note: null\n"
+        "  completion:\n    at: null\n    note: null\n    observed_prs: []\n"
+    )
+    # Phase 2: tracking Issue #999 — NOT registered; observe() will raise on it.
+    (pdir / "02.yaml").write_text(
+        "schema_version: 2\n"
+        "phase:\n  number: 2\n  title: two\n  tag: agentic\n  depends_on: []\n"
+        "  tracking_issue: 'https://github.com/derio-net/test/issues/999'\n"
+        "tasks:\n- number: 1\n  title: t\n  steps:\n  - id: P2.T1.S1\n    text: s\n"
+        "state:\n  steps:\n    P2.T1.S1:\n      state: ' '\n      ticked_at: null\n"
+        "      note: null\n"
+        "  completion:\n    at: null\n    note: null\n    observed_prs: []\n"
+    )
+
+    gh = FakeGhClient()
+    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"vk-ready", "phase:1"})
+    # #999 intentionally not added → view_issue KeyErrors inside observe().
+
+    with caplog.at_level("WARNING", logger="vk.bridge"):
+        found = discover_plans("derio-net/test", gh)
+
+    assert found == [], "one unviewable phase Issue skips the whole plan for this tick"
+    assert any("2026-05-09-twophase-badissue" in rec.getMessage() for rec in caplog.records)
