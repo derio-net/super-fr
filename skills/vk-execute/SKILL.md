@@ -15,7 +15,7 @@ Implements a single phase from a plan.
 
 | Input | Mode |
 |---|---|
-| Issue URL/number (dispatch repo) | Dispatched: read assignment from Issue body |
+| Issue URL/number (dispatch repo) | Dispatched: read assignment from Issue body — it embeds the spec link, plan `_prose.md`, and phase `NN.yaml` inline (repo checkout stays the source of truth) |
 | (plan_dir, phase number) | Local: direct arguments |
 
 ## PR format (unified)

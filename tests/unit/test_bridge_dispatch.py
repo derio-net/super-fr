@@ -87,7 +87,7 @@ def test_card_title_is_minimal_and_description_is_structured():  # H9
     (create_call,) = [c for c in mcp.calls if c[0] == "create_issue"]
     args = create_call[1]
     assert args["title"] == "gh#100: [derio-net/repo-b]"
-    expected_desc = "\n".join(
+    expected_prefix = "\n".join(
         [
             "v2_plan_cross_repo",
             "Phase 2/3",
@@ -95,7 +95,18 @@ def test_card_title_is_minimal_and_description_is_structured():  # H9
             "https://github.com/derio-net/repo-b/issues/100",
         ]
     )
-    assert args["description"] == expected_desc
+    desc = args["description"]
+    # The four legacy lines stay pinned as the prefix; enrichment follows.
+    assert desc.startswith(expected_prefix)
+    assert (
+        "Spec: https://github.com/derio-net/repo-a/blob/main/"
+        "docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md"
+    ) in desc
+    # Phase yaml document embedded verbatim (raw 02.yaml content).
+    assert plan.phase_texts[2].rstrip() in desc
+    assert "<summary>🧾 02.yaml</summary>" in desc
+    # Fixture has no _prose.md — the prose section degrades to nothing.
+    assert "_prose.md" not in desc
 
 
 def test_no_duplicate_dispatch_implementations():  # B2
