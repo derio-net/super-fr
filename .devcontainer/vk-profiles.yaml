@@ -1,0 +1,9 @@
+profiles:
+  dev:
+    purpose: 'day-to-day development: uv run pytest -q --no-cov, ruff, mypy'
+    secrets: []
+  admin:
+    purpose: in-container gh writes (push, PR)
+    secrets:
+    - GH_TOKEN
+default: dev
