@@ -36,6 +36,11 @@ SKILLS: list[tuple[str, str, str]] = [
         "Plan / spec progress reporting (skill).",
         "vk apply  +  vk spec status [--all]  +  vk plan edit",
     ),
+    (
+        "vk-goal",
+        "Autonomous goal-to-PR pipeline (skill).",
+        "vk plan {create,self-review,edit}  →  vk spec status",
+    ),
 ]
 
 
