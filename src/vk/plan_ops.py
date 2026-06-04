@@ -134,6 +134,13 @@ def create(
     # fail loud here — not after the folder is half-built — so a re-run after
     # adding the section isn't blocked by a stranded folder (#133). Mirrors how
     # `vk apply` validates the diff before `--yes` touches GitHub.
+    # Same doctrine for phase numbering: the schema gate (PhaseHeader ge=1)
+    # would only reject at the post-write re-parse, stranding the folder.
+    for ps in phases:
+        if ps.number < 1:
+            raise PlanEditError(
+                f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
+            )
     spec_path: Path | None = None
     if spec_str:
         candidate = (repo_root / spec_str).resolve()

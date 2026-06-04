@@ -450,6 +450,31 @@ def test_self_review_detects_manual_complete_without_note(tmp_path):
     assert any(issue.severity == "error" for issue in issues)
 
 
+def test_create_rejects_phase_zero_before_writing(tmp_path):
+    """Phase numbering starts at 1. create() must refuse a 0-numbered
+    PhaseSpec BEFORE any file is written — failing only at the post-write
+    re-parse would strand a half-built folder (the #133 failure mode)."""
+    from vk.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    with pytest.raises(PlanEditError, match="starts at 1"):
+        create(
+            repo_root=repo,
+            slug="2026-06-04-zero-phase",
+            spec=str(spec_path.relative_to(repo)),
+            target_repo="derio-net/test",
+            vk_version=">=2.0.0,<3.0.0",
+            phases=[
+                PhaseSpec(number=0, title="Prereqs", tag="manual"),
+                PhaseSpec(number=1, title="Build", tag="agentic"),
+            ],
+            prose="# x\n",
+        )
+    folder = repo / "docs" / "superpowers" / "plans" / "2026-06-04-zero-phase"
+    assert not folder.exists(), "phase-0 rejection must not strand a half-built folder"
+
+
 def test_self_review_warns_on_overlong_plan_label(tmp_path):
     """#249: a slug whose NORMALIZED `plan:<slug>` form still exceeds GitHub's
     50-char label limit must surface a self-review warning (it's

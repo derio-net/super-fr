@@ -63,6 +63,34 @@ def test_parse_rejects_v1_plan(tmp_path):
         parse(v1)
 
 
+def test_parse_rejects_phase_zero(tmp_path):
+    """Phase numbering starts at 1. A `00.yaml` with `phase.number: 0` must
+    fail parse loud, naming the offending file."""
+    import re
+    import shutil
+
+    from vk import PlanSchemaError, parse
+
+    shutil.copytree(FIXTURE_DIR, tmp_path / "copy")
+    phase0 = (
+        (tmp_path / "copy" / "01.yaml")
+        .read_text()
+        .replace("number: 1", "number: 0")
+        .replace("P1.T1.S1", "P0.T1.S1")
+    )
+    (tmp_path / "copy" / "01.yaml").unlink()
+    (tmp_path / "copy" / "00.yaml").write_text(phase0)
+    with pytest.raises(PlanSchemaError, match=re.escape("00.yaml")):
+        parse(tmp_path / "copy")
+
+
+def test_parse_accepts_phase_one():
+    """Control: 1-based plans (the minimal fixture) keep parsing."""
+    from vk import parse
+
+    assert parse(FIXTURE_DIR).phases[0].phase.number == 1
+
+
 def test_parse_enforces_vk_version(monkeypatch):
     from vk import PlanSchemaError, parse
 
