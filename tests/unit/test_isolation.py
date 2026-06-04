@@ -236,3 +236,21 @@ def test_down_merged_pr_cleans_without_force(
     )
     target.down(st, force=False)
     assert not st.worktree.exists()
+
+
+def test_up_twice_is_idempotent_on_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-running up() must not fail on the existing worktree (re-entrant runs)."""
+    repo, runner, target, st1 = _upped(tmp_path, monkeypatch)
+    st2 = target.up(None, "vk-iso/test")
+    assert st2.worktree == st1.worktree
+    assert st2.worktree.is_dir()
+    # second up still (re)starts the devcontainer but adds no second worktree
+    (up_call,) = runner.argv_for("devcontainer")
+    assert up_call[1] == "up"
+
+
+def test_pr_malformed_gh_json_is_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, runner, target, st = _upped(tmp_path, monkeypatch, stdout={"gh": "not-json {"})
+    assert target.status(st)["pr"] is None

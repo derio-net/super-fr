@@ -128,8 +128,11 @@ def _ensure_env_placeholders(env_file: Path, repo: str, profile: str, secrets: l
     env_file.parent.mkdir(parents=True, exist_ok=True)
     existing = env_file.read_text() if env_file.is_file() else ""
     lines = [] if existing else [f"# vk isolation secrets — {repo}/{profile}", ""]
+    present = {
+        ln.lstrip("# ").split("=", 1)[0].strip() for ln in existing.splitlines() if "=" in ln
+    }
     for key in secrets:
-        if f"{key}=" in existing:  # set or placeholder already present — never touch
+        if key in present:  # set or placeholder already present — never touch
             continue
         lines.append(f"# {key}=")
     if lines or not existing:

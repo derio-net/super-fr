@@ -31,7 +31,7 @@ def _target(repo: Path) -> LocalWorktreeDevcontainerTarget:
 
 
 def _fail(err: IsolationError) -> None:
-    typer.echo(f"error: {err}", err=False)
+    typer.echo(f"error: {err}", err=True)
     raise typer.Exit(2)
 
 

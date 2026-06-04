@@ -96,3 +96,9 @@ def test_status_lists_all_when_no_branch(repo: Path, fake_run: list) -> None:
     res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
     assert res.exit_code == 0
     assert "a" in res.output and "b" in res.output
+
+
+def test_exec_with_no_command_exits_2(repo: Path, fake_run: list) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "e"])
+    res = runner.invoke(app, ["isolation", "exec", "--repo", str(repo), "--branch", "e"])
+    assert res.exit_code == 2

@@ -39,7 +39,9 @@ def _home() -> Path:
 
 class LocalWorktreeDevcontainerTarget:
     def __init__(self, repo_root: Path, runner: Runner = subprocess_runner):
-        self.repo_root = Path(repo_root)
+        # resolve() — the mount target must match the realpath git bakes
+        # into the worktree's gitdir pointer (symlinked /tmp on macOS etc.)
+        self.repo_root = Path(repo_root).resolve()
         self.run = runner
 
     # ---------- lifecycle ----------

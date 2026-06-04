@@ -52,8 +52,9 @@ Cover, with scan-informed recommended options:
 
 ```bash
 vk init scaffold --repo . --profile dev --purpose "day-to-day development" \
-    --tool uv --tool node --secret GH_TOKEN --default
-vk init scaffold --repo . --profile readonly --purpose "review/exploration"
+    --tool uv --tool node --default
+vk init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
+    --secret GH_TOKEN --secret KUBECONFIG_B64
 ```
 
 Each call writes:
