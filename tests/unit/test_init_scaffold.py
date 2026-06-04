@@ -28,8 +28,17 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def scaffold(repo: Path, *extra: str):
     return runner.invoke(
         app,
-        ["init", "scaffold", "--repo", str(repo), "--profile", "dev",
-         "--purpose", "day-to-day development", *extra],
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "dev",
+            "--purpose",
+            "day-to-day development",
+            *extra,
+        ],
     )
 
 
@@ -69,8 +78,16 @@ def test_scaffold_second_profile_keeps_first(repo: Path) -> None:
     assert scaffold(repo, "--default").exit_code == 0
     res = runner.invoke(
         app,
-        ["init", "scaffold", "--repo", str(repo), "--profile", "readonly",
-         "--purpose", "read-only review"],
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "readonly",
+            "--purpose",
+            "read-only review",
+        ],
     )
     assert res.exit_code == 0, res.output
     profiles = yaml.safe_load((repo / ".devcontainer" / "vk-profiles.yaml").read_text())

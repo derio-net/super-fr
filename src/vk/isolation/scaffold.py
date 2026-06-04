@@ -61,7 +61,9 @@ def scaffold_profile(
 ) -> Path:
     """Write the profile. Returns the devcontainer.json path."""
     if not (repo_root / ".git").exists():
-        raise IsolationError(f"{repo_root} is not a git repo — vk init scaffold only runs inside one.")
+        raise IsolationError(
+            f"{repo_root} is not a git repo — vk init scaffold only runs inside one."
+        )
 
     profile_dir = repo_root / ".devcontainer" / profile
     config_path = profile_dir / "devcontainer.json"
@@ -74,7 +76,7 @@ def scaffold_profile(
     known = {t: KNOWN_TOOL_FEATURES[t] for t in tools if t in KNOWN_TOOL_FEATURES}
     unknown = [t for t in tools if t not in KNOWN_TOOL_FEATURES]
 
-    features: dict[str, dict] = {GH_FEATURE: {}}
+    features: dict[str, dict[str, str]] = {GH_FEATURE: {}}
     for feature in known.values():
         features[feature] = {}
 
@@ -110,7 +112,7 @@ def _update_profiles_yaml(
     data = yaml.safe_load(path.read_text()) if path.is_file() else {}
     data = data or {}
     data.setdefault("profiles", {})
-    entry: dict = {"purpose": purpose, "secrets": secrets}
+    entry: dict[str, object] = {"purpose": purpose, "secrets": secrets}
     if unknown_tools:
         entry["notes"] = [
             f"tool {t!r} has no known devcontainer feature — wire it via postCreateCommand"
@@ -131,4 +133,6 @@ def _ensure_env_placeholders(env_file: Path, repo: str, profile: str, secrets: l
             continue
         lines.append(f"# {key}=")
     if lines or not existing:
-        env_file.write_text(existing + ("\n" if existing and lines else "") + "\n".join(lines) + "\n")
+        env_file.write_text(
+            existing + ("\n" if existing and lines else "") + "\n".join(lines) + "\n"
+        )

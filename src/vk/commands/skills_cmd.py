@@ -41,6 +41,21 @@ SKILLS: list[tuple[str, str, str]] = [
         "Autonomous goal-to-PR pipeline (skill).",
         "vk plan {create,self-review,edit}  →  vk spec status",
     ),
+    (
+        "vk-isolation",
+        "Isolated workspace: worktree + devcontainer, exec-bridge (skill).",
+        "vk isolation {up,exec,status,down}",
+    ),
+    (
+        "vk-init",
+        "Scaffold devcontainer profiles via interview (skill).",
+        "vk init scaffold --profile NAME --purpose TEXT [--tool ...] [--secret ...]",
+    ),
+    (
+        "vk-brainstorming",
+        "Brainstorm inside vk-isolation; hard stop without a profile (skill).",
+        "vk isolation up  →  superpowers:brainstorming  →  vk-plan handoff",
+    ),
 ]
 
 

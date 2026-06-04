@@ -11,9 +11,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from vk.isolation.types import (
     IsolationError,
@@ -23,12 +24,12 @@ from vk.isolation.types import (
     state_path,
 )
 
-Runner = Callable[..., subprocess.CompletedProcess]
+Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
 def subprocess_runner(
     argv: list[str], cwd: Path | None = None, check: bool = False
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
 
 
@@ -45,10 +46,19 @@ class LocalWorktreeDevcontainerTarget:
 
     def up(self, profile: str | None, branch: str, path: Path | None = None) -> IsolationState:
         if not (self.repo_root / ".git").exists():
-            raise IsolationError(f"{self.repo_root} is not a git repo — vk isolation only runs inside one.")
+            raise IsolationError(
+                f"{self.repo_root} is not a git repo — vk isolation only runs inside one."
+            )
         name = resolve_profile(self.repo_root, profile)
 
-        worktree = path or (_home() / ".cache" / "vk" / "worktrees" / self.repo_root.name / branch.replace("/", "__"))
+        worktree = path or (
+            _home()
+            / ".cache"
+            / "vk"
+            / "worktrees"
+            / self.repo_root.name
+            / branch.replace("/", "__")
+        )
         worktree.parent.mkdir(parents=True, exist_ok=True)
         self._git_worktree_add(worktree, branch)
 
@@ -61,7 +71,8 @@ class LocalWorktreeDevcontainerTarget:
         git_dir = self.repo_root / ".git"
         result = self.run(
             [
-                "devcontainer", "up",
+                "devcontainer",
+                "up",
                 f"--workspace-folder={worktree}",
                 f"--config={config}",
                 f"--mount=type=bind,source={git_dir},target={git_dir}",
@@ -76,7 +87,7 @@ class LocalWorktreeDevcontainerTarget:
             branch=branch,
             worktree=worktree,
             profile=name,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         save_state(state)
         return state
@@ -85,7 +96,8 @@ class LocalWorktreeDevcontainerTarget:
         config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
         result = self.run(
             [
-                "devcontainer", "exec",
+                "devcontainer",
+                "exec",
                 f"--workspace-folder={state.worktree}",
                 f"--config={config}",
                 *argv,
@@ -142,7 +154,9 @@ class LocalWorktreeDevcontainerTarget:
     def _docker_ps(self, state: IsolationState) -> str:
         result = self.run(
             [
-                "docker", "ps", "--all",
+                "docker",
+                "ps",
+                "--all",
                 f"--filter=label=devcontainer.local_folder={state.worktree}",
                 "--format={{.ID}} {{.State}}",
             ]
@@ -165,6 +179,7 @@ class LocalWorktreeDevcontainerTarget:
         if result.returncode != 0 or not (result.stdout or "").strip():
             return None
         try:
-            return json.loads(result.stdout)
+            data = json.loads(result.stdout)
         except json.JSONDecodeError:
             return None
+        return data if isinstance(data, dict) else None

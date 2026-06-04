@@ -6,7 +6,6 @@ real throwaway repos (cheap, deterministic). Nothing here needs Docker.
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
@@ -23,14 +22,27 @@ from vk.isolation.types import (
 )
 
 
-def make_repo(tmp_path: Path, profiles: list[str] | None = None, default: str | None = None) -> Path:
+def make_repo(
+    tmp_path: Path, profiles: list[str] | None = None, default: str | None = None
+) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     (repo / "README.md").write_text("x\n")
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ],
         check=True,
     )
     for name in profiles or []:
@@ -66,11 +78,15 @@ class FakeRunner:
 
 # ---------- state ----------
 
+
 def test_state_roundtrip(tmp_path: Path) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev")
     st = IsolationState(
-        repo_root=repo, branch="vk-iso/x", worktree=tmp_path / "wt",
-        profile="dev", created_at="2026-06-04T00:00:00Z",
+        repo_root=repo,
+        branch="vk-iso/x",
+        worktree=tmp_path / "wt",
+        profile="dev",
+        created_at="2026-06-04T00:00:00Z",
     )
     save_state(st)
     p = state_path(repo, "vk-iso/x")
@@ -84,6 +100,7 @@ def test_state_path_sanitizes_branch_slash(tmp_path: Path) -> None:
 
 
 # ---------- profiles ----------
+
 
 def test_resolve_profile_default(tmp_path: Path) -> None:
     repo = make_repo(tmp_path, ["dev", "admin"], default="dev")
@@ -111,7 +128,10 @@ def test_resolve_profile_no_default_single_profile(tmp_path: Path) -> None:
 
 # ---------- target.up ----------
 
-def test_up_creates_worktree_envfile_and_devcontainer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_up_creates_worktree_envfile_and_devcontainer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo = make_repo(tmp_path, ["dev"], default="dev")
     runner = FakeRunner()
@@ -148,6 +168,7 @@ def test_up_devcontainer_failure_raises(tmp_path: Path, monkeypatch: pytest.Monk
 
 # ---------- target.exec / status / down ----------
 
+
 def _upped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **runner_kw):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo = make_repo(tmp_path, ["dev"], default="dev")
@@ -167,9 +188,12 @@ def test_exec_passthrough(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert call[-3:] == ["pytest", "-q", "--no-cov"]
 
 
-def test_status_reports_worktree_container_pr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_reports_worktree_container_pr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _, runner, target, st = _upped(
-        tmp_path, monkeypatch,
+        tmp_path,
+        monkeypatch,
         stdout={"docker": "abc123 running\n", "gh": '{"state": "OPEN", "url": "u"}'},
     )
     s = target.status(st)
@@ -178,7 +202,9 @@ def test_status_reports_worktree_container_pr(tmp_path: Path, monkeypatch: pytes
     assert s["pr"] == {"state": "OPEN", "url": "u"}
 
 
-def test_down_refuses_open_pr_without_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_down_refuses_open_pr_without_force(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     repo, runner, target, st = _upped(
         tmp_path, monkeypatch, stdout={"gh": '{"state": "OPEN", "url": "u"}'}
     )
@@ -187,9 +213,12 @@ def test_down_refuses_open_pr_without_force(tmp_path: Path, monkeypatch: pytest.
     assert st.worktree.is_dir()  # untouched
 
 
-def test_down_force_removes_worktree_and_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_down_force_removes_worktree_and_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     repo, runner, target, st = _upped(
-        tmp_path, monkeypatch,
+        tmp_path,
+        monkeypatch,
         stdout={"docker": "abc123 running\n", "gh": '{"state": "OPEN", "url": "u"}'},
     )
     target.down(st, force=True)
@@ -199,7 +228,9 @@ def test_down_force_removes_worktree_and_state(tmp_path: Path, monkeypatch: pyte
     assert stops, "container should be stopped/removed"
 
 
-def test_down_merged_pr_cleans_without_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_down_merged_pr_cleans_without_force(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     repo, runner, target, st = _upped(
         tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
     )

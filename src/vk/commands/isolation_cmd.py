@@ -16,7 +16,7 @@ from vk.isolation.types import IsolationError, list_states, load_state
 
 isolation_app = typer.Typer(
     name="isolation",
-    help="Isolated workspaces: git worktree + devcontainer (exec-bridge).",
+    help="Isolated workspaces: git worktree + devcontainer.",
     no_args_is_help=True,
 )
 
@@ -38,9 +38,13 @@ def _fail(err: IsolationError) -> None:
 @isolation_app.command()
 def up(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
-    profile: str | None = typer.Option(None, help="Devcontainer profile (default: repo's configured default)."),
+    profile: str | None = typer.Option(
+        None, help="Devcontainer profile (default: repo's configured default)."
+    ),
     branch: str = typer.Option(DEFAULT_BRANCH, help="Branch for the worktree."),
-    path: Path | None = typer.Option(None, help="Worktree path (default: ~/.cache/vk/worktrees/<repo>/<branch>)."),
+    path: Path | None = typer.Option(
+        None, help="Worktree path (default: ~/.cache/vk/worktrees/<repo>/<branch>)."
+    ),
 ) -> None:
     """Create worktree + start the profile's devcontainer against it."""
     try:
@@ -48,12 +52,12 @@ def up(
     except IsolationError as err:
         _fail(err)
         return
-    typer.echo(f"isolation up: worktree={state.worktree} profile={state.profile} branch={state.branch}")
+    typer.echo(
+        f"isolation up: worktree={state.worktree} profile={state.profile} branch={state.branch}"
+    )
 
 
-@isolation_app.command(
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
-)
+@isolation_app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def exec(  # noqa: A001 - typer command name
     ctx: typer.Context,
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
@@ -62,7 +66,11 @@ def exec(  # noqa: A001 - typer command name
     """Run a command inside the isolation container (exit code passthrough)."""
     state = load_state(repo.resolve(), branch)
     if state is None:
-        _fail(IsolationError(f"no isolation workspace for branch {branch!r} — run `vk isolation up` first."))
+        _fail(
+            IsolationError(
+                f"no isolation workspace for branch {branch!r} — run `vk isolation up` first."
+            )
+        )
         return
     argv = list(ctx.args)
     if argv and argv[0] == "--":
@@ -82,9 +90,7 @@ def status(
     """Show worktree, container, and PR state for isolation workspaces."""
     root = repo.resolve()
     states = (
-        [s for s in [load_state(root, branch)] if s is not None]
-        if branch
-        else list_states(root)
+        [s for s in [load_state(root, branch)] if s is not None] if branch else list_states(root)
     )
     if branch and not states:
         _fail(IsolationError(f"no isolation workspace for branch {branch!r}."))

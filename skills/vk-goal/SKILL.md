@@ -34,9 +34,10 @@ tried, and ask — a wrong guess shipped in a PR costs more than a paused run.
 | PR merge | The agent never self-merges |
 | Post-merge Test Plan | Proves real deployment; needs the operator's environment |
 
-### 1. Brainstorm with batched Q&A
+### 1. Brainstorm with batched Q&A — in isolation
 
-Invoke `superpowers:brainstorming`, but explore the codebase first, collect
+Invoke `vk-brainstorming` (runs `vk isolation up` first; no devcontainer
+profile → pause for the vk-init interview). Explore the workspace, collect
 EVERY operator-owned decision, and ask all of them in ONE AskUserQuestion call
 (max 4 questions, recommended option first). Include a post-merge Test Plan
 question ONLY when the deliverable deploys (a service, bot, infra) — never for
@@ -86,9 +87,9 @@ phases. vk-goal adds placement policy (a mid-plan manual phase stalls the run):
 
 ### 6. Implement — vk-execute local mode, TDD, no subagents
 
-Feature branch / worktree (`superpowers:using-git-worktrees`). Run phases via
-`vk-execute` in LOCAL mode (plan-dir + phase number) — NOT dispatched: spec and
-plan aren't on main yet, so `vk apply --yes` would refuse (reachability gate).
+The step-1 isolation workspace is the working copy — every command through
+`vk isolation exec`. Run phases via `vk-execute` in LOCAL mode (plan-dir +
+phase) — NOT dispatched: spec/plan aren't on main, `vk apply --yes` refuses.
 Implement inline, not via subagents — the implementing context needs the Q&A
 and spec history. TDD per step (`superpowers:test-driven-development`). Tick
 steps and complete phases via `vk plan edit`. Never implement a manual phase.
@@ -114,6 +115,6 @@ verbatim, labeled "post-merge — operator-driven". Stop; the operator merges.
 
 When the operator reports the merge: drive the Test Plan interactively if
 present (agent runs checks, operator confirms what the agent can't reach). Then
-confirm phases complete, check `vk spec status`, and archive the plan folder to
+confirm phases complete, check `vk spec status`, archive the plan folder to
 `docs/superpowers/archived-plans/` via a housekeeping PR (v2 plans need the
-manual move; update the spec table).
+manual move; update the spec table), then `vk isolation down`.
