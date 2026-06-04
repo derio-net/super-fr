@@ -60,13 +60,17 @@ SKILLS: list[tuple[str, str, str]] = [
 
 
 def _commands(app: typer.Typer) -> list[tuple[str, str]]:
-    """Introspect a typer app: return (name, first-line-help) for every command/sub-app."""
-    import click
+    """Introspect a typer app: return (name, first-line-help) for every command/sub-app.
 
+    Duck-typed on purpose: typer ≥0.26 vendors click (`typer._click`), so the
+    compiled group is NOT an instance of the externally-installed click's
+    Group — isinstance checks (and bare `import click`) break across typer
+    versions. `.commands` exists on both lineages.
+    """
     click_group = typer.main.get_command(app)
-    assert isinstance(click_group, click.Group), "Typer app must compile to a Group"
+    commands = getattr(click_group, "commands", {})
     rows: list[tuple[str, str]] = []
-    for name, cmd in click_group.commands.items():
+    for name, cmd in commands.items():
         help_text = (cmd.help or "").strip().splitlines()[0] if cmd.help else ""
         rows.append((name, help_text))
     return rows
