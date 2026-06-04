@@ -36,7 +36,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def fake_run(monkeypatch: pytest.MonkeyPatch):
     calls: list[list[str]] = []
 
-    def run(argv, cwd=None, check=False):
+    def run(argv, cwd=None, check=False, capture=True):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         calls.append(list(argv))

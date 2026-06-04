@@ -28,9 +28,11 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
 def subprocess_runner(
-    argv: list[str], cwd: Path | None = None, check: bool = False
+    argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
+    """capture=False inherits stdio — exec passthrough must stream the
+    container's output live (long builds/test runs), not swallow it."""
+    return subprocess.run(argv, cwd=cwd, check=check, capture_output=capture, text=True)
 
 
 def _home() -> Path:
@@ -105,6 +107,7 @@ class LocalWorktreeDevcontainerTarget:
                 *argv,
             ],
             cwd=state.worktree,
+            capture=False,
         )
         return result.returncode
 
