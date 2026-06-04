@@ -55,8 +55,15 @@ def test_skills_subprocess_smoke() -> None:
     assert "Commands:" in result.stdout
 
 
-def test_click_is_declared_dependency() -> None:
-    """skills_cmd imports click directly; pyproject must declare it."""
-    pyproject = (REPO_ROOT / "pyproject.toml").read_text()
-    deps_block = pyproject.split("dependencies = [", 1)[1].split("]", 1)[0]
-    assert "click" in deps_block, "click must be a declared [project] dependency"
+def test_no_direct_click_import_in_src() -> None:
+    """typer ≥0.26 vendors click — a bare `import click` breaks installed envs.
+
+    Nothing in src/ may import click directly; introspect typer objects via
+    duck typing instead (see _commands).
+    """
+    offenders = [
+        p
+        for p in (REPO_ROOT / "src").rglob("*.py")
+        if re.search(r"^\s*(import click|from click)", p.read_text(), re.MULTILINE)
+    ]
+    assert not offenders, f"direct click imports: {offenders}"
