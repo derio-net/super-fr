@@ -39,15 +39,18 @@ from vk.states import (
 )
 from vk.types import PhaseDoc
 
-_DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
-
 
 def _spec_slug(spec_path: str | None) -> str | None:
-    """Strip date prefix and `.md` suffix from spec path; return None if unset."""
+    """Strip the `.md` suffix from the spec path; return None if unset.
+
+    Date-prefix stripping happens inside `labels.spec_label` (via
+    `normalize_label_slug`) — stripping it here too used to leave a
+    leading dash on `YYYY-MM-DD--<layer>--…` slugs (`spec:-auto--…`)
+    because the local regex consumed exactly one trailing dash.
+    """
     if not spec_path:
         return None
-    stem = Path(spec_path).stem
-    return _DATE_PREFIX_RE.sub("", stem)
+    return Path(spec_path).stem
 
 
 def _deps_satisfied(phase: PhaseDoc, plan: Plan, observed: GhState) -> bool:

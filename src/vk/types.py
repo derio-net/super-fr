@@ -79,7 +79,10 @@ class Task(BaseModel):
 
 class PhaseHeader(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    number: int
+    # Phase numbering starts at 1 — a `00.yaml` phase fails parse loud.
+    # (Frank's pre-fix `safe-update-automation` plan has a phase 0; the
+    # bridge skips unparseable plans gracefully until it's remediated.)
+    number: int = Field(ge=1)
     title: str
     tag: Literal["agentic", "manual"]
     depends_on: tuple[int, ...] = ()

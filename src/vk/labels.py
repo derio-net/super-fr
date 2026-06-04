@@ -23,6 +23,24 @@ _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 # GitHub rejects label names longer than this with a 422 at create time (#249).
 MAX_LABEL_NAME_LEN = 50
 
+# Date prefix + ALL dashes that follow it. Frank's slug convention is
+# `YYYY-MM-DD--<layer>--<topic>` (double dash before the layer segment), so
+# stripping the date plus exactly one dash left a leading `-` on the label
+# (`spec:-auto--…`). Matching `-+` covers both single- and double-dash forms.
+_DATE_PREFIX_DASHES_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-+")
+
+
+def normalize_label_slug(slug: str) -> str:
+    """Strip a leading `YYYY-MM-DD-` date prefix (plus any extra dashes).
+
+    Single normalization point for slug-derived label names — both
+    `plan_label` and `spec_label` call it, so every consumer (renderer,
+    self-review lints) sees the same date-free, dash-clean shape:
+    `2026-05-27--auto--awx-deployment` → `auto--awx-deployment`. Slugs
+    without a date prefix pass through unchanged.
+    """
+    return _DATE_PREFIX_DASHES_RE.sub("", slug)
+
 
 @dataclass(frozen=True)
 class LabelDef:
@@ -91,13 +109,23 @@ PHASE_LABEL_COLOR = "FBCA04"
 
 
 def spec_label(slug: str) -> LabelDef:
-    """Return the LabelDef for `spec:<slug>` (name capped at 50 chars; #249)."""
-    return LabelDef(_bounded_label_name("spec:", slug), SPEC_LABEL_COLOR, f"Spec {slug}")
+    """Return the LabelDef for `spec:<slug>` — slug normalized (date prefix
+    stripped), then capped at 50 chars (#249). Description keeps the raw slug."""
+    return LabelDef(
+        _bounded_label_name("spec:", normalize_label_slug(slug)),
+        SPEC_LABEL_COLOR,
+        f"Spec {slug}",
+    )
 
 
 def plan_label(slug: str) -> LabelDef:
-    """Return the LabelDef for `plan:<slug>` (name capped at 50 chars; #249)."""
-    return LabelDef(_bounded_label_name("plan:", slug), PLAN_LABEL_COLOR, f"Part of plan {slug}")
+    """Return the LabelDef for `plan:<slug>` — slug normalized (date prefix
+    stripped), then capped at 50 chars (#249). Description keeps the raw slug."""
+    return LabelDef(
+        _bounded_label_name("plan:", normalize_label_slug(slug)),
+        PLAN_LABEL_COLOR,
+        f"Part of plan {slug}",
+    )
 
 
 def phase_label(n: int) -> LabelDef:

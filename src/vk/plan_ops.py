@@ -26,7 +26,7 @@ from typing import Any, Literal, TypedDict
 import yaml
 
 from vk._urls import is_cross_repo_spec
-from vk.labels import MAX_LABEL_NAME_LEN
+from vk.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from vk.parser import Plan, PlanSchemaError, parse
 
 
@@ -134,6 +134,13 @@ def create(
     # fail loud here — not after the folder is half-built — so a re-run after
     # adding the section isn't blocked by a stranded folder (#133). Mirrors how
     # `vk apply` validates the diff before `--yes` touches GitHub.
+    # Same doctrine for phase numbering: the schema gate (PhaseHeader ge=1)
+    # would only reject at the post-write re-parse, stranding the folder.
+    for ps in phases:
+        if ps.number < 1:
+            raise PlanEditError(
+                f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
+            )
     spec_path: Path | None = None
     if spec_str:
         candidate = (repo_root / spec_str).resolve()
@@ -672,6 +679,46 @@ def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[Rewo
 # ---------------------------------------------------------------------------
 # vk.plan.self_review (lints)
 
+# Agentic-purity gate (#252): a skipped (`state: '-'`) step in an AGENTIC
+# phase whose note defers it forward is a mis-scoped manual step — an
+# agentic phase must be fully agent-completable. The note either names a
+# later phase ("Executed in Phase 5") or uses a defer-phrase.
+_PHASE_REF_NOTE_RE = re.compile(r"[Pp]hase\s+(\d+)")
+_DEFER_PHRASES = ("defer", "executed in", "moved to")
+
+# Part 2 of the gate: manual-operation language in a pending agentic step.
+# Deliberately conservative (precision over recall) — the deferred-step
+# lint above is the load-bearing detector; this one catches the authoring
+# mistake before any deferral happens. Word-boundary, case-insensitive.
+_MANUAL_VERB_RES = tuple(
+    re.compile(rf"\b{phrase}\b", re.IGNORECASE)
+    for phrase in (
+        "manually",
+        "by hand",
+        "via the UI",
+        "in the UI",
+        "click",
+        "SOPS",
+        "operator sets",
+        "operator provides",
+    )
+)
+
+
+def _note_defers_forward(note: str, phase_number: int) -> bool:
+    """True iff `note` defers execution beyond `phase_number`.
+
+    An explicit phase reference decides outright: forward ("Executed in
+    Phase 5" on phase 3) is deferral; backward ("ported from Phase 1") is
+    history and disarms the defer-phrases. Only refless notes fall through
+    to the phrase scan.
+    """
+    m = _PHASE_REF_NOTE_RE.search(note)
+    if m:
+        return int(m.group(1)) > phase_number
+    lowered = note.lower()
+    return any(phrase in lowered for phrase in _DEFER_PHRASES)
+
 
 @dataclass(frozen=True)
 class ReviewIssue:
@@ -712,6 +759,53 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                 )
             )
 
+    # Agentic-purity gate (#252). An agentic phase is meant to be fully
+    # agent-completable and end in one PR. Two error-severity detectors per
+    # agentic phase (the gate is enforced, not advisory):
+    #   1. Deferred steps — a step skipped (`'-'`) with a forward-deferring
+    #      note was manual by nature and belongs in a manual phase.
+    #   2. Manual-operation language in a not-yet-completed step. Completed
+    #      ('x') steps are exempt — a ticked step already proved
+    #      agent-completable, and the exemption keeps historical plans (or
+    #      step texts that merely QUOTE the phrases) from retro-erroring.
+    #      At authoring time every step is unticked, so the gate bites
+    #      exactly where it should.
+    for phase in plan.phases:
+        if phase.phase.tag != "agentic":
+            continue
+        n = phase.phase.number
+        for step_id, ss in sorted(phase.state.steps.items()):
+            if ss.state != "-" or not ss.note:
+                continue
+            if _note_defers_forward(ss.note, n):
+                issues.append(
+                    ReviewIssue(
+                        severity="error",
+                        message=(
+                            f"phase {n} (agentic) step {step_id} is deferred "
+                            f"(note: {ss.note!r}) — manual-by-nature work must move "
+                            f"into a manual phase; agentic phases must be pure agentic."
+                        ),
+                    )
+                )
+        for task in phase.tasks:
+            for step in task.steps:
+                state = phase.state.steps.get(step.id)
+                if state is not None and state.state == "x":
+                    continue
+                hit = next((p for p in _MANUAL_VERB_RES if p.search(step.text)), None)
+                if hit is not None:
+                    issues.append(
+                        ReviewIssue(
+                            severity="error",
+                            message=(
+                                f"phase {n} (agentic) step {step.id} reads like a "
+                                f"manual operation (matched {hit.pattern!r}) — move it "
+                                f"into a manual phase; agentic phases must be pure agentic."
+                            ),
+                        )
+                    )
+
     # Same-repo-form spec that doesn't resolve locally (#248): almost always a
     # malformed cross-repo ref missing the `owner/repo:` prefix, which apply's
     # reachability gate treats as a missing same-repo file and flags unreachable.
@@ -738,15 +832,20 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # Over-long plan label (#249): `plan:<slug>` past GitHub's 50-char label
     # cap is auto-truncated+hashed at dispatch, but the operator should know —
     # a hashed routing key is opaque; a shorter slug reads better on the board.
-    raw_plan_label = f"plan:{plan.meta.plan}"
-    if len(raw_plan_label) > MAX_LABEL_NAME_LEN:
+    # Check the NORMALIZED slug — that's the shape that actually ships; a raw
+    # dated slug whose date-free form fits is not over-long. Built by hand
+    # (not via `labels.plan_label`) on purpose: the factory's `.name` is
+    # already bounded to 50 chars, so overflow would be undetectable from it.
+    normalized_plan_label = f"plan:{normalize_label_slug(plan.meta.plan)}"
+    if len(normalized_plan_label) > MAX_LABEL_NAME_LEN:
         issues.append(
             ReviewIssue(
                 severity="warn",
                 message=(
-                    f"plan label {raw_plan_label!r} is {len(raw_plan_label)} chars "
-                    f"(>{MAX_LABEL_NAME_LEN}); it will be truncated + hashed for GitHub. "
-                    f"Consider a shorter slug (rework suffixes push long slugs over)."
+                    f"plan label {normalized_plan_label!r} is "
+                    f"{len(normalized_plan_label)} chars (>{MAX_LABEL_NAME_LEN}); "
+                    f"it will be truncated + hashed for GitHub. Consider a "
+                    f"shorter slug (rework suffixes push long slugs over)."
                 ),
             )
         )

@@ -1,0 +1,60 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Enforce 1-based phase numbering
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: 'Schema-level gate: PhaseHeader.number >= 1'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Add failing test to tests/unit/test_v2_parse.py: a plan folder with 00.yaml
+      (phase.number: 0, step ids P0.T1.S1) raises PlanSchemaError whose message
+      names 00.yaml; a sibling control plan with 01.yaml phase.number 1 parses.
+      Run targeted pytest — expect the phase-0 test to fail (currently parses).
+  - id: P2.T1.S2
+    text: |-
+      Implement in src/vk/types.py: PhaseHeader.number: int = Field(ge=1).
+      Run: uv run pytest tests/unit/test_v2_parse.py -q --no-cov — expect green.
+- number: 2
+  title: create() pre-flight rejects phase 0 before writing
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Add failing test to tests/unit/test_v2_plan_ops.py: plan_ops.create() with a
+      PhaseSpec(number=0, ...) raises PlanEditError mentioning "phase numbering
+      starts at 1" AND the plan folder does NOT exist afterwards (no stranded
+      half-built folder — #133 regression guard).
+      Run targeted pytest — expect failure (currently strands the folder via
+      post-write re-parse).
+  - id: P2.T2.S2
+    text: |-
+      Implement in src/vk/plan_ops.py create(): pre-flight loop before any mkdir —
+      if any ps.number < 1: raise PlanEditError(
+        f"phase {ps.number}: phase numbering starts at 1, not 0").
+      Run: uv run pytest tests/unit/test_v2_plan_ops.py -q --no-cov — expect green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T10:12:43+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-04T10:12:44+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-04T10:13:40+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-04T10:13:42+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T10:14:00+00:00'
+    note: null
+    observed_prs: []

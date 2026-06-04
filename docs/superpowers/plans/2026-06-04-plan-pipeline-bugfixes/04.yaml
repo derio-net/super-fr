@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Version bump, full validation, PR
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Bump + full gate
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Run scripts/bump-version.py patch (2.2.14 -> 2.2.15). Commit the four files
+      (pyproject.toml, both plugin JSONs, uv.lock) per CLAUDE.md.
+  - id: P4.T1.S2
+    text: |-
+      Full gate: uv run ruff format src/ tests/ && uv run ruff check src/ tests/ &&
+      uv run mypy src/ && uv run pytest -q --no-cov. All green before push.
+- number: 2
+  title: Reviewed PR
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Push branch, open PR against main with summary of the four fixes, the frank
+      phase-0 deployment note, and the label-churn note. Run a thorough code review
+      of the diff and address findings before handing off.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T10:19:23+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-06-04T10:35:10+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-06-04T10:45:46+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T10:45:48+00:00'
+    note: null
+    observed_prs: []

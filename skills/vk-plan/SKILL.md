@@ -31,6 +31,8 @@ A plan is a directory under `docs/superpowers/plans/<slug>/` containing:
 - `NN.yaml` (one file per phase, two-digit zero-padded: `01.yaml`, `02.yaml`,
   …, `99.yaml`) — phase header, tasks, steps, and per-step state. Per-phase
   files prevent merge conflicts when parallel branches tick different phases.
+  Phases are numbered **from 1**: `01.yaml` is the first phase; `00.yaml`
+  (phase 0) fails parse — `vk plan create` rejects it pre-flight.
 
 Every step id follows `P<n>.T<n>.S<n>` (phase number, task number, step
 number). The renderer / observer / diff / apply chain depends on this shape.
@@ -61,6 +63,11 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 ## Rules
 
 - TDD: test first, always. No speculative generality.
+- **Pure agentic phases:** an agentic phase must be fully agent-completable
+  end-to-end. Collect ALL manual work (secrets, UI operations, deploy actions,
+  cluster-dependent config) into a dedicated `[manual]` phase — never author a
+  manual step into an agentic phase planning to defer it. `vk plan
+  self-review` enforces this with error severity (#252).
 - No placeholders: every step has actual code, commands, expected output.
 - Bite-sized steps: 2-5 minutes each.
 - Use BEGIN/END markers for full-file embeds, not nested fences.

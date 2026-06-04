@@ -465,7 +465,7 @@ def test_migrate_phase_with_step_subsections_fallback(tmp_path):
         "# Step Subsections\n\n"
         "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
         "**Status:** Complete\n\n"
-        "## Phase 0: Bootstrap [agentic]\n"
+        "## Phase 1: Bootstrap [agentic]\n"
         "**Depends on:** —\n\n"
         "### Step 1: Create repo\n\n"
         "- [x] **Create repo and clone**\n\n"
@@ -588,7 +588,7 @@ def test_migrate_fallback_ignores_fenced_code_block_examples(tmp_path):
         "# Fenced Examples\n\n"
         "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
         "**Status:** Complete\n\n"
-        "## Phase 0: Documentation [agentic]\n"
+        "## Phase 1: Documentation [agentic]\n"
         "**Depends on:** —\n\n"
         "### Step 1: Document the format\n\n"
         "Plans use this format:\n\n"
@@ -663,6 +663,31 @@ def test_migrate_uses_explicit_target_repo(tmp_path):
     assert plan.meta.target_repo == "derio-net/frank"
 
 
+def test_migrate_phase_zero_v1_plan_fails_loud(tmp_path):
+    """Phase numbering starts at 1: migrating a v1 plan with '## Phase 0'
+    must raise at migration time — not silently produce an invalid v2 folder
+    the bridge would skip forever. The source .md stays unarchived and no
+    half-built folder is stranded, so a renumber + re-run just works."""
+    from vk.migrate import MigrationError, migrate_repo
+
+    repo = _make_repo(tmp_path)
+    p = _plans(repo) / "2026-05-10-zero-phase.md"
+    p.write_text(
+        "# Zero Phase\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 0: Bootstrap [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Task 1: t\n\n- [x] **Step 1: x** d.\n"
+    )
+    with pytest.raises(MigrationError, match="00.yaml"):
+        migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    assert p.exists(), "source .md must not be archived on failed migration"
+    assert not (_plans(repo) / "2026-05-10-zero-phase").is_dir(), (
+        "failed migration must not strand a half-built folder"
+    )
+
+
 def test_migrate_recovers_prose_depends_on(tmp_path):
     """#245 Bug 2: a '## Dependencies' / 'Blocked by Phase N' prose convention
     is recovered into depends_on instead of being flattened to []."""
@@ -675,25 +700,25 @@ def test_migrate_recovers_prose_depends_on(tmp_path):
         "# Prose Deps\n\n"
         "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
         "**Status:** Complete\n\n"
-        "## Phase 0: Bootstrap [agentic]\n"
+        "## Phase 1: Bootstrap [agentic]\n"
         "**Depends on:** —\n\n"
         "### Task 1: t\n\n- [x] **Step 1: x** d.\n\n"
-        "## Phase 1: Build [agentic]\n\n"
+        "## Phase 2: Build [agentic]\n\n"
         "### Task 1: t\n\n- [x] **Step 1: y** d.\n\n"
         "## Dependencies\n\n"
-        "Blocked by Phase 0.\n"
+        "Blocked by Phase 1.\n"
     )
 
     outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(_plans(repo) / "2026-05-10-prose-deps")
     deps = {ph.phase.number: list(ph.phase.depends_on) for ph in plan.phases}
-    assert deps[1] == [0], deps
+    assert deps[2] == [1], deps
     # The recovery is surfaced as a warning so lossy migrations aren't silent.
     assert any("depends_on" in w.lower() for o in outcomes for w in o.warnings)
 
 
 def test_migrate_recovers_multi_phase_prose_depends_on(tmp_path):
-    """'Blocked by Phase 0 and 3' → depends_on == [0, 3]."""
+    """'Blocked by Phase 1 and 3' → depends_on == [1, 3]."""
     from vk import parse
     from vk.migrate import migrate_repo
 
@@ -703,16 +728,16 @@ def test_migrate_recovers_multi_phase_prose_depends_on(tmp_path):
         "# Multi Prose Deps\n\n"
         "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
         "**Status:** Complete\n\n"
-        "## Phase 0: A [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: a** d.\n\n"
+        "## Phase 1: A [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: a** d.\n\n"
         "## Phase 3: B [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: b** d.\n\n"
         "## Phase 4: C [agentic]\n\n### Task 1: t\n\n- [x] **Step 1: c** d.\n\n"
-        "## Dependencies\n\nBlocked by Phase 0 and 3.\n"
+        "## Dependencies\n\nBlocked by Phase 1 and 3.\n"
     )
 
     migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(_plans(repo) / "2026-05-10-multi-prose-deps")
     deps = {ph.phase.number: sorted(ph.phase.depends_on) for ph in plan.phases}
-    assert deps[4] == [0, 3], deps
+    assert deps[4] == [1, 3], deps
 
 
 def test_migrate_prose_depends_on_ignores_unrelated_digits(tmp_path):
@@ -727,15 +752,15 @@ def test_migrate_prose_depends_on_ignores_unrelated_digits(tmp_path):
         "# Noisy Deps\n\n"
         "**Spec:** `docs/superpowers/specs/2026-05-10-test.md`\n"
         "**Status:** Complete\n\n"
-        "## Phase 0: A [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: a** d.\n\n"
-        "## Phase 1: B [agentic]\n\n### Task 1: t\n\n- [x] **Step 1: b** d.\n\n"
-        "## Dependencies\n\nBlocked by Phase 0 which took 5 days (v2.1 rollout in 2026).\n"
+        "## Phase 1: A [agentic]\n**Depends on:** —\n\n### Task 1: t\n\n- [x] **Step 1: a** d.\n\n"
+        "## Phase 2: B [agentic]\n\n### Task 1: t\n\n- [x] **Step 1: b** d.\n\n"
+        "## Dependencies\n\nBlocked by Phase 1 which took 5 days (v2.1 rollout in 2026).\n"
     )
 
     migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(_plans(repo) / "2026-05-10-noisy-deps")
     deps = {ph.phase.number: sorted(ph.phase.depends_on) for ph in plan.phases}
-    assert deps[1] == [0], f"over-captured unrelated digits: {deps}"
+    assert deps[2] == [1], f"over-captured unrelated digits: {deps}"
 
 
 def test_migrate_preserves_task_intro_with_manual_operation_block(tmp_path):

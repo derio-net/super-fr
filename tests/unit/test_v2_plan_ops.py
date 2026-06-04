@@ -450,15 +450,200 @@ def test_self_review_detects_manual_complete_without_note(tmp_path):
     assert any(issue.severity == "error" for issue in issues)
 
 
+# ---------------------------------------------------------------------------
+# vk.plan.self_review — agentic-purity gate (#252)
+
+
+def _purity_plan(tmp_path, *, phase1_tag="agentic", step_text="Run the test suite"):
+    """Scaffold a two-phase plan for purity-lint tests.
+
+    Phase 1 (`phase1_tag`) holds P1.T1.S1 with `step_text`; phase 2 is the
+    manual collection phase. Returns (plan_dir, parse-callable).
+    """
+    from vk.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    create(
+        repo_root=repo,
+        slug="2026-06-04-purity",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=2.0.0,<3.0.0",
+        phases=[
+            PhaseSpec(
+                number=1,
+                title="Build",
+                tag=phase1_tag,
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": "P1.T1.S1", "text": step_text}],
+                    },
+                ),
+            ),
+            PhaseSpec(
+                number=2,
+                title="Deploy",
+                tag="manual",
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": "P2.T1.S1", "text": "Deploy and verify"}],
+                    },
+                ),
+            ),
+        ],
+        prose="# x\n",
+    )
+    return repo / "docs" / "superpowers" / "plans" / "2026-06-04-purity"
+
+
+def _purity_issues(plan_dir):
+    from vk import parse
+    from vk.plan_ops import self_review
+
+    return [i for i in self_review(parse(plan_dir)) if "manual phase" in i.message]
+
+
+def test_self_review_errors_on_step_deferred_to_later_phase(tmp_path):
+    """#252 motivating case: an agentic-phase step skipped with a note
+    deferring it forward ('Executed in Phase 5') is a mis-scoped manual step."""
+    from vk.plan_ops import tick
+
+    plan_dir = _purity_plan(tmp_path)
+    tick(plan_dir, "P1.T1.S1", state="-", note="Executed in Phase 2")
+    issues = _purity_issues(plan_dir)
+    assert len(issues) == 1
+    assert issues[0].severity == "error"
+    assert "P1.T1.S1" in issues[0].message
+
+
+def test_self_review_errors_on_defer_phrase_without_phase_number(tmp_path):
+    from vk.plan_ops import tick
+
+    plan_dir = _purity_plan(tmp_path)
+    tick(plan_dir, "P1.T1.S1", state="-", note="defer to the deploy phase")
+    issues = _purity_issues(plan_dir)
+    assert len(issues) == 1
+    assert issues[0].severity == "error"
+
+
+def test_self_review_ignores_backward_phase_reference(tmp_path):
+    """'ported from Phase 1' on a later phase is history, not deferral."""
+    import yaml as _yaml
+
+    plan_dir = _purity_plan(tmp_path)
+    # Renumber phase 1's note target: put the '-' step on phase 2? No —
+    # backward ref means the note points at an EARLIER phase. Make phase 1
+    # agentic with a note referencing phase 1 itself is meaningless; instead
+    # rewrite the plan so the agentic phase is number 2 and the note says
+    # "ported from Phase 1".
+    p1 = plan_dir / "01.yaml"
+    p2 = plan_dir / "02.yaml"
+    raw1 = _yaml.safe_load(p1.read_text())
+    raw2 = _yaml.safe_load(p2.read_text())
+    raw1["phase"]["tag"] = "manual"  # phase 1 becomes the manual phase
+    raw2["phase"]["tag"] = "agentic"  # phase 2 becomes the agentic phase
+    raw2["state"]["steps"]["P2.T1.S1"] = {
+        "state": "-",
+        "ticked_at": "2026-06-04T00:00:00+00:00",
+        "note": "ported from Phase 1",
+    }
+    p1.write_text(_yaml.safe_dump(raw1, sort_keys=False))
+    p2.write_text(_yaml.safe_dump(raw2, sort_keys=False))
+    assert _purity_issues(plan_dir) == []
+
+
+def test_self_review_ignores_deferred_note_in_manual_phase(tmp_path):
+    from vk.plan_ops import tick
+
+    plan_dir = _purity_plan(tmp_path, phase1_tag="manual")
+    tick(plan_dir, "P1.T1.S1", state="-", note="Executed in Phase 2")
+    assert _purity_issues(plan_dir) == []
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "Set the secret manually in the admin panel",
+        "Rotate the key by hand after deploy",
+        "Configure the OIDC client via the UI",
+        "Toggle the feature flag in the UI",
+        "Click the approve button on the dashboard",
+        "Encrypt the secret with SOPS and commit",
+        "The operator sets the client secret",
+        "The operator provides the API token",
+    ],
+)
+def test_self_review_errors_on_manual_verb_in_agentic_step(tmp_path, phrase):
+    """#252 part 2: manual-operation language in a pending agentic step is a
+    mis-scoped manual step — caught at authoring time, before any deferral."""
+    plan_dir = _purity_plan(tmp_path, step_text=phrase)
+    issues = _purity_issues(plan_dir)
+    assert len(issues) == 1, [str(i) for i in _purity_issues(plan_dir)]
+    assert issues[0].severity == "error"
+    assert "P1.T1.S1" in issues[0].message
+
+
+def test_self_review_manual_verb_respects_word_boundaries(tmp_path):
+    plan_dir = _purity_plan(tmp_path, step_text="Analyze the clickstream data export")
+    assert _purity_issues(plan_dir) == []
+
+
+def test_self_review_manual_verb_ignores_manual_phase_steps(tmp_path):
+    plan_dir = _purity_plan(tmp_path, phase1_tag="manual", step_text="Click the approve button")
+    assert _purity_issues(plan_dir) == []
+
+
+def test_self_review_manual_verb_exempts_completed_steps(tmp_path):
+    """A ticked ('x') step already proved agent-completable; only pending or
+    skipped steps gate. Keeps historical plans (and plans whose step text
+    QUOTES the phrases) from retro-erroring."""
+    from vk.plan_ops import tick
+
+    plan_dir = _purity_plan(tmp_path, step_text="Set the secret manually in the panel")
+    tick(plan_dir, "P1.T1.S1")  # state 'x'
+    assert _purity_issues(plan_dir) == []
+
+
+def test_create_rejects_phase_zero_before_writing(tmp_path):
+    """Phase numbering starts at 1. create() must refuse a 0-numbered
+    PhaseSpec BEFORE any file is written — failing only at the post-write
+    re-parse would strand a half-built folder (the #133 failure mode)."""
+    from vk.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    with pytest.raises(PlanEditError, match="starts at 1"):
+        create(
+            repo_root=repo,
+            slug="2026-06-04-zero-phase",
+            spec=str(spec_path.relative_to(repo)),
+            target_repo="derio-net/test",
+            vk_version=">=2.0.0,<3.0.0",
+            phases=[
+                PhaseSpec(number=0, title="Prereqs", tag="manual"),
+                PhaseSpec(number=1, title="Build", tag="agentic"),
+            ],
+            prose="# x\n",
+        )
+    folder = repo / "docs" / "superpowers" / "plans" / "2026-06-04-zero-phase"
+    assert not folder.exists(), "phase-0 rejection must not strand a half-built folder"
+
+
 def test_self_review_warns_on_overlong_plan_label(tmp_path):
-    """#249: a slug long enough to push `plan:<slug>` past GitHub's 50-char
-    label limit must surface a self-review warning (it's auto-truncated, but
-    the operator should know to shorten the slug)."""
+    """#249: a slug whose NORMALIZED `plan:<slug>` form still exceeds GitHub's
+    50-char label limit must surface a self-review warning (it's
+    auto-truncated, but the operator should know to shorten the slug)."""
     from vk.plan_ops import PhaseSpec, create, self_review
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
-    slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1"  # 50 chars -> label 55
+    # Normalizes to 53 chars -> 'plan:' + 53 = 58 > 50: still over-long.
+    slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1-extra-words"
     plan = create(
         repo_root=repo,
         slug=slug,
@@ -472,6 +657,28 @@ def test_self_review_warns_on_overlong_plan_label(tmp_path):
     assert any(
         i.severity == "warn" and "50" in i.message and "label" in i.message.lower() for i in issues
     ), [str(i) for i in issues]
+
+
+def test_self_review_overlong_lint_checks_the_normalized_label(tmp_path):
+    """A dated slug whose RAW `plan:<slug>` exceeds 50 chars but whose
+    normalized form fits must NOT warn — the label that actually ships is
+    the normalized one."""
+    from vk.plan_ops import PhaseSpec, create, self_review
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1"  # raw label 55, normalized 43
+    plan = create(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=2.0.0,<3.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    issues = self_review(plan)
+    assert not any("label" in i.message.lower() for i in issues), [str(i) for i in issues]
 
 
 def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):
