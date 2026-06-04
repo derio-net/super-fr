@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 4
+  title: vk init scaffold CLI
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Mechanical profile writer
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      TDD src/vk/commands/init_cmd.py + src/vk/isolation/scaffold.py: `vk init scaffold --profile NAME --purpose TEXT [--tool ...] [--secret KEY ...] [--default]` writes .devcontainer/<NAME>/devcontainer.json (base image, features for git/gh, postCreate uv-tool-install of vk, runArgs --env-file ${localEnv:HOME}/.config/vk/secrets/<repo>/<NAME>.env, workspace mount untouched), updates .devcontainer/vk-profiles.yaml (default flag, purpose, expected secret keys), writes host env-file with commented placeholders. Idempotent re-run preserves operator edits (refuse overwrite without --force).
+  - id: P4.T1.S2
+    text: |-
+      Tool mapping table tests: known tools (uv, node, kubectl, docker-in-docker) map to devcontainer features; unknown tool → recorded in vk-profiles.yaml notes for the skill/operator to handle via postCreate.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T21:36:10+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-06-04T21:36:14+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T21:36:19+00:00'
+    note: null
+    observed_prs: []

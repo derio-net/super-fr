@@ -1,0 +1,41 @@
+schema_version: 2
+phase:
+  number: 1
+  title: click dependency fix + vk skills regression test
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Regression test for vk skills
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write tests/unit/test_skills_cmd.py: calling vk.commands.skills_cmd.skills() prints Commands + Skills sections (capsys), and a parametrized check that every SKILLS tuple name has a matching skills/<name>/SKILL.md. Run: fails or passes per current env; document.
+  - id: P1.T1.S2
+    text: |-
+      Add subprocess smoke test: `python -m vk skills` exit 0 in a venv-equivalent (uses sys.executable). Verify it reproduces/covers the failing import path from the spec's Bug fix section.
+- number: 2
+  title: Declare click dependency
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Declare the missing typer-companion dependency (>=8, per the spec's Bug fix section) in pyproject [project].dependencies; uv sync; run the new tests + full unit suite.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T21:26:37+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-06-04T21:26:45+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-06-04T21:26:52+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T21:27:02+00:00'
+    note: null
+    observed_prs: []

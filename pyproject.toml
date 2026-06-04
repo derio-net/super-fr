@@ -1,10 +1,11 @@
 [project]
 name = "vk"
-version = "2.3.0"
+version = "2.4.0"
 description = "VK toolchain: v2 plan-as-folder, render → observe → diff → apply"
 requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",
+    "click>=8",
     "pyyaml>=6",
     "rich>=13",
     "pydantic>=2",

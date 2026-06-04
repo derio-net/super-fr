@@ -1,0 +1,50 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Skills, wiring, version bump
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Three new SKILL.md files
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      skills/vk-isolation/SKILL.md (lifecycle, exec-bridge discipline, agent-agnostic note, cleanup/PR rules), skills/vk-init/SKILL.md (scan → interview → scaffold per profile; multi-profile; secrets placeholders), skills/vk-brainstorming/SKILL.md (isolation-first, standalone interactive, HARD STOP without devcontainer → vk-init). Each ≤120 lines; validation suite green.
+- number: 2
+  title: Wiring + bump
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      vk-goal SKILL.md edits: step 1 → vk-brainstorming; step 6 uses active isolation workspace + vk isolation exec for commands; step 9 adds vk isolation down. Stay ≤120 lines.
+  - id: P5.T2.S2
+    text: |-
+      rules/vk-plan-override.md: Brainstorming Override section. skills_cmd.py SKILLS list += three skills (test from P1 enforces SKILL.md existence). README/CHANGELOG touch if conventional.
+  - id: P5.T2.S3
+    text: |-
+      scripts/bump-version.py minor (2.3.0 → 2.4.0); full suite + ruff format; commit.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T21:49:45+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-06-04T21:49:48+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-06-04T21:49:51+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-06-04T21:49:53+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T21:49:56+00:00'
+    note: null
+    observed_prs: []

@@ -13,6 +13,14 @@ vk-plan, and vk-execute with the operator's gate-waiving contract; starting
 with plain brainstorming loses that contract and reintroduces the approval
 pauses the operator explicitly waived.
 
+## Brainstorming Override
+
+In a repo with vk plans (`docs/superpowers/plans/`) or devcontainer profiles
+(`.devcontainer/<profile>/`), feature brainstorms use `vk-brainstorming`
+instead of plain brainstorming — it enters vk-isolation first, so the base
+repo is never touched. Plain brainstorming remains for non-vk repos and
+non-feature ideation.
+
 ## vk-* Skill Overview
 
 For a condensed overview of the vk-* skills and their CLI subcommands, run `vk skills`.

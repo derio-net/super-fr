@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'vk isolation core: Target protocol + LocalWorktreeDevcontainerTarget'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Target protocol and state model
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD src/vk/isolation/types.py: IsolationState pydantic model (repo root, branch, worktree path, profile, created_at, container_id optional) + Target protocol (up/exec/down/status). Tests: state round-trips to/from .git/vk/isolation/<branch>.json.
+  - id: P2.T1.S2
+    text: |-
+      TDD profile discovery: read .devcontainer/vk-profiles.yaml (default + profiles map); list profile dirs .devcontainer/<name>/devcontainer.json; error paths: no repo, no .devcontainer, unknown profile → exit-2-style IsolationError.
+- number: 2
+  title: LocalWorktreeDevcontainerTarget
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      TDD up(): git worktree add at ~/.cache/vk/worktrees/<repo>/<branch> (override via --path), ensure secrets env-file exists (create empty), devcontainer up with --workspace-folder, --config .devcontainer/<profile>/devcontainer.json, extra --mount for base .git rw at same abspath. All subprocess calls via injectable runner seam; tests use a FakeRunner recording argv.
+  - id: P2.T2.S2
+    text: |-
+      TDD exec(): devcontainer exec passthrough (argv after --), workspace resolved from state file; exit code propagated. down(): docker stop/rm via devcontainer CLI semantics + git worktree remove + state file cleanup; refuse when gh pr view --json state reports OPEN unless force. status(): worktree+container+PR summary, text and json formats.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T21:31:01+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-04T21:31:07+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-04T21:31:14+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-04T21:31:22+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T21:31:28+00:00'
+    note: null
+    observed_prs: []
