@@ -86,6 +86,12 @@ def scaffold_profile(
         "image": BASE_IMAGE,
         "features": features,
         "postCreateCommand": POST_CREATE,
+        # Mount the workspace at its HOST path (not /workspaces/<name>):
+        # linked-worktree gitdir back-pointers record host abspaths, so git
+        # only works in-container when worktree + base .git share the host
+        # layout. Pairs with the base-.git mount that `vk isolation up` adds.
+        "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+        "workspaceFolder": "${localWorkspaceFolder}",
         "runArgs": [
             "--env-file",
             f"${{localEnv:HOME}}/.config/vk/secrets/{repo_root.name}/{profile}.env",

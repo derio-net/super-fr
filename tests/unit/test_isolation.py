@@ -61,10 +61,14 @@ class FakeRunner:
 
     def __init__(self, fail_on: str | None = None, stdout: dict[str, str] | None = None):
         self.calls: list[list[str]] = []
+        self.captures: list[bool] = []
         self.fail_on = fail_on
         self.stdout = stdout or {}
 
-    def __call__(self, argv: list[str], cwd: Path | None = None, check: bool = False):
+    def __call__(
+        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+    ):
+        self.captures.append(capture)
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         self.calls.append(list(argv))
@@ -186,6 +190,7 @@ def test_exec_passthrough(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     (call,) = runner.argv_for("devcontainer")
     assert call[1] == "exec"
     assert call[-3:] == ["pytest", "-q", "--no-cov"]
+    assert runner.captures[-1] is False, "exec must inherit stdio (stream output live)"
 
 
 def test_status_reports_worktree_container_pr(
