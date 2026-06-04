@@ -621,3 +621,150 @@ def test_complete_phase_projects_closed_state():  # C5
     assert state_changes[0].new_state == "CLOSED"
     assert state_changes[0].issue_number == 154
     assert state_changes[0].repo == "derio-net/superpowers-for-vk"
+
+
+# --- ticket context enrichment (spec link + prose + phase yaml) ---------------
+
+
+def _plan_with_spec(spec):
+    """FIXTURE plan with `meta.spec` swapped for `spec`."""
+    from dataclasses import replace
+
+    from vk import parse
+
+    plan = parse(FIXTURE)
+    return replace(plan, meta=plan.meta.model_copy(update={"spec": spec}))
+
+
+def test_spec_url_same_repo():
+    from vk import parse
+    from vk.render import spec_url
+
+    plan = parse(FIXTURE)
+    assert plan.meta.spec  # the minimal fixture carries a same-repo spec path
+    assert spec_url(plan) == (
+        f"https://github.com/{plan.meta.target_repo}/blob/main/{plan.meta.spec}"
+    )
+
+
+def test_spec_url_cross_repo():
+    from vk.render import spec_url
+
+    plan = _plan_with_spec("derio-net/other:docs/specs/y-design.md")
+    assert spec_url(plan) == "https://github.com/derio-net/other/blob/main/docs/specs/y-design.md"
+
+
+def test_spec_url_none():
+    from vk.render import spec_url
+
+    assert spec_url(_plan_with_spec(None)) is None
+
+
+def test_enrichment_block_embeds_prose_and_phase_yaml():
+    from vk import parse
+    from vk.render import enrichment_block
+
+    plan = parse(FIXTURE)
+    block = enrichment_block(plan, plan.phases[0])
+    assert "<summary>📜 _prose.md</summary>" in block
+    assert plan.prose.rstrip() in block
+    assert "<summary>🧾 01.yaml</summary>" in block
+    assert plan.phase_texts[1].rstrip() in block
+    assert "```yaml" in block
+
+
+def test_enrichment_block_fence_escalates_beyond_content_backticks():
+    """Phase yaml containing ``` runs must be wrapped in a longer fence."""
+    from dataclasses import replace
+
+    from vk import parse
+    from vk.render import enrichment_block
+
+    plan = parse(FIXTURE)
+    text_with_fences = "k: |\n  ```python\n  pass\n  ````\n"  # longest run: 4
+    plan = replace(plan, phase_texts={1: text_with_fences})
+    block = enrichment_block(plan, plan.phases[0])
+    assert "`````yaml\n" in block  # 5 backticks: longest run (4) + 1
+    assert block.count("`````") == 2  # opening + closing fence
+
+
+def test_enrichment_block_omits_missing_sections():
+    from dataclasses import replace
+
+    from vk import parse
+    from vk.render import enrichment_block
+
+    plan = parse(FIXTURE)
+    bare = replace(plan, prose=None, phase_texts={})
+    assert enrichment_block(bare, plan.phases[0]) == ""
+    no_prose = replace(plan, prose=None)
+    block = enrichment_block(no_prose, plan.phases[0])
+    assert "## Plan prose" not in block
+    assert "## Phase document" in block
+
+
+def test_render_body_truncates_oversized_content_deterministically():
+    """Bodies stay under GitHub's 65,536 cap; truncation is stable across renders."""
+    from dataclasses import replace
+
+    from vk import parse
+    from vk.render import render_body
+
+    plan = parse(FIXTURE)
+    plan = replace(
+        plan,
+        prose="P" * 40_000,
+        phase_texts={1: "k: v\n" + "y" * 40_000},
+    )
+    body1 = render_body(plan.phases[0], plan)
+    body2 = render_body(plan.phases[0], plan)
+    assert body1 == body2
+    assert len(body1) <= 60_000
+    assert "… (truncated — see" in body1
+
+
+def test_enrichment_block_never_exceeds_budget():
+    """The budget is a hard cap on the RETURNED block (join separator and
+    section overhead included), across content-size combinations."""
+    from dataclasses import replace
+
+    from vk import parse
+    from vk.render import _ENRICHMENT_BUDGET, enrichment_block
+
+    plan = parse(FIXTURE)
+    for prose_n, yaml_n in ((0, 70_000), (70_000, 0), (40_000, 40_000), (54_900, 200)):
+        big = replace(
+            plan,
+            prose=("P" * prose_n) or None,
+            phase_texts={1: "k: v\n" + "y" * yaml_n} if yaml_n else {},
+        )
+        block = enrichment_block(big, big.phases[0])
+        assert len(block) <= _ENRICHMENT_BUDGET, (prose_n, yaml_n, len(block))
+
+
+def test_render_body_spec_line_is_link():
+    from vk import parse
+    from vk.render import render_body
+
+    plan = parse(FIXTURE)
+    body = render_body(plan.phases[0], plan)
+    url = f"https://github.com/{plan.meta.target_repo}/blob/main/{plan.meta.spec}"
+    assert f"📐 Spec:   [{plan.meta.spec}]({url})" in body
+
+
+def test_render_body_spec_line_dash_when_unset():
+    from vk.render import render_body
+
+    plan = _plan_with_spec(None)
+    body = render_body(plan.phases[0], plan)
+    assert "📐 Spec:   —" in body
+
+
+def test_render_body_appends_enrichment_after_dependencies():
+    from vk import parse
+    from vk.render import render_body
+
+    plan = parse(FIXTURE)
+    body = render_body(plan.phases[0], plan)
+    assert body.index("## Dependencies") < body.index("## Plan prose")
+    assert body.index("## Plan prose") < body.index("## Phase document")

@@ -183,6 +183,32 @@ def test_plan_repo_relative_dir_falls_back_when_no_git(tmp_path):
     assert plan.repo_relative_dir == plan.dir
 
 
+def test_parse_populates_prose_and_phase_texts():
+    """parse() carries _prose.md and raw NN.yaml texts onto the Plan."""
+    from vk import parse
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+    assert plan.prose == (multi / "_prose.md").read_text()
+    assert set(plan.phase_texts) == {1, 2, 10}
+    for n, fname in ((1, "01.yaml"), (2, "02.yaml"), (10, "10.yaml")):
+        assert plan.phase_texts[n] == (multi / fname).read_text()
+
+
+def test_parse_missing_prose_is_none(tmp_path):
+    """A plan folder without _prose.md parses fine; prose is None."""
+    import shutil
+
+    from vk import parse
+
+    dest = tmp_path / "no_prose"
+    shutil.copytree(FIXTURE_DIR, dest)
+    (dest / "_prose.md").unlink()
+    plan = parse(dest)
+    assert plan.prose is None
+    assert set(plan.phase_texts) == {1}
+
+
 def test_phasedoc_loads_minimal_fixture():
     import yaml
 

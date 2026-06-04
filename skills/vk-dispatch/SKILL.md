@@ -73,6 +73,10 @@ reconciles. Re-run after editing the plan to push the deltas.
 
 - **Phase added / edited:** `vk apply <plan-dir> --yes` updates labels and
   body for affected Issues.
+- **Body enrichment:** Issue bodies embed a spec link, the plan prose
+  (`_prose.md`), and the phase's `NN.yaml` — including its `state:` block —
+  in collapsed `<details>` blocks. Each apply re-syncs the body as steps
+  tick, so GitHub shows live progress.
 - **Phase complete:** the renderer projects `state == CLOSED` once
   `state.completion.at` is set; `vk apply --yes` closes the Issue.
 - **Auto-close drift:** `vk apply` is the antidote — re-running detects an

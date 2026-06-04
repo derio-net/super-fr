@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import importlib.metadata
 import re
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -39,6 +40,13 @@ class Plan:
     meta: PlanMeta
     phases: tuple[PhaseDoc, ...]
     repo_root: Path | None = None  # absolute path to the git repo root, if discoverable
+    # Raw plan texts, loaded by parse() so the (I/O-free) renderer can embed
+    # them in Issue bodies / VK card descriptions. `prose` is `_prose.md`
+    # verbatim (None when absent); `phase_texts` maps phase NUMBER → raw
+    # `NN.yaml` file content. Defaults keep direct `Plan(...)` constructions
+    # (tests, builders) valid — enrichment then degrades to nothing.
+    prose: str | None = None
+    phase_texts: Mapping[int, str] = field(default_factory=dict)
 
     @property
     def prose_path(self) -> Path:
@@ -137,15 +145,26 @@ def parse(plan_dir: Path) -> Plan:
     indexed_phase_files.sort(key=lambda pair: pair[0])
 
     phases: list[PhaseDoc] = []
+    phase_texts: dict[int, str] = {}
     for _, f in indexed_phase_files:
+        raw = f.read_text()
         try:
-            phases.append(PhaseDoc.model_validate(yaml.safe_load(f.read_text())))
+            doc = PhaseDoc.model_validate(yaml.safe_load(raw))
         except Exception as e:
             raise PlanSchemaError(f"{f.name}: {e}") from e
+        phases.append(doc)
+        # Keyed by the PARSED phase number (not the filename index) — the
+        # renderer looks up by `phase.phase.number`.
+        phase_texts[doc.phase.number] = raw
+
+    prose_path = plan_dir / "_prose.md"
+    prose = prose_path.read_text() if prose_path.exists() else None
 
     return Plan(
         dir=plan_dir,
         meta=meta,
         phases=tuple(phases),
         repo_root=_find_repo_root(plan_dir),
+        prose=prose,
+        phase_texts=phase_texts,
     )

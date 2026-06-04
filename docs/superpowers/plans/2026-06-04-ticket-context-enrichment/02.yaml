@@ -1,0 +1,190 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Renderer enrichment block + spec link
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: spec_url helper
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Add failing tests to `tests/unit/test_v2_render.py`:
+
+      ```python
+      def test_spec_url_same_repo():
+          # plan.meta.spec = "docs/superpowers/specs/x-design.md",
+          # target_repo = "derio-net/superpowers-for-vk"
+          assert spec_url(plan) == (
+              "https://github.com/derio-net/superpowers-for-vk/blob/main/"
+              "docs/superpowers/specs/x-design.md"
+          )
+
+      def test_spec_url_cross_repo():
+          # plan.meta.spec = "derio-net/other:docs/specs/y.md"
+          assert spec_url(plan) == (
+              "https://github.com/derio-net/other/blob/main/docs/specs/y.md"
+          )
+
+      def test_spec_url_none():
+          # plan.meta.spec = None
+          assert spec_url(plan) is None
+      ```
+
+      Build the Plan objects via the existing fixture-loading or
+      direct-construction style already used in this file.
+  - id: P2.T1.S2
+    text: |-
+      Implement in `src/vk/render.py`:
+
+      ```python
+      from vk._urls import is_cross_repo_spec
+
+      def spec_url(plan: Plan) -> str | None:
+          """GitHub blob URL for plan.meta.spec; None when unset.
+
+          `main` is the deliberate branch choice — matches the bridge's
+          hardcoded pull convention and the dispatch reachability gate.
+          """
+          spec = plan.meta.spec
+          if not spec:
+              return None
+          if is_cross_repo_spec(spec):
+              repo, path = spec.split(":", 1)
+          else:
+              repo, path = plan.meta.target_repo, spec
+          return f"https://github.com/{repo}/blob/main/{path}"
+      ```
+
+      Run the three tests green.
+- number: 2
+  title: enrichment_block (prose + phase YAML details)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Add failing tests to `tests/unit/test_v2_render.py` covering:
+
+      - `enrichment_block(plan, phase)` contains `<details>` with
+        `<summary>📜 _prose.md</summary>` and the verbatim prose text.
+      - Contains `<summary>🧾 01.yaml</summary>` (two-digit filename from
+        `phase.phase.number`) and the verbatim `phase_texts` content inside
+        a ```yaml fence.
+      - Fence escalation: when the phase text contains a ``` run, the
+        wrapping fence uses (longest backtick run + 1) backticks.
+      - Prose `None` → no "Plan prose" section; missing phase text → no
+        "Phase document" section; both missing → returns "".
+  - id: P2.T2.S2
+    text: |-
+      Implement in `src/vk/render.py`:
+
+      ```python
+      _BACKTICK_RUN_RE = re.compile(r"`+")
+
+      def _fence_for(content: str) -> str:
+          longest = max((len(m.group()) for m in _BACKTICK_RUN_RE.finditer(content)), default=0)
+          return "`" * max(3, longest + 1)
+
+      def enrichment_block(plan: Plan, phase: PhaseDoc) -> str:
+          parts: list[str] = []
+          if plan.prose:
+              parts.append(
+                  "## Plan prose\n\n<details>\n<summary>📜 _prose.md</summary>\n\n"
+                  f"{plan.prose.rstrip()}\n\n</details>\n"
+              )
+          raw = plan.phase_texts.get(phase.phase.number)
+          if raw:
+              fence = _fence_for(raw)
+              fname = f"{phase.phase.number:02d}.yaml"
+              parts.append(
+                  f"## Phase document\n\n<details>\n<summary>🧾 {fname}</summary>\n\n"
+                  f"{fence}yaml\n{raw.rstrip()}\n{fence}\n\n</details>\n"
+              )
+          return "\n".join(parts)
+      ```
+
+      Run the tests green.
+  - id: P2.T2.S3
+    text: |-
+      Truncation guard. Failing test first: build a plan whose prose and
+      phase text are each > 40_000 chars; assert
+      `len(render_body(...)) <= 60_000`, assert the deterministic marker
+      `… (truncated — see` appears, and assert two consecutive renders are
+      byte-identical. Then implement: in `enrichment_block`, before
+      assembling, clamp `raw` then `prose` so the assembled block stays
+      within a `_ENRICHMENT_BUDGET = 55_000` constant (leaves headroom for
+      the static template under GitHub's 65_536 cap); the truncated text is
+      cut at the budget and suffixed with
+      `\n… (truncated — see {plan.repo_relative_dir}/{fname} in the repo)`.
+      YAML is truncated before prose (prose is plan-wide context, YAML has a
+      canonical in-repo home). Truncation happens on the same input every
+      render, so output stays deterministic.
+- number: 3
+  title: render_body integration
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Failing tests: `render_body` output's `📐 Spec:` line is a markdown
+      link `[<path>](<spec_url>)` when spec is set (bare `—` when unset),
+      and the body contains the enrichment sections after the
+      `## Dependencies` block. Update any existing body-shape tests in
+      `tests/unit/test_v2_render.py`, `test_v2_diff.py`, `test_v2_apply.py`
+      that pin exact bodies.
+  - id: P2.T3.S2
+    text: |-
+      Wire into `render_body()`:
+
+      - spec line: `url = spec_url(plan)`;
+        `spec_cell = f"[{plan.meta.spec}]({url})" if url else (plan.meta.spec or "—")`
+      - append `enrichment_block(phase, ...)` output (when non-empty) after
+        the Dependencies section, separated by `\n`.
+      - Update the docstring: body is no longer "static from dispatch
+        through close" — it now embeds the phase document and re-syncs via
+        IssueBodyChange as state ticks (deliberate; the projection keeps
+        GitHub honest).
+  - id: P2.T3.S3
+    text: |-
+      Run `uv run pytest tests/unit/test_v2_render.py tests/unit/test_v2_diff.py
+      tests/unit/test_v2_apply.py tests/unit/test_render_deps.py -q --no-cov`
+      and fix any remaining pinned-body assertions. Then run the full suite
+      `uv run pytest -q --no-cov`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T08:09:44+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-04T08:09:46+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-04T08:09:48+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-04T08:09:49+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-06-04T08:09:51+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-06-04T08:09:53+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-06-04T08:09:54+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-06-04T08:22:58+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T08:23:00+00:00'
+    note: null
+    observed_prs: []

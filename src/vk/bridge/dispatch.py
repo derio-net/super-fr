@@ -9,7 +9,11 @@ sequence in `src/`.
 
 Wire payload shape:
   - `create_issue`: title = "gh#N: [owner/repo]", description = newline-
-    joined (plan, "Phase N/total", phase title, tracking_issue URL).
+    joined (plan, "Phase N/total", phase title, tracking_issue URL),
+    followed by a `Spec:` link line and the shared enrichment block
+    (plan prose + phase yaml — see `vk.render.enrichment_block`). The
+    description seeds the workspace agent prompt, so the enrichment
+    puts the full task context in front of the agent.
     Returns `{"issue_id": "<uuid>"}`.
   - `update_issue`: status = "In progress". Returns the wrapped
     `{"issue": {..., "simple_id": "FFE-NNN", ...}}` — the bridge
@@ -45,6 +49,7 @@ from vk._urls import parse_issue_url
 from vk.bridge import config as _config
 from vk.bridge.lifecycle import invoke_lifecycle_hook
 from vk.parser import Plan
+from vk.render import enrichment_block, spec_url
 from vk.types import PhaseDoc
 
 __all__ = ["DispatchResult", "MCPDispatch", "build_card_title", "dispatch_phase"]
@@ -227,14 +232,22 @@ def dispatch_phase(
     repo, issue_n = parse_issue_url(tracking)
 
     title = build_card_title(repo, issue_n)
-    description = "\n".join(
-        [
-            plan.meta.plan,
-            f"Phase {phase.phase.number}/{len(plan.phases)}",
-            phase.phase.title,
-            tracking,
-        ]
-    )
+    # First four lines are the legacy pinned shape (test H9 keeps them as
+    # the prefix). The enrichment that follows — spec link, plan prose,
+    # phase yaml — feeds the workspace agent directly: VK derives the
+    # workspace prompt from this description via `start_workspace.issue_id`.
+    desc_parts = [
+        plan.meta.plan,
+        f"Phase {phase.phase.number}/{len(plan.phases)}",
+        phase.phase.title,
+        tracking,
+        "",
+        f"Spec: {spec_url(plan) or plan.meta.spec or '—'}",
+    ]
+    enrichment = enrichment_block(plan, phase)
+    if enrichment:
+        desc_parts += ["", enrichment]
+    description = "\n".join(desc_parts)
 
     card = mcp.create_issue(title=title, description=description, project_id=project_id)
     card_id = _expect_id(card, "create_issue", field="issue_id")

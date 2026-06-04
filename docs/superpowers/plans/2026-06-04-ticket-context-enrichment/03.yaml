@@ -1,0 +1,104 @@
+schema_version: 2
+phase:
+  number: 3
+  title: VK card enrichment, docs, version bump
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: dispatch_phase description enrichment
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Update pin test H9 in `tests/unit/test_bridge_dispatch.py`: the
+      description must START with the existing 4 pinned lines
+      (plan slug, `Phase N/total`, title, tracking URL) — assert with
+      `args["description"].startswith(expected_prefix)` — and additionally
+      contain `"Spec: https://github.com/"` (the CROSS_REPO fixture's
+      `_meta.yaml` has a spec), the prose text, and the phase YAML text.
+      Confirm it FAILS.
+  - id: P3.T1.S2
+    text: |-
+      Implement in `src/vk/bridge/dispatch.py::dispatch_phase`:
+
+      ```python
+      from vk.render import enrichment_block, spec_url
+
+      desc_parts = [
+          plan.meta.plan,
+          f"Phase {phase.phase.number}/{len(plan.phases)}",
+          phase.phase.title,
+          tracking,
+      ]
+      url = spec_url(plan)
+      desc_parts.append("")
+      desc_parts.append(f"Spec: {url or plan.meta.spec or '—'}")
+      enrichment = enrichment_block(plan, phase)
+      if enrichment:
+          desc_parts.append("")
+          desc_parts.append(enrichment)
+      description = "\n".join(desc_parts)
+      ```
+
+      Update the module docstring's wire-payload description. Card TITLES
+      are untouched (pr_state / dedup parse titles only). Run
+      `uv run pytest tests/unit/test_bridge_dispatch.py tests/integration -q --no-cov`.
+- number: 2
+  title: Skill docs + full validation sweep
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Docs: in `skills/vk-dispatch/SKILL.md` and `skills/vk-execute/SKILL.md`
+      note that Issue bodies and VK card descriptions now embed the spec
+      link, the plan prose, and the phase YAML document (so "the full task
+      description is in the GitHub Issue body" is literally true). Keep the
+      edits to a sentence or two each — these files are agent-facing.
+  - id: P3.T2.S2
+    text: |-
+      Full validation:
+
+      ```bash
+      uv run ruff format src/ tests/
+      uv run ruff check src/ tests/
+      uv run mypy src/
+      uv run pytest -q --no-cov
+      ```
+
+      All green before moving on.
+- number: 3
+  title: Version bump
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      `scripts/bump-version.py patch` (src/** and skills/** changed →
+      bump required; patch per CLAUDE.md "if in doubt, patch"). Verify
+      `scripts/bump-version.py --check` passes and commit the four changed
+      files (pyproject.toml, both plugin JSONs, uv.lock) with the phase work.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-06-04T08:23:03+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-06-04T08:23:07+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-06-04T08:23:10+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-06-04T08:23:13+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-06-04T08:23:47+00:00'
+      note: null
+  completion:
+    at: '2026-06-04T08:23:57+00:00'
+    note: null
+    observed_prs: []

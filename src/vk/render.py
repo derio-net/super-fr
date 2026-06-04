@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
+from vk._urls import is_cross_repo_spec
 from vk._urls import issue_number as _issue_number_from_url
 from vk.labels import (
     IN_PROGRESS,
@@ -137,6 +138,110 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
     return obs.issue_state == "CLOSED" and not has_open_pr
 
 
+def spec_url(plan: Plan) -> str | None:
+    """GitHub blob URL for `plan.meta.spec`; None when unset.
+
+    Same-repo specs resolve against `target_repo`; cross-repo
+    `owner/repo:path` notation (see `vk._urls.is_cross_repo_spec`)
+    resolves against the named repo. `main` is the deliberate branch
+    choice — it matches the bridge's hardcoded pull convention and the
+    dispatch reachability gate ("plan and spec must be on origin/HEAD").
+    """
+    spec = plan.meta.spec
+    if not spec:
+        return None
+    if is_cross_repo_spec(spec):
+        repo, path = spec.split(":", 1)
+    else:
+        repo, path = plan.meta.target_repo, spec
+    return f"https://github.com/{repo}/blob/main/{path}"
+
+
+_BACKTICK_RUN_RE = re.compile(r"`+")
+
+# Enrichment budget. GitHub caps Issue bodies at 65,536 chars; the static
+# body template is well under 5k, so capping the enrichment block at 55k
+# keeps the assembled body comfortably below 60k. Truncation inside the
+# budget is deterministic (same inputs → same output) so re-renders
+# converge and the body diff never churns.
+_ENRICHMENT_BUDGET = 55_000
+
+
+def _fence_for(content: str) -> str:
+    """Code fence guaranteed to wrap `content`: longest backtick run + 1, min 3.
+
+    Phase yaml legitimately contains triple-backtick fences inside step
+    text — a fixed ``` fence would terminate early on GitHub.
+    """
+    longest = max((len(m.group()) for m in _BACKTICK_RUN_RE.finditer(content)), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def _truncated(text: str, limit: int, pointer: str) -> str:
+    """Clamp `text` to AT MOST `limit` chars, deterministically.
+
+    Appends a pointer marker when there's room for one; hard-cuts when
+    `limit` is too tight for the marker itself (the result is never
+    longer than `limit`).
+    """
+    if len(text) <= limit:
+        return text
+    marker = f"\n… (truncated — see {pointer} in the repo)"
+    if limit <= len(marker):
+        return text[:limit]
+    return text[: limit - len(marker)] + marker
+
+
+def _prose_section(prose: str) -> str:
+    return f"## Plan prose\n\n<details>\n<summary>📜 _prose.md</summary>\n\n{prose}\n\n</details>\n"
+
+
+def _phase_section(raw: str, fname: str) -> str:
+    fence = _fence_for(raw)
+    return (
+        f"## Phase document\n\n<details>\n<summary>🧾 {fname}</summary>\n\n"
+        f"{fence}yaml\n{raw}\n{fence}\n\n</details>\n"
+    )
+
+
+def enrichment_block(plan: Plan, phase: PhaseDoc) -> str:
+    """Spec/prose/phase-yaml context block shared by Issue bodies + VK cards.
+
+    Embeds the plan's `_prose.md` and the phase's raw `NN.yaml` (both
+    carried on `Plan` by `parse()`) in collapsed `<details>` blocks.
+    Missing inputs degrade gracefully: absent prose or phase text just
+    omits that section; both absent returns "". Oversized content is
+    truncated deterministically — yaml first (it has a canonical in-repo
+    home), then prose — so the RETURNED block never exceeds
+    `_ENRICHMENT_BUDGET`. Content is rstripped once at entry so the
+    truncation arithmetic is exact (each `_truncated` char removed is a
+    block char removed); the budget check runs on the assembled block,
+    join separator and section overhead included.
+    """
+    prose = (plan.prose or "").rstrip() or None
+    raw = (plan.phase_texts.get(phase.phase.number) or "").rstrip() or None
+    fname = f"{phase.phase.number:02d}.yaml"
+
+    def _assemble(p: str | None, y: str | None) -> str:
+        sections = []
+        if p:
+            sections.append(_prose_section(p))
+        if y:
+            sections.append(_phase_section(y, fname))
+        return "\n".join(sections)
+
+    block = _assemble(prose, raw)
+    if len(block) > _ENRICHMENT_BUDGET and raw:
+        yaml_limit = max(0, len(raw) - (len(block) - _ENRICHMENT_BUDGET))
+        raw = _truncated(raw, yaml_limit, f"{plan.repo_relative_dir}/{fname}") or None
+        block = _assemble(prose, raw)
+    if len(block) > _ENRICHMENT_BUDGET and prose:
+        prose_limit = max(0, len(prose) - (len(block) - _ENRICHMENT_BUDGET))
+        prose = _truncated(prose, prose_limit, f"{plan.repo_relative_dir}/_prose.md") or None
+        block = _assemble(prose, raw)
+    return block
+
+
 def render_body(
     phase: PhaseDoc,
     plan: Plan,
@@ -144,7 +249,13 @@ def render_body(
     phase_to_issue: dict[int, int] | None = None,
     phase_to_repo: dict[int, str] | None = None,
 ) -> str:
-    """Static body template. Same content from dispatch through close.
+    """Body template: tracking header, instruction, deps, enrichment block.
+
+    NOT static through close (the pre-enrichment doctrine): the body
+    embeds the phase's yaml document — including its `state:` block — so
+    it re-renders as steps tick and `apply()` syncs it via
+    `IssueBodyChange`. Deliberate: the projection keeps the GitHub view
+    of progress honest with zero new sync machinery.
 
     Uses `plan.repo_relative_dir` (NOT `plan.dir`) for the `📋 Plan:`
     line so the body doesn't leak the dispatcher's absolute filesystem
@@ -171,7 +282,8 @@ def render_body(
     """
     total = len(plan.phases)
     repo = plan.meta.target_repo
-    spec = plan.meta.spec or "—"
+    url = spec_url(plan)
+    spec = f"[{plan.meta.spec}]({url})" if url else (plan.meta.spec or "—")
     plan_path = plan.repo_relative_dir
     tracking = (
         f"📦 Repo:   {repo}\n"
@@ -197,6 +309,7 @@ def render_body(
         deps_block = "\n".join(f"- Blocked by {_dep_ref(n)}" for n in phase.phase.depends_on)
     else:
         deps_block = "None — no blocking phases."
+    enrichment = enrichment_block(plan, phase)
     return (
         f"{tracking}"
         f"\n---\n\n"
@@ -206,7 +319,7 @@ def render_body(
         f"## Workspace\n\n"
         f"Repos: {repo}\n\n"
         f"## Dependencies\n\n"
-        f"{deps_block}\n"
+        f"{deps_block}\n" + (f"\n{enrichment}" if enrichment else "")
     )
 
 
