@@ -1,0 +1,100 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Agentic-purity gate (#252) + GH-issue dispatch pinning
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Deferred-step lint (error)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Add failing tests to tests/unit/test_v2_plan_ops.py for self_review():
+      - agentic phase with a step state '-' and note "Executed in Phase 5" (5 > current)
+        -> one error-severity issue naming the step id.
+      - note "defer to the deploy phase" (defer-phrase, no number) -> error.
+      - note "ported from Phase 1" on phase 3 (backward ref) -> NO purity issue.
+      - the same deferred note inside a MANUAL phase -> NO purity issue.
+      Run targeted pytest — expect failures.
+  - id: P3.T1.S2
+    text: |-
+      Implement in src/vk/plan_ops.py self_review(): for each agentic phase, for each
+      state.steps entry with state '-', scan its note: forward phase ref via
+      re.search(r"[Pp]hase\s+(\d+)") with int(group) > phase.number, or any of the
+      defer-phrases ("defer", "executed in", "moved to") case-insensitive ->
+      ReviewIssue(severity="error", message naming phase, step id, and the fix:
+      move the step into a manual phase).
+      Run targeted pytest — expect green.
+- number: 2
+  title: Manual-verb lint (error)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Add failing tests: agentic-phase step TEXT containing each of "manually",
+      "by hand", "via the UI", "in the UI", "click", "SOPS", "operator sets",
+      "operator provides" -> error naming the step id; the word "clicking" inside
+      a longer token (e.g. "double-clicking") still matches via word boundary on
+      "click"? NO — assert "clickstream analysis" does NOT match (word-boundary
+      regex r"\bclick\b" etc.); manual-phase steps never trip the lint.
+      Run targeted pytest — expect failures.
+  - id: P3.T2.S2
+    text: |-
+      Implement in src/vk/plan_ops.py: module-level _MANUAL_VERB_RES tuple of
+      compiled case-insensitive word-boundary patterns for the list above; in
+      self_review(), for each agentic phase step (task step text), first match ->
+      ReviewIssue(severity="error", message naming phase, step id, matched phrase,
+      and the fix). Run targeted pytest — expect green.
+- number: 3
+  title: 'Pin: every phase (manual included) gets an IssueCreate'
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Add pinning test to tests/unit/test_v2_diff.py: plan with phase 1 agentic +
+      phase 2 manual, neither having tracking_issue, empty GhState -> diff() emits
+      exactly two IssueCreate mutations; the manual phase's labels contain "manual"
+      and not "vk-ready". This should pass immediately (verification, not a code
+      change) — run it and confirm green on first run.
+- number: 4
+  title: vk-plan SKILL.md authoring rules
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Edit skills/vk-plan/SKILL.md Rules section: add "Pure agentic phases: an
+      agentic phase must be fully agent-completable end-to-end. Collect ALL manual
+      work (secrets, UI operations, deploy actions, cluster-dependent config) into
+      a dedicated [manual] phase — never author a manual step into an agentic
+      phase and defer it. vk plan self-review enforces this (error)."
+      Edit Format section: phases are numbered from 1 (01.yaml is the first phase;
+      00.yaml is invalid). Keep the file <= 120 lines (current guideline).
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

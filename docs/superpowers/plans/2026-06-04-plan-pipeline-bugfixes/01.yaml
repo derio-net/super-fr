@@ -1,0 +1,81 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Label slug normalization (strip date prefix + all dashes)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD normalize_label_slug in vk.labels
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add failing tests to tests/unit/test_labels.py:
+      - normalize_label_slug("2026-05-27--auto--awx-deployment") == "auto--awx-deployment"
+      - normalize_label_slug("2026-05-27-single-dash") == "single-dash"
+      - normalize_label_slug("agents--restart-resilience") unchanged (no date prefix)
+      - normalize_label_slug("2026-05-27-") == "" (pathological date-only slug)
+      - plan_label("2026-05-27--auto--awx-deployment").name == "plan:auto--awx-deployment"
+      - spec_label("2026-05-27--auto--awx-deployment-design").name == "spec:auto--awx-deployment-design"
+      - normalize-then-bound: a slug whose RAW form exceeds 50 chars but whose
+        normalized form fits produces the un-hashed normalized label.
+      Run: uv run pytest tests/unit/test_labels.py -q --no-cov — expect failures
+      (ImportError on normalize_label_slug, wrong label names).
+  - id: P1.T1.S2
+    text: |-
+      Implement in src/vk/labels.py:
+      - _DATE_PREFIX_DASHES_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-+")
+      - def normalize_label_slug(slug: str) -> str: return _DATE_PREFIX_DASHES_RE.sub("", slug)
+      - plan_label()/spec_label() call normalize_label_slug(slug) before _bounded_label_name.
+      Run: uv run pytest tests/unit/test_labels.py -q --no-cov — expect green.
+- number: 2
+  title: Renderer + self-review consume normalized slugs
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Add failing tests:
+      - tests/unit/test_v2_render.py: a plan with meta.plan
+        "2026-05-27--auto--awx-deployment" and spec
+        "docs/superpowers/specs/2026-05-27--auto--awx-deployment-design.md"
+        renders labels containing plan:auto--awx-deployment and
+        spec:auto--awx-deployment-design (no leading dash, no date).
+      - tests/unit/test_v2_plan_ops.py: self_review #249 length lint fires on the
+        NORMALIZED name — a dated slug whose normalized "plan:<slug>" is <=50 chars
+        produces no over-long warning even when the raw form exceeds 50.
+      Run targeted pytest — expect failures.
+  - id: P1.T2.S2
+    text: |-
+      Implement:
+      - src/vk/render.py: _spec_slug keeps Path(...).stem but drops its own
+        _DATE_PREFIX_RE date strip (labels.spec_label now normalizes); remove the
+        now-unused regex.
+      - src/vk/plan_ops.py: #249 lint builds the candidate via
+        labels.plan_label(plan.meta.plan).name is WRONG for detecting overflow
+        (it is already bounded); instead compute
+        f"plan:{normalize_label_slug(plan.meta.plan)}" and compare to
+        MAX_LABEL_NAME_LEN.
+      Run: uv run pytest tests/unit/test_v2_render.py tests/unit/test_v2_plan_ops.py
+      tests/unit/test_labels.py -q --no-cov — expect green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

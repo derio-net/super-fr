@@ -146,3 +146,4 @@ Failing tests first, per area:
 
 | Plan | Repo | File | Depends on |
 | ---- | ---- | ---- | ---------- |
+| 2026-06-04-plan-pipeline-bugfixes | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-06-04-plan-pipeline-bugfixes/` | — |
