@@ -451,14 +451,15 @@ def test_self_review_detects_manual_complete_without_note(tmp_path):
 
 
 def test_self_review_warns_on_overlong_plan_label(tmp_path):
-    """#249: a slug long enough to push `plan:<slug>` past GitHub's 50-char
-    label limit must surface a self-review warning (it's auto-truncated, but
-    the operator should know to shorten the slug)."""
+    """#249: a slug whose NORMALIZED `plan:<slug>` form still exceeds GitHub's
+    50-char label limit must surface a self-review warning (it's
+    auto-truncated, but the operator should know to shorten the slug)."""
     from vk.plan_ops import PhaseSpec, create, self_review
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
-    slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1"  # 50 chars -> label 55
+    # Normalizes to 53 chars -> 'plan:' + 53 = 58 > 50: still over-long.
+    slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1-extra-words"
     plan = create(
         repo_root=repo,
         slug=slug,
@@ -472,6 +473,28 @@ def test_self_review_warns_on_overlong_plan_label(tmp_path):
     assert any(
         i.severity == "warn" and "50" in i.message and "label" in i.message.lower() for i in issues
     ), [str(i) for i in issues]
+
+
+def test_self_review_overlong_lint_checks_the_normalized_label(tmp_path):
+    """A dated slug whose RAW `plan:<slug>` exceeds 50 chars but whose
+    normalized form fits must NOT warn — the label that actually ships is
+    the normalized one."""
+    from vk.plan_ops import PhaseSpec, create, self_review
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1"  # raw label 55, normalized 43
+    plan = create(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=2.0.0,<3.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    issues = self_review(plan)
+    assert not any("label" in i.message.lower() for i in issues), [str(i) for i in issues]
 
 
 def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):

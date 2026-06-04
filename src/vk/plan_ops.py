@@ -26,7 +26,7 @@ from typing import Any, Literal, TypedDict
 import yaml
 
 from vk._urls import is_cross_repo_spec
-from vk.labels import MAX_LABEL_NAME_LEN
+from vk.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from vk.parser import Plan, PlanSchemaError, parse
 
 
@@ -738,7 +738,9 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # Over-long plan label (#249): `plan:<slug>` past GitHub's 50-char label
     # cap is auto-truncated+hashed at dispatch, but the operator should know —
     # a hashed routing key is opaque; a shorter slug reads better on the board.
-    raw_plan_label = f"plan:{plan.meta.plan}"
+    # Check the NORMALIZED slug — that's the shape that actually ships; a raw
+    # dated slug whose date-free form fits is not over-long.
+    raw_plan_label = f"plan:{normalize_label_slug(plan.meta.plan)}"
     if len(raw_plan_label) > MAX_LABEL_NAME_LEN:
         issues.append(
             ReviewIssue(

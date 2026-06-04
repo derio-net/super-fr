@@ -82,6 +82,45 @@ class TestPhaseLabel:
         assert "3" in labels.phase_label(3).description
 
 
+class TestNormalizeLabelSlug:
+    """Frank's `YYYY-MM-DD--<layer>--<topic>` slugs produced labels with a
+    leading dash (spec:) or an embedded date (plan:). Normalization strips
+    the date prefix PLUS all dashes that follow it, in one place."""
+
+    def test_strips_date_and_double_dash(self) -> None:
+        assert (
+            labels.normalize_label_slug("2026-05-27--auto--awx-deployment")
+            == "auto--awx-deployment"
+        )
+
+    def test_strips_date_and_single_dash(self) -> None:
+        assert labels.normalize_label_slug("2026-05-27-single-dash") == "single-dash"
+
+    def test_no_date_prefix_passes_through(self) -> None:
+        assert (
+            labels.normalize_label_slug("agents--restart-resilience")
+            == "agents--restart-resilience"
+        )
+
+    def test_date_not_at_start_passes_through(self) -> None:
+        assert labels.normalize_label_slug("awx-2026-05-27-redo") == "awx-2026-05-27-redo"
+
+    def test_date_only_slug_normalizes_to_empty(self) -> None:
+        assert labels.normalize_label_slug("2026-05-27-") == ""
+
+    def test_plan_label_strips_date_prefix(self) -> None:
+        assert (
+            labels.plan_label("2026-05-27--auto--awx-deployment").name
+            == "plan:auto--awx-deployment"
+        )
+
+    def test_spec_label_has_no_leading_dash(self) -> None:
+        assert (
+            labels.spec_label("2026-05-27--auto--awx-deployment-design").name
+            == "spec:auto--awx-deployment-design"
+        )
+
+
 class TestRegistryLookup:
     def test_lifecycle_dict_keys_are_role_names(self) -> None:
         assert set(labels.LIFECYCLE.keys()) == {
@@ -117,7 +156,7 @@ class TestBoundedLabelNames:
         assert slug in lab.description
 
     def test_short_slug_labels_unchanged(self) -> None:
-        assert labels.plan_label("2026-05-09-short").name == "plan:2026-05-09-short"
+        assert labels.plan_label("2026-05-09-short").name == "plan:short"
         assert labels.spec_label("vk-rebuild-design").name == "spec:vk-rebuild-design"
 
     def test_long_spec_slug_label_bounded_to_50(self) -> None:
@@ -127,6 +166,12 @@ class TestBoundedLabelNames:
     def test_labeldef_rejects_name_over_50_chars(self) -> None:
         with pytest.raises(ValueError, match="50"):
             labels.LabelDef("plan:" + "x" * 50, "B60205", "too long")
+
+    def test_normalized_long_slug_skips_the_hash(self) -> None:
+        # Raw 'plan:'+slug is 56 chars, but the NORMALIZED form fits under 50 —
+        # normalization must run BEFORE bounding so no truncate+hash kicks in.
+        slug = "2026-05-23--obs--hop-blog-edge-monitoring-rework-1"
+        assert labels.plan_label(slug).name == "plan:obs--hop-blog-edge-monitoring-rework-1"
 
     def test_bounded_name_stays_within_50_for_any_prefix(self) -> None:
         # Even a pathological (over-long) prefix must not slice the value from

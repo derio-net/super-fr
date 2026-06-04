@@ -34,7 +34,7 @@ def test_render_undispatched_phase_yields_create_intent():
     assert issue.state == "OPEN"
     label_names = {ld.name for ld in issue.labels}
     assert "spec:vk-rebuild-state-machine-design" in label_names
-    assert "plan:2026-05-09-fixture-minimal" in label_names
+    assert "plan:fixture-minimal" in label_names  # date prefix stripped
     assert "phase:1" in label_names
     assert "vk-ready" in label_names  # agentic, no assignee, no PR, not complete
     assert rendered.archive_decision is False
@@ -621,6 +621,36 @@ def test_complete_phase_projects_closed_state():  # C5
     assert state_changes[0].new_state == "CLOSED"
     assert state_changes[0].issue_number == 154
     assert state_changes[0].repo == "derio-net/superpowers-for-vk"
+
+
+def test_render_normalizes_dated_double_dash_slugs_in_labels():
+    """Frank's `YYYY-MM-DD--<layer>--<topic>` slugs must render date-free,
+    leading-dash-free labels: `plan:auto--awx-deployment`, not
+    `plan:2026-05-27--auto--awx-deployment`; `spec:auto--awx-deployment-design`,
+    not `spec:-auto--awx-deployment-design`."""
+    from dataclasses import replace
+
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    plan = replace(
+        plan,
+        meta=plan.meta.model_copy(
+            update={
+                "plan": "2026-05-27--auto--awx-deployment",
+                "spec": "docs/superpowers/specs/2026-05-27--auto--awx-deployment-design.md",
+            }
+        ),
+    )
+    rendered = render(plan, GhState(phases={}))
+    label_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
+    assert "plan:auto--awx-deployment" in label_names
+    assert "spec:auto--awx-deployment-design" in label_names
+    # The broken shapes must NOT appear.
+    assert not any(n.startswith("plan:2026-") for n in label_names)
+    assert not any(n.startswith("spec:-") for n in label_names)
 
 
 # --- ticket context enrichment (spec link + prose + phase yaml) ---------------

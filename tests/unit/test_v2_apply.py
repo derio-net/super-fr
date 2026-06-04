@@ -105,7 +105,7 @@ def test_apply_ensures_labels_with_registry_colors():
     by_name = {ld.name: ld for ld in passed}
     assert by_name["vk-ready"].color == VK_READY.color
     assert by_name["phase:1"].color == PHASE_LABEL_COLOR
-    assert by_name["plan:2026-05-09-fixture-minimal"].color == PLAN_LABEL_COLOR
+    assert by_name["plan:fixture-minimal"].color == PLAN_LABEL_COLOR
     assert by_name["spec:vk-rebuild-state-machine-design"].color == SPEC_LABEL_COLOR
 
     # Sort key invariant: apply() sorts by name (LabelDef has no natural order).
@@ -152,7 +152,7 @@ def test_apply_managed_labels_only_does_not_touch_operator_labels():
     assert "good-first-issue" in final_labels
     # Managed labels were added (positive case)
     assert "spec:vk-rebuild-state-machine-design" in final_labels
-    assert "plan:2026-05-09-fixture-minimal" in final_labels
+    assert "plan:fixture-minimal" in final_labels
 
 
 def test_apply_idempotent_after_url_fillin_cycle():

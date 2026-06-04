@@ -113,6 +113,67 @@ def test_diff_passes_phase_to_issue_map_to_render():
     assert "- Blocked by #1\n" not in phase2_create.body
 
 
+def test_diff_swaps_stale_dated_labels_for_normalized_ones():
+    """One-time churn on live Issues: an Issue still carrying the old dated /
+    leading-dash labels (`plan:2026-…`, `spec:-…`) gets them removed and the
+    normalized shapes added — both are under the vk-managed `plan:`/`spec:`
+    prefixes, so the swap is safe and automatic at the next apply/tick."""
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.diff import IssueLabelChange, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    plan = dc_replace(
+        plan,
+        meta=plan.meta.model_copy(
+            update={
+                "plan": "2026-05-27--auto--awx-deployment",
+                "spec": "docs/superpowers/specs/2026-05-27--auto--awx-deployment-design.md",
+            }
+        ),
+    )
+    repo = "derio-net/superpowers-for-vk"
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://github.com/{repo}/issues/142"}
+            )
+        }
+    )
+    plan = dc_replace(plan, phases=(phase,))
+
+    observed = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(
+                    {
+                        "plan:2026-05-27--auto--awx-deployment",
+                        "spec:-auto--awx-deployment-design",
+                        "phase:1",
+                        "vk-ready",
+                    }
+                ),
+                issue_assignees=(),
+                linked_prs=(),
+            )
+        }
+    )
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    label_changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
+    assert len(label_changes) == 1
+    change = label_changes[0]
+    assert "plan:auto--awx-deployment" in change.add
+    assert "spec:auto--awx-deployment-design" in change.add
+    assert "plan:2026-05-27--auto--awx-deployment" in change.remove
+    assert "spec:-auto--awx-deployment-design" in change.remove
+
+
 def test_repo_label_ensure_carries_registry_colors():
     """RepoLabelEnsure must carry LabelDef objects with the canonical registry
     colors / descriptions so gh.ensure_labels can paint each label correctly.
@@ -157,8 +218,8 @@ def test_repo_label_ensure_carries_registry_colors():
     assert by_name["phase:1"].color == PHASE_LABEL_COLOR
     assert "1" in by_name["phase:1"].description
 
-    assert by_name["plan:2026-05-09-fixture-minimal"].color == PLAN_LABEL_COLOR
-    assert "fixture-minimal" in by_name["plan:2026-05-09-fixture-minimal"].description
+    assert by_name["plan:fixture-minimal"].color == PLAN_LABEL_COLOR
+    assert "fixture-minimal" in by_name["plan:fixture-minimal"].description
 
     assert by_name["spec:vk-rebuild-state-machine-design"].color == SPEC_LABEL_COLOR
 
@@ -200,7 +261,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                         {
                             "vk-ready",
                             "spec:vk-rebuild-state-machine-design",
-                            "plan:2026-05-09-fixture-minimal",
+                            "plan:fixture-minimal",
                             "phase:1",
                         }
                     ),
@@ -218,7 +279,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                     {
                         "vk-ready",
                         "spec:vk-rebuild-state-machine-design",
-                        "plan:2026-05-09-fixture-minimal",
+                        "plan:fixture-minimal",
                         "phase:1",
                     }
                 ),
