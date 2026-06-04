@@ -45,13 +45,18 @@ already exits 1 when any error-severity issue is present):
   phase's number) or contains a defer-phrase (`defer`, `executed in`,
   `moved to`), emit an error. The step belongs in a manual phase.
   Backward phase references ("ported from Phase 1") do not trip the lint.
-- **Manual-verb lint.** For each `agentic` phase, for each step whose
-  *text* matches a conservative, case-insensitive, word-boundary pattern
-  list, emit an error. Initial list: `manually`, `by hand`,
-  `via the UI`, `in the UI`, `click`, `SOPS`, `operator sets`,
-  `operator provides`. The list is deliberately precision-over-recall:
-  the deferred-step lint is the load-bearing detector; the verb lint
-  catches the authoring mistake before any deferral happens.
+- **Manual-verb lint.** For each `agentic` phase, for each
+  **not-yet-completed** step (state `' '` or `'-'`) whose *text* matches
+  a conservative, case-insensitive, word-boundary pattern list, emit an
+  error. Initial list: `manually`, `by hand`, `via the UI`, `in the UI`,
+  `click`, `SOPS`, `operator sets`, `operator provides`. Completed
+  (`'x'`) steps are exempt — a ticked step already proved
+  agent-completable, and exempting it keeps the lint from retro-flagging
+  historical plans (or plans whose step text merely *quotes* the
+  phrases) while still gating at authoring time, when every step is
+  unticked. The list is deliberately precision-over-recall: the
+  deferred-step lint is the load-bearing detector; the verb lint catches
+  the authoring mistake before any deferral happens.
 
 `skills/vk-plan/SKILL.md` gains an authoring rule under **Rules**:
 agentic phases must be pure agentic — collect all manual work (secrets,

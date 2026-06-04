@@ -679,6 +679,44 @@ def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[Rewo
 # ---------------------------------------------------------------------------
 # vk.plan.self_review (lints)
 
+# Agentic-purity gate (#252): a skipped (`state: '-'`) step in an AGENTIC
+# phase whose note defers it forward is a mis-scoped manual step — an
+# agentic phase must be fully agent-completable. The note either names a
+# later phase ("Executed in Phase 5") or uses a defer-phrase.
+_PHASE_REF_NOTE_RE = re.compile(r"[Pp]hase\s+(\d+)")
+_DEFER_PHRASES = ("defer", "executed in", "moved to")
+
+# Part 2 of the gate: manual-operation language in a pending agentic step.
+# Deliberately conservative (precision over recall) — the deferred-step
+# lint above is the load-bearing detector; this one catches the authoring
+# mistake before any deferral happens. Word-boundary, case-insensitive.
+_MANUAL_VERB_RES = tuple(
+    re.compile(rf"\b{phrase}\b", re.IGNORECASE)
+    for phrase in (
+        "manually",
+        "by hand",
+        "via the UI",
+        "in the UI",
+        "click",
+        "SOPS",
+        "operator sets",
+        "operator provides",
+    )
+)
+
+
+def _note_defers_forward(note: str, phase_number: int) -> bool:
+    """True iff `note` defers execution beyond `phase_number`."""
+    m = _PHASE_REF_NOTE_RE.search(note)
+    if m and int(m.group(1)) > phase_number:
+        return True
+    lowered = note.lower()
+    # A backward phase reference ("ported from Phase 1") is history, not
+    # deferral — phrases only count when no earlier-phase ref disarms them.
+    if m and int(m.group(1)) <= phase_number:
+        return False
+    return any(phrase in lowered for phrase in _DEFER_PHRASES)
+
 
 @dataclass(frozen=True)
 class ReviewIssue:
@@ -718,6 +756,57 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                     ),
                 )
             )
+
+    # Agentic-purity gate (#252), part 1: deferred steps. An agentic phase
+    # is meant to be fully agent-completable and end in one PR — a step
+    # skipped with a forward-deferring note was manual by nature and belongs
+    # in a manual phase. Error severity: the gate is enforced, not advisory.
+    for phase in plan.phases:
+        if phase.phase.tag != "agentic":
+            continue
+        n = phase.phase.number
+        for step_id, ss in sorted(phase.state.steps.items()):
+            if ss.state != "-" or not ss.note:
+                continue
+            if _note_defers_forward(ss.note, n):
+                issues.append(
+                    ReviewIssue(
+                        severity="error",
+                        message=(
+                            f"phase {n} (agentic) step {step_id} is deferred "
+                            f"(note: {ss.note!r}) — manual-by-nature work must move "
+                            f"into a manual phase; agentic phases must be pure agentic."
+                        ),
+                    )
+                )
+
+    # Agentic-purity gate (#252), part 2: manual-operation language in a
+    # not-yet-completed agentic step. Completed ('x') steps are exempt — a
+    # ticked step already proved agent-completable, and the exemption keeps
+    # historical plans (or step texts that merely QUOTE the phrases) from
+    # retro-erroring. At authoring time every step is unticked, so the gate
+    # bites exactly where it should.
+    for phase in plan.phases:
+        if phase.phase.tag != "agentic":
+            continue
+        n = phase.phase.number
+        for task in phase.tasks:
+            for step in task.steps:
+                state = phase.state.steps.get(step.id)
+                if state is not None and state.state == "x":
+                    continue
+                hit = next((p for p in _MANUAL_VERB_RES if p.search(step.text)), None)
+                if hit is not None:
+                    issues.append(
+                        ReviewIssue(
+                            severity="error",
+                            message=(
+                                f"phase {n} (agentic) step {step.id} reads like a "
+                                f"manual operation (matched {hit.pattern!r}) — move it "
+                                f"into a manual phase; agentic phases must be pure agentic."
+                            ),
+                        )
+                    )
 
     # Same-repo-form spec that doesn't resolve locally (#248): almost always a
     # malformed cross-repo ref missing the `owner/repo:` prefix, which apply's

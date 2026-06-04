@@ -113,6 +113,33 @@ def test_diff_passes_phase_to_issue_map_to_render():
     assert "- Blocked by #1\n" not in phase2_create.body
 
 
+def test_diff_creates_issues_for_every_phase_including_manual():
+    """Every undispatched phase gets an IssueCreate — manual phases included.
+    Manual phases carry the gray `manual` label (never `vk-ready`), so they
+    surface on GitHub for the operator without ever being routed to an agent.
+    Pinned so a future 'skip manual phases' regression can't slip in silently."""
+    from vk import parse
+    from vk.diff import IssueCreate, diff
+    from vk.render import render
+    from vk.states import GhState
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+    tags = {p.phase.number: p.phase.tag for p in plan.phases}
+    assert "manual" in tags.values(), "fixture must include a manual phase"
+
+    observed = GhState(phases={})
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    creates = {m.phase_number: m for m in d.mutations if isinstance(m, IssueCreate)}
+    assert set(creates) == set(tags), "every phase must get an IssueCreate"
+    for n, tag in tags.items():
+        if tag == "manual":
+            assert "manual" in creates[n].labels
+            assert "vk-ready" not in creates[n].labels
+
+
 def test_diff_swaps_stale_dated_labels_for_normalized_ones():
     """One-time churn on live Issues: an Issue still carrying the old dated /
     leading-dash labels (`plan:2026-…`, `spec:-…`) gets them removed and the
