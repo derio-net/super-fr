@@ -723,6 +723,25 @@ def test_render_body_truncates_oversized_content_deterministically():
     assert "… (truncated — see" in body1
 
 
+def test_enrichment_block_never_exceeds_budget():
+    """The budget is a hard cap on the RETURNED block (join separator and
+    section overhead included), across content-size combinations."""
+    from dataclasses import replace
+
+    from vk import parse
+    from vk.render import _ENRICHMENT_BUDGET, enrichment_block
+
+    plan = parse(FIXTURE)
+    for prose_n, yaml_n in ((0, 70_000), (70_000, 0), (40_000, 40_000), (54_900, 200)):
+        big = replace(
+            plan,
+            prose=("P" * prose_n) or None,
+            phase_texts={1: "k: v\n" + "y" * yaml_n} if yaml_n else {},
+        )
+        block = enrichment_block(big, big.phases[0])
+        assert len(block) <= _ENRICHMENT_BUDGET, (prose_n, yaml_n, len(block))
+
+
 def test_render_body_spec_line_is_link():
     from vk import parse
     from vk.render import render_body

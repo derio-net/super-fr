@@ -178,25 +178,29 @@ def _fence_for(content: str) -> str:
 
 
 def _truncated(text: str, limit: int, pointer: str) -> str:
-    """Clamp `text` to `limit` chars with a deterministic pointer marker."""
+    """Clamp `text` to AT MOST `limit` chars, deterministically.
+
+    Appends a pointer marker when there's room for one; hard-cuts when
+    `limit` is too tight for the marker itself (the result is never
+    longer than `limit`).
+    """
     if len(text) <= limit:
         return text
     marker = f"\n… (truncated — see {pointer} in the repo)"
-    return text[: max(0, limit - len(marker))] + marker
+    if limit <= len(marker):
+        return text[:limit]
+    return text[: limit - len(marker)] + marker
 
 
 def _prose_section(prose: str) -> str:
-    return (
-        "## Plan prose\n\n<details>\n<summary>📜 _prose.md</summary>\n\n"
-        f"{prose.rstrip()}\n\n</details>\n"
-    )
+    return f"## Plan prose\n\n<details>\n<summary>📜 _prose.md</summary>\n\n{prose}\n\n</details>\n"
 
 
 def _phase_section(raw: str, fname: str) -> str:
     fence = _fence_for(raw)
     return (
         f"## Phase document\n\n<details>\n<summary>🧾 {fname}</summary>\n\n"
-        f"{fence}yaml\n{raw.rstrip()}\n{fence}\n\n</details>\n"
+        f"{fence}yaml\n{raw}\n{fence}\n\n</details>\n"
     )
 
 
@@ -208,27 +212,34 @@ def enrichment_block(plan: Plan, phase: PhaseDoc) -> str:
     Missing inputs degrade gracefully: absent prose or phase text just
     omits that section; both absent returns "". Oversized content is
     truncated deterministically — yaml first (it has a canonical in-repo
-    home), then prose — to stay within `_ENRICHMENT_BUDGET`.
+    home), then prose — so the RETURNED block never exceeds
+    `_ENRICHMENT_BUDGET`. Content is rstripped once at entry so the
+    truncation arithmetic is exact (each `_truncated` char removed is a
+    block char removed); the budget check runs on the assembled block,
+    join separator and section overhead included.
     """
-    prose = plan.prose
-    raw = plan.phase_texts.get(phase.phase.number)
+    prose = (plan.prose or "").rstrip() or None
+    raw = (plan.phase_texts.get(phase.phase.number) or "").rstrip() or None
     fname = f"{phase.phase.number:02d}.yaml"
 
-    prose_sec = _prose_section(prose) if prose else ""
-    yaml_sec = _phase_section(raw, fname) if raw else ""
+    def _assemble(p: str | None, y: str | None) -> str:
+        sections = []
+        if p:
+            sections.append(_prose_section(p))
+        if y:
+            sections.append(_phase_section(y, fname))
+        return "\n".join(sections)
 
-    total = len(prose_sec) + len(yaml_sec)
-    if total > _ENRICHMENT_BUDGET and raw:
-        yaml_limit = max(0, len(raw) - (total - _ENRICHMENT_BUDGET))
-        raw = _truncated(raw, yaml_limit, f"{plan.repo_relative_dir}/{fname}")
-        yaml_sec = _phase_section(raw, fname)
-        total = len(prose_sec) + len(yaml_sec)
-    if total > _ENRICHMENT_BUDGET and prose:
-        prose_limit = max(0, len(prose) - (total - _ENRICHMENT_BUDGET))
-        prose = _truncated(prose, prose_limit, f"{plan.repo_relative_dir}/_prose.md")
-        prose_sec = _prose_section(prose)
-
-    return "\n".join(s for s in (prose_sec, yaml_sec) if s)
+    block = _assemble(prose, raw)
+    if len(block) > _ENRICHMENT_BUDGET and raw:
+        yaml_limit = max(0, len(raw) - (len(block) - _ENRICHMENT_BUDGET))
+        raw = _truncated(raw, yaml_limit, f"{plan.repo_relative_dir}/{fname}") or None
+        block = _assemble(prose, raw)
+    if len(block) > _ENRICHMENT_BUDGET and prose:
+        prose_limit = max(0, len(prose) - (len(block) - _ENRICHMENT_BUDGET))
+        prose = _truncated(prose, prose_limit, f"{plan.repo_relative_dir}/_prose.md") or None
+        block = _assemble(prose, raw)
+    return block
 
 
 def render_body(
