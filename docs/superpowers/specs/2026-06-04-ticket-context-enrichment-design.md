@@ -200,4 +200,4 @@ Patch bump (`scripts/bump-version.py patch`) — changes `src/**` and
 
 | Plan | Repo | File | Depends on |
 | --- | --- | --- | --- |
-| ticket-context-enrichment | derio-net/superpowers-for-vk | `docs/superpowers/plans/2026-06-04-ticket-context-enrichment/` | — |
+| 2026-06-04-ticket-context-enrichment | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-06-04-ticket-context-enrichment/` | — |

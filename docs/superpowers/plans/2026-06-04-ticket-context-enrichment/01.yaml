@@ -1,0 +1,94 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Plan carries raw prose + phase texts
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: 'TDD: parser exposes raw plan texts'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add failing tests to `tests/unit/test_v2_parse.py`:
+
+      ```python
+      MULTI_PHASE = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+
+      def test_parse_populates_prose_and_phase_texts():
+          plan = parse(MULTI_PHASE)
+          assert plan.prose == (MULTI_PHASE / "_prose.md").read_text()
+          assert set(plan.phase_texts) == {1, 2, 10}
+          for n, fname in ((1, "01.yaml"), (2, "02.yaml"), (10, "10.yaml")):
+              assert plan.phase_texts[n] == (MULTI_PHASE / fname).read_text()
+
+      def test_parse_missing_prose_is_none(tmp_path):
+          # copy v2_plan_minimal into tmp_path, delete _prose.md if present,
+          # parse, assert plan.prose is None and parse succeeds.
+      ```
+
+      Use `shutil.copytree` for the tmp copy. Match the import style already
+      used at the top of `test_v2_parse.py`.
+  - id: P1.T1.S2
+    text: |-
+      Run `uv run pytest tests/unit/test_v2_parse.py -q --no-cov` and confirm
+      the new tests FAIL (AttributeError / TypeError on the missing fields).
+- number: 2
+  title: Implement Plan fields + parse population
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      In `src/vk/parser.py` extend the frozen `Plan` dataclass:
+
+      ```python
+      from collections.abc import Mapping
+      from dataclasses import dataclass, field
+
+      @dataclass(frozen=True)
+      class Plan:
+          dir: Path
+          meta: PlanMeta
+          phases: tuple[PhaseDoc, ...]
+          repo_root: Path | None = None
+          prose: str | None = None              # _prose.md content, None if absent
+          phase_texts: Mapping[int, str] = field(default_factory=dict)
+      ```
+
+      In `parse()`, while iterating `indexed_phase_files`, capture
+      `raw = f.read_text()` once, feed `yaml.safe_load(raw)` to the model,
+      and store `phase_texts[idx] = raw` (keyed by the phase-file index, the
+      same int used for ordering). After the loop read
+      `prose = (plan_dir / "_prose.md").read_text() if exists else None` and
+      pass both to the `Plan(...)` constructor.
+
+      NOTE: key `phase_texts` by `PhaseDoc.phase.number` (read from the parsed
+      model), not the filename index — the renderer looks up by phase number.
+  - id: P1.T2.S2
+    text: |-
+      Run `uv run pytest tests/unit/test_v2_parse.py -q --no-cov` (green) and
+      `uv run mypy src/` (clean). Defaults must keep every existing direct
+      `Plan(...)` construction in the suite compiling unchanged — run
+      `uv run pytest -q --no-cov` to confirm no regressions.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
