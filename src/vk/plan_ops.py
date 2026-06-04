@@ -706,15 +706,17 @@ _MANUAL_VERB_RES = tuple(
 
 
 def _note_defers_forward(note: str, phase_number: int) -> bool:
-    """True iff `note` defers execution beyond `phase_number`."""
+    """True iff `note` defers execution beyond `phase_number`.
+
+    An explicit phase reference decides outright: forward ("Executed in
+    Phase 5" on phase 3) is deferral; backward ("ported from Phase 1") is
+    history and disarms the defer-phrases. Only refless notes fall through
+    to the phrase scan.
+    """
     m = _PHASE_REF_NOTE_RE.search(note)
-    if m and int(m.group(1)) > phase_number:
-        return True
+    if m:
+        return int(m.group(1)) > phase_number
     lowered = note.lower()
-    # A backward phase reference ("ported from Phase 1") is history, not
-    # deferral — phrases only count when no earlier-phase ref disarms them.
-    if m and int(m.group(1)) <= phase_number:
-        return False
     return any(phrase in lowered for phrase in _DEFER_PHRASES)
 
 
@@ -757,10 +759,17 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                 )
             )
 
-    # Agentic-purity gate (#252), part 1: deferred steps. An agentic phase
-    # is meant to be fully agent-completable and end in one PR — a step
-    # skipped with a forward-deferring note was manual by nature and belongs
-    # in a manual phase. Error severity: the gate is enforced, not advisory.
+    # Agentic-purity gate (#252). An agentic phase is meant to be fully
+    # agent-completable and end in one PR. Two error-severity detectors per
+    # agentic phase (the gate is enforced, not advisory):
+    #   1. Deferred steps — a step skipped (`'-'`) with a forward-deferring
+    #      note was manual by nature and belongs in a manual phase.
+    #   2. Manual-operation language in a not-yet-completed step. Completed
+    #      ('x') steps are exempt — a ticked step already proved
+    #      agent-completable, and the exemption keeps historical plans (or
+    #      step texts that merely QUOTE the phrases) from retro-erroring.
+    #      At authoring time every step is unticked, so the gate bites
+    #      exactly where it should.
     for phase in plan.phases:
         if phase.phase.tag != "agentic":
             continue
@@ -779,17 +788,6 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                         ),
                     )
                 )
-
-    # Agentic-purity gate (#252), part 2: manual-operation language in a
-    # not-yet-completed agentic step. Completed ('x') steps are exempt — a
-    # ticked step already proved agent-completable, and the exemption keeps
-    # historical plans (or step texts that merely QUOTE the phrases) from
-    # retro-erroring. At authoring time every step is unticked, so the gate
-    # bites exactly where it should.
-    for phase in plan.phases:
-        if phase.phase.tag != "agentic":
-            continue
-        n = phase.phase.number
         for task in phase.tasks:
             for step in task.steps:
                 state = phase.state.steps.get(step.id)
@@ -835,16 +833,19 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # cap is auto-truncated+hashed at dispatch, but the operator should know —
     # a hashed routing key is opaque; a shorter slug reads better on the board.
     # Check the NORMALIZED slug — that's the shape that actually ships; a raw
-    # dated slug whose date-free form fits is not over-long.
-    raw_plan_label = f"plan:{normalize_label_slug(plan.meta.plan)}"
-    if len(raw_plan_label) > MAX_LABEL_NAME_LEN:
+    # dated slug whose date-free form fits is not over-long. Built by hand
+    # (not via `labels.plan_label`) on purpose: the factory's `.name` is
+    # already bounded to 50 chars, so overflow would be undetectable from it.
+    normalized_plan_label = f"plan:{normalize_label_slug(plan.meta.plan)}"
+    if len(normalized_plan_label) > MAX_LABEL_NAME_LEN:
         issues.append(
             ReviewIssue(
                 severity="warn",
                 message=(
-                    f"plan label {raw_plan_label!r} is {len(raw_plan_label)} chars "
-                    f"(>{MAX_LABEL_NAME_LEN}); it will be truncated + hashed for GitHub. "
-                    f"Consider a shorter slug (rework suffixes push long slugs over)."
+                    f"plan label {normalized_plan_label!r} is "
+                    f"{len(normalized_plan_label)} chars (>{MAX_LABEL_NAME_LEN}); "
+                    f"it will be truncated + hashed for GitHub. Consider a "
+                    f"shorter slug (rework suffixes push long slugs over)."
                 ),
             )
         )
