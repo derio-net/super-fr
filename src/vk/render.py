@@ -39,6 +39,7 @@ from vk.states import (
 )
 from vk.types import PhaseDoc
 
+
 def _spec_slug(spec_path: str | None) -> str | None:
     """Strip the `.md` suffix from the spec path; return None if unset.
 

@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import Any
 
 from vk._yaml import LiteralStr, dump_plan_yaml
+from vk.parser import PlanSchemaError
+from vk.parser import parse as _parse_v2
 from vk.plan.parser import _RE_STEP, _strip_fenced_regions
 from vk.plan.parser import parse_plan as _parse_v1
 
@@ -299,6 +301,18 @@ def _migrate_one(
     for phase in phases_to_emit:
         phase_doc = _build_phase_doc_from_v1(phase, md_text=md_text, warnings=warnings)
         (new_folder / f"{phase.number:02d}.yaml").write_text(dump_plan_yaml(phase_doc))
+
+    # Validate the freshly-written folder against the v2 schema BEFORE
+    # archiving the source .md. A v1 plan the schema rejects — e.g. a
+    # "## Phase 0" heading (numbering starts at 1) — must fail loud at
+    # migration time, not surface later as a silent bridge-discovery skip.
+    # Tear the folder down so a renumber + re-run isn't blocked by leftovers,
+    # and leave the source .md in place for the operator to fix.
+    try:
+        _parse_v2(new_folder)
+    except PlanSchemaError as e:
+        shutil.rmtree(new_folder)
+        raise MigrationError(f"{md_path.name}: migrated folder fails v2 validation: {e}") from e
 
     # Move original .md to .v1-archive sibling
     archive = md_path.with_suffix(".md.v1-archive")

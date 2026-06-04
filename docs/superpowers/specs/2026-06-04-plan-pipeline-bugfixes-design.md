@@ -85,9 +85,12 @@ on it will fail loud. Remediation — finish & archive, or renumber
 action outside this PR.
 
 **Known limitation.** `vk migrate v1-to-v2` of a v1 plan containing
-"## Phase 0" now fails loud at its re-parse step instead of producing a
-phase-0 v2 folder. Migration is rare and the error message is clear;
-renumber-on-migrate is deliberately out of scope.
+"## Phase 0" fails loud at migration time: `_migrate_one` now validates
+the freshly-written folder against the v2 schema *before* archiving the
+source `.md` (the migrator previously never re-parsed — a schema-invalid
+folder shipped silently). On failure the half-built folder is torn down
+and the source `.md` stays in place, so a renumber + re-run just works.
+Renumber-on-migrate is deliberately out of scope.
 
 ### 3. Pin "every phase gets a GH Issue"
 
