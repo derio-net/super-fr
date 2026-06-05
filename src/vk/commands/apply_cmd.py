@@ -96,6 +96,10 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
 def _format_diff(d: Diff) -> str:
     """Human-readable summary of mutations."""
     if not d.mutations:
+        # "in sync" would be misleading when the completion guard withheld
+        # creates — the suppression block printed below explains the state.
+        if d.suppressed:
+            return "no pending mutations."
         return "no mutations — already in sync."
     lines: list[str] = []
     for m in d.mutations:

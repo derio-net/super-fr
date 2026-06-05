@@ -218,3 +218,20 @@ def test_apply_cli_exposes_force_flag(tmp_path, monkeypatch):
     result = CliRunner().invoke(app, ["apply", "--help"])
     assert result.exit_code == 0
     assert "--force" in result.output
+
+
+def test_apply_dry_run_json_suppressed_alongside_real_mutations(tmp_path):
+    """Mixed plan: the JSON `suppressed` array coexists with IssueCreate
+    mutations for the incomplete phases (downstream-consumer shape)."""
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan_dir = tmp_path / "docs" / "superpowers" / "plans" / "multi"
+    shutil.copytree(fixture, plan_dir)
+    phase = plan_dir / "01.yaml"
+    phase.write_text(phase.read_text().replace('state: " "', "state: x"))
+    rc, _text, json_out = apply_cmd._apply_one(plan_dir, FakeGhClient(), yes=False)
+    assert rc == 0
+    assert {s["phase_number"] for s in json_out["suppressed"]} == {1}
+    created_phases = {
+        m["phase_number"] for m in json_out["mutations"] if m["kind"] == "IssueCreate"
+    }
+    assert created_phases and 1 not in created_phases

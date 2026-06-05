@@ -176,7 +176,7 @@ def _filter_issue_creates(d: Diff) -> Diff:
             )
             continue
         kept.append(m)
-    return Diff(mutations=tuple(kept))
+    return Diff(mutations=tuple(kept), suppressed=d.suppressed)
 
 
 def _rerender_dependent_creates(

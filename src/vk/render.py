@@ -153,6 +153,11 @@ def plan_locally_complete(phase: PhaseDoc) -> bool:
     guard in `vk.diff.diff` (2026-06-05 stale-plan dispatch postmortem),
     the `_drift_warnings` never-dispatched warning, the `vk spec status`
     roll-up, and the `vk archive` gate.
+
+    Tag-agnostic by design: unlike `_phase_complete`, a manual phase with
+    `completion.at` but no `completion.note` still counts — for a dispatch
+    guard, any completion claim is reason enough to refuse creating new
+    work.
     """
     if phase.state.completion.at is not None:
         return True
