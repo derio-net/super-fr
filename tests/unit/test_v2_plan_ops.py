@@ -793,3 +793,38 @@ def test_rework_number_scans_implemented_plans(tmp_path):
 
     rework = rework_create(parent)
     assert rework.dir.name == "2026-05-08-parent-rework-2"
+
+
+# ---------------------------------------------------------------------------
+# vk.plan_ops.clear_tracking_issue (2026-06-05 dispatch-guards spec, Phase 6)
+
+
+def test_clear_tracking_issue_nulls_field_and_returns_true(tmp_path):
+    from vk.plan_ops import clear_tracking_issue, set_tracking_issue
+
+    repo = _make_repo(tmp_path)
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-05-09-fixture-minimal"
+    shutil.copytree(fixture, plan_dir)
+
+    url = "https://github.com/derio-net/test/issues/7"
+    set_tracking_issue(plan_dir, 1, url)
+    assert url in (plan_dir / "01.yaml").read_text()
+
+    assert clear_tracking_issue(plan_dir, 1) is True
+    text = (plan_dir / "01.yaml").read_text()
+    assert url not in text
+    assert "tracking_issue: null" in text
+
+
+def test_clear_tracking_issue_noop_when_already_null(tmp_path):
+    from vk.plan_ops import clear_tracking_issue
+
+    repo = _make_repo(tmp_path)
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-05-09-fixture-minimal"
+    shutil.copytree(fixture, plan_dir)
+
+    before = (plan_dir / "01.yaml").read_text()
+    assert clear_tracking_issue(plan_dir, 1) is False
+    assert (plan_dir / "01.yaml").read_text() == before

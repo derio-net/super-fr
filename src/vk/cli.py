@@ -27,6 +27,7 @@ from vk.commands.plan_cmd import plan_app
 from vk.commands.skills_cmd import skills as skills_command
 from vk.commands.spec_cmd import spec_app
 from vk.commands.status_cmd import status_command
+from vk.commands.undispatch_cmd import undispatch_command
 
 app = typer.Typer(
     name="vk",
@@ -40,6 +41,9 @@ app.command(name="status", help="Read-only plan report (allowlist-safe; never mu
 )
 app.command(name="archive", help="Move finished plans (and specs) to implemented/.")(
     archive_command
+)
+app.command(name="undispatch", help="Close a plan's tracking Issues and null the fields.")(
+    undispatch_command
 )
 app.command(name="pickup", help="Output phase scope (markdown) for an agent.")(pickup_command)
 app.add_typer(plan_app, name="plan")

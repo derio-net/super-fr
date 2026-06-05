@@ -439,6 +439,31 @@ def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
     _stage(plan.repo_root, [phase_path])
 
 
+def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
+    """Null phase.tracking_issue in <plan_dir>/<NN>.yaml (inverse of
+    `set_tracking_issue` — the `vk undispatch` writeback).
+
+    Returns True when the field was cleared, False when it was already
+    null (no-op; the file is not rewritten, keeping re-runs byte-stable).
+    Stages but does not commit.
+    """
+    plan = parse(plan_dir)
+    phase_path = plan_dir / f"{phase_n:02d}.yaml"
+    if not phase_path.exists():
+        raise PlanEditError(f"phase {phase_n} yaml not found: {phase_path}")
+    raw = yaml.safe_load(phase_path.read_text())
+    if raw["phase"].get("tracking_issue") is None:
+        return False
+    raw["phase"]["tracking_issue"] = None
+    phase_path.write_text(_yaml_dump(raw))
+    try:
+        parse(plan_dir)
+    except PlanSchemaError as e:
+        raise PlanEditError(f"post-write schema validation failed: {e}") from e
+    _stage(plan.repo_root, [phase_path])
+    return True
+
+
 # ---------------------------------------------------------------------------
 # vk.plan.rework_create / rework_add_origin / rework_list
 

@@ -45,6 +45,10 @@ class GhClient(Protocol):
 
     def edit_issue_body(self, repo: str, number: int, body: str) -> None: ...
 
+    def comment_issue(self, repo: str, number: int, body: str) -> None:
+        """Post a comment on an Issue (`vk undispatch` leaves its trail here)."""
+        ...
+
     def create_issue(
         self,
         repo: str,

@@ -190,6 +190,10 @@ class RealGhClient:
                 defs.append(LabelDef(name=name, color=color, description=description))
         _gh.ensure_labels(repo=repo, labels=defs)
 
+    def comment_issue(self, repo: str, number: int, body: str) -> None:
+        """Post a comment via `gh issue comment`."""
+        _gh._run_gh(["issue", "comment", str(number), "--repo", repo, "--body", body])
+
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe on the default branch.
 

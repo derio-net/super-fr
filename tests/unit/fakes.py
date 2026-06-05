@@ -139,6 +139,10 @@ class FakeGhClient:
         self.calls.append(("edit_issue_body", {"repo": repo, "number": number, "body": body}))
         self.issues[(repo, number)].body = body
 
+    def comment_issue(self, repo: str, number: int, body: str) -> None:
+        self._gate()
+        self.calls.append(("comment_issue", {"repo": repo, "number": number, "body": body}))
+
     def create_issue(
         self,
         repo: str,
