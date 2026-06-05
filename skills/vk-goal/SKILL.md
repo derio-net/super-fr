@@ -114,7 +114,7 @@ verbatim, labeled "post-merge — operator-driven". Stop; the operator merges.
 ### 9. Post-merge close-out
 
 When the operator reports the merge: drive the Test Plan interactively if
-present (agent runs checks, operator confirms what the agent can't reach). Then
-confirm phases complete, check `vk spec status`, archive the plan folder to
-`docs/superpowers/archived-plans/` via a housekeeping PR (v2 plans need the
-manual move; update the spec table), then `vk isolation down`.
+present (agent runs checks, operator confirms what the agent can't reach).
+Then confirm phases complete (`vk status` shows the archive nudge), run
+`vk archive <plan-dir>` (gate-checked git mv; the spec follows once all
+its rows are implemented), commit via a housekeeping PR, `vk isolation down`.

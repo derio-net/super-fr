@@ -54,8 +54,14 @@ plans surface as `Unreachable` in this layer (a future cross-repo lookup
 will resolve them via the gh contents API).
 
 The reusable `.github/workflows/vk-spec-status.yml` posts this output as a
-PR comment when a PR touching `docs/superpowers/{plans,archived-plans}/`
+PR comment when a PR touching `docs/superpowers/{plans,implemented/plans}/`
 merges.
+
+For a single plan, `vk status <plan-dir>` is the read-only deep report:
+factual header (created date + age, tick counts, dispatch state),
+per-phase table, completion-guard refusals, drift warnings (including
+"Issue closed but plan is incomplete" reverse drift), and the archive
+nudge. Safe to allowlist — it never mutates.
 
 ## Tick / complete phases
 
@@ -71,13 +77,20 @@ with unticked steps (use rework for deferred items — see `vk-plan`).
 
 ## Archive-on-complete
 
-When the operator decides a plan folder should move to
-`docs/superpowers/archived-plans/`, do it as an explicit `git mv`:
+When a plan is finished, archive it with the verb (not a hand-rolled mv):
 
 ```bash
-git mv docs/superpowers/plans/<slug>/ docs/superpowers/archived-plans/<slug>/
+vk archive <plan-dir>     # gate-checked git mv to docs/superpowers/implemented/plans/
+vk archive --all          # sweep every finished plan; specs follow when all their rows are implemented
 ```
 
-The next `vk spec status` run will re-resolve the row from the new path.
-There is no automated archiver in v2 — keeping the move explicit avoids the
-v1 footgun where archiving fired without operator intent.
+The gate requires every phase complete (gh evidence, or fully-ticked
+never-dispatched); `--force` overrides for a single plan. The owning spec
+moves to `implemented/specs/` once all its rows resolve as implemented
+(cross-repo rows via the gh contents API). The next `vk spec status` run
+re-resolves rows from the new path automatically. The operator still runs
+the command and commits the moves — archiving never fires without intent
+(the v1 footgun), it's just one verb now instead of a manual mv.
+
+Legacy `archived-plans/` layouts hard-stop every verb until
+`vk migrate dirs --yes` runs (one git mv + commit).
