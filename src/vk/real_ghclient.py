@@ -190,6 +190,21 @@ class RealGhClient:
                 defs.append(LabelDef(name=name, color=color, description=description))
         _gh.ensure_labels(repo=repo, labels=defs)
 
+    def file_exists(self, repo: str, path: str) -> bool:
+        """Contents-API existence probe on the default branch.
+
+        `gh api` exits non-zero on 404; any other error also reads as
+        "not found" — the spec-archival callers treat unresolved as
+        "leave the spec in place", which is the safe direction.
+        """
+        from vk.gh import GhError
+
+        try:
+            _gh._run_gh(["api", f"repos/{repo}/contents/{path}", "--silent"])
+            return True
+        except GhError:
+            return False
+
 
 _CI_PASS = {"SUCCESS"}
 _CI_FAIL = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}

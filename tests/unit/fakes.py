@@ -45,6 +45,8 @@ class FakeGhClient:
         # Fail on Nth attempted mutation (0-indexed). The mutation is NOT
         # recorded in .calls when it fails.
         self.fail_on_mutation: int | None = None
+        # (repo, path) pairs the fake contents API reports as existing.
+        self.remote_files: set[tuple[str, str]] = set()
 
     # ---- preload helpers (test setup) ----
 
@@ -86,6 +88,10 @@ class FakeGhClient:
         if i is None:
             return []
         return list(i.linked_prs)
+
+    def file_exists(self, repo: str, path: str) -> bool:
+        self.calls.append(("file_exists", {"repo": repo, "path": path}))
+        return (repo, path) in self.remote_files
 
     # ---- mutation methods ----
 

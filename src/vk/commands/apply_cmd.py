@@ -39,6 +39,7 @@ from vk.diff import (
 from vk.git import file_on_ref
 from vk.parser import Plan, PlanSchemaError
 from vk.plan_ops import PlanEditError
+from vk.render import archive_gate
 
 if TYPE_CHECKING:
     from vk.ghclient import GhClient
@@ -185,6 +186,12 @@ def _apply_one(
         parts.append("\nwarnings:")
         for w in rendered.warnings:
             parts.append(f"  [{w.severity}] {w.message}")
+    # Archive nudge — same gate as `vk archive`, so the surfaces agree.
+    if not archive_gate(plan, report.observed):
+        parts.append(
+            f"\nplan complete — run `vk archive {plan.repo_relative_dir}` to move it "
+            f"to implemented/."
+        )
 
     json_out: dict[str, Any] = {
         "plan": plan.meta.plan,

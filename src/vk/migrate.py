@@ -729,14 +729,38 @@ class DirsMove:
     kind: str  # "plans-dir" | "spec"
 
 
-def _spec_fully_implemented(spec_path: Path, repo_root: Path) -> tuple[bool, str | None]:
+def _archive_path_variants(file_cell: str) -> tuple[str | None, str | None]:
+    """(implemented, legacy) path variants of a spec-table File cell.
+
+    `docs/superpowers/plans/X` -> (`docs/superpowers/implemented/plans/X`,
+    `docs/superpowers/archived-plans/X`). (None, None) when the cell has no
+    `plans` segment to rewrite.
+    """
+    parts = Path(file_cell.rstrip("/")).parts
+    if "plans" not in parts:
+        return None, None
+    i = parts.index("plans")
+    implemented = "/".join([*parts[:i], "implemented", "plans", *parts[i + 1 :]])
+    legacy = "/".join([*parts[:i], "archived-plans", *parts[i + 1 :]])
+    return implemented, legacy
+
+
+def _spec_fully_implemented(
+    spec_path: Path, repo_root: Path, gh: Any | None = None
+) -> tuple[bool, str | None]:
     """(implemented?, blocking-note) for one spec's Implementation Plans rows.
 
     A spec qualifies for implemented/specs/ when every row with a plan file
     resolves to an archive location (implemented/plans/ — or the legacy
-    archived-plans/, which this migration is about to rename). Manual rows
-    (File cell `—`) never block. A row resolving to an ACTIVE plans/ dir or
-    not resolving at all (cross-repo) blocks, with a note naming the row.
+    archived-plans/, which `migrate dirs` is about to rename). Manual rows
+    (File cell `—`) never block. A row resolving to an ACTIVE plans/ dir
+    blocks, with a note naming the row.
+
+    Cross-repo rows (no local resolution): when `gh` is supplied, the
+    narrow contents-API lookup (2026-06-05 spec) checks the OTHER repo —
+    active path exists there → blocks; implemented/legacy variant exists
+    → counts as done; nothing found (or no gh / gh outage) → blocks with
+    a "confirm and re-run" note. Unresolved never silently passes.
     """
     from vk.spec import _resolve_local_plan_dir, parse_spec
 
@@ -749,7 +773,19 @@ def _spec_fully_implemented(spec_path: Path, repo_root: Path) -> tuple[bool, str
             continue  # manual/informational row — non-blocking
         resolved = _resolve_local_plan_dir(ref, repo_root)
         if resolved is None:
-            return False, f"row {ref.name!r} unresolved locally (cross-repo?) — confirm and re-run"
+            note = f"row {ref.name!r} unresolved locally (cross-repo?) — confirm and re-run"
+            if gh is not None and "/" in ref.repo:
+                implemented_path, legacy_path = _archive_path_variants(ref.file)
+                try:
+                    if gh.file_exists(ref.repo, ref.file.rstrip("/")):
+                        return False, f"row {ref.name!r} still active in {ref.repo}"
+                    if (implemented_path and gh.file_exists(ref.repo, implemented_path)) or (
+                        legacy_path and gh.file_exists(ref.repo, legacy_path)
+                    ):
+                        continue  # remote row is archived — counts as done
+                except Exception:  # noqa: BLE001 — gh outage degrades to "confirm"
+                    pass
+            return False, note
         try:
             rel_parts = resolved.relative_to(sp).parts
         except ValueError:

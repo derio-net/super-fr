@@ -18,6 +18,7 @@ import typer
 
 from vk import __version__
 from vk.commands.apply_cmd import apply_command
+from vk.commands.archive_cmd import archive_command
 from vk.commands.init_cmd import init_app
 from vk.commands.isolation_cmd import isolation_app
 from vk.commands.migrate_cmd import migrate_app
@@ -36,6 +37,9 @@ app = typer.Typer(
 app.command(name="apply", help="Render + observe + diff + apply for a plan.")(apply_command)
 app.command(name="status", help="Read-only plan report (allowlist-safe; never mutates).")(
     status_command
+)
+app.command(name="archive", help="Move finished plans (and specs) to implemented/.")(
+    archive_command
 )
 app.command(name="pickup", help="Output phase scope (markdown) for an agent.")(pickup_command)
 app.add_typer(plan_app, name="plan")
