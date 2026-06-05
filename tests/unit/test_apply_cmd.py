@@ -213,13 +213,18 @@ def test_apply_yes_force_creates_issues(tmp_path, monkeypatch):
 
 
 def test_apply_cli_exposes_force_flag(tmp_path, monkeypatch):
+    """Strip ANSI before asserting: rich styles --help differently across
+    environments (CI injected escape codes inside the option token)."""
+    import re
+
     from typer.testing import CliRunner
 
     from vk.cli import app
 
     result = CliRunner().invoke(app, ["apply", "--help"])
     assert result.exit_code == 0
-    assert "--force" in result.output
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "--force" in plain
 
 
 def test_apply_dry_run_json_suppressed_alongside_real_mutations(tmp_path):
