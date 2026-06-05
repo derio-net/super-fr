@@ -22,6 +22,7 @@ from typing import Literal
 from vk._urls import parse_issue_url
 from vk.labels import LabelDef
 from vk.parser import Plan
+from vk.render import plan_locally_complete
 from vk.states import GhState, RenderedState
 
 # Prefix-owned namespaces. The applier may add/remove anything starting
@@ -83,8 +84,22 @@ Mutation = IssueLabelChange | IssueStateChange | IssueBodyChange | IssueCreate |
 
 
 @dataclass(frozen=True)
+class SuppressedCreate:
+    """An IssueCreate the guard withheld (2026-06-05 stale-plan postmortem).
+
+    Suppression is data, not a log line: apply dry-run, `vk status`, and
+    JSON output all render these so the operator sees exactly which phases
+    were refused and why. `vk apply --yes --force` re-enables the creates.
+    """
+
+    phase_number: int
+    reason: str
+
+
+@dataclass(frozen=True)
 class Diff:
     mutations: tuple[Mutation, ...]
+    suppressed: tuple[SuppressedCreate, ...] = ()
 
 
 def _build_title(plan: Plan, phase_number: int) -> str:
@@ -97,9 +112,24 @@ def _build_title(plan: Plan, phase_number: int) -> str:
     )
 
 
-def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
-    """Compute mutations to bring observed → rendered. Pure."""
+def diff(
+    rendered: RenderedState,
+    observed: GhState,
+    *,
+    plan: Plan,
+    force_create: bool = False,
+) -> Diff:
+    """Compute mutations to bring observed → rendered. Pure.
+
+    `force_create=False` (default) suppresses `IssueCreate` for undispatched
+    phases that are `plan_locally_complete` — a complete plan must never
+    dispatch as new work (2026-06-05 stale-plan incident: 13 spurious
+    Issues). Suppressions are returned on `Diff.suppressed`. Pass
+    `force_create=True` (CLI `--force`) to emit the creates anyway. Mixed
+    plans are never blocked: only the locally-complete phases suppress.
+    """
     mutations: list[Mutation] = []
+    suppressed: list[SuppressedCreate] = []
     repo = plan.meta.target_repo
 
     # Group managed labels by destination repo so each repo gets exactly one
@@ -127,6 +157,24 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
         obs = observed.phases.get(phase_n)
 
         if tracking is None or obs is None:
+            # Completion guard: a locally-complete phase (all steps ticked
+            # or completion.at set) must not dispatch as new work. See
+            # SuppressedCreate docstring.
+            if not force_create and plan_locally_complete(phase):
+                steps = phase.state.steps
+                ticked = sum(1 for s in steps.values() if s.state in ("x", "-"))
+                completion_note = " and completion.at is set" if phase.state.completion.at else ""
+                suppressed.append(
+                    SuppressedCreate(
+                        phase_number=phase_n,
+                        reason=(
+                            f"{ticked}/{len(steps)} steps ticked{completion_note} — "
+                            f"locally complete, refusing to create an Issue "
+                            f"(override: --force)"
+                        ),
+                    )
+                )
+                continue
             # Undispatched: create the Issue on target_repo. v2 does not yet
             # support first-dispatch to a foreign repo; that would require
             # knowing the intended destination before a tracking_issue exists.
@@ -184,4 +232,4 @@ def diff(rendered: RenderedState, observed: GhState, *, plan: Plan) -> Diff:
                 )
             )
 
-    return Diff(mutations=tuple(mutations))
+    return Diff(mutations=tuple(mutations), suppressed=tuple(suppressed))

@@ -156,10 +156,44 @@ def _mutation_to_json(m: Any) -> dict[str, Any]:
     return {"kind": type(m).__name__}
 
 
-def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, dict[str, Any]]:
+def _plan_header(plan: Plan) -> str:
+    """One factual line: created date + age, tick counts, dispatch state.
+
+    Information, not heuristics (2026-06-05 postmortem): a month-old
+    never-dispatched plan announces itself without any threshold machinery.
+    Age formatting lives here in the CLI layer so the render/diff chain
+    stays clock-free and pure.
+    """
+    import datetime as _dt
+
+    created = plan.meta.created
+    age = ""
+    try:
+        days = (_dt.date.today() - _dt.date.fromisoformat(created)).days
+        age = f" ({days} days ago)"
+    except ValueError:
+        pass
+    total = sum(len(p.state.steps) for p in plan.phases)
+    ticked = sum(1 for p in plan.phases for s in p.state.steps.values() if s.state in ("x", "-"))
+    dispatched = sum(1 for p in plan.phases if p.phase.tracking_issue)
+    if dispatched == 0:
+        dispatch_state = "never dispatched"
+    else:
+        dispatch_state = f"{dispatched}/{len(plan.phases)} phases dispatched"
+    return (
+        f"plan: {plan.meta.plan} · created {created}{age} · "
+        f"{ticked}/{total} steps · {dispatch_state}"
+    )
+
+
+def _apply_one(
+    plan_dir: Path, gh: GhClient, *, yes: bool, force: bool = False
+) -> tuple[int, str, dict[str, Any]]:
     """Apply one plan with an injected GhClient.
 
     Returns (exit_code, text_output, json_output). `yes=False` is dry-run.
+    `force=True` re-enables IssueCreate for locally-complete phases
+    (overrides the completion guard — see `vk.diff.SuppressedCreate`).
     """
     try:
         plan = parse(plan_dir)
@@ -168,9 +202,13 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
 
     observed = observe(plan, gh)
     rendered = render(plan, observed)
-    d = diff(rendered, observed, plan=plan)
+    d = diff(rendered, observed, plan=plan, force_create=force)
 
-    parts = [f"plan: {plan.meta.plan}", _format_diff(d)]
+    parts = [_plan_header(plan), _format_diff(d)]
+    if d.suppressed:
+        parts.append("\nrefused (completion guard):")
+        for s in d.suppressed:
+            parts.append(f"  phase {s.phase_number}: {s.reason}")
     if rendered.warnings:
         parts.append("\nwarnings:")
         for w in rendered.warnings:
@@ -179,6 +217,7 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
     json_out: dict[str, Any] = {
         "plan": plan.meta.plan,
         "mutations": [_mutation_to_json(m) for m in d.mutations],
+        "suppressed": [{"phase_number": s.phase_number, "reason": s.reason} for s in d.suppressed],
         "warnings": [{"severity": w.severity, "message": w.message} for w in rendered.warnings],
         "applied": False,
         "failures": [],
@@ -189,6 +228,21 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
 
     if not yes:
         return 0, "\n".join(parts), json_out
+
+    # Completion-guard refusal: every would-be create was suppressed and no
+    # Issue-level reconciliation remains (RepoLabelEnsure alone is vacuous).
+    # Runs before the git gates — the refusal is about plan state, not git.
+    meaningful = [m for m in d.mutations if not isinstance(m, RepoLabelEnsure)]
+    if d.suppressed and not meaningful:
+        lines = [
+            parts[0],
+            "",
+            f"all {len(d.suppressed)} undispatched phase(s) are locally complete — "
+            "nothing to dispatch.",
+            "If this plan is done, run `vk archive` on it; to dispatch anyway, "
+            "re-run with --force.",
+        ]
+        return 2, "\n".join(lines), json_out
 
     if plan.repo_root is None:
         lines = [
@@ -271,6 +325,15 @@ def apply_command(
         "--yes",
         help="Apply mutations. Without this flag, runs as a preview (dry-run is the default).",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Override the completion guard: create Issues even for phases "
+            "the plan marks locally complete (all steps ticked or "
+            "completion.at set)."
+        ),
+    ),
     output_format: str = typer.Option(
         "text",
         "--format",
@@ -328,7 +391,7 @@ def apply_command(
     json_results: list[dict[str, Any]] = []
     text_outputs: list[str] = []
     for t in targets:
-        rc, text_output, json_output = _apply_one(t, gh, yes=yes)
+        rc, text_output, json_output = _apply_one(t, gh, yes=yes, force=force)
         text_outputs.append(text_output)
         json_results.append(json_output)
         if rc != 0:
