@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 6
+  title: vk undispatch — inverse of dispatch
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: plan_ops.clear_tracking_issue
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Add failing tests in tests/unit/test_v2_plan_ops.py: clear_tracking_issue(plan_dir, phase_n) nulls phase.tracking_issue in NN.yaml preserving the rest of the document byte-stable (same yaml round-trip discipline as set_tracking_issue); calling it when already null is a no-op returning False (True when it cleared). Run; fail.
+  - id: P6.T1.S2
+    text: |-
+      Implement clear_tracking_issue in src/vk/plan_ops.py as the sibling of set_tracking_issue (shared write helper if extraction is trivial). Re-run tests; pass.
+- number: 2
+  title: undispatch_cmd
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Add failing tests in tests/unit/test_undispatch_cmd.py: (a) dry-run (default) lists per-phase 'would close <url> + null tracking_issue', filesystem and FakeGhClient untouched; (b) --yes closes each tracked Issue with comment 'vk undispatch: dispatched in error from <plan-slug>' and state reason not_planned, then nulls the yaml field; (c) re-run after partial failure skips already-closed/already-nulled (idempotent); (d) a gh failure on one phase accumulates and exits 4, other phases proceed. FakeGhClient gains comment_issue + close-reason capture. Run; fail.
+  - id: P6.T2.S2
+    text: |-
+      Implement: add comment_issue(repo, n, body) to GhClient protocol + RealGhClient (`gh issue comment`) + FakeGhClient; edit_issue_state already accepts reason — pass 'not planned' equivalent supported by gh ('--reason "not planned"'). src/vk/commands/undispatch_cmd.py with apply-style failure accumulation; register in cli.py + legacy guard. Re-run tests; pass. Run ruff format + mypy.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,67 @@
+schema_version: 2
+phase:
+  number: 5
+  title: vk archive — gate, spec decision, --all sweep
+  tag: agentic
+  depends_on:
+  - 1
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Archive gate + plan move
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Add failing tests in tests/unit/test_archive_cmd.py (tmp git repo fixture): (a) gate passes when every phase is _phase_complete OR (undispatched AND plan_locally_complete) — fixture: all-ticked never-dispatched plan (the bookmarks shape) archives; (b) incomplete plan exits 2 with per-phase reasons; (c) --force overrides; (d) `git mv` lands the dir at docs/superpowers/implemented/plans/<slug> with git status clean apart from the staged rename; (e) dirty worktree at the plan path refuses exit 2. Run; fail.
+  - id: P5.T1.S2
+    text: |-
+      Implement src/vk/commands/archive_cmd.py with the gate as a shared library function archive_gate(plan, observed) -> list[str] of per-phase blockers (empty = pass) in src/vk/render.py or a new src/vk/archive.py; perform git mv; print moved paths + 'commit and PR this' hint. Register `vk archive` in cli.py + legacy guard. Re-run tests; pass.
+- number: 2
+  title: Spec decision with gh cross-repo resolution
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Add failing tests: (a) archiving the last local plan of a spec moves the spec to implemented/specs/ (table paths NOT rewritten; resolution relies on the P3 fallback); (b) spec with another still-active local plan stays; (c) cross-repo row: FakeGhClient gains a file_exists(repo, path) surface — when the remote plan dir resolves under implemented/plans/ the row counts as done; when gh fails, the spec stays with a printed 'unresolved — confirm and re-run' note. Run; fail.
+  - id: P5.T2.S2
+    text: |-
+      Implement: add file_exists (gh contents API via `gh api repos/{repo}/contents/{path}` returning bool) to GhClient protocol + RealGhClient + FakeGhClient; spec-decision helper shared with migrate dirs (refactor P3's local-only decision to accept an optional gh client). Re-run tests; pass.
+- number: 3
+  title: --all sweep + archive nudge in apply/status
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      Add failing tests: (a) `vk archive --all` archives every passing plan, reports skipped plans with reasons, runs the spec decision once at end-of-sweep (fixture: two plans of one spec, both complete -> spec moves in the same run); (b) `--force --all` exits 2; (c) apply dry-run and status print 'plan complete — run vk archive <dir>' when the gate passes (uses archive_gate, not archive_decision). Run; fail.
+  - id: P5.T3.S2
+    text: |-
+      Implement --all in archive_cmd (walk docs/superpowers/plans/, same gate, end-of-sweep spec pass); refuse --force with --all; add the nudge to the shared read helper so apply + status both print it. Re-run tests; pass. Run ruff format + mypy.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,65 @@
+schema_version: 2
+phase:
+  number: 3
+  title: implemented/ taxonomy, legacy hard-stop, vk migrate dirs
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Recognize the implemented/ layout everywhere plans resolve
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Add failing tests: (a) tests/unit/test_v2_plan_ops.py — plan-path validation accepts docs/superpowers/implemented/plans/<x> and the scaffold duplicate-check sees a same-slug folder there; (b) tests/unit/test_v2_spec.py — _resolve_local_plan_dir falls back plans/<x> -> implemented/plans/<x> -> archived-plans/<x> when the recorded path is missing; (c) tests/unit/test_apply_cmd.py — `vk apply docs/superpowers/implemented/plans/<x>` refuses (terminal, same as the existing archived-plans refusal). Run; fail.
+  - id: P3.T1.S2
+    text: |-
+      Implement: extend the allowed-parent set in src/vk/plan_ops.py (plans, implemented/plans, archived-plans legacy) and its duplicate-scan; add the fallback chain in src/vk/spec.py::_resolve_local_plan_dir; extend the refusal check in src/vk/commands/apply_cmd.py to match superpowers/implemented/plans as well. Re-run tests; pass.
+- number: 2
+  title: Uniform legacy hard-stop
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Add failing tests for a shared guard vk.commands.common.require_migrated_layout(repo_root): when docs/superpowers/archived-plans/ exists it raises typer.Exit(2) after printing 'legacy layout detected — run `vk migrate dirs --yes`, then commit'; CLI tests prove `vk apply` (dry-run AND --yes), `vk plan self-review`, `vk spec status`, and `vk pickup` all exit 2 on a legacy-layout fixture repo. Run; fail.
+  - id: P3.T2.S2
+    text: |-
+      Implement require_migrated_layout in src/vk/commands/common.py and call it at entry of every verb that resolves the superpowers tree: apply_cmd, plan_cmd subcommands, spec_cmd, pickup_cmd, and migrate v1-to-v2. Exemptions: migrate dirs, isolation, init, skills, --version. Re-run tests; pass.
+- number: 3
+  title: vk migrate dirs subcommand
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Add failing tests in tests/unit/test_v2_migrate.py (new module ok): fixture repo with docs/superpowers/{specs,plans,archived-plans} under git (use the existing tmp-git-repo fixture pattern). (a) dry-run (default) prints planned `git mv archived-plans -> implemented/plans` and spec moves, filesystem untouched; (b) `--yes` performs the mv (v1 flat .md archives move along untouched), creates implemented/specs/, moves every spec whose Implementation Plans rows ALL resolve to implemented plans, leaves specs with unresolved/cross-repo rows in place with a printed note; (c) re-run on migrated repo is a clean no-op exit 0. Run; fail.
+  - id: P3.T3.S2
+    text: |-
+      Implement `dirs` in src/vk/commands/migrate_cmd.py with the move logic in src/vk/migrate.py: detect legacy dir, `git mv` via subprocess (check=True, cwd=repo_root), spec-implemented decision reusing parse_spec + the P3.T1 fallback resolution (cross-repo rows: defer to operator-confirmation pathway — print and skip in non-interactive mode). Re-run tests; pass. Run ruff format + mypy.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

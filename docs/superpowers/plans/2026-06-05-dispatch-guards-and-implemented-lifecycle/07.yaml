@@ -1,0 +1,56 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Skill docs, validator, version bump, full verification
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Skill-doc updates
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      skills/vk-dispatch/SKILL.md pre-flight: add (a) the mandatory gh-evidence check before dispatching a plan with zero dispatched phases (search target repo for merged PRs mentioning the plan/spec slug and the plan's deliverable paths; evidence found -> stop and reconcile with the operator); (b) instruct the dispatching agent to include created Issue URLs in the writeback commit body. Keep the file within its line-count budget.
+  - id: P7.T1.S2
+    text: |-
+      Update archived-plans references to the implemented/ layout and mention the new verbs where they belong: skills/vk-progress/SKILL.md (drift reporting -> vk status, complete-but-not-archived -> vk archive), skills/vk-execute/SKILL.md, skills/vk-goal/SKILL.md (step 9 close-out: archive via `vk archive`, not manual mv), src/vk/commands/skills_cmd.py overview (status / archive / undispatch / migrate dirs one-liners).
+- number: 2
+  title: Validator + repo docs
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      Update scripts/validate-plans.sh for the implemented/ layout (validate implemented/plans/ like archived-plans/ today) and grep the repo for remaining 'archived-plans' references that should change (CLAUDE.md examples, README) — leave historical spec/postmortem texts untouched. Run the script locally on this repo: passes.
+- number: 3
+  title: Version bump + full verification
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      Run `scripts/bump-version.py minor` (new verbs + new mandatory behavior per CLAUDE.md), then the full local CI mirror: `uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ && uv run pytest -q --no-cov`. Everything green; commit the version bump files (pyproject.toml, two plugin JSONs, uv.lock) per the bump-version contract.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
