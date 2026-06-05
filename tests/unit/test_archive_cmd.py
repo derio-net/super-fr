@@ -280,3 +280,40 @@ def test_apply_dry_run_prints_archive_nudge(tmp_path, monkeypatch):
     rc, text, _json = apply_cmd._apply_one(plan_dir, FakeGhClient(), yes=False)
     assert rc == 0
     assert "vk archive" in text
+
+
+# --- 2026-06-06 review fixes ---
+
+
+def test_archive_all_sweeps_stranded_spec_with_no_plan_moves(tmp_path, monkeypatch):
+    """A spec whose plans all archived in PRIOR runs must still be swept by
+    a later `vk archive --all` (review finding: the sweep ran only when a
+    plan moved this run, diverging from `vk migrate dirs`)."""
+    repo = _repo(tmp_path)
+    # Plan already archived; spec left behind (e.g. unresolved back then).
+    implemented = repo / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-01-a"
+    shutil.copytree(FIXTURE, implemented)
+    _add_spec(
+        repo,
+        "2026-05-01-a-design.md",
+        [("a", "derio-net/test", "docs/superpowers/plans/2026-05-01-a")],
+    )
+    _git_seed(repo)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    sp = repo / "docs" / "superpowers"
+    assert (sp / "implemented" / "specs" / "2026-05-01-a-design.md").is_file()
+
+
+def test_archive_refuses_plan_dir_outside_repo(tmp_path, monkeypatch):
+    """Out-of-repo plan dir: clean exit 2, not a ValueError traceback."""
+    repo = _repo(tmp_path / "repo-a")
+    _git_seed(repo)
+    other = tmp_path / "repo-b" / "docs" / "superpowers" / "plans" / "2026-05-25-elsewhere"
+    shutil.copytree(FIXTURE, other)
+    phase = other / "01.yaml"
+    phase.write_text(phase.read_text().replace('state: " "', "state: x"))
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", str(other)])
+    assert result.exit_code == 2, result.output
+    assert "not under this repo" in result.output
+    assert other.exists()

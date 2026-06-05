@@ -85,8 +85,18 @@ def undispatch_command(
         try:
             state = str(gh.view_issue(repo, issue_n).get("state", ""))
         except Exception as e:  # noqa: BLE001 — accumulate, keep going
-            failures.append(f"phase {n}: view {repo}#{issue_n} failed: {e}")
-            continue
+            # A DELETED issue is terminal, not transient: retrying can
+            # never succeed, so treat it as already-gone and fall through
+            # to clearing the field (review finding, 2026-06-06).
+            # Transient failures (network, auth) accumulate and RETAIN
+            # the field so a retry can find the Issue again.
+            msg = str(e).lower()
+            gone = isinstance(e, KeyError) or "404" in msg or "could not resolve" in msg
+            if not gone:
+                failures.append(f"phase {n}: view {repo}#{issue_n} failed: {e}")
+                continue
+            typer.echo(f"  phase {n}: {url} no longer exists — clearing the field")
+            state = "CLOSED"
         if state != "CLOSED":
             try:
                 gh.comment_issue(

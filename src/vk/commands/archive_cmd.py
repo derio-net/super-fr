@@ -82,6 +82,17 @@ def archive_command(
     archived: list[Path] = []
     skipped: list[str] = []
     for target in targets:
+        # Under-repo check FIRST — `git status -- <path>` (the dirty check)
+        # and `git mv` both fail opaquely on out-of-repo paths.
+        try:
+            target.resolve().relative_to(repo_root)
+        except ValueError:
+            msg = f"{target} is not under this repo root ({repo_root})"
+            if not all_plans:
+                err_console.print(f"refusing to archive — {msg}")
+                raise typer.Exit(2) from None
+            skipped.append(f"{target.name}: skipped — {msg}")
+            continue
         try:
             report = build_plan_report(target, gh)
         except PlanSchemaError as e:
@@ -122,8 +133,14 @@ def archive_command(
         typer.echo(f"  archived: {target} -> {new_path.relative_to(repo_root)}")
 
     # Spec decision once, after all plan moves (order independence in --all).
-    if archived:
+    # Runs even when nothing archived this run: a spec stranded by a prior
+    # run (cross-repo row unresolved then, resolved now) must still get
+    # swept — `vk migrate dirs` evaluates specs unconditionally and the two
+    # archive paths must agree (review finding, 2026-06-06).
+    specs_moved = False
+    if archived or all_plans:
         sweep = spec_archive_sweep(repo_root, gh)
+        specs_moved = bool(sweep.moves)
         for m in sweep.moves:
             typer.echo(f"  archived spec: {m.src} -> {m.dst}")
         for n in sweep.notes:
@@ -131,7 +148,7 @@ def archive_command(
 
     for s in skipped:
         typer.echo(f"  skipped: {s}")
-    if archived:
+    if archived or specs_moved:
         typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
     elif all_plans:
         typer.echo("nothing to archive.")

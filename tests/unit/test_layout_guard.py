@@ -82,3 +82,14 @@ def test_spec_status_hard_stops_on_legacy_layout(tmp_path, monkeypatch):
     result = CliRunner().invoke(app, ["spec", "status", str(spec_file)])
     assert result.exit_code == 2, result.output
     assert "vk migrate dirs" in result.output
+
+
+def test_guard_fires_on_legacy_archived_specs_too(tmp_path):
+    """archived-specs/ is legacy layout exactly like archived-plans/
+    (review finding, 2026-06-06)."""
+    from vk.commands.common import require_migrated_layout
+
+    (tmp_path / "docs" / "superpowers" / "archived-specs").mkdir(parents=True)
+    with pytest.raises(Exception) as exc_info:
+        require_migrated_layout(tmp_path)
+    assert getattr(exc_info.value, "exit_code", None) == 2

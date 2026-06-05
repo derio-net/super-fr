@@ -815,6 +815,19 @@ def plan_dirs_migration(repo_root: Path) -> tuple[list[DirsMove], list[str]]:
             )
         )
 
+    # Legacy archived-specs/ rides along too (per-entry moves — the
+    # destination dir may already exist and hold newly-archived specs).
+    legacy_specs = sp / "archived-specs"
+    if legacy_specs.is_dir():
+        for entry in sorted(legacy_specs.iterdir()):
+            moves.append(
+                DirsMove(
+                    src=entry.relative_to(repo_root),
+                    dst=Path("docs/superpowers/implemented/specs") / entry.name,
+                    kind="spec",
+                )
+            )
+
     specs_dir = sp / "specs"
     if specs_dir.is_dir():
         for spec_path in sorted(specs_dir.glob("*.md")):
@@ -853,4 +866,9 @@ def migrate_dirs(repo_root: Path, *, dry_run: bool = True) -> tuple[list[DirsMov
             raise MigrationError(
                 f"git mv {m.src} -> {m.dst} failed: {(e.stderr or '').strip()}"
             ) from e
+    # Per-entry moves out of archived-specs/ leave the (untracked, empty)
+    # directory husk behind — git mv removes files, not dirs.
+    legacy_specs = repo_root / "docs" / "superpowers" / "archived-specs"
+    if legacy_specs.is_dir() and not any(legacy_specs.iterdir()):
+        legacy_specs.rmdir()
     return moves, notes

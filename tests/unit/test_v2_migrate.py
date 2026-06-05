@@ -894,3 +894,26 @@ def test_migrate_dirs_noop_on_migrated_repo(tmp_path, monkeypatch):
     result = runner.invoke(app, ["migrate", "dirs", "--yes"])
     assert result.exit_code == 0, result.output
     assert "nothing to migrate" in result.output.lower()
+
+
+def test_migrate_dirs_moves_archived_specs_entries(tmp_path, monkeypatch):
+    """Legacy archived-specs/ entries ride along into implemented/specs/
+    (review finding, 2026-06-06)."""
+    repo = _legacy_layout_repo(tmp_path)
+    legacy_specs = repo / "docs" / "superpowers" / "archived-specs"
+    legacy_specs.mkdir()
+    (legacy_specs / "2026-04-01-old-design.md").write_text("# old design\n")
+    (legacy_specs / "plan-config.yaml").write_text("x: 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "specs"],
+        cwd=repo,
+        check=True,
+    )
+    monkeypatch.chdir(repo)
+    result = CliRunner().invoke(app, ["migrate", "dirs", "--yes"])
+    assert result.exit_code == 0, result.output
+    sp = repo / "docs" / "superpowers"
+    assert (sp / "implemented" / "specs" / "2026-04-01-old-design.md").is_file()
+    assert (sp / "implemented" / "specs" / "plan-config.yaml").is_file()
+    assert not (sp / "archived-specs").exists()

@@ -64,13 +64,15 @@ def require_migrated_layout(repo_root: Path | None = None) -> None:
     in an unrelated directory) — the guard targets repos that have plans.
     """
     root = repo_root if repo_root is not None else resolve_repo_root()
-    legacy = root / "docs" / "superpowers" / "archived-plans"
-    if legacy.is_dir():
+    sp = root / "docs" / "superpowers"
+    legacy_dirs = [d for d in (sp / "archived-plans", sp / "archived-specs") if d.is_dir()]
+    if legacy_dirs:
         import typer
 
         # Plain echo, not rich — rich soft-wraps and can split the
         # copy-pasteable `vk migrate dirs --yes` across lines.
-        typer.echo(f"legacy layout detected: {legacy}", err=True)
+        for d in legacy_dirs:
+            typer.echo(f"legacy layout detected: {d}", err=True)
         typer.echo(
             "The archive location moved to docs/superpowers/implemented/. "
             "Run `vk migrate dirs --yes`, then commit the rename.",

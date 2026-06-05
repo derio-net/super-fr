@@ -66,7 +66,15 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
 
     Caller has already run the archive gate and the dirty check.
     """
-    src_rel = plan_dir.resolve().relative_to(repo_root)
+    try:
+        src_rel = plan_dir.resolve().relative_to(repo_root)
+    except ValueError as e:
+        # `vk archive /path/in/another/repo` (or wrong cwd): a clean
+        # refusal, not a traceback (review finding, 2026-06-06).
+        raise ArchiveError(
+            f"plan dir {plan_dir} is not under this repo root ({repo_root}); "
+            f"run vk archive from the repo that owns the plan"
+        ) from e
     dst_rel = Path("docs/superpowers/implemented/plans") / plan_dir.name
     _git_mv(repo_root, src_rel, dst_rel)
     return repo_root / dst_rel

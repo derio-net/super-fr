@@ -141,3 +141,20 @@ def test_resolve_local_plan_dir_falls_back_to_implemented_then_archived(tmp_path
     legacy = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-x"
     legacy.mkdir(parents=True)
     assert _resolve_local_plan_dir(ref, tmp_path) == legacy
+
+
+def test_resolve_local_plan_dir_no_double_prefix_for_implemented_cell(tmp_path):
+    """A cell already recorded as implemented/plans/X whose dir is missing
+    must fall back to archived-plans/X — not implemented/implemented/…
+    (review finding, 2026-06-06)."""
+    from vk.spec import PlanRef, _resolve_local_plan_dir
+
+    ref = PlanRef(
+        name="x",
+        repo="derio-net/test",
+        file="docs/superpowers/implemented/plans/2026-05-10-x",
+        depends_on="—",
+    )
+    legacy = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-x"
+    legacy.mkdir(parents=True)
+    assert _resolve_local_plan_dir(ref, tmp_path) == legacy

@@ -134,3 +134,19 @@ def test_undispatch_accumulates_gh_failures_exit_4(tmp_path, monkeypatch):
     assert "failure" in result.output.lower()
     # tracking_issue retained so the retry can find the Issue again.
     assert "tracking_issue: https" in (plan_dir / "01.yaml").read_text()
+
+
+def test_undispatch_clears_field_when_issue_deleted(tmp_path, monkeypatch):
+    """A DELETED upstream Issue is terminal — undispatch clears the field
+    instead of looping at exit 4 forever (review finding, 2026-06-06)."""
+    plan_dir = _dispatched_plan_repo(tmp_path)
+    gh = FakeGhClient()  # issue #7 never added -> view_issue raises KeyError
+    result = _invoke(
+        monkeypatch,
+        tmp_path,
+        gh,
+        ["undispatch", str(plan_dir.relative_to(tmp_path)), "--yes"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "no longer exists" in result.output
+    assert "tracking_issue: null" in (plan_dir / "01.yaml").read_text()

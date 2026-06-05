@@ -132,10 +132,11 @@ def test_check_plan_reachable_still_checks_same_repo_spec(monkeypatch):
     )
 
 
-def test_apply_refuses_archived_plan(tmp_path, monkeypatch):
-    """#246: an explicit `vk apply` against a plan under archived-plans/ must
-    refuse — applying a terminal plan would reopen its already-closed Issues.
-    (`vk apply --all` already walks only plans/, so this is the remaining hole.)
+def test_apply_legacy_layout_hard_stops_before_archived_refusal(tmp_path, monkeypatch):
+    """A repo still on archived-plans/ trips the LAYOUT guard first — the
+    #246 archived-plan refusal can no longer be reached on legacy layouts.
+    Its protection lives on for the canonical layout via
+    `test_apply_refuses_implemented_plan` below.
     """
     from typer.testing import CliRunner
 
@@ -144,10 +145,11 @@ def test_apply_refuses_archived_plan(tmp_path, monkeypatch):
     archived = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-done"
     archived.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
 
     result = CliRunner().invoke(app, ["apply", "docs/superpowers/archived-plans/2026-05-10-done"])
     assert result.exit_code == 2, result.output
-    assert "archived" in result.output.lower()
+    assert "vk migrate dirs" in result.output
 
 
 # --- 2026-06-05 stale-plan dispatch guard (completion guard in apply) ---

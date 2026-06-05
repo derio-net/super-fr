@@ -136,8 +136,13 @@ def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     rel = Path(plan_ref.file.rstrip("/"))
     parts = rel.parts
     if "plans" in parts:
-        i = parts.index("plans")
+        # Anchor on the LAST `plans` segment and strip a preceding
+        # `implemented` so a cell already recorded in implemented form
+        # doesn't double-prefix (`implemented/implemented/plans/…`).
+        i = len(parts) - 1 - tuple(reversed(parts)).index("plans")
         prefix, tail = parts[:i], parts[i + 1 :]
+        if prefix and prefix[-1] == "implemented":
+            prefix = prefix[:-1]
         for archive in (("implemented", "plans"), ("archived-plans",)):
             alt = repo_root.joinpath(*prefix, *archive, *tail)
             if alt.is_dir():
