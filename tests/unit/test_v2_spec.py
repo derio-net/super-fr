@@ -120,3 +120,24 @@ def test_vk_v2_spec_status_all_walks_specs_dir(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "2026-05-10-fixture-spec.md" in result.output
     assert "Test plan A" in result.output
+
+
+def test_resolve_local_plan_dir_falls_back_to_implemented_then_archived(tmp_path):
+    """Spec tables are never rewritten on archive: a row recorded as
+    docs/superpowers/plans/X must resolve to implemented/plans/X (canonical)
+    or archived-plans/X (legacy) when the plans/ path is gone."""
+    from vk.spec import PlanRef, _resolve_local_plan_dir
+
+    ref = PlanRef(
+        name="x", repo="derio-net/test", file="docs/superpowers/plans/2026-05-10-x", depends_on="—"
+    )
+
+    implemented = tmp_path / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-10-x"
+    implemented.mkdir(parents=True)
+    assert _resolve_local_plan_dir(ref, tmp_path) == implemented
+
+    # Legacy fallback comes after implemented/.
+    shutil.rmtree(implemented.parent.parent)
+    legacy = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-x"
+    legacy.mkdir(parents=True)
+    assert _resolve_local_plan_dir(ref, tmp_path) == legacy

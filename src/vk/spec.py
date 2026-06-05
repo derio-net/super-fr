@@ -119,6 +119,11 @@ def parse_spec(spec_path: Path) -> SpecMeta:
 def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     """Resolve the plan's File cell to a local directory, if same-repo.
 
+    Spec tables are never rewritten on archive (2026-06-05 spec): a row
+    recorded as `docs/superpowers/plans/X` falls back to
+    `implemented/plans/X` (canonical archive) and then `archived-plans/X`
+    (legacy) when the active path no longer exists.
+
     Cross-repo / manual-action rows return None — those need cross-repo
     gh-API resolution which is out of scope for Phase 3.
     """
@@ -127,6 +132,16 @@ def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     candidate = repo_root / plan_ref.file
     if candidate.is_dir():
         return candidate
+    # Archive fallbacks: plans/<X> -> implemented/plans/<X> -> archived-plans/<X>
+    rel = Path(plan_ref.file.rstrip("/"))
+    parts = rel.parts
+    if "plans" in parts:
+        i = parts.index("plans")
+        prefix, tail = parts[:i], parts[i + 1 :]
+        for archive in (("implemented", "plans"), ("archived-plans",)):
+            alt = repo_root.joinpath(*prefix, *archive, *tail)
+            if alt.is_dir():
+                return alt
     # Trailing slash variant
     if str(candidate).endswith("/"):
         return None

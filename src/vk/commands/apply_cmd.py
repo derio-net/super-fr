@@ -27,6 +27,7 @@ from rich.console import Console
 from vk import plan_ops
 from vk._urls import is_cross_repo_spec
 from vk.apply import apply
+from vk.commands.common import require_migrated_layout
 from vk.diff import (
     Diff,
     IssueBodyChange,
@@ -348,6 +349,7 @@ def apply_command(
 
     Defaults to a preview. Pass --yes to actually mutate GitHub state.
     """
+    require_migrated_layout()
     if all_plans and plan_dir is not None:
         err_console.print("--all and plan_dir are mutually exclusive")
         raise typer.Exit(2)
@@ -378,14 +380,18 @@ def apply_command(
         # that merely happens to be named "archived-plans" isn't refused.
         resolved_parts = plan_dir.resolve().parts
         under_archived = any(
-            resolved_parts[i] == "superpowers" and resolved_parts[i + 1] == "archived-plans"
+            resolved_parts[i] == "superpowers"
+            and (
+                resolved_parts[i + 1] == "archived-plans"
+                or resolved_parts[i + 1 : i + 3] == ("implemented", "plans")
+            )
             for i in range(len(resolved_parts) - 1)
         )
         if under_archived:
             err_console.print(
-                f"refusing to apply archived plan: {plan_dir}\n"
+                f"refusing to apply archived/implemented plan: {plan_dir}\n"
                 "Archived plans are terminal; applying one would reopen its closed "
-                "Issues. (`vk apply --all` already skips archived-plans/.)"
+                "Issues. (`vk apply --all` already walks only plans/.)"
             )
             raise typer.Exit(2)
         targets = [plan_dir]

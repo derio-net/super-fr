@@ -235,3 +235,20 @@ def test_apply_dry_run_json_suppressed_alongside_real_mutations(tmp_path):
         m["phase_number"] for m in json_out["mutations"] if m["kind"] == "IssueCreate"
     }
     assert created_phases and 1 not in created_phases
+
+
+def test_apply_refuses_implemented_plan(tmp_path, monkeypatch):
+    """implemented/plans/ is terminal exactly like legacy archived-plans/."""
+    from typer.testing import CliRunner
+
+    from vk.cli import app
+
+    done = tmp_path / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-10-done"
+    done.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(
+        app, ["apply", "docs/superpowers/implemented/plans/2026-05-10-done"]
+    )
+    assert result.exit_code == 2, result.output
+    assert "implemented" in result.output.lower() or "archived" in result.output.lower()

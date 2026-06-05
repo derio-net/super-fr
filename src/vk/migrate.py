@@ -95,7 +95,10 @@ def migrate_repo(
     """
     outcomes: list[MigrationOutcome] = []
     sp = repo_root / "docs" / "superpowers"
-    for sub in ("plans", "archived-plans"):
+    # Canonical layout: active plans/ + implemented/plans/ (the archive,
+    # 2026-06-05 spec). Legacy archived-plans/ kept in the walk for direct
+    # library callers; the CLI's layout guard prevents reaching it there.
+    for sub in ("plans", "implemented/plans", "archived-plans"):
         d = sp / sub
         if not d.is_dir():
             continue
@@ -710,3 +713,108 @@ def _rewrite_file_cell(cell: str, *, repo_root: Path) -> str:
         return m.group(0)
 
     return _BACKTICKED_PATH_RE.sub(_maybe_swap, cell)
+
+
+# ---------------------------------------------------------------------------
+# `vk migrate dirs` — legacy archived-plans/ -> implemented/ layout
+# (2026-06-05 dispatch-guards spec, Phase 3)
+
+
+@dataclass(frozen=True)
+class DirsMove:
+    """One planned `git mv` of the dirs migration."""
+
+    src: Path  # repo-relative
+    dst: Path  # repo-relative
+    kind: str  # "plans-dir" | "spec"
+
+
+def _spec_fully_implemented(spec_path: Path, repo_root: Path) -> tuple[bool, str | None]:
+    """(implemented?, blocking-note) for one spec's Implementation Plans rows.
+
+    A spec qualifies for implemented/specs/ when every row with a plan file
+    resolves to an archive location (implemented/plans/ — or the legacy
+    archived-plans/, which this migration is about to rename). Manual rows
+    (File cell `—`) never block. A row resolving to an ACTIVE plans/ dir or
+    not resolving at all (cross-repo) blocks, with a note naming the row.
+    """
+    from vk.spec import _resolve_local_plan_dir, parse_spec
+
+    meta = parse_spec(spec_path)
+    if not meta.plans:
+        return False, "no Implementation Plans rows — leaving in place"
+    sp = repo_root / "docs" / "superpowers"
+    for ref in meta.plans:
+        if not ref.file or ref.file in ("—", "-"):
+            continue  # manual/informational row — non-blocking
+        resolved = _resolve_local_plan_dir(ref, repo_root)
+        if resolved is None:
+            return False, f"row {ref.name!r} unresolved locally (cross-repo?) — confirm and re-run"
+        try:
+            rel_parts = resolved.relative_to(sp).parts
+        except ValueError:
+            return False, f"row {ref.name!r} resolves outside docs/superpowers — leaving in place"
+        in_archive = rel_parts[:2] == ("implemented", "plans") or rel_parts[0] == "archived-plans"
+        if not in_archive:
+            return False, f"row {ref.name!r} still active under plans/"
+    return True, None
+
+
+def plan_dirs_migration(repo_root: Path) -> tuple[list[DirsMove], list[str]]:
+    """Compute the moves `vk migrate dirs` would perform. Pure planning.
+
+    Returns (moves, notes). Empty moves = nothing to migrate.
+    """
+    moves: list[DirsMove] = []
+    notes: list[str] = []
+    sp = repo_root / "docs" / "superpowers"
+
+    legacy = sp / "archived-plans"
+    if legacy.is_dir():
+        moves.append(
+            DirsMove(
+                src=legacy.relative_to(repo_root),
+                dst=Path("docs/superpowers/implemented/plans"),
+                kind="plans-dir",
+            )
+        )
+
+    specs_dir = sp / "specs"
+    if specs_dir.is_dir():
+        for spec_path in sorted(specs_dir.glob("*.md")):
+            implemented, note = _spec_fully_implemented(spec_path, repo_root)
+            if implemented:
+                moves.append(
+                    DirsMove(
+                        src=spec_path.relative_to(repo_root),
+                        dst=Path("docs/superpowers/implemented/specs") / spec_path.name,
+                        kind="spec",
+                    )
+                )
+            elif note and "no Implementation Plans rows" not in note:
+                notes.append(f"{spec_path.name}: {note}")
+    return moves, notes
+
+
+def migrate_dirs(repo_root: Path, *, dry_run: bool = True) -> tuple[list[DirsMove], list[str]]:
+    """Execute (or preview) the dirs migration. Moves are `git mv` so the
+    rename history survives; the commit is the operator's."""
+    import subprocess
+
+    moves, notes = plan_dirs_migration(repo_root)
+    if dry_run or not moves:
+        return moves, notes
+    for m in moves:
+        (repo_root / m.dst).parent.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run(
+                ["git", "-C", str(repo_root), "mv", str(m.src), str(m.dst)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise MigrationError(
+                f"git mv {m.src} -> {m.dst} failed: {(e.stderr or '').strip()}"
+            ) from e
+    return moves, notes
