@@ -165,6 +165,35 @@ def plan_locally_complete(phase: PhaseDoc) -> bool:
     return bool(steps) and all(s.state in ("x", "-") for s in steps.values())
 
 
+def archive_gate(plan: Plan, observed: GhState) -> tuple[str, ...]:
+    """Per-phase blockers for `vk archive`; empty tuple = plan may archive.
+
+    A phase clears the gate when it is `_phase_complete` (gh agrees the
+    work landed) OR it was never dispatched and `plan_locally_complete`
+    (the bookmarks shape: ticked but no Issue ever existed — dispatch
+    refuses it, so archive is its terminal state). Broader than
+    `RenderedState.archive_decision` (strict all-`_phase_complete`), which
+    this gate consumes for the dispatched arm.
+
+    Shared by `vk archive` (the actual gate), and `vk apply` / `vk status`
+    (the "plan complete — run vk archive" nudge) so the three surfaces
+    can't disagree.
+    """
+    blockers: list[str] = []
+    for phase in plan.phases:
+        n = phase.phase.number
+        obs = observed.phases.get(n)
+        if _phase_complete(phase, obs):
+            continue
+        if phase.phase.tracking_issue is None and plan_locally_complete(phase):
+            continue
+        steps = phase.state.steps
+        ticked = sum(1 for s in steps.values() if s.state in ("x", "-"))
+        state = "undispatched" if phase.phase.tracking_issue is None else "dispatched"
+        blockers.append(f"Phase {n}: {ticked}/{len(steps)} steps ticked, {state} — not complete")
+    return tuple(blockers)
+
+
 def spec_url(plan: Plan) -> str | None:
     """GitHub blob URL for `plan.meta.spec`; None when unset.
 

@@ -25,6 +25,7 @@ from vk.commands.pickup_cmd import pickup_command
 from vk.commands.plan_cmd import plan_app
 from vk.commands.skills_cmd import skills as skills_command
 from vk.commands.spec_cmd import spec_app
+from vk.commands.status_cmd import status_command
 
 app = typer.Typer(
     name="vk",
@@ -33,6 +34,9 @@ app = typer.Typer(
 )
 
 app.command(name="apply", help="Render + observe + diff + apply for a plan.")(apply_command)
+app.command(name="status", help="Read-only plan report (allowlist-safe; never mutates).")(
+    status_command
+)
 app.command(name="pickup", help="Output phase scope (markdown) for an agent.")(pickup_command)
 app.add_typer(plan_app, name="plan")
 app.add_typer(spec_app, name="spec")

@@ -884,3 +884,31 @@ def test_drift_warning_for_undispatched_locally_complete_phase():
     ]
     assert matching, f"expected a never-dispatched warning, got: {rendered.warnings!r}"
     assert "2/2" in matching[0].message
+
+
+def test_archive_gate_passes_for_ticked_undispatched_plan():
+    """The bookmarks shape — fully ticked, never dispatched — must be
+    archivable (dispatch refuses it; archive is its terminal state)."""
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.render import archive_gate
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", "x")),))
+    assert archive_gate(plan, GhState(phases={})) == ()
+
+
+def test_archive_gate_blocks_incomplete_phase_with_reason():
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.render import archive_gate
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", " ")),))
+    blockers = archive_gate(plan, GhState(phases={}))
+    assert len(blockers) == 1
+    assert "Phase 1" in blockers[0]

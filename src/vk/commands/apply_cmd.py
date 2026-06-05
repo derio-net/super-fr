@@ -27,7 +27,7 @@ from rich.console import Console
 from vk import plan_ops
 from vk._urls import is_cross_repo_spec
 from vk.apply import apply
-from vk.commands.common import require_migrated_layout
+from vk.commands.common import build_plan_report, require_migrated_layout
 from vk.diff import (
     Diff,
     IssueBodyChange,
@@ -35,13 +35,10 @@ from vk.diff import (
     IssueLabelChange,
     IssueStateChange,
     RepoLabelEnsure,
-    diff,
 )
 from vk.git import file_on_ref
-from vk.observe import observe
-from vk.parser import Plan, PlanSchemaError, parse
+from vk.parser import Plan, PlanSchemaError
 from vk.plan_ops import PlanEditError
-from vk.render import render
 
 if TYPE_CHECKING:
     from vk.ghclient import GhClient
@@ -161,36 +158,6 @@ def _mutation_to_json(m: Any) -> dict[str, Any]:
     return {"kind": type(m).__name__}
 
 
-def _plan_header(plan: Plan) -> str:
-    """One factual line: created date + age, tick counts, dispatch state.
-
-    Information, not heuristics (2026-06-05 postmortem): a month-old
-    never-dispatched plan announces itself without any threshold machinery.
-    Age formatting lives here in the CLI layer so the render/diff chain
-    stays clock-free and pure.
-    """
-    import datetime as _dt
-
-    created = plan.meta.created
-    age = ""
-    try:
-        days = (_dt.date.today() - _dt.date.fromisoformat(created)).days
-        age = f" ({days} days ago)"
-    except ValueError:
-        pass
-    total = sum(len(p.state.steps) for p in plan.phases)
-    ticked = sum(1 for p in plan.phases for s in p.state.steps.values() if s.state in ("x", "-"))
-    dispatched = sum(1 for p in plan.phases if p.phase.tracking_issue)
-    if dispatched == 0:
-        dispatch_state = "never dispatched"
-    else:
-        dispatch_state = f"{dispatched}/{len(plan.phases)} phases dispatched"
-    return (
-        f"plan: {plan.meta.plan} · created {created}{age} · "
-        f"{ticked}/{total} steps · {dispatch_state}"
-    )
-
-
 def _apply_one(
     plan_dir: Path, gh: GhClient, *, yes: bool, force: bool = False
 ) -> tuple[int, str, dict[str, Any]]:
@@ -201,15 +168,15 @@ def _apply_one(
     (overrides the completion guard — see `vk.diff.SuppressedCreate`).
     """
     try:
-        plan = parse(plan_dir)
+        report = build_plan_report(plan_dir, gh, force=force)
     except PlanSchemaError as e:
         return 5, f"parse error: {e}", {"plan": str(plan_dir), "parse_error": str(e)}
 
-    observed = observe(plan, gh)
-    rendered = render(plan, observed)
-    d = diff(rendered, observed, plan=plan, force_create=force)
+    plan = report.plan
+    rendered = report.rendered
+    d = report.diff
 
-    parts = [_plan_header(plan), _format_diff(d)]
+    parts = [report.header, _format_diff(d)]
     if d.suppressed:
         parts.append("\nrefused (completion guard):")
         for s in d.suppressed:
