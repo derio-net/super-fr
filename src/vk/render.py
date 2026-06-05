@@ -141,6 +141,25 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
     return obs.issue_state == "CLOSED" and not has_open_pr
 
 
+def plan_locally_complete(phase: PhaseDoc) -> bool:
+    """LOCAL-only completion signal: completion.at set, OR steps non-empty
+    and all ticked ('x' or '-'). No gh observation involved.
+
+    Deliberately weaker than `_phase_complete`, which encodes "operator
+    accepted the work" via merged-PR evidence and must keep requiring it
+    (2026-05-18 premature-close incident). This predicate answers a
+    different question — "does the plan ITSELF claim this phase is done?" —
+    and exists for surfaces that run before any Issue exists: the dispatch
+    guard in `vk.diff.diff` (2026-06-05 stale-plan dispatch postmortem),
+    the `_drift_warnings` never-dispatched warning, the `vk spec status`
+    roll-up, and the `vk archive` gate.
+    """
+    if phase.state.completion.at is not None:
+        return True
+    steps = phase.state.steps
+    return bool(steps) and all(s.state in ("x", "-") for s in steps.values())
+
+
 def spec_url(plan: Plan) -> str | None:
     """GitHub blob URL for `plan.meta.spec`; None when unset.
 
@@ -353,6 +372,24 @@ def _drift_warnings(plan: Plan, observed: GhState) -> tuple[Warning, ...]:
         steps = phase.state.steps
         all_ticked = bool(steps) and all(s.state in ("x", "-") for s in steps.values())
         if obs is None:
+            # Undispatched phase. Pre-2026-06-05 this `continue` also
+            # swallowed the locally-complete case, so a fully-ticked,
+            # never-dispatched plan produced ZERO warnings while apply
+            # created spurious Issues (bookmarks incident). The PR-based
+            # checks below still need an observation — only this signal
+            # is observable without one.
+            if plan_locally_complete(phase):
+                ticked = sum(1 for s in steps.values() if s.state in ("x", "-"))
+                warnings.append(
+                    Warning(
+                        severity="warn",
+                        message=(
+                            f"Phase {n}: {ticked}/{len(steps)} steps ticked but never "
+                            f"dispatched — dispatch would be refused "
+                            f"(vk archive if this plan is done)."
+                        ),
+                    )
+                )
             continue
         has_merged_pr = any(pr.merged for pr in obs.linked_prs)
         # Steps all ticked but no merged PR (operator may have ticked prematurely)

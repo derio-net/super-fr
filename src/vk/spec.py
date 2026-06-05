@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 from vk.parser import PlanSchemaError, parse
+from vk.render import plan_locally_complete
 
 _TABLE_HEADER_RE = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE)
 # A row is `| col1 | col2 | col3 | col4 |`. We strip backticks for path matching.
@@ -222,17 +223,11 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
         steps_ticked = sum(
             1 for p in plan.phases for ss in p.state.steps.values() if ss.state in ("x", "-")
         )
-        # Phase-level: complete iff completion.at set, OR all steps ticked
-        # (mirror render's _phase_complete WITHOUT the merged-PR requirement
-        # since spec status doesn't observe gh — it's a local roll-up only)
-        phases_complete = 0
-        for p in plan.phases:
-            if p.state.completion.at is not None:
-                phases_complete += 1
-                continue
-            steps = p.state.steps
-            if steps and all(s.state in ("x", "-") for s in steps.values()):
-                phases_complete += 1
+        # Phase-level: the shared LOCAL-only predicate (completion.at set,
+        # OR all steps ticked) — spec status doesn't observe gh, it's a
+        # local roll-up only. Same predicate drives the dispatch guard in
+        # vk.diff and the vk archive gate.
+        phases_complete = sum(1 for p in plan.phases if plan_locally_complete(p))
         phases_total = len(plan.phases)
 
         if steps_total == 0:
