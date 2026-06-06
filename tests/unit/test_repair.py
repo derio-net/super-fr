@@ -137,11 +137,16 @@ def test_repair_walks_implemented_specs_too(repo: Path) -> None:
 
 
 def test_repair_meta_null_and_tilde_are_placeholders(repo: Path) -> None:
-    """`spec: null` / `~` are YAML nulls, not refs — no warning, no rewrite."""
+    """`spec: null` / `~` / `none` are sentinels, not refs — no warning, no
+    rewrite ('none' parity with self_review's placeholder list; spuriously
+    warned in the 2026-06-06 fleet sweep on frank + willikins)."""
     plan = repo / "docs/superpowers/plans/2026-05-10-nullspec"
     plan.mkdir()
     meta = plan / "_meta.yaml"
-    meta.write_text("schema_version: 2\nplan: 2026-05-10-nullspec\nspec: null\nparent_plan: ~\n")
+    meta.write_text(
+        "schema_version: 2\nplan: 2026-05-10-nullspec\n"
+        "spec: none\nparent_plan: ~\nprior_rework: null\n"
+    )
     result = repair_repo(repo, write=True)
     assert not result.warnings
     assert not result.rewrites
