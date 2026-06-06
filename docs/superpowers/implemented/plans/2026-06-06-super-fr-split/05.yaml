@@ -28,22 +28,26 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-06T22:25:09+00:00'
       note: null
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-06T22:25:12+00:00'
       note: null
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-06T22:25:15+00:00'
       note: null
     P5.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-06T22:25:17+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-06-06T22:25:36+00:00'
+    note: 'Operator cutover complete 2026-06-07: repo renamed + #262 merged; pod on
+      fr_vk.bridge 3.0.0 (verification tick exit 0); fleet sweep merged (8 PRs: agent-images#109,
+      frank#491, willikins#231, vibe-kanban#14, omada#3, hum#110, content-factory#45,
+      super-fr#269); dual-read removed in #270 (3.0.1); fr CLI + plugins + user rules
+      installed locally'
     observed_prs: []
