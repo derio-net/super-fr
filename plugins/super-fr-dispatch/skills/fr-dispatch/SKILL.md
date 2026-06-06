@@ -1,7 +1,7 @@
 ---
 name: fr-dispatch
 description: >
-  Reconcile a plan's GitHub Issues via the fr CLI (`fr apply`). Use when:
+  Queue a plan's phases to a runner (`fr apply --to <runner>`) and reconcile its GitHub Issues. Use when:
   "dispatch this plan", "send to VK", "create issues from plan", "sync plan to GitHub".
 ---
 
@@ -11,6 +11,16 @@ Wraps the `fr apply` CLI. The single command renders the plan, observes
 GitHub state, diffs, and emits the mutations needed to bring GitHub in line
 with the plan. Works for first-time creation, incremental updates, and
 ongoing reconciliation — there's no separate "first dispatch" verb in v2.
+
+## v3: tracking vs queue
+
+Plain `fr apply` is TRACKING-ONLY (attribute labels, no queue
+lifecycle). Queueing is explicit: `fr apply <dir> --to vk --yes`
+adds `fr:ready` + `runner:vk`, validates the runner against the
+`fr.runners` registry, and enforces the reachability gate (remote
+runners pull the repo; tracking-only applies never pay it). The runner
+choice lives ON THE ISSUE as labels — never in plan files.
+`fr undispatch` dequeues; per-phase mixing is legal.
 
 ## Pre-flight (mandatory)
 
@@ -97,13 +107,10 @@ reconciles. Re-run after editing the plan to push the deltas.
   tick, so GitHub shows live progress.
 - **Phase complete:** the renderer projects `state == CLOSED` once
   `state.completion.at` is set; `fr apply --yes` closes the Issue.
-- **Auto-close drift:** `fr apply` is the antidote — re-running detects an
-  Issue that's still open despite a merged PR and closes it.
 
 ## Integration
 
-- Author / edit plans: fr-plan skill.
-- Execute a phase: fr-execute skill.
+- Author plans: fr-plan skill · execute a phase: fr-execute skill.
 - Read-only audit (allowlist-safe): `fr status <plan-dir>`.
 - Spec rollups: `fr spec status [<spec>|--all]`.
 - Finished plan: `fr archive <plan-dir>` (or `--all`) moves it — and its

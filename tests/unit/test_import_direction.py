@@ -25,13 +25,26 @@ def _imports_of(package_dir: Path) -> dict[Path, set[str]]:
     return out
 
 
+# The ONE sanctioned soft point (spec §Architecture): `fr apply --to`
+# imports fr_dispatch.registry behind an importlib.util.find_spec guard.
+_SOFT_POINT = ("apply_cmd.py", "fr_dispatch")
+
+
 def test_fr_imports_no_siblings() -> None:
     offenders = {
         str(f): roots & {"fr_dispatch", "fr_vk"}
         for f, roots in _imports_of(PACKAGES / "fr" / "src" / "fr").items()
         if roots & {"fr_dispatch", "fr_vk"}
+        and not (f.name == _SOFT_POINT[0] and roots & {"fr_dispatch", "fr_vk"} == {_SOFT_POINT[1]})
     }
     assert not offenders, f"fr must not import siblings: {offenders}"
+
+
+def test_soft_point_is_guarded() -> None:
+    """The sanctioned import must stay behind find_spec — never module-level."""
+    src = (PACKAGES / "fr" / "src" / "fr" / "commands" / "apply_cmd.py").read_text()
+    assert 'importlib.util.find_spec("fr_dispatch")' in src
+    assert "\nfrom fr_dispatch" not in src  # no module-level import
 
 
 def test_fr_dispatch_never_imports_fr_vk() -> None:

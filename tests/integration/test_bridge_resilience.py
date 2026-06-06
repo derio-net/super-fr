@@ -21,14 +21,13 @@ MINIMAL = Path(__file__).parent.parent / "unit" / "fixtures" / "v2_plan_minimal"
 
 def test_renderer_reverses_manual_label_change():
     """
-    GIVEN a phase whose Issue has been observed in steady state with vk-ready
-    AND   an operator manually removes vk-ready via `gh issue edit`
+    GIVEN a queued phase (fr:ready + runner:vk) in steady state
+    AND   an operator manually removes fr:ready via `gh issue edit`
     WHEN  render() + diff() run again (simulating next bridge tick)
-    THEN  the renderer projects vk-ready (state-machine says it's still ready)
-    AND   the diff layer emits IssueLabelChange(add={vk-ready})
-    AND   apply restores the label
-    (Renderer projection IS the source of truth. If operators want a phase
-    out of the dispatch queue, they update plan state — not labels.)
+    THEN  the renderer projects fr:ready back — the surviving runner:<name>
+    attribution anchors queue membership, so the state machine restores
+    the lifecycle (v3: removing EVERY queue marker incl. runner:<name> is
+    the label-level dequeue; `fr undispatch` is the clean verb for that).
     """
     from fr import parse
     from fr.apply import apply
@@ -53,7 +52,7 @@ def test_renderer_reverses_manual_label_change():
     plan = dc_replace(plan, phases=(p1_dispatched,))
 
     # Steady-state observation: issue has all the right labels
-    rendered_ref = render(plan, GhState(phases={}))
+    rendered_ref = render(plan, GhState(phases={}), queue_runner="vk")
     ref_labels = {ld.name for ld in rendered_ref.issue_per_phase[1].labels}
 
     # Operator manually removes vk-ready from the observed state
@@ -61,7 +60,7 @@ def test_renderer_reverses_manual_label_change():
         phases={
             1: PhaseObservation(
                 issue_state="OPEN",
-                issue_labels=frozenset(ref_labels - {"vk-ready"}),  # vk-ready gone
+                issue_labels=frozenset(ref_labels - {"fr:ready"}),  # fr:ready gone; runner:vk stays
                 issue_assignees=(),
                 linked_prs=(),
             )
@@ -73,23 +72,23 @@ def test_renderer_reverses_manual_label_change():
 
     # Renderer still projects vk-ready (plan state is authoritative)
     label_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
-    assert "vk-ready" in label_names
+    assert "fr:ready" in label_names
 
     # diff sees the gap and emits a label change to restore vk-ready
     d = diff(rendered, observed_after_op, plan=plan)
     label_changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
-    assert any("vk-ready" in m.add for m in label_changes), (
-        "expected IssueLabelChange adding vk-ready back"
+    assert any("fr:ready" in m.add for m in label_changes), (
+        "expected IssueLabelChange adding fr:ready back"
     )
 
     # apply restores it
     gh = FakeGhClient()
     gh.add_issue(
-        "derio-net/superpowers-for-vk", 500, state="OPEN", labels=ref_labels - {"vk-ready"}
+        "derio-net/superpowers-for-vk", 500, state="OPEN", labels=ref_labels - {"fr:ready"}
     )
     result = apply(d, gh, plan=plan)
     assert result.failures == (), f"unexpected failures: {result.failures}"
-    assert "vk-ready" in gh.issues[("derio-net/superpowers-for-vk", 500)].labels
+    assert "fr:ready" in gh.issues[("derio-net/superpowers-for-vk", 500)].labels
 
 
 # ── I1: MCP subprocess startup failure → loud exit ────────────────────
@@ -505,4 +504,4 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
     # No duplicate vk-synced (set-typed in the fake, so trivially true,
     # but also no `vk-synced` removal occurred between the two apply
     # passes).
-    assert "vk-synced" in gh.issues[(repo, 77)].labels
+    assert "fr:synced" in gh.issues[(repo, 77)].labels

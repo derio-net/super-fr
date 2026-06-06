@@ -16,6 +16,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from fr_vk.runner import VkRunner
+
 from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
 TARGET_REPO = "derio-net/superpowers-for-vk"
@@ -147,7 +149,7 @@ def test_tick_emits_zero_issue_creates_when_partial_dispatch(tmp_path: Path, cap
     mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, mcp)
+        tick(plan, gh, VkRunner(mcp))
 
     assert _count_issue_creates(gh) == 0, (
         f"bridge tick must NEVER create Issues; got {_count_issue_creates(gh)}"
@@ -275,13 +277,13 @@ def test_tick_mixed_state_syncs_labels_and_state_but_skips_create(
     mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, mcp)
+        tick(plan, gh, VkRunner(mcp))
 
     # Headline assertion
     assert _count_issue_creates(gh) == 0
     # Phase 2 label drift IS sync'd
     p2_labels = gh.issues[(TARGET_REPO, 200)].labels
-    assert "vk-blocked" in p2_labels, "phase 2 must be projected vk-blocked"
+    assert "fr:blocked" in p2_labels, "phase 2 must be projected fr:blocked"
     assert "vk-ready" not in p2_labels, "phase 2 stale vk-ready must be removed"
     # Phase 3 produced a warning
     assert _count_skip_warnings(caplog) == 1
@@ -332,7 +334,7 @@ def test_tick_fully_dispatched_plan_no_creates_no_warnings(tmp_path: Path, caplo
     mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, mcp)
+        tick(plan, gh, VkRunner(mcp))
 
     assert _count_issue_creates(gh) == 0
     assert _count_skip_warnings(caplog) == 0
@@ -390,7 +392,7 @@ def test_tick_stoa_company_shape_emits_no_creates_and_one_warning_per_phase(
     mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, mcp)
+        tick(plan, gh, VkRunner(mcp))
 
     assert _count_issue_creates(gh) == 0, (
         f"regression: bridge tick must NOT create Issues; got "

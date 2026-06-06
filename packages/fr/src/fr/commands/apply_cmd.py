@@ -27,7 +27,7 @@ from rich.console import Console
 from fr import plan_ops
 from fr._urls import is_cross_repo_spec
 from fr.apply import apply
-from fr.commands.common import build_plan_report, require_migrated_layout
+from fr.commands.common import PlanReport, build_plan_report, require_migrated_layout
 from fr.diff import (
     Diff,
     IssueBodyChange,
@@ -163,16 +163,20 @@ def _mutation_to_json(m: Any) -> dict[str, Any]:
 
 
 def _apply_one(
-    plan_dir: Path, gh: GhClient, *, yes: bool, force: bool = False
+    plan_dir: Path, gh: GhClient, *, yes: bool, force: bool = False, to: str | None = None
 ) -> tuple[int, str, dict[str, Any]]:
     """Apply one plan with an injected GhClient.
 
     Returns (exit_code, text_output, json_output). `yes=False` is dry-run.
     `force=True` re-enables IssueCreate for locally-complete phases
-    (overrides the completion guard — see `vk.diff.SuppressedCreate`).
+    (overrides the completion guard — see `fr.diff.SuppressedCreate`).
+    `to=<runner>` queues phases to a registry runner: queue lifecycle +
+    `runner:<name>` labels are projected, and the reachability gate
+    applies (remote runners pull the repo; plain tracking applies never
+    pay it — super-fr split design).
     """
     try:
-        report = build_plan_report(plan_dir, gh, force=force)
+        report = build_plan_report(plan_dir, gh, force=force, queue_runner=to)
     except PlanSchemaError as e:
         return 5, f"parse error: {e}", {"plan": str(plan_dir), "parse_error": str(e)}
 
@@ -226,13 +230,17 @@ def _apply_one(
         ]
         return 2, "\n".join(lines), json_out
 
+    if to is None:
+        # Tracking-only apply: no remote runner will pull this repo, so
+        # the reachability gate doesn't apply (v3).
+        return _do_mutations(plan_dir, gh, report, parts, json_out)
+
     if plan.repo_root is None:
         lines = [
             parts[0],
             "",
             "refuse to dispatch: plan is not in a git checkout — "
-            "can't verify the plan is reachable to the bridge or "
-            "implementing agents.",
+            "can't verify the plan is reachable to the runner's checkout.",
         ]
         return 2, "\n".join(lines), json_out
 
@@ -265,6 +273,19 @@ def _apply_one(
         json_out["unreachable_paths"] = [str(p) for p in missing]
         return 2, "\n".join(lines), json_out
 
+    return _do_mutations(plan_dir, gh, report, parts, json_out)
+
+
+def _do_mutations(
+    plan_dir: Path,
+    gh: GhClient,
+    report: PlanReport,
+    parts: list[str],
+    json_out: dict[str, Any],
+) -> tuple[int, str, dict[str, Any]]:
+    """Execute the diffed mutations + tracking-issue writeback."""
+    plan = report.plan
+    d = report.diff
     result = apply(d, gh, plan=plan)
     writeback_failures: list[dict[str, Any]] = []
     for phase_n, url in result.created_issues.items():
@@ -316,6 +337,15 @@ def apply_command(
             "completion.at set)."
         ),
     ),
+    to: str | None = typer.Option(
+        None,
+        "--to",
+        help=(
+            "Queue phases to a registered runner (e.g. --to vk): adds the "
+            "fr:* queue lifecycle + runner:<name> labels and enforces the "
+            "reachability gate. Without --to, apply is tracking-only."
+        ),
+    ),
     output_format: str = typer.Option(
         "text",
         "--format",
@@ -336,6 +366,28 @@ def apply_command(
     if output_format not in ("text", "json"):
         err_console.print(f"--format must be 'text' or 'json', got {output_format!r}")
         raise typer.Exit(2)
+
+    if to is not None:
+        # The one documented soft point (super-fr split design): dispatching
+        # to a runner needs the fr-dispatch package; the base never imports
+        # it otherwise.
+        import importlib.util
+
+        if importlib.util.find_spec("fr_dispatch") is None:
+            err_console.print(
+                "dispatching to a runner requires fr-dispatch — install it "
+                "(e.g. `uv tool install --with fr-dispatch fr`) and re-run."
+            )
+            raise typer.Exit(2)
+        from fr_dispatch.registry import runner_names
+
+        names = runner_names()
+        if to not in names:
+            err_console.print(
+                f"unknown runner {to!r} — registered runners: "
+                + (", ".join(names) if names else "(none)")
+            )
+            raise typer.Exit(2)
 
     if all_plans:
         plans_dir = Path.cwd() / "docs" / "superpowers" / "plans"
@@ -378,7 +430,7 @@ def apply_command(
     json_results: list[dict[str, Any]] = []
     text_outputs: list[str] = []
     for t in targets:
-        rc, text_output, json_output = _apply_one(t, gh, yes=yes, force=force)
+        rc, text_output, json_output = _apply_one(t, gh, yes=yes, force=force, to=to)
         text_outputs.append(text_output)
         json_results.append(json_output)
         if rc != 0:

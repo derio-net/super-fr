@@ -84,7 +84,7 @@ def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
     assert dispatch_calls == [], f"dispatch fired despite dedup: {dispatch_calls}"
 
     # But `vk-synced` was still stamped on the GH Issue.
-    add_calls = [c for c in gh.calls if c[0] == "edit_issue_labels" and "vk-synced" in c[1]["add"]]
+    add_calls = [c for c in gh.calls if c[0] == "edit_issue_labels" and "fr:synced" in c[1]["add"]]
     assert len(add_calls) == 1
     assert add_calls[0][1]["repo"] == repo
     assert add_calls[0][1]["number"] == n

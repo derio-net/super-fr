@@ -18,15 +18,17 @@ from typing import Literal
 from fr._urls import is_cross_repo_spec
 from fr._urls import issue_number as _issue_number_from_url
 from fr.labels import (
+    FR_SYNCED,
     IN_PROGRESS,
     MANUAL,
     PR_READY,
     VK_BLOCKED,
     VK_READY,
-    VK_SYNCED,
     LabelDef,
+    is_queued,
     phase_label,
     plan_label,
+    runner_label,
     spec_label,
 )
 from fr.parser import Plan
@@ -493,12 +495,21 @@ def render(
     observed: GhState,
     *,
     created_issues: dict[int, str] | None = None,
+    queue_runner: str | None = None,
 ) -> RenderedState:
     """Project (plan, observed) → RenderedState. Pure function.
 
     `created_issues` is the in-flight `phase_number → issue_url` map from
     a running `apply()`. When set, dependent phases' bodies render with
     the now-known Issue numbers instead of the phase-number fallback.
+
+    `queue_runner` is the v3 dispatch intent (`fr apply --to <runner>`):
+    when set, every phase is projected with the queue lifecycle and a
+    `runner:<name>` attribute. When None (the tracking-only default),
+    queue lifecycle is projected ONLY for phases whose OBSERVED labels
+    say they already entered a queue (`labels.is_queued`) — the runner
+    choice is recorded on the Issue, never in the plan (super-fr split
+    design, "derive, don't store").
     """
     phase_to_issue = build_phase_to_issue(plan, created_issues)
     # phase_to_repo is forward-compat for cross-repo deps. v2 is
@@ -509,15 +520,29 @@ def render(
         n = phase.phase.number
         obs = observed.phases.get(n)
         labels: set[LabelDef] = set(_phase_labels(phase, plan))
-        lifecycle = _lifecycle_label(phase, obs, plan, observed)
-        if lifecycle is not None:
-            labels.add(lifecycle)
-        # `vk-synced` is bridge-owned: the renderer doesn't set it, but it
-        # shares the `vk-` managed prefix, so without explicit preservation
-        # `diff()` would strip it on every tick after the bridge added it.
-        # Carry it forward from observed so apply() sees no drift.
-        if obs is not None and VK_SYNCED.name in obs.issue_labels:
-            labels.add(VK_SYNCED)
+        observed_names = obs.issue_labels if obs is not None else frozenset()
+        phase_queued = queue_runner is not None or is_queued(observed_names)
+        if phase_queued:
+            lifecycle = _lifecycle_label(phase, obs, plan, observed)
+            if lifecycle is not None:
+                labels.add(lifecycle)
+            # Preserve the runner attribution: the explicit --to choice, or
+            # whatever runner:<name> the Issue already carries.
+            if queue_runner is not None:
+                labels.add(runner_label(queue_runner))
+            else:
+                for name in observed_names:
+                    if name.startswith("runner:"):
+                        labels.add(runner_label(name.removeprefix("runner:")))
+        elif phase.phase.tag == "manual" and not _phase_complete(phase, obs):
+            # `manual` is a routing attribute, not queue lifecycle — it
+            # stays on tracking-only issues so humans can filter their work.
+            labels.add(MANUAL)
+        # `fr:synced` is protocol-owned (set after the runner accepts): the
+        # renderer doesn't initiate it, but must carry it forward (either
+        # spelling — transitional dual-read) so diff() sees no drift.
+        if FR_SYNCED.name in observed_names or "vk-synced" in observed_names:
+            labels.add(FR_SYNCED)
         state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
         issues[n] = RenderedIssue(
             body=render_body(

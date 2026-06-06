@@ -88,19 +88,59 @@ def _bounded_label_name(prefix: str, value: str) -> str:
     return f"{prefix}{value[:keep]}-{digest}"[:MAX_LABEL_NAME_LEN]
 
 
-# Lifecycle states (mutually exclusive — at most one on a given Issue)
-VK_READY = LabelDef("vk-ready", "0E8AE6", "Queued for an agent to pick up")
-VK_BLOCKED = LabelDef(
-    "vk-blocked",
+# Queue lifecycle states (mutually exclusive — at most one on a given Issue).
+# v3 taxonomy (super-fr split): protocol-owned `fr:*` labels, projected ONLY
+# for phases that entered a runner queue (`fr apply --to <runner>`); plain
+# tracking issues carry no lifecycle label.
+FR_READY = LabelDef("fr:ready", "0E8AE6", "Queued for a runner to pick up")
+FR_BLOCKED = LabelDef(
+    "fr:blocked",
     "aaaaaa",
     "Blocked on dependency — waiting for predecessor phase(s) to complete",
 )
 MANUAL = LabelDef("manual", "BFBFBF", "Human-only; not routable to an agent")
-IN_PROGRESS = LabelDef("in-progress", "D93F0B", "An agent is actively working on this")
-PR_READY = LabelDef("pr-ready", "0E8A16", "PR is open; awaiting review")
+FR_IN_PROGRESS = LabelDef("fr:in-progress", "D93F0B", "An agent is actively working on this")
+FR_PR_READY = LabelDef("fr:pr-ready", "0E8A16", "PR is open; awaiting review")
 
-# Bridge-managed (set by vk-issue-bridge after VK board sync)
-VK_SYNCED = LabelDef("vk-synced", "6A630D", "Synced to VK board")
+# Protocol-owned idempotency marker — set after the runner accepted the
+# phase ("already handed to a runner, don't re-dispatch").
+FR_SYNCED = LabelDef("fr:synced", "6A630D", "Handed to the runner")
+
+RUNNER_LABEL_COLOR = "1D76DB"
+
+
+def runner_label(name: str) -> LabelDef:
+    """`runner:<name>` — which registry runner a queued phase belongs to.
+
+    Bounded like the other dynamic templates (#249)."""
+    return LabelDef(
+        _bounded_label_name("runner:", name)
+        if len(f"runner:{name}") > MAX_LABEL_NAME_LEN
+        else f"runner:{name}",
+        RUNNER_LABEL_COLOR,
+        f"Queued to the {name} runner",
+    )
+
+
+# ── Transitional dual-read (remove in migration step 7, post-sweep) ──
+# Old-spelling labels still on in-flight Issues are DATA, not API: readers
+# treat them as their fr:* equivalents so the cutover window has no
+# dispatch blackout. Writers never emit them.
+LEGACY_QUEUE_ALIASES: dict[str, str] = {
+    "vk-ready": FR_READY.name,
+    "vk-blocked": FR_BLOCKED.name,
+    "in-progress": FR_IN_PROGRESS.name,
+    "pr-ready": FR_PR_READY.name,
+    "vk-synced": FR_SYNCED.name,
+}
+
+# Compatibility constant names (old identifiers, new label values) so the
+# projection/diff call sites read naturally during the v3 transition.
+VK_READY = FR_READY
+VK_BLOCKED = FR_BLOCKED
+IN_PROGRESS = FR_IN_PROGRESS
+PR_READY = FR_PR_READY
+VK_SYNCED = FR_SYNCED
 
 # Templated label colors (name is dynamic)
 SPEC_LABEL_COLOR = "5319E7"
@@ -138,12 +178,33 @@ def phase_label(n: int) -> LabelDef:
 # diff/render projection looks up entries by GitHub name when computing
 # label transitions.
 LIFECYCLE: dict[str, LabelDef] = {
-    "vk_ready": VK_READY,
-    "vk_blocked": VK_BLOCKED,
+    "vk_ready": FR_READY,
+    "vk_blocked": FR_BLOCKED,
     "manual": MANUAL,
-    "in_progress": IN_PROGRESS,
-    "pr_ready": PR_READY,
+    "in_progress": FR_IN_PROGRESS,
+    "pr_ready": FR_PR_READY,
 }
+
+# Every name that marks a phase as queue-participating, old + new spelling.
+QUEUE_MARKER_NAMES: frozenset[str] = frozenset(
+    {
+        FR_READY.name,
+        FR_BLOCKED.name,
+        FR_IN_PROGRESS.name,
+        FR_PR_READY.name,
+        FR_SYNCED.name,
+        *LEGACY_QUEUE_ALIASES.keys(),
+    }
+)
+
+
+def is_queued(observed_labels: frozenset[str] | set[str]) -> bool:
+    """True iff the observed label set says this Issue entered a runner
+    queue — any queue lifecycle label (either spelling) or a
+    `runner:<name>` attribute."""
+    return any(
+        label in QUEUE_MARKER_NAMES or label.startswith("runner:") for label in observed_labels
+    )
 
 
 def def_for_name(name: str, canonical: LabelDef) -> LabelDef:

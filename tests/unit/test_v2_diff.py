@@ -18,12 +18,33 @@ def test_diff_undispatched_yields_create():
     creates = [m for m in d.mutations if isinstance(m, IssueCreate)]
     assert len(creates) == 1
     assert creates[0].phase_number == 1
-    assert "vk-ready" in creates[0].labels
+    # v3 tracking-only default: creates carry attributes, no queue lifecycle.
+    assert "fr:ready" not in creates[0].labels
+    assert "vk-ready" not in creates[0].labels
     assert "phase:1" in creates[0].labels
 
     ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
     assert len(ensures) == 1
-    assert "vk-ready" in {ld.name for ld in ensures[0].labels}
+    assert "phase:1" in {ld.name for ld in ensures[0].labels}
+
+
+def test_diff_queue_runner_creates_carry_lifecycle_and_runner():
+    """`--to vk` intent: creates carry fr:ready + runner:vk and the
+    ensure includes the queue lifecycle defs."""
+    from fr import parse
+    from fr.diff import IssueCreate, RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
+
+    plan = parse(FIXTURE)
+    observed = GhState(phases={})
+    rendered = render(plan, observed, queue_runner="vk")
+    d = diff(rendered, observed, plan=plan)
+    creates = [m for m in d.mutations if isinstance(m, IssueCreate)]
+    assert "fr:ready" in creates[0].labels
+    assert "runner:vk" in creates[0].labels
+    ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+    assert "fr:ready" in {ld.name for ld in ensures[0].labels}
 
 
 def test_diff_emits_issuebodychange_when_body_drifts():
@@ -226,7 +247,7 @@ def test_repo_label_ensure_carries_registry_colors():
     from fr.states import GhState
 
     plan = parse(FIXTURE)
-    rendered = render(plan, GhState(phases={}))
+    rendered = render(plan, GhState(phases={}), queue_runner="vk")
     d = diff(rendered, GhState(phases={}), plan=plan)
 
     ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
@@ -251,8 +272,8 @@ def test_repo_label_ensure_carries_registry_colors():
     assert by_name["spec:fixture-spec-design"].color == SPEC_LABEL_COLOR
 
     # Lifecycle constant: matches the registry singleton's color exactly.
-    assert by_name["vk-ready"].color == VK_READY.color
-    assert by_name["vk-ready"].description == VK_READY.description
+    assert by_name["fr:ready"].color == VK_READY.color
+    assert by_name["fr:ready"].description == VK_READY.description
 
     # Registry constants for unused lifecycle slots are not pulled in.
     for unused in (MANUAL, IN_PROGRESS, PR_READY):
@@ -286,7 +307,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                     issue_state="OPEN",
                     issue_labels=frozenset(
                         {
-                            "vk-ready",
+                            "fr:ready",
                             "spec:fixture-spec-design",
                             "plan:fixture-minimal",
                             "phase:1",
@@ -304,7 +325,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                 issue_state="OPEN",
                 issue_labels=frozenset(
                     {
-                        "vk-ready",
+                        "fr:ready",
                         "spec:fixture-spec-design",
                         "plan:fixture-minimal",
                         "phase:1",

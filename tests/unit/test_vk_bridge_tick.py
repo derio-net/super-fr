@@ -85,7 +85,7 @@ def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
     assert f"https://github.com/{repo}/issues/{n}" in args["description"]
 
     label_calls = [c for c in gh.calls if c[0] == "edit_issue_labels"]
-    add_calls = [c for c in label_calls if "vk-synced" in c[1]["add"]]
+    add_calls = [c for c in label_calls if "fr:synced" in c[1]["add"]]
     assert len(add_calls) == 1
     assert add_calls[0][1]["repo"] == repo
     assert add_calls[0][1]["number"] == n
@@ -121,9 +121,9 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
     assert "injected MCP failure" in result.failures[0]
     assert f"phase {plan.phases[0].phase.number}" in result.failures[0]
 
-    add_calls = [c for c in gh.calls if c[0] == "edit_issue_labels" and "vk-synced" in c[1]["add"]]
+    add_calls = [c for c in gh.calls if c[0] == "edit_issue_labels" and "fr:synced" in c[1]["add"]]
     assert add_calls == []
-    assert "vk-synced" not in gh.issues[(repo, n)].labels
+    assert "fr:synced" not in gh.issues[(repo, n)].labels
 
 
 def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
@@ -186,7 +186,7 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     result = tick(plan, gh, VkRunner(mcp))
 
     rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
-    assert "in-progress" in rlabel_names
+    assert "fr:in-progress" in rlabel_names
     assert "vk-ready" not in rlabel_names
     assert result.synced == 0
     assert result.skipped == 1
@@ -209,7 +209,7 @@ def test_tick_skipped_when_phase_already_vk_synced():
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
     rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
-    assert "vk-synced" in rlabel_names  # preservation
+    assert "fr:synced" in rlabel_names  # preservation
     mcp = FakeMcpClient()
     result = tick(plan, gh, VkRunner(mcp))
 
@@ -291,7 +291,7 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     assert result.synced == 0  # no duplicate
     assert mcp.calls == []
     # vk-synced must survive the apply() in this tick.
-    assert "vk-synced" in gh.issues[(repo, n)].labels
+    assert "fr:synced" in gh.issues[(repo, n)].labels
 
 
 def test_tick_defers_all_when_slot_counting_fails(monkeypatch):

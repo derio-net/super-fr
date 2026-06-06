@@ -166,8 +166,9 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     _preload_repo_labels(gh, repo)
     # Phase 1: not synced yet, has stale phase label
     gh.add_issue(repo, 100, state="OPEN", labels={"vk-ready", "phase:1", "plan:e2e-fixture"})
-    # Phase 2: blocked — operator hasn't realized yet, label drift
-    gh.add_issue(repo, 200, state="OPEN", labels={"phase:2", "plan:e2e-fixture"})
+    # Phase 2: blocked — queued (runner marker survives) but the
+    # lifecycle label drifted off; the tick must restore fr:blocked.
+    gh.add_issue(repo, 200, state="OPEN", labels={"runner:vk", "phase:2", "plan:e2e-fixture"})
     # Phase 3: agentic complete — closed + merged PR observed
     gh.add_issue(
         repo,
@@ -186,17 +187,27 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
 
     # End-state assertions per the spec's projection rules.
     p1_labels = gh.issues[(repo, 100)].labels
-    assert "vk-ready" in p1_labels
-    assert "vk-synced" in p1_labels
+    assert "fr:ready" in p1_labels
+    assert "fr:synced" in p1_labels
 
     p2_labels = gh.issues[(repo, 200)].labels
-    assert "vk-blocked" in p2_labels
-    assert "vk-ready" not in p2_labels
-    assert "vk-synced" not in p2_labels
+    assert "fr:blocked" in p2_labels
+    assert "fr:ready" not in p2_labels
+    assert "fr:synced" not in p2_labels
 
     p3 = gh.issues[(repo, 300)]
     assert p3.state == "CLOSED"
-    lifecycle_labels = {"vk-ready", "vk-blocked", "in-progress", "pr-ready", "manual"}
+    lifecycle_labels = {
+        "fr:ready",
+        "fr:blocked",
+        "fr:in-progress",
+        "fr:pr-ready",
+        "vk-ready",
+        "vk-blocked",
+        "in-progress",
+        "pr-ready",
+        "manual",
+    }
     assert not (p3.labels & lifecycle_labels), (
         f"completed phase should carry no lifecycle label, got: {p3.labels & lifecycle_labels}"
     )
@@ -451,7 +462,7 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
 
     # vk-synced landed on the FOREIGN issue.
     foreign_labels = gh.issues[(foreign_repo, 100)].labels
-    assert "vk-synced" in foreign_labels
+    assert "fr:synced" in foreign_labels
 
     # And the target_repo got no per-issue mutation for issue 100 (it has
     # no issue 100 at all — the assertion guards against a future regression

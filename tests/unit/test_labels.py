@@ -42,11 +42,11 @@ class TestLabelDef:
         assert len(names) == len(set(names))
 
     def test_lifecycle_names_match_spec(self) -> None:
-        assert labels.VK_READY.name == "vk-ready"
+        assert labels.VK_READY.name == "fr:ready"
         assert labels.MANUAL.name == "manual"
-        assert labels.IN_PROGRESS.name == "in-progress"
-        assert labels.PR_READY.name == "pr-ready"
-        assert labels.VK_SYNCED.name == "vk-synced"
+        assert labels.IN_PROGRESS.name == "fr:in-progress"
+        assert labels.PR_READY.name == "fr:pr-ready"
+        assert labels.VK_SYNCED.name == "fr:synced"
 
     @pytest.mark.parametrize("bad_color", ["", "abc", "abcde", "1234567", "xxxxxx", "#ABCDEF"])
     def test_rejects_non_hex_color(self, bad_color: str) -> None:

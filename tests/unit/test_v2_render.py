@@ -36,7 +36,44 @@ def test_render_undispatched_phase_yields_create_intent():
     assert "spec:fixture-spec-design" in label_names
     assert "plan:fixture-minimal" in label_names  # date prefix stripped
     assert "phase:1" in label_names
-    assert "vk-ready" in label_names  # agentic, no assignee, no PR, not complete
+    # v3 tracking-only default: NO queue lifecycle without --to or an
+    # already-queued observation (super-fr split design).
+    assert "fr:ready" not in label_names
+    assert "vk-ready" not in label_names
+
+
+def test_render_queue_runner_projects_lifecycle_and_runner_label():
+    """`fr apply --to vk` intent: queue lifecycle + runner attribution."""
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
+
+    plan = parse(FIXTURE)
+    rendered = render(plan, GhState(phases={}), queue_runner="vk")
+    label_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
+    assert "fr:ready" in label_names
+    assert "runner:vk" in label_names
+
+
+def test_render_observed_queued_phase_keeps_lifecycle():
+    """A phase whose Issue already carries queue labels (either spelling)
+    keeps its lifecycle projection on plain (tracking-only) renders —
+    the runner choice lives on the Issue."""
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    obs = PhaseObservation(
+        issue_state="OPEN",
+        issue_labels=frozenset({"vk-ready", "runner:vk", "phase:1"}),
+        issue_assignees=(),
+        linked_prs=(),
+    )
+    rendered = render(plan, GhState(phases={1: obs}))
+    label_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
+    assert "fr:ready" in label_names  # legacy spelling read, fr:* projected
+    assert "runner:vk" in label_names
     assert rendered.archive_decision is False
 
 
@@ -44,7 +81,7 @@ def test_render_undispatched_phase_yields_create_intent():
     "obs_kwargs,expected_label",
     [
         # No observation (phase undispatched) -> vk-ready
-        (None, "vk-ready"),
+        (None, "fr:ready"),
         # Empty observation -> vk-ready
         (
             {
@@ -53,7 +90,7 @@ def test_render_undispatched_phase_yields_create_intent():
                 "issue_assignees": (),
                 "linked_prs": (),
             },
-            "vk-ready",
+            "fr:ready",
         ),
         # Has assignee -> in-progress
         (
@@ -63,7 +100,7 @@ def test_render_undispatched_phase_yields_create_intent():
                 "issue_assignees": ("claude-bot",),
                 "linked_prs": (),
             },
-            "in-progress",
+            "fr:in-progress",
         ),
         # Open draft PR -> in-progress
         (
@@ -75,7 +112,7 @@ def test_render_undispatched_phase_yields_create_intent():
                     ("https://gh/...", "OPEN", False, True, "PASS"),  # draft
                 ),
             },
-            "in-progress",
+            "fr:in-progress",
         ),
         # Open non-draft PR -> pr-ready
         (
@@ -87,7 +124,7 @@ def test_render_undispatched_phase_yields_create_intent():
                     ("https://gh/...", "OPEN", False, False, "PASS"),  # ready
                 ),
             },
-            "pr-ready",
+            "fr:pr-ready",
         ),
     ],
 )
@@ -506,7 +543,7 @@ def test_render_body_blocked_by_missing_predecessor_falls_back_to_phase_number()
     assert "- Blocked by #1" in body
 
 
-def test_render_preserves_vk_synced_label_from_observed():
+def test_render_preserves_fr_synced_label_from_observed():
     """`vk-synced` is set by the bridge; the renderer doesn't manage it.
     Without explicit preservation it would be stripped by diff() because
     the `vk-` managed prefix sweep wouldn't see it in rendered.labels.
@@ -528,11 +565,13 @@ def test_render_preserves_vk_synced_label_from_observed():
         }
     )
     rendered = render(plan, obs)
-    assert "vk-synced" in {ld.name for ld in rendered.issue_per_phase[1].labels}
+    # Dual-read: observed legacy `vk-synced` is carried forward as the
+    # protocol-owned `fr:synced` (writers never emit the old spelling).
+    assert "fr:synced" in {ld.name for ld in rendered.issue_per_phase[1].labels}
 
 
-def test_render_omits_vk_synced_when_not_observed():
-    """The renderer only preserves vk-synced when it's already on the
+def test_render_omits_fr_synced_when_not_observed():
+    """The renderer only preserves fr:synced when it's already on the
     Issue — it never adds the marker on its own."""
     from fr import parse
     from fr.render import render

@@ -127,7 +127,9 @@ class PlanReport:
     header: str
 
 
-def build_plan_report(plan_dir: Path, gh: GhClient, *, force: bool = False) -> PlanReport:
+def build_plan_report(
+    plan_dir: Path, gh: GhClient, *, force: bool = False, queue_runner: str | None = None
+) -> PlanReport:
     """parse -> observe -> render -> diff, no mutations.
 
     Raises PlanSchemaError; callers map it to exit 5.
@@ -139,7 +141,7 @@ def build_plan_report(plan_dir: Path, gh: GhClient, *, force: bool = False) -> P
 
     plan = _parse(plan_dir)
     observed = _observe(plan, gh)
-    rendered = _render(plan, observed)
+    rendered = _render(plan, observed, queue_runner=queue_runner)
     d = _diff(rendered, observed, plan=plan, force_create=force)
     return PlanReport(
         plan=plan, observed=observed, rendered=rendered, diff=d, header=plan_header(plan)

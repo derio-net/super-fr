@@ -28,11 +28,14 @@ from fr.states import GhState, RenderedState
 # Prefix-owned namespaces. The applier may add/remove anything starting
 # with one of these; everything else (e.g. `good-first-issue`, `bug`)
 # is operator-owned and never touched.
-MANAGED_LABEL_PREFIXES = ("vk-", "spec:", "plan:", "phase:")
+# `fr:` covers the v3 queue lifecycle + synced marker; `runner:` the
+# attribution attribute; `vk-` covers LEGACY queue labels still on
+# in-flight Issues (transitional — the applier replaces them with their
+# fr:* equivalents on first touch; remove with migration step 7).
+MANAGED_LABEL_PREFIXES = ("fr:", "runner:", "vk-", "spec:", "plan:", "phase:")
 
-# Bare lifecycle names — managed by the renderer but don't have a
-# distinguishing prefix. NOTE: `vk-ready` is omitted here because the
-# `vk-` prefix already covers it; including it would just be redundant.
+# Bare lifecycle names — legacy spellings without a distinguishing
+# prefix (transitional, step 7) plus the `manual` routing attribute.
 MANAGED_BARE_LABELS = frozenset({"manual", "in-progress", "pr-ready"})
 
 

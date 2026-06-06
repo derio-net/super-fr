@@ -285,3 +285,44 @@ def test_check_plan_reachable_uses_resolved_spec_path(monkeypatch):
 
     assert "docs/superpowers/implemented/specs/x-design.md" in checked_paths
     assert "x-design.md" not in checked_paths
+
+
+def test_apply_to_unknown_runner_exits_2(tmp_path, monkeypatch):
+    """--to with an unregistered name names the registered runners."""
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    sp = tmp_path / "docs" / "superpowers" / "plans"
+    sp.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["apply", "--all", "--to", "nope"])
+    assert result.exit_code == 2
+    combined = result.output + (result.stderr or "")
+    assert "unknown runner 'nope'" in combined
+    assert "vk" in combined  # the registered runner is listed
+
+
+def test_apply_to_requires_fr_dispatch(tmp_path, monkeypatch):
+    """The sanctioned soft point: --to without fr-dispatch installed
+    exits 2 with the install hint."""
+    import importlib.util
+
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    real = importlib.util.find_spec
+
+    def fake_find_spec(name, *a, **kw):
+        if name == "fr_dispatch":
+            return None
+        return real(name, *a, **kw)
+
+    monkeypatch.setattr("importlib.util.find_spec", fake_find_spec)
+    sp = tmp_path / "docs" / "superpowers" / "plans"
+    sp.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["apply", "--all", "--to", "vk"])
+    assert result.exit_code == 2
+    assert "requires fr-dispatch" in (result.output + (result.stderr or ""))

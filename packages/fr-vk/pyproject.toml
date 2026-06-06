@@ -5,6 +5,9 @@ description = "super-fr VK adapter: VibeKanban runner (MCP client, card/workspac
 requires-python = ">=3.11"
 dependencies = ["fr", "fr-dispatch"]
 
+[project.entry-points."fr.runners"]
+vk = "fr_vk.runner:VkRunner"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

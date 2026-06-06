@@ -90,7 +90,7 @@ def test_apply_ensures_labels_with_registry_colors():
     from tests.unit.fakes import FakeGhClient
 
     plan = parse(FIXTURE)
-    rendered = render(plan, GhState(phases={}))
+    rendered = render(plan, GhState(phases={}), queue_runner="vk")
     d = diff(rendered, GhState(phases={}), plan=plan)
 
     gh = FakeGhClient()
@@ -106,7 +106,7 @@ def test_apply_ensures_labels_with_registry_colors():
     assert not non_defs, f"non-LabelDef in ensure_labels call: {non_defs}"
 
     by_name = {ld.name: ld for ld in passed}
-    assert by_name["vk-ready"].color == VK_READY.color
+    assert by_name["fr:ready"].color == VK_READY.color
     assert by_name["phase:1"].color == PHASE_LABEL_COLOR
     assert by_name["plan:fixture-minimal"].color == PLAN_LABEL_COLOR
     assert by_name["spec:fixture-spec-design"].color == SPEC_LABEL_COLOR
@@ -362,7 +362,9 @@ def test_apply_command_writes_tracking_issue_back(tmp_path):
 
     with _pytest.MonkeyPatch.context() as mp:
         mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
-        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=True, output_format="text")
+        apply_cmd.apply_command(
+            plan_dir=plan_dir, all_plans=False, yes=True, to=None, output_format="text"
+        )
 
     raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
     assert raw["phase"]["tracking_issue"], "tracking_issue should be written"
@@ -386,10 +388,14 @@ def test_apply_command_second_run_emits_no_issue_create(tmp_path, capsys):
     with _pytest.MonkeyPatch.context() as mp:
         mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
         # First run — creates the Issue and writes back the URL.
-        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=True, output_format="json")
+        apply_cmd.apply_command(
+            plan_dir=plan_dir, all_plans=False, yes=True, to=None, output_format="json"
+        )
         capsys.readouterr()  # discard first-run output
         # Second run — must be a no-op for IssueCreate.
-        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=True, output_format="json")
+        apply_cmd.apply_command(
+            plan_dir=plan_dir, all_plans=False, yes=True, to=None, output_format="json"
+        )
         out = capsys.readouterr().out
 
     parsed = json.loads(out)
@@ -411,7 +417,9 @@ def test_apply_command_dry_run_does_not_write_back(tmp_path):
 
     with _pytest.MonkeyPatch.context() as mp:
         mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
-        apply_cmd.apply_command(plan_dir=plan_dir, all_plans=False, yes=False, output_format="text")
+        apply_cmd.apply_command(
+            plan_dir=plan_dir, all_plans=False, yes=False, to=None, output_format="text"
+        )
 
     raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
     assert raw["phase"]["tracking_issue"] is None
@@ -444,7 +452,7 @@ def test_apply_command_partial_failure_isolates_writeback(tmp_path):
         mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
         with _pytest.raises(typer.Exit):
             apply_cmd.apply_command(
-                plan_dir=plan_dir, all_plans=False, yes=True, output_format="text"
+                plan_dir=plan_dir, all_plans=False, yes=True, output_format="text", to=None
             )
 
     p1 = yaml.safe_load((plan_dir / "01.yaml").read_text())
@@ -477,7 +485,7 @@ def test_apply_command_writeback_failure_surfaced_in_json_and_text(tmp_path, cap
         mp.setattr(apply_cmd.plan_ops, "set_tracking_issue", boom)
         with _pytest.raises(typer.Exit) as ei:
             apply_cmd.apply_command(
-                plan_dir=plan_dir, all_plans=False, yes=True, output_format="json"
+                plan_dir=plan_dir, all_plans=False, yes=True, output_format="json", to=None
             )
         assert ei.value.exit_code == 4
         json_out = capsys.readouterr().out
@@ -498,7 +506,7 @@ def test_apply_command_writeback_failure_surfaced_in_json_and_text(tmp_path, cap
         mp.setattr(apply_cmd.plan_ops, "set_tracking_issue", boom)
         with _pytest.raises(typer.Exit):
             apply_cmd.apply_command(
-                plan_dir=plan_dir2, all_plans=False, yes=True, output_format="text"
+                plan_dir=plan_dir2, all_plans=False, yes=True, output_format="text", to=None
             )
         text_out = capsys.readouterr().out
 
@@ -570,7 +578,9 @@ def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
         mp.setattr(apply_cmd, "_make_gh_client", lambda: fake)
         mp.setattr(apply_cmd.plan_ops, "set_tracking_issue", conditional_set)
         with _pytest.raises(typer.Exit) as ei:
-            apply_cmd.apply_command(plan_dir=None, all_plans=True, yes=True, output_format="text")
+            apply_cmd.apply_command(
+                plan_dir=None, all_plans=True, yes=True, to=None, output_format="text"
+            )
         assert ei.value.exit_code == 4
 
     raw_a = yaml.safe_load((plan_a / "01.yaml").read_text())
@@ -788,7 +798,7 @@ def test_apply_one_rejects_when_gate_returns_missing(tmp_path, monkeypatch):
     fake = FakeGhClient()
     monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
 
-    rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True)
+    rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True, to="vk")
     assert rc == 2, f"expected exit 2, got {rc}"
     assert "refuse to dispatch" in text
     assert "_meta.yaml" in text
@@ -821,7 +831,7 @@ def test_apply_one_refuses_when_plan_not_in_git_checkout(tmp_path, monkeypatch):
 
     monkeypatch.setattr(apply_cmd, "_check_plan_reachable_on_origin_head", _spy)
 
-    rc, text, _ = apply_cmd._apply_one(plan_dir, fake, yes=True)
+    rc, text, _ = apply_cmd._apply_one(plan_dir, fake, yes=True, to="vk")
     assert rc == 2, f"expected exit 2, got {rc}\noutput:\n{text}"
     assert "not in a git checkout" in text
     assert called["count"] == 0, "gate should NOT run when plan.repo_root is None"

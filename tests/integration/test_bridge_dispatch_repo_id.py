@@ -222,7 +222,7 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
     link_calls = [c for c in mcp.calls if c[0] == "link_workspace_issue"]
     assert len(link_calls) == 1
 
-    assert "vk-synced" in gh.issues[(TARGET_REPO, 42)].labels
+    assert "fr:synced" in gh.issues[(TARGET_REPO, 42)].labels
 
 
 def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None:
