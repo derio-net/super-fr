@@ -828,3 +828,61 @@ def test_clear_tracking_issue_noop_when_already_null(tmp_path):
     before = (plan_dir / "01.yaml").read_text()
     assert clear_tracking_issue(plan_dir, 1) is False
     assert (plan_dir / "01.yaml").read_text() == before
+
+
+# ── 2026-06-06 spec-path-repair: canonical writers + spec fallback ──
+
+
+def test_create_writes_bare_slug_file_cell(tmp_path):
+    from vk.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    create(
+        repo_root=repo,
+        slug="2026-06-06-slugcell",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        vk_version=">=1.0.0,<3.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# p\n",
+    )
+    table = spec_path.read_text()
+    assert "| `2026-06-06-slugcell` |" in table or "| 2026-06-06-slugcell |" in table
+    assert "docs/superpowers/plans/2026-06-06-slugcell" not in table
+
+
+def test_rework_create_from_archived_spec_appends_row(tmp_path):
+    """Parent's meta.spec records specs/X.md but the spec archived to
+    implemented/specs/ — rework_create must resolve it and append the
+    row (the old code silently skipped on a stale path)."""
+    from vk.plan_ops import rework_create
+
+    repo = _make_repo(tmp_path)
+    spec = _make_spec(repo)
+    parent = _make_archived_parent_plan(repo, "2026-06-06-parent", spec)
+    moved = repo / "docs" / "superpowers" / "implemented" / "specs" / spec.name
+    moved.parent.mkdir(parents=True, exist_ok=True)
+    spec.rename(moved)
+
+    rework = rework_create(parent)
+    assert "2026-06-06-parent-rework-1" in moved.read_text()
+    assert rework.meta.parent_plan == "2026-06-06-parent"
+
+
+def test_rework_create_writes_canonical_refs(tmp_path):
+    from vk.plan_ops import rework_create
+
+    repo = _make_repo(tmp_path)
+    spec = _make_spec(repo)
+    parent = _make_archived_parent_plan(repo, "2026-06-06-canon", spec)
+
+    rework = rework_create(parent)
+    # parent_plan: bare slug, not a path
+    assert rework.meta.parent_plan == "2026-06-06-canon"
+    # spec: bare filename for same-repo refs
+    assert rework.meta.spec == spec.name
+    # spec-table File cell: bare rework slug
+    table = spec.read_text()
+    assert "2026-06-06-canon-rework-1" in table
+    assert "docs/superpowers/plans/2026-06-06-canon-rework-1" not in table

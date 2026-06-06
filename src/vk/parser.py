@@ -27,6 +27,8 @@ import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from vk import refs
+from vk._urls import is_cross_repo_spec
 from vk.types import PhaseDoc, PlanMeta
 
 
@@ -47,6 +49,11 @@ class Plan:
     # (tests, builders) valid — enrichment then degrades to nothing.
     prose: str | None = None
     phase_texts: Mapping[int, str] = field(default_factory=dict)
+    # Lifecycle-resolved repo-relative spec path, loaded by parse() so the
+    # (I/O-free) renderer can link the spec's CURRENT location even after
+    # it archives to implemented/specs/ (2026-06-06 spec-path-repair).
+    # None when meta.spec is unset, cross-repo, or unresolvable.
+    spec_path: str | None = None
 
     @property
     def prose_path(self) -> Path:
@@ -160,11 +167,20 @@ def parse(plan_dir: Path) -> Plan:
     prose_path = plan_dir / "_prose.md"
     prose = prose_path.read_text() if prose_path.exists() else None
 
+    repo_root = _find_repo_root(plan_dir)
+
+    spec_path: str | None = None
+    if meta.spec and repo_root is not None and not is_cross_repo_spec(meta.spec):
+        res = refs.resolve_spec_ref(meta.spec, repo_root)
+        if res.path is not None:
+            spec_path = res.path.relative_to(repo_root).as_posix()
+
     return Plan(
         dir=plan_dir,
         meta=meta,
         phases=tuple(phases),
-        repo_root=_find_repo_root(plan_dir),
+        repo_root=repo_root,
         prose=prose,
         phase_texts=phase_texts,
+        spec_path=spec_path,
     )

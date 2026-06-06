@@ -209,7 +209,10 @@ def spec_url(plan: Plan) -> str | None:
     if is_cross_repo_spec(spec):
         repo, path = spec.split(":", 1)
     else:
-        repo, path = plan.meta.target_repo, spec
+        # plan.spec_path is the parse-time lifecycle resolution
+        # (2026-06-06 spec-path-repair): the link follows the spec to
+        # implemented/specs/, and slug-form refs become real paths.
+        repo, path = plan.meta.target_repo, plan.spec_path or spec
     return f"https://github.com/{repo}/blob/main/{path}"
 
 

@@ -25,6 +25,7 @@ from typing import Any, Literal, TypedDict
 
 import yaml
 
+from vk import refs
 from vk._urls import is_cross_repo_spec
 from vk.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from vk.parser import Plan, PlanSchemaError, parse
@@ -189,7 +190,9 @@ def create(
             spec_path,
             plan_name=slug,
             repo=target_repo,
-            file=str(folder.resolve().relative_to(repo_root)) + "/",
+            # Canonical lifecycle-independent form (2026-06-06
+            # spec-path-repair): the bare slug cannot go stale on archive.
+            file=slug,
             depends_on="—",
         )
         written.append(spec_path)
@@ -552,17 +555,24 @@ def rework_create(parent_plan_dir: Path) -> Plan:
 
     repo_root = parent_plan.repo_root
 
-    parent_rel = str(parent_dir.relative_to(repo_root)) + "/" if repo_root else str(parent_dir)
+    # Canonical lifecycle-independent refs (2026-06-06 spec-path-repair):
+    # bare slugs cannot go stale when plans archive.
+    parent_rel = parent_dir.name
     prior_rework_rel: str | None = None
     if n > 1:
         prior_dir = _find_prior_rework(parent_dir, below=n)
-        if prior_dir is not None and repo_root is not None:
-            prior_rework_rel = str(prior_dir.resolve().relative_to(repo_root)) + "/"
+        if prior_dir is not None:
+            prior_rework_rel = prior_dir.name
+
+    parent_spec = parent_plan.meta.spec
+    if parent_spec and not is_cross_repo_spec(parent_spec):
+        # Same-repo spec refs canonicalize to the bare filename.
+        parent_spec = refs.plan_slug(parent_spec)
 
     meta = {
         "schema_version": 2,
         "plan": rework_slug,
-        "spec": parent_plan.meta.spec,
+        "spec": parent_spec,
         "target_repo": parent_plan.meta.target_repo,
         "vk_version": parent_plan.meta.vk_version,
         "created": _dt.date.today().isoformat(),
@@ -587,18 +597,20 @@ def rework_create(parent_plan_dir: Path) -> Plan:
 
     written: list[Path] = [rework_folder / "_meta.yaml", rework_folder / "_prose.md"]
 
-    # Append spec row
-    if parent_plan.meta.spec and repo_root is not None:
-        spec_path = (repo_root / parent_plan.meta.spec).resolve()
-        if spec_path.exists():
+    # Append spec row — lifecycle-resolved (2026-06-06 spec-path-repair):
+    # the spec may have archived to implemented/specs/ since the parent
+    # plan recorded it; the old exact-path check silently skipped then.
+    if parent_plan.meta.spec and repo_root is not None and not is_cross_repo_spec(parent_plan.meta.spec):
+        spec_res = refs.resolve_spec_ref(parent_plan.meta.spec, repo_root)
+        if spec_res.path is not None:
             _append_spec_row(
-                spec_path,
+                spec_res.path,
                 plan_name=rework_slug,
                 repo=parent_plan.meta.target_repo,
-                file=str(rework_folder.resolve().relative_to(repo_root)) + "/",
+                file=rework_slug,
                 depends_on=parent_plan.meta.plan,
             )
-            written.append(spec_path)
+            written.append(spec_res.path)
 
     _stage(repo_root, written)
     return parse(rework_folder)
