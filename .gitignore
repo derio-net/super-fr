@@ -15,6 +15,9 @@ build/
 # Local git worktrees.
 .worktrees/
 
+# Operator scratch dir (ad-hoc runnable scripts handed to the operator).
+scripts/tmp/
+
 # Dormant npm scaffolding. PR #173 removed package.json and
 # package-lock.json (nothing reads them since the 2026-04-13
 # installer rewrite that switched to .claude-plugin/*.json). Some

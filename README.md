@@ -32,15 +32,16 @@ Add to `~/.claude/settings.json`:
 ```bash
 git clone https://github.com/derio-net/super-fr
 cd super-fr
-./scripts/install.sh   # installs skills + rules + vk CLI (via uv tool)
+./scripts/install.sh   # installs skills + rules + fr CLI (via uv tool)
 ```
 
-### vk CLI only
+### fr CLI only
 
 If skills are already installed via plugin but you need the CLI:
 
 ```bash
-uv tool install path/to/super-fr   # or: uv tool install git+https://github.com/derio-net/super-fr
+uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr'
+# or from a local clone: uv tool install ./packages/fr
 ```
 
 ## Per-Repo Profile
