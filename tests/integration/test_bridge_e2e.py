@@ -85,9 +85,9 @@ def _preload_repo_labels(gh: FakeGhClient, repo: str) -> None:
     """
     gh.repo_labels.setdefault(repo, set()).update(
         {
-            "vk-ready",
-            "vk-blocked",
-            "vk-synced",
+            "fr:ready",
+            "fr:blocked",
+            "fr:synced",
             "in-progress",
             "pr-ready",
             "manual",
@@ -165,7 +165,7 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     gh = FakeGhClient()
     _preload_repo_labels(gh, repo)
     # Phase 1: not synced yet, has stale phase label
-    gh.add_issue(repo, 100, state="OPEN", labels={"vk-ready", "phase:1", "plan:e2e-fixture"})
+    gh.add_issue(repo, 100, state="OPEN", labels={"fr:ready", "phase:1", "plan:e2e-fixture"})
     # Phase 2: blocked — queued (runner marker survives) but the
     # lifecycle label drifted off; the tick must restore fr:blocked.
     gh.add_issue(repo, 200, state="OPEN", labels={"runner:vk", "phase:2", "plan:e2e-fixture"})
@@ -202,8 +202,8 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
         "fr:blocked",
         "fr:in-progress",
         "fr:pr-ready",
-        "vk-ready",
-        "vk-blocked",
+        "fr:ready",
+        "fr:blocked",
         "in-progress",
         "pr-ready",
         "manual",
@@ -260,7 +260,7 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
 
     gh = FakeGhClient()
     _preload_repo_labels(gh, repo)
-    gh.add_issue(repo, 42, state="OPEN", labels={"vk-ready", "phase:1", "plan:e2e-fixture"})
+    gh.add_issue(repo, 42, state="OPEN", labels={"fr:ready", "phase:1", "plan:e2e-fixture"})
     mcp = FakeMcpClient()
 
     # Tick 1: brings the plan to steady state (vk-synced applied + body update)
@@ -314,7 +314,7 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
 # ── F5: Legacy body-text-driven dispatch retired ──────────────────────
 
 
-def test_standalone_vk_ready_issue_without_plan_is_ignored(tmp_path: Path) -> None:
+def test_standalone_fr_ready_issue_without_plan_is_ignored(tmp_path: Path) -> None:
     """
     GIVEN a vk-ready GitHub Issue that is NOT backed by any v2 plan
           (manual `gh issue create --label vk-ready` outside the plan workflow)
@@ -354,7 +354,7 @@ def test_standalone_vk_ready_issue_without_plan_is_ignored(tmp_path: Path) -> No
     gh = FakeGhClient()
     _preload_repo_labels(gh, repo)
     # Free-floating vk-ready Issue — NOT referenced by the plan above.
-    gh.add_issue(repo, 9999, state="OPEN", labels={"vk-ready"}, body="manually filed")
+    gh.add_issue(repo, 9999, state="OPEN", labels={"fr:ready"}, body="manually filed")
     snapshot_labels = frozenset(gh.issues[(repo, 9999)].labels)
     snapshot_state = gh.issues[(repo, 9999)].state
     snapshot_body = gh.issues[(repo, 9999)].body
@@ -420,9 +420,9 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
     for repo in (target_repo, foreign_repo):
         gh.repo_labels.setdefault(repo, set()).update(
             {
-                "vk-ready",
-                "vk-blocked",
-                "vk-synced",
+                "fr:ready",
+                "fr:blocked",
+                "fr:synced",
                 "in-progress",
                 "pr-ready",
                 "manual",
@@ -431,7 +431,7 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
             }
         )
     gh.add_issue(
-        foreign_repo, 100, state="OPEN", labels={"vk-ready", "phase:1", "plan:e2e-fixture"}
+        foreign_repo, 100, state="OPEN", labels={"fr:ready", "phase:1", "plan:e2e-fixture"}
     )
 
     # Advertise both repos in VK's registry (short names, with ids) so

@@ -44,7 +44,7 @@ def test_tick_defers_when_active_workspaces_saturate_budget(monkeypatch):
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -73,7 +73,7 @@ def test_tick_dispatches_within_budget(monkeypatch):
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 

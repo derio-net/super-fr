@@ -20,7 +20,7 @@ import typer
 from rich.console import Console
 
 from fr.commands.common import PlanReport, build_plan_report, require_migrated_layout
-from fr.labels import VK_SYNCED
+from fr.labels import FR_SYNCED
 from fr.parser import PlanSchemaError
 from fr.render import archive_gate
 
@@ -56,7 +56,7 @@ def _phase_line(report: PlanReport, phase_n: int) -> str:
         status = "complete (closed)"
     else:
         lifecycle = next(
-            (ld.name for ld in ri.labels if ld.name in _LIFECYCLE and ld != VK_SYNCED), None
+            (ld.name for ld in ri.labels if ld.name in _LIFECYCLE and ld != FR_SYNCED), None
         )
         status = lifecycle or "—"
     suppressed = {s.phase_number for s in report.diff.suppressed}

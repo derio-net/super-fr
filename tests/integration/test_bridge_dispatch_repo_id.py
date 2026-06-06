@@ -190,13 +190,13 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
 
     gh = FakeGhClient()
     gh.repo_labels.setdefault(TARGET_REPO, set()).update(
-        {"vk-ready", "vk-blocked", "vk-synced", "phase:1", "plan:2026-05-18-dispatch-fixture"}
+        {"fr:ready", "fr:blocked", "fr:synced", "phase:1", "plan:2026-05-18-dispatch-fixture"}
     )
     gh.add_issue(
         TARGET_REPO,
         42,
         state="OPEN",
-        labels={"vk-ready", "phase:1", "plan:2026-05-18-dispatch-fixture"},
+        labels={"fr:ready", "phase:1", "plan:2026-05-18-dispatch-fixture"},
     )
 
     mcp = WireShapeMcpClient()
@@ -245,13 +245,13 @@ def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None
 
     gh = FakeGhClient()
     gh.repo_labels.setdefault(other_repo, set()).update(
-        {"vk-ready", "vk-blocked", "vk-synced", "phase:1", "plan:2026-05-18-dispatch-fixture"}
+        {"fr:ready", "fr:blocked", "fr:synced", "phase:1", "plan:2026-05-18-dispatch-fixture"}
     )
     gh.add_issue(
         other_repo,
         7,
         state="OPEN",
-        labels={"vk-ready", "phase:1", "plan:2026-05-18-dispatch-fixture"},
+        labels={"fr:ready", "phase:1", "plan:2026-05-18-dispatch-fixture"},
     )
 
     mcp = WireShapeMcpClient()

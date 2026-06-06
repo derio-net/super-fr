@@ -29,14 +29,14 @@ from fr.states import GhState, RenderedState
 # with one of these; everything else (e.g. `good-first-issue`, `bug`)
 # is operator-owned and never touched.
 # `fr:` covers the v3 queue lifecycle + synced marker; `runner:` the
-# attribution attribute; `vk-` covers LEGACY queue labels still on
-# in-flight Issues (transitional — the applier replaces them with their
-# fr:* equivalents on first touch; remove with migration step 7).
-MANAGED_LABEL_PREFIXES = ("fr:", "runner:", "vk-", "spec:", "plan:", "phase:")
+# attribution attribute. (The transitional `vk-` legacy prefix and bare
+# `in-progress`/`pr-ready` spellings were retired in migration step 7 —
+# the fleet sweep renamed every label GitHub-side, so a stray legacy
+# spelling is operator-owned foreign data now.)
+MANAGED_LABEL_PREFIXES = ("fr:", "runner:", "spec:", "plan:", "phase:")
 
-# Bare lifecycle names — legacy spellings without a distinguishing
-# prefix (transitional, step 7) plus the `manual` routing attribute.
-MANAGED_BARE_LABELS = frozenset({"manual", "in-progress", "pr-ready"})
+# Bare managed names — the `manual` routing attribute.
+MANAGED_BARE_LABELS = frozenset({"manual"})
 
 
 def _is_managed(label: str) -> bool:

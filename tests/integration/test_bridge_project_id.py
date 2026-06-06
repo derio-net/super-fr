@@ -70,13 +70,13 @@ def _write_plan(plan_dir: Path) -> None:
 
 def _prep_gh(gh: FakeGhClient) -> None:
     gh.repo_labels.setdefault(TARGET_REPO, set()).update(
-        {"vk-ready", "vk-blocked", "vk-synced", "phase:1", "plan:2026-05-18-project-id-fixture"}
+        {"fr:ready", "fr:blocked", "fr:synced", "phase:1", "plan:2026-05-18-project-id-fixture"}
     )
     gh.add_issue(
         TARGET_REPO,
         42,
         state="OPEN",
-        labels={"vk-ready", "phase:1", "plan:2026-05-18-project-id-fixture"},
+        labels={"fr:ready", "phase:1", "plan:2026-05-18-project-id-fixture"},
     )
 
 

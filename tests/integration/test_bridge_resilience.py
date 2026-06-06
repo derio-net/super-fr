@@ -138,7 +138,7 @@ def test_tick_aborts_cleanly_on_mcp_subprocess_death() -> None:
         plan, phases=(phase,), meta=plan.meta.model_copy(update={"target_repo": repo})
     )
     gh = FakeGhClient()
-    gh.add_issue(repo, 42, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, 42, state="OPEN", labels={"fr:ready", "phase:1"})
 
     class _DyingMcp(FakeMcpClient):
         _calls = 0
@@ -152,7 +152,7 @@ def test_tick_aborts_cleanly_on_mcp_subprocess_death() -> None:
     assert result.synced == 0
     assert result.errors >= 1
     # `vk-synced` must NOT land on the issue.
-    assert "vk-synced" not in gh.issues[(repo, 42)].labels
+    assert "fr:synced" not in gh.issues[(repo, 42)].labels
 
 
 def test_tick_continues_when_one_phase_times_out() -> None:
@@ -201,7 +201,7 @@ def test_tick_continues_when_one_phase_times_out() -> None:
     phase_numbers = [ph.phase.number for ph in plan.phases]
     issue_numbers = [100, 101, 102]
     for n, pn in zip(issue_numbers, phase_numbers, strict=True):
-        gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", f"phase:{pn}"})
+        gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", f"phase:{pn}"})
 
     class _TimeoutOnPhase2(FakeMcpClient):
         """Raise TimeoutError on phase 2's start_workspace (the second
@@ -465,9 +465,9 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
     # Pre-register managed labels so both apply() chains succeed without
     # racing on ensure_labels.
     gh.repo_labels[repo] = {
-        "vk-ready",
-        "vk-blocked",
-        "vk-synced",
+        "fr:ready",
+        "fr:blocked",
+        "fr:synced",
         "in-progress",
         "pr-ready",
         "manual",
@@ -475,7 +475,7 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
         "phase:1",
     }
     gh.add_issue(
-        repo, 77, state="OPEN", labels={"vk-ready", "phase:1", "plan:2026-05-09-fixture-minimal"}
+        repo, 77, state="OPEN", labels={"fr:ready", "phase:1", "plan:2026-05-09-fixture-minimal"}
     )
     mcp = FakeMcpClient()
 

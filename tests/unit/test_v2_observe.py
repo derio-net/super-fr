@@ -38,7 +38,7 @@ def test_observe_dispatched_phase_returns_observation():
         repo,
         142,
         state="OPEN",
-        labels={"vk-ready", "phase:1"},
+        labels={"fr:ready", "phase:1"},
         assignees=("claude-bot",),
         linked_prs=[
             {
@@ -56,7 +56,7 @@ def test_observe_dispatched_phase_returns_observation():
     assert 1 in observed.phases
     obs = observed.phases[1]
     assert obs.issue_state == "OPEN"
-    assert "vk-ready" in obs.issue_labels
+    assert "fr:ready" in obs.issue_labels
     assert obs.issue_assignees == ("claude-bot",)
     assert len(obs.linked_prs) == 1
     pr = obs.linked_prs[0]
@@ -144,7 +144,7 @@ def test_observe_skips_phases_without_tracking_issue():
     new_plan = dc_replace(plan, phases=tuple(phases))
 
     gh = FakeGhClient()
-    gh.add_issue(repo, 501, state="OPEN", labels={"vk-ready"})
+    gh.add_issue(repo, 501, state="OPEN", labels={"fr:ready"})
 
     observed = observe(new_plan, gh)
     assert set(observed.phases.keys()) == {2}

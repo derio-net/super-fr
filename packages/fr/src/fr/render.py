@@ -18,12 +18,12 @@ from typing import Literal
 from fr._urls import is_cross_repo_spec
 from fr._urls import issue_number as _issue_number_from_url
 from fr.labels import (
+    FR_BLOCKED,
+    FR_IN_PROGRESS,
+    FR_PR_READY,
+    FR_READY,
     FR_SYNCED,
-    IN_PROGRESS,
     MANUAL,
-    PR_READY,
-    VK_BLOCKED,
-    VK_READY,
     LabelDef,
     is_queued,
     phase_label,
@@ -83,20 +83,20 @@ def _lifecycle_label(
     if phase.phase.tag == "manual":
         return MANUAL
     if not _deps_satisfied(phase, plan, observed):
-        return VK_BLOCKED
+        return FR_BLOCKED
     if obs is None:
-        return VK_READY
+        return FR_READY
     has_open_pr_nondraft = any(
         pr.state == "OPEN" and not pr.draft and not pr.merged for pr in obs.linked_prs
     )
     if has_open_pr_nondraft:
-        return PR_READY
+        return FR_PR_READY
     has_assignee_or_draft_pr = bool(obs.issue_assignees) or any(
         pr.state == "OPEN" and pr.draft for pr in obs.linked_prs
     )
     if has_assignee_or_draft_pr:
-        return IN_PROGRESS
-    return VK_READY
+        return FR_IN_PROGRESS
+    return FR_READY
 
 
 def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
@@ -539,9 +539,9 @@ def render(
             # stays on tracking-only issues so humans can filter their work.
             labels.add(MANUAL)
         # `fr:synced` is protocol-owned (set after the runner accepts): the
-        # renderer doesn't initiate it, but must carry it forward (either
-        # spelling — transitional dual-read) so diff() sees no drift.
-        if FR_SYNCED.name in observed_names or "vk-synced" in observed_names:
+        # renderer doesn't initiate it, but must carry it forward so
+        # diff() sees no drift.
+        if FR_SYNCED.name in observed_names:
             labels.add(FR_SYNCED)
         state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
         issues[n] = RenderedIssue(

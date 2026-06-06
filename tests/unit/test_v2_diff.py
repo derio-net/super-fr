@@ -20,7 +20,7 @@ def test_diff_undispatched_yields_create():
     assert creates[0].phase_number == 1
     # v3 tracking-only default: creates carry attributes, no queue lifecycle.
     assert "fr:ready" not in creates[0].labels
-    assert "vk-ready" not in creates[0].labels
+    assert "fr:ready" not in creates[0].labels
     assert "phase:1" in creates[0].labels
 
     ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
@@ -158,7 +158,7 @@ def test_diff_creates_issues_for_every_phase_including_manual():
     for n, tag in tags.items():
         if tag == "manual":
             assert "manual" in creates[n].labels
-            assert "vk-ready" not in creates[n].labels
+            assert "fr:ready" not in creates[n].labels
 
 
 def test_diff_swaps_stale_dated_labels_for_normalized_ones():
@@ -202,7 +202,7 @@ def test_diff_swaps_stale_dated_labels_for_normalized_ones():
                         "plan:2026-05-27--auto--awx-deployment",
                         "spec:-auto--awx-deployment-design",
                         "phase:1",
-                        "vk-ready",
+                        "fr:ready",
                     }
                 ),
                 issue_assignees=(),
@@ -234,13 +234,13 @@ def test_repo_label_ensure_carries_registry_colors():
     from fr import parse
     from fr.diff import RepoLabelEnsure, diff
     from fr.labels import (
-        IN_PROGRESS,
+        FR_IN_PROGRESS,
+        FR_PR_READY,
+        FR_READY,
         MANUAL,
         PHASE_LABEL_COLOR,
         PLAN_LABEL_COLOR,
-        PR_READY,
         SPEC_LABEL_COLOR,
-        VK_READY,
         LabelDef,
     )
     from fr.render import render
@@ -272,11 +272,11 @@ def test_repo_label_ensure_carries_registry_colors():
     assert by_name["spec:fixture-spec-design"].color == SPEC_LABEL_COLOR
 
     # Lifecycle constant: matches the registry singleton's color exactly.
-    assert by_name["fr:ready"].color == VK_READY.color
-    assert by_name["fr:ready"].description == VK_READY.description
+    assert by_name["fr:ready"].color == FR_READY.color
+    assert by_name["fr:ready"].description == FR_READY.description
 
     # Registry constants for unused lifecycle slots are not pulled in.
-    for unused in (MANUAL, IN_PROGRESS, PR_READY):
+    for unused in (MANUAL, FR_IN_PROGRESS, FR_PR_READY):
         assert unused.name not in by_name
 
 
@@ -417,7 +417,7 @@ def test_diff_routes_per_issue_mutations_to_tracking_repo():
         phases={
             2: PhaseObservation(
                 issue_state="OPEN",
-                issue_labels=frozenset({"vk-ready", "stale-label"}),
+                issue_labels=frozenset({"fr:ready", "stale-label"}),
                 issue_assignees=(),
                 linked_prs=(),
                 body="stale body",
@@ -517,7 +517,7 @@ def test_diff_fully_cross_repo_plan_skips_target_repo_ensure():
     )
     obs_open = PhaseObservation(
         issue_state="OPEN",
-        issue_labels=frozenset({"vk-ready"}),
+        issue_labels=frozenset({"fr:ready"}),
         issue_assignees=(),
         linked_prs=(),
     )
@@ -647,12 +647,14 @@ def test_diff_dispatched_phases_unaffected_by_guard():
     assert [m for m in d.mutations if isinstance(m, IssueCreate)] == []
 
 
-def test_diff_converges_legacy_queue_labels_in_one_apply_idempotently():
-    """The zero-blackout contract: an old-labeled Issue converges to the
-    fr:* spelling in ONE label change (remove legacy, add fr:*), and a
-    second diff against the converged state is a no-op."""
+def test_diff_treats_stray_legacy_spellings_as_foreign_data():
+    """Post-step-7 contract (successor to the dual-read convergence test):
+    the 2026-06 fleet sweep renamed every label GitHub-side, so a stray
+    legacy spelling (`vk-ready`) is operator-owned foreign data — it does
+    NOT queue the phase, and diff() never adds or removes it."""
     from fr import parse
     from fr.diff import IssueLabelChange, diff
+    from fr.labels import is_queued
     from fr.render import render
     from fr.states import GhState, PhaseObservation
 
@@ -660,9 +662,7 @@ def test_diff_converges_legacy_queue_labels_in_one_apply_idempotently():
     phase = plan.phases[0].model_copy(
         update={
             "phase": plan.phases[0].phase.model_copy(
-                update={
-                    "tracking_issue": ("https://github.com/derio-net/superpowers-for-vk/issues/42")
-                }
+                update={"tracking_issue": ("https://github.com/derio-net/super-fr/issues/42")}
             )
         }
     )
@@ -670,27 +670,26 @@ def test_diff_converges_legacy_queue_labels_in_one_apply_idempotently():
 
     plan = dc_replace(plan, phases=(phase,))
 
-    def obs(labels):
-        return GhState(
-            phases={
-                1: PhaseObservation(
-                    issue_state="OPEN",
-                    issue_labels=frozenset(labels),
-                    issue_assignees=(),
-                    linked_prs=(),
-                )
-            }
-        )
+    assert not is_queued(frozenset({"vk-ready", "vk-synced", "in-progress", "pr-ready"}))
 
-    legacy = obs({"vk-ready", "phase:1", "plan:fixture-minimal", "spec:fixture-spec-design"})
-    rendered = render(plan, legacy)
-    d = diff(rendered, legacy, plan=plan)
+    stray = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(
+                    {"vk-ready", "phase:1", "plan:fixture-minimal", "spec:fixture-spec-design"}
+                ),
+                issue_assignees=(),
+                linked_prs=(),
+            )
+        }
+    )
+    rendered = render(plan, stray)
+    # Not queued: tracking-only projection, no fr:* lifecycle label appears.
+    rendered_labels = rendered.issue_per_phase[1].labels
+    assert not any(ld.name.startswith("fr:") for ld in rendered_labels), rendered_labels
+
+    d = diff(rendered, stray, plan=plan)
     changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
-    assert len(changes) == 1
-    assert "vk-ready" in changes[0].remove
-    assert "fr:ready" in changes[0].add
-
-    converged = obs({"fr:ready", "phase:1", "plan:fixture-minimal", "spec:fixture-spec-design"})
-    rendered2 = render(plan, converged)
-    d2 = diff(rendered2, converged, plan=plan)
-    assert not [m for m in d2.mutations if isinstance(m, IssueLabelChange)]
+    # The stray legacy label is unmanaged: never removed, never replaced.
+    assert not any("vk-ready" in c.remove or "vk-ready" in c.add for c in changes), changes

@@ -42,14 +42,14 @@ def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: i
     return plan, repo, issue_number
 
 
-def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
+def test_tick_syncs_fr_ready_phase_and_flips_fr_synced():
     from fr.observe import observe
     from fr.render import render
     from fr_dispatch import TickResult, tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -91,7 +91,7 @@ def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
     assert add_calls[0][1]["number"] == n
 
 
-def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
+def test_tick_mcp_failure_does_not_mark_fr_synced_so_next_tick_retries():
     """If dispatch_phase raises, the bridge MUST NOT add `vk-synced` —
     otherwise the failure would silently strand the phase on the next tick.
     """
@@ -101,7 +101,7 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -140,7 +140,7 @@ def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -176,7 +176,7 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
         repo,
         n,
         state="OPEN",
-        labels={"vk-ready", "phase:1"},
+        labels={"fr:ready", "phase:1"},
         assignees=("some-agent",),
     )
     rendered = render(plan, observe(plan, gh))
@@ -187,14 +187,14 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
 
     rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
     assert "fr:in-progress" in rlabel_names
-    assert "vk-ready" not in rlabel_names
+    assert "fr:ready" not in rlabel_names
     assert result.synced == 0
     assert result.skipped == 1
     assert result.errors == 0
     assert mcp.calls == []
 
 
-def test_tick_skipped_when_phase_already_vk_synced():
+def test_tick_skipped_when_phase_already_fr_synced():
     """vk-ready + vk-synced means the previous tick already created the
     card — leave it alone. Render preserves `vk-synced` from observed
     so the gate sees it on the projected side."""
@@ -204,7 +204,7 @@ def test_tick_skipped_when_phase_already_vk_synced():
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "vk-synced", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "fr:synced", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -260,7 +260,7 @@ def test_tick_does_not_create_issues_or_write_tracking_issue_back(tmp_path):
     assert create_calls == [], f"bridge tick must NOT create Issues; got {len(create_calls)}"
 
 
-def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_synced():
+def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_fr_synced():
     """Regression for the two coupled bugs the review surfaced:
 
     (a) Gating on pre-apply observed labels would erroneously sync a
@@ -281,7 +281,7 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
     # Second-tick scenario: vk-synced already set, body in sync.
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "vk-synced", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "fr:synced", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -323,7 +323,7 @@ def test_tick_defers_all_when_slot_counting_fails(monkeypatch):
     )
 
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 

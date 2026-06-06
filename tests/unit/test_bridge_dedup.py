@@ -54,7 +54,7 @@ def test_is_dispatched_membership_check():
     assert not is_dispatched("gh#43: [derio-net/superpowers-for-vk]", existing)
 
 
-def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
+def test_tick_skips_dispatch_when_card_already_exists_and_stamps_fr_synced():
     """A card with the would-be title already in VK → skip dispatch_phase
     entirely (no create_issue / no start_workspace), but DO stamp
     `vk-synced` on the GH Issue so the next tick won't retry.
@@ -65,7 +65,7 @@ def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -101,7 +101,7 @@ def test_tick_dispatches_normally_when_no_existing_card():
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 

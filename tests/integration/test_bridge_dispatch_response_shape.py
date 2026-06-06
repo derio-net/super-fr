@@ -226,13 +226,13 @@ def test_tick_dispatches_end_to_end_against_real_vk_envelopes(tmp_path: Path) ->
 
     gh = FakeGhClient()
     gh.repo_labels.setdefault(TARGET_REPO, set()).update(
-        {"vk-ready", "vk-blocked", "vk-synced", "phase:1", "plan:2026-05-18-response-shape-fixture"}
+        {"fr:ready", "fr:blocked", "fr:synced", "phase:1", "plan:2026-05-18-response-shape-fixture"}
     )
     gh.add_issue(
         TARGET_REPO,
         42,
         state="OPEN",
-        labels={"vk-ready", "phase:1", "plan:2026-05-18-response-shape-fixture"},
+        labels={"fr:ready", "phase:1", "plan:2026-05-18-response-shape-fixture"},
     )
 
     mcp = _RealShapeMcp()

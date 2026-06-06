@@ -72,7 +72,7 @@ def repo_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path / "test"
 
 
-def test_discover_plans_returns_only_vk_ready(repo_layout: Path) -> None:
+def test_discover_plans_returns_only_fr_ready(repo_layout: Path) -> None:
     from fr import parse
     from fr_dispatch import discover_plans
 
@@ -95,8 +95,8 @@ def test_discover_plans_returns_only_vk_ready(repo_layout: Path) -> None:
     )
 
     gh = FakeGhClient()
-    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"vk-ready", "phase:1"})
-    gh.add_issue("derio-net/test", 2, state="OPEN", labels={"phase:1", "vk-synced"})
+    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"fr:ready", "phase:1"})
+    gh.add_issue("derio-net/test", 2, state="OPEN", labels={"phase:1", "fr:synced"})
 
     found = discover_plans("derio-net/test", gh)
 
@@ -180,7 +180,7 @@ def test_discover_plans_skips_unparseable_plan_and_keeps_going(
     (bad_dir / "_meta.yaml").write_text("not: a valid meta\nschema_version: nope\n")
 
     gh = FakeGhClient()
-    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"vk-ready"})
+    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"fr:ready"})
 
     with caplog.at_level("WARNING", logger="fr_dispatch"):
         found = discover_plans("derio-net/test", gh)
@@ -243,7 +243,7 @@ def test_discover_plans_includes_phase_unblocked_by_completed_dependency(
         "derio-net/test",
         1,
         state="CLOSED",
-        labels={"phase:1", "vk-synced"},
+        labels={"phase:1", "fr:synced"},
         linked_prs=[
             {
                 "url": "https://github.com/derio-net/test/pull/3",
@@ -253,7 +253,7 @@ def test_discover_plans_includes_phase_unblocked_by_completed_dependency(
             }
         ],
     )
-    gh.add_issue("derio-net/test", 2, state="OPEN", labels={"phase:2", "vk-blocked"})
+    gh.add_issue("derio-net/test", 2, state="OPEN", labels={"phase:2", "fr:blocked"})
 
     found = discover_plans("derio-net/test", gh)
     assert len(found) == 1, "phase unblocked by a completed dependency must be discoverable"
@@ -309,7 +309,7 @@ def test_discover_plans_skips_whole_plan_when_a_phase_issue_unviewable(
     )
 
     gh = FakeGhClient()
-    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"fr:ready", "phase:1"})
     # #999 intentionally not added → view_issue KeyErrors inside observe().
 
     with caplog.at_level("WARNING", logger="fr_dispatch"):
