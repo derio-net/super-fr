@@ -255,7 +255,7 @@ def _migrate_one(
         "plan": slug,
         "spec": v1plan.spec,
         "target_repo": resolved_target,
-        # Match `vk plan create`'s default — migrated plans are v2 plans (#245).
+        # Match `fr plan create`'s default — migrated plans are v2 plans (#245).
         "vk_version": ">=2.0.0,<3.0.0",
         "created": slug[:10],  # YYYY-MM-DD prefix is enforced above
     }
@@ -717,7 +717,7 @@ def _rewrite_file_cell(cell: str, *, repo_root: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# `vk migrate dirs` — legacy archived-plans/ -> implemented/ layout
+# `fr migrate dirs` — legacy archived-plans/ -> implemented/ layout
 # (2026-06-05 dispatch-guards spec, Phase 3)
 
 
@@ -801,7 +801,7 @@ def _spec_fully_implemented(
 
 
 def plan_dirs_migration(repo_root: Path) -> tuple[list[DirsMove], list[str]]:
-    """Compute the moves `vk migrate dirs` would perform. Pure planning.
+    """Compute the moves `fr migrate dirs` would perform. Pure planning.
 
     Returns (moves, notes). Empty moves = nothing to migrate.
     """

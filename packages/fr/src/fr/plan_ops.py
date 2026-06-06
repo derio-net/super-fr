@@ -134,7 +134,7 @@ def create(
     # filesystem. A spec missing its '## Implementation Plans' section must
     # fail loud here — not after the folder is half-built — so a re-run after
     # adding the section isn't blocked by a stranded folder (#133). Mirrors how
-    # `vk apply` validates the diff before `--yes` touches GitHub.
+    # `fr apply` validates the diff before `--yes` touches GitHub.
     # Same doctrine for phase numbering: the schema gate (PhaseHeader ge=1)
     # would only reject at the post-write re-parse, stranding the folder.
     for ps in phases:
@@ -444,7 +444,7 @@ def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
 
 def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
     """Null phase.tracking_issue in <plan_dir>/<NN>.yaml (inverse of
-    `set_tracking_issue` — the `vk undispatch` writeback).
+    `set_tracking_issue` — the `fr undispatch` writeback).
 
     Returns True when the field was cleared, False when it was already
     null (no-op; the file is not rewritten, keeping re-runs byte-stable).

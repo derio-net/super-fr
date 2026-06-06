@@ -1,11 +1,11 @@
-"""vk skills — overview of the v2 CLI surface and the skill files that document it.
+"""fr skills — overview of the v2 CLI surface and the skill files that document it.
 
 Two sections:
   - **Commands** — every top-level command and sub-app, introspected from the
     typer app at runtime (so it stays in sync with the actual surface).
   - **Skills** — the four `vk-*` SKILL.md files. v2 skills are not 1:1 with
-    sub-apps (e.g. `vk-execute` orchestrates `vk pickup` + `vk plan edit` +
-    `vk apply`), so the skill section is free-form prose pointing at the
+    sub-apps (e.g. `vk-execute` orchestrates `fr pickup` + `fr plan edit` +
+    `fr apply`), so the skill section is free-form prose pointing at the
     relevant commands rather than a single-app mapping.
 """
 
@@ -19,43 +19,43 @@ SKILLS: list[tuple[str, str, str]] = [
     (
         "vk-plan",
         "Author / edit plans (skill).",
-        "vk plan {create,edit,rework,rework-add,rework-list,self-review}",
+        "fr plan {create,edit,rework,rework-add,rework-list,self-review}",
     ),
     (
         "vk-dispatch",
         "Reconcile a plan's GitHub Issues (skill).",
-        "vk status  →  vk apply [--yes] [--force]  ·  vk undispatch / vk archive to invert/finish",
+        "fr status  →  fr apply [--yes] [--force]  ·  fr undispatch / fr archive to invert/finish",
     ),
     (
         "vk-execute",
         "Implement a phase end-to-end (skill).",
-        "vk pickup --phase N  →  vk plan edit --tick / --complete-phase  →  vk apply --yes",
+        "fr pickup --phase N  →  fr plan edit --tick / --complete-phase  →  fr apply --yes",
     ),
     (
         "vk-progress",
         "Plan / spec progress reporting (skill).",
-        "vk status <plan-dir>  +  vk spec status [--all]  +  vk plan edit  +  vk archive [--all]"
-        "  ·  vk repair [--yes] to normalize stale refs",
+        "fr status <plan-dir>  +  fr spec status [--all]  +  fr plan edit  +  fr archive [--all]"
+        "  ·  fr repair [--yes] to normalize stale refs",
     ),
     (
         "vk-goal",
         "Autonomous goal-to-PR pipeline (skill).",
-        "vk plan {create,self-review,edit}  →  vk spec status",
+        "fr plan {create,self-review,edit}  →  fr spec status",
     ),
     (
         "vk-isolation",
         "Isolated workspace: worktree + devcontainer, exec-bridge (skill).",
-        "vk isolation {up,exec,status,down}",
+        "fr isolation {up,exec,status,down}",
     ),
     (
         "vk-init",
         "Scaffold devcontainer profiles via interview (skill).",
-        "vk init scaffold --profile NAME --purpose TEXT [--tool ...] [--secret ...]",
+        "fr init scaffold --profile NAME --purpose TEXT [--tool ...] [--secret ...]",
     ),
     (
         "vk-brainstorming",
         "Brainstorm inside vk-isolation; hard stop without a profile (skill).",
-        "vk isolation up  →  superpowers:brainstorming  →  vk-plan handoff",
+        "fr isolation up  →  superpowers:brainstorming  →  vk-plan handoff",
     ),
 ]
 

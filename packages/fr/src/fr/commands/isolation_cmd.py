@@ -1,4 +1,4 @@
-"""vk isolation — CLI over the isolation Target (worktree + devcontainer).
+"""fr isolation — CLI over the isolation Target (worktree + devcontainer).
 
 Plain-shell surface by design (agent-agnostic): any agent or a human drives
 up/exec/status/down identically. IsolationError maps to exit 2.
@@ -68,7 +68,7 @@ def exec(  # noqa: A001 - typer command name
     if state is None:
         _fail(
             IsolationError(
-                f"no isolation workspace for branch {branch!r} — run `vk isolation up` first."
+                f"no isolation workspace for branch {branch!r} — run `fr isolation up` first."
             )
         )
         return
@@ -76,7 +76,7 @@ def exec(  # noqa: A001 - typer command name
     if argv and argv[0] == "--":
         argv = argv[1:]
     if not argv:
-        _fail(IsolationError("nothing to run — usage: vk isolation exec -- CMD ..."))
+        _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
     raise typer.Exit(_target(repo).exec(state, argv))
 

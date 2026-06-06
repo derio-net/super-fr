@@ -1,5 +1,5 @@
 """Canonical label registry — single source of truth for label colors,
-descriptions, and dynamic templates. Consumed by `vk apply` (which calls
+descriptions, and dynamic templates. Consumed by `fr apply` (which calls
 `ensure_labels` on the target repo before it touches Issues).
 
 Color scheme (lifecycle gradient, board reads visually as a progression):

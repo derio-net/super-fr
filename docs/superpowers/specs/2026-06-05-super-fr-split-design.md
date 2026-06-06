@@ -174,6 +174,18 @@ Operator-level rules (`~/.claude/rules/vk-plan-override.md`) are replaced
 by `fr`-named equivalents in the same sweep (§Migration); skill override
 routing (`writing-plans` → `fr-plan`) carries over verbatim.
 
+### Plan-file version constraints (v3 landmine, resolved)
+
+Every plan in the wild carries `vk_version: ">=2.0.0,<3.0.0"` — under a
+strict rename, fr 3.0.0 would refuse to parse ALL of them, including
+archived history. Resolution (the labels-are-data doctrine applied to
+plan files): the legacy `vk_version` field becomes **inert metadata**
+(parsed, never enforced — it constrains a tool that no longer exists);
+the schema gains `fr_version`, which IS enforced when present. New
+plans write `fr_version`; the step-6 sweep adds it to active plans;
+archived plans keep their historical `vk_version` untouched and stay
+parseable forever. Implemented in migration step 4 (protocol phase).
+
 ## Versioning
 
 Single lockstep version across the three packages and both plugin

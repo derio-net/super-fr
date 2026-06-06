@@ -1,10 +1,10 @@
-"""`vk status` CLI — read-only plan report (2026-06-05 dispatch-guards spec).
+"""`fr status` CLI — read-only plan report (2026-06-05 dispatch-guards spec).
 
-The safely-allowlistable audit verb: same read pipeline as `vk apply`'s
+The safely-allowlistable audit verb: same read pipeline as `fr apply`'s
 dry-run (via `vk.commands.common.build_plan_report`, so the two can never
 drift) but with no mutation vocabulary and no `--yes` to misfire. Exit 0
 even when drift exists — it's a report, not a gate. Allowlist as
-`vk status*`.
+`fr status*`.
 
 Exit codes: 0 report printed (drift included); 2 usage / legacy layout;
 5 plan parse error.
@@ -82,7 +82,7 @@ def _report_text(report: PlanReport) -> str:
     if not archive_gate(report.plan, report.observed):
         lines.append("")
         lines.append(
-            f"plan complete — run `vk archive {report.plan.repo_relative_dir}` to move it "
+            f"plan complete — run `fr archive {report.plan.repo_relative_dir}` to move it "
             f"to implemented/."
         )
     return "\n".join(lines)
@@ -127,7 +127,7 @@ def status_command(
 ) -> None:
     """Read-only plan report: tick counts, dispatch state, drift, archive hint.
 
-    Never mutates GitHub. Safe to allowlist as `vk status*`.
+    Never mutates GitHub. Safe to allowlist as `fr status*`.
     """
     require_migrated_layout()
     if output_format not in ("text", "json"):

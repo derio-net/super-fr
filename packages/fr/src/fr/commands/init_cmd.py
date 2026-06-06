@@ -1,4 +1,4 @@
-"""vk init — repo initialization commands (devcontainer profile scaffolding)."""
+"""fr init — repo initialization commands (devcontainer profile scaffolding)."""
 
 from __future__ import annotations
 

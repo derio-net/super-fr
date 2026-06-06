@@ -12,9 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-# Transitional: the console script keeps the `vk` name until the Phase 3
-# rebrand flips it to `fr`.
-vk = "fr.cli:app"
+fr = "fr.cli:app"
 
 [build-system]
 requires = ["hatchling"]

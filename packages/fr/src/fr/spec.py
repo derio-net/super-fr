@@ -236,7 +236,7 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
         # Phase-level: the shared LOCAL-only predicate (completion.at set,
         # OR all steps ticked) — spec status doesn't observe gh, it's a
         # local roll-up only. Same predicate drives the dispatch guard in
-        # vk.diff and the vk archive gate.
+        # vk.diff and the fr archive gate.
         phases_complete = sum(1 for p in plan.phases if plan_locally_complete(p))
         phases_total = len(plan.phases)
 

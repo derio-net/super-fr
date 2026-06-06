@@ -1,4 +1,4 @@
-"""`vk archive` CLI — move finished plans (and their specs) to implemented/.
+"""`fr archive` CLI — move finished plans (and their specs) to implemented/.
 
 Gate per plan (vk.render.archive_gate): every phase `_phase_complete` OR
 (undispatched AND `plan_locally_complete`). `--force` overrides — single
@@ -136,7 +136,7 @@ def archive_command(
     # Spec decision once, after all plan moves (order independence in --all).
     # Runs even when nothing archived this run: a spec stranded by a prior
     # run (cross-repo row unresolved then, resolved now) must still get
-    # swept — `vk migrate dirs` evaluates specs unconditionally and the two
+    # swept — `fr migrate dirs` evaluates specs unconditionally and the two
     # archive paths must agree (review finding, 2026-06-06).
     specs_moved = False
     if archived or all_plans:

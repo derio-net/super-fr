@@ -1,23 +1,23 @@
 ---
-name: vk-init
+name: fr-init
 description: >
   Initialize a repo for isolated runs: scan it, interview the operator about
   working patterns, tools, and credentials, then scaffold one or more
-  devcontainer profiles via `vk init scaffold`. Use when a repo has no
-  devcontainer profile, when vk-isolation or vk-brainstorming hard-stops
+  devcontainer profiles via `fr init scaffold`. Use when a repo has no
+  devcontainer profile, when fr-isolation or fr-brainstorming hard-stops
   asking for one, when the operator says "init this repo", "set up the
   devcontainer", or wants separate read-only/admin environments.
 ---
 
-# vk-init
+# fr-init
 
 Captures "how you work in this repo" as committed devcontainer profiles plus
 host-only secrets placeholders. Interactive BY DESIGN — the interview is
 operator-owned context, so this skill is exempt from autonomy contracts:
-under a vk-goal run, a missing devcontainer is a blocker; pause, run this
+under a fr-goal run, a missing devcontainer is a blocker; pause, run this
 interview, resume isolated.
 
-**Announce at start:** "I'm using vk-init to set up this repo's profiles."
+**Announce at start:** "I'm using fr-init to set up this repo's profiles."
 
 ## 1. Scan first
 
@@ -51,9 +51,9 @@ Cover, with scan-informed recommended options:
 ## 3. Scaffold per profile
 
 ```bash
-vk init scaffold --repo . --profile dev --purpose "day-to-day development" \
+fr init scaffold --repo . --profile dev --purpose "day-to-day development" \
     --tool uv --tool node --default
-vk init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
+fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
     --secret GH_TOKEN --secret KUBECONFIG_B64
 ```
 
@@ -75,15 +75,15 @@ Unknown tools land in the profile's notes — wire them into
 
 - Tell the operator which placeholders to fill
   (`~/.config/vk/secrets/<repo>/<profile>.env`) before the first
-  `vk isolation up`.
+  `fr isolation up`.
 - Commit the `.devcontainer/` files (PR per the repo's conventions —
   some repos block direct pushes to main).
-- If a run was paused on this init, resume it: `vk isolation up` now works.
+- If a run was paused on this init, resume it: `fr isolation up` now works.
 
 ## Multi-profile principles
 
 - The DEFAULT profile is the one autonomous runs use; keep it least-
   privileged enough to be safe unattended (admin credentials belong in a
   non-default profile the operator selects explicitly).
-- Adding a profile later is one more `vk init scaffold` call — the layout
+- Adding a profile later is one more `fr init scaffold` call — the layout
   is per-profile subfolders from day one, no migration.

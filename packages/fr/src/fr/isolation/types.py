@@ -1,4 +1,4 @@
-"""State, profiles, and the Target protocol for vk isolation."""
+"""State, profiles, and the Target protocol for fr isolation."""
 
 from __future__ import annotations
 

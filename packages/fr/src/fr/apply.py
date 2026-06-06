@@ -112,7 +112,7 @@ def apply(
     `skip_issue_create=True` strips `IssueCreate` mutations from the diff
     before applying and emits a WARNING for each one. The bridge tick
     uses this so the cron daemon never creates GitHub Issues — Issue
-    creation is operator-only, via `vk apply --yes`. The default
+    creation is operator-only, via `fr apply --yes`. The default
     `False` keeps the operator path unchanged. See incident on
     2026-05-18 (sfv#196-#214 and sfv#216-#234).
     """
@@ -162,7 +162,7 @@ def _filter_issue_creates(d: Diff) -> Diff:
 
     Used by the bridge tick — Issue creation is operator-only. The
     warning carries the rendered Issue title so the operator can spot
-    which dispatch work is pending (run `vk apply --yes <plan>` to
+    which dispatch work is pending (run `fr apply --yes <plan>` to
     materialise it).
     """
     kept: list[Mutation] = []
@@ -170,7 +170,7 @@ def _filter_issue_creates(d: Diff) -> Diff:
         if isinstance(m, IssueCreate):
             logger.warning(
                 "phase %d: would have created Issue; skipping "
-                "(operator-only via `vk apply --yes`) — title=%r",
+                "(operator-only via `fr apply --yes`) — title=%r",
                 m.phase_number,
                 m.title,
             )

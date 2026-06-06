@@ -1,4 +1,4 @@
-"""`vk repair` CLI — idempotent stale-ref normalization (2026-06-06 spec).
+"""`fr repair` CLI — idempotent stale-ref normalization (2026-06-06 spec).
 
 Dry-run by default; `--yes` writes. Exit codes: 0 success / clean
 dry-run (warnings don't fail it — a report, not a gate); 2 usage,
@@ -32,7 +32,7 @@ def _emit_text(result: RepairResult, *, applied: bool) -> None:
         console.print("nothing to repair — all refs canonical and resolvable.")
     elif not applied and result.rewrites:
         console.print(
-            f"\n{len(result.rewrites)} rewrite(s) planned — run `vk repair --yes` to apply."
+            f"\n{len(result.rewrites)} rewrite(s) planned — run `fr repair --yes` to apply."
         )
 
 

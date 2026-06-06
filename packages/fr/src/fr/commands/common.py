@@ -56,7 +56,7 @@ def require_migrated_layout(repo_root: Path | None = None) -> None:
     the superpowers tree — read or mutating — refuses to run on a legacy
     layout so the migration happens at first use of the new version. (A
     banner would get overlooked; nothing here mutates, so a read verb
-    refusing is still side-effect-free.) Exemptions: `vk migrate dirs`
+    refusing is still side-effect-free.) Exemptions: `fr migrate dirs`
     itself and verbs that never resolve the tree (isolation, init, skills,
     --version).
 
@@ -70,19 +70,19 @@ def require_migrated_layout(repo_root: Path | None = None) -> None:
         import typer
 
         # Plain echo, not rich — rich soft-wraps and can split the
-        # copy-pasteable `vk migrate dirs --yes` across lines.
+        # copy-pasteable `fr migrate dirs --yes` across lines.
         for d in legacy_dirs:
             typer.echo(f"legacy layout detected: {d}", err=True)
         typer.echo(
             "The archive location moved to docs/superpowers/implemented/. "
-            "Run `vk migrate dirs --yes`, then commit the rename.",
+            "Run `fr migrate dirs --yes`, then commit the rename.",
             err=True,
         )
         raise typer.Exit(2)
 
 
 # ---------------------------------------------------------------------------
-# Shared read path for `vk apply` (dry-run) and `vk status` — extracting it
+# Shared read path for `fr apply` (dry-run) and `fr status` — extracting it
 # means the two verbs can never drift (2026-06-05 spec, "New CLI verbs").
 
 

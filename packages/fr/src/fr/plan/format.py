@@ -28,11 +28,11 @@ def detect(markdown: str) -> PlanFormat:
     Detection is structural, not config-driven:
     - At least one ``## Phase N:`` header -> PHASED
     - No phase headers but has ``### Task N:`` headers -> FLAT
-    - Neither -> raises ValueError (not a vk plan)
+    - Neither -> raises ValueError (not a fr plan)
     """
     if _RE_PHASE_HEADER.search(markdown):
         return PlanFormat.PHASED
     if _RE_TASK_HEADER.search(markdown):
         return PlanFormat.FLAT
-    msg = "Cannot detect plan format — not a vk plan (no Phase or Task headers found)"
+    msg = "Cannot detect plan format — not a fr plan (no Phase or Task headers found)"
     raise ValueError(msg)

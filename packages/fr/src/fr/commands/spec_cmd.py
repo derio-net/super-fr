@@ -1,4 +1,4 @@
-"""`vk spec status` CLI."""
+"""`fr spec status` CLI."""
 
 from __future__ import annotations
 

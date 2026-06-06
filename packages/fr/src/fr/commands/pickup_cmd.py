@@ -1,4 +1,4 @@
-"""`vk pickup` CLI — output phase scope for an agent."""
+"""`fr pickup` CLI — output phase scope for an agent."""
 
 from __future__ import annotations
 

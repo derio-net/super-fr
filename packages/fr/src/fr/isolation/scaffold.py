@@ -62,7 +62,7 @@ def scaffold_profile(
     """Write the profile. Returns the devcontainer.json path."""
     if not (repo_root / ".git").exists():
         raise IsolationError(
-            f"{repo_root} is not a git repo — vk init scaffold only runs inside one."
+            f"{repo_root} is not a git repo — fr init scaffold only runs inside one."
         )
 
     profile_dir = repo_root / ".devcontainer" / profile
@@ -89,7 +89,7 @@ def scaffold_profile(
         # Mount the workspace at its HOST path (not /workspaces/<name>):
         # linked-worktree gitdir back-pointers record host abspaths, so git
         # only works in-container when worktree + base .git share the host
-        # layout. Pairs with the base-.git mount that `vk isolation up` adds.
+        # layout. Pairs with the base-.git mount that `fr isolation up` adds.
         "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
         "workspaceFolder": "${localWorkspaceFolder}",
         "runArgs": [
@@ -133,7 +133,7 @@ def _update_profiles_yaml(
 def _ensure_env_placeholders(env_file: Path, repo: str, profile: str, secrets: list[str]) -> None:
     env_file.parent.mkdir(parents=True, exist_ok=True)
     existing = env_file.read_text() if env_file.is_file() else ""
-    lines = [] if existing else [f"# vk isolation secrets — {repo}/{profile}", ""]
+    lines = [] if existing else [f"# fr isolation secrets — {repo}/{profile}", ""]
     present = {
         ln.lstrip("# ").split("=", 1)[0].strip() for ln in existing.splitlines() if "=" in ln
     }

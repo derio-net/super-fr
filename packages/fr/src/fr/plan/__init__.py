@@ -1,6 +1,6 @@
 """Legacy v1 plan reader.
 
-Retained ONLY for `vk migrate v1-to-v2`'s use — `vk.migrate` imports
+Retained ONLY for `fr migrate v1-to-v2`'s use — `vk.migrate` imports
 `vk.plan.parser.parse_plan` to read v1 `.md` plans during conversion to
 the v2 plan-as-folder format. No v2 code path other than the migration
 tool touches this package.

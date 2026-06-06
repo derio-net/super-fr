@@ -72,7 +72,7 @@ class Plan:
     ``preamble`` is the block of free-form content between the recognized
     header fields (title/spec/status/goal) and the first ``---`` divider —
     typically ``**Architecture:**``, ``**Tech Stack:**``, blockquotes, or
-    operator notes.  It is preserved verbatim so ``vk plan convert`` doesn't
+    operator notes.  It is preserved verbatim so ``fr plan convert`` doesn't
     silently delete author-written context on round-trip.
     """
 

@@ -1,15 +1,15 @@
 ---
-name: vk-execute
+name: fr-execute
 description: >
   Execute an agentic phase from a plan. Use when implementing
   assigned work from a plan file. Agent-facing skill.
 ---
 
-# vk-execute
+# fr-execute
 
 Implements a single phase from a plan.
 
-**Announce at start:** "I'm using vk-execute to implement this phase."
+**Announce at start:** "I'm using fr-execute to implement this phase."
 
 ## Mode selection
 
@@ -28,7 +28,7 @@ When creating the PR for an agentic phase:
   the Issue body (the `📦 Repo:` / `📋 Plan:` / … lines plus the
   `**Goal (from plan):**` paragraph). Then proceed with your PR summary.
 
-The `vk pickup` output below provides the canonical PR title template.
+The `fr pickup` output below provides the canonical PR title template.
 
 ## Label lifecycle (no manual transition verbs in v2)
 
@@ -44,7 +44,7 @@ renderer can observe on the Issue plus its linked PRs:
   observed AND no open linked PR remains (per `_phase_complete` in
   `render.py`).
 
-The `vk apply` step at the end of the phase pushes whichever transitions the
+The `fr apply` step at the end of the phase pushes whichever transitions the
 renderer projects from current GitHub state. To trigger `in-progress`,
 assign yourself to the Issue (or open a draft PR); to trigger `pr-ready`,
 take the PR out of draft.
@@ -53,7 +53,7 @@ take the PR out of draft.
 
 1. **Get phase scope:**
    ```bash
-   vk pickup <plan-dir> --phase N
+   fr pickup <plan-dir> --phase N
    ```
    Output is markdown: phase title, dependency reminder, PR title template,
    tasks + steps, and a pointer to `_prose.md` for plan-level context.
@@ -65,27 +65,27 @@ take the PR out of draft.
 
 3. **Tick steps as you complete them:**
    ```bash
-   vk plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state x
+   fr plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state x
    # or, to record a deliberate skip:
-   vk plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state - --note "<reason>"
+   fr plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state - --note "<reason>"
    ```
 
 4. **Mark the phase complete (after every step is ticked):**
    ```bash
-   vk plan edit <plan-dir> --complete-phase N
+   fr plan edit <plan-dir> --complete-phase N
    # manual phases require --note describing what was done
-   vk plan edit <plan-dir> --complete-phase N --note "<runbook ref>"
+   fr plan edit <plan-dir> --complete-phase N --note "<runbook ref>"
    ```
 
 5. **Open the PR.** Delegate to `superpowers:finishing-a-development-branch`.
-   Use the PR title from `vk pickup` and the body shape above.
+   Use the PR title from `fr pickup` and the body shape above.
 
 6. **Reconcile GitHub state:**
    ```bash
-   vk apply <plan-dir>           # preview the projected mutations
-   vk apply <plan-dir> --yes     # push label / state changes
+   fr apply <plan-dir>           # preview the projected mutations
+   fr apply <plan-dir> --yes     # push label / state changes
    ```
-   `vk apply` is idempotent. **Safe to run before your PR merges** —
+   `fr apply` is idempotent. **Safe to run before your PR merges** —
    renderer needs BOTH `completion.at` AND a merged PR observed before
    projecting CLOSED, so this only sets `pr-ready`. Re-run after merge
    (or let the bridge) to close.
@@ -96,7 +96,7 @@ take the PR out of draft.
 - Don't touch other phases.
 - Stop if blocked — report what's missing.
 - Step IDs: `P<n>.T<n>.S<n>`.
-- Migration from v1 (.md) plans is a separate concern — see `vk migrate v1-to-v2`.
+- Migration from v1 (.md) plans is a separate concern — see `fr migrate v1-to-v2`.
 
 ## Bridge integration
 
@@ -111,10 +111,10 @@ If you encounter a `.md` plan file (not a folder), it's a v1 plan that needs
 migration to the v2 plan-as-folder format before any execution:
 
 ```bash
-vk migrate v1-to-v2           # preview (default)
-vk migrate v1-to-v2 --yes     # apply: creates <slug>/ folders, moves .md to .md.v1-archive
+fr migrate v1-to-v2           # preview (default)
+fr migrate v1-to-v2 --yes     # apply: creates <slug>/ folders, moves .md to .md.v1-archive
 ```
 
 Migration is repo-wide: it converts every v1 plan in
 `docs/superpowers/{plans,implemented/plans}/` and rewrites spec tables;
-commit as its own PR. "Legacy layout detected" → `vk migrate dirs --yes`.
+commit as its own PR. "Legacy layout detected" → `fr migrate dirs --yes`.

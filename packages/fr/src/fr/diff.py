@@ -87,9 +87,9 @@ Mutation = IssueLabelChange | IssueStateChange | IssueBodyChange | IssueCreate |
 class SuppressedCreate:
     """An IssueCreate the guard withheld (2026-06-05 stale-plan postmortem).
 
-    Suppression is data, not a log line: apply dry-run, `vk status`, and
+    Suppression is data, not a log line: apply dry-run, `fr status`, and
     JSON output all render these so the operator sees exactly which phases
-    were refused and why. `vk apply --yes --force` re-enables the creates.
+    were refused and why. `fr apply --yes --force` re-enables the creates.
     """
 
     phase_number: int

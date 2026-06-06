@@ -121,7 +121,7 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
     Pre-2026-05-18 behavior was `completion.at OR (all_steps_ticked + merged PR)`
     — the OR shortcut closed Issues prematurely when an agent set
     `completion.at` before opening its PR. See 2026-05-18 incident
-    (multiple VK-spawned agents skipped `vk apply --yes` to avoid the
+    (multiple VK-spawned agents skipped `fr apply --yes` to avoid the
     premature close).
     """
     completion = phase.state.completion
@@ -151,8 +151,8 @@ def plan_locally_complete(phase: PhaseDoc) -> bool:
     different question — "does the plan ITSELF claim this phase is done?" —
     and exists for surfaces that run before any Issue exists: the dispatch
     guard in `vk.diff.diff` (2026-06-05 stale-plan dispatch postmortem),
-    the `_drift_warnings` never-dispatched warning, the `vk spec status`
-    roll-up, and the `vk archive` gate.
+    the `_drift_warnings` never-dispatched warning, the `fr spec status`
+    roll-up, and the `fr archive` gate.
 
     Tag-agnostic by design: unlike `_phase_complete`, a manual phase with
     `completion.at` but no `completion.note` still counts — for a dispatch
@@ -166,7 +166,7 @@ def plan_locally_complete(phase: PhaseDoc) -> bool:
 
 
 def archive_gate(plan: Plan, observed: GhState) -> tuple[str, ...]:
-    """Per-phase blockers for `vk archive`; empty tuple = plan may archive.
+    """Per-phase blockers for `fr archive`; empty tuple = plan may archive.
 
     A phase clears the gate when it is `_phase_complete` (gh agrees the
     work landed) OR it was never dispatched and `plan_locally_complete`
@@ -175,8 +175,8 @@ def archive_gate(plan: Plan, observed: GhState) -> tuple[str, ...]:
     `RenderedState.archive_decision` (strict all-`_phase_complete`), which
     this gate consumes for the dispatched arm.
 
-    Shared by `vk archive` (the actual gate), and `vk apply` / `vk status`
-    (the "plan complete — run vk archive" nudge) so the three surfaces
+    Shared by `fr archive` (the actual gate), and `fr apply` / `fr status`
+    (the "plan complete — run fr archive" nudge) so the three surfaces
     can't disagree.
     """
     blockers: list[str] = []
@@ -423,7 +423,7 @@ def _drift_warnings(plan: Plan, observed: GhState) -> tuple[Warning, ...]:
                         message=(
                             f"Phase {n}: {ticked}/{len(steps)} steps ticked but never "
                             f"dispatched — dispatch would be refused "
-                            f"(vk archive if this plan is done)."
+                            f"(fr archive if this plan is done)."
                         ),
                     )
                 )

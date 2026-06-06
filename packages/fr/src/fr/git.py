@@ -48,7 +48,7 @@ def file_on_ref(ref: str, path: str, cwd: Path | None = None) -> bool:
 
     Thin wrapper around `git ls-tree`. Used by the dispatch
     reachability gate to verify plan files are reachable on
-    origin/HEAD before `vk apply --yes` creates an Issue.
+    origin/HEAD before `fr apply --yes` creates an Issue.
     Raises if the ref doesn't exist locally.
     """
     output = _run_git(["ls-tree", ref, "--", path], cwd=cwd)

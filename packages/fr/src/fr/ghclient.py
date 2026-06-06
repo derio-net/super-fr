@@ -46,7 +46,7 @@ class GhClient(Protocol):
     def edit_issue_body(self, repo: str, number: int, body: str) -> None: ...
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
-        """Post a comment on an Issue (`vk undispatch` leaves its trail here)."""
+        """Post a comment on an Issue (`fr undispatch` leaves its trail here)."""
         ...
 
     def create_issue(
@@ -71,8 +71,8 @@ class GhClient(Protocol):
     def file_exists(self, repo: str, path: str) -> bool:
         """True iff `path` exists on `repo`'s default branch (contents API).
 
-        Read-only. Used by the spec-archival decision (`vk archive` /
-        `vk migrate dirs`) to resolve cross-repo plan rows — the
+        Read-only. Used by the spec-archival decision (`fr archive` /
+        `fr migrate dirs`) to resolve cross-repo plan rows — the
         2026-06-05 spec's narrow gh-contents lookup.
         """
         ...

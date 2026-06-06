@@ -1,4 +1,4 @@
-"""`vk repair` library — idempotent stale-ref normalization.
+"""`fr repair` library — idempotent stale-ref normalization.
 
 Walks the superpowers tree rewriting plan/spec refs to the canonical
 lifecycle-independent form (2026-06-06 spec-path-repair design):
@@ -62,7 +62,7 @@ def _warn_unresolved(
     tried = ", ".join(str(p) for p in res.tried)
     out.warnings.append(
         f"{file.name}: {what} {ref!r} does not resolve — tried: {tried}. "
-        "Left untouched; if this is a cross-repo row, run `vk repair` in its own repo."
+        "Left untouched; if this is a cross-repo row, run `fr repair` in its own repo."
     )
 
 

@@ -1,4 +1,4 @@
-"""`vk migrate v1-to-v2` CLI."""
+"""`fr migrate v1-to-v2` CLI."""
 
 from __future__ import annotations
 

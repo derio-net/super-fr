@@ -66,7 +66,7 @@ class RenderedIssue:
 class Warning:
     """A drift signal surfaced by the renderer.
 
-    Severity drives presentation in `vk apply --dry-run` output and
+    Severity drives presentation in `fr apply --dry-run` output and
     in the GHA spec-status comment, ordering more-actionable signals
     first.
     """

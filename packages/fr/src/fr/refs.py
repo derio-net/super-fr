@@ -1,7 +1,7 @@
 """Lifecycle-independent plan/spec ref normalization + resolution.
 
 The canonical ref form is the bare slug (a plan's folder name, a spec's
-filename) — it cannot go stale when `vk archive` / `vk migrate dirs`
+filename) — it cannot go stale when `fr archive` / `fr migrate dirs`
 relocate the underlying directory. The read side accepts every
 historical form forever: bare slug, active path, `implemented/` path,
 legacy `archived-plans/` path, and backticked/annotated spec-table

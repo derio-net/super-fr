@@ -1,28 +1,28 @@
 ---
-name: vk-goal
+name: fr-goal
 description: >
   Run a feature goal end-to-end autonomously: brainstorm the context, ask one
-  batched Q&A, then spec → review → vk-plan → review → TDD implementation →
+  batched Q&A, then spec → review → fr-plan → review → TDD implementation →
   review → single PR, fixing every review finding, with no intermediate operator
-  approval gates. ALWAYS use when the operator invokes /vk-goal or /goal with a
+  approval gates. ALWAYS use when the operator invokes /fr-goal or /goal with a
   task description. Also use when they say "build this autonomously", "ask your
   questions once then build it", "take this to a PR", hand over a feature with
   instructions to run unattended, mention "auto mode", or ask for the full
   spec-to-PR pipeline in one shot.
 ---
 
-# vk-goal
+# fr-goal
 
 One operator touchpoint from goal to reviewed PR: brainstorm context → ONE
-batched Q&A → spec → review → vk-plan → review → TDD implementation → review →
+batched Q&A → spec → review → fr-plan → review → TDD implementation → review →
 single PR. Every review fixes all issues it finds. The superpowers approval
-gates catch misunderstanding early; vk-goal front-loads that protection into
+gates catch misunderstanding early; fr-goal front-loads that protection into
 the single Q&A — the operator's autonomy instruction (outranking skill
 defaults) replaces each pause with a review-and-fix pass. Autonomy isn't
 silence on failure: when blocked, stop, state what's blocked and what you
 tried, and ask — a wrong guess shipped in a PR costs more than a paused run.
 
-**Announce at start:** "I'm using vk-goal to run this goal autonomously."
+**Announce at start:** "I'm using fr-goal to run this goal autonomously."
 
 ## What stays interactive
 
@@ -36,8 +36,8 @@ tried, and ask — a wrong guess shipped in a PR costs more than a paused run.
 
 ### 1. Brainstorm with batched Q&A — in isolation
 
-Invoke `vk-brainstorming` (runs `vk isolation up` first; no devcontainer
-profile → pause for the vk-init interview). Explore the workspace, collect
+Invoke `fr-brainstorming` (runs `fr isolation up` first; no devcontainer
+profile → pause for the fr-init interview). Explore the workspace, collect
 EVERY operator-owned decision, and ask all of them in ONE AskUserQuestion call
 (max 4 questions, recommended option first). Include a post-merge Test Plan
 question ONLY when the deliverable deploys (a service, bot, infra) — never for
@@ -59,22 +59,22 @@ if not found — batched into the Q&A when the shape is known up front. Dispatch
 one agent per repo (`isolation: "worktree"`) with the spec ref and this
 pipeline from step 4. One plan, one PR per repo.
 
-### 4. Plan — vk-plan, then review it
+### 4. Plan — fr-plan, then review it
 
-Invoke `vk-plan`, skipping the section-by-section approval (the spec already
+Invoke `fr-plan`, skipping the section-by-section approval (the spec already
 encodes the approved design). Keep v2 plan-as-folder format and TDD-shaped
-steps. Review: `vk plan self-review <plan-dir>` must pass; read the phases back
+steps. Review: `fr plan self-review <plan-dir>` must pass; read the phases back
 against the spec — all covered, nothing assumed. Fix everything, then implement.
 
 ### 5. Manual phases — back-load by default
 
-vk-plan's agentic-purity gate collects manual work into dedicated `[manual]`
-phases. vk-goal adds placement policy (a mid-plan manual phase stalls the run):
+fr-plan's agentic-purity gate collects manual work into dedicated `[manual]`
+phases. fr-goal adds placement policy (a mid-plan manual phase stalls the run):
 
 - **Back-load by default:** ALL manual work in the LAST phase, no agentic
   phase depending on it. The PR ships with that phase deliberately
   unimplemented, marked for the operator, who implements it and pushes to the
-  same PR (`vk plan edit --complete-phase N --note` records what was done).
+  same PR (`fr plan edit --complete-phase N --note` records what was done).
 - **Front-load only when agentic work genuinely depends on it.** Then finish
   plan + plan review, open a PR of spec + plan (the manual instructions ARE the
   deliverable), and pause. The operator merges that PR or pushes evidence to
@@ -85,14 +85,14 @@ phases. vk-goal adds placement policy (a mid-plan manual phase stalls the run):
   `depends_on` reaches only within a plan, so ordering lives in the spec and
   PR sequencing (a manual secret in one repo may gate another's phases).
 
-### 6. Implement — vk-execute local mode, TDD, no subagents
+### 6. Implement — fr-execute local mode, TDD, no subagents
 
 The step-1 isolation workspace is the working copy — every command through
-`vk isolation exec`. Run phases via `vk-execute` in LOCAL mode (plan-dir +
-phase) — NOT dispatched: spec/plan aren't on main, `vk apply --yes` refuses.
+`fr isolation exec`. Run phases via `fr-execute` in LOCAL mode (plan-dir +
+phase) — NOT dispatched: spec/plan aren't on main, `fr apply --yes` refuses.
 Implement inline, not via subagents — the implementing context needs the Q&A
 and spec history. TDD per step (`superpowers:test-driven-development`). Tick
-steps and complete phases via `vk plan edit`. Never implement a manual phase.
+steps and complete phases via `fr plan edit`. Never implement a manual phase.
 
 ### 7. Review at milestones — fix everything found
 
@@ -115,6 +115,6 @@ verbatim, labeled "post-merge — operator-driven". Stop; the operator merges.
 
 When the operator reports the merge: drive the Test Plan interactively if
 present (agent runs checks, operator confirms what the agent can't reach).
-Then confirm phases complete (`vk status` shows the archive nudge), run
-`vk archive <plan-dir>` (gate-checked git mv; the spec follows once all
-its rows are implemented), commit via a housekeeping PR, `vk isolation down`.
+Then confirm phases complete (`fr status` shows the archive nudge), run
+`fr archive <plan-dir>` (gate-checked git mv; the spec follows once all
+its rows are implemented), commit via a housekeeping PR, `fr isolation down`.

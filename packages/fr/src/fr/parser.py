@@ -118,7 +118,7 @@ def parse(plan_dir: Path) -> Plan:
     if not meta_path.exists():
         raise PlanSchemaError(
             f"{plan_dir} is not a v2 plan (no _meta.yaml). "
-            f"Run `vk migrate v1-to-v2` first if migrating from v1."
+            f"Run `fr migrate v1-to-v2` first if migrating from v1."
         )
     try:
         meta = PlanMeta.model_validate(yaml.safe_load(meta_path.read_text()))

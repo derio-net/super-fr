@@ -1,4 +1,4 @@
-"""`vk undispatch` CLI — the inverse of dispatch (2026-06-05 spec, Phase 6).
+"""`fr undispatch` CLI — the inverse of dispatch (2026-06-05 spec, Phase 6).
 
 For "these Issues were created in error": close each phase's tracking
 Issue with a comment + reason `not planned`, then null the
@@ -102,7 +102,7 @@ def undispatch_command(
                 gh.comment_issue(
                     repo,
                     issue_n,
-                    f"vk undispatch: dispatched in error from {plan.meta.plan}",
+                    f"fr undispatch: dispatched in error from {plan.meta.plan}",
                 )
                 gh.edit_issue_state(repo, issue_n, state="CLOSED", reason="not planned")
             except Exception as e:  # noqa: BLE001 — keep field for retry

@@ -51,7 +51,7 @@ class LocalWorktreeDevcontainerTarget:
     def up(self, profile: str | None, branch: str, path: Path | None = None) -> IsolationState:
         if not (self.repo_root / ".git").exists():
             raise IsolationError(
-                f"{self.repo_root} is not a git repo — vk isolation only runs inside one."
+                f"{self.repo_root} is not a git repo — fr isolation only runs inside one."
             )
         name = resolve_profile(self.repo_root, profile)
 
@@ -69,7 +69,7 @@ class LocalWorktreeDevcontainerTarget:
         env_file = self._env_file(name)
         if not env_file.is_file():
             env_file.parent.mkdir(parents=True, exist_ok=True)
-            env_file.write_text(f"# vk isolation secrets — {self.repo_root.name}/{name}\n")
+            env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}/{name}\n")
 
         config = worktree / ".devcontainer" / name / "devcontainer.json"
         git_dir = self.repo_root / ".git"

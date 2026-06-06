@@ -31,7 +31,7 @@ def is_cross_repo_spec(spec: str) -> bool:
     Same-repo specs are plain repo-relative paths (no colon). A spec is
     cross-repo iff it contains a ':' AND the part before the first ':' looks
     like 'owner/repo' (contains a '/'). Single source for this check so apply's
-    reachability gate and `vk plan self-review` agree on it (#248).
+    reachability gate and `fr plan self-review` agree on it (#248).
     """
     return ":" in spec and "/" in spec.split(":", 1)[0]
 

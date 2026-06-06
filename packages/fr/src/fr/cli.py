@@ -2,13 +2,13 @@
 
 Exit code conventions (uniform across every subcommand):
   0 = success
-  1 = lint failure (e.g. `vk plan self-review` found errors)
+  1 = lint failure (e.g. `fr plan self-review` found errors)
   2 = usage error or plan-edit refusal (bad flags, missing args,
       `plan_ops.PlanEditError`)
-  4 = gh / network failure during `vk apply`
+  4 = gh / network failure during `fr apply`
   5 = plan parse error (`PlanSchemaError`)
 
-Mutating commands (`vk apply`, `vk migrate v1-to-v2`) default to a
+Mutating commands (`fr apply`, `fr migrate v1-to-v2`) default to a
 dry-run. Pass `--yes` to actually write changes.
 """
 
@@ -31,8 +31,8 @@ from fr.commands.status_cmd import status_command
 from fr.commands.undispatch_cmd import undispatch_command
 
 app = typer.Typer(
-    name="vk",
-    help="VK toolchain: v2 plan-as-folder, render → observe → diff → apply.",
+    name="fr",
+    help="super-fr: plan-as-folder superpowers toolchain, render → observe → diff → apply.",
     no_args_is_help=True,
 )
 
@@ -60,7 +60,7 @@ app.command(name="skills")(skills_command)
 
 def version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"vk {__version__}")
+        typer.echo(f"fr {__version__}")
         raise typer.Exit()
 
 

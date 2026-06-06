@@ -1,4 +1,4 @@
-"""`vk apply` CLI — render + observe + diff + apply for a plan.
+"""`fr apply` CLI — render + observe + diff + apply for a plan.
 
 Wires the library functions (`render`/`observe`/`diff`/`apply`) into
 typer. Production uses `RealGhClient` (the gh-CLI wrapper); tests
@@ -189,10 +189,10 @@ def _apply_one(
         parts.append("\nwarnings:")
         for w in rendered.warnings:
             parts.append(f"  [{w.severity}] {w.message}")
-    # Archive nudge — same gate as `vk archive`, so the surfaces agree.
+    # Archive nudge — same gate as `fr archive`, so the surfaces agree.
     if not archive_gate(plan, report.observed):
         parts.append(
-            f"\nplan complete — run `vk archive {plan.repo_relative_dir}` to move it "
+            f"\nplan complete — run `fr archive {plan.repo_relative_dir}` to move it "
             f"to implemented/."
         )
 
@@ -221,7 +221,7 @@ def _apply_one(
             "",
             f"all {len(d.suppressed)} undispatched phase(s) are locally complete — "
             "nothing to dispatch.",
-            "If this plan is done, run `vk archive` on it; to dispatch anyway, "
+            "If this plan is done, run `fr archive` on it; to dispatch anyway, "
             "re-run with --force.",
         ]
         return 2, "\n".join(lines), json_out
@@ -259,7 +259,7 @@ def _apply_one(
             lines.append(f"  {p}")
         lines.append("")
         lines.append(
-            "Merge the plan + spec to the default branch first, then re-run `vk apply --yes`."
+            "Merge the plan + spec to the default branch first, then re-run `fr apply --yes`."
         )
         lines.append("(If origin/HEAD isn't set locally: `git remote set-head origin --auto`.)")
         json_out["unreachable_paths"] = [str(p) for p in missing]
@@ -352,7 +352,7 @@ def apply_command(
         # their already-closed Issues (agentic phases executed inline can never
         # satisfy the merged-PR completion signal). `--all` already walks only
         # plans/, so this guards the one remaining entry point — an explicit
-        # `vk apply docs/superpowers/archived-plans/<plan>`. Anchored to the
+        # `fr apply docs/superpowers/archived-plans/<plan>`. Anchored to the
         # canonical `superpowers/archived-plans` location so an unrelated dir
         # that merely happens to be named "archived-plans" isn't refused.
         resolved_parts = plan_dir.resolve().parts
@@ -368,7 +368,7 @@ def apply_command(
             err_console.print(
                 f"refusing to apply archived/implemented plan: {plan_dir}\n"
                 "Archived plans are terminal; applying one would reopen its closed "
-                "Issues. (`vk apply --all` already walks only plans/.)"
+                "Issues. (`fr apply --all` already walks only plans/.)"
             )
             raise typer.Exit(2)
         targets = [plan_dir]

@@ -78,7 +78,7 @@ def parse_plan(path: Path) -> Plan:
     """Parse a plan markdown file into a frozen Plan AST.
 
     Raises FileNotFoundError if path does not exist.
-    Raises ValueError if the file is not a valid vk plan.
+    Raises ValueError if the file is not a valid fr plan.
     """
     text = path.read_text(encoding="utf-8")
     fmt = detect(text)

@@ -92,7 +92,7 @@ class RealGhClient:
             )
         except _gh.GhError:
             # Fail soft: an unreachable PR query shouldn't blow up the
-            # whole `vk apply --dry-run`. Return [] and let downstream
+            # whole `fr apply --dry-run`. Return [] and let downstream
             # diff/render proceed without PR observations.
             return []
         data = json.loads(out)

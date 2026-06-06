@@ -1,4 +1,4 @@
-"""`vk plan ...` CLI subcommands — wraps vk.plan_ops."""
+"""`fr plan ...` CLI subcommands — wraps vk.plan_ops."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
 
 @plan_app.callback()
 def _plan_guard() -> None:
-    """Runs before every `vk plan ...` subcommand (legacy-layout hard-stop)."""
+    """Runs before every `fr plan ...` subcommand (legacy-layout hard-stop)."""
     require_migrated_layout()
 
 
