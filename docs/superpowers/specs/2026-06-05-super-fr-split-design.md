@@ -1,10 +1,10 @@
 # super-fr split — Design (DRAFT)
 
-**Status:** Draft — blocked-by
-`2026-06-05-dispatch-guards-and-implemented-lifecycle-design.md`, which
-ships first and edits the same modules (`render.py`, `diff.py`,
-`apply_cmd.py`, `spec.py`, four skill docs). Reevaluate this spec against
-the merged result before planning; see §Reevaluation checklist.
+**Status:** Draft, reevaluated — the blocker
+(`2026-06-05-dispatch-guards-and-implemented-lifecycle-design.md`) shipped
+as 2.5.0 (#263, merged 2026-06-06) and this spec's second pass ran against
+the merged tree; see §Reevaluation findings. Awaiting operator approval to
+go Final and hand off to planning.
 
 Companion artifact: `docs/superpowers/brainstorms/2026-06-05-plugin-split-seam-report.md`
 (full CLI/skill inventory and seam analysis this design rests on).
@@ -48,9 +48,12 @@ fr             Layer 1 + tracking duty
                spec, migrate, pickup, apply/observe/render/diff,
                gh + ghclient + real_ghclient, labels (state labels),
                states, _urls, _yaml
-               + (inherited from dispatch-guards) status, archive,
-                 undispatch, migrate dirs, plan_locally_complete,
-                 Diff.suppressed
+               + (landed in 2.5.0, all base) archive.py,
+                 commands/{status,archive,undispatch}_cmd.py,
+                 migrate dirs, plan_locally_complete + archive_gate
+                 (render.py), build_plan_report/PlanReport + the
+                 legacy-layout hard-stop (commands/common.py),
+                 plan_ops.clear_tracking_issue
 fr-dispatch    Queue protocol + generic runner framework
                queue labels (fr:ready / fr:in-progress / fr:pr-ready),
                reachability gate, runner registry, discover_plans + tick,
@@ -72,6 +75,12 @@ base CLI but requires `fr-dispatch`. The flag's handler does
 `importlib.util.find_spec("fr_dispatch")`; missing → exit 2 with
 "dispatching to a runner requires fr-dispatch". No other base code path
 references the siblings.
+
+**CLI composition note (from 2.5.0):** the legacy-layout hard-stop lives
+in `commands/common.py` and every tree-resolving verb opts in. Any verb
+`fr-dispatch` registers onto the `fr` CLI must call the same guard —
+this becomes part of the documented extension contract alongside the
+runner registry.
 
 **Runner registry:** `fr-dispatch` resolves `--to <name>` via the
 `fr.runners` entry-point group. `fr-vk` registers `vk`; a future
@@ -95,8 +104,12 @@ acts: on the GitHub Issue, as labels.
 - Downstream projection derives from observation: `fr status` /
   `fr spec status` show "queued" only when a runner label is observed.
   Per-phase mixing is legal (phase 1 executed inline, phases 2–4 queued).
-- `fr undispatch` (shipping in dispatch-guards) is the inverse, already
-  designed to leave runner workspaces to the runner's own reaper.
+- `fr undispatch` (shipped in 2.5.0) is the inverse, already designed to
+  leave runner workspaces to the runner's own reaper. It is a **base**
+  verb: local-mode also creates tracking issues, so closing erroneous
+  ones is not dispatch-only — its primary doc home is the base
+  (`fr-progress` remedies), with the `fr-dispatch` skill referencing it
+  for queue cleanup.
 
 ### Label taxonomy (v3)
 
@@ -117,9 +130,10 @@ reads them.
   `fr-init`, `fr-plan`, `fr-execute` (inline-only; lifecycle/bridge
   sections removed), `fr-goal`, `fr-progress`. Installer installs the
   `fr` package. Complete for local-mode by itself.
-- **super-fr-dispatch:** skills `fr-dispatch` (the `--to` ceremony:
-  pre-flight incl. the gh-evidence check from dispatch-guards,
-  reachability gate, writeback commit with Issue URLs) and `fr-runner`
+- **super-fr-dispatch:** skills `fr-dispatch` (the `--to` ceremony: the
+  2.5.0 three-step pre-flight — `fr status` audit, gh-evidence check for
+  never-dispatched plans, reachability gate — plus writeback commit with
+  Issue URLs in the body) and `fr-runner`
   (new: operate/verify/debug a runner — tick health, stuck cards, orphan
   workspaces; the operator surface the bridge never had). Installer
   installs `fr-dispatch` + the default adapter `fr-vk`.
@@ -143,9 +157,9 @@ by design.
 Strictly sequenced after dispatch-guards merges. Each step is an
 independently shippable PR in this repo unless noted:
 
-1. **Rebase + inherit:** absorb dispatch-guards (new verbs, suppressed
-   diffs, `implemented/` taxonomy, skill-doc text) into the split's
-   module map. Update this spec from Draft to Final (§Reevaluation).
+1. **Rebase + inherit:** ✅ done 2026-06-06 — branch rebased on 2.5.0,
+   module map re-derived from the merged tree (this spec's second pass).
+   Remaining: operator approves Draft → Final.
 2. **Workspace split:** uv workspace; move modules into `fr` /
    `fr-dispatch` / `fr-vk` per §Architecture; import-direction +
    cross-package contract tests (the bridge regression suite now runs
@@ -162,11 +176,13 @@ independently shippable PR in this repo unless noted:
 6. **Repo sweep (subagents, parallel):** one batch per checkout root
    (`~/Docs/projects/DERIO_NET/`, `~/Docs/projects/agentic-stoa/`), one
    subagent per repo in its own worktree, producing one PR per repo that
-   bundles: label rename (`vk-ready`→`fr:ready` etc. via gh), `fr migrate
-   dirs` (the dispatch-guards legacy hard-stop fires once, here),
-   in-repo rules/docs references, and `.claude/settings*` allowlist
-   updates (`vk status*` → `fr status*` — allowlists reference the binary
-   name and break silently otherwise).
+   bundles: label rename (`vk-ready`→`fr:ready` etc. via gh), in-repo
+   rules/docs references, and `.claude/settings*` allowlist updates
+   (`vk status*` → `fr status*` — allowlists reference the binary name
+   and break silently otherwise). The `migrate dirs` bundling originally
+   planned here is moot: the 2.5.0 rollout already ran it per repo
+   (PRs #107/#480/#12/#226), so all repos are on the `implemented/`
+   layout before the sweep starts.
 7. **Operator config:** user-level rules files, the vk-plan-override
    mirror, shell completion. Last, because everything before it must
    already answer to `fr`.
@@ -175,37 +191,39 @@ Rollback story: steps 2–4 are in-repo and revert cleanly; step 5–6 are
 the point of no return — hence the sweep bundles everything per repo in
 one reviewable PR rather than trickling renames.
 
-## Interactions with dispatch-guards (why this is a draft)
+## Reevaluation findings (2026-06-06, against the merged 2.5.0 tree)
 
-1. Its `plan_locally_complete` + suppressed creates + factual staleness
-   header dissolve most of the tracking-vs-queue ambiguity this design
-   originally chased — our baseline improves before we start.
-2. Its new verbs (`status`, `archive`, `undispatch`, `migrate dirs`) are
-   all base-package; `undispatch` already respects the dispatch/adapter
-   seam (leaves cards to `reap_orphans`).
-3. Its `diff(force_create=)` / `Diff.suppressed` and the shared
-   apply/status read-helper become **public cross-package API** under the
-   split; its "bridge suite passes untouched" guarantee must be preserved
-   as a contract test at the new boundary.
-4. Its legacy-layout hard-stop and our v3 break must hit each repo once,
-   together (step 6).
-5. Its `vk status*` allowlistability survives only if the sweep updates
-   allowlists to `fr status*`.
-6. Both efforts edit the same files — no parallel implementation;
-   sequence strictly after its merge.
+The draft's blocked-by interactions, resolved item by item:
 
-## Reevaluation checklist (run when dispatch-guards is live)
+1. ✅ **Module map re-derived.** All 2.5.0 additions are base-package as
+   predicted, now pinned to real locations (§Architecture): the shared
+   read pipeline is `commands/common.py::build_plan_report` returning
+   `PlanReport`; the archive gate is `render.py::archive_gate` (shared by
+   archive/apply/status, exactly the one-definition shape the split
+   needs); the legacy-layout hard-stop lives in `commands/common.py` and
+   becomes part of the CLI extension contract for `fr-dispatch` verbs.
+2. ✅ **Bridge contract confirmed.** The 73-test bridge suite passed
+   untouched against `diff(force_create=)` defaults — that suite is the
+   ready-made cross-package contract suite at the `fr`/`fr-dispatch`
+   boundary (migration step 2 relocates it, semantics frozen).
+3. ✅ **Skill text re-split mapped.** vk-dispatch's new three-step
+   pre-flight moves whole into the `fr-dispatch` skill; the
+   archive/status text added to vk-goal/vk-progress is base-side; the
+   `undispatch` documentation gets a base home (`fr-progress` remedies)
+   since local-mode tracking issues need it too — the one assignment the
+   draft had wrong (it was dispatch-plugin-only).
+4. ✅ **No new plan-file fields.** `plan/models.py` and `plan/parser.py`
+   untouched by 2.5.0 — the "derive, don't store" doctrine held, and the
+   runner-as-Issue-labels design needs no rework.
+5. ✅ **Hard-stop already absorbed fleet-wide.** The 2.5.0 rollout ran
+   `migrate dirs` per repo (PRs #107/#480/#12/#226), so the v3 sweep no
+   longer bundles it (migration step 6 simplified).
+6. ✅ **`vk status*` allowlists** confirmed as a real migration surface —
+   the skill doc explicitly markets allowlist-safety; step 6 covers the
+   rename to `fr status*`.
 
-- [ ] Re-derive §Architecture's module map from the merged tree (new
-      commands files, the shared read-helper's location).
-- [ ] Confirm the bridge regression suite still passes with `diff()`
-      defaults across the package boundary as planned.
-- [ ] Re-read the four updated skill docs and re-split their text between
-      `fr-execute` (inline) and `fr-dispatch`/`fr-runner`.
-- [ ] Check no new plan-file fields appeared that violate the
-      runner-at-dispatch-time decision.
-- [ ] Promote this spec Draft → Final, then hand off to fr-plan
-      (vk-plan).
+Remaining before planning: operator approves Draft → Final, then hand
+off to fr-plan (vk-plan).
 
 ## Out of scope
 
