@@ -917,3 +917,97 @@ def test_migrate_dirs_moves_archived_specs_entries(tmp_path, monkeypatch):
     assert (sp / "implemented" / "specs" / "2026-04-01-old-design.md").is_file()
     assert (sp / "implemented" / "specs" / "plan-config.yaml").is_file()
     assert not (sp / "archived-specs").exists()
+
+
+# ── 2026-06-06 spec-path-repair: slug-derived gh-lookup candidates ──
+
+
+def test_archive_path_variants_legacy_form_cell():
+    """THE bug's cross-repo arm: a legacy archived-plans/ cell must yield
+    usable candidates (old gate returned (None, None))."""
+    from vk.migrate import _archive_path_variants
+
+    active, implemented, legacy = _archive_path_variants(
+        "docs/superpowers/archived-plans/2026-05-10-x/"
+    )
+    assert active == "docs/superpowers/plans/2026-05-10-x"
+    assert implemented == "docs/superpowers/implemented/plans/2026-05-10-x"
+    assert legacy == "docs/superpowers/archived-plans/2026-05-10-x"
+
+
+def test_archive_path_variants_bare_slug_cell():
+    from vk.migrate import _archive_path_variants
+
+    active, implemented, legacy = _archive_path_variants("2026-05-10-x")
+    assert active == "docs/superpowers/plans/2026-05-10-x"
+    assert implemented == "docs/superpowers/implemented/plans/2026-05-10-x"
+    assert legacy == "docs/superpowers/archived-plans/2026-05-10-x"
+
+
+def test_archive_path_variants_placeholder():
+    from vk.migrate import _archive_path_variants
+
+    assert _archive_path_variants("—") == (None, None, None)
+
+
+def test_spec_fully_implemented_cross_repo_slug_row(tmp_path):
+    """A cross-repo row in canonical slug form counts as done when the
+    other repo has the plan under implemented/plans/ — and the 'still
+    active' check probes the ACTIVE variant, not the raw cell."""
+    from tests.unit.fakes import FakeGhClient
+    from vk.migrate import _spec_fully_implemented
+
+    spec = tmp_path / "docs" / "superpowers" / "specs" / "2026-05-10-fixture.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text(
+        "# Fixture\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|---|---|---|---|\n"
+        "| Remote plan | `derio-net/other` | `2026-05-10-x` | — |\n"
+    )
+    gh = FakeGhClient()
+    gh.remote_files = {("derio-net/other", "docs/superpowers/implemented/plans/2026-05-10-x")}
+    implemented, note = _spec_fully_implemented(spec, tmp_path, gh)
+    assert implemented, note
+
+
+def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
+    """`vk migrate dirs --yes` normalizes refs after relocating the legacy
+    tree — the repo converges in one operation."""
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from vk.cli import app
+
+    sp = tmp_path / "docs" / "superpowers"
+    (sp / "plans").mkdir(parents=True)
+    (sp / "specs").mkdir()
+    legacy_plan = sp / "archived-plans" / "2026-05-10-old"
+    legacy_plan.mkdir(parents=True)
+    (legacy_plan / "_meta.yaml").write_text(
+        "schema_version: 2\nplan: 2026-05-10-old\n"
+        "target_repo: derio-net/test\nvk_version: '>=1.0.0,<3.0.0'\ncreated: 2026-05-10\n"
+    )
+    spec = sp / "specs" / "2026-05-10-spec.md"
+    spec.write_text(
+        "# S\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|---|---|---|---|\n"
+        "| Old | `derio-net/test` | `docs/superpowers/archived-plans/2026-05-10-old/` | — |\n"
+    )
+    for cmd in (
+        ["git", "init", "-q"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+    ):
+        subprocess.run(cmd, cwd=tmp_path, check=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["migrate", "dirs", "--yes"])
+    assert result.exit_code == 0, result.output
+    # the spec may itself have been swept to implemented/specs/
+    moved_spec = sp / "implemented" / "specs" / spec.name
+    text = (moved_spec if moved_spec.exists() else spec).read_text()
+    assert "| `2026-05-10-old` |" in text
+    assert "archived-plans" not in text

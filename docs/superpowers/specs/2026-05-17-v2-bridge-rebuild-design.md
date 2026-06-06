@@ -1568,7 +1568,7 @@ Test traceability: each capability's test docstring repeats the Given/When/Then.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| 2026-05-17-v2-bridge-rebuild | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-17-v2-bridge-rebuild/` | — |
+| 2026-05-17-v2-bridge-rebuild | `derio-net/superpowers-for-vk` | `2026-05-17-v2-bridge-rebuild` | — |
 | 2026-05-17-v2-bridge-cutover | `derio-net/agent-images` | `docs/superpowers/plans/2026-05-17-v2-bridge-cutover/` | `2026-05-17-v2-bridge-rebuild` (`v2.2.0` tag) |
 
 ## Post-deploy gaps

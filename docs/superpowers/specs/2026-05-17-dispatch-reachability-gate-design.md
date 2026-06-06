@@ -323,4 +323,4 @@ consumers act on stale or partial information.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| 2026-05-17-dispatch-reachability-gate | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-05-17-dispatch-reachability-gate/` (shipped via PR #146, archived 2026-05-17) | — |
+| 2026-05-17-dispatch-reachability-gate | `derio-net/superpowers-for-vk` | `2026-05-17-dispatch-reachability-gate` (shipped via PR #146, archived 2026-05-17) | — |

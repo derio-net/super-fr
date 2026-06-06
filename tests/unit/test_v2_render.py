@@ -912,3 +912,64 @@ def test_archive_gate_blocks_incomplete_phase_with_reason():
     blockers = archive_gate(plan, GhState(phases={}))
     assert len(blockers) == 1
     assert "Phase 1" in blockers[0]
+
+
+# ── 2026-06-06 spec-path-repair: spec_url lifecycle fallback ────────
+
+
+def _parse_fixture_in_repo(tmp_path, spec_ref):
+    """Copy the minimal fixture into a tmp repo (`.git` marker only) with
+    `meta.spec` swapped — resolution happens at parse time."""
+    import shutil
+
+    from vk import parse
+
+    (tmp_path / ".git").mkdir()
+    plan_dir = tmp_path / "docs" / "superpowers" / "plans" / "2026-05-09-fixture-minimal"
+    plan_dir.parent.mkdir(parents=True)
+    shutil.copytree(FIXTURE, plan_dir)
+    meta = (plan_dir / "_meta.yaml").read_text()
+    meta = meta.replace(
+        "spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md",
+        f"spec: {spec_ref}",
+    )
+    (plan_dir / "_meta.yaml").write_text(meta)
+    return parse(plan_dir)
+
+
+def test_spec_url_resolves_archived_spec(tmp_path):
+    """meta.spec recorded as specs/X.md must yield the implemented/ blob
+    URL after the spec archives — not a 404 link."""
+    from vk.render import spec_url
+
+    moved = tmp_path / "docs/superpowers/implemented/specs/2026-05-10-x-design.md"
+    moved.parent.mkdir(parents=True)
+    moved.write_text("# x\n")
+    plan = _parse_fixture_in_repo(tmp_path, "docs/superpowers/specs/2026-05-10-x-design.md")
+    assert spec_url(plan) == (
+        f"https://github.com/{plan.meta.target_repo}/blob/main/"
+        "docs/superpowers/implemented/specs/2026-05-10-x-design.md"
+    )
+
+
+def test_spec_url_slug_form(tmp_path):
+    from vk.render import spec_url
+
+    active = tmp_path / "docs/superpowers/specs/2026-05-10-x-design.md"
+    active.parent.mkdir(parents=True)
+    active.write_text("# x\n")
+    plan = _parse_fixture_in_repo(tmp_path, "2026-05-10-x-design.md")
+    assert spec_url(plan) == (
+        f"https://github.com/{plan.meta.target_repo}/blob/main/"
+        "docs/superpowers/specs/2026-05-10-x-design.md"
+    )
+
+
+def test_spec_url_unresolvable_falls_back_to_raw(tmp_path):
+    from vk.render import spec_url
+
+    plan = _parse_fixture_in_repo(tmp_path, "docs/superpowers/specs/2026-05-10-gone.md")
+    assert spec_url(plan) == (
+        f"https://github.com/{plan.meta.target_repo}/blob/main/"
+        "docs/superpowers/specs/2026-05-10-gone.md"
+    )

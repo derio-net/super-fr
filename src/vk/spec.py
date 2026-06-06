@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from vk import refs
 from vk.parser import PlanSchemaError, parse
 from vk.render import plan_locally_complete
 
@@ -119,10 +120,11 @@ def parse_spec(spec_path: Path) -> SpecMeta:
 def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     """Resolve the plan's File cell to a local directory, if same-repo.
 
-    Spec tables are never rewritten on archive (2026-06-05 spec): a row
-    recorded as `docs/superpowers/plans/X` falls back to
-    `implemented/plans/X` (canonical archive) and then `archived-plans/X`
-    (legacy) when the active path no longer exists.
+    Delegates to `vk.refs.resolve_plan_ref` (2026-06-06 spec-path-repair
+    design): the cell may be a bare slug (canonical), an active /
+    `implemented/` / legacy `archived-plans/` path, or a backticked
+    annotated cell — every form resolves against every lifecycle root,
+    active first. An exact on-disk path wins before normalization.
 
     Cross-repo / manual-action rows return None — those need cross-repo
     gh-API resolution which is out of scope for Phase 3.
@@ -132,22 +134,10 @@ def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     candidate = repo_root / plan_ref.file
     if candidate.is_dir():
         return candidate
-    # Archive fallbacks: plans/<X> -> implemented/plans/<X> -> archived-plans/<X>
-    rel = Path(plan_ref.file.rstrip("/"))
-    parts = rel.parts
-    if "plans" in parts:
-        # Anchor on the LAST `plans` segment and strip a preceding
-        # `implemented` so a cell already recorded in implemented form
-        # doesn't double-prefix (`implemented/implemented/plans/…`).
-        i = len(parts) - 1 - tuple(reversed(parts)).index("plans")
-        prefix, tail = parts[:i], parts[i + 1 :]
-        if prefix and prefix[-1] == "implemented":
-            prefix = prefix[:-1]
-        for archive in (("implemented", "plans"), ("archived-plans",)):
-            alt = repo_root.joinpath(*prefix, *archive, *tail)
-            if alt.is_dir():
-                return alt
-    # Trailing slash variant
+    res = refs.resolve_plan_ref(plan_ref.file, repo_root)
+    if res.path is not None:
+        return res.path
+    # v1 flat-plan refs (.md files) and other exact file refs still resolve.
     if str(candidate).endswith("/"):
         return None
     return candidate if candidate.exists() else None

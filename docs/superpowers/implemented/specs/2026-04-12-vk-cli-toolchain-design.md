@@ -754,10 +754,10 @@ Depends on: P5.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| P0 Scaffolding | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-12-vk-cli-p0-scaffold/` | — |
-| P1 Core modules | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-12-vk-cli-p1-core-modules/` | P0 |
-| P2 Dispatch | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-12-vk-cli-p2-dispatch/` | P1 |
-| P3 Progress | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-12-vk-cli-p3-progress/` | P2 |
-| P4 Plan + Execute | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-12-vk-cli-p4-plan-execute/` | P2 |
-| P5 Skill rewrites | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-12-vk-cli-p5-skill-rewrites/` | P4 |
-| P6 Migration | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-12-vk-cli-p6-migration/` | P5 |
+| P0 Scaffolding | `derio-net/superpowers-for-vk` | `2026-04-12-vk-cli-p0-scaffold` | — |
+| P1 Core modules | `derio-net/superpowers-for-vk` | `2026-04-12-vk-cli-p1-core-modules` | P0 |
+| P2 Dispatch | `derio-net/superpowers-for-vk` | `2026-04-12-vk-cli-p2-dispatch` | P1 |
+| P3 Progress | `derio-net/superpowers-for-vk` | `2026-04-12-vk-cli-p3-progress` | P2 |
+| P4 Plan + Execute | `derio-net/superpowers-for-vk` | `2026-04-12-vk-cli-p4-plan-execute` | P2 |
+| P5 Skill rewrites | `derio-net/superpowers-for-vk` | `2026-04-12-vk-cli-p5-skill-rewrites` | P4 |
+| P6 Migration | `derio-net/superpowers-for-vk` | `2026-04-12-vk-cli-p6-migration` | P5 |

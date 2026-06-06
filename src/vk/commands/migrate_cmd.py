@@ -111,6 +111,15 @@ def dirs_cmd(
     for n in notes:
         typer.echo(f"  note: {n}")
     if yes:
+        # Repair in passing (2026-06-06 spec-path-repair): refs to the
+        # relocated tree normalize in the same operator commit.
+        from vk.repair import repair_repo
+
+        repair = repair_repo(repo_root, write=True)
+        for r in repair.rewrites:
+            typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
+        for w in repair.warnings:
+            err_console.print(f"[yellow]warning:[/yellow] {w}")
         typer.echo("\nmoves staged via git mv — review and commit them.")
     else:
         typer.echo("\n(dry-run; pass --yes to apply)")

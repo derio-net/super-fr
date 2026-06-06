@@ -367,5 +367,5 @@ None at spec time. Phase A's unit tests will surface any grammar edge cases miss
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| Parallel Dispatch DAG Implementation Plan | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag/` | — |
+| Parallel Dispatch DAG Implementation Plan | `derio-net/superpowers-for-vk` | `2026-04-20-parallel-dispatch-dag` | — |
 | Bridge Audit Implementation Plan | `derio-net/agent-images` | `docs/superpowers/archived-plans/2026-04-20-parallel-dispatch-dag-bridge-audit/` | Phase 2 of the superpowers-for-vk plan |
