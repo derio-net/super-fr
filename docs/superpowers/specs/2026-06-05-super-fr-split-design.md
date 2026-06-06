@@ -216,6 +216,19 @@ independently shippable PR in this repo unless noted:
    planned here is moot: the 2.5.0 rollout already ran it per repo
    (PRs #107/#480/#12/#226), so all repos are on the `implemented/`
    layout before the sweep starts.
+
+   **Doctrine reversal note (2026-06-06):** the 2.5.0 rule "spec tables
+   are never rewritten on archive" is being consciously reversed by the
+   spec-path-repair feature (separate goal, pre-split): legacy-form
+   `archived-plans/` File cells were invisible to the resolver fallback
+   (`spec.py::_resolve_local_plan_dir` anchors on a literal `plans`
+   segment), stranding every pre-2.5.0-archived row after `migrate
+   dirs`. The replacement doctrine is *normalize once, idempotently*:
+   lifecycle-independent File cells + `vk archive` repairing stale paths
+   on every run, warning loudly on unresolvable rows. The split inherits
+   this in base (`fr`), and slug-form cells shrink this sweep step —
+   lifecycle-independent references have no `vk`-era path prefixes to
+   rewrite.
 7. **Cleanup + operator config:** remove the step-5 label dual-read once
    every repo's sweep PR is merged; user-level rules files, the
    vk-plan-override mirror, shell completion. Last, because everything
