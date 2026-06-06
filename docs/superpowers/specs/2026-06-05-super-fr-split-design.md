@@ -1,10 +1,19 @@
 # super-fr split — Design (DRAFT)
 
-**Status:** Draft, reevaluated — the blocker
-(`2026-06-05-dispatch-guards-and-implemented-lifecycle-design.md`) shipped
-as 2.5.0 (#263, merged 2026-06-06) and this spec's second pass ran against
-the merged tree; see §Reevaluation findings. Awaiting operator approval to
-go Final and hand off to planning.
+**Status:** FINAL (operator-approved 2026-06-06, third pass against
+2.6.1). History: drafted blocked-by dispatch-guards (shipped 2.5.0,
+#263); second pass against that tree (§Reevaluation findings); third
+pass folds in 2.6.x (spec-path-repair, #266/#268 — `refs.py`,
+`repair.py`, `archive.py`, `Plan.spec_path` all join the base package;
+slug-form refs already shrink migration step 6 as anticipated).
+
+**Build decisions (operator Q&A, 2026-06-06 second batch):** one PR
+evolving #262 (spec + plan + implementation on this branch); GitHub repo
+rename to `derio-net/super-fr` happens right before merge (back-loaded
+manual phase; GitHub redirects the old name); cutover uses the dual-read
+plan as specced; **VK adapter is the only runner shipped** — the
+registry + de-VK-ified Protocols are the deliverable, GHA/headless
+runners stay future work.
 
 Companion artifact: `docs/superpowers/brainstorms/2026-06-05-plugin-split-seam-report.md`
 (full CLI/skill inventory and seam analysis this design rests on).
@@ -54,6 +63,9 @@ fr             Layer 1 + tracking duty
                  (render.py), build_plan_report/PlanReport + the
                  legacy-layout hard-stop (commands/common.py),
                  plan_ops.clear_tracking_issue
+               + (landed in 2.6.x, all base) refs.py (lifecycle
+                 resolver), repair.py + commands/repair_cmd.py,
+                 Plan.spec_path parse-time resolution
 fr-dispatch    Queue protocol + runner framework
                queue labels (fr:ready / fr:in-progress / fr:pr-ready /
                fr:blocked / fr:synced), reachability gate, runner
@@ -294,4 +306,5 @@ off to fr-plan (vk-plan).
 
 ## Implementation Plans
 
-(added by fr-plan after Draft → Final)
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
