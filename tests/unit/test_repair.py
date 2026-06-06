@@ -145,3 +145,41 @@ def test_repair_meta_null_and_tilde_are_placeholders(repo: Path) -> None:
     result = repair_repo(repo, write=True)
     assert not result.warnings
     assert not result.rewrites
+
+
+def test_repair_warns_on_ambiguous_slug_across_roots(repo: Path) -> None:
+    """Spec promise: same slug under two roots → active wins AND a
+    warning names both (review finding 1, 2026-06-06)."""
+    (repo / "docs/superpowers/plans" / SLUG).mkdir()
+    (repo / "docs/superpowers/implemented/plans" / SLUG).mkdir()
+    _spec_with_cell(repo, f"docs/superpowers/archived-plans/{SLUG}/")
+    result = repair_repo(repo, write=True)
+    assert len(result.rewrites) == 1  # still rewrites (active wins)
+    assert any(
+        "ambiguous" in w
+        and f"docs/superpowers/plans/{SLUG}" in w
+        and f"docs/superpowers/implemented/plans/{SLUG}" in w
+        for w in result.warnings
+    ), result.warnings
+
+
+def test_repair_never_touches_fenced_blocks_after_table(repo: Path) -> None:
+    """A code fence abutting the table (no blank line) must not be
+    rewritten even if it contains 4-column pipe rows (review finding 2)."""
+    (repo / "docs/superpowers/implemented/plans" / SLUG).mkdir()
+    spec = repo / "docs/superpowers/specs/2026-05-10-fenced.md"
+    spec.write_text(
+        "# F\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|---|---|---|---|\n"
+        f"| Plan X | `derio-net/test` | `docs/superpowers/archived-plans/{SLUG}/` | — |\n"
+        "```\n"
+        f"| fake | row | `docs/superpowers/archived-plans/{SLUG}/` | — |\n"
+        "```\n"
+    )
+    repair_repo(repo, write=True)
+    text = spec.read_text()
+    assert f"| Plan X | `derio-net/test` | `{SLUG}` | — |" in text  # real row fixed
+    assert (
+        f"| fake | row | `docs/superpowers/archived-plans/{SLUG}/` | — |" in text
+    )  # fence untouched

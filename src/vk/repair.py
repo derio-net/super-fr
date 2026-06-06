@@ -48,6 +48,14 @@ class RepairResult:
     failures: list[str] = field(default_factory=list)
 
 
+def _warn_ambiguous(out: RepairResult, file: Path, what: str, res: RefResolution) -> None:
+    matched = ", ".join(str(p) for p in res.matches)
+    out.warnings.append(
+        f"{file.name}: {what} {res.slug!r} is ambiguous — present under multiple "
+        f"lifecycle roots ({matched}); resolved to the active one."
+    )
+
+
 def _warn_unresolved(
     out: RepairResult, file: Path, what: str, ref: str, res: RefResolution
 ) -> None:
@@ -74,6 +82,7 @@ def _repair_spec_table(spec_path: Path, repo_root: Path, out: RepairResult, *, w
     lines = text.splitlines(keepends=True)
     in_table = False
     seen_header = False
+    in_fence = False
     changed = False
     for i, line in enumerate(lines):
         if line.startswith("## Implementation Plans"):
@@ -82,6 +91,13 @@ def _repair_spec_table(spec_path: Path, repo_root: Path, out: RepairResult, *, w
         if not in_table:
             continue
         stripped = line.strip()
+        # Code fences can abut the table with no blank line — their
+        # pipe-shaped contents are NOT rows (review finding 2, 2026-06-06).
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if not stripped.startswith("|"):
             if seen_header and not stripped:
                 in_table = False
@@ -100,6 +116,8 @@ def _repair_spec_table(spec_path: Path, repo_root: Path, out: RepairResult, *, w
         if res.path is None:
             _warn_unresolved(out, spec_path, f"File cell (row {name!r})", file_cell, res)
             continue
+        if len(res.matches) > 1:
+            _warn_ambiguous(out, spec_path, f"File cell (row {name!r})", res)
         canonical = _canonical_cell(file_cell, res.slug)
         if file_cell == canonical:
             continue  # already canonical — idempotent fixed point
@@ -134,6 +152,8 @@ def _repair_meta(meta_path: Path, repo_root: Path, out: RepairResult, *, write: 
         if res.path is None:
             _warn_unresolved(out, meta_path, f"{fname}:", value, res)
             continue
+        if len(res.matches) > 1:
+            _warn_ambiguous(out, meta_path, f"{fname}:", res)
         canonical = res.path.name
         if value == canonical:
             continue
