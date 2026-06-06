@@ -2,6 +2,14 @@ version = 1
 revision = 3
 requires-python = ">=3.11"
 
+[manifest]
+members = [
+    "fr",
+    "fr-dispatch",
+    "fr-vk",
+    "super-fr-workspace",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -143,6 +151,53 @@ wheels = [
 [package.optional-dependencies]
 toml = [
     { name = "tomli", marker = "python_full_version <= '3.11'" },
+]
+
+[[package]]
+name = "fr"
+version = "3.0.0"
+source = { editable = "packages/fr" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "packaging", specifier = ">=24" },
+    { name = "pydantic", specifier = ">=2" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "rich", specifier = ">=13" },
+    { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
+name = "fr-dispatch"
+version = "3.0.0"
+source = { editable = "packages/fr-dispatch" }
+dependencies = [
+    { name = "fr" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "fr", editable = "packages/fr" }]
+
+[[package]]
+name = "fr-vk"
+version = "3.0.0"
+source = { editable = "packages/fr-vk" }
+dependencies = [
+    { name = "fr" },
+    { name = "fr-dispatch" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
 ]
 
 [[package]]
@@ -593,6 +648,41 @@ wheels = [
 ]
 
 [[package]]
+name = "super-fr-workspace"
+version = "3.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fr" },
+    { name = "fr-dispatch" },
+    { name = "fr-vk" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+    { name = "fr-vk", editable = "packages/fr-vk" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.11" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
+    { name = "ruff", specifier = ">=0.6" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20260408" },
+]
+
+[[package]]
 name = "tomli"
 version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -689,43 +779,4 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/e3/70399cb7dd41c10ac53367ae42139cf4b1ca5f36bb3dc6c9d33acdb43655/typing_inspection-0.4.2.tar.gz", hash = "sha256:ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464", size = 75949, upload-time = "2025-10-01T02:14:41.687Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl", hash = "sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7", size = 14611, upload-time = "2025-10-01T02:14:40.154Z" },
-]
-
-[[package]]
-name = "vk"
-version = "2.6.1"
-source = { editable = "." }
-dependencies = [
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "typer" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "packaging", specifier = ">=24" },
-    { name = "pydantic", specifier = ">=2" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "rich", specifier = ">=13" },
-    { name = "typer", specifier = ">=0.12" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.11" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-cov", specifier = ">=5" },
-    { name = "ruff", specifier = ">=0.6" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20260408" },
 ]

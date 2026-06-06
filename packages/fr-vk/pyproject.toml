@@ -1,0 +1,20 @@
+[project]
+name = "fr-vk"
+version = "3.0.0"
+description = "super-fr VK adapter: VibeKanban runner (MCP client, card/workspace dispatch, bridge daemon)"
+requires-python = ">=3.11"
+dependencies = ["fr", "fr-dispatch"]
+
+[project.entry-points."fr.runners"]
+vk = "fr_vk.runner:VkRunner"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fr_vk"]
+
+[tool.uv.sources]
+fr = { workspace = true }
+fr-dispatch = { workspace = true }

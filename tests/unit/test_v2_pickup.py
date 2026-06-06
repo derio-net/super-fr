@@ -1,4 +1,4 @@
-"""`vk pickup` tests."""
+"""`fr pickup` tests."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
 def test_pickup_emits_phase_title_and_pr_template():
-    from vk.cli import app
+    from fr.cli import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["pickup", str(FIXTURE), "--phase", "1"])
@@ -28,7 +28,7 @@ def test_pickup_emits_phase_title_and_pr_template():
 
 
 def test_pickup_unknown_phase_exits_2():
-    from vk.cli import app
+    from fr.cli import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["pickup", str(FIXTURE), "--phase", "99"])
@@ -37,7 +37,7 @@ def test_pickup_unknown_phase_exits_2():
 
 
 def test_pickup_includes_dependency_reminder():
-    from vk.cli import app
+    from fr.cli import app
 
     multi = FIXTURE.parent / "v2_plan_multi_phase"
     runner = CliRunner()

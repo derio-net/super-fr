@@ -11,8 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from vk.refs import plan_slug, resolve_plan_ref, resolve_spec_ref
+from fr.refs import plan_slug, resolve_plan_ref, resolve_spec_ref
 
 SLUG = "2026-06-04--obs--security-trace-analyst"
 

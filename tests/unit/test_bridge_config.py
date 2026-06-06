@@ -3,7 +3,7 @@
 The legacy bridge fetches the VK-known repo list once per tick via
 `mcp.list_repos()` and refuses to dispatch any phase whose
 `tracking_issue` lives outside that set. The v2 port keeps the
-behaviour: in `vk.bridge.config`, the cached lookup is exposed via
+behaviour: in `fr_dispatch.config`, the cached lookup is exposed via
 `is_known_repo(repo, mcp)`; tick consults it before dispatching.
 """
 
@@ -15,8 +15,9 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from fr_vk.runner import VkRunner
 
-from tests.unit.fakes import FakeGhClient, FakeMcpClient
+from tests.unit.fakes import FakeGhClient, FakeMcpClient, vk_metrics
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -41,7 +42,7 @@ def _bodies(pushes: list[bytes]) -> str:
 
 
 def _dispatched_plan(repo: str, issue_number: int = 42):
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     phase = plan.phases[0].model_copy(
@@ -59,7 +60,7 @@ def _dispatched_plan(repo: str, issue_number: int = 42):
 
 def test_is_known_repo_uses_mcp_list_repos():
     """`is_known_repo` consults `mcp.list_repos()` (cached per tick)."""
-    from vk.bridge.config import is_known_repo
+    from fr_vk.config import is_known_repo
 
     mcp = FakeMcpClient()
     # FakeMcpClient.list_repos() returns derio-net/{frank,willikins,superpowers-for-vk}.
@@ -76,7 +77,7 @@ def test_is_known_repo_caches_within_a_tick():
     bother with TTL/eviction. A long-running daemon with config drift
     would call `clear_repo_cache()` between ticks.
     """
-    from vk.bridge import config
+    from fr_vk import config
 
     mcp = FakeMcpClient()
     config.clear_repo_cache()
@@ -90,9 +91,10 @@ def test_is_known_repo_caches_within_a_tick():
 
 
 def test_tick_skips_unknown_repo_and_pushes_failure_metric(fake_pushgateway):
-    from vk.bridge import config, tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.observe import observe
+    from fr.render import render
+    from fr_dispatch import tick
+    from fr_vk import config
 
     config.clear_repo_cache()
 
@@ -104,7 +106,7 @@ def test_tick_skips_unknown_repo_and_pushes_failure_metric(fake_pushgateway):
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
     mcp = FakeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp), metrics=vk_metrics())
 
     # No dispatch sequence — no card, no workspace.
     create_calls = [c for c in mcp.calls if c[0] == "create_issue"]
@@ -124,9 +126,10 @@ def test_tick_skips_unknown_repo_and_pushes_failure_metric(fake_pushgateway):
 
 def test_tick_dispatches_known_repo_normally(fake_pushgateway):
     """Sanity check — a known repo is not affected by the unknown-repo gate."""
-    from vk.bridge import config, tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.observe import observe
+    from fr.render import render
+    from fr_dispatch import tick
+    from fr_vk import config
 
     config.clear_repo_cache()
 
@@ -137,7 +140,7 @@ def test_tick_dispatches_known_repo_normally(fake_pushgateway):
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
     mcp = FakeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp), metrics=vk_metrics())
 
     assert result.synced == 1
     create_calls = [c for c in mcp.calls if c[0] == "create_issue"]

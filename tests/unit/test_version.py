@@ -1,4 +1,4 @@
-from vk import __version__
+from fr import __version__
 
 
 def test_version_is_string():
@@ -15,6 +15,6 @@ def test_version_value():
     """__version__ should match the installed package metadata."""
     from importlib.metadata import version
 
-    from vk import __version__
+    from fr import __version__
 
-    assert __version__ == version("vk")
+    assert __version__ == version("fr")

@@ -2,7 +2,7 @@
 
 The rest of the v1-era `common.py` (tri-state flags, error formatting,
 gate refusal) was retired with the v1 commands. Only `resolve_repo_root`
-survives — `vk apply`, `vk migrate`, etc. land in the operator's cwd by
+survives — `fr apply`, `fr migrate`, etc. land in the operator's cwd by
 default, but the env-var override is preserved for integration tests
 that need to point at `tmp_path`.
 """
@@ -14,8 +14,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from vk.commands.common import resolve_repo_root
+from fr.commands.common import resolve_repo_root
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""vk isolation — Target protocol, state, profiles, and the local target.
+"""fr isolation — Target protocol, state, profiles, and the local target.
 
 All devcontainer/docker/gh calls go through the Runner seam; git calls hit
 real throwaway repos (cheap, deterministic). Nothing here needs Docker.
@@ -10,9 +10,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from vk.isolation.local import LocalWorktreeDevcontainerTarget
-from vk.isolation.types import (
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.types import (
     IsolationError,
     IsolationState,
     load_state,

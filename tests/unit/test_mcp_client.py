@@ -11,8 +11,7 @@ import queue
 from typing import Any
 
 import pytest
-
-from vk._mcp_client import VkMcpClient, VkMcpError
+from fr_vk._mcp_client import VkMcpClient, VkMcpError
 
 
 def test_mcp_client_importable_from_vk():  # B3

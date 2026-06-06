@@ -5,10 +5,10 @@ CROSS_REPO = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
 
 
 def test_diff_undispatched_yields_create():
-    from vk import parse
-    from vk.diff import IssueCreate, RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     observed = GhState(phases={})
@@ -18,22 +18,43 @@ def test_diff_undispatched_yields_create():
     creates = [m for m in d.mutations if isinstance(m, IssueCreate)]
     assert len(creates) == 1
     assert creates[0].phase_number == 1
-    assert "vk-ready" in creates[0].labels
+    # v3 tracking-only default: creates carry attributes, no queue lifecycle.
+    assert "fr:ready" not in creates[0].labels
+    assert "vk-ready" not in creates[0].labels
     assert "phase:1" in creates[0].labels
 
     ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
     assert len(ensures) == 1
-    assert "vk-ready" in {ld.name for ld in ensures[0].labels}
+    assert "phase:1" in {ld.name for ld in ensures[0].labels}
+
+
+def test_diff_queue_runner_creates_carry_lifecycle_and_runner():
+    """`--to vk` intent: creates carry fr:ready + runner:vk and the
+    ensure includes the queue lifecycle defs."""
+    from fr import parse
+    from fr.diff import IssueCreate, RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
+
+    plan = parse(FIXTURE)
+    observed = GhState(phases={})
+    rendered = render(plan, observed, queue_runner="vk")
+    d = diff(rendered, observed, plan=plan)
+    creates = [m for m in d.mutations if isinstance(m, IssueCreate)]
+    assert "fr:ready" in creates[0].labels
+    assert "runner:vk" in creates[0].labels
+    ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
+    assert "fr:ready" in {ld.name for ld in ensures[0].labels}
 
 
 def test_diff_emits_issuebodychange_when_body_drifts():
     """Observed body differs from rendered → IssueBodyChange emitted."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueBodyChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueBodyChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -72,10 +93,10 @@ def test_diff_passes_phase_to_issue_map_to_render():
     from dataclasses import replace as dc_replace
     from pathlib import Path
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -118,10 +139,10 @@ def test_diff_creates_issues_for_every_phase_including_manual():
     Manual phases carry the gray `manual` label (never `vk-ready`), so they
     surface on GitHub for the operator without ever being routed to an agent.
     Pinned so a future 'skip manual phases' regression can't slip in silently."""
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -147,10 +168,10 @@ def test_diff_swaps_stale_dated_labels_for_normalized_ones():
     prefixes, so the swap is safe and automatic at the next apply/tick."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueLabelChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     plan = dc_replace(
@@ -210,9 +231,9 @@ def test_repo_label_ensure_carries_registry_colors():
     ensure_labels and the GhClient fallback wrapped them as default-grey
     LabelDefs.
     """
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.labels import (
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.labels import (
         IN_PROGRESS,
         MANUAL,
         PHASE_LABEL_COLOR,
@@ -222,11 +243,11 @@ def test_repo_label_ensure_carries_registry_colors():
         VK_READY,
         LabelDef,
     )
-    from vk.render import render
-    from vk.states import GhState
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
-    rendered = render(plan, GhState(phases={}))
+    rendered = render(plan, GhState(phases={}), queue_runner="vk")
     d = diff(rendered, GhState(phases={}), plan=plan)
 
     ensures = [m for m in d.mutations if isinstance(m, RepoLabelEnsure)]
@@ -251,8 +272,8 @@ def test_repo_label_ensure_carries_registry_colors():
     assert by_name["spec:fixture-spec-design"].color == SPEC_LABEL_COLOR
 
     # Lifecycle constant: matches the registry singleton's color exactly.
-    assert by_name["vk-ready"].color == VK_READY.color
-    assert by_name["vk-ready"].description == VK_READY.description
+    assert by_name["fr:ready"].color == VK_READY.color
+    assert by_name["fr:ready"].description == VK_READY.description
 
     # Registry constants for unused lifecycle slots are not pulled in.
     for unused in (MANUAL, IN_PROGRESS, PR_READY):
@@ -263,10 +284,10 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
     """Already-dispatched, labels match → only RepoLabelEnsure (always emitted)."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, IssueLabelChange, IssueStateChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueCreate, IssueLabelChange, IssueStateChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -286,7 +307,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                     issue_state="OPEN",
                     issue_labels=frozenset(
                         {
-                            "vk-ready",
+                            "fr:ready",
                             "spec:fixture-spec-design",
                             "plan:fixture-minimal",
                             "phase:1",
@@ -304,7 +325,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                 issue_state="OPEN",
                 issue_labels=frozenset(
                     {
-                        "vk-ready",
+                        "fr:ready",
                         "spec:fixture-spec-design",
                         "plan:fixture-minimal",
                         "phase:1",
@@ -339,10 +360,10 @@ def test_diff_emits_ensure_per_destination_repo():
     AND   one targets 'derio-net/repo-a' (for undispatched phases)
     AND   one targets 'derio-net/repo-b' (for phase 2's tracking issue)
     """
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(CROSS_REPO)
     observed = GhState(phases={})
@@ -365,10 +386,10 @@ def test_diff_routes_per_issue_mutations_to_tracking_repo():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueBodyChange, IssueLabelChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueBodyChange, IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(CROSS_REPO)
 
@@ -422,10 +443,10 @@ def test_diff_single_repo_plan_emits_one_ensure():
     THEN  exactly one RepoLabelEnsure mutation is emitted
     AND   its repo == plan.meta.target_repo
     """
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     observed = GhState(phases={})
@@ -447,10 +468,10 @@ def test_diff_fully_cross_repo_plan_skips_target_repo_ensure():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(CROSS_REPO)
 
@@ -527,10 +548,10 @@ def test_diff_suppresses_create_for_locally_complete_undispatched_phase():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_tick_all_steps(plan.phases[0]),))
@@ -547,10 +568,10 @@ def test_diff_suppresses_create_for_locally_complete_undispatched_phase():
 def test_diff_force_create_overrides_suppression():
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_tick_all_steps(plan.phases[0]),))
@@ -569,10 +590,10 @@ def test_diff_mixed_plan_dispatches_incomplete_suppresses_complete():
     from dataclasses import replace as dc_replace
     from pathlib import Path
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -593,10 +614,10 @@ def test_diff_dispatched_phases_unaffected_by_guard():
     phase produces its normal mutations and no suppression."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -624,3 +645,52 @@ def test_diff_dispatched_phases_unaffected_by_guard():
 
     assert d.suppressed == ()
     assert [m for m in d.mutations if isinstance(m, IssueCreate)] == []
+
+
+def test_diff_converges_legacy_queue_labels_in_one_apply_idempotently():
+    """The zero-blackout contract: an old-labeled Issue converges to the
+    fr:* spelling in ONE label change (remove legacy, add fr:*), and a
+    second diff against the converged state is a no-op."""
+    from fr import parse
+    from fr.diff import IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={
+                    "tracking_issue": ("https://github.com/derio-net/superpowers-for-vk/issues/42")
+                }
+            )
+        }
+    )
+    from dataclasses import replace as dc_replace
+
+    plan = dc_replace(plan, phases=(phase,))
+
+    def obs(labels):
+        return GhState(
+            phases={
+                1: PhaseObservation(
+                    issue_state="OPEN",
+                    issue_labels=frozenset(labels),
+                    issue_assignees=(),
+                    linked_prs=(),
+                )
+            }
+        )
+
+    legacy = obs({"vk-ready", "phase:1", "plan:fixture-minimal", "spec:fixture-spec-design"})
+    rendered = render(plan, legacy)
+    d = diff(rendered, legacy, plan=plan)
+    changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
+    assert len(changes) == 1
+    assert "vk-ready" in changes[0].remove
+    assert "fr:ready" in changes[0].add
+
+    converged = obs({"fr:ready", "phase:1", "plan:fixture-minimal", "spec:fixture-spec-design"})
+    rendered2 = render(plan, converged)
+    d2 = diff(rendered2, converged, plan=plan)
+    assert not [m for m in d2.mutations if isinstance(m, IssueLabelChange)]

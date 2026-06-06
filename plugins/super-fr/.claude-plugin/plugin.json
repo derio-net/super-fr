@@ -1,0 +1,16 @@
+{
+    "name": "super-fr",
+    "description": "super-fr base: superpowers-wrapped planning, isolation, and goal-to-PR pipeline with GitHub tracking",
+    "version": "3.0.0",
+    "author": {
+        "name": "Ioannis Dermitzakis"
+    },
+    "repository": "https://github.com/derio-net/super-fr",
+    "license": "MIT",
+    "keywords": [
+        "skills",
+        "planning",
+        "superpowers",
+        "agentic"
+    ]
+}

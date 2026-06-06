@@ -5,12 +5,16 @@ from pathlib import Path
 import pytest
 import yaml
 
-SKILLS_DIR = Path(__file__).parent.parent.parent / "skills"
+PLUGINS_DIR = Path(__file__).parent.parent.parent / "plugins"
+# Every skill across both plugins; a glob miss collapses the matrix
+# silently, so a floor assertion guards collection (2026-06-06).
+_SKILL_DIRS = sorted(PLUGINS_DIR.glob("*/skills/fr-*"))
+assert len(_SKILL_DIRS) >= 9, f"skill glob collapsed: {_SKILL_DIRS}"
 
 
 @pytest.mark.parametrize(
     "skill_dir",
-    sorted(SKILLS_DIR.glob("vk-*")),
+    _SKILL_DIRS,
     ids=lambda p: p.name,
 )
 class TestSkillValidation:
@@ -48,30 +52,30 @@ class TestSkillValidation:
         line_count = len(text.strip().split("\n"))
         assert line_count <= 120, f"{skill_dir.name}/SKILL.md has {line_count} lines (max 120)"
 
-    def test_vk_execute_uses_v2_pickup(self, skill_dir: Path) -> None:
-        """vk-execute must point at `vk pickup` for phase scope (v2 entry point)."""
-        if skill_dir.name != "vk-execute":
-            pytest.skip("Only applies to vk-execute")
+    def test_fr_execute_uses_v2_pickup(self, skill_dir: Path) -> None:
+        """fr-execute must point at `fr pickup` for phase scope (v2 entry point)."""
+        if skill_dir.name != "fr-execute":
+            pytest.skip("Only applies to fr-execute")
         text = (skill_dir / "SKILL.md").read_text()
-        assert "vk pickup" in text, "vk-execute must reference vk pickup"
+        assert "fr pickup" in text, "fr-execute must reference fr pickup"
 
-    def test_vk_execute_uses_v2_apply_for_reconciliation(self, skill_dir: Path) -> None:
-        """vk-execute must hand reconciliation back to `vk apply` (no manual claim/pr-opened)."""
-        if skill_dir.name != "vk-execute":
-            pytest.skip("Only applies to vk-execute")
+    def test_fr_execute_uses_v2_apply_for_reconciliation(self, skill_dir: Path) -> None:
+        """fr-execute must hand reconciliation back to `fr apply` (no manual claim/pr-opened)."""
+        if skill_dir.name != "fr-execute":
+            pytest.skip("Only applies to fr-execute")
         text = (skill_dir / "SKILL.md").read_text()
-        assert "vk apply" in text, "vk-execute must reference vk apply"
+        assert "fr apply" in text, "fr-execute must reference fr apply"
 
-    def test_vk_execute_mentions_pr_ready_label(self, skill_dir: Path) -> None:
-        if skill_dir.name != "vk-execute":
-            pytest.skip("Only applies to vk-execute")
+    def test_fr_execute_mentions_pr_ready_label(self, skill_dir: Path) -> None:
+        if skill_dir.name != "fr-execute":
+            pytest.skip("Only applies to fr-execute")
         text = (skill_dir / "SKILL.md").read_text()
-        assert "pr-ready" in text, "vk-execute must document the pr-ready lifecycle stage"
+        assert "pr-ready" in text, "fr-execute must document the pr-ready lifecycle stage"
 
-    def test_vk_execute_mentions_unified_pr_title(self, skill_dir: Path) -> None:
-        if skill_dir.name != "vk-execute":
-            pytest.skip("Only applies to vk-execute")
+    def test_fr_execute_mentions_unified_pr_title(self, skill_dir: Path) -> None:
+        if skill_dir.name != "fr-execute":
+            pytest.skip("Only applies to fr-execute")
         text = (skill_dir / "SKILL.md").read_text()
         assert "[{owner}/{repo}]" in text or "[owner/repo]" in text, (
-            "vk-execute must document the unified PR title format"
+            "fr-execute must document the unified PR title format"
         )

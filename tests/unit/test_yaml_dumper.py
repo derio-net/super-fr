@@ -9,8 +9,7 @@ The custom dumper here uses literal block scalars (`|`) instead.
 from __future__ import annotations
 
 import yaml
-
-from vk._yaml import LiteralStr, dump_plan_yaml
+from fr._yaml import LiteralStr, dump_plan_yaml
 
 
 def test_multiline_string_uses_literal_block_scalar():

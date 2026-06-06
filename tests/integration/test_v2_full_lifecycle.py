@@ -23,13 +23,14 @@ def tmp_repo(tmp_path, monkeypatch):
 
 def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
     """Walk through the v2 lifecycle: create → dispatch → tick → close."""
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import IssueCreate, RepoLabelEnsure, diff
+    from fr.observe import observe
+    from fr.plan_ops import PhaseSpec, complete_phase, create, tick
+    from fr.render import render
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import IssueCreate, RepoLabelEnsure, diff
-    from vk.observe import observe
-    from vk.plan_ops import PhaseSpec, complete_phase, create, tick
-    from vk.render import render
 
     # 1. CREATE the plan
     create(
@@ -37,7 +38,7 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
         slug="2026-05-10-lifecycle",
         spec="docs/superpowers/specs/2026-05-10-fixture.md",
         target_repo="derio-net/superpowers-for-vk",
-        vk_version=">=1.0.0,<3.0.0",
+        fr_version=">=1.0.0,<4.0.0",
         phases=[
             PhaseSpec(
                 number=1,
@@ -64,7 +65,7 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
     assert new_url.startswith("https://github.com/")
 
     # 3. Inject the URL back, simulate plan-side commit
-    from vk import plan_ops
+    from fr import plan_ops
 
     plan_ops.set_tracking_issue(plan_dir, 1, new_url)
 
@@ -106,20 +107,21 @@ def test_full_lifecycle_create_apply_tick_complete(tmp_repo, monkeypatch):
 
 def test_full_lifecycle_manual_phase(tmp_repo):
     """Manual phase: completes via complete_phase(--note); apply closes Issue."""
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.observe import observe
+    from fr.plan_ops import PhaseSpec, complete_phase, create
+    from fr.render import render
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.observe import observe
-    from vk.plan_ops import PhaseSpec, complete_phase, create
-    from vk.render import render
 
     create(
         repo_root=tmp_repo,
         slug="2026-05-10-manual",
         spec="docs/superpowers/specs/2026-05-10-fixture.md",
         target_repo="derio-net/superpowers-for-vk",
-        vk_version=">=1.0.0,<3.0.0",
+        fr_version=">=1.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="Manual setup", tag="manual")],
         prose="# Manual\n",
     )
@@ -132,7 +134,7 @@ def test_full_lifecycle_manual_phase(tmp_repo):
 
     # Operator finishes runbook
     new_url = list(gh.issues.keys())[0]
-    from vk import plan_ops
+    from fr import plan_ops
 
     url = f"https://github.com/{new_url[0]}/issues/{new_url[1]}"
     plan_ops.set_tracking_issue(plan_dir, 1, url)

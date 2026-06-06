@@ -13,7 +13,7 @@ MULTI_PHASE = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
 
 def _make_plan_with_phases(phases_data):
     """Build a plan in-memory from the multi-phase fixture, replacing phases."""
-    from vk import parse
+    from fr import parse
 
     plan = parse(MULTI_PHASE)
     return dc_replace(plan, phases=tuple(phases_data))
@@ -47,20 +47,20 @@ def test_phase_with_unsatisfied_deps_projects_vk_blocked():
     AND   rendered.issue_per_phase[2].labels contains 'vk-blocked'
     AND   rendered.issue_per_phase[2].labels does NOT contain 'vk-ready'
     """
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(MULTI_PHASE)
     observed = GhState(phases={})
-    rendered = render(plan, observed)
+    rendered = render(plan, observed, queue_runner="vk")
 
     label_names_1 = {ld.name for ld in rendered.issue_per_phase[1].labels}
     label_names_2 = {ld.name for ld in rendered.issue_per_phase[2].labels}
 
-    assert "vk-ready" in label_names_1
-    assert "vk-blocked" in label_names_2
-    assert "vk-ready" not in label_names_2
+    assert "fr:ready" in label_names_1
+    assert "fr:blocked" in label_names_2
+    assert "fr:ready" not in label_names_2
 
 
 def test_phase_with_satisfied_deps_projects_vk_ready():
@@ -68,13 +68,13 @@ def test_phase_with_satisfied_deps_projects_vk_ready():
     GIVEN a plan with phases 1 (depends_on=[]) and 2 (depends_on=[1])
     AND   phase 1's tracking_issue is observed as CLOSED with a merged PR
     AND   phase 1's state.completion.at is set
-    WHEN  render(plan, observed) is called
+    WHEN  render(plan, observed, queue_runner="vk") is called
     THEN  rendered.issue_per_phase[2].labels contains 'vk-ready'
     AND   does NOT contain 'vk-blocked'
     """
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(MULTI_PHASE)
     plan = _complete_phase_1(plan)
@@ -98,11 +98,11 @@ def test_phase_with_satisfied_deps_projects_vk_ready():
             )
         }
     )
-    rendered = render(plan, observed)
+    rendered = render(plan, observed, queue_runner="vk")
 
     label_names_2 = {ld.name for ld in rendered.issue_per_phase[2].labels}
-    assert "vk-ready" in label_names_2
-    assert "vk-blocked" not in label_names_2
+    assert "fr:ready" in label_names_2
+    assert "fr:blocked" not in label_names_2
 
 
 def test_blocked_to_ready_transition_when_dep_completes():
@@ -113,10 +113,10 @@ def test_blocked_to_ready_transition_when_dep_completes():
     THEN  the mutation list contains an IssueLabelChange that removes
           'vk-blocked' AND adds 'vk-ready' on phase 2's tracking issue
     """
-    from vk import parse
-    from vk.diff import IssueLabelChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.diff import IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(MULTI_PHASE)
     plan = _complete_phase_1(plan)
@@ -162,14 +162,14 @@ def test_blocked_to_ready_transition_when_dep_completes():
         }
     )
 
-    rendered = render(plan, observed)
+    rendered = render(plan, observed, queue_runner="vk")
     d = diff(rendered, observed, plan=plan)
 
     label_changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
     phase2_changes = [m for m in label_changes if m.issue_number == 200]
     assert phase2_changes, "expected IssueLabelChange for phase 2"
     change = phase2_changes[0]
-    assert "vk-ready" in change.add
+    assert "fr:ready" in change.add
     assert "vk-blocked" in change.remove
 
 
@@ -177,22 +177,22 @@ def test_fan_in_phase_blocked_until_all_deps_complete():
     """
     GIVEN a plan where phase 4 has depends_on=[1, 2, 3]
     AND   phases 1 and 2 are complete; phase 3 is in-progress
-    WHEN  render(plan, observed) is called
+    WHEN  render(plan, observed, queue_runner="vk") is called
     THEN  rendered.issue_per_phase[4].labels contains 'vk-blocked'
 
     GIVEN the same state but with phase 3 now complete
-    WHEN  render(plan, observed) is called again
+    WHEN  render(plan, observed, queue_runner="vk") is called again
     THEN  rendered.issue_per_phase[4].labels contains 'vk-ready'
     """
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(MULTI_PHASE)
 
     def _make_phase(number, depends_on, complete=False, tag="agentic"):
         step_id = f"P{number}.T1.S1"
-        from vk.types import (
+        from fr.types import (
             Completion,
             PhaseDoc,
             PhaseHeader,
@@ -264,9 +264,9 @@ def test_fan_in_phase_blocked_until_all_deps_complete():
 
     # phase 3 incomplete → phase 4 blocked
     observed = GhState(phases={1: obs_complete, 2: obs_complete, 3: obs_inprogress})
-    rendered = render(plan, observed)
+    rendered = render(plan, observed, queue_runner="vk")
     label_names_4 = {ld.name for ld in rendered.issue_per_phase[4].labels}
-    assert "vk-blocked" in label_names_4
+    assert "fr:blocked" in label_names_4
 
     # phase 3 also complete → phase 4 ready
     plan3_complete = dc_replace(
@@ -285,10 +285,10 @@ def test_fan_in_phase_blocked_until_all_deps_complete():
         linked_prs=(merged_pr,),
     )
     observed2 = GhState(phases={1: obs_complete, 2: obs_complete, 3: obs3_complete})
-    rendered2 = render(plan3_complete, observed2)
+    rendered2 = render(plan3_complete, observed2, queue_runner="vk")
     label_names_4b = {ld.name for ld in rendered2.issue_per_phase[4].labels}
-    assert "vk-ready" in label_names_4b
-    assert "vk-blocked" not in label_names_4b
+    assert "fr:ready" in label_names_4b
+    assert "fr:blocked" not in label_names_4b
 
 
 def test_manual_phase_unaffected_by_dep_gating():
@@ -299,10 +299,10 @@ def test_manual_phase_unaffected_by_dep_gating():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
-    from vk.types import (
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
+    from fr.types import (
         Completion,
         PhaseDoc,
         PhaseHeader,
@@ -343,25 +343,25 @@ def test_manual_phase_unaffected_by_dep_gating():
 
     # Phase 1 incomplete (no completion.at)
     observed = GhState(phases={})
-    rendered = render(plan, observed)
+    rendered = render(plan, observed, queue_runner="vk")
 
     label_names_2 = {ld.name for ld in rendered.issue_per_phase[2].labels}
     assert "manual" in label_names_2
-    assert "vk-blocked" not in label_names_2
+    assert "fr:blocked" not in label_names_2
 
 
 def test_bad_dep_reference_treated_as_blocked():
     """
     GIVEN a plan with phase 2 having depends_on=[99] (no phase 99 exists)
-    WHEN  render(plan, observed) is called
+    WHEN  render(plan, observed, queue_runner="vk") is called
     THEN  rendered.issue_per_phase[2].labels contains 'vk-blocked'
           (conservative: bad reference = treat as never-satisfiable)
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(MULTI_PHASE)
 
@@ -373,7 +373,7 @@ def test_bad_dep_reference_treated_as_blocked():
     )
 
     observed = GhState(phases={})
-    rendered = render(plan, observed)
+    rendered = render(plan, observed, queue_runner="vk")
 
     label_names_2 = {ld.name for ld in rendered.issue_per_phase[2].labels}
-    assert "vk-blocked" in label_names_2
+    assert "fr:blocked" in label_names_2

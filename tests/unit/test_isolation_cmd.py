@@ -1,4 +1,4 @@
-"""vk isolation CLI — flag mapping, exec passthrough, error UX (exit 2 + vk-init pointer)."""
+"""fr isolation CLI — flag mapping, exec passthrough, error UX (exit 2 + vk-init pointer)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fr.cli import app
+from fr.commands import isolation_cmd
 from typer.testing import CliRunner
-
-from vk.cli import app
-from vk.commands import isolation_cmd
 
 runner = CliRunner()
 

@@ -4,9 +4,10 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
 def test_observe_undispatched_phase_returns_no_observation():
+    from fr import parse
+    from fr.observe import observe
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.observe import observe
 
     plan = parse(FIXTURE)
     gh = FakeGhClient()
@@ -18,9 +19,10 @@ def test_observe_dispatched_phase_returns_observation():
     """Phase with tracking_issue → observe builds PhaseObservation from gh state."""
     from dataclasses import replace as dc_replace
 
+    from fr import parse
+    from fr.observe import observe
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.observe import observe
 
     plan = parse(FIXTURE)
     # Inject a tracking_issue into phase 1
@@ -67,9 +69,10 @@ def test_observe_populates_body_field():
     """PhaseObservation.body comes from gh's view_issue body field."""
     from dataclasses import replace as dc_replace
 
+    from fr import parse
+    from fr.observe import observe
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.observe import observe
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -94,10 +97,10 @@ def test_observe_rejects_unexpected_issue_state():
     from dataclasses import replace as dc_replace
 
     import pytest
+    from fr import parse
+    from fr.observe import observe
 
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.observe import observe
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -121,9 +124,10 @@ def test_observe_skips_phases_without_tracking_issue():
     """Mixed dispatch state — observe returns only the dispatched phase."""
     from dataclasses import replace as dc_replace
 
+    from fr import parse
+    from fr.observe import observe
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.observe import observe
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)

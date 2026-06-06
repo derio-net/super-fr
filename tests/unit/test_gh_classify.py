@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from vk.gh import _classify_error
+from fr.gh import _classify_error
 
 
 def test_rate_limit_classified():

@@ -1,4 +1,4 @@
-"""E2: `python -m vk.bridge --dry-run` exits 0 in a clean environment.
+"""E2: `python -m fr_vk.bridge --dry-run` exits 0 in a clean environment.
 
 The dry-run path must short-circuit before any gh / MCP subprocess
 starts, so an operator (or a hermetic CI runner) can sanity-check the
@@ -10,9 +10,11 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import fr
+
 
 def test_python_dash_m_dry_run_exits_zero():
-    """Run `python -m vk.bridge --dry-run` with most env stripped."""
+    """Run `python -m fr_vk.bridge --dry-run` with most env stripped."""
     env = {
         "PATH": "/usr/bin:/bin",
         "HOME": "/tmp",
@@ -22,19 +24,18 @@ def test_python_dash_m_dry_run_exits_zero():
     # PYTHONPATH must include the in-repo `src` so the test sees the
     # version under test (the agent runs from a worktree without editable
     # install). This is independent of "MCP / gh side effects".
-    import vk
 
-    src_root = str(__import__("pathlib").Path(vk.__file__).parent.parent)
+    src_root = str(__import__("pathlib").Path(fr.__file__).parent.parent)
     env["PYTHONPATH"] = src_root
 
     result = subprocess.run(
-        [sys.executable, "-m", "vk.bridge", "--dry-run"],
+        [sys.executable, "-m", "fr_vk.bridge", "--dry-run"],
         capture_output=True,
         text=True,
         env=env,
         timeout=30,
     )
     assert result.returncode == 0, (
-        f"vk.bridge --dry-run failed (rc={result.returncode}):\n"
+        f"fr_dispatch --dry-run failed (rc={result.returncode}):\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )

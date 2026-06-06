@@ -5,8 +5,7 @@ from __future__ import annotations
 import re
 
 import pytest
-
-from vk import labels
+from fr import labels
 
 HEX_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 
@@ -43,11 +42,11 @@ class TestLabelDef:
         assert len(names) == len(set(names))
 
     def test_lifecycle_names_match_spec(self) -> None:
-        assert labels.VK_READY.name == "vk-ready"
+        assert labels.VK_READY.name == "fr:ready"
         assert labels.MANUAL.name == "manual"
-        assert labels.IN_PROGRESS.name == "in-progress"
-        assert labels.PR_READY.name == "pr-ready"
-        assert labels.VK_SYNCED.name == "vk-synced"
+        assert labels.IN_PROGRESS.name == "fr:in-progress"
+        assert labels.PR_READY.name == "fr:pr-ready"
+        assert labels.VK_SYNCED.name == "fr:synced"
 
     @pytest.mark.parametrize("bad_color", ["", "abc", "abcde", "1234567", "xxxxxx", "#ABCDEF"])
     def test_rejects_non_hex_color(self, bad_color: str) -> None:
@@ -176,7 +175,7 @@ class TestBoundedLabelNames:
     def test_bounded_name_stays_within_50_for_any_prefix(self) -> None:
         # Even a pathological (over-long) prefix must not slice the value from
         # the end or overflow — the result is unconditionally clamped to 50.
-        from vk.labels import _bounded_label_name
+        from fr.labels import _bounded_label_name
 
         out = _bounded_label_name("x" * 45 + ":", "some-long-value-here")
         assert len(out) <= 50

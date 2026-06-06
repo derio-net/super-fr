@@ -8,9 +8,8 @@ import subprocess
 from unittest.mock import patch
 
 import pytest
-
-from vk import gh
-from vk.gh import (
+from fr import gh
+from fr.gh import (
     GhError,
     auth_status,
     close_issue,
@@ -22,7 +21,7 @@ from vk.gh import (
 
 class TestCreateIssue:
     def test_basic_creation(self) -> None:
-        with patch("vk.gh._run_gh", return_value="https://github.com/org/repo/issues/42") as mock:
+        with patch("fr.gh._run_gh", return_value="https://github.com/org/repo/issues/42") as mock:
             url = create_issue(
                 repo="org/repo",
                 title="Phase 1: Setup",
@@ -46,7 +45,7 @@ class TestCreateIssue:
             )
 
     def test_multiple_labels(self) -> None:
-        with patch("vk.gh._run_gh", return_value="https://github.com/org/repo/issues/43") as mock:
+        with patch("fr.gh._run_gh", return_value="https://github.com/org/repo/issues/43") as mock:
             create_issue(
                 repo="org/repo",
                 title="Task",
@@ -57,7 +56,7 @@ class TestCreateIssue:
             assert args.count("--label") == 2
 
     def test_no_labels(self) -> None:
-        with patch("vk.gh._run_gh", return_value="url") as mock:
+        with patch("fr.gh._run_gh", return_value="url") as mock:
             create_issue(repo="org/repo", title="T", body="B", labels=[])
             args = mock.call_args[0][0]
             assert "--label" not in args
@@ -65,7 +64,7 @@ class TestCreateIssue:
 
 class TestCloseIssue:
     def test_close(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
+        with patch("fr.gh._run_gh") as mock:
             close_issue(repo="org/repo", number=42)
             mock.assert_called_once_with(
                 [
@@ -80,28 +79,28 @@ class TestCloseIssue:
 
 class TestEditIssueBody:
     def test_edit_body_calls_gh(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
+        with patch("fr.gh._run_gh") as mock:
             edit_issue_body(repo="org/repo", number=42, body="New body content.")
             mock.assert_called_once_with(
                 ["issue", "edit", "42", "--repo", "org/repo", "--body", "New body content."]
             )
 
     def test_edit_body_propagates_gh_error(self) -> None:
-        with patch("vk.gh._run_gh", side_effect=GhError("rate limited")):
+        with patch("fr.gh._run_gh", side_effect=GhError("rate limited")):
             with pytest.raises(GhError, match="rate limited"):
                 edit_issue_body(repo="org/repo", number=42, body="body")
 
 
 class TestAuthStatus:
     def test_authenticated(self) -> None:
-        with patch("vk.gh._run_gh", return_value="github.com\n  Logged in") as mock:
+        with patch("fr.gh._run_gh", return_value="github.com\n  Logged in") as mock:
             result = auth_status()
             assert result is True
             mock.assert_called_once_with(["auth", "status"])
 
     def test_not_authenticated(self) -> None:
         with patch(
-            "vk.gh._run_gh",
+            "fr.gh._run_gh",
             side_effect=GhError("not logged in"),
         ):
             result = auth_status()
@@ -127,7 +126,7 @@ class TestEnsureLabel:
     """
 
     def test_calls_gh_label_create_with_force(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
+        with patch("fr.gh._run_gh") as mock:
             ensure_label(repo="org/repo", name="vk-ready")
             mock.assert_called_once()
             args = mock.call_args[0][0]
@@ -138,7 +137,7 @@ class TestEnsureLabel:
             assert "--color" in args  # a default color is always supplied
 
     def test_includes_description_when_given(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
+        with patch("fr.gh._run_gh") as mock:
             ensure_label(
                 repo="org/repo",
                 name="vk-ready",
@@ -149,13 +148,13 @@ class TestEnsureLabel:
             assert "Ready for VK pickup" in args
 
     def test_omits_description_by_default(self) -> None:
-        with patch("vk.gh._run_gh") as mock:
+        with patch("fr.gh._run_gh") as mock:
             ensure_label(repo="org/repo", name="vk-ready")
             args = mock.call_args[0][0]
             assert "--description" not in args
 
     def test_propagates_gh_error(self) -> None:
-        with patch("vk.gh._run_gh", side_effect=GhError("permission denied")):
+        with patch("fr.gh._run_gh", side_effect=GhError("permission denied")):
             with pytest.raises(GhError, match="permission denied"):
                 ensure_label(repo="org/repo", name="vk-ready")
 
@@ -164,7 +163,7 @@ class TestEnsureLabels:
     def test_calls_ensure_label_per_def_with_color_and_desc(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from vk.labels import LabelDef
+        from fr.labels import LabelDef
 
         captured: list[dict[str, str]] = []
 
@@ -197,7 +196,7 @@ class TestEnsureLabels:
         assert called["n"] == 0
 
     def test_first_failure_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from vk.labels import LabelDef
+        from fr.labels import LabelDef
 
         seen: list[str] = []
 

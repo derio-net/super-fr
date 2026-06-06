@@ -1,4 +1,4 @@
-"""`vk repair` CLI — dry-run default, --yes writes, loud warnings."""
+"""`fr repair` CLI — dry-run default, --yes writes, loud warnings."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from fr.cli import app
 from typer.testing import CliRunner
-
-from vk.cli import app
 
 SLUG = "2026-05-10-x"
 

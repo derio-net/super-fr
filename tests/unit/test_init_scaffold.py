@@ -1,4 +1,4 @@
-"""vk init scaffold — mechanical devcontainer-profile writer."""
+"""fr init scaffold — mechanical devcontainer-profile writer."""
 
 from __future__ import annotations
 
@@ -8,10 +8,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fr.cli import app
+from fr.isolation.scaffold import KNOWN_TOOL_FEATURES
 from typer.testing import CliRunner
-
-from vk.cli import app
-from vk.isolation.scaffold import KNOWN_TOOL_FEATURES
 
 runner = CliRunner()
 
@@ -52,7 +51,7 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     assert any("github-cli" in k for k in cfg["features"])
     assert any(KNOWN_TOOL_FEATURES["uv"] in k for k in cfg["features"])
     # vk installed in postCreate; secrets env-file wired with localEnv HOME
-    assert "vk" in cfg["postCreateCommand"]
+    assert "super-fr#subdirectory=packages/fr" in cfg["postCreateCommand"]
     # host-path workspace mount — linked-worktree git breaks without it
     assert cfg["workspaceFolder"] == "${localWorkspaceFolder}"
     assert "target=${localWorkspaceFolder}" in cfg["workspaceMount"]

@@ -1,7 +1,7 @@
-"""`vk status` — read-only, allowlistable report (2026-06-05 spec, Phase 4).
+"""`fr status` — read-only, allowlistable report (2026-06-05 spec, Phase 4).
 
 The structural guarantee under test: status NEVER calls a gh mutation
-method (that is what makes `vk status*` safe to allowlist), and its read
+method (that is what makes `fr status*` safe to allowlist), and its read
 path is the same `build_plan_report` apply uses, so the two can't drift.
 """
 
@@ -11,11 +11,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fr.cli import app
+from fr.commands import status_cmd
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
-from vk.cli import app
-from vk.commands import status_cmd
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -68,7 +68,7 @@ def test_status_reports_header_table_and_refusal(tmp_path, monkeypatch):
     assert "phase 1" in result.output
     assert "would refuse" in result.output
     # Archive nudge — the gate passes (undispatched + locally complete).
-    assert "vk archive" in result.output
+    assert "fr archive" in result.output
     # Drift warning from the renderer surfaces here.
     assert "never dispatched —" in result.output or "warnings" in result.output
 

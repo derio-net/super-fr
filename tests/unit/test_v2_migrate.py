@@ -6,9 +6,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fr.cli import app
 from typer.testing import CliRunner
-
-from vk.cli import app
 
 
 def _make_repo(tmp_path: Path) -> Path:
@@ -35,7 +34,7 @@ def _write_v1_plan(repo: Path, *, slug: str, status: str = "Complete") -> Path:
 
 
 def test_migrate_dry_run_lists_outcomes_without_writing(tmp_path):
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     md = _write_v1_plan(repo, slug="2026-05-10-fixture-v1")
@@ -49,8 +48,8 @@ def test_migrate_dry_run_lists_outcomes_without_writing(tmp_path):
 
 
 def test_migrate_apply_creates_v2_folder_and_archives_md(tmp_path):
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     md = _write_v1_plan(repo, slug="2026-05-10-fixture-v1")
@@ -79,7 +78,7 @@ def test_migrate_apply_creates_v2_folder_and_archives_md(tmp_path):
 
 
 def test_migrate_skips_in_progress_by_default(tmp_path):
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-complete", status="Complete")
@@ -92,7 +91,7 @@ def test_migrate_skips_in_progress_by_default(tmp_path):
 
 
 def test_migrate_include_in_progress_flag(tmp_path):
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-in-progress", status="In Progress")
@@ -104,7 +103,7 @@ def test_migrate_include_in_progress_flag(tmp_path):
 
 
 def test_migrate_rewrites_spec_table_drops_status_column(tmp_path):
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
@@ -128,7 +127,7 @@ def test_migrate_rewrites_spec_table_drops_status_column(tmp_path):
 def test_migrate_rewrites_file_cells_md_to_folder(tmp_path):
     """Spec File cells pointing at `<path>.md` get rewritten to `<path>/`
     after migration converts them to v2 folders."""
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-cells-fixture")
@@ -152,7 +151,7 @@ def test_migrate_leaves_file_cells_when_folder_does_not_exist(tmp_path):
     """If a row points at `<path>.md` but no `<path>/` folder exists,
     the cell is left alone — re-running after fixing the cause completes
     the rewrite."""
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
@@ -173,7 +172,7 @@ def test_migrate_leaves_file_cells_when_folder_does_not_exist(tmp_path):
 
 def test_migrate_rejects_non_iso_date_slug(tmp_path):
     """Plans whose slug doesn't begin with YYYY-MM-DD raise MigrationError."""
-    from vk.migrate import MigrationError, migrate_repo
+    from fr.migrate import MigrationError, migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="legacy-plan-no-date")
@@ -184,8 +183,8 @@ def test_migrate_rejects_non_iso_date_slug(tmp_path):
 
 def test_migrate_preserves_freeform_track(tmp_path):
     """Origin table 'Track' cells with non-canonical values are preserved verbatim."""
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-2.md"
@@ -220,8 +219,8 @@ def test_migrate_does_not_treat_rework_substring_as_rework(tmp_path):
     rework feature) is NOT a rework plan — its parent_plan / origin_items
     fields must NOT be populated. Anchored slug regex is the gate.
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     # Slug contains "rework" but does NOT end with `-rework-N`
@@ -250,8 +249,8 @@ def test_migrate_does_not_treat_rework_substring_as_rework(tmp_path):
 
 
 def test_migrate_rework_extracts_origin_table(tmp_path):
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-base-rework-1.md"
@@ -285,7 +284,7 @@ def test_migrate_rework_extracts_origin_table(tmp_path):
 
 
 def test_migrate_skips_already_migrated(tmp_path):
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-already")
@@ -298,7 +297,7 @@ def test_migrate_skips_already_migrated(tmp_path):
 
 def test_migrate_rejects_per_phase_target_repo_conflict(tmp_path):
     """v1 plan with conflicting target_repo across phases → MigrationError."""
-    from vk.migrate import MigrationError, migrate_repo
+    from fr.migrate import MigrationError, migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-multi-target.md"
@@ -324,9 +323,8 @@ def test_migrate_rejects_per_phase_target_repo_conflict(tmp_path):
 
 def test_migrate_cli_default_is_dry_run(tmp_path, monkeypatch):
     """No --yes flag → preview mode; nothing gets written."""
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     repo = _make_repo(tmp_path)
     md = _write_v1_plan(repo, slug="2026-05-10-cli-default")
@@ -347,8 +345,8 @@ def test_migrate_flat_plan_emits_single_phase_yaml(tmp_path):
     plans. Without the fix the migration would create an empty folder with
     only _meta.yaml; with the fix all tasks land in a synthetic Phase 1.
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-flat-plan.md"
@@ -379,9 +377,8 @@ def test_migrate_flat_plan_emits_single_phase_yaml(tmp_path):
 
 
 def test_migrate_cli_apply_yes(tmp_path, monkeypatch):
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-cli-test")
@@ -401,8 +398,8 @@ def test_migrate_step_bold_paragraph_format(tmp_path):
     bold paragraphs instead of `- [x] **Step N:**` checkboxes. Before 2.0.4
     the regex required the checkbox prefix and silently dropped every step.
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-paragraph.md"
@@ -431,8 +428,8 @@ def test_migrate_step_bold_prefix_format(tmp_path):
     Used in willikins/stoa-goals-entry plan. Distinct from `**Step N: title**`
     because the closing `**` comes immediately after the colon.
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-bold-prefix.md"
@@ -460,8 +457,8 @@ def test_migrate_phase_with_step_subsections_fallback(tmp_path):
     emits `tasks: []`. With fallback, each `### Step` becomes a synthetic
     task with the raw body preserved as a single step.
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-step-subsections.md"
@@ -492,8 +489,8 @@ def test_migrate_task_with_no_parseable_steps_fallback(tmp_path):
     """Task whose body uses an unrecognised step format gets its raw body
     spliced in as a single synthetic step (no silent content loss).
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-task-body-fallback.md"
@@ -515,7 +512,7 @@ def test_migrate_task_with_no_parseable_steps_fallback(tmp_path):
 
 def test_migrate_force_re_migrates_existing_folder(tmp_path):
     """`--force` tears down an existing v2 folder + restores the .v1-archive."""
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-force-target")
@@ -553,8 +550,8 @@ def test_migrate_task_body_fallback_with_phase_tag_suffix(tmp_path):
     `### Task` header in md_text retains it. Body lookup must ignore the
     suffix or the fallback never finds the task body.
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-tagged-task.md"
@@ -583,8 +580,8 @@ def test_migrate_fallback_ignores_fenced_code_block_examples(tmp_path):
     Without fence-stripping the body-extraction regex would treat those as
     real headers and emit spurious synthetic tasks.
     """
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-fenced-examples.md"
@@ -616,7 +613,7 @@ def test_migrate_fallback_ignores_fenced_code_block_examples(tmp_path):
 
 def test_migrate_force_dry_run_does_not_destroy(tmp_path):
     """`--force` in dry-run mode reports re-migration but doesn't touch disk."""
-    from vk.migrate import migrate_repo
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-force-dryrun")
@@ -645,7 +642,7 @@ def _plans(repo: Path) -> Path:
 def test_migrate_fails_loud_without_target_repo(tmp_path):
     """#245 Bug 1: a plan with no per-phase '**Target repo:**' and no
     --target-repo must fail loud — never silently default to the plugin repo."""
-    from vk.migrate import MigrationError, migrate_repo
+    from fr.migrate import MigrationError, migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-no-target")  # helper declares no target
@@ -656,8 +653,8 @@ def test_migrate_fails_loud_without_target_repo(tmp_path):
 
 def test_migrate_uses_explicit_target_repo(tmp_path):
     """#245 Bug 1: an explicit target_repo is honored (and recorded in meta)."""
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-with-flag")
@@ -672,7 +669,7 @@ def test_migrate_phase_zero_v1_plan_fails_loud(tmp_path):
     must raise at migration time — not silently produce an invalid v2 folder
     the bridge would skip forever. The source .md stays unarchived and no
     half-built folder is stranded, so a renumber + re-run just works."""
-    from vk.migrate import MigrationError, migrate_repo
+    from fr.migrate import MigrationError, migrate_repo
 
     repo = _make_repo(tmp_path)
     p = _plans(repo) / "2026-05-10-zero-phase.md"
@@ -695,8 +692,8 @@ def test_migrate_phase_zero_v1_plan_fails_loud(tmp_path):
 def test_migrate_recovers_prose_depends_on(tmp_path):
     """#245 Bug 2: a '## Dependencies' / 'Blocked by Phase N' prose convention
     is recovered into depends_on instead of being flattened to []."""
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = _plans(repo) / "2026-05-10-prose-deps.md"
@@ -723,8 +720,8 @@ def test_migrate_recovers_prose_depends_on(tmp_path):
 
 def test_migrate_recovers_multi_phase_prose_depends_on(tmp_path):
     """'Blocked by Phase 1 and 3' → depends_on == [1, 3]."""
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = _plans(repo) / "2026-05-10-multi-prose-deps.md"
@@ -747,8 +744,8 @@ def test_migrate_recovers_multi_phase_prose_depends_on(tmp_path):
 def test_migrate_prose_depends_on_ignores_unrelated_digits(tmp_path):
     """#245 review: 'Blocked by Phase N' recovery must capture only the phase
     list, not version numbers / day counts / years in the surrounding prose."""
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = _plans(repo) / "2026-05-10-noisy-deps.md"
@@ -770,8 +767,8 @@ def test_migrate_prose_depends_on_ignores_unrelated_digits(tmp_path):
 def test_migrate_preserves_task_intro_with_manual_operation_block(tmp_path):
     """#245 Bug 3: task intro prose + a fenced `# manual-operation` block before
     the first step must survive even when the task HAS parsed steps."""
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     p = _plans(repo) / "2026-05-10-manual-op.md"
@@ -799,19 +796,19 @@ def test_migrate_preserves_task_intro_with_manual_operation_block(tmp_path):
 
 def test_migrate_aligns_vk_version_with_create_default(tmp_path):
     """#245 Minor: migrated plans get the same vk_version as freshly-created ones."""
-    from vk import parse
-    from vk.migrate import migrate_repo
+    from fr import parse
+    from fr.migrate import migrate_repo
 
     repo = _make_repo(tmp_path)
     _write_v1_plan(repo, slug="2026-05-10-vkver")
 
     migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(_plans(repo) / "2026-05-10-vkver")
-    assert plan.meta.vk_version == ">=2.0.0,<3.0.0"
+    assert plan.meta.fr_version == ">=3.0.0,<4.0.0"
 
 
 # ---------------------------------------------------------------------------
-# vk migrate dirs (2026-06-05 dispatch-guards spec, Phase 3)
+# fr migrate dirs (2026-06-05 dispatch-guards spec, Phase 3)
 
 
 def _legacy_layout_repo(tmp_path: Path) -> Path:
@@ -925,7 +922,7 @@ def test_migrate_dirs_moves_archived_specs_entries(tmp_path, monkeypatch):
 def test_archive_path_variants_legacy_form_cell():
     """THE bug's cross-repo arm: a legacy archived-plans/ cell must yield
     usable candidates (old gate returned (None, None))."""
-    from vk.migrate import _archive_path_variants
+    from fr.migrate import _archive_path_variants
 
     active, implemented, legacy = _archive_path_variants(
         "docs/superpowers/archived-plans/2026-05-10-x/"
@@ -936,7 +933,7 @@ def test_archive_path_variants_legacy_form_cell():
 
 
 def test_archive_path_variants_bare_slug_cell():
-    from vk.migrate import _archive_path_variants
+    from fr.migrate import _archive_path_variants
 
     active, implemented, legacy = _archive_path_variants("2026-05-10-x")
     assert active == "docs/superpowers/plans/2026-05-10-x"
@@ -945,7 +942,7 @@ def test_archive_path_variants_bare_slug_cell():
 
 
 def test_archive_path_variants_placeholder():
-    from vk.migrate import _archive_path_variants
+    from fr.migrate import _archive_path_variants
 
     assert _archive_path_variants("—") == (None, None, None)
 
@@ -954,8 +951,9 @@ def test_spec_fully_implemented_cross_repo_slug_row(tmp_path):
     """A cross-repo row in canonical slug form counts as done when the
     other repo has the plan under implemented/plans/ — and the 'still
     active' check probes the ACTIVE variant, not the raw cell."""
+    from fr.migrate import _spec_fully_implemented
+
     from tests.unit.fakes import FakeGhClient
-    from vk.migrate import _spec_fully_implemented
 
     spec = tmp_path / "docs" / "superpowers" / "specs" / "2026-05-10-fixture.md"
     spec.parent.mkdir(parents=True)
@@ -972,13 +970,12 @@ def test_spec_fully_implemented_cross_repo_slug_row(tmp_path):
 
 
 def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
-    """`vk migrate dirs --yes` normalizes refs after relocating the legacy
+    """`fr migrate dirs --yes` normalizes refs after relocating the legacy
     tree — the repo converges in one operation."""
     import subprocess
 
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     sp = tmp_path / "docs" / "superpowers"
     (sp / "plans").mkdir(parents=True)

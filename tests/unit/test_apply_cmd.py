@@ -15,10 +15,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fr.apply import ApplyResult
+from fr.commands import apply_cmd
+from fr.parser import parse
+
 from tests.unit.fakes import FakeGhClient
-from vk.apply import ApplyResult
-from vk.commands import apply_cmd
-from vk.parser import parse
 
 
 def test_apply_cmd_propagates_plan_to_apply(monkeypatch):
@@ -65,7 +66,7 @@ def test_check_plan_reachable_skips_cross_repo_spec(monkeypatch):
 
     Surfaced 2026-05-18 when the agent-images cutover plan (whose spec
     lives in superpowers-for-vk) couldn't be dispatched via
-    `vk apply --yes` — the gate treated the literal cross-repo path
+    `fr apply --yes` — the gate treated the literal cross-repo path
     as a same-repo filename, `git ls-tree` returned empty, gate refused.
     """
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -138,9 +139,8 @@ def test_apply_legacy_layout_hard_stops_before_archived_refusal(tmp_path, monkey
     Its protection lives on for the canonical layout via
     `test_apply_refuses_implemented_plan` below.
     """
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     archived = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-done"
     archived.mkdir(parents=True)
@@ -149,7 +149,7 @@ def test_apply_legacy_layout_hard_stops_before_archived_refusal(tmp_path, monkey
 
     result = CliRunner().invoke(app, ["apply", "docs/superpowers/archived-plans/2026-05-10-done"])
     assert result.exit_code == 2, result.output
-    assert "vk migrate dirs" in result.output
+    assert "fr migrate dirs" in result.output
 
 
 # --- 2026-06-05 stale-plan dispatch guard (completion guard in apply) ---
@@ -196,7 +196,7 @@ def test_apply_yes_all_suppressed_exits_2_with_archive_hint(tmp_path):
     gh = FakeGhClient()
     rc, text, _json_out = apply_cmd._apply_one(plan_dir, gh, yes=True)
     assert rc == 2, text
-    assert "vk archive" in text
+    assert "fr archive" in text
     creates = [c for c in gh.calls if c[0] == "create_issue"]
     assert creates == [], "guard must prevent Issue creation"
 
@@ -217,9 +217,8 @@ def test_apply_cli_exposes_force_flag(tmp_path, monkeypatch):
     environments (CI injected escape codes inside the option token)."""
     import re
 
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     result = CliRunner().invoke(app, ["apply", "--help"])
     assert result.exit_code == 0
@@ -246,9 +245,8 @@ def test_apply_dry_run_json_suppressed_alongside_real_mutations(tmp_path):
 
 def test_apply_refuses_implemented_plan(tmp_path, monkeypatch):
     """implemented/plans/ is terminal exactly like legacy archived-plans/."""
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     done = tmp_path / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-10-done"
     done.mkdir(parents=True)
@@ -287,3 +285,44 @@ def test_check_plan_reachable_uses_resolved_spec_path(monkeypatch):
 
     assert "docs/superpowers/implemented/specs/x-design.md" in checked_paths
     assert "x-design.md" not in checked_paths
+
+
+def test_apply_to_unknown_runner_exits_2(tmp_path, monkeypatch):
+    """--to with an unregistered name names the registered runners."""
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    sp = tmp_path / "docs" / "superpowers" / "plans"
+    sp.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["apply", "--all", "--to", "nope"])
+    assert result.exit_code == 2
+    combined = result.output + (result.stderr or "")
+    assert "unknown runner 'nope'" in combined
+    assert "vk" in combined  # the registered runner is listed
+
+
+def test_apply_to_requires_fr_dispatch(tmp_path, monkeypatch):
+    """The sanctioned soft point: --to without fr-dispatch installed
+    exits 2 with the install hint."""
+    import importlib.util
+
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    real = importlib.util.find_spec
+
+    def fake_find_spec(name, *a, **kw):
+        if name == "fr_dispatch":
+            return None
+        return real(name, *a, **kw)
+
+    monkeypatch.setattr("importlib.util.find_spec", fake_find_spec)
+    sp = tmp_path / "docs" / "superpowers" / "plans"
+    sp.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["apply", "--all", "--to", "vk"])
+    assert result.exit_code == 2
+    assert "requires fr-dispatch" in (result.output + (result.stderr or ""))

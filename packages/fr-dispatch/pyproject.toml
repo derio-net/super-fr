@@ -1,0 +1,16 @@
+[project]
+name = "fr-dispatch"
+version = "3.0.0"
+description = "super-fr dispatch: queue protocol + runner framework (discover/tick, Runner protocol, prompt/lifecycle/metrics)"
+requires-python = ">=3.11"
+dependencies = ["fr"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fr_dispatch"]
+
+[tool.uv.sources]
+fr = { workspace = true }

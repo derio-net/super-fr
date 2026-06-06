@@ -85,15 +85,15 @@ class TestInstallRules:
     def test_installs_rule_file(self, fake_home: Path) -> None:
         _run_install(fake_home)
 
-        rule = fake_home / ".claude" / "rules" / "vk-plan-override.md"
+        rule = fake_home / ".claude" / "rules" / "fr-plan-override.md"
         assert rule.exists()
-        assert "vk-plan" in rule.read_text().lower()
+        assert "fr-plan" in rule.read_text().lower()
 
     def test_replaces_stale_symlink_rule(self, fake_home: Path) -> None:
         """If the rule is a symlink to a removed target, install still succeeds."""
         rules_dir = fake_home / ".claude" / "rules"
         rules_dir.mkdir(parents=True, exist_ok=True)
-        stale = rules_dir / "vk-plan-override.md"
+        stale = rules_dir / "fr-plan-override.md"
         stale.symlink_to("/nonexistent/old/path")
 
         _run_install(fake_home)
@@ -106,7 +106,7 @@ class TestInstallRules:
         _run_install(fake_home)
         _run_install(fake_home)
 
-        assert (fake_home / ".claude" / "rules" / "vk-plan-override.md").exists()
+        assert (fake_home / ".claude" / "rules" / "fr-plan-override.md").exists()
 
 
 # ── MCP config ───────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ class TestMissingBinary:
         )
         assert "vibe-kanban-mcp" in result.stderr
         # Script should continue past the binary check (installing rules, etc.)
-        assert "Installing superpowers-for-vk" in result.stdout
+        assert "Installing super-fr" in result.stdout
 
     def test_warns_if_binary_not_executable(self, tmp_path: Path) -> None:
         """A non-executable binary triggers a WARNING, not a fatal error."""
@@ -234,7 +234,7 @@ class TestMissingBinary:
             f"Expected WARNING in stderr:\n  stderr={result.stderr!r}"
         )
         # Script should continue past the binary check
-        assert "Installing superpowers-for-vk" in result.stdout
+        assert "Installing super-fr" in result.stdout
 
 
 # ── Uninstall path ───────────────────────────────────────────────────
@@ -245,7 +245,7 @@ class TestUninstall:
         _run_install(fake_home)
         _run_install(fake_home, "--uninstall")
 
-        assert not (fake_home / ".claude" / "rules" / "vk-plan-override.md").exists()
+        assert not (fake_home / ".claude" / "rules" / "fr-plan-override.md").exists()
 
     def test_removes_vk_from_mcp_config(self, fake_home: Path) -> None:
         _run_install(fake_home)
@@ -293,3 +293,13 @@ class TestUninstall:
         """Uninstalling when nothing is installed should not fail."""
         result = _run_install(fake_home, "--uninstall")
         assert result.returncode == 0
+
+
+def test_install_sh_smokes_fr_binary_not_vk():
+    """The uv stub hides step 10 from CI — at least pin the script text:
+    the smoke check must probe the `fr` entry point (the `vk` script was
+    deleted in v3; probing it fails every real install)."""
+    script = INSTALL_SH.read_text()
+    assert 'fr_bin="$(uv tool dir 2>/dev/null)/fr/bin/fr"' in script
+    assert '"$fr_bin" --version' in script
+    assert "/fr/bin/vk" not in script

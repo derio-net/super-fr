@@ -1,4 +1,4 @@
-# Agent instructions — superpowers-for-vk
+# Agent instructions — super-fr
 
 Working notes for agents maintaining this repo. User-facing rules that ship with
 the plugin live in `rules/`; this file is *internal*.
@@ -14,9 +14,9 @@ moves.
 
 Bump if the PR changes any of:
 
-- `skills/**` — skill docs, including frontmatter metadata
+- `plugins/*/skills/**` — skill docs, including frontmatter metadata
 - `src/**` — any Python source
-- `rules/**` — user-level rules installed by the plugin
+- `plugins/super-fr/rules/**` — user-level rules installed by the plugin
 - `scripts/install.sh`, `scripts/install-validator-wrapper.sh`,
   `scripts/validate-plans.sh`, `scripts/validate-skills.sh` — anything the
   installer or validator wrapper runs
@@ -36,7 +36,7 @@ Mixed PRs (some of each) bump, because at least one file that matters changed.
 The two plugin JSONs (`.claude-plugin/plugin.json` and
 `.claude-plugin/marketplace.json`) must match it byte-for-byte; the
 Python code reads its version dynamically via `importlib.metadata`
-(`src/vk/__init__.py`), so it follows pyproject automatically.
+(`packages/fr/src/fr/__init__.py`), so it follows pyproject automatically.
 
 Use the helper, not a manual three-file edit:
 
@@ -49,7 +49,7 @@ scripts/bump-version.py --check     # verify all three agree (also runs in CI)
 ```
 
 The script updates all three files, runs `uv sync` to refresh `uv.lock`,
-and verifies `uv run vk --version` reports the new number. Commit the
+and verifies `uv run fr --version` reports the new number. Commit the
 four changed files (three sources + `uv.lock`) together in your PR.
 
 CI runs `bump-version.py --check` on every PR (`version-sync` job in
@@ -89,17 +89,17 @@ created specifically to propagate that work.
 
 For any brainstorm, spec, or plan touching dispatch / sync / cron / VK card /
 workspace / GitHub Issue label-lifecycle surfaces, the brainstorm MUST start
-by reading `vk.bridge.*` (rooted at `src/vk/bridge/`) end-to-end.
+by reading `fr_dispatch.*` + `fr_vk.*` (rooted at `packages/fr-dispatch/src/` and `packages/fr-vk/src/`) end-to-end.
 Confabulating what the bridge does without reading it is the root cause
 documented in #147.
 
 Before the v2 rebuild shipped this was
 `agent-images/kali/scripts/vk-issue-bridge.py` (1089 LOC). The rebuild
-consolidated it into `vk.bridge.*` — one repo's code, easier to enforce.
-After this PR ships, `vk.bridge.*` is the canonical read-target for any
+consolidated it into `fr_dispatch.*` (framework) + `fr_vk.*` (adapter) — one repo's code, easier to enforce.
+After this PR ships, `fr_dispatch.*` + `fr_vk.*` are the canonical read-target for any
 agent investigating bridge behavior.
 
-The user-level mirror of this rule lives in `~/.claude/rules/vk-plan-override.md`
+The user-level mirror of this rule lives in `~/.claude/rules/fr-plan-override.md`
 (operator-owned, outside this repo). When this section changes, flag the
 operator-side update in the PR description so the two stay in sync.
 
@@ -113,10 +113,10 @@ operator-side update in the PR description so the two stay in sync.
   --check`, `mypy src/`, and `pytest`. Before pushing, run
   `uv run ruff format src/ tests/` and `uv run pytest -q --no-cov` yourself —
   CI is slow to fail-loud.
-- `vk apply --yes` enforces the "plan and spec must be on
+- `fr apply --yes` enforces the "plan and spec must be on
   `origin/HEAD`" contract before dispatching a GitHub Issue.
   See `docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md`
-  for the rationale and `skills/vk-dispatch/SKILL.md`
+  for the rationale and `skills/fr-dispatch/SKILL.md`
   (Pre-flight) for the operator workflow.
 
 ## Follow-up candidates (not urgent)

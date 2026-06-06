@@ -1,0 +1,56 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Rebrand — fr CLI, fr-* skills, two plugins, v3.0.0
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: CLI + skills
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Console script becomes `fr` (the `vk` entry is DELETED — v3 clean break); cli help text, error messages, `vk skills` -> `fr skills` content rewritten
+  - id: P3.T1.S2
+    text: |-
+      skills/ dirs rename vk-* -> fr-* ; every SKILL.md rewritten for fr verbs and split-aware wording (fr-execute loses bridge sections to the dispatch plugin per the spec; fr-dispatch skill gains the --to ceremony; new fr-runner skill scaffolded)
+- number: 2
+  title: Packaging + repo surfaces
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Two plugin manifests: .claude-plugin/ for super-fr (base skills) and super-fr-dispatch (fr-dispatch + fr-runner skills); marketplace.json lists both; installer + validate scripts rewritten; rules/ ships fr-named override rules
+  - id: P3.T2.S2
+    text: |-
+      CI workflows: vk-spec-status.yml -> fr-spec-status.yml with super-fr pin and fr verbs; _pr_spec_status caller updated; README + CLAUDE.md references; all derio-net/superpowers-for-vk URLs -> derio-net/super-fr (repo rename is the operator's, manifests are written for the new name)
+  - id: P3.T2.S3
+    text: |-
+      bump-version to 3.0.0 across the workspace; full suite + gates green
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-06-06T17:58:58+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-06-06T17:59:00+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-06-06T17:59:02+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-06-06T17:59:04+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-06-06T17:59:05+00:00'
+      note: null
+  completion:
+    at: '2026-06-06T17:59:07+00:00'
+    note: null
+    observed_prs: []

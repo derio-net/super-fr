@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install superpowers-for-vk extras that the plugin system can't handle.
+# Install super-fr extras that the plugin system can't handle.
 # Skills are delivered by the plugin system (enabledPlugins in settings.json).
 # This script handles: marketplace + plugin registration, stale cache cleanup,
 # rules, MCP config, vk CLI, stale skill cleanup, and PostToolUse hook hint.
@@ -25,14 +25,16 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 MCP_CONFIG="$CLAUDE_DIR/.mcp.json"
 VK_MCP_BINARY="$HOME/bin/vibe-kanban-mcp"
 MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/derio-net"
-CACHE_DIR="$CLAUDE_DIR/plugins/cache/derio-net/superpowers-for-vk"
+CACHE_BASE="$CLAUDE_DIR/plugins/cache/derio-net"
+PLUGIN_NAMES=(super-fr super-fr-dispatch)
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
 INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
+# Legacy user-level copies from pre-plugin installs (old vk-* names).
 SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
 if [[ "${1:-}" == "--install-bridge" ]]; then
-  # Write the cron wrapper that exec's `python -m vk.bridge`. Hidden by
+  # Write the cron wrapper that exec's `python -m fr_vk.bridge`. Hidden by
   # design — there is no `vk bridge` public CLI verb.
   # Default to a user-writable path so operators don't need sudo. The
   # legacy default was /opt/vk-bridge/run.sh — fine for root-owned pod
@@ -44,14 +46,21 @@ if [[ "${1:-}" == "--install-bridge" ]]; then
   mkdir -p "$(dirname "$wrapper_path")"
   # Prefer the active uv tool's interpreter so the wrapper can't pick
   # up a stale system Python that doesn't have vk installed.
-  vk_python="$(uv tool dir 2>/dev/null)/vk/bin/python"
+  vk_python="$(uv tool dir 2>/dev/null)/fr/bin/python"
   if [ ! -x "$vk_python" ]; then
     # Fallback chain: any `uv run` env, then plain `python3`.
     vk_python="$(uv run --no-project which python 2>/dev/null || command -v python3 || echo /usr/bin/python3)"
   fi
+  # The wrapper is only correct if its interpreter can actually import the
+  # adapter — verify before writing (review finding, 2026-06-06).
+  if ! "$vk_python" -c "import fr_vk.bridge" >/dev/null 2>&1; then
+    echo "  ERROR: $vk_python cannot import fr_vk.bridge — bridge wrapper not installed" >&2
+    echo "  (re-run after: uv tool install --force --with $PLUGIN_ROOT/packages/fr-vk $PLUGIN_ROOT/packages/fr)" >&2
+    exit 1
+  fi
   cat > "$wrapper_path" <<EOF
 #!/bin/bash
-exec "$vk_python" -m vk.bridge "\$@"
+exec "$vk_python" -m fr_vk.bridge "\$@"
 EOF
   chmod +x "$wrapper_path"
   echo "Wrapper installed at $wrapper_path"
@@ -62,9 +71,9 @@ EOF
 fi
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-  echo "Uninstalling superpowers-for-vk extras..."
-  rm -f "$RULES_DIR/vk-plan-override.md"
-  echo "  Removed $RULES_DIR/vk-plan-override.md"
+  echo "Uninstalling super-fr extras..."
+  rm -f "$RULES_DIR/fr-plan-override.md" "$RULES_DIR/vk-plan-override.md"
+  echo "  Removed fr/vk plan-override rules"
   if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
     if jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
       jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
@@ -107,7 +116,7 @@ echo "Preflight: validating source repo at $PLUGIN_ROOT..."
 
 if [ ! -d "$PLUGIN_ROOT/.git" ]; then
   echo "ERROR: $PLUGIN_ROOT is not a git checkout." >&2
-  echo "  install.sh must be run from a git clone of derio-net/superpowers-for-vk." >&2
+  echo "  install.sh must be run from a git clone of derio-net/super-fr." >&2
   exit 1
 fi
 
@@ -180,7 +189,7 @@ else
 fi
 
 echo ""
-echo "Installing superpowers-for-vk..."
+echo "Installing super-fr..."
 
 # 2. Register derio-net marketplace so the plugin system knows where to find it
 echo ""
@@ -189,7 +198,7 @@ if command -v jq &>/dev/null; then
   # Add to extraKnownMarketplaces in settings.json
   if [ -f "$SETTINGS" ]; then
     if ! jq -e '.extraKnownMarketplaces["derio-net"]' "$SETTINGS" &>/dev/null; then
-      jq '.extraKnownMarketplaces["derio-net"] = {"source":{"source":"github","repo":"derio-net/superpowers-for-vk"}}' \
+      jq '.extraKnownMarketplaces["derio-net"] = {"source":{"source":"github","repo":"derio-net/super-fr"}}' \
         "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
       echo "  Added derio-net to extraKnownMarketplaces"
     else
@@ -200,7 +209,7 @@ if command -v jq &>/dev/null; then
   # Add to known_marketplaces.json
   if [ -f "$KNOWN_MARKETPLACES" ]; then
     if ! jq -e '.["derio-net"]' "$KNOWN_MARKETPLACES" &>/dev/null; then
-      jq '."derio-net" = {"source":{"source":"github","repo":"derio-net/superpowers-for-vk"},"installLocation":"'"$MARKETPLACE_DIR"'"}' \
+      jq '."derio-net" = {"source":{"source":"github","repo":"derio-net/super-fr"},"installLocation":"'"$MARKETPLACE_DIR"'"}' \
         "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
       echo "  Added derio-net to known_marketplaces.json"
     else
@@ -208,14 +217,22 @@ if command -v jq &>/dev/null; then
     fi
   fi
 
-  # Enable the plugin in settings.json
+  # Enable both plugins in settings.json (v3: superpowers-for-vk is gone)
   if [ -f "$SETTINGS" ]; then
-    if ! jq -e '.enabledPlugins["superpowers-for-vk@derio-net"]' "$SETTINGS" &>/dev/null; then
-      jq '.enabledPlugins["superpowers-for-vk@derio-net"] = true' \
+    for plugin_name in "${PLUGIN_NAMES[@]}"; do
+      if ! jq -e ".enabledPlugins[\"$plugin_name@derio-net\"]" "$SETTINGS" &>/dev/null; then
+        jq ".enabledPlugins[\"$plugin_name@derio-net\"] = true" \
+          "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+        echo "  Enabled $plugin_name@derio-net in settings.json"
+      else
+        echo "  $plugin_name@derio-net already enabled"
+      fi
+    done
+    # v3 clean break: drop the retired plugin entry if present.
+    if jq -e '.enabledPlugins["superpowers-for-vk@derio-net"]' "$SETTINGS" &>/dev/null; then
+      jq 'del(.enabledPlugins["superpowers-for-vk@derio-net"])' \
         "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
-      echo "  Enabled superpowers-for-vk@derio-net in settings.json"
-    else
-      echo "  superpowers-for-vk@derio-net already enabled"
+      echo "  Removed retired superpowers-for-vk@derio-net entry"
     fi
   fi
 else
@@ -244,41 +261,45 @@ rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
   "$PLUGIN_ROOT/" "$MARKETPLACE_DIR/"
 echo "  Copied plugin into $MARKETPLACE_DIR"
 
-# 4. Register in installed_plugins.json so Claude Code loads the cached plugin
+# 4. Register each plugin in installed_plugins.json + sync per-plugin cache
 echo ""
-echo "Registering plugin..."
-CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
+echo "Registering plugins..."
 if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
-  CACHE_VERSION_DIR="$CACHE_DIR/$CURRENT_VERSION"
-  mkdir -p "$CACHE_VERSION_DIR"
-  # Sync plugin files into cache
-  rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
-    "$PLUGIN_ROOT/" "$CACHE_VERSION_DIR/"
-  echo "  Synced plugin v$CURRENT_VERSION to cache"
+  for plugin_name in "${PLUGIN_NAMES[@]}"; do
+    plugin_src="$PLUGIN_ROOT/plugins/$plugin_name"
+    CURRENT_VERSION=$(jq -r '.version' "$plugin_src/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
+    CACHE_VERSION_DIR="$CACHE_BASE/$plugin_name/$CURRENT_VERSION"
+    mkdir -p "$CACHE_VERSION_DIR"
+    rsync -a --delete --exclude='__pycache__' \
+      "$plugin_src/" "$CACHE_VERSION_DIR/"
+    echo "  Synced $plugin_name v$CURRENT_VERSION to cache"
 
-  INSTALL_ENTRY='[{"scope":"user","installPath":"'"$CACHE_VERSION_DIR"'","version":"'"$CURRENT_VERSION"'","installedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'","lastUpdated":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'"}]'
-  jq --argjson entry "$INSTALL_ENTRY" '.plugins["superpowers-for-vk@derio-net"] = $entry' \
-    "$INSTALLED_PLUGINS" > "${INSTALLED_PLUGINS}.tmp" && mv "${INSTALLED_PLUGINS}.tmp" "$INSTALLED_PLUGINS"
-  echo "  Registered superpowers-for-vk@derio-net v$CURRENT_VERSION in installed_plugins.json"
-else
-  echo "  WARNING: cannot register plugin — jq or installed_plugins.json missing" >&2
-fi
+    INSTALL_ENTRY='[{"scope":"user","installPath":"'"$CACHE_VERSION_DIR"'","version":"'"$CURRENT_VERSION"'","installedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'","lastUpdated":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'"}]'
+    jq --argjson entry "$INSTALL_ENTRY" ".plugins[\"$plugin_name@derio-net\"] = \$entry" \
+      "$INSTALLED_PLUGINS" > "${INSTALLED_PLUGINS}.tmp" && mv "${INSTALLED_PLUGINS}.tmp" "$INSTALLED_PLUGINS"
+    echo "  Registered $plugin_name@derio-net v$CURRENT_VERSION in installed_plugins.json"
 
-# 5. Clear stale cache versions (keep only the current version)
-if [ -d "$CACHE_DIR" ]; then
-  echo ""
-  echo "Checking plugin cache..."
-  CURRENT_VERSION=$(jq -r '.plugins[] | select(.name == "superpowers-for-vk") | .version' "$MARKETPLACE_DIR/.claude-plugin/marketplace.json" 2>/dev/null || echo "")
-  for version_dir in "$CACHE_DIR"/*/; do
-    [ -d "$version_dir" ] || continue
-    version_name=$(basename "$version_dir")
-    if [ -n "$CURRENT_VERSION" ] && [ "$version_name" = "$CURRENT_VERSION" ]; then
-      echo "  keeping cache: $version_name (current)"
-    else
-      rm -rf "$version_dir"
-      echo "  cleared stale cache: $version_name"
-    fi
+    # Clear stale cache versions for this plugin (keep only current)
+    for version_dir in "$CACHE_BASE/$plugin_name"/*/; do
+      [ -d "$version_dir" ] || continue
+      version_name=$(basename "$version_dir")
+      if [ "$version_name" = "$CURRENT_VERSION" ]; then
+        echo "  keeping cache: $plugin_name/$version_name (current)"
+      else
+        rm -rf "$version_dir"
+        echo "  cleared stale cache: $plugin_name/$version_name"
+      fi
+    done
   done
+  # v3 clean break: retire the old single-plugin entry + cache wholesale.
+  if jq -e '.plugins["superpowers-for-vk@derio-net"]' "$INSTALLED_PLUGINS" &>/dev/null; then
+    jq 'del(.plugins["superpowers-for-vk@derio-net"])' \
+      "$INSTALLED_PLUGINS" > "${INSTALLED_PLUGINS}.tmp" && mv "${INSTALLED_PLUGINS}.tmp" "$INSTALLED_PLUGINS"
+    rm -rf "$CACHE_BASE/superpowers-for-vk"
+    echo "  Retired superpowers-for-vk@derio-net (entry + cache removed)"
+  fi
+else
+  echo "  WARNING: cannot register plugins — jq or installed_plugins.json missing" >&2
 fi
 
 # 6. Clean stale user-level skill copies (from older installs)
@@ -293,9 +314,9 @@ done
 echo ""
 echo "Installing rules..."
 mkdir -p "$RULES_DIR"
-rm -f "$RULES_DIR/vk-plan-override.md"
-cp "$PLUGIN_ROOT/rules/vk-plan-override.md" "$RULES_DIR/vk-plan-override.md"
-echo "  Installed $RULES_DIR/vk-plan-override.md"
+rm -f "$RULES_DIR/vk-plan-override.md" "$RULES_DIR/fr-plan-override.md"
+cp "$PLUGIN_ROOT/plugins/super-fr/rules/fr-plan-override.md" "$RULES_DIR/fr-plan-override.md"
+echo "  Installed $RULES_DIR/fr-plan-override.md (retired vk-plan-override.md)"
 
 # 8. VK MCP server at user level
 if [ "$SKIP_MCP" = true ]; then
@@ -344,8 +365,20 @@ fi
 # 10. vk CLI
 if command -v uv &>/dev/null; then
   echo ""
-  echo "Installing vk CLI globally..."
-  uv tool install "$PLUGIN_ROOT" 2>&1 | sed 's/^/  /'
+  echo "Installing fr CLI globally (workspace member fr + the VK adapter)..."
+  uv tool install --force \
+    --with "$PLUGIN_ROOT/packages/fr-vk" \
+    "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'
+  # Smoke check — a tool env without a working entry point must fail loud.
+  fr_bin="$(uv tool dir 2>/dev/null)/fr/bin/fr"
+  if [ -x "$fr_bin" ]; then
+    if ! "$fr_bin" --version >/dev/null 2>&1; then
+      echo "  ERROR: fr CLI installed but does not run" >&2
+      exit 1
+    fi
+  else
+    echo "  WARNING: fr entry point not found at $fr_bin (uv stub or unusual layout?)" >&2
+  fi
 else
   echo ""
   echo "  WARNING: uv not found — install vk CLI manually:"
@@ -357,8 +390,8 @@ echo "Installation complete. Restart Claude Code to pick up plugin changes."
 echo ""
 echo "Verify with:"
 echo "  jq '.mcpServers.vibe_kanban' ~/.claude/.mcp.json"
-echo "  cat ~/.claude/rules/vk-plan-override.md"
-echo "  vk --version"
+echo "  cat ~/.claude/rules/fr-plan-override.md"
+echo "  fr --version"
 echo ""
 echo "Per-repo step (only for repos that keep plans under docs/superpowers/plans/):"
 echo "  The PostToolUse hook calls \$REPO_ROOT/scripts/validate-plans.sh — drop"

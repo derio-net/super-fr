@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Bump or verify the plugin/library version.
+"""Bump or verify the workspace version (lockstep).
 
-`pyproject.toml` `[project].version` is the canonical source. The two
-plugin JSONs (`.claude-plugin/plugin.json` and
-`.claude-plugin/marketplace.json`) must match it byte-for-byte. Python
-code reads the version dynamically via `importlib.metadata`, so it
-follows pyproject automatically — no other surfaces need updating.
+The workspace-root `pyproject.toml` `[project].version` is the canonical
+source. Every member pyproject under `packages/*/pyproject.toml` and
+every plugin version in `.claude-plugin/{plugin.json,marketplace.json}`
+must match it byte-for-byte. Python code reads its version dynamically
+via `importlib.metadata`, so it follows the member pyprojects
+automatically — no other surfaces need updating.
 
 Usage:
     scripts/bump-version.py patch        # 2.1.7 -> 2.1.8
     scripts/bump-version.py minor        # 2.1.7 -> 2.2.0
     scripts/bump-version.py major        # 2.1.7 -> 3.0.0
     scripts/bump-version.py 2.3.1        # set explicitly
-    scripts/bump-version.py --check      # verify the three files agree; exit 1 on drift
+    scripts/bump-version.py --check      # verify the whole set agrees; exit 1 on drift
 """
 
 from __future__ import annotations
@@ -25,36 +26,43 @@ import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PYPROJECT = REPO / "pyproject.toml"
-PLUGIN_JSON = REPO / ".claude-plugin" / "plugin.json"
-MARKETPLACE_JSON = REPO / ".claude-plugin" / "marketplace.json"
+PLUGIN_DIR = REPO / ".claude-plugin"
+MARKETPLACE_JSON = PLUGIN_DIR / "marketplace.json"
 
 VERSION_RE = re.compile(r'^(version\s*=\s*")([^"]+)(")', re.M)
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
-def read_pyproject_version() -> str:
-    m = VERSION_RE.search(PYPROJECT.read_text())
+def member_pyprojects() -> list[pathlib.Path]:
+    return sorted((REPO / "packages").glob("*/pyproject.toml"))
+
+
+def plugin_jsons() -> list[pathlib.Path]:
+    """Every plugin manifest — per-plugin dirs since the split."""
+    return sorted(
+        [*PLUGIN_DIR.glob("**/plugin.json"), *(REPO / "plugins").glob("*/.claude-plugin/plugin.json")]
+    )
+
+
+def read_version(toml: pathlib.Path) -> str:
+    m = VERSION_RE.search(toml.read_text())
     if not m:
-        sys.exit(f"error: no `version = \"...\"` line in {PYPROJECT}")
+        sys.exit(f'error: no `version = "..."` line in {toml}')
     return m.group(2)
 
 
-def read_plugin_json_version() -> str:
-    return json.loads(PLUGIN_JSON.read_text())["version"]
-
-
-def read_marketplace_json_version() -> str:
-    return json.loads(MARKETPLACE_JSON.read_text())["plugins"][0]["version"]
-
-
 def check() -> int:
-    py = read_pyproject_version()
-    pj = read_plugin_json_version()
-    mp = read_marketplace_json_version()
-    print(f"pyproject.toml          {py}")
-    print(f"plugin.json             {pj}")
-    print(f"marketplace.json[0]     {mp}")
-    if py == pj == mp:
+    versions: dict[str, str] = {"pyproject.toml": read_version(PYPROJECT)}
+    for member in member_pyprojects():
+        versions[str(member.relative_to(REPO))] = read_version(member)
+    for pj in plugin_jsons():
+        versions[str(pj.relative_to(REPO))] = json.loads(pj.read_text())["version"]
+    for i, plugin in enumerate(json.loads(MARKETPLACE_JSON.read_text())["plugins"]):
+        versions[f"marketplace.json[{i}]"] = plugin["version"]
+    width = max(len(k) for k in versions)
+    for k, v in versions.items():
+        print(f"{k:<{width}}  {v}")
+    if len(set(versions.values())) == 1:
         print("ok — versions agree")
         return 0
     print("DRIFT — run `scripts/bump-version.py <patch|minor|major|X.Y.Z>` to resync")
@@ -74,51 +82,51 @@ def compute_new(old: str, arg: str) -> str:
     sys.exit(f"error: expected patch|minor|major|X.Y.Z, got {arg!r}")
 
 
-def write_pyproject(new: str) -> None:
-    PYPROJECT.write_text(VERSION_RE.sub(rf'\g<1>{new}\g<3>', PYPROJECT.read_text(), count=1))
-
-
-def write_plugin_json(new: str) -> None:
-    data = json.loads(PLUGIN_JSON.read_text())
-    data["version"] = new
-    PLUGIN_JSON.write_text(json.dumps(data, indent=4) + "\n")
-
-
-def write_marketplace_json(new: str) -> None:
-    data = json.loads(MARKETPLACE_JSON.read_text())
-    data["plugins"][0]["version"] = new
-    MARKETPLACE_JSON.write_text(json.dumps(data, indent=4) + "\n")
+def write_toml(toml: pathlib.Path, new: str) -> None:
+    toml.write_text(VERSION_RE.sub(rf"\g<1>{new}\g<3>", toml.read_text(), count=1))
 
 
 def bump(arg: str) -> int:
-    old = read_pyproject_version()
+    old = read_version(PYPROJECT)
     new = compute_new(old, arg)
     if new == old:
         print(f"already at {new}, nothing to do")
         return 0
 
-    write_pyproject(new)
-    write_plugin_json(new)
-    write_marketplace_json(new)
-    print(f"bumped {old} -> {new} in 3 files")
+    tomls = [PYPROJECT, *member_pyprojects()]
+    for toml in tomls:
+        write_toml(toml, new)
+    for pj in plugin_jsons():
+        data = json.loads(pj.read_text())
+        data["version"] = new
+        pj.write_text(json.dumps(data, indent=4) + "\n")
+    data = json.loads(MARKETPLACE_JSON.read_text())
+    for plugin in data["plugins"]:
+        plugin["version"] = new
+    MARKETPLACE_JSON.write_text(json.dumps(data, indent=4) + "\n")
+    n_files = len(tomls) + len(plugin_jsons()) + 1
+    print(f"bumped {old} -> {new} in {n_files} files")
 
-    # uv sync refreshes uv.lock with the new `vk==X.Y.Z` entry.
+    # uv sync refreshes uv.lock with the new member entries.
     print("running `uv sync`...")
     subprocess.run(["uv", "sync"], check=True, cwd=REPO)
 
-    # Verify the entry point reports the new number.
-    result = subprocess.run(
-        ["uv", "run", "vk", "--version"],
-        check=True,
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-    )
-    reported = result.stdout.strip()
-    print(f"`vk --version` -> {reported}")
-    if new not in reported:
-        sys.exit(f"error: vk --version output {reported!r} doesn't contain {new!r}")
-    return 0
+    # Verify the entry point reports the new number. The script name is
+    # `vk` until the Phase 3 rebrand flips it to `fr`; probe both.
+    for cli in ("fr", "vk"):
+        result = subprocess.run(
+            ["uv", "run", cli, "--version"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            reported = result.stdout.strip()
+            print(f"`{cli} --version` -> {reported}")
+            if new not in reported:
+                sys.exit(f"error: {cli} --version output {reported!r} doesn't contain {new!r}")
+            return 0
+    sys.exit("error: neither `fr` nor `vk` entry point responded to --version")
 
 
 def main() -> int:

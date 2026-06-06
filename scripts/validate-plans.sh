@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Canonical plan validator — profile-driven.
-# Ships with superpowers-for-vk plugin. Per-repo thin wrappers call this.
+# Ships with super-fr plugin. Per-repo thin wrappers call this.
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"

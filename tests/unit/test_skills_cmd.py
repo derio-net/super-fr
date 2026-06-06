@@ -1,4 +1,4 @@
-"""vk skills — regression coverage for the CLI/skill overview command.
+"""fr skills — regression coverage for the CLI/skill overview command.
 
 The command crashed in installed environments (`ModuleNotFoundError:
 No module named 'click'`): skills_cmd imports click directly, so the
@@ -13,8 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from vk.commands import skills_cmd
+from fr.commands import skills_cmd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,29 +22,29 @@ def test_skills_prints_commands_and_skills(capsys: pytest.CaptureFixture[str]) -
     skills_cmd.skills()
     out = capsys.readouterr().out
     assert "Commands:" in out
-    assert "Skills (full docs in skills/<name>/SKILL.md):" in out
+    assert "Skills (full docs in plugins/*/skills/<name>/SKILL.md):" in out
     # Every top-level sub-app we know about should be listed.
     for verb in ("apply", "pickup", "plan", "spec"):
-        assert re.search(rf"^  vk {verb}\b", out, re.MULTILINE), f"missing: vk {verb}"
+        assert re.search(rf"^  fr {verb}\b", out, re.MULTILINE), f"missing: fr {verb}"
 
 
 @pytest.mark.parametrize("name", [entry[0] for entry in skills_cmd.SKILLS])
 def test_skills_list_matches_skill_files(name: str) -> None:
-    """Every SKILLS tuple must point at a real skills/<name>/SKILL.md."""
-    assert (REPO_ROOT / "skills" / name / "SKILL.md").is_file()
+    """Every SKILLS tuple must point at a real plugins/*/skills/<name>/SKILL.md."""
+    assert list((REPO_ROOT / "plugins").glob(f"*/skills/{name}/SKILL.md")), name
 
 
 def test_skill_files_match_skills_list() -> None:
     """Every skills/<name>/ folder must be summarized in SKILLS (drift guard)."""
     listed = {entry[0] for entry in skills_cmd.SKILLS}
-    on_disk = {p.parent.name for p in (REPO_ROOT / "skills").glob("*/SKILL.md")}
+    on_disk = {p.parent.name for p in (REPO_ROOT / "plugins").glob("*/skills/*/SKILL.md")}
     assert on_disk == listed
 
 
 def test_skills_subprocess_smoke() -> None:
-    """`python -m vk skills` must exit 0 — covers the direct click import."""
+    """`python -m fr skills` must exit 0 — covers the direct click import."""
     result = subprocess.run(
-        [sys.executable, "-m", "vk", "skills"],
+        [sys.executable, "-m", "fr", "skills"],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,

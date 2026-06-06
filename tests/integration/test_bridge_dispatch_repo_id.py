@@ -25,6 +25,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from fr_vk.runner import VkRunner
+
 TARGET_REPO = "derio-net/superpowers-for-vk"
 TARGET_REPO_ID = "uuid-superpowers-for-vk"
 
@@ -177,9 +179,10 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
     never tested against real `vibe-kanban-mcp`; both the unknown-repo gate
     AND the start_workspace payload had the wrong shape.
     """
+    from fr import parse
+    from fr_dispatch import tick
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir, target_repo=TARGET_REPO, issue_number=42)
@@ -197,7 +200,7 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
     )
 
     mcp = WireShapeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.errors == 0, f"unexpected failures: {result.failures}"
     assert result.synced == 1, f"phase should have been dispatched; result={result}"
@@ -219,7 +222,7 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
     link_calls = [c for c in mcp.calls if c[0] == "link_workspace_issue"]
     assert len(link_calls) == 1
 
-    assert "vk-synced" in gh.issues[(TARGET_REPO, 42)].labels
+    assert "fr:synced" in gh.issues[(TARGET_REPO, 42)].labels
 
 
 def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None:
@@ -230,9 +233,10 @@ def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None
     THEN  the gate refuses with a clean reason (no workspace dispatched)
     AND   no start_workspace call is made
     """
+    from fr import parse
+    from fr_dispatch import tick
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.bridge import tick
 
     other_repo = "derio-net/never-registered-repo"
     plan_dir = tmp_path / "plan"
@@ -251,7 +255,7 @@ def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None
     )
 
     mcp = WireShapeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.synced == 0
     assert result.errors == 1

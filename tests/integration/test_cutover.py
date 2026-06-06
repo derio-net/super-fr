@@ -104,30 +104,30 @@ def test_agent_images_bridge_files_deleted() -> None:
 #   - "DELETED" — the concern retired with the rebuild; verify absence
 #   - a dotted module path — must be importable under the live `vk` package
 INVENTORY: dict[str, str] = {
-    "A": "vk.bridge.cli",
+    "A": "fr_vk.bridge_cli",
     "A'": "DELETED",
     "B": "DELETED",
-    "C": "vk.render",
-    "D": "vk.bridge.workspaces",
-    "E": "vk.bridge.lifecycle",
-    "F": "vk.bridge.pr_state",
-    "G": "vk.bridge.dispatch",
-    "H": "vk.bridge.slots",
-    "I": "vk.bridge.dedup",
-    "J": "vk.bridge.config",
-    "K": "vk.bridge.prompt",
-    "L": "vk.bridge.metrics",
-    "M": "vk.gh",
-    "N": "vk.bridge.lifecycle",
-    "O": "vk.bridge.cli",
-    "P": "vk.parser",
+    "C": "fr.render",
+    "D": "fr_vk.workspaces",
+    "E": "fr_dispatch.lifecycle",
+    "F": "fr_vk.pr_state",
+    "G": "fr_vk.dispatch",
+    "H": "fr_vk.slots",
+    "I": "fr_vk.dedup",
+    "J": "fr_vk.config",
+    "K": "fr_dispatch.prompt",
+    "L": "fr_dispatch.metrics",
+    "M": "fr.gh",
+    "N": "fr_dispatch.lifecycle",
+    "O": "fr_vk.bridge_cli",
+    "P": "fr.parser",
 }
 
 # Modules the rebuild explicitly retired. Importing these MUST fail —
 # leaving a shim would silently keep the dead code alive.
 DELETED_SHIMS: tuple[str, ...] = (
-    "vk.bridge.body_parse",
-    "vk.bridge.gh_ready_listing",
+    "fr_dispatch.body_parse",
+    "fr_dispatch.gh_ready_listing",
 )
 
 

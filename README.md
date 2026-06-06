@@ -1,4 +1,4 @@
-# superpowers-for-vk
+# super-fr
 
 Canonical planning and work lifecycle skills for derio-net repos. Wraps the upstream
 [superpowers](https://github.com/obra/superpowers) plugin with phase-based plans,
@@ -8,10 +8,10 @@ profile-driven per-repo behavior, and work lifecycle tracking.
 
 | Skill | Description |
 |-------|-------------|
-| `vk-plan` | Canonical plan skill — phase-structured plans with profile-driven behavior and spec index maintenance |
-| `vk-dispatch` | Dispatch plan phases to GitHub Issues with profile-aware config |
-| `vk-execute` | Execute an agentic phase (agent-facing, Phase > Task > Step) |
-| `vk-progress` | Work lifecycle — plan sync, status board, create/transition, health, audit |
+| `fr-plan` | Canonical plan skill — phase-structured plans with profile-driven behavior and spec index maintenance |
+| `fr-dispatch` | Dispatch plan phases to GitHub Issues with profile-aware config |
+| `fr-execute` | Execute an agentic phase (agent-facing, Phase > Task > Step) |
+| `fr-progress` | Work lifecycle — plan sync, status board, create/transition, health, audit |
 
 ## Installation
 
@@ -22,7 +22,7 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "enabledPlugins": {
-    "superpowers-for-vk@derio-net": true
+    "super-fr@derio-net": true
   }
 }
 ```
@@ -30,8 +30,8 @@ Add to `~/.claude/settings.json`:
 ### Option 2: User-level install
 
 ```bash
-git clone https://github.com/derio-net/superpowers-for-vk
-cd superpowers-for-vk
+git clone https://github.com/derio-net/super-fr
+cd super-fr
 ./scripts/install.sh   # installs skills + rules + vk CLI (via uv tool)
 ```
 
@@ -40,21 +40,21 @@ cd superpowers-for-vk
 If skills are already installed via plugin but you need the CLI:
 
 ```bash
-uv tool install path/to/superpowers-for-vk   # or: uv tool install git+https://github.com/derio-net/superpowers-for-vk
+uv tool install path/to/super-fr   # or: uv tool install git+https://github.com/derio-net/super-fr
 ```
 
 ## Per-Repo Profile
 
 Each repo can define `docs/superpowers/plan-config.yaml` to control:
 - Filename patterns, required headers, status values
-- Post-deploy phases (auto-appended by vk-plan)
+- Post-deploy phases (auto-appended by fr-plan)
 - Dispatch config (project board, labels, target repo)
 
 ## Plan Model
 
 - **One plan = one repo's worth of work.** Plans live in the repo they modify.
 - **One phase = one GitHub Issue = one PR.** Phases are scoped for reviewability.
-- **Cross-repo features use multiple plans**, coordinated via the spec's "Implementation Plans" section (maintained automatically by vk-plan).
+- **Cross-repo features use multiple plans**, coordinated via the spec's "Implementation Plans" section (maintained automatically by fr-plan).
 
 ## Requirements
 

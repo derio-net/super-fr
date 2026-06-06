@@ -8,7 +8,7 @@ VK's MCP tools return DIFFERENT envelope keys per tool (see
 - `start_workspace` → `{"workspace_id": "<uuid>"}`
 - `link_workspace_issue` → `{"success": True, "workspace_id": ..., "issue_id": ...}`
 
-Before this fix `vk.bridge.dispatch._expect_id` only looked for `"id"`
+Before this fix `fr_dispatch.dispatch._expect_id` only looked for `"id"`
 (the legacy v1 bridge's convention), so `create_issue` and
 `start_workspace` raised `VkMcpError` even though the calls succeeded
 server-side. The bridge tick caught the exception AFTER VK had already
@@ -26,6 +26,8 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 from typing import Any
+
+from fr_vk.runner import VkRunner
 
 from tests.unit.fakes import FakeGhClient
 
@@ -215,8 +217,8 @@ def test_tick_dispatches_end_to_end_against_real_vk_envelopes(tmp_path: Path) ->
     subsequent `update_issue` + `start_workspace` calls never ran,
     stranding the card in the default "To do" status with no workspace.
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr_dispatch import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir)
@@ -234,7 +236,7 @@ def test_tick_dispatches_end_to_end_against_real_vk_envelopes(tmp_path: Path) ->
     )
 
     mcp = _RealShapeMcp()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.errors == 0, f"unexpected failures: {result.failures}"
     assert result.synced == 1, f"phase must dispatch end-to-end; result={result}"
