@@ -293,3 +293,13 @@ class TestUninstall:
         """Uninstalling when nothing is installed should not fail."""
         result = _run_install(fake_home, "--uninstall")
         assert result.returncode == 0
+
+
+def test_install_sh_smokes_fr_binary_not_vk():
+    """The uv stub hides step 10 from CI — at least pin the script text:
+    the smoke check must probe the `fr` entry point (the `vk` script was
+    deleted in v3; probing it fails every real install)."""
+    script = INSTALL_SH.read_text()
+    assert 'fr_bin="$(uv tool dir 2>/dev/null)/fr/bin/fr"' in script
+    assert '"$fr_bin" --version' in script
+    assert "/fr/bin/vk" not in script

@@ -81,10 +81,10 @@ def test_tick_pulls_managed_repos_before_discover(
 
     monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
-    # `discover_plans` looks up `${VK_REPOS_DIR}/<name>` — the cli sets
+    # `discover_plans` looks up `${FR_REPOS_DIR}/<name>` — the cli sets
     # this per-iteration to the clone's parent so the lookup resolves
     # to our clone. Pre-set it for clarity.
-    monkeypatch.setenv("VK_REPOS_DIR", str(repos_dir))
+    monkeypatch.setenv("FR_REPOS_DIR", str(repos_dir))
 
     from fr_vk import bridge_cli
 
@@ -175,7 +175,7 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
 
     monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
-    monkeypatch.setenv("VK_REPOS_DIR", str(repos_dir))
+    monkeypatch.setenv("FR_REPOS_DIR", str(repos_dir))
 
     from fr_dispatch import TickResult
     from fr_vk import bridge_cli

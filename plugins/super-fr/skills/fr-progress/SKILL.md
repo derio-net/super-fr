@@ -53,7 +53,7 @@ Missing / Unreachable), step + phase counts, and an aggregate. Cross-repo
 plans surface as `Unreachable` in this layer (a future cross-repo lookup
 will resolve them via the gh contents API).
 
-The reusable `.github/workflows/vk-spec-status.yml` posts this output as a
+The reusable `.github/workflows/fr-spec-status.yml` posts this output as a
 PR comment when a PR touching `docs/superpowers/{plans,implemented/plans}/`
 merges.
 

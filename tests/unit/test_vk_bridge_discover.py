@@ -1,6 +1,6 @@
 """Unit tests for `fr_dispatch.discover_plans`.
 
-We build a fake repo checkout under `tmp_path`, point `VK_REPOS_DIR` at it,
+We build a fake repo checkout under `tmp_path`, point `FR_REPOS_DIR` at it,
 and stub the GhClient via FakeGhClient so the test never touches the
 network. `vk.parse()` is used to construct the expected Plans because that
 pins the structure the bridge will see at runtime.
@@ -66,8 +66,8 @@ def _write_plan(
 
 @pytest.fixture
 def repo_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Set VK_REPOS_DIR to tmp_path and create the `test/` checkout dir."""
-    monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))
+    """Set FR_REPOS_DIR to tmp_path and create the `test/` checkout dir."""
+    monkeypatch.setenv("FR_REPOS_DIR", str(tmp_path))
     (tmp_path / "test").mkdir()
     return tmp_path / "test"
 
@@ -113,7 +113,7 @@ def test_discover_plans_returns_empty_when_checkout_missing(
 
     from tests.unit.fakes import FakeGhClient
 
-    monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))  # checkout dir intentionally absent
+    monkeypatch.setenv("FR_REPOS_DIR", str(tmp_path))  # checkout dir intentionally absent
     assert discover_plans("derio-net/missing", FakeGhClient()) == []
 
 
@@ -124,7 +124,7 @@ def test_discover_plans_returns_empty_when_plans_dir_absent(
 
     from tests.unit.fakes import FakeGhClient
 
-    monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))
+    monkeypatch.setenv("FR_REPOS_DIR", str(tmp_path))
     (tmp_path / "test").mkdir()  # checkout exists but no docs/superpowers/plans/
     assert discover_plans("derio-net/test", FakeGhClient()) == []
 

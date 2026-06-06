@@ -281,8 +281,8 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     continue
                 resolved_owner: str = owner_name
-                prev_repos_dir = os.environ.get("VK_REPOS_DIR")
-                os.environ["VK_REPOS_DIR"] = str(repo_path.parent)
+                prev_repos_dir = os.environ.get("FR_REPOS_DIR")
+                os.environ["FR_REPOS_DIR"] = str(repo_path.parent)
                 try:
 
                     def _fetch_plans(r: str = resolved_owner) -> Any:
@@ -320,9 +320,9 @@ def main(argv: list[str] | None = None) -> int:
                             _metrics.push_failure_total(reason=f"plan_error:{plan_slug}:{e}")
                 finally:
                     if prev_repos_dir is None:
-                        os.environ.pop("VK_REPOS_DIR", None)
+                        os.environ.pop("FR_REPOS_DIR", None)
                     else:
-                        os.environ["VK_REPOS_DIR"] = prev_repos_dir
+                        os.environ["FR_REPOS_DIR"] = prev_repos_dir
 
             for missing in sorted(seen_plans_before - seen_plans_after):
                 logger.warning(

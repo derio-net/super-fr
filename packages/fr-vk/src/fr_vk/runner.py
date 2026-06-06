@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 # build_prompt params). VK derives workspace prompts server-side from the
 # card description, so these are not consumed in the VK dispatch flow today.
 AGENT_IDENTITY = "a VK-spawned agent"
-EXECUTE_SKILL = "superpowers-for-vk:vk-execute"
+EXECUTE_SKILL = "super-fr:fr-execute"
 METRICS_NAMESPACE = "willikins_vk_bridge"
 METRICS_JOB = "vk_issue_bridge"
 HEARTBEAT_METRIC = "willikins_heartbeat_last_success_timestamp"

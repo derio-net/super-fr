@@ -645,3 +645,52 @@ def test_diff_dispatched_phases_unaffected_by_guard():
 
     assert d.suppressed == ()
     assert [m for m in d.mutations if isinstance(m, IssueCreate)] == []
+
+
+def test_diff_converges_legacy_queue_labels_in_one_apply_idempotently():
+    """The zero-blackout contract: an old-labeled Issue converges to the
+    fr:* spelling in ONE label change (remove legacy, add fr:*), and a
+    second diff against the converged state is a no-op."""
+    from fr import parse
+    from fr.diff import IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={
+                    "tracking_issue": ("https://github.com/derio-net/superpowers-for-vk/issues/42")
+                }
+            )
+        }
+    )
+    from dataclasses import replace as dc_replace
+
+    plan = dc_replace(plan, phases=(phase,))
+
+    def obs(labels):
+        return GhState(
+            phases={
+                1: PhaseObservation(
+                    issue_state="OPEN",
+                    issue_labels=frozenset(labels),
+                    issue_assignees=(),
+                    linked_prs=(),
+                )
+            }
+        )
+
+    legacy = obs({"vk-ready", "phase:1", "plan:fixture-minimal", "spec:fixture-spec-design"})
+    rendered = render(plan, legacy)
+    d = diff(rendered, legacy, plan=plan)
+    changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
+    assert len(changes) == 1
+    assert "vk-ready" in changes[0].remove
+    assert "fr:ready" in changes[0].add
+
+    converged = obs({"fr:ready", "phase:1", "plan:fixture-minimal", "spec:fixture-spec-design"})
+    rendered2 = render(plan, converged)
+    d2 = diff(rendered2, converged, plan=plan)
+    assert not [m for m in d2.mutations if isinstance(m, IssueLabelChange)]

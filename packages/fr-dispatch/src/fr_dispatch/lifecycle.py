@@ -1,6 +1,6 @@
-"""Lifecycle hook — invokes `VK_LIFECYCLE_HOOK_SCRIPT` on phase transitions.
+"""Lifecycle hook — invokes `FR_LIFECYCLE_HOOK_SCRIPT` on phase transitions.
 
-The bridge is observability-first: when a phase advances (e.g. `vk-ready`
+The bridge is observability-first: when a phase advances (e.g. `fr:ready`
 → `in-progress`), an operator-configured script is called with
 `(issue_url, transition)`. Wire this to Slack / a status board / etc.
 
@@ -34,14 +34,14 @@ _HOOK_TIMEOUT_SEC = 30
 
 
 def invoke_lifecycle_hook(issue_url: str, transition: LifecycleState) -> None:
-    """Run `$VK_LIFECYCLE_HOOK_SCRIPT issue_url transition` if configured.
+    """Run `$FR_LIFECYCLE_HOOK_SCRIPT issue_url transition` if configured.
 
     The call is synchronous (so cron-time logging stays linear) but
     bounded by `_HOOK_TIMEOUT_SEC`. Every plausible failure — missing
     env, missing script, non-zero exit, timeout — is logged at WARNING
     and swallowed: the bridge must survive a broken notifier.
     """
-    script = os.environ.get("VK_LIFECYCLE_HOOK_SCRIPT")
+    script = os.environ.get("FR_LIFECYCLE_HOOK_SCRIPT")
     if not script:
         return
     try:

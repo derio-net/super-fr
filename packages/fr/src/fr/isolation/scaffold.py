@@ -38,7 +38,7 @@ GH_FEATURE = "ghcr.io/devcontainers/features/github-cli:1"
 # Baseline: vk itself, installed from the repo's main branch at create time.
 POST_CREATE = (
     "pipx install uv 2>/dev/null || true; "
-    "uv tool install git+https://github.com/derio-net/superpowers-for-vk || true"
+    "uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true"
 )
 
 

@@ -1,4 +1,4 @@
-"""D5 — `VK_LIFECYCLE_HOOK_SCRIPT` is invoked on successful dispatch.
+"""D5 — `FR_LIFECYCLE_HOOK_SCRIPT` is invoked on successful dispatch.
 
 When the env var points at an executable script, dispatch must call
 it with `(issue_url, "in-progress")` after the VK card is created.
@@ -49,7 +49,7 @@ def test_lifecycle_hook_invoked_with_issue_url_and_transition(tmp_path, monkeypa
     from fr_vk.dispatch import dispatch_phase
 
     script, log = _write_recorder_script(tmp_path)
-    monkeypatch.setenv("VK_LIFECYCLE_HOOK_SCRIPT", str(script))
+    monkeypatch.setenv("FR_LIFECYCLE_HOOK_SCRIPT", str(script))
 
     repo = "derio-net/superpowers-for-vk"
     issue_n = 42
@@ -68,7 +68,7 @@ def test_lifecycle_hook_invoked_with_issue_url_and_transition(tmp_path, monkeypa
 def test_lifecycle_hook_not_invoked_when_env_unset(tmp_path, monkeypatch):
     from fr_vk.dispatch import dispatch_phase
 
-    monkeypatch.delenv("VK_LIFECYCLE_HOOK_SCRIPT", raising=False)
+    monkeypatch.delenv("FR_LIFECYCLE_HOOK_SCRIPT", raising=False)
 
     repo = "derio-net/superpowers-for-vk"
     issue_n = 42
@@ -82,7 +82,7 @@ def test_lifecycle_hook_not_invoked_when_env_unset(tmp_path, monkeypatch):
     # the env stays unset (the absence-of-side-effect is asserted by
     # the dispatch returning without exception and the FakeMcpClient
     # call sequence completing normally).
-    assert os.environ.get("VK_LIFECYCLE_HOOK_SCRIPT") is None
+    assert os.environ.get("FR_LIFECYCLE_HOOK_SCRIPT") is None
 
 
 def test_lifecycle_hook_failure_does_not_break_dispatch(tmp_path, monkeypatch, caplog):
@@ -90,7 +90,7 @@ def test_lifecycle_hook_failure_does_not_break_dispatch(tmp_path, monkeypatch, c
     from fr_vk.dispatch import dispatch_phase
 
     missing = tmp_path / "definitely-does-not-exist.sh"
-    monkeypatch.setenv("VK_LIFECYCLE_HOOK_SCRIPT", str(missing))
+    monkeypatch.setenv("FR_LIFECYCLE_HOOK_SCRIPT", str(missing))
 
     repo = "derio-net/superpowers-for-vk"
     issue_n = 42
@@ -109,7 +109,7 @@ def test_lifecycle_hook_invoked_directly_via_helper(tmp_path, monkeypatch):
     from fr_dispatch.lifecycle import invoke_lifecycle_hook
 
     script, log = _write_recorder_script(tmp_path)
-    monkeypatch.setenv("VK_LIFECYCLE_HOOK_SCRIPT", str(script))
+    monkeypatch.setenv("FR_LIFECYCLE_HOOK_SCRIPT", str(script))
 
     invoke_lifecycle_hook("https://example/issues/7", "in-progress")
     assert log.exists()

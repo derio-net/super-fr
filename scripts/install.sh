@@ -365,14 +365,19 @@ fi
 # 10. vk CLI
 if command -v uv &>/dev/null; then
   echo ""
-  echo "Installing vk CLI globally (workspace member fr + the VK adapter)..."
+  echo "Installing fr CLI globally (workspace member fr + the VK adapter)..."
   uv tool install --force \
     --with "$PLUGIN_ROOT/packages/fr-vk" \
     "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'
   # Smoke check — a tool env without a working entry point must fail loud.
-  if ! uv tool run --from fr vk --version >/dev/null 2>&1 && ! "$(uv tool dir)/fr/bin/vk" --version >/dev/null 2>&1; then
-    echo "  ERROR: vk CLI did not install correctly (no working entry point)" >&2
-    exit 1
+  fr_bin="$(uv tool dir 2>/dev/null)/fr/bin/fr"
+  if [ -x "$fr_bin" ]; then
+    if ! "$fr_bin" --version >/dev/null 2>&1; then
+      echo "  ERROR: fr CLI installed but does not run" >&2
+      exit 1
+    fi
+  else
+    echo "  WARNING: fr entry point not found at $fr_bin (uv stub or unusual layout?)" >&2
   fi
 else
   echo ""
@@ -385,8 +390,8 @@ echo "Installation complete. Restart Claude Code to pick up plugin changes."
 echo ""
 echo "Verify with:"
 echo "  jq '.mcpServers.vibe_kanban' ~/.claude/.mcp.json"
-echo "  cat ~/.claude/rules/vk-plan-override.md"
-echo "  vk --version"
+echo "  cat ~/.claude/rules/fr-plan-override.md"
+echo "  fr --version"
 echo ""
 echo "Per-repo step (only for repos that keep plans under docs/superpowers/plans/):"
 echo "  The PostToolUse hook calls \$REPO_ROOT/scripts/validate-plans.sh — drop"

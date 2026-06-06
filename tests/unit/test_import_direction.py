@@ -59,7 +59,7 @@ def test_fr_dispatch_never_imports_fr_vk() -> None:
 def test_fr_vk_strings_stay_in_the_adapter() -> None:
     """The framework carries no VK vocabulary: no MCP client types, no
     VibeKanban wire shapes, no willikins metric names."""
-    banned = re.compile(r"VkMcpClient|vibe-kanban|willikins|project_id", re.I)
+    banned = re.compile(r"VkMcpClient|vibe-kanban|willikins|project_id|VK_[A-Z]", re.I)
     offenders = []
     for py in (PACKAGES / "fr-dispatch" / "src" / "fr_dispatch").rglob("*.py"):
         for n, line in enumerate(py.read_text().splitlines(), 1):

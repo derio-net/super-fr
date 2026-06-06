@@ -51,7 +51,7 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     assert any("github-cli" in k for k in cfg["features"])
     assert any(KNOWN_TOOL_FEATURES["uv"] in k for k in cfg["features"])
     # vk installed in postCreate; secrets env-file wired with localEnv HOME
-    assert "vk" in cfg["postCreateCommand"]
+    assert "super-fr#subdirectory=packages/fr" in cfg["postCreateCommand"]
     # host-path workspace mount — linked-worktree git breaks without it
     assert cfg["workspaceFolder"] == "${localWorkspaceFolder}"
     assert "target=${localWorkspaceFolder}" in cfg["workspaceMount"]

@@ -31,18 +31,9 @@ console = Console()
 err_console = Console(stderr=True)
 
 # Lifecycle labels a phase can carry (one at a time) — see render._lifecycle_label.
-_LIFECYCLE = (
-    "fr:ready",
-    "fr:blocked",
-    "fr:in-progress",
-    "fr:pr-ready",
-    "manual",
-    # Legacy spellings (dual-read, removed in migration step 7):
-    "vk-ready",
-    "vk-blocked",
-    "in-progress",
-    "pr-ready",
-)
+# Matched against RENDERED labels, which are always fr:* (the renderer
+# translates legacy spellings) — no legacy entries needed here.
+_LIFECYCLE = ("fr:ready", "fr:blocked", "fr:in-progress", "fr:pr-ready", "manual")
 
 
 def _make_gh_client() -> GhClient:

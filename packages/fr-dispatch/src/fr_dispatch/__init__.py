@@ -25,7 +25,7 @@ from fr._urls import parse_issue_url
 from fr.apply import apply
 from fr.diff import diff
 from fr.ghclient import GhClient
-from fr.labels import VK_READY, VK_SYNCED
+from fr.labels import FR_READY, FR_SYNCED
 from fr.observe import observe
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_ops import PlanEditError
@@ -73,7 +73,7 @@ def _plan_projects_ready(plan: Plan, gh: GhClient) -> bool:
         ri = rendered.issue_per_phase.get(phase.phase.number)
         if ri is None:
             continue
-        if VK_READY in ri.labels and VK_SYNCED not in ri.labels:
+        if FR_READY in ri.labels and FR_SYNCED not in ri.labels:
             return True
     return False
 
@@ -82,11 +82,11 @@ def _repo_checkout_root(repo: str) -> Path:
     """Resolve `owner/name` to a local checkout path.
 
     Matches the live bridge's REPOS_DIR convention (`~/repos/<name>`).
-    Override the parent with `VK_REPOS_DIR` — used by tests and by any
+    Override the parent with `FR_REPOS_DIR` — used by tests and by any
     deployment where checkouts live somewhere other than `$HOME/repos`.
     """
     name = repo.split("/", 1)[1] if "/" in repo else repo
-    base = os.environ.get("VK_REPOS_DIR")
+    base = os.environ.get("FR_REPOS_DIR")
     root = Path(base) if base else Path.home() / "repos"
     return root / name
 
@@ -172,7 +172,7 @@ def tick(
         tracking = phase.phase.tracking_issue
         if ri is None or not tracking:  # pragma: no cover — defensive guard
             continue
-        if VK_READY not in ri.labels or VK_SYNCED in ri.labels:
+        if FR_READY not in ri.labels or FR_SYNCED in ri.labels:
             continue
         try:
             issue_repo, issue_number = parse_issue_url(tracking)
@@ -247,11 +247,11 @@ def tick(
                     continue
 
             try:
-                gh.ensure_labels(issue_repo, [VK_SYNCED])
+                gh.ensure_labels(issue_repo, [FR_SYNCED])
                 gh.edit_issue_labels(
                     issue_repo,
                     issue_number,
-                    add=frozenset({VK_SYNCED.name}),
+                    add=frozenset({FR_SYNCED.name}),
                     remove=frozenset(),
                 )
                 synced += 1

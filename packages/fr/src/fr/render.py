@@ -375,7 +375,7 @@ def render_body(
         f"{tracking}"
         f"\n---\n\n"
         f"## Instruction\n\n"
-        f"Use superpowers-for-vk:vk-execute to implement Phase "
+        f"Use super-fr:fr-execute to implement Phase "
         f"{phase.phase.number} of this plan.\n\n"
         f"## Workspace\n\n"
         f"Repos: {repo}\n\n"
