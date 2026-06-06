@@ -439,6 +439,31 @@ def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
     _stage(plan.repo_root, [phase_path])
 
 
+def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
+    """Null phase.tracking_issue in <plan_dir>/<NN>.yaml (inverse of
+    `set_tracking_issue` — the `vk undispatch` writeback).
+
+    Returns True when the field was cleared, False when it was already
+    null (no-op; the file is not rewritten, keeping re-runs byte-stable).
+    Stages but does not commit.
+    """
+    plan = parse(plan_dir)
+    phase_path = plan_dir / f"{phase_n:02d}.yaml"
+    if not phase_path.exists():
+        raise PlanEditError(f"phase {phase_n} yaml not found: {phase_path}")
+    raw = yaml.safe_load(phase_path.read_text())
+    if raw["phase"].get("tracking_issue") is None:
+        return False
+    raw["phase"]["tracking_issue"] = None
+    phase_path.write_text(_yaml_dump(raw))
+    try:
+        parse(plan_dir)
+    except PlanSchemaError as e:
+        raise PlanEditError(f"post-write schema validation failed: {e}") from e
+    _stage(plan.repo_root, [phase_path])
+    return True
+
+
 # ---------------------------------------------------------------------------
 # vk.plan.rework_create / rework_add_origin / rework_list
 
@@ -446,10 +471,24 @@ def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
 _REWORK_SUFFIX_RE = re.compile(r"-rework-(\d+)$")
 
 
+def _superpowers_dir(parent_dir: Path) -> Path:
+    """Resolve the docs/superpowers/ root from a plan dir in any layout:
+    plans/<x>, implemented/plans/<x> (canonical archive, 2026-06-05 spec),
+    or archived-plans/<x> (legacy)."""
+    if parent_dir.parent.name == "plans" and parent_dir.parent.parent.name == "implemented":
+        return parent_dir.parent.parent.parent
+    return parent_dir.parent.parent
+
+
 def _next_rework_number(parent_dir: Path) -> int:
-    """Cross-directory N collision check, like v1 next_rework_number."""
-    repo_root = parent_dir.parent.parent  # plans/ or archived-plans/ -> superpowers/
+    """Cross-directory N collision check, like v1 next_rework_number.
+
+    Scans active plans/, implemented/plans/ (canonical archive), and
+    archived-plans/ (legacy) so an archived rework still claims its number.
+    """
+    repo_root = _superpowers_dir(parent_dir)
     plans_dir = repo_root / "plans"
+    implemented_dir = repo_root / "implemented" / "plans"
     archived_dir = repo_root / "archived-plans"
 
     parent_slug = parent_dir.name
@@ -469,13 +508,14 @@ def _next_rework_number(parent_dir: Path) -> int:
         return out
 
     in_plans = _scan(plans_dir)
-    in_archived = _scan(archived_dir)
+    in_archived = _scan(implemented_dir) | _scan(archived_dir)
     collision = in_plans & in_archived
     if collision:
         n = sorted(collision)[0]
         raise PlanEditError(
             f"ambiguous rework state: {parent_slug}-rework-{n} exists in BOTH "
-            f"plans/ and archived-plans/. Resolve manually before scaffolding."
+            f"plans/ and an archive dir (implemented/plans/ or archived-plans/). "
+            f"Resolve manually before scaffolding."
         )
     combined = in_plans | in_archived
     return max(combined) + 1 if combined else 1
@@ -490,13 +530,15 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     parent_dir = parent_plan_dir.resolve()
     if not parent_dir.is_dir():
         raise PlanEditError(f"parent plan dir not found: {parent_dir}")
-    superpowers_dir = parent_dir.parent.parent
-    if superpowers_dir.name != "superpowers" or parent_dir.parent.name not in (
-        "plans",
-        "archived-plans",
-    ):
+    superpowers_dir = _superpowers_dir(parent_dir)
+    in_implemented = (
+        parent_dir.parent.name == "plans" and parent_dir.parent.parent.name == "implemented"
+    )
+    in_active_or_legacy = parent_dir.parent.name in ("plans", "archived-plans")
+    if superpowers_dir.name != "superpowers" or not (in_implemented or in_active_or_legacy):
         raise PlanEditError(
-            f"parent must live under docs/superpowers/{{plans,archived-plans}}/, got: {parent_dir}"
+            f"parent must live under docs/superpowers/"
+            f"{{plans,implemented/plans,archived-plans}}/, got: {parent_dir}"
         )
 
     parent_plan = parse(parent_dir)

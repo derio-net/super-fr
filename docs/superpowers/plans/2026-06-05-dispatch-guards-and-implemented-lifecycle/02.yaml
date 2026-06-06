@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'Guarded diff: force_create + SuppressedCreate, apply CLI wiring'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: diff() suppression of locally-complete undispatched creates
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Add failing tests to tests/unit/test_v2_diff.py: (a) locally-complete undispatched phase -> no IssueCreate in d.mutations and exactly one d.suppressed entry carrying phase_number and a human-readable reason with tick counts; (b) same phase with diff(..., force_create=True) -> IssueCreate emitted, suppressed empty; (c) mixed plan (phase 1 complete, phase 2 incomplete, both undispatched) -> phase 2 creates, phase 1 suppressed; (d) dispatched phases unaffected. Run; confirm fail.
+  - id: P2.T1.S2
+    text: |-
+      Implement in src/vk/diff.py: frozen dataclass SuppressedCreate(phase_number: int, reason: str); Diff gains `suppressed: tuple[SuppressedCreate, ...] = ()`; diff() gains keyword `force_create: bool = False`. In the undispatched branch, when plan_locally_complete(phase) and not force_create, append SuppressedCreate instead of IssueCreate (reason includes ticked/total and whether completion.at is set). Re-run tests; pass.
+- number: 2
+  title: Bridge regression guarantee
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Run the full bridge suite untouched: `uv run pytest tests/unit/test_bridge*.py tests/integration -q --no-cov` (adjust to the actual bridge test module names found via `ls tests/`). All green with zero bridge-code changes — proving the force_create default leaves tick()/discover_plans semantics identical. If anything fails, fix diff.py, never the bridge.
+- number: 3
+  title: 'apply_cmd: --force, suppression display, factual header, exit 2'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Add failing CLI tests to tests/unit/test_apply_cmd.py using CliRunner + FakeGhClient: (a) dry-run output contains the factual header line 'created <date> (<N> days ago) · <ticked>/<total> steps · never dispatched' and a 'would REFUSE create' line per suppressed phase with '(override: --force)'; (b) `--yes` on a plan where every create is suppressed exits 2 and stderr/stdout mentions 'vk archive'; (c) `--yes --force` creates the Issues; (d) `--format json` includes a 'suppressed' array. Run; fail.
+  - id: P2.T3.S2
+    text: |-
+      Implement in src/vk/commands/apply_cmd.py: add `--force` typer option threaded to diff(force_create=...); compute the header line (age from meta.created via datetime.date in the CLI layer; dispatch state from any phase having tracking_issue); render d.suppressed in text + json; after the reachability gate, if yes and d.suppressed and no IssueCreate mutations remain, return exit 2 with the 'all N phases locally complete — nothing to dispatch; run vk archive or pass --force' message. Re-run tests; pass. Run ruff format + mypy.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-05T21:29:46+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-05T21:29:53+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-05T21:33:09+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-06-05T21:41:40+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-06-05T21:41:46+00:00'
+      note: null
+  completion:
+    at: '2026-06-05T21:41:52+00:00'
+    note: null
+    observed_prs: []

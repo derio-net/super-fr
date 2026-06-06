@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from vk.commands.common import require_migrated_layout
 from vk.migrate import MigrationError, migrate_repo
 
 console = Console()
@@ -51,6 +52,7 @@ def v1_to_v2_cmd(
     Defaults to a preview. Pass --yes to actually write changes.
     """
     repo_root = Path.cwd()
+    require_migrated_layout(repo_root)
     try:
         outcomes = migrate_repo(
             repo_root,
@@ -71,3 +73,44 @@ def v1_to_v2_cmd(
     n_skipped = sum(1 for o in outcomes if o.reason.startswith("skipped"))
     suffix = "" if yes else " (dry-run; pass --yes to apply)"
     console.print(f"\n{n_migrated} migrated, {n_skipped} skipped.{suffix}")
+
+
+@migrate_app.command("dirs")
+def dirs_cmd(
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Perform the moves. Without this flag, runs as a preview (dry-run is the default).",
+    ),
+) -> None:
+    """Migrate the legacy archived-plans/ layout to implemented/{plans,specs}/.
+
+    Renames docs/superpowers/archived-plans -> implemented/plans (v1 flat
+    archives ride along untouched) and moves every spec whose plans are all
+    implemented into implemented/specs/. Moves are `git mv`; committing is
+    the operator's job. This is the ONLY verb exempt from the legacy-layout
+    hard-stop.
+    """
+    from vk.migrate import MigrationError, migrate_dirs
+
+    repo_root = Path.cwd()
+    try:
+        moves, notes = migrate_dirs(repo_root, dry_run=not yes)
+    except MigrationError as e:
+        err_console.print(f"[red]migration error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    if not moves:
+        typer.echo("nothing to migrate — layout is already current.")
+        for n in notes:
+            typer.echo(f"  note: {n}")
+        return
+    verb = "moved" if yes else "would move"
+    for m in moves:
+        typer.echo(f"  {verb}: {m.src} -> {m.dst}")
+    for n in notes:
+        typer.echo(f"  note: {n}")
+    if yes:
+        typer.echo("\nmoves staged via git mv — review and commit them.")
+    else:
+        typer.echo("\n(dry-run; pass --yes to apply)")

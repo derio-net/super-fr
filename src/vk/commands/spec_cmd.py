@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from vk.commands.common import require_migrated_layout
 from vk.spec import compute_status, parse_spec, render_status_md
 
 console = Console()
@@ -25,6 +26,7 @@ def status_cmd(
     Same code path as the GHA workflow uses — output is markdown
     suitable for posting as a PR comment.
     """
+    require_migrated_layout()
     if all_specs and spec_path is not None:
         err_console.print("--all and spec_path are mutually exclusive")
         raise typer.Exit(2)

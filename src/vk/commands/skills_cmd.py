@@ -24,7 +24,7 @@ SKILLS: list[tuple[str, str, str]] = [
     (
         "vk-dispatch",
         "Reconcile a plan's GitHub Issues (skill).",
-        "vk apply [--yes] [--format text|json]",
+        "vk status  →  vk apply [--yes] [--force]  ·  vk undispatch / vk archive to invert/finish",
     ),
     (
         "vk-execute",
@@ -34,7 +34,7 @@ SKILLS: list[tuple[str, str, str]] = [
     (
         "vk-progress",
         "Plan / spec progress reporting (skill).",
-        "vk apply  +  vk spec status [--all]  +  vk plan edit",
+        "vk status <plan-dir>  +  vk spec status [--all]  +  vk plan edit  +  vk archive [--all]",
     ),
     (
         "vk-goal",

@@ -115,6 +115,6 @@ vk migrate v1-to-v2           # preview (default)
 vk migrate v1-to-v2 --yes     # apply: creates <slug>/ folders, moves .md to .md.v1-archive
 ```
 
-Migration is repo-wide; it converts every v1 plan in
-`docs/superpowers/{plans,archived-plans}/` and rewrites spec tables.
-Commit as its own PR before resuming phase execution.
+Migration is repo-wide: it converts every v1 plan in
+`docs/superpowers/{plans,implemented/plans}/` and rewrites spec tables;
+commit as its own PR. "Legacy layout detected" → `vk migrate dirs --yes`.

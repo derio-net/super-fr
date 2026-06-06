@@ -119,8 +119,10 @@ if [ ${#FILES[@]} -gt 0 ]; then
   done
 else
   PLANS_DIR="$REPO_ROOT/docs/superpowers/plans"
-  ARCHIVE_DIR="$REPO_ROOT/docs/superpowers/archived-plans"
-  for f in "$PLANS_DIR"/*.md "$ARCHIVE_DIR"/*.md; do
+  # Canonical archive (2026-06-05 spec) + legacy fallback for unmigrated repos.
+  IMPLEMENTED_DIR="$REPO_ROOT/docs/superpowers/implemented/plans"
+  LEGACY_ARCHIVE_DIR="$REPO_ROOT/docs/superpowers/archived-plans"
+  for f in "$PLANS_DIR"/*.md "$IMPLEMENTED_DIR"/*.md "$LEGACY_ARCHIVE_DIR"/*.md; do
     [ -e "$f" ] && validate_file "$f"
   done
 fi

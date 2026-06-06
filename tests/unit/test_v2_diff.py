@@ -511,3 +511,116 @@ def test_diff_fully_cross_repo_plan_skips_target_repo_ensure():
     assert "derio-net/repo-a" not in ensure_repos
     # Only repo-b gets an ensure
     assert "derio-net/repo-b" in ensure_repos
+
+
+def _tick_all_steps(phase):
+    """Return a copy of `phase` with every step ticked 'x'."""
+    new_steps = {k: s.model_copy(update={"state": "x"}) for k, s in phase.state.steps.items()}
+    return phase.model_copy(update={"state": phase.state.model_copy(update={"steps": new_steps})})
+
+
+def test_diff_suppresses_create_for_locally_complete_undispatched_phase():
+    """2026-06-05 stale-plan dispatch guard (bookmarks incident).
+
+    A locally-complete (all steps ticked) phase with no tracking_issue must
+    NOT produce an IssueCreate; the suppression is data on the Diff.
+    """
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.diff import IssueCreate, diff
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    plan = dc_replace(plan, phases=(_tick_all_steps(plan.phases[0]),))
+    observed = GhState(phases={})
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    assert [m for m in d.mutations if isinstance(m, IssueCreate)] == []
+    assert len(d.suppressed) == 1
+    assert d.suppressed[0].phase_number == 1
+    assert "1/1" in d.suppressed[0].reason
+
+
+def test_diff_force_create_overrides_suppression():
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.diff import IssueCreate, diff
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    plan = dc_replace(plan, phases=(_tick_all_steps(plan.phases[0]),))
+    observed = GhState(phases={})
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan, force_create=True)
+
+    creates = [m for m in d.mutations if isinstance(m, IssueCreate)]
+    assert len(creates) == 1 and creates[0].phase_number == 1
+    assert d.suppressed == ()
+
+
+def test_diff_mixed_plan_dispatches_incomplete_suppresses_complete():
+    """Mid-plan resume must never be blocked: complete phases suppress,
+    incomplete phases still create."""
+    from dataclasses import replace as dc_replace
+    from pathlib import Path
+
+    from vk import parse
+    from vk.diff import IssueCreate, diff
+    from vk.render import render
+    from vk.states import GhState
+
+    multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
+    plan = parse(multi)
+    new_phases = tuple(_tick_all_steps(p) if p.phase.number == 1 else p for p in plan.phases)
+    plan = dc_replace(plan, phases=new_phases)
+    observed = GhState(phases={})
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    created_phases = {m.phase_number for m in d.mutations if isinstance(m, IssueCreate)}
+    assert 1 not in created_phases
+    assert created_phases  # the other phases still create
+    assert {s.phase_number for s in d.suppressed} == {1}
+
+
+def test_diff_dispatched_phases_unaffected_by_guard():
+    """The guard only concerns undispatched phases: a dispatched, observed
+    phase produces its normal mutations and no suppression."""
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.diff import IssueCreate, diff
+    from vk.render import render
+    from vk.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    repo = "derio-net/superpowers-for-vk"
+    phase = _tick_all_steps(plan.phases[0]).model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://github.com/{repo}/issues/7"}
+            )
+        }
+    )
+    plan = dc_replace(plan, phases=(phase,))
+    observed = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(),
+                issue_assignees=(),
+                linked_prs=(),
+                body="stale",
+            )
+        }
+    )
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+
+    assert d.suppressed == ()
+    assert [m for m in d.mutations if isinstance(m, IssueCreate)] == []

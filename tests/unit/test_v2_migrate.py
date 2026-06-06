@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
+
+from vk.cli import app
 
 
 def _make_repo(tmp_path: Path) -> Path:
     (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
-    (tmp_path / "docs" / "superpowers" / "archived-plans").mkdir()
+    (tmp_path / "docs" / "superpowers" / "implemented" / "plans").mkdir(parents=True)
     (tmp_path / "docs" / "superpowers" / "specs").mkdir()
     return tmp_path
 
@@ -804,3 +808,112 @@ def test_migrate_aligns_vk_version_with_create_default(tmp_path):
     migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(_plans(repo) / "2026-05-10-vkver")
     assert plan.meta.vk_version == ">=2.0.0,<3.0.0"
+
+
+# ---------------------------------------------------------------------------
+# vk migrate dirs (2026-06-05 dispatch-guards spec, Phase 3)
+
+
+def _legacy_layout_repo(tmp_path: Path) -> Path:
+    """Git repo with legacy archived-plans/ + two specs (one fully
+    implemented, one still active)."""
+    import shutil as _shutil
+
+    sp = tmp_path / "docs" / "superpowers"
+    (sp / "plans").mkdir(parents=True)
+    (sp / "archived-plans").mkdir()
+    (sp / "specs").mkdir()
+
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    # A completed v2 plan archived under the legacy dir.
+    _shutil.copytree(fixture, sp / "archived-plans" / "2026-05-01-done-plan")
+    # A v1 flat archive rides along untouched.
+    (sp / "archived-plans" / "2026-04-01-old-flat.md").write_text("# old v1 plan\n")
+    # An active plan.
+    _shutil.copytree(fixture, sp / "plans" / "2026-06-01-active-plan")
+
+    (sp / "specs" / "2026-05-01-done-design.md").write_text(
+        "# Done design\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+        "| done | derio-net/test | `docs/superpowers/plans/2026-05-01-done-plan` | — |\n"
+    )
+    (sp / "specs" / "2026-06-01-active-design.md").write_text(
+        "# Active design\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+        "| active | derio-net/test | `docs/superpowers/plans/2026-06-01-active-plan` | — |\n"
+    )
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+        cwd=tmp_path,
+        check=True,
+    )
+    return tmp_path
+
+
+def test_migrate_dirs_dry_run_plans_moves_without_touching_fs(tmp_path, monkeypatch):
+    repo = _legacy_layout_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+    result = runner.invoke(app, ["migrate", "dirs"])
+    assert result.exit_code == 0, result.output
+    assert "archived-plans" in result.output and "implemented/plans" in result.output
+    assert "dry-run" in result.output
+    sp = repo / "docs" / "superpowers"
+    assert (sp / "archived-plans").is_dir(), "dry-run must not move anything"
+    assert not (sp / "implemented").exists()
+
+
+def test_migrate_dirs_yes_moves_layout_and_implemented_specs(tmp_path, monkeypatch):
+    repo = _legacy_layout_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+    result = runner.invoke(app, ["migrate", "dirs", "--yes"])
+    assert result.exit_code == 0, result.output
+    sp = repo / "docs" / "superpowers"
+    assert not (sp / "archived-plans").exists()
+    assert (sp / "implemented" / "plans" / "2026-05-01-done-plan").is_dir()
+    assert (sp / "implemented" / "plans" / "2026-04-01-old-flat.md").is_file()
+    # Fully-implemented spec moved; active spec stayed.
+    assert (sp / "implemented" / "specs" / "2026-05-01-done-design.md").is_file()
+    assert (sp / "specs" / "2026-06-01-active-design.md").is_file()
+    # Moves are staged (git mv), not raw renames.
+    porcelain = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout
+    assert "R " in porcelain or "A " in porcelain
+
+
+def test_migrate_dirs_noop_on_migrated_repo(tmp_path, monkeypatch):
+    repo = _legacy_layout_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+    assert runner.invoke(app, ["migrate", "dirs", "--yes"]).exit_code == 0
+    result = runner.invoke(app, ["migrate", "dirs", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "nothing to migrate" in result.output.lower()
+
+
+def test_migrate_dirs_moves_archived_specs_entries(tmp_path, monkeypatch):
+    """Legacy archived-specs/ entries ride along into implemented/specs/
+    (review finding, 2026-06-06)."""
+    repo = _legacy_layout_repo(tmp_path)
+    legacy_specs = repo / "docs" / "superpowers" / "archived-specs"
+    legacy_specs.mkdir()
+    (legacy_specs / "2026-04-01-old-design.md").write_text("# old design\n")
+    (legacy_specs / "plan-config.yaml").write_text("x: 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "specs"],
+        cwd=repo,
+        check=True,
+    )
+    monkeypatch.chdir(repo)
+    result = CliRunner().invoke(app, ["migrate", "dirs", "--yes"])
+    assert result.exit_code == 0, result.output
+    sp = repo / "docs" / "superpowers"
+    assert (sp / "implemented" / "specs" / "2026-04-01-old-design.md").is_file()
+    assert (sp / "implemented" / "specs" / "plan-config.yaml").is_file()
+    assert not (sp / "archived-specs").exists()

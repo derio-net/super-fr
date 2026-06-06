@@ -1,0 +1,58 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Pure layer: plan_locally_complete + drift-warning blind-spot fix'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: plan_locally_complete predicate in render.py
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add failing tests to tests/unit/test_v2_render.py: a test_plan_locally_complete truth table covering (a) completion.at set, steps unticked -> True; (b) all steps 'x' -> True; (c) mix of 'x' and '-' -> True; (d) one step ' ' and no completion.at -> False; (e) empty steps dict and no completion.at -> False. Build PhaseDoc fixtures with the existing test helpers. Run `uv run pytest tests/unit/test_v2_render.py -q --no-cov` and confirm the new tests fail with ImportError/AttributeError.
+  - id: P1.T1.S2
+    text: |-
+      Implement `plan_locally_complete(phase: PhaseDoc) -> bool` in src/vk/render.py (public, near _phase_complete): True iff phase.state.completion.at is not None, OR state.steps is non-empty and every StepState.state is in ('x', '-'). Docstring states it is the LOCAL-only signal and deliberately weaker than _phase_complete (no gh evidence). Re-run the tests; all pass.
+- number: 2
+  title: Refactor spec.py onto the shared predicate
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Confirm baseline green: `uv run pytest tests/unit/test_v2_spec*.py -q --no-cov` (or the spec-status test module). Then replace the inline OR logic in src/vk/spec.py compute_status (the completion.at / all-steps-ticked block, ~lines 229-235) with a call to vk.render.plan_locally_complete. Re-run the same tests; still green (pure refactor under green).
+- number: 3
+  title: Drift warning for undispatched locally-complete phases
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Add failing test to tests/unit/test_v2_render.py: a plan whose phase has all steps ticked, tracking_issue None, and an empty GhState -> render(plan, observed).warnings contains a warn-severity message matching 'never dispatched'. This is the bookmarks-incident regression test for the `if obs is None: continue` blind spot. Run; confirm fail.
+  - id: P1.T3.S2
+    text: |-
+      In src/vk/render.py _drift_warnings, before the `if obs is None: continue` line, emit Warning(severity='warn', message=f"Phase {n}: {ticked}/{total} steps ticked but never dispatched — dispatch would be refused (vk archive if this plan is done)") when obs is None and plan_locally_complete(phase). Keep the continue for the PR-based checks. Re-run tests; pass. Run `uv run ruff format src/ tests/ && uv run mypy src/`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-05T21:12:27+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-06-05T21:12:34+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-06-05T21:14:31+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-06-05T21:26:45+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-06-05T21:26:51+00:00'
+      note: null
+  completion:
+    at: '2026-06-05T21:26:57+00:00'
+    note: null
+    observed_prs: []

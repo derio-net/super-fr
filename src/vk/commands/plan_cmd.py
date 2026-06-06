@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from vk import parse
+from vk.commands.common import require_migrated_layout
 from vk.parser import PlanSchemaError
 from vk.plan_ops import (
     PhaseSpec,
@@ -26,6 +27,12 @@ console = Console()
 err_console = Console(stderr=True)
 
 plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
+
+
+@plan_app.callback()
+def _plan_guard() -> None:
+    """Runs before every `vk plan ...` subcommand (legacy-layout hard-stop)."""
+    require_migrated_layout()
 
 
 @plan_app.command("create")

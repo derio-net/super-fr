@@ -45,6 +45,10 @@ class GhClient(Protocol):
 
     def edit_issue_body(self, repo: str, number: int, body: str) -> None: ...
 
+    def comment_issue(self, repo: str, number: int, body: str) -> None:
+        """Post a comment on an Issue (`vk undispatch` leaves its trail here)."""
+        ...
+
     def create_issue(
         self,
         repo: str,
@@ -61,5 +65,14 @@ class GhClient(Protocol):
 
         `labels` may be a list of strings (label names) or LabelDef-shaped
         objects with `.name`/`.color`/`.description`. The wrapper coerces.
+        """
+        ...
+
+    def file_exists(self, repo: str, path: str) -> bool:
+        """True iff `path` exists on `repo`'s default branch (contents API).
+
+        Read-only. Used by the spec-archival decision (`vk archive` /
+        `vk migrate dirs`) to resolve cross-repo plan rows — the
+        2026-06-05 spec's narrow gh-contents lookup.
         """
         ...

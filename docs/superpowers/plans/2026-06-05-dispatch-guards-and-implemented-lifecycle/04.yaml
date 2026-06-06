@@ -1,0 +1,43 @@
+schema_version: 2
+phase:
+  number: 4
+  title: vk status — read-only allowlistable report
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Extract the shared read path
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Refactor under green: extract from src/vk/commands/apply_cmd.py::_apply_one the read portion (parse -> observe -> render -> diff -> warning/suppression formatting) into a helper in src/vk/commands/common.py returning a structured report object (plan, diff, rendered, header fields); _apply_one consumes it. Run the full apply_cmd test module; still green.
+- number: 2
+  title: status_cmd
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Add failing CLI tests in tests/unit/test_status_cmd.py: (a) output contains the factual header line, a per-phase table (steps ticked, tracking issue or '—', lifecycle label, would-create/would-refuse), rendered warnings including the reverse-drift 'Issue closed but plan is incomplete' case, and the 'plan complete — run vk archive' nudge when the archive gate passes; (b) exit 0 despite drift warnings; (c) exit 5 on parse error; (d) FakeGhClient mutation log is EMPTY after a run — the allowlistability guarantee as a test; (e) --format json mirrors apply's shape plus 'suppressed'. Run; fail.
+  - id: P4.T2.S2
+    text: |-
+      Implement src/vk/commands/status_cmd.py on the shared read helper; register `vk status` in src/vk/cli.py; wire require_migrated_layout. No mutation vocabulary in output ('would refuse' not 'REFUSE create'... keep wording report-flavored). Re-run tests; pass. Run ruff format + mypy.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-06-05T22:13:42+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-06-05T22:13:47+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-06-05T22:13:51+00:00'
+      note: null
+  completion:
+    at: '2026-06-05T22:13:55+00:00'
+    note: null
+    observed_prs: []

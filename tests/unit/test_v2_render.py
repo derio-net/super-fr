@@ -798,3 +798,117 @@ def test_render_body_appends_enrichment_after_dependencies():
     body = render_body(plan.phases[0], plan)
     assert body.index("## Dependencies") < body.index("## Plan prose")
     assert body.index("## Plan prose") < body.index("## Phase document")
+
+
+def _phase_for_local_complete(step_states, completion_at=None):
+    """PhaseDoc fixture with the given tuple of step states ('x'/'-'/' ')."""
+    from vk.types import (
+        Completion,
+        PhaseDoc,
+        PhaseHeader,
+        PhaseStateBlock,
+        Step,
+        StepState,
+        Task,
+    )
+
+    steps = tuple(Step(id=f"P1.T1.S{i + 1}", text=f"step {i + 1}") for i in range(len(step_states)))
+    return PhaseDoc(
+        schema_version=2,
+        phase=PhaseHeader(
+            number=1,
+            title="Phase 1",
+            tag="agentic",
+            depends_on=(),
+            tracking_issue=None,
+        ),
+        tasks=(Task(number=1, title="t", steps=steps),) if steps else (),
+        state=PhaseStateBlock(
+            steps={
+                s.id: StepState(state=st, ticked_at=None, note=None)
+                for s, st in zip(steps, step_states)
+            },
+            completion=Completion(at=completion_at, note=None, observed_prs=()),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "step_states,completion_at,expected",
+    [
+        # (a) completion.at set, steps unticked -> True
+        ((" ", " "), "2026-06-05T10:00:00Z", True),
+        # (b) all steps 'x' -> True
+        (("x", "x", "x"), None, True),
+        # (c) mix of 'x' and '-' -> True
+        (("x", "-", "x"), None, True),
+        # (d) one step ' ' and no completion.at -> False
+        (("x", " ", "x"), None, False),
+        # (e) empty steps dict and no completion.at -> False
+        ((), None, False),
+    ],
+)
+def test_plan_locally_complete(step_states, completion_at, expected):
+    """Truth table for the LOCAL-only completion signal (no gh evidence).
+
+    This is the predicate the dispatch guard keys on — see the 2026-06-05
+    stale-plan dispatch postmortem (bookmarks: all steps ticked, never
+    dispatched, apply created 4 spurious Issues).
+    """
+    from vk.render import plan_locally_complete
+
+    phase = _phase_for_local_complete(step_states, completion_at)
+    assert plan_locally_complete(phase) is expected
+
+
+def test_drift_warning_for_undispatched_locally_complete_phase():
+    """Bookmarks-incident regression (2026-06-05 postmortem).
+
+    A fully-ticked phase that was never dispatched (no tracking_issue, no
+    observation) must surface a warn-severity drift warning. Pre-fix,
+    `_drift_warnings` did `if obs is None: continue`, so the dry-run for
+    such a plan printed zero warnings while apply created spurious Issues.
+    """
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.render import render
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    phase = _phase_for_local_complete(("x", "x"), completion_at=None)
+    plan = dc_replace(plan, phases=(phase,))
+    rendered = render(plan, GhState(phases={}))
+    matching = [
+        w for w in rendered.warnings if w.severity == "warn" and "never dispatched" in w.message
+    ]
+    assert matching, f"expected a never-dispatched warning, got: {rendered.warnings!r}"
+    assert "2/2" in matching[0].message
+
+
+def test_archive_gate_passes_for_ticked_undispatched_plan():
+    """The bookmarks shape — fully ticked, never dispatched — must be
+    archivable (dispatch refuses it; archive is its terminal state)."""
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.render import archive_gate
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", "x")),))
+    assert archive_gate(plan, GhState(phases={})) == ()
+
+
+def test_archive_gate_blocks_incomplete_phase_with_reason():
+    from dataclasses import replace as dc_replace
+
+    from vk import parse
+    from vk.render import archive_gate
+    from vk.states import GhState
+
+    plan = parse(FIXTURE)
+    plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", " ")),))
+    blockers = archive_gate(plan, GhState(phases={}))
+    assert len(blockers) == 1
+    assert "Phase 1" in blockers[0]

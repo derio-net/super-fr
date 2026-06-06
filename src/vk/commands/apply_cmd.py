@@ -27,6 +27,7 @@ from rich.console import Console
 from vk import plan_ops
 from vk._urls import is_cross_repo_spec
 from vk.apply import apply
+from vk.commands.common import build_plan_report, require_migrated_layout
 from vk.diff import (
     Diff,
     IssueBodyChange,
@@ -34,13 +35,11 @@ from vk.diff import (
     IssueLabelChange,
     IssueStateChange,
     RepoLabelEnsure,
-    diff,
 )
 from vk.git import file_on_ref
-from vk.observe import observe
-from vk.parser import Plan, PlanSchemaError, parse
+from vk.parser import Plan, PlanSchemaError
 from vk.plan_ops import PlanEditError
-from vk.render import render
+from vk.render import archive_gate
 
 if TYPE_CHECKING:
     from vk.ghclient import GhClient
@@ -96,6 +95,10 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
 def _format_diff(d: Diff) -> str:
     """Human-readable summary of mutations."""
     if not d.mutations:
+        # "in sync" would be misleading when the completion guard withheld
+        # creates — the suppression block printed below explains the state.
+        if d.suppressed:
+            return "no pending mutations."
         return "no mutations — already in sync."
     lines: list[str] = []
     for m in d.mutations:
@@ -156,29 +159,44 @@ def _mutation_to_json(m: Any) -> dict[str, Any]:
     return {"kind": type(m).__name__}
 
 
-def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, dict[str, Any]]:
+def _apply_one(
+    plan_dir: Path, gh: GhClient, *, yes: bool, force: bool = False
+) -> tuple[int, str, dict[str, Any]]:
     """Apply one plan with an injected GhClient.
 
     Returns (exit_code, text_output, json_output). `yes=False` is dry-run.
+    `force=True` re-enables IssueCreate for locally-complete phases
+    (overrides the completion guard — see `vk.diff.SuppressedCreate`).
     """
     try:
-        plan = parse(plan_dir)
+        report = build_plan_report(plan_dir, gh, force=force)
     except PlanSchemaError as e:
         return 5, f"parse error: {e}", {"plan": str(plan_dir), "parse_error": str(e)}
 
-    observed = observe(plan, gh)
-    rendered = render(plan, observed)
-    d = diff(rendered, observed, plan=plan)
+    plan = report.plan
+    rendered = report.rendered
+    d = report.diff
 
-    parts = [f"plan: {plan.meta.plan}", _format_diff(d)]
+    parts = [report.header, _format_diff(d)]
+    if d.suppressed:
+        parts.append("\nrefused (completion guard):")
+        for s in d.suppressed:
+            parts.append(f"  phase {s.phase_number}: {s.reason}")
     if rendered.warnings:
         parts.append("\nwarnings:")
         for w in rendered.warnings:
             parts.append(f"  [{w.severity}] {w.message}")
+    # Archive nudge — same gate as `vk archive`, so the surfaces agree.
+    if not archive_gate(plan, report.observed):
+        parts.append(
+            f"\nplan complete — run `vk archive {plan.repo_relative_dir}` to move it "
+            f"to implemented/."
+        )
 
     json_out: dict[str, Any] = {
         "plan": plan.meta.plan,
         "mutations": [_mutation_to_json(m) for m in d.mutations],
+        "suppressed": [{"phase_number": s.phase_number, "reason": s.reason} for s in d.suppressed],
         "warnings": [{"severity": w.severity, "message": w.message} for w in rendered.warnings],
         "applied": False,
         "failures": [],
@@ -189,6 +207,21 @@ def _apply_one(plan_dir: Path, gh: GhClient, *, yes: bool) -> tuple[int, str, di
 
     if not yes:
         return 0, "\n".join(parts), json_out
+
+    # Completion-guard refusal: every would-be create was suppressed and no
+    # Issue-level reconciliation remains (RepoLabelEnsure alone is vacuous).
+    # Runs before the git gates — the refusal is about plan state, not git.
+    meaningful = [m for m in d.mutations if not isinstance(m, RepoLabelEnsure)]
+    if d.suppressed and not meaningful:
+        lines = [
+            parts[0],
+            "",
+            f"all {len(d.suppressed)} undispatched phase(s) are locally complete — "
+            "nothing to dispatch.",
+            "If this plan is done, run `vk archive` on it; to dispatch anyway, "
+            "re-run with --force.",
+        ]
+        return 2, "\n".join(lines), json_out
 
     if plan.repo_root is None:
         lines = [
@@ -271,6 +304,15 @@ def apply_command(
         "--yes",
         help="Apply mutations. Without this flag, runs as a preview (dry-run is the default).",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Override the completion guard: create Issues even for phases "
+            "the plan marks locally complete (all steps ticked or "
+            "completion.at set)."
+        ),
+    ),
     output_format: str = typer.Option(
         "text",
         "--format",
@@ -281,6 +323,7 @@ def apply_command(
 
     Defaults to a preview. Pass --yes to actually mutate GitHub state.
     """
+    require_migrated_layout()
     if all_plans and plan_dir is not None:
         err_console.print("--all and plan_dir are mutually exclusive")
         raise typer.Exit(2)
@@ -311,14 +354,18 @@ def apply_command(
         # that merely happens to be named "archived-plans" isn't refused.
         resolved_parts = plan_dir.resolve().parts
         under_archived = any(
-            resolved_parts[i] == "superpowers" and resolved_parts[i + 1] == "archived-plans"
+            resolved_parts[i] == "superpowers"
+            and (
+                resolved_parts[i + 1] == "archived-plans"
+                or resolved_parts[i + 1 : i + 3] == ("implemented", "plans")
+            )
             for i in range(len(resolved_parts) - 1)
         )
         if under_archived:
             err_console.print(
-                f"refusing to apply archived plan: {plan_dir}\n"
+                f"refusing to apply archived/implemented plan: {plan_dir}\n"
                 "Archived plans are terminal; applying one would reopen its closed "
-                "Issues. (`vk apply --all` already skips archived-plans/.)"
+                "Issues. (`vk apply --all` already walks only plans/.)"
             )
             raise typer.Exit(2)
         targets = [plan_dir]
@@ -328,7 +375,7 @@ def apply_command(
     json_results: list[dict[str, Any]] = []
     text_outputs: list[str] = []
     for t in targets:
-        rc, text_output, json_output = _apply_one(t, gh, yes=yes)
+        rc, text_output, json_output = _apply_one(t, gh, yes=yes, force=force)
         text_outputs.append(text_output)
         json_results.append(json_output)
         if rc != 0:

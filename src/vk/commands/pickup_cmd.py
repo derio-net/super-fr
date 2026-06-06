@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 
 from vk import parse
+from vk.commands.common import require_migrated_layout
 from vk.parser import PlanSchemaError
 
 console = Console()
@@ -23,6 +24,7 @@ def pickup_command(
     Returns: phase title, all step text (full multi-line), PR title template,
     dependency reminder, pointer to _prose.md for plan-level context.
     """
+    require_migrated_layout()
     try:
         plan = parse(plan_dir)
     except PlanSchemaError as e:
