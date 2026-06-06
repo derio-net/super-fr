@@ -28,6 +28,9 @@ if TYPE_CHECKING:
     from fr.parser import Plan
     from fr.types import PhaseDoc
 
+# Reserved for a runner that builds its own agent prompt (fr_dispatch.prompt.
+# build_prompt params). VK derives workspace prompts server-side from the
+# card description, so these are not consumed in the VK dispatch flow today.
 AGENT_IDENTITY = "a VK-spawned agent"
 EXECUTE_SKILL = "superpowers-for-vk:vk-execute"
 METRICS_NAMESPACE = "willikins_vk_bridge"

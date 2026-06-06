@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
-      - run: uv run mypy packages/fr/src/
+      - run: uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
 
   test:
     runs-on: ubuntu-latest

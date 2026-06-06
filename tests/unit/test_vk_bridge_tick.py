@@ -292,3 +292,48 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     assert mcp.calls == []
     # vk-synced must survive the apply() in this tick.
     assert "vk-synced" in gh.issues[(repo, n)].labels
+
+
+def test_tick_defers_all_when_slot_counting_fails(monkeypatch):
+    """Intentional Phase-2 semantic choice (review finding 6): when the
+    runner's slot_budget() raises, the tick DEFERS every would-be dispatch
+    (budget 0) instead of dispatching blind up to the cap — unknown
+    capacity must not risk overshoot. Self-heals next tick."""
+    from pathlib import Path
+
+    from fr import parse
+    from fr.observe import observe
+    from fr.render import render
+    from fr_dispatch import tick
+
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    from dataclasses import replace as dc_replace
+
+    repo, n = "derio-net/superpowers-for-vk", 42
+    plan = parse(fixture)
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://github.com/{repo}/issues/{n}"}
+            )
+        }
+    )
+    plan = dc_replace(
+        plan, phases=(phase,), meta=plan.meta.model_copy(update={"target_repo": repo})
+    )
+
+    gh = FakeGhClient()
+    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    rendered = render(plan, observe(plan, gh))
+    gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
+
+    mcp = FakeMcpClient()
+    runner = VkRunner(mcp)
+    monkeypatch.setattr(runner, "slot_budget", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    result = tick(plan, gh, runner)
+    assert result.synced == 0
+    assert result.skipped == 1  # the phase was deferred, not failed
+    assert any("slot check failed" in f for f in result.failures)
+    # No dispatch reached the backend.
+    assert [c for c in mcp.calls if c[0] == "create_issue"] == []

@@ -7,4 +7,4 @@ cron wrapper execs this). `python -m fr_vk` works too via __main__.
 from fr_vk.bridge_cli import main
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

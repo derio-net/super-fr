@@ -190,11 +190,15 @@ name = "fr-vk"
 version = "2.6.1"
 source = { editable = "packages/fr-vk" }
 dependencies = [
+    { name = "fr" },
     { name = "fr-dispatch" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fr-dispatch", editable = "packages/fr-dispatch" }]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+]
 
 [[package]]
 name = "iniconfig"

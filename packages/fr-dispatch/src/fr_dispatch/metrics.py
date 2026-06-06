@@ -93,7 +93,12 @@ class MetricsPusher:
 
     def push_heartbeat(self) -> None:
         m = self.heartbeat_metric
-        _push(f"# TYPE {m} gauge\n{m} {int(time.time())}\n", self.job)
+        _push(
+            f"# TYPE {m} gauge\n"
+            f"# HELP {m} Unix timestamp of last successful run\n"
+            f"{m} {int(time.time())}\n",
+            self.job,
+        )
 
 
 class NullMetrics(MetricsPusher):

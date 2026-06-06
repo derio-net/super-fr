@@ -44,10 +44,17 @@ if [[ "${1:-}" == "--install-bridge" ]]; then
   mkdir -p "$(dirname "$wrapper_path")"
   # Prefer the active uv tool's interpreter so the wrapper can't pick
   # up a stale system Python that doesn't have vk installed.
-  vk_python="$(uv tool dir 2>/dev/null)/vk/bin/python"
+  vk_python="$(uv tool dir 2>/dev/null)/fr/bin/python"
   if [ ! -x "$vk_python" ]; then
     # Fallback chain: any `uv run` env, then plain `python3`.
     vk_python="$(uv run --no-project which python 2>/dev/null || command -v python3 || echo /usr/bin/python3)"
+  fi
+  # The wrapper is only correct if its interpreter can actually import the
+  # adapter — verify before writing (review finding, 2026-06-06).
+  if ! "$vk_python" -c "import fr_vk.bridge" >/dev/null 2>&1; then
+    echo "  ERROR: $vk_python cannot import fr_vk.bridge — bridge wrapper not installed" >&2
+    echo "  (re-run after: uv tool install --force --with $PLUGIN_ROOT/packages/fr-vk $PLUGIN_ROOT/packages/fr)" >&2
+    exit 1
   fi
   cat > "$wrapper_path" <<EOF
 #!/bin/bash
@@ -344,8 +351,15 @@ fi
 # 10. vk CLI
 if command -v uv &>/dev/null; then
   echo ""
-  echo "Installing vk CLI globally..."
-  uv tool install "$PLUGIN_ROOT" 2>&1 | sed 's/^/  /'
+  echo "Installing vk CLI globally (workspace member fr + the VK adapter)..."
+  uv tool install --force \
+    --with "$PLUGIN_ROOT/packages/fr-vk" \
+    "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'
+  # Smoke check — a tool env without a working entry point must fail loud.
+  if ! uv tool run --from fr vk --version >/dev/null 2>&1 && ! "$(uv tool dir)/fr/bin/vk" --version >/dev/null 2>&1; then
+    echo "  ERROR: vk CLI did not install correctly (no working entry point)" >&2
+    exit 1
+  fi
 else
   echo ""
   echo "  WARNING: uv not found — install vk CLI manually:"
