@@ -66,5 +66,5 @@ kid-laptops plan 6 (Hermes Agent) — 24 flat tasks → 5 phases via `vk plan co
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| Deprecate Flat Plans Implementation Plan |  | `docs/superpowers/archived-plans/2026-04-18-deprecate-flat-plans/` | — |
-| Lossless Plan Convert Implementation Plan |  | `docs/superpowers/archived-plans/2026-04-20-lossless-plan-convert/` | — |
+| Deprecate Flat Plans Implementation Plan |  | `2026-04-18-deprecate-flat-plans` | — |
+| Lossless Plan Convert Implementation Plan |  | `2026-04-20-lossless-plan-convert` | — |

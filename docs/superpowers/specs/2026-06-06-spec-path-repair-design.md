@@ -202,4 +202,4 @@ path prefixes left to rewrite.
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
-| 2026-06-06-spec-path-repair | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-06-06-spec-path-repair/` | — |
+| 2026-06-06-spec-path-repair | `derio-net/superpowers-for-vk` | `2026-06-06-spec-path-repair` | — |

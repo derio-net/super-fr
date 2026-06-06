@@ -67,9 +67,7 @@ def repo(tmp_path: Path) -> Path:
         f"`docs/superpowers/archived-plans/{SLUG}/` (shipped via PR #146)",
     ],
 )
-@pytest.mark.parametrize(
-    "root", ["plans", "implemented/plans", "archived-plans"]
-)
+@pytest.mark.parametrize("root", ["plans", "implemented/plans", "archived-plans"])
 def test_resolve_plan_ref_any_form_any_root(repo: Path, ref: str, root: str) -> None:
     actual = repo / "docs/superpowers" / root / SLUG
     actual.mkdir(parents=True, exist_ok=True)

@@ -298,4 +298,4 @@ must lead with `vk migrate dirs`.
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
-| 2026-06-05-dispatch-guards-and-implemented-lifecycle | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-06-05-dispatch-guards-and-implemented-lifecycle/` | — |
+| 2026-06-05-dispatch-guards-and-implemented-lifecycle | `derio-net/superpowers-for-vk` | `2026-06-05-dispatch-guards-and-implemented-lifecycle` | — |

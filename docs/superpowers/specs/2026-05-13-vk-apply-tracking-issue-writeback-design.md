@@ -226,4 +226,4 @@ Run `uv sync` to refresh `uv.lock`, then `uv run vk --version` to confirm.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| 2026-05-13-vk-apply-tracking-issue-writeback | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-05-13-vk-apply-tracking-issue-writeback/` (shipped via PR #122, archived 2026-05-17) | — |
+| 2026-05-13-vk-apply-tracking-issue-writeback | `derio-net/superpowers-for-vk` | `2026-05-13-vk-apply-tracking-issue-writeback` (shipped via PR #122, archived 2026-05-17) | — |

@@ -28,7 +28,7 @@ from vk.refs import RefResolution
 
 _META_REF_FIELDS = ("parent_plan", "prior_rework", "spec")
 _ROW_RE = re.compile(r"^\|(.+)\|\s*$")
-_PLACEHOLDERS = ("—", "-", "")
+_PLACEHOLDERS = ("—", "-", "", "null", "~")  # incl. YAML nulls in _meta fields
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,9 @@ class RepairResult:
     failures: list[str] = field(default_factory=list)
 
 
-def _warn_unresolved(out: RepairResult, file: Path, what: str, ref: str, res: RefResolution) -> None:
+def _warn_unresolved(
+    out: RepairResult, file: Path, what: str, ref: str, res: RefResolution
+) -> None:
     tried = ", ".join(str(p) for p in res.tried)
     out.warnings.append(
         f"{file.name}: {what} {ref!r} does not resolve — tried: {tried}. "

@@ -31,7 +31,9 @@ def _emit_text(result: RepairResult, *, applied: bool) -> None:
     if not result.rewrites and not result.warnings and not result.failures:
         console.print("nothing to repair — all refs canonical and resolvable.")
     elif not applied and result.rewrites:
-        console.print(f"\n{len(result.rewrites)} rewrite(s) planned — run `vk repair --yes` to apply.")
+        console.print(
+            f"\n{len(result.rewrites)} rewrite(s) planned — run `vk repair --yes` to apply."
+        )
 
 
 def _emit_json(result: RepairResult, *, applied: bool) -> None:

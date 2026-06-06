@@ -192,4 +192,4 @@ enter the container implicitly.
 
 | Plan | Repo | File | Depends on |
 | --- | --- | --- | --- |
-| 2026-06-04-vk-isolation-suite | `derio-net/superpowers-for-vk` | `docs/superpowers/archived-plans/2026-06-04-vk-isolation-suite/` | — |
+| 2026-06-04-vk-isolation-suite | `derio-net/superpowers-for-vk` | `2026-06-04-vk-isolation-suite` | — |

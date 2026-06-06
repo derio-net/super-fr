@@ -36,7 +36,17 @@ def _git_seed(repo: Path) -> None:
     for cmd in (
         ["git", "init", "-q"],
         ["git", "add", "-A"],
-        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed", "--allow-empty"],
+        [
+            "git",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "seed",
+            "--allow-empty",
+        ],
     ):
         subprocess.run(cmd, cwd=repo, check=True)
 

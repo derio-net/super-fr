@@ -258,4 +258,4 @@ deterministic, no manual intervention needed).
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
-| 2026-05-16-cross-repo-label-ensure | `derio-net/superpowers-for-vk` | `docs/superpowers/plans/2026-05-16-cross-repo-label-ensure/` | — |
+| 2026-05-16-cross-repo-label-ensure | `derio-net/superpowers-for-vk` | `2026-05-16-cross-repo-label-ensure` | — |

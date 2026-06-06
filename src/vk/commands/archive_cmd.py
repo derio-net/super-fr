@@ -18,10 +18,10 @@ import typer
 from rich.console import Console
 
 from vk.archive import ArchiveError, archive_plan_dir, paths_dirty, spec_archive_sweep
-from vk.repair import repair_repo
 from vk.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from vk.parser import PlanSchemaError
 from vk.render import archive_gate
+from vk.repair import repair_repo
 
 if TYPE_CHECKING:
     from vk.ghclient import GhClient

@@ -600,7 +600,11 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     # Append spec row — lifecycle-resolved (2026-06-06 spec-path-repair):
     # the spec may have archived to implemented/specs/ since the parent
     # plan recorded it; the old exact-path check silently skipped then.
-    if parent_plan.meta.spec and repo_root is not None and not is_cross_repo_spec(parent_plan.meta.spec):
+    if (
+        parent_plan.meta.spec
+        and repo_root is not None
+        and not is_cross_repo_spec(parent_plan.meta.spec)
+    ):
         spec_res = refs.resolve_spec_ref(parent_plan.meta.spec, repo_root)
         if spec_res.path is not None:
             _append_spec_row(
