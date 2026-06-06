@@ -28,7 +28,7 @@ from vk.refs import RefResolution
 
 _META_REF_FIELDS = ("parent_plan", "prior_rework", "spec")
 _ROW_RE = re.compile(r"^\|(.+)\|\s*$")
-_PLACEHOLDERS = ("—", "-", "", "null", "~")  # incl. YAML nulls in _meta fields
+_PLACEHOLDERS = ("—", "-", "", "null", "~", "none")  # incl. YAML nulls + the 'none' sentinel
 
 
 @dataclass(frozen=True)
