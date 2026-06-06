@@ -1,0 +1,55 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Workspace + module rename — vk becomes fr, one package, all green
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: uv workspace scaffolding
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Root pyproject becomes a uv workspace ([tool.uv.workspace] members=packages/*); scaffold packages/fr/pyproject.toml (dist name fr, module fr) carrying the current deps; uv sync resolves
+  - id: P1.T1.S2
+    text: |-
+      git mv src/vk -> packages/fr/src/fr (full tree incl. bridge for now); rewrite every import vk.* -> fr.* across src and tests; fix importlib.metadata version lookup to the new dist name
+- number: 2
+  title: Keep the world green
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Console script: temporary entry `vk = fr.cli:app` (rebrand to fr happens in Phase 3); tests/ tree moves to packages/fr/tests or stays top-level with workspace test config — decide by least churn, document choice in plan note
+  - id: P1.T2.S2
+    text: |-
+      scripts/bump-version.py + the version-sync CI job become workspace-aware (all member pyprojects + both plugin JSONs lockstep; --check validates the set)
+  - id: P1.T2.S3
+    text: |-
+      Full suite + ruff + mypy green with REAL exit codes (no piped statuses); fixture and skill docs untouched in this phase
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,4 +1,4 @@
-# super-fr split — Design (DRAFT)
+# super-fr split — Design
 
 **Status:** FINAL (operator-approved 2026-06-06, third pass against
 2.6.1). History: drafted blocked-by dispatch-guards (shipped 2.5.0,
@@ -308,3 +308,4 @@ off to fr-plan (vk-plan).
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-06-06-super-fr-split | `derio-net/superpowers-for-vk` | `2026-06-06-super-fr-split` | — |

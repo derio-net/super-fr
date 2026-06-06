@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Operator cutover — rename, merge, pod, sweep
+  tag: manual
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Merge-time
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      [manual] Rename GitHub repo derio-net/superpowers-for-vk -> derio-net/super-fr (Settings; redirects keep old clones working), then merge the PR
+- number: 2
+  title: Post-merge
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      [manual] Pod cutover: install fr-vk (pip, pulls fr-dispatch+fr transitively), switch daemon entry to python -m fr_vk.bridge, retire the old vk daemon the same day (dual-READ ships in the code; dual-RUN is forbidden)
+  - id: P5.T2.S2
+    text: |-
+      [manual] Dispatch the subagent sweep (one batch per checkout root, one PR per repo): gh label renames vk-ready->fr:ready etc., in-repo rules/docs refs, .claude/settings allowlists vk*->fr*
+  - id: P5.T2.S3
+    text: |-
+      [manual] After the sweep merges everywhere: small follow-up PR removing the dual-read constant; update user-level rules files + shell completion; uv tool install the fr CLI
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
