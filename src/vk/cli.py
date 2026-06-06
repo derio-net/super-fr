@@ -24,6 +24,7 @@ from vk.commands.isolation_cmd import isolation_app
 from vk.commands.migrate_cmd import migrate_app
 from vk.commands.pickup_cmd import pickup_command
 from vk.commands.plan_cmd import plan_app
+from vk.commands.repair_cmd import repair_command
 from vk.commands.skills_cmd import skills as skills_command
 from vk.commands.spec_cmd import spec_app
 from vk.commands.status_cmd import status_command
@@ -46,6 +47,9 @@ app.command(name="undispatch", help="Close a plan's tracking Issues and null the
     undispatch_command
 )
 app.command(name="pickup", help="Output phase scope (markdown) for an agent.")(pickup_command)
+app.command(name="repair", help="Normalize stale plan/spec refs (dry-run; --yes to write).")(
+    repair_command
+)
 app.add_typer(plan_app, name="plan")
 app.add_typer(spec_app, name="spec")
 app.add_typer(migrate_app, name="migrate")

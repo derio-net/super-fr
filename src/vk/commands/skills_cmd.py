@@ -34,7 +34,8 @@ SKILLS: list[tuple[str, str, str]] = [
     (
         "vk-progress",
         "Plan / spec progress reporting (skill).",
-        "vk status <plan-dir>  +  vk spec status [--all]  +  vk plan edit  +  vk archive [--all]",
+        "vk status <plan-dir>  +  vk spec status [--all]  +  vk plan edit  +  vk archive [--all]"
+        "  ·  vk repair [--yes] to normalize stale refs",
     ),
     (
         "vk-goal",
