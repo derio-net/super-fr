@@ -1,4 +1,4 @@
-"""Unit tests for `vk.bridge.discover_plans`.
+"""Unit tests for `fr.bridge.discover_plans`.
 
 We build a fake repo checkout under `tmp_path`, point `VK_REPOS_DIR` at it,
 and stub the GhClient via FakeGhClient so the test never touches the
@@ -73,9 +73,10 @@ def repo_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_discover_plans_returns_only_vk_ready(repo_layout: Path) -> None:
+    from fr import parse
+    from fr.bridge import discover_plans
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.bridge import discover_plans
 
     # Plan A: phase dispatched (tracking_issue set) and labelled vk-ready.
     plan_a_dir = _write_plan(
@@ -108,8 +109,9 @@ def test_discover_plans_returns_only_vk_ready(repo_layout: Path) -> None:
 def test_discover_plans_returns_empty_when_checkout_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from fr.bridge import discover_plans
+
     from tests.unit.fakes import FakeGhClient
-    from vk.bridge import discover_plans
 
     monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))  # checkout dir intentionally absent
     assert discover_plans("derio-net/missing", FakeGhClient()) == []
@@ -118,8 +120,9 @@ def test_discover_plans_returns_empty_when_checkout_missing(
 def test_discover_plans_returns_empty_when_plans_dir_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from fr.bridge import discover_plans
+
     from tests.unit.fakes import FakeGhClient
-    from vk.bridge import discover_plans
 
     monkeypatch.setenv("VK_REPOS_DIR", str(tmp_path))
     (tmp_path / "test").mkdir()  # checkout exists but no docs/superpowers/plans/
@@ -133,8 +136,9 @@ def test_discover_plans_survives_view_issue_failure_for_one_phase(
     or gh is briefly flaky), the bridge logs and treats the phase as
     not-ready rather than crashing the whole tick.
     """
+    from fr.bridge import discover_plans
+
     from tests.unit.fakes import FakeGhClient
-    from vk.bridge import discover_plans
 
     _write_plan(
         repo_layout,
@@ -144,7 +148,7 @@ def test_discover_plans_survives_view_issue_failure_for_one_phase(
 
     gh = FakeGhClient()  # no Issues registered — view_issue will KeyError
 
-    with caplog.at_level("WARNING", logger="vk.bridge"):
+    with caplog.at_level("WARNING", logger="fr.bridge"):
         found = discover_plans("derio-net/test", gh)
 
     assert found == []  # phase not ready (couldn't view its Issue)
@@ -160,8 +164,9 @@ def test_discover_plans_survives_view_issue_failure_for_one_phase(
 def test_discover_plans_skips_unparseable_plan_and_keeps_going(
     repo_layout: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
+    from fr.bridge import discover_plans
+
     from tests.unit.fakes import FakeGhClient
-    from vk.bridge import discover_plans
 
     # A valid vk-ready plan.
     _write_plan(
@@ -177,7 +182,7 @@ def test_discover_plans_skips_unparseable_plan_and_keeps_going(
     gh = FakeGhClient()
     gh.add_issue("derio-net/test", 1, state="OPEN", labels={"vk-ready"})
 
-    with caplog.at_level("WARNING", logger="vk.bridge"):
+    with caplog.at_level("WARNING", logger="fr.bridge"):
         found = discover_plans("derio-net/test", gh)
 
     assert len(found) == 1
@@ -197,8 +202,9 @@ def test_discover_plans_includes_phase_unblocked_by_completed_dependency(
     updated — a deadlock that strands every multi-phase plan after a phase
     completes.
     """
+    from fr.bridge import discover_plans
+
     from tests.unit.fakes import FakeGhClient
-    from vk.bridge import discover_plans
 
     plans_dir = repo_layout / "docs" / "superpowers" / "plans"
     pdir = plans_dir / "2026-05-09-twophase"
@@ -265,8 +271,9 @@ def test_discover_plans_skips_whole_plan_when_a_phase_issue_unviewable(
     then can't process. Transient: the next tick retries once the Issue is
     viewable again.
     """
+    from fr.bridge import discover_plans
+
     from tests.unit.fakes import FakeGhClient
-    from vk.bridge import discover_plans
 
     plans_dir = repo_layout / "docs" / "superpowers" / "plans"
     pdir = plans_dir / "2026-05-09-twophase-badissue"
@@ -305,7 +312,7 @@ def test_discover_plans_skips_whole_plan_when_a_phase_issue_unviewable(
     gh.add_issue("derio-net/test", 1, state="OPEN", labels={"vk-ready", "phase:1"})
     # #999 intentionally not added → view_issue KeyErrors inside observe().
 
-    with caplog.at_level("WARNING", logger="vk.bridge"):
+    with caplog.at_level("WARNING", logger="fr.bridge"):
         found = discover_plans("derio-net/test", gh)
 
     assert found == [], "one unviewable phase Issue skips the whole plan for this tick"

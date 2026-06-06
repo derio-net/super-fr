@@ -24,7 +24,7 @@ def fake_gh_factory(monkeypatch):
 
     fake = FakeGhClient()
     monkeypatch.setattr(
-        "vk.commands.apply_cmd._make_gh_client",
+        "fr.commands.apply_cmd._make_gh_client",
         lambda: fake,
     )
     return fake
@@ -74,7 +74,7 @@ def test_apply_cmd_produces_correct_dep_refs_for_multi_phase_plan(fake_gh_factor
           `Blocked by #<phase-1-issue-number>` (NOT `Blocked by #1`,
           which would be the phase-number fallback).
     """
-    from vk.cli import app
+    from fr.cli import app
 
     plan_copy = _seed_repo(tmp_path)
 

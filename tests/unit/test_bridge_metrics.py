@@ -47,7 +47,7 @@ def fake_pushgateway(monkeypatch):
 
 
 def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: int = 42):
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     phase = plan.phases[0].model_copy(
@@ -69,7 +69,7 @@ def _bodies(pushes: list[bytes]) -> str:
 
 
 def test_push_sync_total_emits_counter(fake_pushgateway):
-    from vk.bridge.metrics import push_sync_total
+    from fr.bridge.metrics import push_sync_total
 
     push_sync_total()
     body = _bodies(fake_pushgateway)
@@ -77,7 +77,7 @@ def test_push_sync_total_emits_counter(fake_pushgateway):
 
 
 def test_push_failure_total_emits_reason_label(fake_pushgateway):
-    from vk.bridge.metrics import push_failure_total
+    from fr.bridge.metrics import push_failure_total
 
     push_failure_total(reason="unknown_repo")
     body = _bodies(fake_pushgateway)
@@ -86,7 +86,7 @@ def test_push_failure_total_emits_reason_label(fake_pushgateway):
 
 
 def test_push_heartbeat_emits_gauge(fake_pushgateway):
-    from vk.bridge.metrics import push_heartbeat
+    from fr.bridge.metrics import push_heartbeat
 
     push_heartbeat()
     body = _bodies(fake_pushgateway)
@@ -95,7 +95,7 @@ def test_push_heartbeat_emits_gauge(fake_pushgateway):
 
 def test_push_metric_swallows_network_failure(monkeypatch, fake_pushgateway):
     """A Pushgateway outage must not break the bridge tick."""
-    from vk.bridge.metrics import push_sync_total
+    from fr.bridge.metrics import push_sync_total
 
     def _boom(*a: Any, **kw: Any):
         raise OSError("network down")
@@ -106,9 +106,9 @@ def test_push_metric_swallows_network_failure(monkeypatch, fake_pushgateway):
 
 
 def test_tick_emits_sync_metric_on_dispatch_success(fake_pushgateway):
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -138,9 +138,9 @@ def test_tick_emits_failure_metric_on_dispatch_error(fake_pushgateway):
     the dispatch-error metric path (not the unknown-repo path that
     `list_repos` failure routes through).
     """
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -168,9 +168,9 @@ def test_tick_emits_gh_error_metric_when_label_stamp_fails(fake_pushgateway):
     NOT `reason="mcp_error"` — operators paged on MCP must not chase a
     GH outage.
     """
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -198,9 +198,9 @@ def test_tick_emits_gh_error_metric_when_label_stamp_fails(fake_pushgateway):
 def test_tick_emits_heartbeat_even_on_idle_plan(fake_pushgateway):
     """Heartbeat is the liveness signal — it must always fire, even
     when there's nothing to dispatch."""
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()

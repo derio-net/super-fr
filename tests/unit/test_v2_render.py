@@ -7,9 +7,9 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 def test_render_body_uses_repo_relative_path_not_absolute():
     """Issue body must not leak the dispatcher's absolute filesystem path."""
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -21,9 +21,9 @@ def test_render_body_uses_repo_relative_path_not_absolute():
 
 
 def test_render_undispatched_phase_yields_create_intent():
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     observed = GhState(phases={})
@@ -92,9 +92,9 @@ def test_render_undispatched_phase_yields_create_intent():
     ],
 )
 def test_lifecycle_label_projection(obs_kwargs, expected_label):
-    from vk import parse
-    from vk.render import _lifecycle_label
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import _lifecycle_label
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     obs = None
@@ -119,9 +119,9 @@ def test_agentic_phase_complete_requires_completion_at_and_merged_pr():
     completion.at alone, which closed Issues prematurely when an agent
     set completion.at before opening its PR.
     """
-    from vk import parse
-    from vk.render import _phase_complete
-    from vk.states import PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import _phase_complete
+    from fr.states import PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     p1 = plan.phases[0]
@@ -209,9 +209,9 @@ def test_agentic_phase_complete_respects_operator_close_for_inline_work():
     the merged-PR signal is unsatisfiable. Without this, `vk apply` recomputes the
     desired state as OPEN and reopens the already-closed Issue on every run.
     """
-    from vk import parse
-    from vk.render import _phase_complete
-    from vk.states import PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import _phase_complete
+    from fr.states import PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     p1 = plan.phases[0]
@@ -248,8 +248,8 @@ def test_agentic_phase_complete_respects_operator_close_for_inline_work():
 
 
 def test_manual_phase_complete_requires_completion_at_and_note():
-    from vk import parse
-    from vk.render import _phase_complete
+    from fr import parse
+    from fr.render import _phase_complete
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -289,9 +289,9 @@ def test_manual_phase_complete_requires_completion_at_and_note():
 
 def test_drift_warning_steps_ticked_pr_not_merged():
     """All steps ticked but no merged PR → warning surfaces."""
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     ticked = plan.phases[0].model_copy(
@@ -323,9 +323,9 @@ def test_drift_warning_steps_ticked_pr_not_merged():
 
 def test_drift_warning_pr_merged_steps_unticked():
     """Merged PR but steps unticked → warning surfaces."""
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     obs = PhaseObservation(
@@ -343,9 +343,9 @@ def test_drift_warning_pr_merged_steps_unticked():
 
 def test_drift_warning_issue_closed_plan_incomplete():
     """Issue closed externally while plan still incomplete → warning."""
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     obs = PhaseObservation(
@@ -371,9 +371,9 @@ def test_archive_decision_true_when_all_phases_complete():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -413,9 +413,9 @@ def test_archive_decision_true_when_all_phases_complete():
 
 
 def test_archive_decision_false_when_any_phase_incomplete():
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -425,9 +425,9 @@ def test_archive_decision_false_when_any_phase_incomplete():
 
 def test_manual_phase_label_is_manual():
     """A phase with tag=manual gets the manual lifecycle label, not vk-ready."""
-    from vk import parse
-    from vk.render import _lifecycle_label
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import _lifecycle_label
+    from fr.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -443,8 +443,8 @@ def test_render_body_blocked_by_uses_issue_number_not_phase_number():
     number, not its phase number. Bridge parses `#N` as an Issue number, so
     using a phase number silently mis-gates dependent phases.
     """
-    from vk import parse
-    from vk.render import render_body
+    from fr import parse
+    from fr.render import render_body
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -468,8 +468,8 @@ def test_render_body_blocked_by_cross_repo_dep():
     renderer symmetric now avoids a second rework when cross-repo dispatch
     lands.
     """
-    from vk import parse
-    from vk.render import render_body
+    from fr import parse
+    from fr.render import render_body
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -494,8 +494,8 @@ def test_render_body_blocked_by_missing_predecessor_falls_back_to_phase_number()
     dispatched and not in this run's created set), emit the phase-number
     form so the operator sees a broken ref instead of an empty deps block.
     """
-    from vk import parse
-    from vk.render import render_body
+    from fr import parse
+    from fr.render import render_body
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -511,9 +511,9 @@ def test_render_preserves_vk_synced_label_from_observed():
     Without explicit preservation it would be stripped by diff() because
     the `vk-` managed prefix sweep wouldn't see it in rendered.labels.
     """
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     obs = GhState(
@@ -534,9 +534,9 @@ def test_render_preserves_vk_synced_label_from_observed():
 def test_render_omits_vk_synced_when_not_observed():
     """The renderer only preserves vk-synced when it's already on the
     Issue — it never adds the marker on its own."""
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     obs = GhState(
@@ -572,10 +572,10 @@ def test_complete_phase_projects_closed_state():  # C5
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueStateChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.diff import IssueStateChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(FIXTURE)
     # Set completion.at and tick the only step so _phase_complete fires.
@@ -630,9 +630,9 @@ def test_render_normalizes_dated_double_dash_slugs_in_labels():
     not `spec:-auto--awx-deployment-design`."""
     from dataclasses import replace
 
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     plan = replace(
@@ -660,15 +660,15 @@ def _plan_with_spec(spec):
     """FIXTURE plan with `meta.spec` swapped for `spec`."""
     from dataclasses import replace
 
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     return replace(plan, meta=plan.meta.model_copy(update={"spec": spec}))
 
 
 def test_spec_url_same_repo():
-    from vk import parse
-    from vk.render import spec_url
+    from fr import parse
+    from fr.render import spec_url
 
     plan = parse(FIXTURE)
     assert plan.meta.spec  # the minimal fixture carries a same-repo spec path
@@ -678,21 +678,21 @@ def test_spec_url_same_repo():
 
 
 def test_spec_url_cross_repo():
-    from vk.render import spec_url
+    from fr.render import spec_url
 
     plan = _plan_with_spec("derio-net/other:docs/specs/y-design.md")
     assert spec_url(plan) == "https://github.com/derio-net/other/blob/main/docs/specs/y-design.md"
 
 
 def test_spec_url_none():
-    from vk.render import spec_url
+    from fr.render import spec_url
 
     assert spec_url(_plan_with_spec(None)) is None
 
 
 def test_enrichment_block_embeds_prose_and_phase_yaml():
-    from vk import parse
-    from vk.render import enrichment_block
+    from fr import parse
+    from fr.render import enrichment_block
 
     plan = parse(FIXTURE)
     block = enrichment_block(plan, plan.phases[0])
@@ -707,8 +707,8 @@ def test_enrichment_block_fence_escalates_beyond_content_backticks():
     """Phase yaml containing ``` runs must be wrapped in a longer fence."""
     from dataclasses import replace
 
-    from vk import parse
-    from vk.render import enrichment_block
+    from fr import parse
+    from fr.render import enrichment_block
 
     plan = parse(FIXTURE)
     text_with_fences = "k: |\n  ```python\n  pass\n  ````\n"  # longest run: 4
@@ -721,8 +721,8 @@ def test_enrichment_block_fence_escalates_beyond_content_backticks():
 def test_enrichment_block_omits_missing_sections():
     from dataclasses import replace
 
-    from vk import parse
-    from vk.render import enrichment_block
+    from fr import parse
+    from fr.render import enrichment_block
 
     plan = parse(FIXTURE)
     bare = replace(plan, prose=None, phase_texts={})
@@ -737,8 +737,8 @@ def test_render_body_truncates_oversized_content_deterministically():
     """Bodies stay under GitHub's 65,536 cap; truncation is stable across renders."""
     from dataclasses import replace
 
-    from vk import parse
-    from vk.render import render_body
+    from fr import parse
+    from fr.render import render_body
 
     plan = parse(FIXTURE)
     plan = replace(
@@ -758,8 +758,8 @@ def test_enrichment_block_never_exceeds_budget():
     section overhead included), across content-size combinations."""
     from dataclasses import replace
 
-    from vk import parse
-    from vk.render import _ENRICHMENT_BUDGET, enrichment_block
+    from fr import parse
+    from fr.render import _ENRICHMENT_BUDGET, enrichment_block
 
     plan = parse(FIXTURE)
     for prose_n, yaml_n in ((0, 70_000), (70_000, 0), (40_000, 40_000), (54_900, 200)):
@@ -773,8 +773,8 @@ def test_enrichment_block_never_exceeds_budget():
 
 
 def test_render_body_spec_line_is_link():
-    from vk import parse
-    from vk.render import render_body
+    from fr import parse
+    from fr.render import render_body
 
     plan = parse(FIXTURE)
     body = render_body(plan.phases[0], plan)
@@ -783,7 +783,7 @@ def test_render_body_spec_line_is_link():
 
 
 def test_render_body_spec_line_dash_when_unset():
-    from vk.render import render_body
+    from fr.render import render_body
 
     plan = _plan_with_spec(None)
     body = render_body(plan.phases[0], plan)
@@ -791,8 +791,8 @@ def test_render_body_spec_line_dash_when_unset():
 
 
 def test_render_body_appends_enrichment_after_dependencies():
-    from vk import parse
-    from vk.render import render_body
+    from fr import parse
+    from fr.render import render_body
 
     plan = parse(FIXTURE)
     body = render_body(plan.phases[0], plan)
@@ -802,7 +802,7 @@ def test_render_body_appends_enrichment_after_dependencies():
 
 def _phase_for_local_complete(step_states, completion_at=None):
     """PhaseDoc fixture with the given tuple of step states ('x'/'-'/' ')."""
-    from vk.types import (
+    from fr.types import (
         Completion,
         PhaseDoc,
         PhaseHeader,
@@ -855,7 +855,7 @@ def test_plan_locally_complete(step_states, completion_at, expected):
     stale-plan dispatch postmortem (bookmarks: all steps ticked, never
     dispatched, apply created 4 spurious Issues).
     """
-    from vk.render import plan_locally_complete
+    from fr.render import plan_locally_complete
 
     phase = _phase_for_local_complete(step_states, completion_at)
     assert plan_locally_complete(phase) is expected
@@ -871,9 +871,9 @@ def test_drift_warning_for_undispatched_locally_complete_phase():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     phase = _phase_for_local_complete(("x", "x"), completion_at=None)
@@ -891,9 +891,9 @@ def test_archive_gate_passes_for_ticked_undispatched_plan():
     archivable (dispatch refuses it; archive is its terminal state)."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import archive_gate
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import archive_gate
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", "x")),))
@@ -903,9 +903,9 @@ def test_archive_gate_passes_for_ticked_undispatched_plan():
 def test_archive_gate_blocks_incomplete_phase_with_reason():
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import archive_gate
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import archive_gate
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", " ")),))
@@ -922,7 +922,7 @@ def _parse_fixture_in_repo(tmp_path, spec_ref):
     `meta.spec` swapped — resolution happens at parse time."""
     import shutil
 
-    from vk import parse
+    from fr import parse
 
     (tmp_path / ".git").mkdir()
     plan_dir = tmp_path / "docs" / "superpowers" / "plans" / "2026-05-09-fixture-minimal"
@@ -940,7 +940,7 @@ def _parse_fixture_in_repo(tmp_path, spec_ref):
 def test_spec_url_resolves_archived_spec(tmp_path):
     """meta.spec recorded as specs/X.md must yield the implemented/ blob
     URL after the spec archives — not a 404 link."""
-    from vk.render import spec_url
+    from fr.render import spec_url
 
     moved = tmp_path / "docs/superpowers/implemented/specs/2026-05-10-x-design.md"
     moved.parent.mkdir(parents=True)
@@ -953,7 +953,7 @@ def test_spec_url_resolves_archived_spec(tmp_path):
 
 
 def test_spec_url_slug_form(tmp_path):
-    from vk.render import spec_url
+    from fr.render import spec_url
 
     active = tmp_path / "docs/superpowers/specs/2026-05-10-x-design.md"
     active.parent.mkdir(parents=True)
@@ -966,7 +966,7 @@ def test_spec_url_slug_form(tmp_path):
 
 
 def test_spec_url_unresolvable_falls_back_to_raw(tmp_path):
-    from vk.render import spec_url
+    from fr.render import spec_url
 
     plan = _parse_fixture_in_repo(tmp_path, "docs/superpowers/specs/2026-05-10-gone.md")
     assert spec_url(plan) == (

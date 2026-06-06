@@ -1,4 +1,4 @@
-"""Integration tests for `vk.bridge.cli.main()`.
+"""Integration tests for `fr.bridge.cli.main()`.
 
 These exercise the daemon-level wiring with real git checkouts (E4)
 and a monkeypatched MCP/gh surface — proving the loop drives
@@ -86,7 +86,7 @@ def test_tick_pulls_managed_repos_before_discover(
     # to our clone. Pre-set it for clarity.
     monkeypatch.setenv("VK_REPOS_DIR", str(repos_dir))
 
-    from vk.bridge import cli as bridge_cli
+    from fr.bridge import cli as bridge_cli
 
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "_seen_plans.json")
     # `clone.name` is "foo" → owner/name "example/foo" matches the
@@ -160,7 +160,7 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
     """Regression guard for the 2026-05-18 silent-tick incident.
 
     Pre-fix the bridge ran a complete tick with zero per-plan output —
-    just "[bridge] - vX.Y.Z - <ts> - tick" + "vk.bridge: tick complete"
+    just "[bridge] - vX.Y.Z - <ts> - tick" + "fr.bridge: tick complete"
     bracketing total silence. That made it impossible to diagnose
     no-op ticks ("did the bridge see no repos? no plans? skip all?").
 
@@ -177,8 +177,8 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
     monkeypatch.setenv("VK_REPOS_DIR", str(repos_dir))
 
-    from vk.bridge import TickResult
-    from vk.bridge import cli as bridge_cli
+    from fr.bridge import TickResult
+    from fr.bridge import cli as bridge_cli
 
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "_seen_plans.json")
     monkeypatch.setattr(
@@ -218,7 +218,7 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
     monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda mcp, state: None)
     monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp: None)
 
-    with caplog.at_level("INFO", logger="vk.bridge.cli"):
+    with caplog.at_level("INFO", logger="fr.bridge.cli"):
         rc = bridge_cli.main([])
 
     assert rc == 0
@@ -242,7 +242,7 @@ def test_tick_warns_when_owner_name_unresolvable(
     monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
 
-    from vk.bridge import cli as bridge_cli
+    from fr.bridge import cli as bridge_cli
 
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "_seen_plans.json")
     monkeypatch.setattr(bridge_cli, "_pull_managed_repo", lambda repo_path: None)
@@ -265,7 +265,7 @@ def test_tick_warns_when_owner_name_unresolvable(
     monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda mcp, state: None)
     monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp: None)
 
-    with caplog.at_level("WARNING", logger="vk.bridge.cli"):
+    with caplog.at_level("WARNING", logger="fr.bridge.cli"):
         rc = bridge_cli.main([])
 
     assert rc == 0

@@ -6,11 +6,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fr.cli import app
+from fr.commands import archive_cmd
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
-from vk.cli import app
-from vk.commands import archive_cmd
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -272,7 +272,7 @@ def test_archive_all_refuses_force(tmp_path, monkeypatch):
 
 def test_apply_dry_run_prints_archive_nudge(tmp_path, monkeypatch):
     """apply's dry-run nudges toward vk archive when the gate passes."""
-    from vk.commands import apply_cmd
+    from fr.commands import apply_cmd
 
     repo = _repo(tmp_path)
     plan_dir = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)

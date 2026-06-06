@@ -6,9 +6,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from fr.cli import app
 from typer.testing import CliRunner
-
-from vk.cli import app
 
 SLUG = "2026-05-10-x"
 

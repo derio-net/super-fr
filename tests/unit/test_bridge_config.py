@@ -3,7 +3,7 @@
 The legacy bridge fetches the VK-known repo list once per tick via
 `mcp.list_repos()` and refuses to dispatch any phase whose
 `tracking_issue` lives outside that set. The v2 port keeps the
-behaviour: in `vk.bridge.config`, the cached lookup is exposed via
+behaviour: in `fr.bridge.config`, the cached lookup is exposed via
 `is_known_repo(repo, mcp)`; tick consults it before dispatching.
 """
 
@@ -41,7 +41,7 @@ def _bodies(pushes: list[bytes]) -> str:
 
 
 def _dispatched_plan(repo: str, issue_number: int = 42):
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     phase = plan.phases[0].model_copy(
@@ -59,7 +59,7 @@ def _dispatched_plan(repo: str, issue_number: int = 42):
 
 def test_is_known_repo_uses_mcp_list_repos():
     """`is_known_repo` consults `mcp.list_repos()` (cached per tick)."""
-    from vk.bridge.config import is_known_repo
+    from fr.bridge.config import is_known_repo
 
     mcp = FakeMcpClient()
     # FakeMcpClient.list_repos() returns derio-net/{frank,willikins,superpowers-for-vk}.
@@ -76,7 +76,7 @@ def test_is_known_repo_caches_within_a_tick():
     bother with TTL/eviction. A long-running daemon with config drift
     would call `clear_repo_cache()` between ticks.
     """
-    from vk.bridge import config
+    from fr.bridge import config
 
     mcp = FakeMcpClient()
     config.clear_repo_cache()
@@ -90,9 +90,9 @@ def test_is_known_repo_caches_within_a_tick():
 
 
 def test_tick_skips_unknown_repo_and_pushes_failure_metric(fake_pushgateway):
-    from vk.bridge import config, tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import config, tick
+    from fr.observe import observe
+    from fr.render import render
 
     config.clear_repo_cache()
 
@@ -124,9 +124,9 @@ def test_tick_skips_unknown_repo_and_pushes_failure_metric(fake_pushgateway):
 
 def test_tick_dispatches_known_repo_normally(fake_pushgateway):
     """Sanity check — a known repo is not affected by the unknown-repo gate."""
-    from vk.bridge import config, tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import config, tick
+    from fr.observe import observe
+    from fr.render import render
 
     config.clear_repo_cache()
 

@@ -6,10 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fr.cli import app
+from fr.commands import isolation_cmd
 from typer.testing import CliRunner
-
-from vk.cli import app
-from vk.commands import isolation_cmd
 
 runner = CliRunner()
 

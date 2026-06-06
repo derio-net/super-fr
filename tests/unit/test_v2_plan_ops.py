@@ -40,7 +40,7 @@ def _make_spec(repo: Path, slug: str = "test-spec") -> Path:
 
 
 def test_create_scaffolds_folder_and_appends_spec_row(tmp_path):
-    from vk.plan_ops import PhaseSpec, create
+    from fr.plan_ops import PhaseSpec, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -70,7 +70,7 @@ def test_create_scaffolds_folder_and_appends_spec_row(tmp_path):
 
 def test_create_rejects_existing_folder_with_mismatched_content(tmp_path):
     """A slug reused for *different* content is a real collision — still rejected."""
-    from vk.plan_ops import PhaseSpec, PlanEditError, create
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -92,7 +92,7 @@ def test_create_rejects_existing_folder_with_mismatched_content(tmp_path):
 def test_create_preflight_validates_spec_before_creating_folder(tmp_path):
     """#133: a spec missing '## Implementation Plans' must fail BEFORE any
     folder is created, so a re-run isn't blocked by a half-built folder."""
-    from vk.plan_ops import PhaseSpec, PlanEditError, create
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
 
     repo = _make_repo(tmp_path)
     # Spec exists but has NO '## Implementation Plans' section.
@@ -117,7 +117,7 @@ def test_create_preflight_validates_spec_before_creating_folder(tmp_path):
 def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
     """#133: re-running create with matching content finishes the job (appends
     the missing spec row) instead of dead-ending at 'already exists'."""
-    from vk.plan_ops import PhaseSpec, create
+    from fr.plan_ops import PhaseSpec, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -149,7 +149,7 @@ def test_create_rejects_existing_folder_with_stale_extra_phase(tmp_path):
     """#133 review: a re-run that DROPS a phase must not silently 'repair' and
     leave the orphaned phase file behind — that's a real content mismatch, so
     it must raise rather than yield a plan with a phase the operator removed."""
-    from vk.plan_ops import PhaseSpec, PlanEditError, create
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -177,8 +177,8 @@ def test_create_rejects_existing_folder_with_stale_extra_phase(tmp_path):
 
 
 def test_tick_marks_step_and_records_timestamp(tmp_path):
-    from vk import parse
-    from vk.plan_ops import tick
+    from fr import parse
+    from fr.plan_ops import tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -193,8 +193,8 @@ def test_tick_marks_step_and_records_timestamp(tmp_path):
 
 
 def test_tick_idempotent(tmp_path):
-    from vk import parse
-    from vk.plan_ops import tick
+    from fr import parse
+    from fr.plan_ops import tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -208,7 +208,7 @@ def test_tick_idempotent(tmp_path):
 
 
 def test_tick_skipped_requires_note(tmp_path):
-    from vk.plan_ops import PlanEditError, tick
+    from fr.plan_ops import PlanEditError, tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -219,7 +219,7 @@ def test_tick_skipped_requires_note(tmp_path):
 
 
 def test_tick_unknown_step_id(tmp_path):
-    from vk.plan_ops import PlanEditError, tick
+    from fr.plan_ops import PlanEditError, tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -234,7 +234,7 @@ def test_tick_unknown_step_id(tmp_path):
 
 
 def test_complete_phase_agentic_refuses_unticked(tmp_path):
-    from vk.plan_ops import PlanEditError, complete_phase
+    from fr.plan_ops import PlanEditError, complete_phase
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -245,8 +245,8 @@ def test_complete_phase_agentic_refuses_unticked(tmp_path):
 
 
 def test_complete_phase_agentic_succeeds_after_ticking(tmp_path):
-    from vk import parse
-    from vk.plan_ops import complete_phase, tick
+    from fr import parse
+    from fr.plan_ops import complete_phase, tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -260,7 +260,7 @@ def test_complete_phase_agentic_succeeds_after_ticking(tmp_path):
 
 
 def test_complete_phase_manual_requires_note(tmp_path):
-    from vk.plan_ops import PlanEditError, complete_phase
+    from fr.plan_ops import PlanEditError, complete_phase
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     dest = tmp_path / "v2_plan_multi_phase"
@@ -272,8 +272,8 @@ def test_complete_phase_manual_requires_note(tmp_path):
 
 
 def test_complete_phase_manual_succeeds_with_note(tmp_path):
-    from vk import parse
-    from vk.plan_ops import complete_phase
+    from fr import parse
+    from fr.plan_ops import complete_phase
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     dest = tmp_path / "v2_plan_multi_phase"
@@ -307,7 +307,7 @@ def _make_archived_parent_plan(repo: Path, slug: str, spec_path: Path) -> Path:
 
 
 def test_rework_create_scaffolds_sibling_with_parent_link(tmp_path):
-    from vk.plan_ops import rework_create
+    from fr.plan_ops import rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -322,7 +322,7 @@ def test_rework_create_scaffolds_sibling_with_parent_link(tmp_path):
 
 
 def test_rework_create_collision_check_across_directories(tmp_path):
-    from vk.plan_ops import PlanEditError, rework_create
+    from fr.plan_ops import PlanEditError, rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -341,8 +341,8 @@ def test_rework_create_collision_check_across_directories(tmp_path):
 
 
 def test_rework_add_origin_appends_with_auto_id(tmp_path):
-    from vk import parse
-    from vk.plan_ops import rework_add_origin, rework_create
+    from fr import parse
+    from fr.plan_ops import rework_add_origin, rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -360,7 +360,7 @@ def test_rework_add_origin_appends_with_auto_id(tmp_path):
 
 
 def test_rework_add_origin_rejects_non_rework_plan(tmp_path):
-    from vk.plan_ops import PlanEditError, rework_add_origin
+    from fr.plan_ops import PlanEditError, rework_add_origin
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -375,7 +375,7 @@ def test_rework_add_origin_rejects_non_rework_plan(tmp_path):
 
 
 def test_rework_list_filters_by_parent_plan(tmp_path):
-    from vk.plan_ops import rework_create, rework_list
+    from fr.plan_ops import rework_create, rework_list
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -408,7 +408,7 @@ def test_yaml_dump_coerces_step_text_to_literal_block(tmp_path):
     dest = tmp_path / "v2_plan_minimal"
     shutil.copytree(fixture, dest)
 
-    from vk.plan_ops import tick
+    from fr.plan_ops import tick
 
     tick(dest, "P1.T1.S1")
 
@@ -417,8 +417,8 @@ def test_yaml_dump_coerces_step_text_to_literal_block(tmp_path):
 
 
 def test_self_review_clean_plan_has_no_issues(tmp_path):
-    from vk import parse
-    from vk.plan_ops import self_review
+    from fr import parse
+    from fr.plan_ops import self_review
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"
@@ -429,8 +429,8 @@ def test_self_review_clean_plan_has_no_issues(tmp_path):
 
 
 def test_self_review_detects_manual_complete_without_note(tmp_path):
-    from vk import parse
-    from vk.plan_ops import self_review
+    from fr import parse
+    from fr.plan_ops import self_review
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     dest = tmp_path / "v2_plan_multi_phase"
@@ -460,7 +460,7 @@ def _purity_plan(tmp_path, *, phase1_tag="agentic", step_text="Run the test suit
     Phase 1 (`phase1_tag`) holds P1.T1.S1 with `step_text`; phase 2 is the
     manual collection phase. Returns (plan_dir, parse-callable).
     """
-    from vk.plan_ops import PhaseSpec, create
+    from fr.plan_ops import PhaseSpec, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -502,8 +502,8 @@ def _purity_plan(tmp_path, *, phase1_tag="agentic", step_text="Run the test suit
 
 
 def _purity_issues(plan_dir):
-    from vk import parse
-    from vk.plan_ops import self_review
+    from fr import parse
+    from fr.plan_ops import self_review
 
     return [i for i in self_review(parse(plan_dir)) if "manual phase" in i.message]
 
@@ -511,7 +511,7 @@ def _purity_issues(plan_dir):
 def test_self_review_errors_on_step_deferred_to_later_phase(tmp_path):
     """#252 motivating case: an agentic-phase step skipped with a note
     deferring it forward ('Executed in Phase 5') is a mis-scoped manual step."""
-    from vk.plan_ops import tick
+    from fr.plan_ops import tick
 
     plan_dir = _purity_plan(tmp_path)
     tick(plan_dir, "P1.T1.S1", state="-", note="Executed in Phase 2")
@@ -522,7 +522,7 @@ def test_self_review_errors_on_step_deferred_to_later_phase(tmp_path):
 
 
 def test_self_review_errors_on_defer_phrase_without_phase_number(tmp_path):
-    from vk.plan_ops import tick
+    from fr.plan_ops import tick
 
     plan_dir = _purity_plan(tmp_path)
     tick(plan_dir, "P1.T1.S1", state="-", note="defer to the deploy phase")
@@ -558,7 +558,7 @@ def test_self_review_ignores_backward_phase_reference(tmp_path):
 
 
 def test_self_review_ignores_deferred_note_in_manual_phase(tmp_path):
-    from vk.plan_ops import tick
+    from fr.plan_ops import tick
 
     plan_dir = _purity_plan(tmp_path, phase1_tag="manual")
     tick(plan_dir, "P1.T1.S1", state="-", note="Executed in Phase 2")
@@ -602,7 +602,7 @@ def test_self_review_manual_verb_exempts_completed_steps(tmp_path):
     """A ticked ('x') step already proved agent-completable; only pending or
     skipped steps gate. Keeps historical plans (and plans whose step text
     QUOTES the phrases) from retro-erroring."""
-    from vk.plan_ops import tick
+    from fr.plan_ops import tick
 
     plan_dir = _purity_plan(tmp_path, step_text="Set the secret manually in the panel")
     tick(plan_dir, "P1.T1.S1")  # state 'x'
@@ -613,7 +613,7 @@ def test_create_rejects_phase_zero_before_writing(tmp_path):
     """Phase numbering starts at 1. create() must refuse a 0-numbered
     PhaseSpec BEFORE any file is written — failing only at the post-write
     re-parse would strand a half-built folder (the #133 failure mode)."""
-    from vk.plan_ops import PhaseSpec, PlanEditError, create
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -638,7 +638,7 @@ def test_self_review_warns_on_overlong_plan_label(tmp_path):
     """#249: a slug whose NORMALIZED `plan:<slug>` form still exceeds GitHub's
     50-char label limit must surface a self-review warning (it's
     auto-truncated, but the operator should know to shorten the slug)."""
-    from vk.plan_ops import PhaseSpec, create, self_review
+    from fr.plan_ops import PhaseSpec, create, self_review
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -663,7 +663,7 @@ def test_self_review_overlong_lint_checks_the_normalized_label(tmp_path):
     """A dated slug whose RAW `plan:<slug>` exceeds 50 chars but whose
     normalized form fits must NOT warn — the label that actually ships is
     the normalized one."""
-    from vk.plan_ops import PhaseSpec, create, self_review
+    from fr.plan_ops import PhaseSpec, create, self_review
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -684,8 +684,8 @@ def test_self_review_overlong_lint_checks_the_normalized_label(tmp_path):
 def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):
     """#248: a spec in same-repo form (no owner/repo: prefix) that doesn't
     resolve locally is likely a malformed cross-repo ref."""
-    from vk import parse
-    from vk.plan_ops import PhaseSpec, create, self_review
+    from fr import parse
+    from fr.plan_ops import PhaseSpec, create, self_review
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -714,8 +714,8 @@ def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):
 
 def test_self_review_no_spec_warning_for_valid_cross_repo_form(tmp_path):
     """A correctly-formatted cross-repo spec (owner/repo:path) must NOT warn."""
-    from vk import parse
-    from vk.plan_ops import PhaseSpec, create, self_review
+    from fr import parse
+    from fr.plan_ops import PhaseSpec, create, self_review
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -741,7 +741,7 @@ def test_self_review_no_spec_warning_for_valid_cross_repo_form(tmp_path):
 
 
 def test_is_cross_repo_spec_helper():
-    from vk._urls import is_cross_repo_spec
+    from fr._urls import is_cross_repo_spec
 
     assert is_cross_repo_spec("derio-net/frank:docs/superpowers/specs/x.md") is True
     assert is_cross_repo_spec("docs/superpowers/specs/x.md") is False
@@ -768,7 +768,7 @@ def _make_implemented_parent_plan(repo: Path, slug: str, spec_path: Path) -> Pat
 
 
 def test_rework_create_accepts_parent_under_implemented_plans(tmp_path):
-    from vk.plan_ops import rework_create
+    from fr.plan_ops import rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -782,7 +782,7 @@ def test_rework_create_accepts_parent_under_implemented_plans(tmp_path):
 def test_rework_number_scans_implemented_plans(tmp_path):
     """A rework-1 already archived under implemented/plans/ must push the
     next rework number to 2, not collide or restart at 1."""
-    from vk.plan_ops import rework_create
+    from fr.plan_ops import rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -800,7 +800,7 @@ def test_rework_number_scans_implemented_plans(tmp_path):
 
 
 def test_clear_tracking_issue_nulls_field_and_returns_true(tmp_path):
-    from vk.plan_ops import clear_tracking_issue, set_tracking_issue
+    from fr.plan_ops import clear_tracking_issue, set_tracking_issue
 
     repo = _make_repo(tmp_path)
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -818,7 +818,7 @@ def test_clear_tracking_issue_nulls_field_and_returns_true(tmp_path):
 
 
 def test_clear_tracking_issue_noop_when_already_null(tmp_path):
-    from vk.plan_ops import clear_tracking_issue
+    from fr.plan_ops import clear_tracking_issue
 
     repo = _make_repo(tmp_path)
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -834,7 +834,7 @@ def test_clear_tracking_issue_noop_when_already_null(tmp_path):
 
 
 def test_create_writes_bare_slug_file_cell(tmp_path):
-    from vk.plan_ops import PhaseSpec, create
+    from fr.plan_ops import PhaseSpec, create
 
     repo = _make_repo(tmp_path)
     spec_path = _make_spec(repo)
@@ -856,7 +856,7 @@ def test_rework_create_from_archived_spec_appends_row(tmp_path):
     """Parent's meta.spec records specs/X.md but the spec archived to
     implemented/specs/ — rework_create must resolve it and append the
     row (the old code silently skipped on a stale path)."""
-    from vk.plan_ops import rework_create
+    from fr.plan_ops import rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -871,7 +871,7 @@ def test_rework_create_from_archived_spec_appends_row(tmp_path):
 
 
 def test_rework_create_writes_canonical_refs(tmp_path):
-    from vk.plan_ops import rework_create
+    from fr.plan_ops import rework_create
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)
@@ -893,8 +893,8 @@ def test_self_review_resolves_slug_form_spec(tmp_path):
     resolves via the lifecycle roots (2026-06-06 dogfood find)."""
     import shutil
 
-    from vk.parser import parse
-    from vk.plan_ops import self_review
+    from fr.parser import parse
+    from fr.plan_ops import self_review
 
     repo = _make_repo(tmp_path)
     spec = _make_spec(repo)

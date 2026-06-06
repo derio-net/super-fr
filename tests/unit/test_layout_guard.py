@@ -12,9 +12,8 @@ import shutil
 from pathlib import Path
 
 import pytest
+from fr.cli import app
 from typer.testing import CliRunner
-
-from vk.cli import app
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -28,7 +27,7 @@ def _legacy_repo(tmp_path: Path) -> Path:
 
 
 def test_require_migrated_layout_raises_on_legacy(tmp_path):
-    from vk.commands.common import require_migrated_layout
+    from fr.commands.common import require_migrated_layout
 
     _legacy_repo(tmp_path)
     with pytest.raises(Exception) as exc_info:
@@ -37,14 +36,14 @@ def test_require_migrated_layout_raises_on_legacy(tmp_path):
 
 
 def test_require_migrated_layout_noop_when_migrated(tmp_path):
-    from vk.commands.common import require_migrated_layout
+    from fr.commands.common import require_migrated_layout
 
     (tmp_path / "docs" / "superpowers" / "implemented" / "plans").mkdir(parents=True)
     require_migrated_layout(tmp_path)  # must not raise
 
 
 def test_require_migrated_layout_noop_without_superpowers_tree(tmp_path):
-    from vk.commands.common import require_migrated_layout
+    from fr.commands.common import require_migrated_layout
 
     require_migrated_layout(tmp_path)  # no docs/superpowers at all -> no-op
 
@@ -87,7 +86,7 @@ def test_spec_status_hard_stops_on_legacy_layout(tmp_path, monkeypatch):
 def test_guard_fires_on_legacy_archived_specs_too(tmp_path):
     """archived-specs/ is legacy layout exactly like archived-plans/
     (review finding, 2026-06-06)."""
-    from vk.commands.common import require_migrated_layout
+    from fr.commands.common import require_migrated_layout
 
     (tmp_path / "docs" / "superpowers" / "archived-specs").mkdir(parents=True)
     with pytest.raises(Exception) as exc_info:

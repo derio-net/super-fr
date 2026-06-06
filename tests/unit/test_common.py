@@ -14,8 +14,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from vk.commands.common import resolve_repo_root
+from fr.commands.common import resolve_repo_root
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""D2 — `vk.bridge.tick` dedups by VK card title.
+"""D2 — `fr.bridge.tick` dedups by VK card title.
 
 Detection lives in tick (NOT dispatch_phase) because tick is the only
 place with both `mcp` (to read card titles) and `gh` (to stamp the
@@ -16,7 +16,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
 def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: int = 42):
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     phase = plan.phases[0].model_copy(
@@ -34,7 +34,7 @@ def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: i
 
 def test_fetch_existing_titles_collects_card_titles():
     """The helper returns the set of every card title visible to MCP."""
-    from vk.bridge.dedup import fetch_existing_titles
+    from fr.bridge.dedup import fetch_existing_titles
 
     mcp = FakeMcpClient()
     mcp.create_issue(title="gh#1: [foo/bar]", description="")
@@ -45,7 +45,7 @@ def test_fetch_existing_titles_collects_card_titles():
 
 
 def test_is_dispatched_membership_check():
-    from vk.bridge.dedup import is_dispatched
+    from fr.bridge.dedup import is_dispatched
 
     existing = {"gh#42: [derio-net/superpowers-for-vk]"}
     assert is_dispatched("gh#42: [derio-net/superpowers-for-vk]", existing)
@@ -57,9 +57,9 @@ def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
     entirely (no create_issue / no start_workspace), but DO stamp
     `vk-synced` on the GH Issue so the next tick won't retry.
     """
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -93,9 +93,9 @@ def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
 
 def test_tick_dispatches_normally_when_no_existing_card():
     """Sanity check — without a matching title, tick still dispatches."""
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()

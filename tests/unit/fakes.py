@@ -181,7 +181,7 @@ class FakeMcpClient:
     `fail_on_call=N` to make the (0-indexed) Nth call raise.
 
     The surface deliberately matches the calling convention
-    `vk.bridge.dispatch.dispatch_phase` uses against the real client —
+    `fr.bridge.dispatch.dispatch_phase` uses against the real client —
     keyword-only on the methods where the wire payload is structured.
 
     Recording layer

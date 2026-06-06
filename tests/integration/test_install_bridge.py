@@ -34,7 +34,7 @@ def test_install_bridge_flag_writes_wrapper(tmp_path: Path) -> None:
     assert wrapper_path.is_file(), f"{wrapper_path} not created"
     assert os.access(wrapper_path, os.X_OK), f"{wrapper_path} not executable"
     contents = wrapper_path.read_text()
-    assert "-m vk.bridge" in contents, f"wrapper must exec `python -m vk.bridge`:\n{contents}"
+    assert "-m fr.bridge" in contents, f"wrapper must exec `python -m fr.bridge`:\n{contents}"
     # The wrapper resolves a python interpreter (preferably the venv's).
     assert "python" in contents
 

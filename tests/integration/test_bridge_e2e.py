@@ -1,4 +1,4 @@
-"""End-to-end acceptance tests for `vk.bridge.tick`.
+"""End-to-end acceptance tests for `fr.bridge.tick`.
 
 Each test composes the full pipeline — observe → render → diff → apply →
 per-phase dispatch — against a tmp_path plan + FakeGhClient + FakeMcpClient.
@@ -105,7 +105,7 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     """
     GIVEN a fixture multi-phase plan with mixed depends_on shape
     AND   a FakeMcpClient + FakeGhClient pre-loaded with the dispatched Issues
-    WHEN  vk.bridge.tick() runs one tick
+    WHEN  fr.bridge.tick() runs one tick
     THEN  the resulting label state on every Issue matches the documented
           expectation:
           - root phases (depends_on=[]) → vk-ready + vk-synced
@@ -114,8 +114,8 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
           - manual phases → manual label
     AND   the resulting workspace count == count of root phases just synced
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     repo = "derio-net/superpowers-for-vk"
     plan_dir = tmp_path / "plan"
@@ -219,14 +219,14 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
     """
     GIVEN a plan in a steady-state (all phases dispatched, labels match
           renderer projection)
-    WHEN  vk.bridge.tick() runs once
-    AND   vk.bridge.tick() runs again immediately after
+    WHEN  fr.bridge.tick() runs once
+    AND   fr.bridge.tick() runs again immediately after
     THEN  the second run made no MCP mutations
     AND   the second run made no GH label changes
     AND   the second run made no GH Issue state changes
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     repo = "derio-net/superpowers-for-vk"
     plan_dir = tmp_path / "plan"
@@ -306,18 +306,18 @@ def test_standalone_vk_ready_issue_without_plan_is_ignored(tmp_path: Path) -> No
     GIVEN a vk-ready GitHub Issue that is NOT backed by any v2 plan
           (manual `gh issue create --label vk-ready` outside the plan workflow)
     AND   no plan in any managed repo references it as tracking_issue
-    WHEN  vk.bridge.tick() runs
+    WHEN  fr.bridge.tick() runs
     THEN  no MCP calls were made for this Issue
     AND   no labels were changed on this Issue
     (Legacy bridge would have parsed the body and dispatched; new bridge ignores.)
 
-    Verifies the structural property in `vk.bridge.tick`: the loop iterates
+    Verifies the structural property in `fr.bridge.tick`: the loop iterates
     phases of DISCOVERED plans only. A free-floating vk-ready Issue with no
     plan reference simply isn't in the iteration set — there's no code
     path that falls back to listing gh Issues by label for dispatch.
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     repo = "derio-net/superpowers-for-vk"
 
@@ -374,13 +374,13 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
     """
     GIVEN a plan with target_repo='derio-net/foo' and a phase with
           tracking_issue='https://github.com/derio-net/bar/issues/100'
-    WHEN  vk.bridge.tick() runs
-    THEN  vk.bridge.dispatch is called with workspace branch repo='derio-net/bar'
+    WHEN  fr.bridge.tick() runs
+    THEN  fr.bridge.dispatch is called with workspace branch repo='derio-net/bar'
     AND   the vk-synced label is added on derio-net/bar#100 (NOT derio-net/foo)
     AND   the workspace name follows '<simple_id> -> gh#100' convention
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     target_repo = "derio-net/foo"
     foreign_repo = "derio-net/bar"
@@ -422,7 +422,7 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
     )
 
     # Advertise both repos in VK's registry (short names, with ids) so
-    # `vk.bridge.config.is_known_repo` accepts the dispatch and
+    # `fr.bridge.config.is_known_repo` accepts the dispatch and
     # `repo_id_for` returns the canonical Uuid. VK indexes by short name
     # only — no `owner/`.
     mcp = FakeMcpClient()

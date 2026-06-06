@@ -84,8 +84,8 @@ def test_tick_passes_project_id_to_create_issue(tmp_path: Path) -> None:
     WHEN  bridge.tick() runs
     THEN  the mcp.create_issue call carries the project_id kwarg
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir)
@@ -116,8 +116,8 @@ def test_tick_fails_clean_when_project_id_unset(tmp_path: Path, monkeypatch) -> 
     AND   the result carries one failure naming the env var
     AND   the `project_id_missing` metric reason is recorded
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     monkeypatch.delenv("VK_DERIO_OPS_PROJECT", raising=False)
     monkeypatch.delenv("VK_DERIO_OPS_PROJECT_ID", raising=False)
@@ -154,8 +154,8 @@ def test_tick_prefers_canonical_id_env_over_legacy(tmp_path: Path, monkeypatch) 
     we deploy to injects `VK_DERIO_OPS_PROJECT_ID` and an earlier wave
     of this fix mis-read the bare name.
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     monkeypatch.setenv("VK_DERIO_OPS_PROJECT_ID", "uuid-canonical-from-k8s")
     monkeypatch.setenv("VK_DERIO_OPS_PROJECT", "uuid-legacy-fallback")
@@ -187,8 +187,8 @@ def test_tick_dedup_passes_project_id_to_list_issues(tmp_path: Path) -> None:
     Scoping dedup to the bridge's own project avoids matching titles from
     unrelated VK projects (and keeps the call cheap on VK's side).
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir)

@@ -13,8 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from vk.commands import skills_cmd
+from fr.commands import skills_cmd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -43,9 +42,9 @@ def test_skill_files_match_skills_list() -> None:
 
 
 def test_skills_subprocess_smoke() -> None:
-    """`python -m vk skills` must exit 0 — covers the direct click import."""
+    """`python -m fr skills` must exit 0 — covers the direct click import."""
     result = subprocess.run(
-        [sys.executable, "-m", "vk", "skills"],
+        [sys.executable, "-m", "fr", "skills"],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,

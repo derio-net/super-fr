@@ -13,7 +13,7 @@ MULTI_PHASE = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
 
 def _make_plan_with_phases(phases_data):
     """Build a plan in-memory from the multi-phase fixture, replacing phases."""
-    from vk import parse
+    from fr import parse
 
     plan = parse(MULTI_PHASE)
     return dc_replace(plan, phases=tuple(phases_data))
@@ -47,9 +47,9 @@ def test_phase_with_unsatisfied_deps_projects_vk_blocked():
     AND   rendered.issue_per_phase[2].labels contains 'vk-blocked'
     AND   rendered.issue_per_phase[2].labels does NOT contain 'vk-ready'
     """
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(MULTI_PHASE)
     observed = GhState(phases={})
@@ -72,9 +72,9 @@ def test_phase_with_satisfied_deps_projects_vk_ready():
     THEN  rendered.issue_per_phase[2].labels contains 'vk-ready'
     AND   does NOT contain 'vk-blocked'
     """
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(MULTI_PHASE)
     plan = _complete_phase_1(plan)
@@ -113,10 +113,10 @@ def test_blocked_to_ready_transition_when_dep_completes():
     THEN  the mutation list contains an IssueLabelChange that removes
           'vk-blocked' AND adds 'vk-ready' on phase 2's tracking issue
     """
-    from vk import parse
-    from vk.diff import IssueLabelChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.diff import IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(MULTI_PHASE)
     plan = _complete_phase_1(plan)
@@ -184,15 +184,15 @@ def test_fan_in_phase_blocked_until_all_deps_complete():
     WHEN  render(plan, observed) is called again
     THEN  rendered.issue_per_phase[4].labels contains 'vk-ready'
     """
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(MULTI_PHASE)
 
     def _make_phase(number, depends_on, complete=False, tag="agentic"):
         step_id = f"P{number}.T1.S1"
-        from vk.types import (
+        from fr.types import (
             Completion,
             PhaseDoc,
             PhaseHeader,
@@ -299,10 +299,10 @@ def test_manual_phase_unaffected_by_dep_gating():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
-    from vk.types import (
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
+    from fr.types import (
         Completion,
         PhaseDoc,
         PhaseHeader,
@@ -359,9 +359,9 @@ def test_bad_dep_reference_treated_as_blocked():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(MULTI_PHASE)
 

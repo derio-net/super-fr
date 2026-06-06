@@ -11,8 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from vk.repair import repair_repo
+from fr.repair import repair_repo
 
 SLUG = "2026-05-10-x"
 

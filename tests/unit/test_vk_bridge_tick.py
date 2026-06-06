@@ -1,4 +1,4 @@
-"""Unit tests for `vk.bridge.tick`.
+"""Unit tests for `fr.bridge.tick`.
 
 Every test uses `FakeGhClient` + `FakeMcpClient` so the test never
 touches gh or MCP. The plan structure comes from the minimal v2
@@ -6,7 +6,7 @@ fixture; we attach a `tracking_issue` via pydantic copies so the
 phase looks dispatched.
 
 Phase 2 of the v2 bridge rebuild routed the per-phase MCP work
-through `vk.bridge.dispatch.dispatch_phase` — the assertions below
+through `fr.bridge.dispatch.dispatch_phase` — the assertions below
 reflect the new call surface (create_issue + update_issue + list_repos
 + start_workspace + link_workspace_issue) rather than the legacy
 single `create_card` call.
@@ -24,7 +24,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: int = 42):
     """Parse the minimal fixture and stamp phase 1 with a tracking_issue."""
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     phase = plan.phases[0].model_copy(
@@ -41,9 +41,9 @@ def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: i
 
 
 def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
-    from vk.bridge import TickResult, tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import TickResult, tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -93,9 +93,9 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
     """If dispatch_phase raises, the bridge MUST NOT add `vk-synced` —
     otherwise the failure would silently strand the phase on the next tick.
     """
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -132,9 +132,9 @@ def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
     apply-side failure shape (the label-ensure is always emitted first
     when a plan has any managed labels).
     """
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -162,9 +162,9 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     """An assigned phase projects `in-progress` (not `vk-ready`) — the
     bridge gates on the rendered lifecycle, not stale observed labels,
     so a phase claimed mid-tick is correctly skipped."""
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -196,9 +196,9 @@ def test_tick_skipped_when_phase_already_vk_synced():
     """vk-ready + vk-synced means the previous tick already created the
     card — leave it alone. Render preserves `vk-synced` from observed
     so the gate sees it on the projected side."""
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -230,9 +230,8 @@ def test_tick_does_not_create_issues_or_write_tracking_issue_back(tmp_path):
     import subprocess
 
     import yaml
-
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     subprocess.run(
@@ -273,9 +272,9 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     Together: a Plan B (agent-images) bridge running on a busy repo
     must not duplicate cards and must not undo its own sync state.
     """
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()

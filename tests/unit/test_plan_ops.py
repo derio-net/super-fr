@@ -60,7 +60,7 @@ URL_B = "https://github.com/derio-net/test/issues/99"
 
 
 def test_set_tracking_issue_writes_url_and_stages(tmp_path):
-    from vk import plan_ops
+    from fr import plan_ops
 
     plan_dir = _setup_plan(tmp_path)
 
@@ -76,7 +76,7 @@ def test_set_tracking_issue_writes_url_and_stages(tmp_path):
 
 
 def test_set_tracking_issue_idempotent_on_same_url(tmp_path):
-    from vk import plan_ops
+    from fr import plan_ops
 
     plan_dir = _setup_plan(tmp_path)
     plan_ops.set_tracking_issue(plan_dir, 1, URL)
@@ -91,7 +91,7 @@ def test_set_tracking_issue_idempotent_on_same_url(tmp_path):
 
 
 def test_set_tracking_issue_overwrites_different_non_null_url(tmp_path):
-    from vk import plan_ops
+    from fr import plan_ops
 
     plan_dir = _setup_plan(tmp_path)
     plan_ops.set_tracking_issue(plan_dir, 1, URL)
@@ -104,8 +104,8 @@ def test_set_tracking_issue_overwrites_different_non_null_url(tmp_path):
 
 
 def test_set_tracking_issue_raises_when_phase_yaml_missing(tmp_path):
-    from vk import plan_ops
-    from vk.plan_ops import PlanEditError
+    from fr import plan_ops
+    from fr.plan_ops import PlanEditError
 
     plan_dir = _setup_plan(tmp_path)
 
@@ -118,7 +118,7 @@ def test_set_tracking_issue_raises_when_phase_yaml_missing(tmp_path):
 
 
 def test_set_tracking_issue_works_for_manual_phase(tmp_path):
-    from vk import plan_ops
+    from fr import plan_ops
 
     plan_dir = _setup_plan(tmp_path)
 
@@ -146,9 +146,9 @@ def test_set_tracking_issue_raises_on_post_write_schema_invalid(tmp_path):
     translate the PlanSchemaError into a PlanEditError so callers see a
     single exception type from the writer surface.
     """
-    from vk import plan_ops
-    from vk.parser import PlanSchemaError
-    from vk.plan_ops import PlanEditError
+    from fr import plan_ops
+    from fr.parser import PlanSchemaError
+    from fr.plan_ops import PlanEditError
 
     plan_dir = _setup_plan(tmp_path)
 

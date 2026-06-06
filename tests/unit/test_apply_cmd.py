@@ -15,10 +15,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fr.apply import ApplyResult
+from fr.commands import apply_cmd
+from fr.parser import parse
+
 from tests.unit.fakes import FakeGhClient
-from vk.apply import ApplyResult
-from vk.commands import apply_cmd
-from vk.parser import parse
 
 
 def test_apply_cmd_propagates_plan_to_apply(monkeypatch):
@@ -138,9 +139,8 @@ def test_apply_legacy_layout_hard_stops_before_archived_refusal(tmp_path, monkey
     Its protection lives on for the canonical layout via
     `test_apply_refuses_implemented_plan` below.
     """
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     archived = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-done"
     archived.mkdir(parents=True)
@@ -217,9 +217,8 @@ def test_apply_cli_exposes_force_flag(tmp_path, monkeypatch):
     environments (CI injected escape codes inside the option token)."""
     import re
 
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     result = CliRunner().invoke(app, ["apply", "--help"])
     assert result.exit_code == 0
@@ -246,9 +245,8 @@ def test_apply_dry_run_json_suppressed_alongside_real_mutations(tmp_path):
 
 def test_apply_refuses_implemented_plan(tmp_path, monkeypatch):
     """implemented/plans/ is terminal exactly like legacy archived-plans/."""
+    from fr.cli import app
     from typer.testing import CliRunner
-
-    from vk.cli import app
 
     done = tmp_path / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-10-done"
     done.mkdir(parents=True)

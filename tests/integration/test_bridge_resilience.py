@@ -29,12 +29,13 @@ def test_renderer_reverses_manual_label_change():
     (Renderer projection IS the source of truth. If operators want a phase
     out of the dispatch queue, they update plan state — not labels.)
     """
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import IssueLabelChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
 
     plan = parse(MULTI_PHASE)
     # Use only the first phase (no deps, agentic) and give it a tracking_issue
@@ -98,7 +99,7 @@ def test_bridge_exits_loud_when_mcp_subprocess_fails_to_start(
 ) -> None:
     """When neither `vibe-kanban-mcp` nor `npx` is on PATH, the bridge
     must exit non-zero and tell the operator which package to install."""
-    from vk.bridge import cli as bridge_cli
+    from fr.bridge import cli as bridge_cli
 
     monkeypatch.setattr(bridge_cli.shutil, "which", lambda name: None)
     with pytest.raises(SystemExit) as exc_info:
@@ -119,9 +120,10 @@ def test_tick_aborts_cleanly_on_mcp_subprocess_death() -> None:
     on the GH side, no half-state."""
     from dataclasses import replace as dc_replace
 
+    from fr import parse
+    from fr.bridge import tick
+
     from tests.unit.fakes import FakeGhClient, FakeMcpClient
-    from vk import parse
-    from vk.bridge import tick
 
     plan = parse(MINIMAL)
     repo = "derio-net/superpowers-for-vk"
@@ -162,9 +164,10 @@ def test_tick_continues_when_one_phase_times_out() -> None:
     that behaviour against future narrowing."""
     from dataclasses import replace as dc_replace
 
+    from fr import parse
+    from fr.bridge import tick
+
     from tests.unit.fakes import FakeGhClient, FakeMcpClient
-    from vk import parse
-    from vk.bridge import tick
 
     plan = parse(MULTI_PHASE)
     repo = "derio-net/superpowers-for-vk"
@@ -228,8 +231,8 @@ def test_tick_backs_off_on_gh_rate_limit(monkeypatch: pytest.MonkeyPatch) -> Non
     """`_gh_rate_limit_guard` recognises gh 403 rate-limit stderr and
     skips this tick rather than re-raising — the next cron fire retries
     fresh. A failure metric is pushed with `reason='gh_rate_limited'`."""
-    from vk.bridge import cli as bridge_cli
-    from vk.gh import GhError
+    from fr.bridge import cli as bridge_cli
+    from fr.gh import GhError
 
     pushed: list[str] = []
 
@@ -254,8 +257,8 @@ def test_tick_reraises_non_rate_limit_gh_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Non-rate-limit gh errors are not silently swallowed."""
-    from vk.bridge import cli as bridge_cli
-    from vk.gh import GhError
+    from fr.bridge import cli as bridge_cli
+    from fr.gh import GhError
 
     def boom() -> Any:
         raise GhError("nope", stderr="permission denied", returncode=1)
@@ -270,10 +273,10 @@ def test_tick_reraises_non_rate_limit_gh_error(
 def test_second_concurrent_tick_aborts_early(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A second `python -m vk.bridge` invocation while the first holds
+    """A second `python -m fr.bridge` invocation while the first holds
     the lock exits 0 with a 'tick already in progress' message and does
     not touch gh / MCP."""
-    from vk.bridge import cli as bridge_cli
+    from fr.bridge import cli as bridge_cli
 
     lock_path = tmp_path / "vk-bridge.lock"
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(lock_path))
@@ -311,7 +314,7 @@ def test_plan_deletion_between_ticks_does_not_purge_cards(
     every VK card alone."""
     import logging
 
-    from vk.bridge import cli as bridge_cli
+    from fr.bridge import cli as bridge_cli
 
     seen_file = tmp_path / "seen.json"
     seen_file.write_text('["plan-a", "plan-b"]')
@@ -338,7 +341,7 @@ def test_plan_deletion_between_ticks_does_not_purge_cards(
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
 
-    caplog.set_level(logging.WARNING, logger="vk.bridge")
+    caplog.set_level(logging.WARNING, logger="fr.bridge")
     rc = bridge_cli.main([])
     assert rc == 0
     warns = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
@@ -358,7 +361,7 @@ def test_per_plan_exception_does_not_kill_daemon(
     repo until an operator intervenes."""
     from dataclasses import dataclass
 
-    from vk.bridge import cli as bridge_cli
+    from fr.bridge import cli as bridge_cli
 
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
@@ -420,7 +423,7 @@ def test_per_plan_exception_does_not_kill_daemon(
     )
 
 
-# ── I8: `vk apply` and `vk.bridge.tick` racing for the same plan ─────
+# ── I8: `vk apply` and `fr.bridge.tick` racing for the same plan ─────
 
 
 def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
@@ -436,13 +439,14 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
     """
     from dataclasses import replace as dc_replace
 
+    from fr import parse
+    from fr.apply import apply
+    from fr.bridge import tick
+    from fr.diff import diff
+    from fr.observe import observe
+    from fr.render import render
+
     from tests.unit.fakes import FakeGhClient, FakeMcpClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.bridge import tick
-    from vk.diff import diff
-    from vk.observe import observe
-    from vk.render import render
 
     plan = parse(MINIMAL)
     repo = "derio-net/superpowers-for-vk"

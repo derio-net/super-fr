@@ -1,7 +1,7 @@
 """Concern K — prompt construction for the live bridge.
 
 The legacy bridge built its agent prompt from the GH Issue body text
-(`build_prompt:605-639`). v2 ports it to `vk.bridge.prompt`, with the
+(`build_prompt:605-639`). v2 ports it to `fr.bridge.prompt`, with the
 critical change that the dependency preamble is derived from the
 parsed phase's `depends_on` field, NOT from body-text parsing.
 
@@ -27,7 +27,7 @@ def _plan_with_phase(
     depends_on: tuple[int, ...] = (),
     target_repo: str = "derio-net/superpowers-for-vk",
 ):
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     phase = plan.phases[0].model_copy(
@@ -48,7 +48,7 @@ def _plan_with_phase(
 def test_prompt_includes_issue_url_repo_and_skill():
     """Base shape: every prompt names the GH issue, the repo, and the
     skill the agent should use."""
-    from vk.bridge.prompt import build_prompt
+    from fr.bridge.prompt import build_prompt
 
     plan, phase = _plan_with_phase()
     text = build_prompt(plan, phase)
@@ -62,7 +62,7 @@ def test_preamble_always_includes_sync_step():
     """The sync step (item 1) appears unconditionally — even when the
     phase has no deps. Added in Phase 8 of #147 to compensate for the
     bridge pod's stale shared checkout."""
-    from vk.bridge.prompt import build_prompt
+    from fr.bridge.prompt import build_prompt
 
     plan, phase = _plan_with_phase(depends_on=())
     text = build_prompt(plan, phase)
@@ -75,7 +75,7 @@ def test_preamble_always_includes_sync_step():
 
 def test_preamble_adds_deps_step_when_phase_has_deps():
     """When the phase has deps, item 2 appears AFTER item 1."""
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     blocker = plan.phases[0].model_copy(
@@ -101,7 +101,7 @@ def test_preamble_adds_deps_step_when_phase_has_deps():
     )
     plan = dc_replace(plan, phases=(blocker, dependent))
 
-    from vk.bridge.prompt import build_prompt
+    from fr.bridge.prompt import build_prompt
 
     text = build_prompt(plan, dependent)
     sync_idx = text.index("1. Fetch and rebase")
@@ -112,7 +112,7 @@ def test_preamble_adds_deps_step_when_phase_has_deps():
 def test_prompt_with_one_dep_includes_preamble_referencing_dep_issue():
     """A phase with `depends_on=[2]` gets a preamble that names dep #2's
     tracking_issue if available."""
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     # Build a two-phase plan: phase 1 (the blocker, tracking #100) and
@@ -144,7 +144,7 @@ def test_prompt_with_one_dep_includes_preamble_referencing_dep_issue():
         meta=plan.meta.model_copy(update={"target_repo": "owner/repo"}),
     )
 
-    from vk.bridge.prompt import build_prompt
+    from fr.bridge.prompt import build_prompt
 
     text = build_prompt(plan, dependent)
     assert "BEFORE YOU BEGIN" in text
@@ -159,7 +159,7 @@ def test_prompt_with_dep_whose_tracking_issue_is_unset_falls_back_to_phase_numbe
     still list the dep — using its phase number — so the agent knows to
     block. Body-text parsing for issue numbers is GONE; we derive from
     the plan."""
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     blocker = plan.phases[0].model_copy(
@@ -180,7 +180,7 @@ def test_prompt_with_dep_whose_tracking_issue_is_unset_falls_back_to_phase_numbe
     )
     plan = dc_replace(plan, phases=(blocker, dependent))
 
-    from vk.bridge.prompt import build_prompt
+    from fr.bridge.prompt import build_prompt
 
     text = build_prompt(plan, dependent)
     assert "BEFORE YOU BEGIN" in text
@@ -192,7 +192,7 @@ def test_prompt_cross_repo_shows_both_target_and_tracking():
     """When the phase's tracking_issue lives in a repo other than
     `plan.meta.target_repo`, the prompt's `Repos:` line must list both
     so the agent isn't misled about where the work lands."""
-    from vk.bridge.prompt import build_prompt
+    from fr.bridge.prompt import build_prompt
 
     plan, phase = _plan_with_phase(
         tracking_issue="https://github.com/derio-net/willikins/issues/9",
@@ -207,8 +207,7 @@ def test_prompt_with_no_tracking_issue_raises():
     """A phase with no tracking_issue can't be dispatched — building a
     prompt for it is a programmer error, not a runtime fallback."""
     import pytest
-
-    from vk.bridge.prompt import build_prompt
+    from fr.bridge.prompt import build_prompt
 
     plan, phase = _plan_with_phase(tracking_issue=None)
     with pytest.raises(ValueError):

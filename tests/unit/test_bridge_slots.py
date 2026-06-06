@@ -1,6 +1,6 @@
-"""D1 — `vk.bridge.tick` respects MAX_CONCURRENT slot budget.
+"""D1 — `fr.bridge.tick` respects MAX_CONCURRENT slot budget.
 
-The slot gate lives in `vk.bridge.tick` (not `dispatch_phase`) because
+The slot gate lives in `fr.bridge.tick` (not `dispatch_phase`) because
 the decision needs both a slot-aware counter (`count_active_ws(mcp)`)
 and a per-plan iteration scope. We stub `count_active_ws` rather than
 seeding `FakeMcpClient.workspaces` so the test pins the behavior at the
@@ -18,7 +18,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
 def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: int = 42):
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     phase = plan.phases[0].model_copy(
@@ -36,9 +36,9 @@ def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: i
 
 def test_tick_defers_when_active_workspaces_saturate_budget(monkeypatch):
     """count_active_ws=3 with MAX_CONCURRENT=2 → no MCP dispatch calls."""
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -48,7 +48,7 @@ def test_tick_defers_when_active_workspaces_saturate_budget(monkeypatch):
 
     mcp = FakeMcpClient()
 
-    from vk.bridge import slots as slots_mod
+    from fr.bridge import slots as slots_mod
 
     monkeypatch.setattr(slots_mod, "count_active_ws", lambda _mcp: 3)
     monkeypatch.setenv("MAX_CONCURRENT", "2")
@@ -65,9 +65,9 @@ def test_tick_defers_when_active_workspaces_saturate_budget(monkeypatch):
 
 def test_tick_dispatches_within_budget(monkeypatch):
     """count_active_ws=0 with MAX_CONCURRENT=2 → dispatch fires normally."""
-    from vk.bridge import tick
-    from vk.observe import observe
-    from vk.render import render
+    from fr.bridge import tick
+    from fr.observe import observe
+    from fr.render import render
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -77,7 +77,7 @@ def test_tick_dispatches_within_budget(monkeypatch):
 
     mcp = FakeMcpClient()
 
-    from vk.bridge import slots as slots_mod
+    from fr.bridge import slots as slots_mod
 
     monkeypatch.setattr(slots_mod, "count_active_ws", lambda _mcp: 0)
     monkeypatch.setenv("MAX_CONCURRENT", "2")
@@ -91,7 +91,7 @@ def test_tick_dispatches_within_budget(monkeypatch):
 
 def test_count_active_ws_counts_unarchived():
     """The helper itself must filter on the `archived` flag."""
-    from vk.bridge.slots import count_active_ws
+    from fr.bridge.slots import count_active_ws
 
     class _Stub:
         def list_workspaces(self):
@@ -106,7 +106,7 @@ def test_count_active_ws_counts_unarchived():
 
 def test_max_concurrent_env_override(monkeypatch):
     """Default is 8; env var overrides."""
-    from vk.bridge.slots import max_concurrent
+    from fr.bridge.slots import max_concurrent
 
     monkeypatch.delenv("MAX_CONCURRENT", raising=False)
     assert max_concurrent() == 8

@@ -8,10 +8,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fr.cli import app
+from fr.isolation.scaffold import KNOWN_TOOL_FEATURES
 from typer.testing import CliRunner
-
-from vk.cli import app
-from vk.isolation.scaffold import KNOWN_TOOL_FEATURES
 
 runner = CliRunner()
 

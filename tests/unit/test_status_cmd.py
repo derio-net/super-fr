@@ -11,11 +11,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fr.cli import app
+from fr.commands import status_cmd
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
-from vk.cli import app
-from vk.commands import status_cmd
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 

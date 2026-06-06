@@ -17,7 +17,7 @@ def fake_gh_factory(monkeypatch):
 
     fake = FakeGhClient()
     monkeypatch.setattr(
-        "vk.commands.apply_cmd._make_gh_client",
+        "fr.commands.apply_cmd._make_gh_client",
         lambda: fake,
     )
     return fake
@@ -25,7 +25,7 @@ def fake_gh_factory(monkeypatch):
 
 def test_vk_v2_apply_default_is_dry_run(fake_gh_factory):
     """vk apply <plan> (no flags) is a dry-run; emits a creation summary."""
-    from vk.cli import app
+    from fr.cli import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["apply", str(FIXTURE)])
@@ -56,8 +56,7 @@ def test_vk_v2_apply_yes_actually_calls_gh(fake_gh_factory, tmp_path):
     import subprocess
 
     import yaml
-
-    from vk.cli import app
+    from fr.cli import app
 
     origin = tmp_path / "origin.git"
     subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
@@ -101,8 +100,9 @@ def test_vk_v2_apply_all_walks_plans_dir(tmp_path, monkeypatch):
     """--all globs plans/ folders and applies each (dry-run)."""
     import shutil
 
+    from fr.cli import app
+
     from tests.unit.fakes import FakeGhClient
-    from vk.cli import app
 
     # Build a tmp repo-shaped tree with two plan folders
     plans = tmp_path / "docs" / "superpowers" / "plans"
@@ -112,7 +112,7 @@ def test_vk_v2_apply_all_walks_plans_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     fake = FakeGhClient()
-    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: fake)
+    monkeypatch.setattr("fr.commands.apply_cmd._make_gh_client", lambda: fake)
 
     runner = CliRunner()
     result = runner.invoke(app, ["apply", "--all"])
@@ -123,10 +123,11 @@ def test_vk_v2_apply_all_walks_plans_dir(tmp_path, monkeypatch):
 
 def test_vk_v2_apply_rejects_both_arg_and_all(monkeypatch):
     """plan_dir + --all is a usage error."""
-    from tests.unit.fakes import FakeGhClient
-    from vk.cli import app
+    from fr.cli import app
 
-    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
+    from tests.unit.fakes import FakeGhClient
+
+    monkeypatch.setattr("fr.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
     runner = CliRunner()
     result = runner.invoke(app, ["apply", str(FIXTURE), "--all"])
     assert result.exit_code == 2
@@ -134,10 +135,11 @@ def test_vk_v2_apply_rejects_both_arg_and_all(monkeypatch):
 
 def test_vk_v2_apply_missing_args_exits_2(monkeypatch):
     """No plan_dir and no --all is a usage error."""
-    from tests.unit.fakes import FakeGhClient
-    from vk.cli import app
+    from fr.cli import app
 
-    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
+    from tests.unit.fakes import FakeGhClient
+
+    monkeypatch.setattr("fr.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
     runner = CliRunner()
     result = runner.invoke(app, ["apply"])
     assert result.exit_code == 2
@@ -147,7 +149,7 @@ def test_vk_v2_apply_json_format(fake_gh_factory):
     """vk apply <plan> --format json emits parseable JSON."""
     import json
 
-    from vk.cli import app
+    from fr.cli import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["apply", str(FIXTURE), "--format", "json"])
@@ -163,10 +165,11 @@ def test_vk_v2_apply_json_format(fake_gh_factory):
 
 def test_vk_v2_apply_invalid_format(monkeypatch):
     """--format must be text or json."""
-    from tests.unit.fakes import FakeGhClient
-    from vk.cli import app
+    from fr.cli import app
 
-    monkeypatch.setattr("vk.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
+    from tests.unit.fakes import FakeGhClient
+
+    monkeypatch.setattr("fr.commands.apply_cmd._make_gh_client", lambda: FakeGhClient())
     runner = CliRunner()
     result = runner.invoke(app, ["apply", str(FIXTURE), "--format", "xml"])
     assert result.exit_code == 2

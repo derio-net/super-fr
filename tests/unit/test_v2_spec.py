@@ -34,7 +34,7 @@ def _make_repo_with_spec(tmp_path: Path) -> Path:
 
 
 def test_parse_spec_extracts_4col_table(tmp_path):
-    from vk.spec import parse_spec
+    from fr.spec import parse_spec
 
     repo = _make_repo_with_spec(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
@@ -47,7 +47,7 @@ def test_parse_spec_extracts_4col_table(tmp_path):
 
 
 def test_compute_status_aggregates_local_plan(tmp_path):
-    from vk.spec import compute_status, parse_spec
+    from fr.spec import compute_status, parse_spec
 
     repo = _make_repo_with_spec(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
@@ -65,8 +65,7 @@ def test_compute_status_aggregates_local_plan(tmp_path):
 def test_compute_status_complete_when_all_phases_complete(tmp_path):
     """All steps ticked + completion.at set on every phase → state == Complete."""
     import yaml
-
-    from vk.spec import compute_status, parse_spec
+    from fr.spec import compute_status, parse_spec
 
     repo = _make_repo_with_spec(tmp_path)
     plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-05-10-fixture-spec-test"
@@ -84,7 +83,7 @@ def test_compute_status_complete_when_all_phases_complete(tmp_path):
 
 
 def test_render_status_md_contains_table_and_aggregate(tmp_path):
-    from vk.spec import compute_status, parse_spec, render_status_md
+    from fr.spec import compute_status, parse_spec, render_status_md
 
     repo = _make_repo_with_spec(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
@@ -98,7 +97,7 @@ def test_render_status_md_contains_table_and_aggregate(tmp_path):
 
 
 def test_vk_v2_spec_status_cli_prints_markdown(tmp_path, monkeypatch):
-    from vk.cli import app
+    from fr.cli import app
 
     repo = _make_repo_with_spec(tmp_path)
     monkeypatch.chdir(repo)
@@ -111,7 +110,7 @@ def test_vk_v2_spec_status_cli_prints_markdown(tmp_path, monkeypatch):
 
 
 def test_vk_v2_spec_status_all_walks_specs_dir(tmp_path, monkeypatch):
-    from vk.cli import app
+    from fr.cli import app
 
     repo = _make_repo_with_spec(tmp_path)
     monkeypatch.chdir(repo)
@@ -126,7 +125,7 @@ def test_resolve_local_plan_dir_falls_back_to_implemented_then_archived(tmp_path
     """Spec tables are never rewritten on archive: a row recorded as
     docs/superpowers/plans/X must resolve to implemented/plans/X (canonical)
     or archived-plans/X (legacy) when the plans/ path is gone."""
-    from vk.spec import PlanRef, _resolve_local_plan_dir
+    from fr.spec import PlanRef, _resolve_local_plan_dir
 
     ref = PlanRef(
         name="x", repo="derio-net/test", file="docs/superpowers/plans/2026-05-10-x", depends_on="—"
@@ -147,7 +146,7 @@ def test_resolve_local_plan_dir_no_double_prefix_for_implemented_cell(tmp_path):
     """A cell already recorded as implemented/plans/X whose dir is missing
     must fall back to archived-plans/X — not implemented/implemented/…
     (review finding, 2026-06-06)."""
-    from vk.spec import PlanRef, _resolve_local_plan_dir
+    from fr.spec import PlanRef, _resolve_local_plan_dir
 
     ref = PlanRef(
         name="x",
@@ -164,7 +163,7 @@ def test_resolve_local_plan_dir_legacy_form_cell_resolves(tmp_path):
     """THE 2026-06-06 bug: a cell recorded as archived-plans/X (pre-2.5.0
     convention) must resolve after `migrate dirs` moved the dir to
     implemented/plans/X. The old 'plans in parts' gate returned None."""
-    from vk.spec import PlanRef, _resolve_local_plan_dir
+    from fr.spec import PlanRef, _resolve_local_plan_dir
 
     ref = PlanRef(
         name="x",
@@ -180,7 +179,7 @@ def test_resolve_local_plan_dir_legacy_form_cell_resolves(tmp_path):
 def test_resolve_local_plan_dir_annotated_cell_resolves(tmp_path):
     """Cells with annotation tails (`docs/…/X/` (shipped via PR #146)) keep
     their backticks after _strip_cell — resolution must extract the token."""
-    from vk.spec import PlanRef, _resolve_local_plan_dir
+    from fr.spec import PlanRef, _resolve_local_plan_dir
 
     ref = PlanRef(
         name="x",
@@ -195,7 +194,7 @@ def test_resolve_local_plan_dir_annotated_cell_resolves(tmp_path):
 
 def test_resolve_local_plan_dir_bare_slug_cell_resolves(tmp_path):
     """The new canonical form: a bare-slug cell resolves across roots."""
-    from vk.spec import PlanRef, _resolve_local_plan_dir
+    from fr.spec import PlanRef, _resolve_local_plan_dir
 
     ref = PlanRef(name="x", repo="derio-net/test", file="2026-05-10-x", depends_on="—")
     active = tmp_path / "docs" / "superpowers" / "plans" / "2026-05-10-x"

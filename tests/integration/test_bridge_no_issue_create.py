@@ -115,8 +115,8 @@ def test_tick_emits_zero_issue_creates_when_partial_dispatch(tmp_path: Path, cap
            "would have created Issue; skipping (operator-only via
            `vk apply --yes`)"
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(
@@ -146,7 +146,7 @@ def test_tick_emits_zero_issue_creates_when_partial_dispatch(tmp_path: Path, cap
     )
     mcp = FakeMcpClient()
 
-    with caplog.at_level(logging.WARNING, logger="vk.apply"):
+    with caplog.at_level(logging.WARNING, logger="fr.apply"):
         tick(plan, gh, mcp)
 
     assert _count_issue_creates(gh) == 0, (
@@ -168,11 +168,11 @@ def test_operator_apply_default_still_creates_issues(tmp_path: Path) -> None:
     THEN   the gh client receives 3 IssueCreate calls (Phases 2..4)
     AND    the returned ApplyResult.created_issues maps each phase to a URL
     """
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.observe import observe
-    from vk.render import render
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.observe import observe
+    from fr.render import render
 
     plan_dir = tmp_path / "plan"
     _write_plan(
@@ -225,8 +225,8 @@ def test_tick_mixed_state_syncs_labels_and_state_but_skips_create(
     AND    Phase 3 produces ZERO IssueCreate
     AND    Phase 3 logs the WARNING about pending dispatch
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(
@@ -274,7 +274,7 @@ def test_tick_mixed_state_syncs_labels_and_state_but_skips_create(
     )
     mcp = FakeMcpClient()
 
-    with caplog.at_level(logging.WARNING, logger="vk.apply"):
+    with caplog.at_level(logging.WARNING, logger="fr.apply"):
         tick(plan, gh, mcp)
 
     # Headline assertion
@@ -297,8 +297,8 @@ def test_tick_fully_dispatched_plan_no_creates_no_warnings(tmp_path: Path, caplo
     THEN   ZERO IssueCreate calls (no nulls to create)
     AND    ZERO warnings (nothing to skip)
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(
@@ -331,7 +331,7 @@ def test_tick_fully_dispatched_plan_no_creates_no_warnings(tmp_path: Path, caplo
         )
     mcp = FakeMcpClient()
 
-    with caplog.at_level(logging.WARNING, logger="vk.apply"):
+    with caplog.at_level(logging.WARNING, logger="fr.apply"):
         tick(plan, gh, mcp)
 
     assert _count_issue_creates(gh) == 0
@@ -354,8 +354,8 @@ def test_tick_stoa_company_shape_emits_no_creates_and_one_warning_per_phase(
     Regression guard for the 2026-05-18 incident which created 19 spurious
     Issues per wave, 38 in total (sfv#196-#214 wave 1, sfv#216-#234 wave 2).
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     plan_dir = tmp_path / "plan"
     phases = [
@@ -389,7 +389,7 @@ def test_tick_stoa_company_shape_emits_no_creates_and_one_warning_per_phase(
     )
     mcp = FakeMcpClient()
 
-    with caplog.at_level(logging.WARNING, logger="vk.apply"):
+    with caplog.at_level(logging.WARNING, logger="fr.apply"):
         tick(plan, gh, mcp)
 
     assert _count_issue_creates(gh) == 0, (

@@ -5,8 +5,7 @@ from __future__ import annotations
 import re
 
 import pytest
-
-from vk import labels
+from fr import labels
 
 HEX_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 
@@ -176,7 +175,7 @@ class TestBoundedLabelNames:
     def test_bounded_name_stays_within_50_for_any_prefix(self) -> None:
         # Even a pathological (over-long) prefix must not slice the value from
         # the end or overflow — the result is unconditionally clamped to 50.
-        from vk.labels import _bounded_label_name
+        from fr.labels import _bounded_label_name
 
         out = _bounded_label_name("x" * 45 + ":", "some-long-value-here")
         assert len(out) <= 50

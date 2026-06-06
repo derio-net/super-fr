@@ -5,10 +5,10 @@ CROSS_REPO = Path(__file__).parent / "fixtures" / "v2_plan_cross_repo"
 
 
 def test_diff_undispatched_yields_create():
-    from vk import parse
-    from vk.diff import IssueCreate, RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     observed = GhState(phases={})
@@ -30,10 +30,10 @@ def test_diff_emits_issuebodychange_when_body_drifts():
     """Observed body differs from rendered → IssueBodyChange emitted."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueBodyChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueBodyChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -72,10 +72,10 @@ def test_diff_passes_phase_to_issue_map_to_render():
     from dataclasses import replace as dc_replace
     from pathlib import Path
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -118,10 +118,10 @@ def test_diff_creates_issues_for_every_phase_including_manual():
     Manual phases carry the gray `manual` label (never `vk-ready`), so they
     surface on GitHub for the operator without ever being routed to an agent.
     Pinned so a future 'skip manual phases' regression can't slip in silently."""
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -147,10 +147,10 @@ def test_diff_swaps_stale_dated_labels_for_normalized_ones():
     prefixes, so the swap is safe and automatic at the next apply/tick."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueLabelChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     plan = dc_replace(
@@ -210,9 +210,9 @@ def test_repo_label_ensure_carries_registry_colors():
     ensure_labels and the GhClient fallback wrapped them as default-grey
     LabelDefs.
     """
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.labels import (
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.labels import (
         IN_PROGRESS,
         MANUAL,
         PHASE_LABEL_COLOR,
@@ -222,8 +222,8 @@ def test_repo_label_ensure_carries_registry_colors():
         VK_READY,
         LabelDef,
     )
-    from vk.render import render
-    from vk.states import GhState
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -263,10 +263,10 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
     """Already-dispatched, labels match → only RepoLabelEnsure (always emitted)."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, IssueLabelChange, IssueStateChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueCreate, IssueLabelChange, IssueStateChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -339,10 +339,10 @@ def test_diff_emits_ensure_per_destination_repo():
     AND   one targets 'derio-net/repo-a' (for undispatched phases)
     AND   one targets 'derio-net/repo-b' (for phase 2's tracking issue)
     """
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(CROSS_REPO)
     observed = GhState(phases={})
@@ -365,10 +365,10 @@ def test_diff_routes_per_issue_mutations_to_tracking_repo():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueBodyChange, IssueLabelChange, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueBodyChange, IssueLabelChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(CROSS_REPO)
 
@@ -422,10 +422,10 @@ def test_diff_single_repo_plan_emits_one_ensure():
     THEN  exactly one RepoLabelEnsure mutation is emitted
     AND   its repo == plan.meta.target_repo
     """
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     observed = GhState(phases={})
@@ -447,10 +447,10 @@ def test_diff_fully_cross_repo_plan_skips_target_repo_ensure():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import RepoLabelEnsure, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation, PrObservation
+    from fr import parse
+    from fr.diff import RepoLabelEnsure, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation, PrObservation
 
     plan = parse(CROSS_REPO)
 
@@ -527,10 +527,10 @@ def test_diff_suppresses_create_for_locally_complete_undispatched_phase():
     """
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_tick_all_steps(plan.phases[0]),))
@@ -547,10 +547,10 @@ def test_diff_suppresses_create_for_locally_complete_undispatched_phase():
 def test_diff_force_create_overrides_suppression():
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_tick_all_steps(plan.phases[0]),))
@@ -569,10 +569,10 @@ def test_diff_mixed_plan_dispatches_incomplete_suppresses_complete():
     from dataclasses import replace as dc_replace
     from pathlib import Path
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
 
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
     plan = parse(multi)
@@ -593,10 +593,10 @@ def test_diff_dispatched_phases_unaffected_by_guard():
     phase produces its normal mutations and no suppression."""
     from dataclasses import replace as dc_replace
 
-    from vk import parse
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
+    from fr import parse
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"

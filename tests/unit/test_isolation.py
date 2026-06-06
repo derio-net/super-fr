@@ -10,9 +10,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from vk.isolation.local import LocalWorktreeDevcontainerTarget
-from vk.isolation.types import (
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.types import (
     IsolationError,
     IsolationState,
     load_state,

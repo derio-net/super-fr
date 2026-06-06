@@ -11,9 +11,8 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from vk import gh as _gh
-from vk.real_ghclient import RealGhClient, _coerce_ci_state
+from fr import gh as _gh
+from fr.real_ghclient import RealGhClient, _coerce_ci_state
 
 
 def _fake_run_gh_factory(returns: dict[tuple[str, ...], str]):

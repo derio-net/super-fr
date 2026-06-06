@@ -7,7 +7,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 def _dispatched_plan_with_extra_label():
     """Helper: parse FIXTURE, attach tracking_issue, return (plan, repo, issue_number)."""
-    from vk import parse
+    from fr import parse
 
     plan = parse(FIXTURE)
     repo = "derio-net/superpowers-for-vk"
@@ -24,12 +24,13 @@ def _dispatched_plan_with_extra_label():
 
 def test_apply_dry_run_calls_no_mutation_methods():
     """dry_run=True returns mutations without touching gh."""
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.render import render
+    from fr.states import GhState
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.render import render
-    from vk.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -45,12 +46,13 @@ def test_apply_dry_run_calls_no_mutation_methods():
 
 
 def test_apply_creates_issue_and_returns_url():
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.render import render
+    from fr.states import GhState
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.render import render
-    from vk.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -72,19 +74,20 @@ def test_apply_ensures_labels_with_registry_colors():
     catches a future regression where apply() or its sort/projection
     strips the colors off before handing them to the GhClient.
     """
-    from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.labels import (
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.labels import (
         PHASE_LABEL_COLOR,
         PLAN_LABEL_COLOR,
         SPEC_LABEL_COLOR,
         VK_READY,
         LabelDef,
     )
-    from vk.render import render
-    from vk.states import GhState
+    from fr.render import render
+    from fr.states import GhState
+
+    from tests.unit.fakes import FakeGhClient
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -115,11 +118,12 @@ def test_apply_ensures_labels_with_registry_colors():
 
 def test_apply_managed_labels_only_does_not_touch_operator_labels():
     """Pre-existing operator label like 'good-first-issue' must survive apply."""
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
+
     from tests.unit.fakes import FakeGhClient
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
 
     plan, repo, issue_n = _dispatched_plan_with_extra_label()
 
@@ -157,12 +161,13 @@ def test_apply_managed_labels_only_does_not_touch_operator_labels():
 
 def test_apply_idempotent_after_url_fillin_cycle():
     """Three cycles: create → fill-in URL body → no-op."""
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import IssueBodyChange, RepoLabelEnsure, diff
+    from fr.observe import observe
+    from fr.render import render
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import IssueBodyChange, RepoLabelEnsure, diff
-    from vk.observe import observe
-    from vk.render import render
 
     plan = parse(FIXTURE)
     gh = FakeGhClient()
@@ -204,10 +209,10 @@ def test_apply_idempotent_after_url_fillin_cycle():
 def test_apply_propagates_unhandled_mutation_type():
     """Programmer-error sentinel must NOT be swallowed as a failure."""
     import pytest
+    from fr.apply import _UnhandledMutationError, apply
+    from fr.diff import Diff
 
     from tests.unit.fakes import FakeGhClient
-    from vk.apply import _UnhandledMutationError, apply
-    from vk.diff import Diff
 
     class NovelMutation:
         """A mutation type apply() doesn't know about."""
@@ -251,12 +256,13 @@ def test_apply_in_flight_dep_body_uses_predecessor_issue_number():
     """
     from pathlib import Path
 
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import IssueCreate, diff
+    from fr.render import render
+    from fr.states import GhState
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import IssueCreate, diff
-    from vk.render import render
-    from vk.states import GhState
 
     # Use the multi-phase fixture: Phase 2 depends on Phase 1.
     multi = Path(__file__).parent / "fixtures" / "v2_plan_multi_phase"
@@ -345,9 +351,9 @@ def _writeback_repo(tmp_path: Path, fixture_name: str = "v2_plan_minimal") -> Pa
 
 def test_apply_command_writes_tracking_issue_back(tmp_path):
     import yaml
+    from fr.commands import apply_cmd
 
     from tests.unit.fakes import FakeGhClient
-    from vk.commands import apply_cmd
 
     plan_dir = _writeback_repo(tmp_path)
     fake = FakeGhClient()
@@ -367,9 +373,10 @@ def test_apply_command_second_run_emits_no_issue_create(tmp_path, capsys):
     """Second `apply_command --yes` must NOT emit another IssueCreate."""
     import json
 
+    from fr.commands import apply_cmd
+    from fr.diff import IssueCreate
+
     from tests.unit.fakes import FakeGhClient
-    from vk.commands import apply_cmd
-    from vk.diff import IssueCreate
 
     plan_dir = _writeback_repo(tmp_path)
     fake = FakeGhClient()
@@ -393,9 +400,9 @@ def test_apply_command_second_run_emits_no_issue_create(tmp_path, capsys):
 
 def test_apply_command_dry_run_does_not_write_back(tmp_path):
     import yaml
+    from fr.commands import apply_cmd
 
     from tests.unit.fakes import FakeGhClient
-    from vk.commands import apply_cmd
 
     plan_dir = _writeback_repo(tmp_path)
     fake = FakeGhClient()
@@ -413,9 +420,9 @@ def test_apply_command_dry_run_does_not_write_back(tmp_path):
 def test_apply_command_partial_failure_isolates_writeback(tmp_path):
     """Phase 1 IssueCreate succeeds, Phase 2's fails — Phase 1 writeback lands."""
     import yaml
+    from fr.commands import apply_cmd
 
     from tests.unit.fakes import FakeGhClient, FakeGhError
-    from vk.commands import apply_cmd
 
     plan_dir = _writeback_repo(tmp_path, fixture_name="v2_plan_multi_phase")
     fake = FakeGhClient()
@@ -453,10 +460,10 @@ def test_apply_command_writeback_failure_surfaced_in_json_and_text(tmp_path, cap
 
     import pytest as _pytest
     import typer
+    from fr import plan_ops
+    from fr.commands import apply_cmd
 
     from tests.unit.fakes import FakeGhClient
-    from vk import plan_ops
-    from vk.commands import apply_cmd
 
     plan_dir = _writeback_repo(tmp_path)
     fake = FakeGhClient()
@@ -506,10 +513,10 @@ def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
     import pytest as _pytest
     import typer
     import yaml
+    from fr import plan_ops
+    from fr.commands import apply_cmd
 
     from tests.unit.fakes import FakeGhClient
-    from vk import plan_ops
-    from vk.commands import apply_cmd
 
     # Build a repo with TWO plans + a bare origin so origin/HEAD resolves.
     origin = tmp_path / "origin.git"
@@ -574,12 +581,13 @@ def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
 
 def test_apply_accumulates_failures_continues_past_one_bad_mutation():
     """Mutation N fails — mutation N+1 still runs; failure is recorded."""
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.render import render
+    from fr.states import GhState
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.render import render
-    from vk.states import GhState
 
     plan = parse(FIXTURE)
     rendered = render(plan, GhState(phases={}))
@@ -634,8 +642,8 @@ def test_gate_passes_when_plan_and_spec_on_origin_head(tmp_path):
     """All files committed and pushed → empty missing-paths list."""
     import shutil
 
-    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
-    from vk.parser import parse
+    from fr.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from fr.parser import parse
 
     work, _ = _make_repo_with_origin(tmp_path)
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -663,8 +671,8 @@ def test_gate_reports_missing_plan_files(tmp_path):
     """Plan files committed locally but NOT pushed → returned in missing list."""
     import shutil
 
-    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
-    from vk.parser import parse
+    from fr.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from fr.parser import parse
 
     work, _ = _make_repo_with_origin(tmp_path)
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -690,8 +698,8 @@ def test_gate_reports_missing_spec(tmp_path):
     """Plan committed and pushed, but spec NOT pushed → spec in missing list."""
     import shutil
 
-    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
-    from vk.parser import parse
+    from fr.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from fr.parser import parse
 
     work, _ = _make_repo_with_origin(tmp_path)
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -723,9 +731,8 @@ def test_gate_skips_spec_check_when_meta_spec_is_none(tmp_path):
     import shutil
 
     import yaml
-
-    from vk.commands.apply_cmd import _check_plan_reachable_on_origin_head
-    from vk.parser import parse
+    from fr.commands.apply_cmd import _check_plan_reachable_on_origin_head
+    from fr.parser import parse
 
     work, _ = _make_repo_with_origin(tmp_path)
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -759,7 +766,7 @@ def test_apply_one_rejects_when_gate_returns_missing(tmp_path, monkeypatch):
     """vk apply --yes refuses dispatch when the gate reports missing files."""
     import shutil
 
-    from vk.commands import apply_cmd
+    from fr.commands import apply_cmd
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -794,7 +801,7 @@ def test_apply_one_refuses_when_plan_not_in_git_checkout(tmp_path, monkeypatch):
     """No `.git/` anywhere above the plan dir → refuse early with a clear message."""
     import shutil
 
-    from vk.commands import apply_cmd
+    from fr.commands import apply_cmd
 
     # NO `git init` — tmp_path is not a git checkout.
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -825,7 +832,7 @@ def test_apply_one_passes_through_when_gate_returns_empty(tmp_path, monkeypatch)
     """Gate passes → normal apply flow runs."""
     import shutil
 
-    from vk.commands import apply_cmd
+    from fr.commands import apply_cmd
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -854,7 +861,7 @@ def test_apply_one_dry_run_skips_gate(tmp_path, monkeypatch):
     """vk apply <plan-dir> (no --yes) doesn't invoke the gate — preview unaffected."""
     import shutil
 
-    from vk.commands import apply_cmd
+    from fr.commands import apply_cmd
 
     src_fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     plan_dir = tmp_path / "v2_plan_minimal"
@@ -896,12 +903,13 @@ def test_apply_executes_cross_repo_mutations_through_correct_repo():
     """
     from dataclasses import replace as dc_replace
 
+    from fr import parse
+    from fr.apply import apply
+    from fr.diff import diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.apply import apply
-    from vk.diff import diff
-    from vk.render import render
-    from vk.states import GhState, PhaseObservation
 
     plan = parse(CROSS_REPO_FIXTURE)
 

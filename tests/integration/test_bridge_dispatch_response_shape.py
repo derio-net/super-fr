@@ -8,7 +8,7 @@ VK's MCP tools return DIFFERENT envelope keys per tool (see
 - `start_workspace` → `{"workspace_id": "<uuid>"}`
 - `link_workspace_issue` → `{"success": True, "workspace_id": ..., "issue_id": ...}`
 
-Before this fix `vk.bridge.dispatch._expect_id` only looked for `"id"`
+Before this fix `fr.bridge.dispatch._expect_id` only looked for `"id"`
 (the legacy v1 bridge's convention), so `create_issue` and
 `start_workspace` raised `VkMcpError` even though the calls succeeded
 server-side. The bridge tick caught the exception AFTER VK had already
@@ -215,8 +215,8 @@ def test_tick_dispatches_end_to_end_against_real_vk_envelopes(tmp_path: Path) ->
     subsequent `update_issue` + `start_workspace` calls never ran,
     stranding the card in the default "To do" status with no workspace.
     """
-    from vk import parse
-    from vk.bridge import tick
+    from fr import parse
+    from fr.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir)

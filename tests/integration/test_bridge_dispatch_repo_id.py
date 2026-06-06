@@ -177,9 +177,10 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
     never tested against real `vibe-kanban-mcp`; both the unknown-repo gate
     AND the start_workspace payload had the wrong shape.
     """
+    from fr import parse
+    from fr.bridge import tick
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.bridge import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir, target_repo=TARGET_REPO, issue_number=42)
@@ -230,9 +231,10 @@ def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None
     THEN  the gate refuses with a clean reason (no workspace dispatched)
     AND   no start_workspace call is made
     """
+    from fr import parse
+    from fr.bridge import tick
+
     from tests.unit.fakes import FakeGhClient
-    from vk import parse
-    from vk.bridge import tick
 
     other_repo = "derio-net/never-registered-repo"
     plan_dir = tmp_path / "plan"
