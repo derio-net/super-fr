@@ -886,3 +886,33 @@ def test_rework_create_writes_canonical_refs(tmp_path):
     table = spec.read_text()
     assert "2026-06-06-canon-rework-1" in table
     assert "docs/superpowers/plans/2026-06-06-canon-rework-1" not in table
+
+
+def test_self_review_resolves_slug_form_spec(tmp_path):
+    """#248 warn must not fire for a canonical slug-form spec ref that
+    resolves via the lifecycle roots (2026-06-06 dogfood find)."""
+    import shutil
+
+    from vk.parser import parse
+    from vk.plan_ops import self_review
+
+    repo = _make_repo(tmp_path)
+    spec = _make_spec(repo)
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-06-06-slugspec"
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    shutil.copytree(fixture, plan_dir)
+    meta = (plan_dir / "_meta.yaml").read_text()
+    meta = meta.replace(
+        "spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md",
+        f"spec: {spec.name}",
+    )
+    (plan_dir / "_meta.yaml").write_text(meta)
+
+    issues = self_review(parse(plan_dir))
+    assert not any("does not resolve under the repo root" in i.message for i in issues), issues
+
+    # ...and it still fires when the slug-form ref resolves nowhere.
+    meta = meta.replace(f"spec: {spec.name}", "spec: 2026-06-06-gone-design.md")
+    (plan_dir / "_meta.yaml").write_text(meta)
+    issues = self_review(parse(plan_dir))
+    assert any("does not resolve under the repo root" in i.message for i in issues)

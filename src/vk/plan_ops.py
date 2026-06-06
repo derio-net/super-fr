@@ -718,7 +718,12 @@ def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[Rewo
             for it in plan.meta.origin_items:
                 by_track[it.track] = by_track.get(it.track, 0) + 1
 
-            spec_path = (repo_root / plan.meta.spec).resolve() if plan.meta.spec else None
+            spec_path = None
+            if plan.meta.spec:
+                if plan.spec_path is not None:
+                    spec_path = (repo_root / plan.spec_path).resolve()
+                else:
+                    spec_path = (repo_root / plan.meta.spec).resolve()
             records.append(
                 ReworkRecord(
                     parent_slug=parent_slug,
@@ -874,6 +879,9 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
         and plan.repo_root is not None
         and not is_cross_repo_spec(spec)
         and ("/" in spec or spec.endswith(".md"))
+        # parse-time lifecycle resolution (2026-06-06 spec-path-repair):
+        # slug-form and archived specs resolve via plan.spec_path.
+        and plan.spec_path is None
         and not (plan.repo_root / spec).exists()
     ):
         issues.append(

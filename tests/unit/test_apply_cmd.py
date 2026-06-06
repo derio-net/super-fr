@@ -259,3 +259,31 @@ def test_apply_refuses_implemented_plan(tmp_path, monkeypatch):
     )
     assert result.exit_code == 2, result.output
     assert "implemented" in result.output.lower() or "archived" in result.output.lower()
+
+
+def test_check_plan_reachable_uses_resolved_spec_path(monkeypatch):
+    """Slug-form (canonical) spec refs must be reachability-checked at
+    their RESOLVED repo path, not the raw slug — otherwise every
+    repaired plan would be refused dispatch (2026-06-06 dogfood find)."""
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    plan = parse(fixture)
+
+    plan_slug_spec = plan.__class__(
+        dir=plan.dir,
+        meta=plan.meta.model_copy(update={"spec": "x-design.md"}),
+        phases=plan.phases,
+        repo_root=plan.repo_root,
+        spec_path="docs/superpowers/implemented/specs/x-design.md",  # parse-time resolution
+    )
+
+    checked_paths: list[str] = []
+
+    def fake_file_on_ref(ref, path, cwd=None):
+        checked_paths.append(path)
+        return True
+
+    monkeypatch.setattr(apply_cmd, "file_on_ref", fake_file_on_ref)
+    apply_cmd._check_plan_reachable_on_origin_head(plan_slug_spec, plan.repo_root or plan.dir)
+
+    assert "docs/superpowers/implemented/specs/x-design.md" in checked_paths
+    assert "x-design.md" not in checked_paths

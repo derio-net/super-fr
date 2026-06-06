@@ -86,7 +86,10 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
         # path. Skip the check for cross-repo specs; the operator is
         # trusted to keep the upstream spec correct.
         if not is_cross_repo_spec(plan.meta.spec):
-            spec_rel = Path(plan.meta.spec)
+            # plan.spec_path is the parse-time lifecycle resolution
+            # (2026-06-06 spec-path-repair): canonical slug-form refs and
+            # archived specs check their REAL repo path on origin/HEAD.
+            spec_rel = Path(plan.spec_path or plan.meta.spec)
             if not file_on_ref("origin/HEAD", str(spec_rel), cwd=repo_root):
                 missing.append(spec_rel)
     return missing
