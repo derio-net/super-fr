@@ -1,0 +1,55 @@
+"""Package boundary enforcement (super-fr split, B2 style).
+
+Dependency direction is the architecture: `fr` imports neither sibling;
+`fr_dispatch` never imports `fr_vk` (adapters plug in via the Runner
+protocol / entry points). A violation here is a design regression, not
+a style nit — the whole point of the split is that the base ships
+without the dispatch stack and the framework ships without VibeKanban.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+PACKAGES = Path(__file__).resolve().parents[2] / "packages"
+
+_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+([a-zA-Z_][a-zA-Z0-9_]*)", re.M)
+
+
+def _imports_of(package_dir: Path) -> dict[Path, set[str]]:
+    out: dict[Path, set[str]] = {}
+    for py in (package_dir).rglob("*.py"):
+        roots = set(_IMPORT_RE.findall(py.read_text()))
+        out[py] = roots
+    return out
+
+
+def test_fr_imports_no_siblings() -> None:
+    offenders = {
+        str(f): roots & {"fr_dispatch", "fr_vk"}
+        for f, roots in _imports_of(PACKAGES / "fr" / "src" / "fr").items()
+        if roots & {"fr_dispatch", "fr_vk"}
+    }
+    assert not offenders, f"fr must not import siblings: {offenders}"
+
+
+def test_fr_dispatch_never_imports_fr_vk() -> None:
+    offenders = {
+        str(f): roots & {"fr_vk"}
+        for f, roots in _imports_of(PACKAGES / "fr-dispatch" / "src" / "fr_dispatch").items()
+        if "fr_vk" in roots
+    }
+    assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
+
+
+def test_fr_vk_strings_stay_in_the_adapter() -> None:
+    """The framework carries no VK vocabulary: no MCP client types, no
+    VibeKanban wire shapes, no willikins metric names."""
+    banned = re.compile(r"VkMcpClient|vibe-kanban|willikins|project_id", re.I)
+    offenders = []
+    for py in (PACKAGES / "fr-dispatch" / "src" / "fr_dispatch").rglob("*.py"):
+        for n, line in enumerate(py.read_text().splitlines(), 1):
+            if banned.search(line):
+                offenders.append(f"{py.name}:{n}: {line.strip()}")
+    assert not offenders, "VK vocabulary leaked into fr_dispatch:\n" + "\n".join(offenders)

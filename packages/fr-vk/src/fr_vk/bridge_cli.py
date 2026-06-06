@@ -1,8 +1,8 @@
-"""fr.bridge cron entry point — `python -m fr.bridge`.
+"""fr_dispatch cron entry point — `python -m fr_vk.bridge`.
 
 One tick: pull every managed repo to head-of-main, walk
 `discover_plans` per repo, dispatch eligible phases via
-`fr.bridge.tick`, run the PR-state sweep + workspace reaper, push the
+`fr_dispatch.tick`, run the PR-state sweep + workspace reaper, push the
 heartbeat. The whole thing is wrapped by a single `flock`-based lock
 file so two cron firings can never overlap (I4), and each plan's
 iteration is wrapped in a try/except boundary so one bad plan can't
@@ -28,18 +28,34 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import IO, Any, cast
 
-from fr._mcp_client import VkMcpClient
-from fr.bridge import discover_plans
-from fr.bridge import metrics as _metrics
-from fr.bridge import tick as _tick
-from fr.bridge.pr_state import tick as _pr_state_tick
-from fr.bridge.workspaces import reap_orphans
 from fr.gh import GhError, _classify_error
 from fr.real_ghclient import RealGhClient
+from fr_dispatch import discover_plans
+from fr_dispatch import tick as _tick
+from fr_dispatch.metrics import MetricsPusher
+
+from fr_vk._mcp_client import VkMcpClient
+from fr_vk.pr_state import tick as _pr_state_tick
+from fr_vk.runner import (
+    HEARTBEAT_METRIC,
+    METRICS_JOB,
+    METRICS_NAMESPACE,
+    METRICS_REASON_ALIASES,
+    VkRunner,
+)
+from fr_vk.workspaces import reap_orphans
 
 __all__ = ["main"]
 
-logger = logging.getLogger("fr.bridge")
+logger = logging.getLogger("vk-issue-bridge")
+
+# Legacy VK metric names — wire format preserved across the split.
+_metrics = MetricsPusher(
+    namespace=METRICS_NAMESPACE,
+    job=METRICS_JOB,
+    heartbeat_metric=HEARTBEAT_METRIC,
+    reason_aliases=METRICS_REASON_ALIASES,
+)
 
 _DEFAULT_LOCK_PATH = "/var/run/vk-bridge.lock"
 _SEEN_PLANS_PATH = Path.home() / ".willikins-agent" / "_seen_plans.json"
@@ -190,7 +206,7 @@ def _acquire_lock(path: str) -> IO[str]:
 
 def main(argv: list[str] | None = None) -> int:
     """One bridge tick — see module docstring."""
-    parser = argparse.ArgumentParser(prog="fr.bridge")
+    parser = argparse.ArgumentParser(prog="fr_dispatch")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -205,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     _emit_banner()
 
     if args.dry_run:
-        logger.info("fr.bridge: dry-run complete")
+        logger.info("fr_dispatch: dry-run complete")
         return 0
 
     lock_path = os.environ.get("VK_BRIDGE_LOCK_PATH", _DEFAULT_LOCK_PATH)
@@ -241,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
                     "refused for any plan with vk-ready phases (label sync "
                     "still runs)"
                 )
+            runner = VkRunner(mcp, project_id=project_id)
 
             configured = _configured_repos()
             logger.info(
@@ -285,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
                         plan_slug = plan.dir.name
                         seen_plans_after.add(plan_slug)
                         try:
-                            result = _tick(plan, gh, mcp, project_id=project_id)
+                            result = _tick(plan, gh, runner, metrics=_metrics)
                             total_plans_ticked += 1
                             total_synced += result.synced
                             total_errors += result.errors
@@ -346,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
                 mcp.close()
             except Exception:  # noqa: BLE001
                 pass
-        logger.info("fr.bridge: tick complete")
+        logger.info("fr_dispatch: tick complete")
         return 0
     finally:
         try:

@@ -1,4 +1,4 @@
-"""Unit tests for `fr.bridge.tick`.
+"""Unit tests for `fr_dispatch.tick`.
 
 Every test uses `FakeGhClient` + `FakeMcpClient` so the test never
 touches gh or MCP. The plan structure comes from the minimal v2
@@ -6,7 +6,7 @@ fixture; we attach a `tracking_issue` via pydantic copies so the
 phase looks dispatched.
 
 Phase 2 of the v2 bridge rebuild routed the per-phase MCP work
-through `fr.bridge.dispatch.dispatch_phase` — the assertions below
+through `fr_dispatch.dispatch.dispatch_phase` — the assertions below
 reflect the new call surface (create_issue + update_issue + list_repos
 + start_workspace + link_workspace_issue) rather than the legacy
 single `create_card` call.
@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from dataclasses import replace as dc_replace
 from pathlib import Path
+
+from fr_vk.runner import VkRunner
 
 from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
@@ -41,9 +43,9 @@ def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: i
 
 
 def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
-    from fr.bridge import TickResult, tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import TickResult, tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -53,7 +55,7 @@ def test_tick_syncs_vk_ready_phase_and_flips_vk_synced():
 
     mcp = FakeMcpClient()
 
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert isinstance(result, TickResult)
     assert result.synced == 1
@@ -93,9 +95,9 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
     """If dispatch_phase raises, the bridge MUST NOT add `vk-synced` —
     otherwise the failure would silently strand the phase on the next tick.
     """
-    from fr.bridge import tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -111,7 +113,7 @@ def test_tick_mcp_failure_does_not_mark_vk_synced_so_next_tick_retries():
     # dispatch_phase aborts before link_workspace_issue.
     mcp = FakeMcpClient(fail_on_call=3)
 
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.synced == 0
     assert result.errors == 1
@@ -132,9 +134,9 @@ def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
     apply-side failure shape (the label-ensure is always emitted first
     when a plan has any managed labels).
     """
-    from fr.bridge import tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -149,7 +151,7 @@ def test_tick_continues_vk_sync_when_apply_label_ensure_fails():
     gh.fail_on_mutation = 0
 
     mcp = FakeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.synced == 1
     # ensure_labels fails (mutation 0) + subsequent label-change fails because
@@ -162,9 +164,9 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     """An assigned phase projects `in-progress` (not `vk-ready`) — the
     bridge gates on the rendered lifecycle, not stale observed labels,
     so a phase claimed mid-tick is correctly skipped."""
-    from fr.bridge import tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -181,7 +183,7 @@ def test_tick_returns_skipped_when_phase_is_in_progress():
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
     mcp = FakeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
     assert "in-progress" in rlabel_names
@@ -196,9 +198,9 @@ def test_tick_skipped_when_phase_already_vk_synced():
     """vk-ready + vk-synced means the previous tick already created the
     card — leave it alone. Render preserves `vk-synced` from observed
     so the gate sees it on the projected side."""
-    from fr.bridge import tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -209,7 +211,7 @@ def test_tick_skipped_when_phase_already_vk_synced():
     rlabel_names = {ld.name for ld in rendered.issue_per_phase[1].labels}
     assert "vk-synced" in rlabel_names  # preservation
     mcp = FakeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.synced == 0
     assert result.skipped == 1
@@ -231,7 +233,7 @@ def test_tick_does_not_create_issues_or_write_tracking_issue_back(tmp_path):
 
     import yaml
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     subprocess.run(
@@ -248,7 +250,7 @@ def test_tick_does_not_create_issues_or_write_tracking_issue_back(tmp_path):
     gh = FakeGhClient()
     mcp = FakeMcpClient()
 
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
 
     raw = yaml.safe_load((plan_dir / "01.yaml").read_text())
     assert raw["phase"]["tracking_issue"] is None, (
@@ -272,9 +274,9 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     Together: a Plan B (agent-images) bridge running on a busy repo
     must not duplicate cards and must not undo its own sync state.
     """
-    from fr.bridge import tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -284,7 +286,7 @@ def test_tick_skips_phase_claimed_during_dispatch_window_and_does_not_strip_vk_s
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
     mcp = FakeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.synced == 0  # no duplicate
     assert mcp.calls == []

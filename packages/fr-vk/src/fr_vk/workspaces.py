@@ -40,7 +40,7 @@ class MCPArchiver(Protocol):
     """Minimal surface for `archive_for_card`.
 
     A narrow Protocol so callers that only need the archive primitive
-    (e.g. `fr.bridge.pr_state.tick`) don't have to satisfy the larger
+    (e.g. `fr_dispatch.pr_state.tick`) don't have to satisfy the larger
     `MCPWorkspaceClient` surface.
     """
 
@@ -311,7 +311,7 @@ def recover_orphan_card(
     # start_workspace call carries the canonical repo_id Uuid. If VK
     # has no entry for this repo's short name the recovery bails cleanly
     # — the next operator action will see the orphan in the metrics.
-    from fr.bridge import config as _config
+    from fr_vk import config as _config
 
     repo_id = _config.repo_id_for(repo, mcp)
     if repo_id is None:

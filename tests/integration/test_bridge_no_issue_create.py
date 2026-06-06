@@ -116,7 +116,7 @@ def test_tick_emits_zero_issue_creates_when_partial_dispatch(tmp_path: Path, cap
            `vk apply --yes`)"
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(
@@ -226,7 +226,7 @@ def test_tick_mixed_state_syncs_labels_and_state_but_skips_create(
     AND    Phase 3 logs the WARNING about pending dispatch
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(
@@ -298,7 +298,7 @@ def test_tick_fully_dispatched_plan_no_creates_no_warnings(tmp_path: Path, caplo
     AND    ZERO warnings (nothing to skip)
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(
@@ -355,7 +355,7 @@ def test_tick_stoa_company_shape_emits_no_creates_and_one_warning_per_phase(
     Issues per wave, 38 in total (sfv#196-#214 wave 1, sfv#216-#234 wave 2).
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     plan_dir = tmp_path / "plan"
     phases = [

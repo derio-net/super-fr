@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fr_vk.runner import VkRunner
 
 MULTI_PHASE = Path(__file__).parent.parent / "unit" / "fixtures" / "v2_plan_multi_phase"
 MINIMAL = Path(__file__).parent.parent / "unit" / "fixtures" / "v2_plan_minimal"
@@ -99,7 +100,7 @@ def test_bridge_exits_loud_when_mcp_subprocess_fails_to_start(
 ) -> None:
     """When neither `vibe-kanban-mcp` nor `npx` is on PATH, the bridge
     must exit non-zero and tell the operator which package to install."""
-    from fr.bridge import cli as bridge_cli
+    from fr_vk import bridge_cli
 
     monkeypatch.setattr(bridge_cli.shutil, "which", lambda name: None)
     with pytest.raises(SystemExit) as exc_info:
@@ -121,7 +122,7 @@ def test_tick_aborts_cleanly_on_mcp_subprocess_death() -> None:
     from dataclasses import replace as dc_replace
 
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
@@ -148,7 +149,7 @@ def test_tick_aborts_cleanly_on_mcp_subprocess_death() -> None:
             raise BrokenPipeError("MCP subprocess gone")
 
     mcp = _DyingMcp()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
     assert result.synced == 0
     assert result.errors >= 1
     # `vk-synced` must NOT land on the issue.
@@ -165,7 +166,7 @@ def test_tick_continues_when_one_phase_times_out() -> None:
     from dataclasses import replace as dc_replace
 
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
@@ -216,7 +217,7 @@ def test_tick_continues_when_one_phase_times_out() -> None:
             return super().start_workspace(**kw)
 
     mcp = _TimeoutOnPhase2()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
     assert result.synced == 2, (
         f"phases 1 and 3 must dispatch, got synced={result.synced}, failures={result.failures}"
     )
@@ -231,8 +232,8 @@ def test_tick_backs_off_on_gh_rate_limit(monkeypatch: pytest.MonkeyPatch) -> Non
     """`_gh_rate_limit_guard` recognises gh 403 rate-limit stderr and
     skips this tick rather than re-raising — the next cron fire retries
     fresh. A failure metric is pushed with `reason='gh_rate_limited'`."""
-    from fr.bridge import cli as bridge_cli
     from fr.gh import GhError
+    from fr_vk import bridge_cli
 
     pushed: list[str] = []
 
@@ -257,8 +258,8 @@ def test_tick_reraises_non_rate_limit_gh_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Non-rate-limit gh errors are not silently swallowed."""
-    from fr.bridge import cli as bridge_cli
     from fr.gh import GhError
+    from fr_vk import bridge_cli
 
     def boom() -> Any:
         raise GhError("nope", stderr="permission denied", returncode=1)
@@ -273,10 +274,10 @@ def test_tick_reraises_non_rate_limit_gh_error(
 def test_second_concurrent_tick_aborts_early(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A second `python -m fr.bridge` invocation while the first holds
+    """A second `python -m fr_dispatch` invocation while the first holds
     the lock exits 0 with a 'tick already in progress' message and does
     not touch gh / MCP."""
-    from fr.bridge import cli as bridge_cli
+    from fr_vk import bridge_cli
 
     lock_path = tmp_path / "vk-bridge.lock"
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(lock_path))
@@ -314,7 +315,7 @@ def test_plan_deletion_between_ticks_does_not_purge_cards(
     every VK card alone."""
     import logging
 
-    from fr.bridge import cli as bridge_cli
+    from fr_vk import bridge_cli
 
     seen_file = tmp_path / "seen.json"
     seen_file.write_text('["plan-a", "plan-b"]')
@@ -341,7 +342,7 @@ def test_plan_deletion_between_ticks_does_not_purge_cards(
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
 
-    caplog.set_level(logging.WARNING, logger="fr.bridge")
+    caplog.set_level(logging.WARNING, logger="fr_dispatch")
     rc = bridge_cli.main([])
     assert rc == 0
     warns = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
@@ -361,7 +362,7 @@ def test_per_plan_exception_does_not_kill_daemon(
     repo until an operator intervenes."""
     from dataclasses import dataclass
 
-    from fr.bridge import cli as bridge_cli
+    from fr_vk import bridge_cli
 
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
@@ -423,7 +424,7 @@ def test_per_plan_exception_does_not_kill_daemon(
     )
 
 
-# ── I8: `vk apply` and `fr.bridge.tick` racing for the same plan ─────
+# ── I8: `vk apply` and `fr_dispatch.tick` racing for the same plan ─────
 
 
 def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
@@ -441,10 +442,10 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
 
     from fr import parse
     from fr.apply import apply
-    from fr.bridge import tick
     from fr.diff import diff
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
@@ -481,7 +482,7 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
 
     # First: the bridge brings the plan to steady state (vk-synced on,
     # body in sync).
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
     steady_labels = frozenset(gh.issues[(repo, 77)].labels)
     steady_state = gh.issues[(repo, 77)].state
     steady_body = gh.issues[(repo, 77)].body
@@ -495,7 +496,7 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
     assert op_result.failures == (), f"operator apply unexpectedly failed: {op_result.failures}"
 
     # Then the bridge ticks again, racing on the same plan.
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
 
     # Final state matches steady-state byte-for-byte.
     assert frozenset(gh.issues[(repo, 77)].labels) == steady_labels

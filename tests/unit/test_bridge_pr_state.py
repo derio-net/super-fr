@@ -1,8 +1,8 @@
-"""Unit tests for `fr.bridge.pr_state` — C3, C4.
+"""Unit tests for `fr_dispatch.pr_state` — C3, C4.
 
 PR observations are passed in as a dict (`{card_id: "open" | "merged"}`)
 so the unit tests stub the observation source. Phase 5's
-`fr.bridge.cli` wires the actual `vk.observe` call.
+`fr_dispatch.cli` wires the actual `vk.observe` call.
 """
 
 from __future__ import annotations
@@ -34,10 +34,10 @@ def test_in_progress_transitions_to_in_review_when_pr_opens():  # C3
     """BDD scenario (spec §C3):
     GIVEN a VK card currently 'In progress'
     AND   the card's latest_pr_status is 'open' (non-draft PR exists)
-    WHEN  fr.bridge.pr_state.tick(client, pr_observations) is called
+    WHEN  fr_dispatch.pr_state.tick(client, pr_observations) is called
     THEN  client.update_issue(card_id, status='In review') was called
     """
-    from fr.bridge.pr_state import tick
+    from fr_vk.pr_state import tick
 
     mcp = FakeMcpClient()
     _prime_card(
@@ -61,11 +61,11 @@ def test_in_review_transitions_to_done_when_pr_merges():  # C4
     """BDD scenario (spec §C4):
     GIVEN a VK card currently 'In review'
     AND   the card's latest_pr_status is 'merged'
-    WHEN  fr.bridge.pr_state.tick(client, pr_observations) is called
+    WHEN  fr_dispatch.pr_state.tick(client, pr_observations) is called
     THEN  client.update_issue(card_id, status='Done') was called
     AND   client.update_workspace(linked_ws_id, archived=True) was called
     """
-    from fr.bridge.pr_state import tick
+    from fr_vk.pr_state import tick
 
     mcp = FakeMcpClient()
     _prime_card(
@@ -102,7 +102,7 @@ def test_in_review_transitions_to_done_when_pr_merges():  # C4
 
 def test_tick_ignores_cards_without_pr_observation():
     """A card with status In-progress but no PR observation must not move."""
-    from fr.bridge.pr_state import tick
+    from fr_vk.pr_state import tick
 
     mcp = FakeMcpClient()
     _prime_card(mcp, "card-1", simple_id="5", status="In progress")
@@ -116,7 +116,7 @@ def test_tick_ignores_cards_without_pr_observation():
 
 def test_tick_ignores_mismatched_status_pr_pairs():
     """In-progress + merged (skip stage) is not auto-transitioned."""
-    from fr.bridge.pr_state import tick
+    from fr_vk.pr_state import tick
 
     mcp = FakeMcpClient()
     _prime_card(mcp, "card-1", simple_id="5", status="In progress")
@@ -133,7 +133,7 @@ def test_tick_invokes_gh_issue_closer_when_pr_merged(monkeypatch):
     The caller injects a `close_gh_issue` callable so unit tests can
     observe without shelling out to gh.
     """
-    from fr.bridge.pr_state import tick
+    from fr_vk.pr_state import tick
 
     closed: list[tuple[str, str]] = []
 
@@ -167,7 +167,7 @@ def test_draft_pr_does_not_transition_in_progress():
     Pinning this here so a Phase 5 observation wiring that maps drafts
     to `"open"` can't silently regress C3.
     """
-    from fr.bridge.pr_state import tick
+    from fr_vk.pr_state import tick
 
     mcp = FakeMcpClient()
     _prime_card(mcp, "card-1", simple_id="5", status="In progress")
@@ -181,7 +181,7 @@ def test_draft_pr_does_not_transition_in_progress():
 def test_tick_threads_project_id_to_list_issues():
     """`project_id` kwarg must reach the MCP `list_issues` call so the
     sweep is scoped to the bridge's own VK project."""
-    from fr.bridge.pr_state import tick
+    from fr_vk.pr_state import tick
 
     mcp = FakeMcpClient()
 
@@ -196,8 +196,8 @@ def test_tick_threads_project_id_to_list_issues():
 
 def test_default_close_gh_issue_is_invoked_via_subprocess(monkeypatch):
     """Default close_gh_issue uses subprocess.run; we patch it out."""
-    import fr.bridge.pr_state as ps
-    from fr.bridge.pr_state import tick
+    import fr_vk.pr_state as ps
+    from fr_vk.pr_state import tick
 
     seen: list[list[str]] = []
 

@@ -6,13 +6,15 @@ name = "super-fr-workspace"
 version = "2.6.1"
 description = "super-fr workspace root (fr / fr-dispatch / fr-vk)"
 requires-python = ">=3.11"
-dependencies = ["fr"]
+dependencies = ["fr", "fr-dispatch", "fr-vk"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
 
 [tool.uv.sources]
 fr = { workspace = true }
+fr-dispatch = { workspace = true }
+fr-vk = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

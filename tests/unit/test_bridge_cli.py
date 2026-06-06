@@ -1,4 +1,4 @@
-"""Unit tests for `fr.bridge.cli` — G1, G5.
+"""Unit tests for `fr_dispatch.cli` — G1, G5.
 
 Pins the version-stamped tick banner that ships in the first INFO
 record of every tick, and that it flows through stdlib `logging`
@@ -17,12 +17,12 @@ import re
 def test_logging_uses_stdlib_logging(caplog):  # G1
     """A tick emits its banner through the stdlib `logging` framework.
 
-    If `fr.bridge.cli` ever drops back to bare `print(...)`, caplog
+    If `fr_dispatch.cli` ever drops back to bare `print(...)`, caplog
     captures nothing and the test fails.
     """
-    from fr.bridge import cli
+    from fr_vk import bridge_cli as cli
 
-    with caplog.at_level(logging.INFO, logger="fr.bridge"):
+    with caplog.at_level(logging.INFO, logger="fr_dispatch"):
         rc = cli.main(["--dry-run"])
     assert rc == 0
     assert len(caplog.records) > 0
@@ -30,9 +30,9 @@ def test_logging_uses_stdlib_logging(caplog):  # G1
 
 def test_tick_first_log_line_has_version_and_timestamp(caplog):  # G5
     """First INFO record matches the documented banner shape."""
-    from fr.bridge import cli
+    from fr_vk import bridge_cli as cli
 
-    with caplog.at_level(logging.INFO, logger="fr.bridge"):
+    with caplog.at_level(logging.INFO, logger="fr_dispatch"):
         rc = cli.main(["--dry-run"])
     assert rc == 0
     first_record = caplog.records[0]

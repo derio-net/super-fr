@@ -9,7 +9,7 @@ clean failure-metric reason and keeps Pushgateway counters honest.
 
 The bridge runs single-MCP-per-process, so the cache is a single
 optional snapshot rather than a per-client dict. `clear_repo_cache()`
-fires once per tick (the daemon — or `fr.bridge.tick` — calls it)
+fires once per tick (the daemon — or `fr_dispatch.tick` — calls it)
 so config drift propagates without a daemon restart.
 
 Wire shape (real `vibe-kanban-mcp`):

@@ -33,14 +33,14 @@ def test_claude_md_has_bridge_audit_rule():
     GIVEN CLAUDE.md in the repo root
     WHEN  searching its content
     THEN  it contains a section/paragraph mentioning 'bridge audit rule'
-          AND references fr.bridge.* as the canonical read-target post-rebuild
+          AND references fr_dispatch.* as the canonical read-target post-rebuild
     """
     body = Path("CLAUDE.md").read_text()
     assert re.search(r"bridge audit rule", body, re.IGNORECASE), (
         "CLAUDE.md is missing a 'bridge audit rule' section"
     )
-    assert "fr.bridge" in body, (
-        "CLAUDE.md's bridge audit rule must reference `fr.bridge.*` as the canonical "
+    assert "fr_dispatch" in body, (
+        "CLAUDE.md's bridge audit rule must reference `fr_dispatch.*` as the canonical "
         "read-target after the v2 rebuild"
     )
 

@@ -6,7 +6,7 @@ via JSON-RPC 2.0 over stdin/stdout.
 
 Moved from agent-images/kali/scripts/vk_mcp_client.py. The wire
 protocol is unchanged; only the Python-level interface is adapted
-to use keyword-only args that match fr.bridge.dispatch's calling
+to use keyword-only args that match fr_vk.dispatch's calling
 convention.
 """
 
@@ -156,7 +156,7 @@ class VkMcpClient:
 
     # --- High-level convenience methods ---
     # Thin wrappers around call_tool. Signatures are keyword-only so callers
-    # (fr.bridge.dispatch + FakeMcpClient in tests) share one calling
+    # (fr_vk.dispatch + FakeMcpClient in tests) share one calling
     # convention. The wire payload still names the same JSON-RPC tools the
     # VK MCP server has always used; all unknown kwargs flow through so the
     # full upstream surface (e.g. project_id) remains reachable.
@@ -190,7 +190,7 @@ class VkMcpClient:
         # `repositories: Vec<McpWorkspaceRepoInput>` with fields
         # `repo_id: Uuid, branch: String`). VK indexes repos by `id`; the
         # caller resolves short name → repo_id via
-        # `fr.bridge.config.repo_id_for` first. Branch lives inside the
+        # `fr_vk.config.repo_id_for` first. Branch lives inside the
         # repo entry — there is no top-level `branch` field. Block
         # `repositories=` in kwargs so a stray override can't slip past
         # spread-last semantics.

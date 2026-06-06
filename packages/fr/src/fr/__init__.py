@@ -1,8 +1,7 @@
-"""VK CLI toolchain — v2 plan-as-folder model + projection chain."""
+"""super-fr base — v2 plan-as-folder model + projection chain."""
 
 from importlib.metadata import version
 
-from fr import bridge as bridge  # noqa: F401 — public sub-package for the live VK bridge
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.types import (
     Completion,
@@ -31,6 +30,5 @@ __all__ = [
     "StepState",
     "Task",
     "__version__",
-    "bridge",
     "parse",
 ]

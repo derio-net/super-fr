@@ -23,7 +23,7 @@ import subprocess
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from fr.bridge.workspaces import MCPArchiver, archive_for_card
+from fr_vk.workspaces import MCPArchiver, archive_for_card
 
 __all__ = ["tick"]
 

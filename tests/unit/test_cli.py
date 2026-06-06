@@ -2,7 +2,7 @@
 
 Specifically: the bridge daemon must NOT appear as a public subcommand
 (E1). It's invoked from a wrapper that `install.sh --install-bridge`
-writes, which exec's `python -m fr.bridge`. Surfacing it as a `vk
+writes, which exec's `python -m fr_dispatch`. Surfacing it as a `vk
 bridge` verb would let operators run it ad-hoc and bypass the
 lock-file guard.
 """

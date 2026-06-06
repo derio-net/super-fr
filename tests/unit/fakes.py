@@ -181,7 +181,7 @@ class FakeMcpClient:
     `fail_on_call=N` to make the (0-indexed) Nth call raise.
 
     The surface deliberately matches the calling convention
-    `fr.bridge.dispatch.dispatch_phase` uses against the real client —
+    `fr_dispatch.dispatch.dispatch_phase` uses against the real client —
     keyword-only on the methods where the wire payload is structured.
 
     Recording layer
@@ -307,3 +307,21 @@ class FakeMcpClient:
 
     def close(self) -> None:
         self._record("close", {})
+
+
+def vk_metrics():
+    """Legacy-named MetricsPusher — the wire format the dashboards expect."""
+    from fr_dispatch.metrics import MetricsPusher
+    from fr_vk.runner import (
+        HEARTBEAT_METRIC,
+        METRICS_JOB,
+        METRICS_NAMESPACE,
+        METRICS_REASON_ALIASES,
+    )
+
+    return MetricsPusher(
+        namespace=METRICS_NAMESPACE,
+        job=METRICS_JOB,
+        heartbeat_metric=HEARTBEAT_METRIC,
+        reason_aliases=METRICS_REASON_ALIASES,
+    )

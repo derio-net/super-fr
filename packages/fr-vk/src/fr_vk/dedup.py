@@ -1,4 +1,4 @@
-"""Card-title dedup detection for `fr.bridge.tick`.
+"""Card-title dedup detection for `fr_dispatch.tick`.
 
 Detection lives in tick (not `dispatch_phase`) because the decision
 needs both the MCP card listing and the GH client used to stamp

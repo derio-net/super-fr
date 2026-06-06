@@ -46,7 +46,7 @@ def _phase_with_tracking(repo: str, issue_n: int):
 
 def test_lifecycle_hook_invoked_with_issue_url_and_transition(tmp_path, monkeypatch):
     """Configured hook script gets `(issue_url, "in-progress")` on successful dispatch."""
-    from fr.bridge.dispatch import dispatch_phase
+    from fr_vk.dispatch import dispatch_phase
 
     script, log = _write_recorder_script(tmp_path)
     monkeypatch.setenv("VK_LIFECYCLE_HOOK_SCRIPT", str(script))
@@ -66,7 +66,7 @@ def test_lifecycle_hook_invoked_with_issue_url_and_transition(tmp_path, monkeypa
 
 
 def test_lifecycle_hook_not_invoked_when_env_unset(tmp_path, monkeypatch):
-    from fr.bridge.dispatch import dispatch_phase
+    from fr_vk.dispatch import dispatch_phase
 
     monkeypatch.delenv("VK_LIFECYCLE_HOOK_SCRIPT", raising=False)
 
@@ -87,7 +87,7 @@ def test_lifecycle_hook_not_invoked_when_env_unset(tmp_path, monkeypatch):
 
 def test_lifecycle_hook_failure_does_not_break_dispatch(tmp_path, monkeypatch, caplog):
     """A non-zero exit / missing script / timeout must NOT raise."""
-    from fr.bridge.dispatch import dispatch_phase
+    from fr_vk.dispatch import dispatch_phase
 
     missing = tmp_path / "definitely-does-not-exist.sh"
     monkeypatch.setenv("VK_LIFECYCLE_HOOK_SCRIPT", str(missing))
@@ -106,7 +106,7 @@ def test_lifecycle_hook_invoked_directly_via_helper(tmp_path, monkeypatch):
     """`invoke_lifecycle_hook` is the public surface; tests can use it
     independently of dispatch_phase to assert the env-gated behaviour.
     """
-    from fr.bridge.lifecycle import invoke_lifecycle_hook
+    from fr_dispatch.lifecycle import invoke_lifecycle_hook
 
     script, log = _write_recorder_script(tmp_path)
     monkeypatch.setenv("VK_LIFECYCLE_HOOK_SCRIPT", str(script))

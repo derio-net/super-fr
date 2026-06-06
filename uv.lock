@@ -5,6 +5,8 @@ requires-python = ">=3.11"
 [manifest]
 members = [
     "fr",
+    "fr-dispatch",
+    "fr-vk",
     "super-fr-workspace",
 ]
 
@@ -171,6 +173,28 @@ requires-dist = [
     { name = "rich", specifier = ">=13" },
     { name = "typer", specifier = ">=0.12" },
 ]
+
+[[package]]
+name = "fr-dispatch"
+version = "2.6.1"
+source = { editable = "packages/fr-dispatch" }
+dependencies = [
+    { name = "fr" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "fr", editable = "packages/fr" }]
+
+[[package]]
+name = "fr-vk"
+version = "2.6.1"
+source = { editable = "packages/fr-vk" }
+dependencies = [
+    { name = "fr-dispatch" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "fr-dispatch", editable = "packages/fr-dispatch" }]
 
 [[package]]
 name = "iniconfig"
@@ -625,6 +649,8 @@ version = "2.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "fr" },
+    { name = "fr-dispatch" },
+    { name = "fr-vk" },
 ]
 
 [package.dev-dependencies]
@@ -637,7 +663,11 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fr", editable = "packages/fr" }]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+    { name = "fr-vk", editable = "packages/fr-vk" },
+]
 
 [package.metadata.requires-dev]
 dev = [

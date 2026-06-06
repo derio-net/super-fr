@@ -1,4 +1,4 @@
-"""End-to-end acceptance tests for `fr.bridge.tick`.
+"""End-to-end acceptance tests for `fr_dispatch.tick`.
 
 Each test composes the full pipeline — observe → render → diff → apply →
 per-phase dispatch — against a tmp_path plan + FakeGhClient + FakeMcpClient.
@@ -11,6 +11,8 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 from typing import Any
+
+from fr_vk.runner import VkRunner
 
 from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
@@ -105,7 +107,7 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     """
     GIVEN a fixture multi-phase plan with mixed depends_on shape
     AND   a FakeMcpClient + FakeGhClient pre-loaded with the dispatched Issues
-    WHEN  fr.bridge.tick() runs one tick
+    WHEN  fr_dispatch.tick() runs one tick
     THEN  the resulting label state on every Issue matches the documented
           expectation:
           - root phases (depends_on=[]) → vk-ready + vk-synced
@@ -115,7 +117,7 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     AND   the resulting workspace count == count of root phases just synced
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     repo = "derio-net/superpowers-for-vk"
     plan_dir = tmp_path / "plan"
@@ -180,7 +182,7 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     gh.add_issue(repo, 400, state="OPEN", labels={"phase:4", "plan:e2e-fixture"})
 
     mcp = FakeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     # End-state assertions per the spec's projection rules.
     p1_labels = gh.issues[(repo, 100)].labels
@@ -219,14 +221,14 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
     """
     GIVEN a plan in a steady-state (all phases dispatched, labels match
           renderer projection)
-    WHEN  fr.bridge.tick() runs once
-    AND   fr.bridge.tick() runs again immediately after
+    WHEN  fr_dispatch.tick() runs once
+    AND   fr_dispatch.tick() runs again immediately after
     THEN  the second run made no MCP mutations
     AND   the second run made no GH label changes
     AND   the second run made no GH Issue state changes
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     repo = "derio-net/superpowers-for-vk"
     plan_dir = tmp_path / "plan"
@@ -251,7 +253,7 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
     mcp = FakeMcpClient()
 
     # Tick 1: brings the plan to steady state (vk-synced applied + body update)
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
 
     # Snapshot post-first-tick state.
     gh_calls_after_first = list(gh.calls)
@@ -263,7 +265,7 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
     )
 
     # Tick 2: should be a no-op.
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
 
     # The 2nd tick may issue read-only MCP calls (list_workspaces,
     # list_issues, list_repos) for slot/dedup/config — those are not
@@ -306,18 +308,18 @@ def test_standalone_vk_ready_issue_without_plan_is_ignored(tmp_path: Path) -> No
     GIVEN a vk-ready GitHub Issue that is NOT backed by any v2 plan
           (manual `gh issue create --label vk-ready` outside the plan workflow)
     AND   no plan in any managed repo references it as tracking_issue
-    WHEN  fr.bridge.tick() runs
+    WHEN  fr_dispatch.tick() runs
     THEN  no MCP calls were made for this Issue
     AND   no labels were changed on this Issue
     (Legacy bridge would have parsed the body and dispatched; new bridge ignores.)
 
-    Verifies the structural property in `fr.bridge.tick`: the loop iterates
+    Verifies the structural property in `fr_dispatch.tick`: the loop iterates
     phases of DISCOVERED plans only. A free-floating vk-ready Issue with no
     plan reference simply isn't in the iteration set — there's no code
     path that falls back to listing gh Issues by label for dispatch.
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     repo = "derio-net/superpowers-for-vk"
 
@@ -347,7 +349,7 @@ def test_standalone_vk_ready_issue_without_plan_is_ignored(tmp_path: Path) -> No
     snapshot_body = gh.issues[(repo, 9999)].body
 
     mcp = FakeMcpClient()
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
 
     # No MCP calls referenced the orphan Issue.
     orphan_token = "9999"
@@ -374,13 +376,13 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
     """
     GIVEN a plan with target_repo='derio-net/foo' and a phase with
           tracking_issue='https://github.com/derio-net/bar/issues/100'
-    WHEN  fr.bridge.tick() runs
-    THEN  fr.bridge.dispatch is called with workspace branch repo='derio-net/bar'
+    WHEN  fr_dispatch.tick() runs
+    THEN  fr_dispatch.dispatch is called with workspace branch repo='derio-net/bar'
     AND   the vk-synced label is added on derio-net/bar#100 (NOT derio-net/foo)
     AND   the workspace name follows '<simple_id> -> gh#100' convention
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     target_repo = "derio-net/foo"
     foreign_repo = "derio-net/bar"
@@ -422,7 +424,7 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
     )
 
     # Advertise both repos in VK's registry (short names, with ids) so
-    # `fr.bridge.config.is_known_repo` accepts the dispatch and
+    # `fr_dispatch.config.is_known_repo` accepts the dispatch and
     # `repo_id_for` returns the canonical Uuid. VK indexes by short name
     # only — no `owner/`.
     mcp = FakeMcpClient()
@@ -430,7 +432,7 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
         {"id": "uuid-foo", "name": "foo"},
         {"id": "uuid-bar", "name": "bar"},
     ]
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.synced == 1, f"expected synced=1 got {result.synced} ({result.failures})"
 

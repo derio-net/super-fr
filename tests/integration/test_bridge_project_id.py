@@ -23,6 +23,8 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
+from fr_vk.runner import VkRunner
+
 from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
 TARGET_REPO = "derio-net/superpowers-for-vk"
@@ -85,7 +87,7 @@ def test_tick_passes_project_id_to_create_issue(tmp_path: Path) -> None:
     THEN  the mcp.create_issue call carries the project_id kwarg
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir)
@@ -95,7 +97,7 @@ def test_tick_passes_project_id_to_create_issue(tmp_path: Path) -> None:
     _prep_gh(gh)
     mcp = FakeMcpClient()
 
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.errors == 0, f"unexpected failures: {result.failures}"
     assert result.synced == 1, f"phase should have dispatched; result={result}"
@@ -117,7 +119,7 @@ def test_tick_fails_clean_when_project_id_unset(tmp_path: Path, monkeypatch) -> 
     AND   the `project_id_missing` metric reason is recorded
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     monkeypatch.delenv("VK_DERIO_OPS_PROJECT", raising=False)
     monkeypatch.delenv("VK_DERIO_OPS_PROJECT_ID", raising=False)
@@ -130,7 +132,7 @@ def test_tick_fails_clean_when_project_id_unset(tmp_path: Path, monkeypatch) -> 
     _prep_gh(gh)
     mcp = FakeMcpClient()
 
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert [c for c in mcp.calls if c[0] == "create_issue"] == [], (
         "no create_issue must be attempted when project_id is unset"
@@ -155,7 +157,7 @@ def test_tick_prefers_canonical_id_env_over_legacy(tmp_path: Path, monkeypatch) 
     of this fix mis-read the bare name.
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     monkeypatch.setenv("VK_DERIO_OPS_PROJECT_ID", "uuid-canonical-from-k8s")
     monkeypatch.setenv("VK_DERIO_OPS_PROJECT", "uuid-legacy-fallback")
@@ -168,7 +170,7 @@ def test_tick_prefers_canonical_id_env_over_legacy(tmp_path: Path, monkeypatch) 
     _prep_gh(gh)
     mcp = FakeMcpClient()
 
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
 
     create_calls = [c for c in mcp.calls if c[0] == "create_issue"]
     assert len(create_calls) == 1
@@ -188,7 +190,7 @@ def test_tick_dedup_passes_project_id_to_list_issues(tmp_path: Path) -> None:
     unrelated VK projects (and keeps the call cheap on VK's side).
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     plan_dir = tmp_path / "plan"
     _write_plan(plan_dir)
@@ -198,7 +200,7 @@ def test_tick_dedup_passes_project_id_to_list_issues(tmp_path: Path) -> None:
     _prep_gh(gh)
     mcp = FakeMcpClient()
 
-    tick(plan, gh, mcp)
+    tick(plan, gh, VkRunner(mcp))
 
     list_calls = [c for c in mcp.calls if c[0] == "list_issues"]
     assert len(list_calls) >= 1

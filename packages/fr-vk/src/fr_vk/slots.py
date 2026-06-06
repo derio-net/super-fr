@@ -2,7 +2,7 @@
 
 `MAX_CONCURRENT` (env-overridable; default 8) caps the number of
 non-archived VK workspaces. `count_active_ws(mcp)` queries the current
-count via MCP. `fr.bridge.tick` subtracts these to derive available
+count via MCP. `fr_dispatch.tick` subtracts these to derive available
 slots and stops dispatching when the budget is exhausted.
 
 Both helpers are isolated here so tests can monkeypatch `count_active_ws`

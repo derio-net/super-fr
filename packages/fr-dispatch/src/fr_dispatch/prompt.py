@@ -93,7 +93,13 @@ def _format_repos(plan: Plan, tracking_repo: str) -> str:
     return meta_repo or tracking_repo
 
 
-def build_prompt(plan: Plan, phase: PhaseDoc) -> str:
+def build_prompt(
+    plan: Plan,
+    phase: PhaseDoc,
+    *,
+    agent_identity: str = "a runner-spawned agent",
+    execute_skill: str = "fr-execute",
+) -> str:
     """Render the agent prompt for one dispatched phase.
 
     Raises:
@@ -121,11 +127,11 @@ def build_prompt(plan: Plan, phase: PhaseDoc) -> str:
 
     return (
         preamble
-        + f"You are a VK-spawned agent working on GitHub Issue gh#{issue_n}:\n"
+        + f"You are {agent_identity} working on GitHub Issue gh#{issue_n}:\n"
         + f"{phase.phase.title}\n\n"
         + f"The Issue is at: {tracking}\n"
         + f"Repos: {repos}\n\n"
-        + "Use superpowers-for-vk:vk-execute to implement this task.\n\n"
+        + f"Use {execute_skill} to implement this task.\n\n"
         + "The full task description is in the GitHub Issue body — read it before "
         + "starting. When you finish, open a PR. The lifecycle board will reflect "
         + "your progress automatically."

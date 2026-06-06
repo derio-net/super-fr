@@ -25,6 +25,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from fr_vk.runner import VkRunner
+
 TARGET_REPO = "derio-net/superpowers-for-vk"
 TARGET_REPO_ID = "uuid-superpowers-for-vk"
 
@@ -178,7 +180,7 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
     AND the start_workspace payload had the wrong shape.
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     from tests.unit.fakes import FakeGhClient
 
@@ -198,7 +200,7 @@ def test_tick_dispatches_workspace_using_repo_id_from_list_repos(tmp_path: Path)
     )
 
     mcp = WireShapeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.errors == 0, f"unexpected failures: {result.failures}"
     assert result.synced == 1, f"phase should have been dispatched; result={result}"
@@ -232,7 +234,7 @@ def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None
     AND   no start_workspace call is made
     """
     from fr import parse
-    from fr.bridge import tick
+    from fr_dispatch import tick
 
     from tests.unit.fakes import FakeGhClient
 
@@ -253,7 +255,7 @@ def test_tick_refuses_dispatch_when_short_name_not_in_vk(tmp_path: Path) -> None
     )
 
     mcp = WireShapeMcpClient()
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     assert result.synced == 0
     assert result.errors == 1

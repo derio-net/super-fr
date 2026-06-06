@@ -1,7 +1,7 @@
 """Canonical phase-dispatch implementation.
 
 The ONE place that creates a VK card + workspace for a `vk-ready` phase.
-Both `fr.bridge.tick` and any future direct callers (e.g. a CLI verb)
+Both `fr_dispatch.tick` and any future direct callers (e.g. a CLI verb)
 funnel through `dispatch_phase` so the create_issue + update_issue +
 list_repos + start_workspace + link_workspace_issue sequence cannot
 drift between implementations. Test B2 enforces this is the only such
@@ -21,7 +21,7 @@ Wire payload shape:
   - `start_workspace`: name = "{simple_id} -> gh#{N}" (matches legacy
     convention so `reap_orphans` can match workspace ↔ card by sid),
     `repo_id` = the VK Uuid resolved from the SHORT name (`owner/name`
-    → `name` → VK `id`) via `fr.bridge.config.repo_id_for`,
+    → `name` → VK `id`) via `fr_vk.config.repo_id_for`,
     executor = CLAUDE_CODE, `branch` = the BASE branch ("main") VK
     forks the workspace branch off, `issue_id` = the freshly-created
     card so VK derives the workspace prompt from its title/description
@@ -44,13 +44,14 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from fr._mcp_client import VkMcpError
 from fr._urls import parse_issue_url
-from fr.bridge import config as _config
-from fr.bridge.lifecycle import invoke_lifecycle_hook
 from fr.parser import Plan
 from fr.render import enrichment_block, spec_url
 from fr.types import PhaseDoc
+from fr_dispatch.lifecycle import invoke_lifecycle_hook
+
+from fr_vk import config as _config
+from fr_vk._mcp_client import VkMcpError
 
 __all__ = ["DispatchResult", "MCPDispatch", "build_card_title", "dispatch_phase"]
 
@@ -60,7 +61,7 @@ logger = logging.getLogger(__name__)
 def build_card_title(repo: str, issue_n: int) -> str:
     """Canonical card-title format.
 
-    Shared with `fr.bridge.tick` so the pre-dispatch dedup check and the
+    Shared with `fr_dispatch.tick` so the pre-dispatch dedup check and the
     post-dispatch create_issue payload cannot drift. Format pinned by
     test D2 — `"gh#{n}: [{owner/repo}]"`.
     """
@@ -72,7 +73,7 @@ class MCPDispatch(Protocol):
 
     Covers `dispatch_phase` (create_issue / update_issue / list_repos /
     start_workspace / link_workspace_issue) plus the read-only helpers
-    `fr.bridge.tick` consults each iteration: `list_workspaces` for the
+    `fr_dispatch.tick` consults each iteration: `list_workspaces` for the
     slot budget and `list_issues` for the dedup snapshot.
 
     Both `vk._mcp_client.VkMcpClient` (production) and
@@ -116,9 +117,9 @@ def _resolve_repo_id(mcp: MCPDispatch, repo: str) -> str:
     """Issue the mandated `list_repos` call and resolve `repo` → VK repo_id.
 
     The dispatch contract requires this `list_repos` call (test B2) — kept
-    even though `fr.bridge.config.repo_id_for` would cache it, because the
+    even though `fr_vk.config.repo_id_for` would cache it, because the
     call site here documents the per-dispatch read for any future caller
-    bypassing the tick path. The lookup goes through `fr.bridge.config` so
+    bypassing the tick path. The lookup goes through `fr_vk.config` so
     the per-tick cache populates whichever entry point sees VK first.
 
     Raises `VkMcpError` if VK has no repo registered for `repo`'s short
@@ -211,7 +212,7 @@ def dispatch_phase(
     because the cron bridge runs outside any workspace context, so
     `create_issue` can't infer it server-side (see VK MCP's
     `remote_issues.rs::create_issue`). The caller — typically
-    `fr.bridge.tick` — reads `VK_DERIO_OPS_PROJECT` and forwards it.
+    `fr_dispatch.tick` — reads `VK_DERIO_OPS_PROJECT` and forwards it.
 
     Raises:
         ValueError: if the phase has no `tracking_issue` (dispatch
@@ -220,7 +221,7 @@ def dispatch_phase(
             shape (no `id` on create_issue / start_workspace) or VK
             has no repo registered for the tracking_issue's owner/name.
         Any: propagates exceptions from MCP calls (the caller — typically
-            `fr.bridge.tick` — is responsible for swallowing one-phase
+            `fr_dispatch.tick` — is responsible for swallowing one-phase
             failures so they don't kill the whole tick).
     """
     tracking = phase.phase.tracking_issue

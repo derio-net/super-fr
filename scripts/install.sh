@@ -32,7 +32,7 @@ INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
 SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
 if [[ "${1:-}" == "--install-bridge" ]]; then
-  # Write the cron wrapper that exec's `python -m fr.bridge`. Hidden by
+  # Write the cron wrapper that exec's `python -m fr_vk.bridge`. Hidden by
   # design — there is no `vk bridge` public CLI verb.
   # Default to a user-writable path so operators don't need sudo. The
   # legacy default was /opt/vk-bridge/run.sh — fine for root-owned pod
@@ -51,7 +51,7 @@ if [[ "${1:-}" == "--install-bridge" ]]; then
   fi
   cat > "$wrapper_path" <<EOF
 #!/bin/bash
-exec "$vk_python" -m fr.bridge "\$@"
+exec "$vk_python" -m fr_vk.bridge "\$@"
 EOF
   chmod +x "$wrapper_path"
   echo "Wrapper installed at $wrapper_path"

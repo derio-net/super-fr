@@ -19,7 +19,7 @@ from __future__ import annotations
 import queue
 from typing import Any
 
-from fr._mcp_client import VkMcpClient
+from fr_vk._mcp_client import VkMcpClient
 
 
 class _RecordingMcpClient(VkMcpClient):

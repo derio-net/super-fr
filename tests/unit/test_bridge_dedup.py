@@ -1,4 +1,4 @@
-"""D2 — `fr.bridge.tick` dedups by VK card title.
+"""D2 — `fr_dispatch.tick` dedups by VK card title.
 
 Detection lives in tick (NOT dispatch_phase) because tick is the only
 place with both `mcp` (to read card titles) and `gh` (to stamp the
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import replace as dc_replace
 from pathlib import Path
+
+from fr_vk.runner import VkRunner
 
 from tests.unit.fakes import FakeGhClient, FakeMcpClient
 
@@ -34,7 +36,7 @@ def _dispatched_plan(repo: str = "derio-net/superpowers-for-vk", issue_number: i
 
 def test_fetch_existing_titles_collects_card_titles():
     """The helper returns the set of every card title visible to MCP."""
-    from fr.bridge.dedup import fetch_existing_titles
+    from fr_vk.dedup import fetch_existing_titles
 
     mcp = FakeMcpClient()
     mcp.create_issue(title="gh#1: [foo/bar]", description="")
@@ -45,7 +47,7 @@ def test_fetch_existing_titles_collects_card_titles():
 
 
 def test_is_dispatched_membership_check():
-    from fr.bridge.dedup import is_dispatched
+    from fr_vk.dedup import is_dispatched
 
     existing = {"gh#42: [derio-net/superpowers-for-vk]"}
     assert is_dispatched("gh#42: [derio-net/superpowers-for-vk]", existing)
@@ -57,9 +59,9 @@ def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
     entirely (no create_issue / no start_workspace), but DO stamp
     `vk-synced` on the GH Issue so the next tick won't retry.
     """
-    from fr.bridge import tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -73,7 +75,7 @@ def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
     # Reset call history so the assertions below see only what `tick` did.
     mcp.calls.clear()
 
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     # Dispatch must NOT fire — none of the dispatch-side wire calls happened.
     dispatch_calls = [
@@ -93,9 +95,9 @@ def test_tick_skips_dispatch_when_card_already_exists_and_stamps_vk_synced():
 
 def test_tick_dispatches_normally_when_no_existing_card():
     """Sanity check — without a matching title, tick still dispatches."""
-    from fr.bridge import tick
     from fr.observe import observe
     from fr.render import render
+    from fr_dispatch import tick
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
@@ -105,7 +107,7 @@ def test_tick_dispatches_normally_when_no_existing_card():
 
     mcp = FakeMcpClient()  # no pre-seeded card
 
-    result = tick(plan, gh, mcp)
+    result = tick(plan, gh, VkRunner(mcp))
 
     create_calls = [c for c in mcp.calls if c[0] == "create_issue"]
     assert len(create_calls) == 1

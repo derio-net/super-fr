@@ -89,14 +89,14 @@ created specifically to propagate that work.
 
 For any brainstorm, spec, or plan touching dispatch / sync / cron / VK card /
 workspace / GitHub Issue label-lifecycle surfaces, the brainstorm MUST start
-by reading `fr.bridge.*` (rooted at `packages/fr/src/fr/bridge/`) end-to-end.
+by reading `fr_dispatch.*` + `fr_vk.*` (rooted at `packages/fr-dispatch/src/` and `packages/fr-vk/src/`) end-to-end.
 Confabulating what the bridge does without reading it is the root cause
 documented in #147.
 
 Before the v2 rebuild shipped this was
 `agent-images/kali/scripts/vk-issue-bridge.py` (1089 LOC). The rebuild
-consolidated it into `fr.bridge.*` — one repo's code, easier to enforce.
-After this PR ships, `fr.bridge.*` is the canonical read-target for any
+consolidated it into `fr_dispatch.*` (framework) + `fr_vk.*` (adapter) — one repo's code, easier to enforce.
+After this PR ships, `fr_dispatch.*` + `fr_vk.*` are the canonical read-target for any
 agent investigating bridge behavior.
 
 The user-level mirror of this rule lives in `~/.claude/rules/vk-plan-override.md`

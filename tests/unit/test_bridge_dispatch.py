@@ -1,4 +1,4 @@
-"""Unit tests for `fr.bridge.dispatch` — B1, B2, H9.
+"""Unit tests for `fr_dispatch.dispatch` — B1, B2, H9.
 
 Every test uses `FakeMcpClient` so the test never touches the live MCP
 server. Plans come from existing v2 fixtures; phase 1 of
@@ -44,7 +44,7 @@ def test_dispatch_creates_card_and_workspace():  # B1
     AND   a link_workspace_issue call
     AND   the function returned a DispatchResult with card_id and workspace_id
     """
-    from fr.bridge.dispatch import dispatch_phase
+    from fr_vk.dispatch import dispatch_phase
 
     plan = load_plan_dir(MULTI_PHASE)
     plan, phase = _patch_tracking(
@@ -79,7 +79,7 @@ def test_dispatch_creates_card_and_workspace():  # B1
 
 
 def test_card_title_is_minimal_and_description_is_structured():  # H9
-    from fr.bridge.dispatch import dispatch_phase
+    from fr_vk.dispatch import dispatch_phase
 
     plan = load_plan_dir(CROSS_REPO)
     phase = plan.phases[1]  # dispatched on derio-net/repo-b/issues/100
@@ -113,7 +113,7 @@ def test_card_title_is_minimal_and_description_is_structured():  # H9
 def test_no_duplicate_dispatch_implementations():  # B2
     """The full dispatch chain — create_issue, update_issue, list_repos,
     start_workspace, link_workspace_issue — must be CALLED from exactly
-    one module in `src/`: fr.bridge.dispatch.
+    one module in `src/`: fr_dispatch.dispatch.
 
     Both legacy and v2 call sites converge through dispatch_phase; if a
     second copy of the sequence regrows we want to know immediately.
@@ -147,10 +147,10 @@ def test_no_duplicate_dispatch_implementations():  # B2
         content = py.read_text()
         if all(call in content for call in chain):
             culprits.append(str(py.relative_to(repo_root)))
-    assert culprits == ["packages/fr/src/fr/bridge/dispatch.py"], (
+    assert culprits == ["packages/fr-vk/src/fr_vk/dispatch.py"], (
         f"Dispatch sequence appears in unexpected files: {culprits}. "
         f"If you intentionally changed the dispatch contract (e.g. removed "
         f"a call from dispatch_phase), update the `chain` tuple at the top "
         f"of this test. Otherwise, fold the duplicate call site into "
-        f"fr.bridge.dispatch."
+        f"fr_vk.dispatch."
     )
