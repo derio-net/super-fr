@@ -903,7 +903,7 @@ def test_self_review_resolves_slug_form_spec(tmp_path):
     shutil.copytree(fixture, plan_dir)
     meta = (plan_dir / "_meta.yaml").read_text()
     meta = meta.replace(
-        "spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md",
+        "spec: docs/superpowers/specs/fixture-spec-design.md",
         f"spec: {spec.name}",
     )
     (plan_dir / "_meta.yaml").write_text(meta)

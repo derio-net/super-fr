@@ -33,7 +33,7 @@ def test_render_undispatched_phase_yields_create_intent():
     issue = rendered.issue_per_phase[1]
     assert issue.state == "OPEN"
     label_names = {ld.name for ld in issue.labels}
-    assert "spec:vk-rebuild-state-machine-design" in label_names
+    assert "spec:fixture-spec-design" in label_names
     assert "plan:fixture-minimal" in label_names  # date prefix stripped
     assert "phase:1" in label_names
     assert "vk-ready" in label_names  # agentic, no assignee, no PR, not complete
@@ -930,7 +930,7 @@ def _parse_fixture_in_repo(tmp_path, spec_ref):
     shutil.copytree(FIXTURE, plan_dir)
     meta = (plan_dir / "_meta.yaml").read_text()
     meta = meta.replace(
-        "spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md",
+        "spec: docs/superpowers/specs/fixture-spec-design.md",
         f"spec: {spec_ref}",
     )
     (plan_dir / "_meta.yaml").write_text(meta)

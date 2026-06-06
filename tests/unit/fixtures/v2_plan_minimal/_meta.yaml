@@ -1,6 +1,6 @@
 schema_version: 2
 plan: 2026-05-09-fixture-minimal
-spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md
+spec: docs/superpowers/specs/fixture-spec-design.md
 target_repo: derio-net/superpowers-for-vk
 vk_version: ">=1.0.0,<3.0.0"
 created: 2026-05-09

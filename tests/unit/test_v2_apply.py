@@ -106,7 +106,7 @@ def test_apply_ensures_labels_with_registry_colors():
     assert by_name["vk-ready"].color == VK_READY.color
     assert by_name["phase:1"].color == PHASE_LABEL_COLOR
     assert by_name["plan:fixture-minimal"].color == PLAN_LABEL_COLOR
-    assert by_name["spec:vk-rebuild-state-machine-design"].color == SPEC_LABEL_COLOR
+    assert by_name["spec:fixture-spec-design"].color == SPEC_LABEL_COLOR
 
     # Sort key invariant: apply() sorts by name (LabelDef has no natural order).
     passed_names = [ld.name for ld in passed]
@@ -151,7 +151,7 @@ def test_apply_managed_labels_only_does_not_touch_operator_labels():
     # The unmanaged label survives
     assert "good-first-issue" in final_labels
     # Managed labels were added (positive case)
-    assert "spec:vk-rebuild-state-machine-design" in final_labels
+    assert "spec:fixture-spec-design" in final_labels
     assert "plan:fixture-minimal" in final_labels
 
 
@@ -644,7 +644,7 @@ def test_gate_passes_when_plan_and_spec_on_origin_head(tmp_path):
     shutil.copytree(src_fixture, dest_plan)
     spec_dir = work / "docs" / "superpowers" / "specs"
     spec_dir.mkdir(parents=True)
-    spec_path = spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md"
+    spec_path = spec_dir / "fixture-spec-design.md"
     spec_path.write_text("# stub spec\n")
     subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land plan"], check=True)
@@ -673,7 +673,7 @@ def test_gate_reports_missing_plan_files(tmp_path):
     shutil.copytree(src_fixture, dest_plan)
     spec_dir = work / "docs" / "superpowers" / "specs"
     spec_dir.mkdir(parents=True)
-    (spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md").write_text("# stub\n")
+    (spec_dir / "fixture-spec-design.md").write_text("# stub\n")
     subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "local only"], check=True)
     # NOTE: no push — files are local-only.
@@ -709,11 +709,11 @@ def test_gate_reports_missing_spec(tmp_path):
     # Create the spec locally; do NOT commit it.
     spec_dir = work / "docs" / "superpowers" / "specs"
     spec_dir.mkdir(parents=True)
-    (spec_dir / "2026-05-06-vk-rebuild-state-machine-design.md").write_text("# stub\n")
+    (spec_dir / "fixture-spec-design.md").write_text("# stub\n")
 
     plan = parse(dest_plan)
     missing = _check_plan_reachable_on_origin_head(plan, work)
-    assert any("2026-05-06-vk-rebuild-state-machine-design.md" in str(p) for p in missing), (
+    assert any("fixture-spec-design.md" in str(p) for p in missing), (
         f"expected spec in missing list, got {missing}"
     )
 
