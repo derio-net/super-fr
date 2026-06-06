@@ -158,3 +158,46 @@ def test_resolve_local_plan_dir_no_double_prefix_for_implemented_cell(tmp_path):
     legacy = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-x"
     legacy.mkdir(parents=True)
     assert _resolve_local_plan_dir(ref, tmp_path) == legacy
+
+
+def test_resolve_local_plan_dir_legacy_form_cell_resolves(tmp_path):
+    """THE 2026-06-06 bug: a cell recorded as archived-plans/X (pre-2.5.0
+    convention) must resolve after `migrate dirs` moved the dir to
+    implemented/plans/X. The old 'plans in parts' gate returned None."""
+    from vk.spec import PlanRef, _resolve_local_plan_dir
+
+    ref = PlanRef(
+        name="x",
+        repo="derio-net/test",
+        file="docs/superpowers/archived-plans/2026-05-10-x/",
+        depends_on="—",
+    )
+    implemented = tmp_path / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-10-x"
+    implemented.mkdir(parents=True)
+    assert _resolve_local_plan_dir(ref, tmp_path) == implemented
+
+
+def test_resolve_local_plan_dir_annotated_cell_resolves(tmp_path):
+    """Cells with annotation tails (`docs/…/X/` (shipped via PR #146)) keep
+    their backticks after _strip_cell — resolution must extract the token."""
+    from vk.spec import PlanRef, _resolve_local_plan_dir
+
+    ref = PlanRef(
+        name="x",
+        repo="derio-net/test",
+        file="`docs/superpowers/archived-plans/2026-05-10-x/` (shipped via PR #146)",
+        depends_on="—",
+    )
+    implemented = tmp_path / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-10-x"
+    implemented.mkdir(parents=True)
+    assert _resolve_local_plan_dir(ref, tmp_path) == implemented
+
+
+def test_resolve_local_plan_dir_bare_slug_cell_resolves(tmp_path):
+    """The new canonical form: a bare-slug cell resolves across roots."""
+    from vk.spec import PlanRef, _resolve_local_plan_dir
+
+    ref = PlanRef(name="x", repo="derio-net/test", file="2026-05-10-x", depends_on="—")
+    active = tmp_path / "docs" / "superpowers" / "plans" / "2026-05-10-x"
+    active.mkdir(parents=True)
+    assert _resolve_local_plan_dir(ref, tmp_path) == active

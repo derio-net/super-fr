@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from vk import refs
 from vk._yaml import LiteralStr, dump_plan_yaml
 from vk.parser import PlanSchemaError
 from vk.parser import parse as _parse_v2
@@ -729,20 +730,21 @@ class DirsMove:
     kind: str  # "plans-dir" | "spec"
 
 
-def _archive_path_variants(file_cell: str) -> tuple[str | None, str | None]:
-    """(implemented, legacy) path variants of a spec-table File cell.
+def _archive_path_variants(
+    file_cell: str,
+) -> tuple[str | None, str | None, str | None]:
+    """(active, implemented, legacy) gh-lookup candidates for a File cell.
 
-    `docs/superpowers/plans/X` -> (`docs/superpowers/implemented/plans/X`,
-    `docs/superpowers/archived-plans/X`). (None, None) when the cell has no
-    `plans` segment to rewrite.
+    Derived from the bare slug (`vk.refs.plan_slug`, 2026-06-06
+    spec-path-repair design), so every historical cell form — bare slug,
+    active path, legacy `archived-plans/` path, annotated cell — yields
+    the same canonical-layout candidates. (None, None, None) for
+    placeholder cells.
     """
-    parts = Path(file_cell.rstrip("/")).parts
-    if "plans" not in parts:
-        return None, None
-    i = parts.index("plans")
-    implemented = "/".join([*parts[:i], "implemented", "plans", *parts[i + 1 :]])
-    legacy = "/".join([*parts[:i], "archived-plans", *parts[i + 1 :]])
-    return implemented, legacy
+    slug = refs.plan_slug(file_cell)
+    if not slug:
+        return None, None, None
+    return tuple(f"docs/superpowers/{root}/{slug}" for root in refs.PLAN_ROOTS)  # type: ignore[return-value]
 
 
 def _spec_fully_implemented(
@@ -775,9 +777,11 @@ def _spec_fully_implemented(
         if resolved is None:
             note = f"row {ref.name!r} unresolved locally (cross-repo?) — confirm and re-run"
             if gh is not None and "/" in ref.repo:
-                implemented_path, legacy_path = _archive_path_variants(ref.file)
+                active_path, implemented_path, legacy_path = _archive_path_variants(ref.file)
                 try:
-                    if gh.file_exists(ref.repo, ref.file.rstrip("/")):
+                    # Probe the ACTIVE canonical variant (slug cells are not
+                    # paths, so the raw cell is never a usable gh path).
+                    if active_path and gh.file_exists(ref.repo, active_path):
                         return False, f"row {ref.name!r} still active in {ref.repo}"
                     if (implemented_path and gh.file_exists(ref.repo, implemented_path)) or (
                         legacy_path and gh.file_exists(ref.repo, legacy_path)
