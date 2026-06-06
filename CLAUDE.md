@@ -32,9 +32,10 @@ Mixed PRs (some of each) bump, because at least one file that matters changed.
 
 ### How to bump
 
-`pyproject.toml` `[project].version` is the **single canonical source**.
-The two plugin JSONs (`.claude-plugin/plugin.json` and
-`.claude-plugin/marketplace.json`) must match it byte-for-byte; the
+The workspace-root `pyproject.toml` `[project].version` is the **single
+canonical source**. Every member package's `pyproject.toml`, the per-plugin
+`plugins/*/.claude-plugin/plugin.json`, and the root
+`.claude-plugin/marketplace.json` must match it byte-for-byte; the
 Python code reads its version dynamically via `importlib.metadata`
 (`packages/fr/src/fr/__init__.py`), so it follows pyproject automatically.
 
@@ -74,9 +75,9 @@ If in doubt, patch.
 
 ### Why this matters
 
-The installer (`scripts/install.sh`) reads
-`.claude-plugin/plugin.json::.version` and `.claude-plugin/marketplace.json
-::.plugins[0].version` to decide whether to clear stale cache. If the version
+The installer (`scripts/install.sh`) reads each plugin's
+`plugins/<name>/.claude-plugin/plugin.json::.version` to decide whether to
+clear stale cache. If the version
 hasn't moved, the cached install stays — even though main has newer commits.
 Result: the behavior you just shipped is invisible to every consumer until the
 next bump ships.
@@ -116,7 +117,7 @@ operator-side update in the PR description so the two stay in sync.
 - `fr apply --yes` enforces the "plan and spec must be on
   `origin/HEAD`" contract before dispatching a GitHub Issue.
   See `docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md`
-  for the rationale and `skills/fr-dispatch/SKILL.md`
+  for the rationale and `plugins/super-fr-dispatch/skills/fr-dispatch/SKILL.md`
   (Pre-flight) for the operator workflow.
 
 ## Follow-up candidates (not urgent)
