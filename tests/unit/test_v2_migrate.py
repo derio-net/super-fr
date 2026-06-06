@@ -969,3 +969,45 @@ def test_spec_fully_implemented_cross_repo_slug_row(tmp_path):
     gh.remote_files = {("derio-net/other", "docs/superpowers/implemented/plans/2026-05-10-x")}
     implemented, note = _spec_fully_implemented(spec, tmp_path, gh)
     assert implemented, note
+
+
+def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
+    """`vk migrate dirs --yes` normalizes refs after relocating the legacy
+    tree — the repo converges in one operation."""
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from vk.cli import app
+
+    sp = tmp_path / "docs" / "superpowers"
+    (sp / "plans").mkdir(parents=True)
+    (sp / "specs").mkdir()
+    legacy_plan = sp / "archived-plans" / "2026-05-10-old"
+    legacy_plan.mkdir(parents=True)
+    (legacy_plan / "_meta.yaml").write_text(
+        "schema_version: 2\nplan: 2026-05-10-old\n"
+        "target_repo: derio-net/test\nvk_version: '>=1.0.0,<3.0.0'\ncreated: 2026-05-10\n"
+    )
+    spec = sp / "specs" / "2026-05-10-spec.md"
+    spec.write_text(
+        "# S\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|---|---|---|---|\n"
+        "| Old | `derio-net/test` | `docs/superpowers/archived-plans/2026-05-10-old/` | — |\n"
+    )
+    for cmd in (
+        ["git", "init", "-q"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+    ):
+        subprocess.run(cmd, cwd=tmp_path, check=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["migrate", "dirs", "--yes"])
+    assert result.exit_code == 0, result.output
+    # the spec may itself have been swept to implemented/specs/
+    moved_spec = sp / "implemented" / "specs" / spec.name
+    text = (moved_spec if moved_spec.exists() else spec).read_text()
+    assert "| `2026-05-10-old` |" in text
+    assert "archived-plans" not in text

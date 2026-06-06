@@ -92,5 +92,12 @@ re-resolves rows from the new path automatically. The operator still runs
 the command and commits the moves — archiving never fires without intent
 (the v1 footgun), it's just one verb now instead of a manual mv.
 
+Rows reported Unreachable/Missing for plans that exist locally mean
+stale refs (pre-2.5.0 path forms). Normalize them idempotently:
+`vk repair` previews, `vk repair --yes` rewrites File cells and
+`_meta.yaml` refs to bare slugs, warning loudly about anything it
+cannot resolve. `vk archive` / `vk migrate dirs` run the same repair
+in passing.
+
 Legacy `archived-plans/` layouts hard-stop every verb until
 `vk migrate dirs --yes` runs (one git mv + commit).

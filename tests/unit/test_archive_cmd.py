@@ -317,3 +317,29 @@ def test_archive_refuses_plan_dir_outside_repo(tmp_path, monkeypatch):
     assert result.exit_code == 2, result.output
     assert "not under this repo" in result.output
     assert other.exists()
+
+
+# ── 2026-06-06 spec-path-repair: repair in passing ──────────────────
+
+
+def test_archive_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
+    """After archiving, the repo has zero stale-form refs: the spec row
+    that recorded the plan's active path is normalized to the bare slug
+    in the same operation."""
+    repo = _repo(tmp_path)
+    spec = _add_spec(
+        repo,
+        "2026-06-06-fixture-spec.md",
+        [("Plan X", "`derio-net/test`", "docs/superpowers/plans/2026-06-06-done/")],
+    )
+    plan_dir = _add_plan(repo, "2026-06-06-done", ticked=True, spec_name=spec.name)
+    _git_seed(repo)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 0, result.output
+    # spec moved too (single row, now implemented) — find it wherever it lives
+    moved_spec = repo / "docs" / "superpowers" / "implemented" / "specs" / spec.name
+    text = (moved_spec if moved_spec.exists() else spec).read_text()
+    assert "| `2026-06-06-done` |" in text
+    assert "docs/superpowers/plans/2026-06-06-done" not in text

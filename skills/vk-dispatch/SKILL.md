@@ -19,6 +19,9 @@ ongoing reconciliation — there's no separate "first dispatch" verb in v2.
    date + age, tick counts, dispatch state) and the per-phase table.
    A locally-complete plan shows "would refuse create"; if the plan is
    genuinely done, run `vk archive <plan-dir>` instead of dispatching.
+   Spec rows Unreachable for plans that exist locally = stale refs —
+   `vk repair --yes` normalizes them (File cells are bare slugs as of
+   the 2026-06-06 spec-path-repair design).
 2. **Never-dispatched plan? Search the target repo for evidence the
    work already landed** (the stoa incident: 0/59 steps ticked, but 15
    merged PRs and the deliverable tree existed in the target repo).

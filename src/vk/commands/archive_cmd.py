@@ -18,6 +18,7 @@ import typer
 from rich.console import Console
 
 from vk.archive import ArchiveError, archive_plan_dir, paths_dirty, spec_archive_sweep
+from vk.repair import repair_repo
 from vk.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from vk.parser import PlanSchemaError
 from vk.render import archive_gate
@@ -145,6 +146,15 @@ def archive_command(
             typer.echo(f"  archived spec: {m.src} -> {m.dst}")
         for n in sweep.notes:
             typer.echo(f"  note: {n}")
+
+    # Repair in passing (2026-06-06 spec-path-repair): the move and the
+    # ref normalization land in the same operator commit.
+    if archived or specs_moved:
+        repair = repair_repo(repo_root, write=True)
+        for r in repair.rewrites:
+            typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
+        for w in repair.warnings:
+            err_console.print(f"[yellow]warning:[/yellow] {w}")
 
     for s in skipped:
         typer.echo(f"  skipped: {s}")
