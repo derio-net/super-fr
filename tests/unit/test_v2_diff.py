@@ -248,7 +248,7 @@ def test_repo_label_ensure_carries_registry_colors():
     assert by_name["plan:fixture-minimal"].color == PLAN_LABEL_COLOR
     assert "fixture-minimal" in by_name["plan:fixture-minimal"].description
 
-    assert by_name["spec:vk-rebuild-state-machine-design"].color == SPEC_LABEL_COLOR
+    assert by_name["spec:fixture-spec-design"].color == SPEC_LABEL_COLOR
 
     # Lifecycle constant: matches the registry singleton's color exactly.
     assert by_name["vk-ready"].color == VK_READY.color
@@ -287,7 +287,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                     issue_labels=frozenset(
                         {
                             "vk-ready",
-                            "spec:vk-rebuild-state-machine-design",
+                            "spec:fixture-spec-design",
                             "plan:fixture-minimal",
                             "phase:1",
                         }
@@ -305,7 +305,7 @@ def test_diff_observed_matches_rendered_yields_minimal_diff():
                 issue_labels=frozenset(
                     {
                         "vk-ready",
-                        "spec:vk-rebuild-state-machine-design",
+                        "spec:fixture-spec-design",
                         "plan:fixture-minimal",
                         "phase:1",
                     }
