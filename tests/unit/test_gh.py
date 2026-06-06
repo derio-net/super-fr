@@ -26,7 +26,7 @@ class TestCreateIssue:
                 repo="org/repo",
                 title="Phase 1: Setup",
                 body="Implementation plan body.",
-                labels=["vk-ready"],
+                labels=["fr:ready"],
             )
             assert url == "https://github.com/org/repo/issues/42"
             mock.assert_called_once_with(
@@ -40,7 +40,7 @@ class TestCreateIssue:
                     "--body",
                     "Implementation plan body.",
                     "--label",
-                    "vk-ready",
+                    "fr:ready",
                 ]
             )
 
@@ -50,7 +50,7 @@ class TestCreateIssue:
                 repo="org/repo",
                 title="Task",
                 body="Body.",
-                labels=["vk-ready", "manual"],
+                labels=["fr:ready", "manual"],
             )
             args = mock.call_args[0][0]
             assert args.count("--label") == 2
@@ -127,10 +127,10 @@ class TestEnsureLabel:
 
     def test_calls_gh_label_create_with_force(self) -> None:
         with patch("fr.gh._run_gh") as mock:
-            ensure_label(repo="org/repo", name="vk-ready")
+            ensure_label(repo="org/repo", name="fr:ready")
             mock.assert_called_once()
             args = mock.call_args[0][0]
-            assert args[:3] == ["label", "create", "vk-ready"]
+            assert args[:3] == ["label", "create", "fr:ready"]
             assert "--force" in args
             assert "--repo" in args
             assert "org/repo" in args
@@ -140,7 +140,7 @@ class TestEnsureLabel:
         with patch("fr.gh._run_gh") as mock:
             ensure_label(
                 repo="org/repo",
-                name="vk-ready",
+                name="fr:ready",
                 description="Ready for VK pickup",
             )
             args = mock.call_args[0][0]
@@ -149,14 +149,14 @@ class TestEnsureLabel:
 
     def test_omits_description_by_default(self) -> None:
         with patch("fr.gh._run_gh") as mock:
-            ensure_label(repo="org/repo", name="vk-ready")
+            ensure_label(repo="org/repo", name="fr:ready")
             args = mock.call_args[0][0]
             assert "--description" not in args
 
     def test_propagates_gh_error(self) -> None:
         with patch("fr.gh._run_gh", side_effect=GhError("permission denied")):
             with pytest.raises(GhError, match="permission denied"):
-                ensure_label(repo="org/repo", name="vk-ready")
+                ensure_label(repo="org/repo", name="fr:ready")
 
 
 class TestEnsureLabels:
@@ -176,12 +176,12 @@ class TestEnsureLabels:
 
         monkeypatch.setattr(gh, "ensure_label", fake_ensure)
         defs = [
-            LabelDef("vk-ready", "0E8AE6", "queued"),
+            LabelDef("fr:ready", "0E8AE6", "queued"),
             LabelDef("phase:1", "FBCA04", "phase 1"),
         ]
         gh.ensure_labels(repo="o/r", labels=defs)
         assert captured == [
-            {"repo": "o/r", "name": "vk-ready", "color": "0E8AE6", "description": "queued"},
+            {"repo": "o/r", "name": "fr:ready", "color": "0E8AE6", "description": "queued"},
             {"repo": "o/r", "name": "phase:1", "color": "FBCA04", "description": "phase 1"},
         ]
 
@@ -209,13 +209,13 @@ class TestEnsureLabels:
 
         monkeypatch.setattr(gh, "ensure_label", fake_ensure)
         defs = [
-            LabelDef("vk-ready", "0E8AE6", ""),
+            LabelDef("fr:ready", "0E8AE6", ""),
             LabelDef("phase:1", "FBCA04", ""),
             LabelDef("phase:2", "FBCA04", ""),
         ]
         with pytest.raises(gh.GhError):
             gh.ensure_labels(repo="o/r", labels=defs)
-        assert seen == ["vk-ready", "phase:1"]  # third never reached
+        assert seen == ["fr:ready", "phase:1"]  # third never reached
 
 
 class TestGhErrorFields:
@@ -273,7 +273,7 @@ class TestSwapIssueLabels:
             repo="o/r",
             number=42,
             add=["pr-ready"],
-            remove=["in-progress", "vk-ready"],
+            remove=["in-progress", "fr:ready"],
         )
         assert captured == [
             [
@@ -287,7 +287,7 @@ class TestSwapIssueLabels:
                 "--remove-label",
                 "in-progress",
                 "--remove-label",
-                "vk-ready",
+                "fr:ready",
             ]
         ]
 
@@ -320,14 +320,14 @@ class TestListLabels:
             captured.append(args)
             return json.dumps(
                 [
-                    {"name": "vk-ready", "color": "0E8AE6", "description": "queued"},
+                    {"name": "fr:ready", "color": "0E8AE6", "description": "queued"},
                     {"name": "bug", "color": "d73a4a", "description": "Something's wrong"},
                 ]
             )
 
         monkeypatch.setattr(gh, "_run_gh", fake)
         labels = gh.list_labels(repo="o/r")
-        assert labels[0]["name"] == "vk-ready"
+        assert labels[0]["name"] == "fr:ready"
         assert labels[0]["color"] == "0E8AE6"
         assert labels[1]["name"] == "bug"
         assert captured[0] == [

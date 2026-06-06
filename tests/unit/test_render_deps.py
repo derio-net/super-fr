@@ -38,14 +38,14 @@ def _complete_phase_1(plan):
     )
 
 
-def test_phase_with_unsatisfied_deps_projects_vk_blocked():
+def test_phase_with_unsatisfied_deps_projects_fr_blocked():
     """
     GIVEN a plan with two phases — phase 1 (depends_on=[]) and phase 2
           (depends_on=[1]) — neither dispatched
     WHEN  render(plan, observed=empty) is called
-    THEN  rendered.issue_per_phase[1].labels contains 'vk-ready'
-    AND   rendered.issue_per_phase[2].labels contains 'vk-blocked'
-    AND   rendered.issue_per_phase[2].labels does NOT contain 'vk-ready'
+    THEN  rendered.issue_per_phase[1].labels contains 'fr:ready'
+    AND   rendered.issue_per_phase[2].labels contains 'fr:blocked'
+    AND   rendered.issue_per_phase[2].labels does NOT contain 'fr:ready'
     """
     from fr import parse
     from fr.render import render
@@ -63,14 +63,14 @@ def test_phase_with_unsatisfied_deps_projects_vk_blocked():
     assert "fr:ready" not in label_names_2
 
 
-def test_phase_with_satisfied_deps_projects_vk_ready():
+def test_phase_with_satisfied_deps_projects_fr_ready():
     """
     GIVEN a plan with phases 1 (depends_on=[]) and 2 (depends_on=[1])
     AND   phase 1's tracking_issue is observed as CLOSED with a merged PR
     AND   phase 1's state.completion.at is set
     WHEN  render(plan, observed, queue_runner="vk") is called
-    THEN  rendered.issue_per_phase[2].labels contains 'vk-ready'
-    AND   does NOT contain 'vk-blocked'
+    THEN  rendered.issue_per_phase[2].labels contains 'fr:ready'
+    AND   does NOT contain 'fr:blocked'
     """
     from fr import parse
     from fr.render import render
@@ -111,7 +111,7 @@ def test_blocked_to_ready_transition_when_dep_completes():
     WHEN  phase 1 completes (observed: closed + merged PR; state.completion.at set)
     AND   diff(rendered, observed, plan) is computed
     THEN  the mutation list contains an IssueLabelChange that removes
-          'vk-blocked' AND adds 'vk-ready' on phase 2's tracking issue
+          'fr:blocked' AND adds 'fr:ready' on phase 2's tracking issue
     """
     from fr import parse
     from fr.diff import IssueLabelChange, diff
@@ -155,7 +155,7 @@ def test_blocked_to_ready_transition_when_dep_completes():
             ),
             2: PhaseObservation(
                 issue_state="OPEN",
-                issue_labels=frozenset({"vk-blocked"}),
+                issue_labels=frozenset({"fr:blocked"}),
                 issue_assignees=(),
                 linked_prs=(),
             ),
@@ -170,7 +170,7 @@ def test_blocked_to_ready_transition_when_dep_completes():
     assert phase2_changes, "expected IssueLabelChange for phase 2"
     change = phase2_changes[0]
     assert "fr:ready" in change.add
-    assert "vk-blocked" in change.remove
+    assert "fr:blocked" in change.remove
 
 
 def test_fan_in_phase_blocked_until_all_deps_complete():
@@ -178,11 +178,11 @@ def test_fan_in_phase_blocked_until_all_deps_complete():
     GIVEN a plan where phase 4 has depends_on=[1, 2, 3]
     AND   phases 1 and 2 are complete; phase 3 is in-progress
     WHEN  render(plan, observed, queue_runner="vk") is called
-    THEN  rendered.issue_per_phase[4].labels contains 'vk-blocked'
+    THEN  rendered.issue_per_phase[4].labels contains 'fr:blocked'
 
     GIVEN the same state but with phase 3 now complete
     WHEN  render(plan, observed, queue_runner="vk") is called again
-    THEN  rendered.issue_per_phase[4].labels contains 'vk-ready'
+    THEN  rendered.issue_per_phase[4].labels contains 'fr:ready'
     """
     from fr import parse
     from fr.render import render
@@ -295,7 +295,7 @@ def test_manual_phase_unaffected_by_dep_gating():
     """
     GIVEN a manual-tagged phase with depends_on=[1] and phase 1 incomplete
     WHEN  render() is called
-    THEN  the phase projects 'manual' lifecycle label (not 'vk-blocked')
+    THEN  the phase projects 'manual' lifecycle label (not 'fr:blocked')
     """
     from dataclasses import replace as dc_replace
 
@@ -354,7 +354,7 @@ def test_bad_dep_reference_treated_as_blocked():
     """
     GIVEN a plan with phase 2 having depends_on=[99] (no phase 99 exists)
     WHEN  render(plan, observed, queue_runner="vk") is called
-    THEN  rendered.issue_per_phase[2].labels contains 'vk-blocked'
+    THEN  rendered.issue_per_phase[2].labels contains 'fr:blocked'
           (conservative: bad reference = treat as never-satisfiable)
     """
     from dataclasses import replace as dc_replace

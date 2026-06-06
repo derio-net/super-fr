@@ -129,7 +129,7 @@ class TestViewIssue:
         observe contract is plain string lists."""
         gh_response = {
             "state": "OPEN",
-            "labels": [{"name": "vk-ready", "color": "0E8AE6"}, {"name": "phase:1"}],
+            "labels": [{"name": "fr:ready", "color": "0E8AE6"}, {"name": "phase:1"}],
             "assignees": [{"login": "alice"}],
             "body": "the body",
         }
@@ -140,7 +140,7 @@ class TestViewIssue:
         )
         info = RealGhClient().view_issue("derio-net/x", 42)
         assert info["state"] == "OPEN"
-        assert info["labels"] == ["vk-ready", "phase:1"]
+        assert info["labels"] == ["fr:ready", "phase:1"]
         assert info["assignees"] == ["alice"]
         assert info["body"] == "the body"
 

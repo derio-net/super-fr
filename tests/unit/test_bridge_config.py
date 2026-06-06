@@ -101,7 +101,7 @@ def test_tick_skips_unknown_repo_and_pushes_failure_metric(fake_pushgateway):
     # FakeMcpClient.list_repos() does NOT include 'derio-net/foreign'.
     plan, repo, n = _dispatched_plan("derio-net/foreign")
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -135,7 +135,7 @@ def test_tick_dispatches_known_repo_normally(fake_pushgateway):
 
     plan, repo, n = _dispatched_plan("derio-net/superpowers-for-vk")
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 

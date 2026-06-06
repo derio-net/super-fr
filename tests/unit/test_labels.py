@@ -13,40 +13,40 @@ HEX_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 class TestLabelDef:
     def test_all_constants_have_six_char_hex_color(self) -> None:
         for ld in (
-            labels.VK_READY,
+            labels.FR_READY,
             labels.MANUAL,
-            labels.IN_PROGRESS,
-            labels.PR_READY,
-            labels.VK_SYNCED,
+            labels.FR_IN_PROGRESS,
+            labels.FR_PR_READY,
+            labels.FR_SYNCED,
         ):
             assert HEX_RE.match(ld.color), f"{ld.name}: bad color {ld.color!r}"
 
     def test_all_constants_have_non_empty_description(self) -> None:
         for ld in (
-            labels.VK_READY,
+            labels.FR_READY,
             labels.MANUAL,
-            labels.IN_PROGRESS,
-            labels.PR_READY,
-            labels.VK_SYNCED,
+            labels.FR_IN_PROGRESS,
+            labels.FR_PR_READY,
+            labels.FR_SYNCED,
         ):
             assert ld.description, f"{ld.name}: empty description"
 
     def test_lifecycle_names_are_unique(self) -> None:
         names = [
-            labels.VK_READY.name,
+            labels.FR_READY.name,
             labels.MANUAL.name,
-            labels.IN_PROGRESS.name,
-            labels.PR_READY.name,
-            labels.VK_SYNCED.name,
+            labels.FR_IN_PROGRESS.name,
+            labels.FR_PR_READY.name,
+            labels.FR_SYNCED.name,
         ]
         assert len(names) == len(set(names))
 
     def test_lifecycle_names_match_spec(self) -> None:
-        assert labels.VK_READY.name == "fr:ready"
+        assert labels.FR_READY.name == "fr:ready"
         assert labels.MANUAL.name == "manual"
-        assert labels.IN_PROGRESS.name == "fr:in-progress"
-        assert labels.PR_READY.name == "fr:pr-ready"
-        assert labels.VK_SYNCED.name == "fr:synced"
+        assert labels.FR_IN_PROGRESS.name == "fr:in-progress"
+        assert labels.FR_PR_READY.name == "fr:pr-ready"
+        assert labels.FR_SYNCED.name == "fr:synced"
 
     @pytest.mark.parametrize("bad_color", ["", "abc", "abcde", "1234567", "xxxxxx", "#ABCDEF"])
     def test_rejects_non_hex_color(self, bad_color: str) -> None:
@@ -123,19 +123,19 @@ class TestNormalizeLabelSlug:
 class TestRegistryLookup:
     def test_lifecycle_dict_keys_are_role_names(self) -> None:
         assert set(labels.LIFECYCLE.keys()) == {
-            "vk_ready",
-            "vk_blocked",
+            "fr_ready",
+            "fr_blocked",
             "manual",
             "in_progress",
             "pr_ready",
         }
 
     def test_lifecycle_values_match_module_constants(self) -> None:
-        assert labels.LIFECYCLE["vk_ready"] is labels.VK_READY
-        assert labels.LIFECYCLE["vk_blocked"] is labels.VK_BLOCKED
+        assert labels.LIFECYCLE["fr_ready"] is labels.FR_READY
+        assert labels.LIFECYCLE["fr_blocked"] is labels.FR_BLOCKED
         assert labels.LIFECYCLE["manual"] is labels.MANUAL
-        assert labels.LIFECYCLE["in_progress"] is labels.IN_PROGRESS
-        assert labels.LIFECYCLE["pr_ready"] is labels.PR_READY
+        assert labels.LIFECYCLE["in_progress"] is labels.FR_IN_PROGRESS
+        assert labels.LIFECYCLE["pr_ready"] is labels.FR_PR_READY
 
 
 class TestBoundedLabelNames:

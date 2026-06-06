@@ -122,25 +122,10 @@ def runner_label(name: str) -> LabelDef:
     )
 
 
-# ── Transitional dual-read (remove in migration step 7, post-sweep) ──
-# Old-spelling labels still on in-flight Issues are DATA, not API: readers
-# treat them as their fr:* equivalents so the cutover window has no
-# dispatch blackout. Writers never emit them.
-LEGACY_QUEUE_ALIASES: dict[str, str] = {
-    "vk-ready": FR_READY.name,
-    "vk-blocked": FR_BLOCKED.name,
-    "in-progress": FR_IN_PROGRESS.name,
-    "pr-ready": FR_PR_READY.name,
-    "vk-synced": FR_SYNCED.name,
-}
-
-# Compatibility constant names (old identifiers, new label values) so the
-# projection/diff call sites read naturally during the v3 transition.
-VK_READY = FR_READY
-VK_BLOCKED = FR_BLOCKED
-IN_PROGRESS = FR_IN_PROGRESS
-PR_READY = FR_PR_READY
-VK_SYNCED = FR_SYNCED
+# The transitional dual-read of legacy vk-* spellings (LEGACY_QUEUE_ALIASES)
+# was removed in migration step 7: the 2026-06 fleet sweep renamed every
+# label GitHub-side, so old spellings no longer exist as live data. A stray
+# legacy label is foreign data now — neither a queue marker nor managed.
 
 # Templated label colors (name is dynamic)
 SPEC_LABEL_COLOR = "5319E7"
@@ -178,14 +163,14 @@ def phase_label(n: int) -> LabelDef:
 # diff/render projection looks up entries by GitHub name when computing
 # label transitions.
 LIFECYCLE: dict[str, LabelDef] = {
-    "vk_ready": FR_READY,
-    "vk_blocked": FR_BLOCKED,
+    "fr_ready": FR_READY,
+    "fr_blocked": FR_BLOCKED,
     "manual": MANUAL,
     "in_progress": FR_IN_PROGRESS,
     "pr_ready": FR_PR_READY,
 }
 
-# Every name that marks a phase as queue-participating, old + new spelling.
+# Every name that marks a phase as queue-participating.
 QUEUE_MARKER_NAMES: frozenset[str] = frozenset(
     {
         FR_READY.name,
@@ -193,15 +178,13 @@ QUEUE_MARKER_NAMES: frozenset[str] = frozenset(
         FR_IN_PROGRESS.name,
         FR_PR_READY.name,
         FR_SYNCED.name,
-        *LEGACY_QUEUE_ALIASES.keys(),
     }
 )
 
 
 def is_queued(observed_labels: frozenset[str] | set[str]) -> bool:
     """True iff the observed label set says this Issue entered a runner
-    queue — any queue lifecycle label (either spelling) or a
-    `runner:<name>` attribute."""
+    queue — any queue lifecycle label or a `runner:<name>` attribute."""
     return any(
         label in QUEUE_MARKER_NAMES or label.startswith("runner:") for label in observed_labels
     )

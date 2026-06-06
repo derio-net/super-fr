@@ -39,7 +39,7 @@ def test_render_undispatched_phase_yields_create_intent():
     # v3 tracking-only default: NO queue lifecycle without --to or an
     # already-queued observation (super-fr split design).
     assert "fr:ready" not in label_names
-    assert "vk-ready" not in label_names
+    assert "fr:ready" not in label_names
 
 
 def test_render_queue_runner_projects_lifecycle_and_runner_label():
@@ -66,7 +66,7 @@ def test_render_observed_queued_phase_keeps_lifecycle():
     plan = parse(FIXTURE)
     obs = PhaseObservation(
         issue_state="OPEN",
-        issue_labels=frozenset({"vk-ready", "runner:vk", "phase:1"}),
+        issue_labels=frozenset({"fr:ready", "runner:vk", "phase:1"}),
         issue_assignees=(),
         linked_prs=(),
     )
@@ -557,7 +557,7 @@ def test_render_preserves_fr_synced_label_from_observed():
         phases={
             1: PhaseObservation(
                 issue_state="OPEN",
-                issue_labels=frozenset({"vk-ready", "vk-synced", "phase:1"}),
+                issue_labels=frozenset({"fr:ready", "fr:synced", "phase:1"}),
                 issue_assignees=(),
                 linked_prs=(),
                 body="",
@@ -582,7 +582,7 @@ def test_render_omits_fr_synced_when_not_observed():
         phases={
             1: PhaseObservation(
                 issue_state="OPEN",
-                issue_labels=frozenset({"vk-ready", "phase:1"}),
+                issue_labels=frozenset({"fr:ready", "phase:1"}),
                 issue_assignees=(),
                 linked_prs=(),
                 body="",
@@ -590,7 +590,7 @@ def test_render_omits_fr_synced_when_not_observed():
         }
     )
     rendered = render(plan, obs)
-    assert "vk-synced" not in {ld.name for ld in rendered.issue_per_phase[1].labels}
+    assert "fr:synced" not in {ld.name for ld in rendered.issue_per_phase[1].labels}
 
 
 def test_complete_phase_projects_closed_state():  # C5

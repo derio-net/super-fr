@@ -110,7 +110,7 @@ def test_tick_emits_sync_metric_on_dispatch_success(fake_pushgateway):
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -142,7 +142,7 @@ def test_tick_emits_failure_metric_on_dispatch_error(fake_pushgateway):
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -172,7 +172,7 @@ def test_tick_emits_gh_error_metric_when_label_stamp_fails(fake_pushgateway):
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 
@@ -202,7 +202,7 @@ def test_tick_emits_heartbeat_even_on_idle_plan(fake_pushgateway):
 
     plan, repo, n = _dispatched_plan()
     gh = FakeGhClient()
-    gh.add_issue(repo, n, state="OPEN", labels={"vk-ready", "vk-synced", "phase:1"})
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "fr:synced", "phase:1"})
     rendered = render(plan, observe(plan, gh))
     gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
 

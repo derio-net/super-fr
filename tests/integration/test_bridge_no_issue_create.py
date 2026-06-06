@@ -79,9 +79,9 @@ def _preload_managed_labels(gh: FakeGhClient, repo: str, max_phase: int) -> None
     ensure step's mechanics.
     """
     labels = {
-        "vk-ready",
-        "vk-blocked",
-        "vk-synced",
+        "fr:ready",
+        "fr:blocked",
+        "fr:synced",
         "in-progress",
         "pr-ready",
         "manual",
@@ -144,7 +144,7 @@ def test_tick_emits_zero_issue_creates_when_partial_dispatch(tmp_path: Path, cap
         TARGET_REPO,
         100,
         state="OPEN",
-        labels={"vk-ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
+        labels={"fr:ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
     )
     mcp = FakeMcpClient()
 
@@ -196,7 +196,7 @@ def test_operator_apply_default_still_creates_issues(tmp_path: Path) -> None:
 
     gh = FakeGhClient()
     _preload_managed_labels(gh, TARGET_REPO, max_phase=4)
-    gh.add_issue(TARGET_REPO, 100, state="OPEN", labels={"vk-ready"})
+    gh.add_issue(TARGET_REPO, 100, state="OPEN", labels={"fr:ready"})
 
     obs = observe(plan, gh)
     d = diff(render(plan, obs), obs, plan=plan)
@@ -265,14 +265,14 @@ def test_tick_mixed_state_syncs_labels_and_state_but_skips_create(
         TARGET_REPO,
         100,
         state="OPEN",
-        labels={"vk-ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
+        labels={"fr:ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
     )
     # Phase 2 — observed with stale vk-ready (should be sync'd to vk-blocked)
     gh.add_issue(
         TARGET_REPO,
         200,
         state="OPEN",
-        labels={"vk-ready", "phase:2", "plan:2026-05-18-no-issue-create-fixture"},
+        labels={"fr:ready", "phase:2", "plan:2026-05-18-no-issue-create-fixture"},
     )
     mcp = FakeMcpClient()
 
@@ -284,7 +284,7 @@ def test_tick_mixed_state_syncs_labels_and_state_but_skips_create(
     # Phase 2 label drift IS sync'd
     p2_labels = gh.issues[(TARGET_REPO, 200)].labels
     assert "fr:blocked" in p2_labels, "phase 2 must be projected fr:blocked"
-    assert "vk-ready" not in p2_labels, "phase 2 stale vk-ready must be removed"
+    assert "fr:ready" not in p2_labels, "phase 2 stale vk-ready must be removed"
     # Phase 3 produced a warning
     assert _count_skip_warnings(caplog) == 1
 
@@ -326,7 +326,7 @@ def test_tick_fully_dispatched_plan_no_creates_no_warnings(tmp_path: Path, caplo
             100 + n,
             state="OPEN",
             labels={
-                "vk-ready",
+                "fr:ready",
                 f"phase:{n}",
                 "plan:2026-05-18-no-issue-create-fixture",
             },
@@ -387,7 +387,7 @@ def test_tick_stoa_company_shape_emits_no_creates_and_one_warning_per_phase(
         TARGET_REPO,
         100,
         state="OPEN",
-        labels={"vk-ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
+        labels={"fr:ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
     )
     mcp = FakeMcpClient()
 

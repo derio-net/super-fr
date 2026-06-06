@@ -78,10 +78,10 @@ def test_apply_ensures_labels_with_registry_colors():
     from fr.apply import apply
     from fr.diff import diff
     from fr.labels import (
+        FR_READY,
         PHASE_LABEL_COLOR,
         PLAN_LABEL_COLOR,
         SPEC_LABEL_COLOR,
-        VK_READY,
         LabelDef,
     )
     from fr.render import render
@@ -106,7 +106,7 @@ def test_apply_ensures_labels_with_registry_colors():
     assert not non_defs, f"non-LabelDef in ensure_labels call: {non_defs}"
 
     by_name = {ld.name: ld for ld in passed}
-    assert by_name["fr:ready"].color == VK_READY.color
+    assert by_name["fr:ready"].color == FR_READY.color
     assert by_name["phase:1"].color == PHASE_LABEL_COLOR
     assert by_name["plan:fixture-minimal"].color == PLAN_LABEL_COLOR
     assert by_name["spec:fixture-spec-design"].color == SPEC_LABEL_COLOR
@@ -133,7 +133,7 @@ def test_apply_managed_labels_only_does_not_touch_operator_labels():
         repo,
         issue_n,
         state="OPEN",
-        labels={"good-first-issue", "vk-ready", "phase:1"},
+        labels={"good-first-issue", "fr:ready", "phase:1"},
         # missing spec:* and plan:* taxonomy labels — apply should add them
     )
 
@@ -141,7 +141,7 @@ def test_apply_managed_labels_only_does_not_touch_operator_labels():
         phases={
             1: PhaseObservation(
                 issue_state="OPEN",
-                issue_labels=frozenset({"good-first-issue", "vk-ready", "phase:1"}),
+                issue_labels=frozenset({"good-first-issue", "fr:ready", "phase:1"}),
                 issue_assignees=(),
                 linked_prs=(),
             )
@@ -946,7 +946,7 @@ def test_apply_executes_cross_repo_mutations_through_correct_repo():
         phases={
             2: PhaseObservation(
                 issue_state="OPEN",
-                issue_labels=frozenset({"vk-ready"}),
+                issue_labels=frozenset({"fr:ready"}),
                 issue_assignees=(),
                 linked_prs=(),
                 body="stale body",
@@ -960,7 +960,7 @@ def test_apply_executes_cross_repo_mutations_through_correct_repo():
         "derio-net/repo-b",
         100,
         state="OPEN",
-        labels={"vk-ready"},
+        labels={"fr:ready"},
         body="stale body",
     )
 
