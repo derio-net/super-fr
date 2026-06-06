@@ -4,7 +4,7 @@ Two sections:
   - **Commands** — every top-level command and sub-app, introspected from the
     typer app at runtime (so it stays in sync with the actual surface).
   - **Skills** — the four `vk-*` SKILL.md files. v2 skills are not 1:1 with
-    sub-apps (e.g. `vk-execute` orchestrates `fr pickup` + `fr plan edit` +
+    sub-apps (e.g. `fr-execute` orchestrates `fr pickup` + `fr plan edit` +
     `fr apply`), so the skill section is free-form prose pointing at the
     relevant commands rather than a single-app mapping.
 """
@@ -17,45 +17,50 @@ import typer
 # verbs it orchestrates. Update alongside the SKILL.md files.
 SKILLS: list[tuple[str, str, str]] = [
     (
-        "vk-plan",
+        "fr-plan",
         "Author / edit plans (skill).",
         "fr plan {create,edit,rework,rework-add,rework-list,self-review}",
     ),
     (
-        "vk-dispatch",
+        "fr-dispatch",
         "Reconcile a plan's GitHub Issues (skill).",
         "fr status  →  fr apply [--yes] [--force]  ·  fr undispatch / fr archive to invert/finish",
     ),
     (
-        "vk-execute",
+        "fr-execute",
         "Implement a phase end-to-end (skill).",
         "fr pickup --phase N  →  fr plan edit --tick / --complete-phase  →  fr apply --yes",
     ),
     (
-        "vk-progress",
+        "fr-progress",
         "Plan / spec progress reporting (skill).",
         "fr status <plan-dir>  +  fr spec status [--all]  +  fr plan edit  +  fr archive [--all]"
         "  ·  fr repair [--yes] to normalize stale refs",
     ),
     (
-        "vk-goal",
+        "fr-goal",
         "Autonomous goal-to-PR pipeline (skill).",
         "fr plan {create,self-review,edit}  →  fr spec status",
     ),
     (
-        "vk-isolation",
+        "fr-isolation",
         "Isolated workspace: worktree + devcontainer, exec-bridge (skill).",
         "fr isolation {up,exec,status,down}",
     ),
     (
-        "vk-init",
+        "fr-runner",
+        "Operate/debug an autonomous runner (dispatch plugin skill).",
+        "heartbeat + failure metrics  ·  fr status  ·  fr undispatch",
+    ),
+    (
+        "fr-init",
         "Scaffold devcontainer profiles via interview (skill).",
         "fr init scaffold --profile NAME --purpose TEXT [--tool ...] [--secret ...]",
     ),
     (
-        "vk-brainstorming",
-        "Brainstorm inside vk-isolation; hard stop without a profile (skill).",
-        "fr isolation up  →  superpowers:brainstorming  →  vk-plan handoff",
+        "fr-brainstorming",
+        "Brainstorm inside fr-isolation; hard stop without a profile (skill).",
+        "fr isolation up  →  superpowers:brainstorming  →  fr-plan handoff",
     ),
 ]
 
@@ -86,9 +91,9 @@ def skills() -> None:
     rows = _commands(app)
     width = max((len(n) for n, _ in rows), default=0)
     for name, help_text in rows:
-        typer.echo(f"  vk {name:<{width}}  {help_text}")
+        typer.echo(f"  fr {name:<{width}}  {help_text}")
     typer.echo()
-    typer.echo("Skills (full docs in skills/<name>/SKILL.md):")
+    typer.echo("Skills (full docs in plugins/*/skills/<name>/SKILL.md):")
     skill_width = max((len(n) for n, _, _ in SKILLS), default=0)
     for name, summary, verbs in SKILLS:
         typer.echo(f"  {name:<{skill_width}}  {summary}")

@@ -42,8 +42,8 @@ def create_cmd(
     spec: Path | None = typer.Option(
         None, "--spec", help="Spec path relative to repo root (optional)."
     ),
-    vk_version: str = typer.Option(
-        ">=2.0.0,<3.0.0", "--vk-version", help="vk_version constraint for the plan."
+    fr_version: str = typer.Option(
+        ">=3.0.0,<4.0.0", "--fr-version", help="fr_version constraint for the plan."
     ),
     phases_file: Path | None = typer.Option(
         None, "--phases-file", help="YAML file with a list of phase specs."
@@ -86,7 +86,7 @@ def create_cmd(
             slug=slug,
             spec=str(spec) if spec else None,
             target_repo=target_repo,
-            vk_version=vk_version,
+            fr_version=fr_version,
             phases=phases,
             prose=prose,
         )

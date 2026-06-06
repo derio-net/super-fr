@@ -1,4 +1,4 @@
-"""`vk repair` CLI — dry-run default, --yes writes, loud warnings."""
+"""`fr repair` CLI — dry-run default, --yes writes, loud warnings."""
 
 from __future__ import annotations
 

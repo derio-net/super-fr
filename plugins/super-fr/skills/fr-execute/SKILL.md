@@ -88,7 +88,7 @@ take the PR out of draft.
    `fr apply` is idempotent. **Safe to run before your PR merges** —
    renderer needs BOTH `completion.at` AND a merged PR observed before
    projecting CLOSED, so this only sets `pr-ready`. Re-run after merge
-   (or let the bridge) to close.
+   (or let the runner) to close.
 
 ## Constraints
 
@@ -97,13 +97,6 @@ take the PR out of draft.
 - Stop if blocked — report what's missing.
 - Step IDs: `P<n>.T<n>.S<n>`.
 - Migration from v1 (.md) plans is a separate concern — see `fr migrate v1-to-v2`.
-
-## Bridge integration
-
-`vk.bridge.discover_plans` + `vk.bridge.tick` are the library surface
-the live cron bridge (`agent-images/kali/scripts/vk-issue-bridge.py`)
-imports — NOT operator CLI commands. Agents executing a phase never call
-them. See spec §"Bridge integration — `vk.bridge.*`".
 
 ## v1 plan migration
 

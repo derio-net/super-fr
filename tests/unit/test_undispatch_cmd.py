@@ -1,4 +1,4 @@
-"""`vk undispatch` — inverse of dispatch (2026-06-05 spec, Phase 6)."""
+"""`fr undispatch` — inverse of dispatch (2026-06-05 spec, Phase 6)."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def test_undispatch_yes_closes_with_comment_and_nulls_field(tmp_path, monkeypatc
     assert result.exit_code == 0, result.output
     comments = [c for c in gh.calls if c[0] == "comment_issue"]
     assert len(comments) == 1
-    assert "vk undispatch" in comments[0][1]["body"]
+    assert "fr undispatch" in comments[0][1]["body"]
     assert "2026-05-09-fixture-minimal" in comments[0][1]["body"]
     closes = [c for c in gh.calls if c[0] == "edit_issue_state"]
     assert len(closes) == 1

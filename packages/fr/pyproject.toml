@@ -1,6 +1,6 @@
 [project]
 name = "fr"
-version = "2.6.1"
+version = "3.0.0"
 description = "super-fr base: superpowers wrapper + plan-as-folder + GH tracking (render → observe → diff → apply)"
 requires-python = ">=3.11"
 dependencies = [

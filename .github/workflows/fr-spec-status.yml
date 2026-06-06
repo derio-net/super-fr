@@ -1,4 +1,4 @@
-name: vk-spec-status
+name: fr-spec-status
 on:
   workflow_call:
 
@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install vk
-        run: pip install --user "vk @ git+https://github.com/derio-net/superpowers-for-vk@v2.0.0"
+        run: pip install --user "fr @ git+https://github.com/derio-net/super-fr@v3.0.0#subdirectory=packages/fr"
       - name: Find specs touched by plan changes
         id: affected
         env:
@@ -55,7 +55,7 @@ jobs:
           set -euo pipefail
           : > /tmp/status.md
           for spec in $SPECS; do
-            vk v2 spec status "$spec" >> /tmp/status.md
+            fr spec status "$spec" >> /tmp/status.md
             printf '\n\n---\n\n' >> /tmp/status.md
           done
       - name: Post comment

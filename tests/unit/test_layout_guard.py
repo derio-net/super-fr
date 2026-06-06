@@ -2,7 +2,7 @@
 
 Every vk verb that resolves the superpowers tree must exit 2 when the
 legacy `docs/superpowers/archived-plans/` directory exists, pointing the
-operator at `vk migrate dirs --yes`. Read verbs hard-stop too — banners
+operator at `fr migrate dirs --yes`. Read verbs hard-stop too — banners
 get overlooked; migration should happen at first use of the new version.
 """
 
@@ -64,7 +64,7 @@ def test_verbs_hard_stop_on_legacy_layout(tmp_path, monkeypatch, argv):
 
     result = CliRunner().invoke(app, argv)
     assert result.exit_code == 2, f"{argv}: rc={result.exit_code}\n{result.output}"
-    assert "vk migrate dirs" in result.output
+    assert "fr migrate dirs" in result.output
 
 
 def test_spec_status_hard_stops_on_legacy_layout(tmp_path, monkeypatch):
@@ -80,7 +80,7 @@ def test_spec_status_hard_stops_on_legacy_layout(tmp_path, monkeypatch):
 
     result = CliRunner().invoke(app, ["spec", "status", str(spec_file)])
     assert result.exit_code == 2, result.output
-    assert "vk migrate dirs" in result.output
+    assert "fr migrate dirs" in result.output
 
 
 def test_guard_fires_on_legacy_archived_specs_too(tmp_path):

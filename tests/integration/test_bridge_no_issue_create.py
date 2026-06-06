@@ -1,6 +1,6 @@
 """Bridge tick must NOT emit `IssueCreate` mutations.
 
-`IssueCreate` is operator-only (via `vk apply --yes`). Regression
+`IssueCreate` is operator-only (via `fr apply --yes`). Regression
 guard for the 2026-05-18 incident where the bridge auto-created 38
 spurious GH Issues across two waves (sfv#196-#214, sfv#216-#234).
 
@@ -113,7 +113,7 @@ def test_tick_emits_zero_issue_creates_when_partial_dispatch(tmp_path: Path, cap
     THEN   the gh client receives ZERO IssueCreate calls
     AND    each null-tracking-issue phase logs a WARNING saying
            "would have created Issue; skipping (operator-only via
-           `vk apply --yes`)"
+           `fr apply --yes`)"
     """
     from fr import parse
     from fr_dispatch import tick

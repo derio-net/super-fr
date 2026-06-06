@@ -115,7 +115,7 @@ def create(
     slug: str,
     spec: Path | str | None,
     target_repo: str,
-    vk_version: str,
+    fr_version: str,
     phases: list[PhaseSpec],
     prose: str,
     plans_dir: Path | None = None,
@@ -157,7 +157,7 @@ def create(
         "plan": slug,
         "spec": spec_str,
         "target_repo": target_repo,
-        "vk_version": vk_version,
+        "fr_version": fr_version,
         "created": _dt.date.today().isoformat(),
     }
     meta_text = _yaml_dump(meta)
@@ -574,7 +574,7 @@ def rework_create(parent_plan_dir: Path) -> Plan:
         "plan": rework_slug,
         "spec": parent_spec,
         "target_repo": parent_plan.meta.target_repo,
-        "vk_version": parent_plan.meta.vk_version,
+        "fr_version": parent_plan.meta.fr_version or ">=3.0.0,<4.0.0",
         "created": _dt.date.today().isoformat(),
         "parent_plan": parent_rel,
     }

@@ -206,7 +206,7 @@ def test_agentic_phase_complete_respects_operator_close_for_inline_work():
     set and no open linked PR, is complete even without a GitHub-linked merged PR.
 
     Inline-executed plans (direct commits) never produce a closing-keyword PR, so
-    the merged-PR signal is unsatisfiable. Without this, `vk apply` recomputes the
+    the merged-PR signal is unsatisfiable. Without this, `fr apply` recomputes the
     desired state as OPEN and reopens the already-closed Issue on every run.
     """
     from fr import parse

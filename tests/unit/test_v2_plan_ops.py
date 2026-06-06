@@ -50,7 +50,7 @@ def test_create_scaffolds_folder_and_appends_spec_row(tmp_path):
         slug="2026-05-10-fixture-create",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=1.0.0,<3.0.0",
+        fr_version=">=1.0.0,<4.0.0",
         phases=[
             PhaseSpec(
                 number=1,
@@ -79,7 +79,7 @@ def test_create_rejects_existing_folder_with_mismatched_content(tmp_path):
         slug="2026-05-10-dup",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=1.0.0,<3.0.0",
+        fr_version=">=1.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -106,7 +106,7 @@ def test_create_preflight_validates_spec_before_creating_folder(tmp_path):
             slug=slug,
             spec=str(spec_path.relative_to(repo)),
             target_repo="derio-net/test",
-            vk_version=">=1.0.0,<3.0.0",
+            fr_version=">=1.0.0,<4.0.0",
             phases=[PhaseSpec(number=1, title="t", tasks=())],
             prose="# x\n",
         )
@@ -126,7 +126,7 @@ def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
         slug="2026-05-10-repair",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=1.0.0,<3.0.0",
+        fr_version=">=1.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -158,7 +158,7 @@ def test_create_rejects_existing_folder_with_stale_extra_phase(tmp_path):
         slug="2026-05-10-stale",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=1.0.0,<3.0.0",
+        fr_version=">=1.0.0,<4.0.0",
         prose="# x\n",
     )
     create(
@@ -469,7 +469,7 @@ def _purity_plan(tmp_path, *, phase1_tag="agentic", step_text="Run the test suit
         slug="2026-06-04-purity",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=2.0.0,<3.0.0",
+        fr_version=">=3.0.0,<4.0.0",
         phases=[
             PhaseSpec(
                 number=1,
@@ -623,7 +623,7 @@ def test_create_rejects_phase_zero_before_writing(tmp_path):
             slug="2026-06-04-zero-phase",
             spec=str(spec_path.relative_to(repo)),
             target_repo="derio-net/test",
-            vk_version=">=2.0.0,<3.0.0",
+            fr_version=">=3.0.0,<4.0.0",
             phases=[
                 PhaseSpec(number=0, title="Prereqs", tag="manual"),
                 PhaseSpec(number=1, title="Build", tag="agentic"),
@@ -649,7 +649,7 @@ def test_self_review_warns_on_overlong_plan_label(tmp_path):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=2.0.0,<3.0.0",
+        fr_version=">=3.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -673,7 +673,7 @@ def test_self_review_overlong_lint_checks_the_normalized_label(tmp_path):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=2.0.0,<3.0.0",
+        fr_version=">=3.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -694,7 +694,7 @@ def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):
         slug="2026-05-10-specwarn",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=2.0.0,<3.0.0",
+        fr_version=">=3.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -724,7 +724,7 @@ def test_self_review_no_spec_warning_for_valid_cross_repo_form(tmp_path):
         slug="2026-05-10-xrepo",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=2.0.0,<3.0.0",
+        fr_version=">=3.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -843,7 +843,7 @@ def test_create_writes_bare_slug_file_cell(tmp_path):
         slug="2026-06-06-slugcell",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        vk_version=">=1.0.0,<3.0.0",
+        fr_version=">=1.0.0,<4.0.0",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# p\n",
     )

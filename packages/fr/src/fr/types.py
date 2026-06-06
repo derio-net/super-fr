@@ -48,7 +48,11 @@ class PlanMeta(BaseModel):
     plan: str
     spec: str | None = None
     target_repo: str
-    vk_version: str
+    # Legacy constraint for the retired `vk` tool — parsed but NEVER
+    # enforced (inert metadata; plans in the wild keep it). The enforced
+    # constraint is `fr_version` (super-fr split, v3).
+    vk_version: str | None = None
+    fr_version: str | None = None
     created: str  # YYYY-MM-DD; not parsed to date for round-trip stability
     parent_plan: str | None = None
     prior_rework: str | None = None

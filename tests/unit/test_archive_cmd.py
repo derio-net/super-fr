@@ -1,4 +1,4 @@
-"""`vk archive` — gate, plan/spec moves, --all sweep (2026-06-05 spec, Phase 5)."""
+"""`fr archive` — gate, plan/spec moves, --all sweep (2026-06-05 spec, Phase 5)."""
 
 from __future__ import annotations
 
@@ -271,7 +271,7 @@ def test_archive_all_refuses_force(tmp_path, monkeypatch):
 
 
 def test_apply_dry_run_prints_archive_nudge(tmp_path, monkeypatch):
-    """apply's dry-run nudges toward vk archive when the gate passes."""
+    """apply's dry-run nudges toward fr archive when the gate passes."""
     from fr.commands import apply_cmd
 
     repo = _repo(tmp_path)
@@ -279,7 +279,7 @@ def test_apply_dry_run_prints_archive_nudge(tmp_path, monkeypatch):
     _git_seed(repo)
     rc, text, _json = apply_cmd._apply_one(plan_dir, FakeGhClient(), yes=False)
     assert rc == 0
-    assert "vk archive" in text
+    assert "fr archive" in text
 
 
 # --- 2026-06-06 review fixes ---
@@ -287,8 +287,8 @@ def test_apply_dry_run_prints_archive_nudge(tmp_path, monkeypatch):
 
 def test_archive_all_sweeps_stranded_spec_with_no_plan_moves(tmp_path, monkeypatch):
     """A spec whose plans all archived in PRIOR runs must still be swept by
-    a later `vk archive --all` (review finding: the sweep ran only when a
-    plan moved this run, diverging from `vk migrate dirs`)."""
+    a later `fr archive --all` (review finding: the sweep ran only when a
+    plan moved this run, diverging from `fr migrate dirs`)."""
     repo = _repo(tmp_path)
     # Plan already archived; spec left behind (e.g. unresolved back then).
     implemented = repo / "docs" / "superpowers" / "implemented" / "plans" / "2026-05-01-a"

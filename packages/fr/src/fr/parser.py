@@ -9,7 +9,7 @@ Design rationale lives in:
 
 Key invariants enforced here:
   - The directory must contain `_meta.yaml` (otherwise it's not a v2 plan).
-  - The plan's `vk_version` constraint must be satisfiable by the
+  - The plan's `fr_version` constraint (when present) must be satisfiable by the
     installed `vk` package (otherwise we'd produce wrong renders).
   - All errors surface as `PlanSchemaError` with the offending file
     in the message — no naked pydantic/packaging exceptions leak out.
@@ -98,7 +98,7 @@ _PHASE_FILE_RE = re.compile(r"^(\d{2})\.yaml$")
 # free. The bridge runs under supercronic, which kills and respawns the
 # process on every cron tick after `vk-bump`, so a stale cache is not a real
 # concern — the new process always re-reads the metadata.
-INSTALLED_VK_VERSION = importlib.metadata.version("fr")
+INSTALLED_FR_VERSION = importlib.metadata.version("fr")
 
 
 def parse(plan_dir: Path) -> Plan:
@@ -108,7 +108,8 @@ def parse(plan_dir: Path) -> Plan:
       - `plan_dir` is not a directory
       - missing `_meta.yaml` (looks like a v1 plan)
       - `_meta.yaml` fails schema validation
-      - `vk_version` is malformed or unsatisfiable by the installed vk
+      - `fr_version` is malformed or unsatisfiable by the installed fr
+        (legacy `vk_version` is inert metadata — never enforced)
       - any `NN.yaml` is malformed yaml or fails schema validation
     """
     plan_dir = Path(plan_dir).resolve()
@@ -125,24 +126,28 @@ def parse(plan_dir: Path) -> Plan:
     except Exception as e:
         raise PlanSchemaError(f"_meta.yaml: {e}") from e
 
-    try:
-        spec = SpecifierSet(meta.vk_version)
-    except InvalidSpecifier as e:
-        raise PlanSchemaError(f"_meta.yaml: invalid vk_version {meta.vk_version!r}: {e}") from e
-    try:
-        installed = Version(INSTALLED_VK_VERSION)
-    except InvalidVersion as e:  # pragma: no cover — installed version comes from packaging
-        raise PlanSchemaError(
-            f"installed vk version {INSTALLED_VK_VERSION!r} is not a valid PEP 440 version: {e}"
-        ) from e
-    if installed not in spec:
-        raise PlanSchemaError(
-            f"plan {plan_dir} requires vk_version {meta.vk_version} "
-            f"but installed is {INSTALLED_VK_VERSION}. "
-            f"To upgrade: pip install --user --upgrade "
-            f'"vk @ git+https://github.com/derio-net/superpowers-for-vk@vX.Y.Z" '
-            f"where X.Y.Z is a version satisfying {meta.vk_version}."
-        )
+    # `fr_version` is enforced when present; the legacy `vk_version` field
+    # is inert (it constrains a tool that no longer exists — labels-are-data
+    # doctrine applied to plan files; see the super-fr split design).
+    if meta.fr_version:
+        try:
+            spec = SpecifierSet(meta.fr_version)
+        except InvalidSpecifier as e:
+            raise PlanSchemaError(f"_meta.yaml: invalid fr_version {meta.fr_version!r}: {e}") from e
+        try:
+            installed = Version(INSTALLED_FR_VERSION)
+        except InvalidVersion as e:  # pragma: no cover — installed version comes from packaging
+            raise PlanSchemaError(
+                f"installed fr version {INSTALLED_FR_VERSION!r} is not a valid PEP 440 version: {e}"
+            ) from e
+        if installed not in spec:
+            raise PlanSchemaError(
+                f"plan {plan_dir} requires fr_version {meta.fr_version} "
+                f"but installed is {INSTALLED_FR_VERSION}. "
+                f"To upgrade: uv tool install --force "
+                f'"fr @ git+https://github.com/derio-net/super-fr@vX.Y.Z#subdirectory=packages/fr" '
+                f"where X.Y.Z is a version satisfying {meta.fr_version}."
+            )
 
     indexed_phase_files: list[tuple[int, Path]] = []
     for p in plan_dir.iterdir():

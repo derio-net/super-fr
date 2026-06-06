@@ -1,4 +1,4 @@
-"""End-to-end test: `vk apply --dry-run` against a fixture v2 plan."""
+"""End-to-end test: `fr apply --dry-run` against a fixture v2 plan."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def fake_gh_factory(monkeypatch):
 
 
 def test_vk_v2_apply_default_is_dry_run(fake_gh_factory):
-    """vk apply <plan> (no flags) is a dry-run; emits a creation summary."""
+    """fr apply <plan> (no flags) is a dry-run; emits a creation summary."""
     from fr.cli import app
 
     runner = CliRunner()
@@ -48,7 +48,7 @@ def test_vk_v2_apply_default_is_dry_run(fake_gh_factory):
 
 
 def test_vk_v2_apply_yes_actually_calls_gh(fake_gh_factory, tmp_path):
-    """vk apply <plan> --yes actually mutates via the fake gh."""
+    """fr apply <plan> --yes actually mutates via the fake gh."""
     # Apply --yes now writes `tracking_issue` back into the plan yaml, so
     # use a tmp copy inside a proper git repo (with origin) to keep the
     # shared fixture clean and satisfy the reachability gate.
@@ -146,7 +146,7 @@ def test_vk_v2_apply_missing_args_exits_2(monkeypatch):
 
 
 def test_vk_v2_apply_json_format(fake_gh_factory):
-    """vk apply <plan> --format json emits parseable JSON."""
+    """fr apply <plan> --format json emits parseable JSON."""
     import json
 
     from fr.cli import app

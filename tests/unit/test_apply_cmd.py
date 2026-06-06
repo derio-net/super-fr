@@ -66,7 +66,7 @@ def test_check_plan_reachable_skips_cross_repo_spec(monkeypatch):
 
     Surfaced 2026-05-18 when the agent-images cutover plan (whose spec
     lives in superpowers-for-vk) couldn't be dispatched via
-    `vk apply --yes` — the gate treated the literal cross-repo path
+    `fr apply --yes` — the gate treated the literal cross-repo path
     as a same-repo filename, `git ls-tree` returned empty, gate refused.
     """
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -149,7 +149,7 @@ def test_apply_legacy_layout_hard_stops_before_archived_refusal(tmp_path, monkey
 
     result = CliRunner().invoke(app, ["apply", "docs/superpowers/archived-plans/2026-05-10-done"])
     assert result.exit_code == 2, result.output
-    assert "vk migrate dirs" in result.output
+    assert "fr migrate dirs" in result.output
 
 
 # --- 2026-06-05 stale-plan dispatch guard (completion guard in apply) ---
@@ -196,7 +196,7 @@ def test_apply_yes_all_suppressed_exits_2_with_archive_hint(tmp_path):
     gh = FakeGhClient()
     rc, text, _json_out = apply_cmd._apply_one(plan_dir, gh, yes=True)
     assert rc == 2, text
-    assert "vk archive" in text
+    assert "fr archive" in text
     creates = [c for c in gh.calls if c[0] == "create_issue"]
     assert creates == [], "guard must prevent Issue creation"
 

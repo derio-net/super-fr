@@ -221,7 +221,7 @@ def test_tick_skipped_when_phase_already_vk_synced():
 def test_tick_does_not_create_issues_or_write_tracking_issue_back(tmp_path):
     """Bridge.tick on a fresh plan (tracking_issue=null) must NOT auto-create
     a GH Issue and must NOT write back to the plan yaml — Issue creation is
-    operator-only (via `vk apply --yes`). See 2026-05-18 incident
+    operator-only (via `fr apply --yes`). See 2026-05-18 incident
     (sfv#196-#214 wave 1, sfv#216-#234 wave 2).
 
     Full BDD coverage for this invariant lives in

@@ -38,8 +38,10 @@ def member_pyprojects() -> list[pathlib.Path]:
 
 
 def plugin_jsons() -> list[pathlib.Path]:
-    """Every plugin manifest (one today; two after the plugin split)."""
-    return sorted(PLUGIN_DIR.glob("**/plugin.json"))
+    """Every plugin manifest — per-plugin dirs since the split."""
+    return sorted(
+        [*PLUGIN_DIR.glob("**/plugin.json"), *(REPO / "plugins").glob("*/.claude-plugin/plugin.json")]
+    )
 
 
 def read_version(toml: pathlib.Path) -> str:

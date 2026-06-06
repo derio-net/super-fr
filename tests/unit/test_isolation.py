@@ -1,4 +1,4 @@
-"""vk isolation — Target protocol, state, profiles, and the local target.
+"""fr isolation — Target protocol, state, profiles, and the local target.
 
 All devcontainer/docker/gh calls go through the Runner seam; git calls hit
 real throwaway repos (cheap, deterministic). Nothing here needs Docker.

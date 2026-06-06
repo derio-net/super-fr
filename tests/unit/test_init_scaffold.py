@@ -1,4 +1,4 @@
-"""vk init scaffold — mechanical devcontainer-profile writer."""
+"""fr init scaffold — mechanical devcontainer-profile writer."""
 
 from __future__ import annotations
 

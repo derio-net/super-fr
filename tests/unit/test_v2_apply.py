@@ -763,7 +763,7 @@ def test_gate_skips_spec_check_when_meta_spec_is_none(tmp_path):
 
 
 def test_apply_one_rejects_when_gate_returns_missing(tmp_path, monkeypatch):
-    """vk apply --yes refuses dispatch when the gate reports missing files."""
+    """fr apply --yes refuses dispatch when the gate reports missing files."""
     import shutil
 
     from fr.commands import apply_cmd
@@ -858,7 +858,7 @@ def test_apply_one_passes_through_when_gate_returns_empty(tmp_path, monkeypatch)
 
 
 def test_apply_one_dry_run_skips_gate(tmp_path, monkeypatch):
-    """vk apply <plan-dir> (no --yes) doesn't invoke the gate — preview unaffected."""
+    """fr apply <plan-dir> (no --yes) doesn't invoke the gate — preview unaffected."""
     import shutil
 
     from fr.commands import apply_cmd

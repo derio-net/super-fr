@@ -808,7 +808,7 @@ def test_migrate_aligns_vk_version_with_create_default(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# vk migrate dirs (2026-06-05 dispatch-guards spec, Phase 3)
+# fr migrate dirs (2026-06-05 dispatch-guards spec, Phase 3)
 
 
 def _legacy_layout_repo(tmp_path: Path) -> Path:
@@ -970,7 +970,7 @@ def test_spec_fully_implemented_cross_repo_slug_row(tmp_path):
 
 
 def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
-    """`vk migrate dirs --yes` normalizes refs after relocating the legacy
+    """`fr migrate dirs --yes` normalizes refs after relocating the legacy
     tree — the repo converges in one operation."""
     import subprocess
 

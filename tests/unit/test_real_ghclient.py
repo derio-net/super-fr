@@ -92,7 +92,7 @@ class TestListLinkedPrs:
         assert prs[0]["ci"] == "PENDING"
 
     def test_returns_empty_on_gh_error(self, monkeypatch):
-        """Soft-fail: an unreachable PR query shouldn't blow up `vk apply`."""
+        """Soft-fail: an unreachable PR query shouldn't blow up `fr apply`."""
 
         def _raise(args):
             raise _gh.GhError("transient failure")

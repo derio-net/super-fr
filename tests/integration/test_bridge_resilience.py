@@ -424,13 +424,13 @@ def test_per_plan_exception_does_not_kill_daemon(
     )
 
 
-# ── I8: `vk apply` and `fr_dispatch.tick` racing for the same plan ─────
+# ── I8: `fr apply` and `fr_dispatch.tick` racing for the same plan ─────
 
 
 def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
     """
     GIVEN a plan with steady-state Issues
-    WHEN  an operator runs `vk apply --yes` simultaneously with the bridge's
+    WHEN  an operator runs `fr apply --yes` simultaneously with the bridge's
           tick (both call apply() on overlapping mutations)
     THEN  the final gh state matches what either path alone would produce
     AND   no Issue ends up with duplicate labels
@@ -487,7 +487,7 @@ def test_concurrent_apply_and_tick_are_idempotent(tmp_path: Path) -> None:
     steady_state = gh.issues[(repo, 77)].state
     steady_body = gh.issues[(repo, 77)].body
 
-    # Now race: operator-side `vk apply` projects the same render → diff,
+    # Now race: operator-side `fr apply` projects the same render → diff,
     # which on a steady-state plan emits only the idempotent
     # RepoLabelEnsure (no per-issue diffs).
     rendered = render(plan, observe(plan, gh))

@@ -1,4 +1,4 @@
-"""vk isolation CLI — flag mapping, exec passthrough, error UX (exit 2 + vk-init pointer)."""
+"""fr isolation CLI — flag mapping, exec passthrough, error UX (exit 2 + vk-init pointer)."""
 
 from __future__ import annotations
 

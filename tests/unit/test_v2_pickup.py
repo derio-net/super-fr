@@ -1,4 +1,4 @@
-"""`vk pickup` tests."""
+"""`fr pickup` tests."""
 
 from __future__ import annotations
 

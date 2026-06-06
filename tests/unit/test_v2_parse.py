@@ -88,17 +88,42 @@ def test_parse_accepts_phase_one():
     assert parse(FIXTURE_DIR).phases[0].phase.number == 1
 
 
-def test_parse_enforces_vk_version(monkeypatch):
+def test_parse_enforces_fr_version(monkeypatch, tmp_path):
+    """`fr_version` (when present) gates parsing; the legacy `vk_version`
+    field is INERT — it constrains a tool that no longer exists (v3)."""
+    import shutil
+
     from fr import PlanSchemaError, parse
 
-    monkeypatch.setattr("fr.parser.INSTALLED_VK_VERSION", "1.4.5")
-    future = Path(__file__).parent / "fixtures" / "v2_plan_future"
-    with pytest.raises(PlanSchemaError, match="vk_version"):
-        parse(future)
+    plan_dir = tmp_path / "plan"
+    shutil.copytree(FIXTURE_DIR, plan_dir)
+    meta = (plan_dir / "_meta.yaml").read_text()
+    (plan_dir / "_meta.yaml").write_text(meta + 'fr_version: ">=9.0.0,<10.0.0"\n')
+
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "3.0.0")
+    with pytest.raises(PlanSchemaError, match="requires fr_version"):
+        parse(plan_dir)
 
 
-def test_parse_rejects_invalid_vk_version_specifier(tmp_path):
-    """Malformed vk_version surfaces as PlanSchemaError, not InvalidSpecifier."""
+def test_parse_legacy_vk_version_is_inert(monkeypatch, tmp_path):
+    """A wild plan pinned to vk <3.0.0 parses fine under fr 3.x —
+    the v3 landmine the split design defused (labels-are-data doctrine
+    applied to plan files)."""
+    import shutil
+
+    from fr import parse
+
+    plan_dir = tmp_path / "plan"
+    shutil.copytree(FIXTURE_DIR, plan_dir)
+    # fixture carries vk_version ">=1.0.0,<3.0.0"
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "99.0.0")
+    plan = parse(plan_dir)
+    assert plan.meta.vk_version is not None  # parsed, retained, unenforced
+
+
+def test_parse_rejects_invalid_fr_version_specifier(tmp_path):
+    """Malformed fr_version surfaces as PlanSchemaError, not
+    InvalidSpecifier. (A malformed legacy vk_version is inert — ignored.)"""
     import shutil
 
     from fr import PlanSchemaError, parse
@@ -106,9 +131,10 @@ def test_parse_rejects_invalid_vk_version_specifier(tmp_path):
     shutil.copytree(FIXTURE_DIR, tmp_path / "copy")
     (tmp_path / "copy" / "_meta.yaml").write_text(
         "schema_version: 2\nplan: x\ntarget_repo: o/r\n"
-        'vk_version: "totally not a spec"\ncreated: "2026-05-09"\n'
+        'vk_version: "totally not a spec"\n'
+        'fr_version: "also not a spec"\ncreated: "2026-05-09"\n'
     )
-    with pytest.raises(PlanSchemaError, match="invalid vk_version"):
+    with pytest.raises(PlanSchemaError, match="invalid fr_version"):
         parse(tmp_path / "copy")
 
 
