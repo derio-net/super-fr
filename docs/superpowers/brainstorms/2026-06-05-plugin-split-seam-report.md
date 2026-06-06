@@ -24,6 +24,10 @@ GitHub Issues but no VibeKanban.
 
 ## Inventory — CLI surface
 
+*(Snapshot at 2.4.2, pre-dispatch-guards. 2.5.0 added `vk status`,
+`vk archive`, `vk undispatch`, and `vk migrate dirs` — all base-layer;
+see the spec's §Architecture for the current verb set.)*
+
 | Command | What it does | Mode | VK-coupling |
 |---|---|---|---|
 | `vk plan create` | Scaffold v2 plan folder + spec row | both | none |
@@ -78,14 +82,24 @@ dedup, lifecycle hooks, orphan reaping.
 
 ### Layer 3 splits again: runner framework vs VK adapter
 
-Inside the bridge, only `dispatch.py`, `workspaces.py`, `cli.py`, and
-`__init__.py` touch the MCP client. `slots.py` (concurrency budget),
-`dedup.py`, `lifecycle.py` (transition hooks — "wire this to Slack / a
-status board"), `prompt.py` (agent prompt construction), `pr_state.py`,
-`metrics.py` are generic runner machinery with no VK types in their
-core logic (the MCP surface is already duck-typed via Protocols for
-tests). The bridge is ~70% "generic autonomous runner" and ~30%
-"VibeKanban adapter".
+*(Corrected 2026-06-06 after code review — the first version of this
+section overstated the separation.)*
+
+Inside the bridge, the *roles* split into generic runner machinery
+(concurrency budget, dedup, prompt construction, transition hooks,
+PR-state reconciliation, metrics) vs VK adapter (card/workspace
+creation) — but the *code* does not split that cleanly today. Only
+`lifecycle.py` is genuinely VK-free. `slots.py` (`count_active_ws(mcp)`),
+`config.py` (`known_repos(mcp)`, the `vibe-kanban-mcp` wire shape),
+`dedup.py` (`fetch_existing_titles(mcp, project_id=…)`), and
+`pr_state.py` (`MCPCardClient`, `archive_for_card`) all take MCP clients
+and assume VK data shapes; `prompt.py` hardcodes "You are a VK-spawned
+agent"; `metrics.py` names every metric `willikins_vk_bridge_*`. The
+saving grace is that the MCP surface is duck-typed via Protocols
+(`MCPDispatch`, `MCPArchiver`, `MCPWorkspaceClient`), so a runner
+framework CAN be extracted — but it is a de-VK-ification refactor
+(generalize the Protocols, rename workspace-isms, parameterize prompt
+and metric strings), not a free relocation of already-generic modules.
 
 ## Mapping layers onto the two modes
 
@@ -129,7 +143,8 @@ contract a runner needs. Candidate runners that consume it unchanged:
 - **Headless CLI runner**: the bridge minus VK — same tick loop
   (`discover_plans` is already board-agnostic), but `dispatch_phase`
   spawns `claude -p` in a `vk isolation` workspace instead of creating a
-  card. Reuses slots/dedup/prompt/lifecycle as-is.
+  card. Reuses slots/dedup/prompt/lifecycle after the de-VK-ification
+  described above.
 - **Human team as runner**: `vk-ready` issues are a queue humans assign
   themselves; any Claude Code session + `vk-execute` completes a phase.
   The manual-PR-gate property is inherent.
@@ -143,9 +158,11 @@ contract a runner needs. Candidate runners that consume it unchanged:
   VibeKanban brand — including the surfaces with zero VK coupling
   (isolation, init, plan). A VK-free base distributed under `vk-*`
   naming misleads.
-- `vk-ready`/`plan:<slug>`/`phase:<n>` labels are in the wild across
-  DERIO_NET repos (frank, paperclip, …); renaming them is a migration,
-  not a find-and-replace.
+- `vk-ready`/`vk-blocked`/`vk-synced`/`plan:<slug>`/`spec:<slug>`/
+  `phase:<n>` labels are in the wild across DERIO_NET repos (frank,
+  paperclip, …); renaming them is a migration, not a find-and-replace.
+  (`vk-blocked` is load-bearing — the #251 dependency-gating fix turns
+  on it.)
 
 ## Open questions (for the design phase)
 

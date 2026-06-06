@@ -54,12 +54,19 @@ fr             Layer 1 + tracking duty
                  (render.py), build_plan_report/PlanReport + the
                  legacy-layout hard-stop (commands/common.py),
                  plan_ops.clear_tracking_issue
-fr-dispatch    Queue protocol + generic runner framework
-               queue labels (fr:ready / fr:in-progress / fr:pr-ready),
-               reachability gate, runner registry, discover_plans + tick,
-               slots, dedup, prompt, lifecycle, pr_state, metrics,
-               runner Protocols (the existing duck-typed MCP seam,
-               generalized)                       → depends on fr
+fr-dispatch    Queue protocol + runner framework
+               queue labels (fr:ready / fr:in-progress / fr:pr-ready /
+               fr:blocked / fr:synced), reachability gate, runner
+               registry, discover_plans + tick, slots, dedup, prompt,
+               lifecycle, pr_state, metrics, runner Protocols
+               (generalized from the duck-typed MCP seam)
+                                                  → depends on fr
+               NOTE: extracting these modules is a de-VK-ification
+               refactor, not a relocation — today only lifecycle.py is
+               VK-free; slots/config/dedup/pr_state take MCP clients
+               and assume VK shapes (workspaces, cards, project_id),
+               prompt.py and metrics.py hardcode VK strings. Step 2
+               scopes this work explicitly.
 fr-vk          VibeKanban adapter
                _mcp_client, dispatch_phase (card + workspace creation),
                workspaces, bridge daemon CLI, private label vk:synced
@@ -115,14 +122,25 @@ acts: on the GitHub Issue, as labels.
 
 | Label | Owner | Replaces |
 |---|---|---|
-| `fr:ready`, `fr:in-progress`, `fr:pr-ready` | fr-dispatch (protocol) | `vk-ready`, `in-progress`, `pr-ready` |
+| `fr:ready`, `fr:in-progress`, `fr:pr-ready`, `fr:blocked` | fr-dispatch (protocol) | `vk-ready`, `in-progress`, `pr-ready`, `vk-blocked` |
+| `fr:synced` | fr-dispatch (protocol — the "already handed to a runner" idempotency marker) | `vk-synced` |
 | `runner:<name>` | fr-dispatch (protocol) | — (new) |
-| `vk:synced` | fr-vk (adapter-private dedup marker) | `vk-synced` |
-| `plan:<slug>`, `phase:<n>` | fr (attributes) | unchanged |
+| `plan:<slug>`, `phase:<n>`, `spec:<slug>` | fr (attributes) | unchanged |
 | `manual` | fr | unchanged |
 
-Adapter-private labels are namespaced by runner name; the protocol never
-reads them.
+**Synced-marker ownership (resolved 2026-06-06 after code review):** the
+"already dispatched, don't re-dispatch" predicate is read by
+`discover_plans`/`tick` — protocol layer — today (`vk-ready` AND NOT
+`vk-synced`, the #251 deadlock fix builds on it). So the marker cannot
+be adapter-private: it becomes `fr:synced`, owned by fr-dispatch, set by
+the protocol after the adapter's `dispatch_phase` returns success.
+Adapters MAY still stamp private labels namespaced by runner name
+(`vk:<whatever>`); the protocol never reads those — but none are
+required for correctness.
+
+Runner names feed the dynamic `runner:<name>` template and therefore go
+through the same `_bounded_label_name` 50-char machinery as `plan:` /
+`spec:` slugs — the registry contract states this constraint.
 
 ## Plugins (marketplace lists two)
 
@@ -147,8 +165,13 @@ routing (`writing-plans` → `fr-plan`) carries over verbatim.
 ## Versioning
 
 Single lockstep version across the three packages and both plugin
-manifests; `bump-version.py` grows from three files to the workspace set
-and stays the only bump path. First release of the split is **3.0.0**.
+manifests; `bump-version.py` stays the only bump path — but note this is
+real surgery, not a file-list extension: the script currently hardcodes
+one root `pyproject.toml`, while uv-workspace members each carry their
+own. Lockstep needs either N per-member writes or a single
+source-of-truth version the members read dynamically; `--check` (and the
+CI `version-sync` job) must validate every member plus both plugin
+JSONs. First release of the split is **3.0.0**.
 No 2.x compat: a 2.x client meeting a v3 repo (or vice versa) fails loud,
 by design.
 
@@ -167,12 +190,22 @@ independently shippable PR in this repo unless noted:
    `fr-dispatch` side). Pure refactor, CLI still `vk`.
 3. **Rebrand:** repo → `derio-net/super-fr`; CLI binary → `fr`; skill
    dirs → `fr-*`; two plugin manifests; installer rewrite; `vk skills` →
-   `fr skills` content. v3.0.0 tags here.
+   `fr skills` content; **this repo's own CI workflows**
+   (`.github/workflows/vk-spec-status.yml` pins
+   `vk @ git+…/superpowers-for-vk@v2.0.0` and runs the `vk` binary —
+   both 404/vanish at the rename; `_pr_spec_status.yml` calls it).
+   v3.0.0 tags here.
 4. **Protocol v3:** `--to` flag + runner registry + label taxonomy;
    `fr-vk` adapter behind it; bridge daemon entry point moves to `fr-vk`.
 5. **Pod cutover:** bridge pod installs `fr-vk`; its checkout/cron config
    updates; old `vk` daemon retired the same day (no dual-running — the
-   two would fight over label states).
+   two would fight over label states). **Dual-read, not dual-run:** for
+   the rollout window, `fr-vk`'s discovery recognizes BOTH `vk-ready`
+   and `fr:ready` (and both synced spellings) — otherwise every
+   not-yet-swept repo's queued phases go dark between this step and its
+   step-6 PR. This is the one sanctioned exception to "no compat": old
+   labels in the wild are *data* to migrate, not API to shim. The
+   dual-read is removed in step 7 once the sweep completes.
 6. **Repo sweep (subagents, parallel):** one batch per checkout root
    (`~/Docs/projects/DERIO_NET/`, `~/Docs/projects/agentic-stoa/`), one
    subagent per repo in its own worktree, producing one PR per repo that
@@ -183,9 +216,10 @@ independently shippable PR in this repo unless noted:
    planned here is moot: the 2.5.0 rollout already ran it per repo
    (PRs #107/#480/#12/#226), so all repos are on the `implemented/`
    layout before the sweep starts.
-7. **Operator config:** user-level rules files, the vk-plan-override
-   mirror, shell completion. Last, because everything before it must
-   already answer to `fr`.
+7. **Cleanup + operator config:** remove the step-5 label dual-read once
+   every repo's sweep PR is merged; user-level rules files, the
+   vk-plan-override mirror, shell completion. Last, because everything
+   before it must already answer to `fr`.
 
 Rollback story: steps 2–4 are in-repo and revert cleanly; step 5–6 are
 the point of no return — hence the sweep bundles everything per repo in
