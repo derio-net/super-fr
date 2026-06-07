@@ -62,6 +62,13 @@ before the `fr isolation` allowlist check:
    tests' `tmp_path` repos) must still be guarded. The guard re-evaluates
    every subsequent call against its own declared cwd, so nothing is lost.
 
+Only the LEADING `cd` is evaluated — by design. A later segment of the same
+compound command can `cd` back into the base repo
+(`cd <worktree> && cd <repo> && make` is allowed); re-guarding would require
+parsing arbitrary shell, and the guard's charter is a discipline backstop,
+not a security boundary. Each *new* Bash call is still re-evaluated against
+its declared cwd. A test pins this as intentional.
+
 ### Allowed prefixes
 
 A colon-separated list, env-overridable for tests (precedent:

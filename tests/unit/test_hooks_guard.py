@@ -227,6 +227,14 @@ class TestCdTransitionAllowance:
         result = run_hook(payload(f"cd {sub} && make", repo), sentinels, env)
         assert decision(result) == "deny"
 
+    def test_cd_then_back_into_repo_allowed_by_design(self, tmp_path: Path) -> None:
+        """Only the LEADING cd is evaluated (spec: discipline backstop, not a
+        security boundary) — a later segment cd-ing back into the repo is not
+        re-guarded within the same compound command."""
+        repo, worktree, _, sentinels, env = self._setup(tmp_path)
+        result = run_hook(payload(f"cd {worktree} && cd {repo} && make", repo), sentinels, env)
+        assert decision(result) is None
+
     def test_deny_reason_mentions_cd_hint(self, tmp_path: Path) -> None:
         repo, _, _, sentinels, env = self._setup(tmp_path)
         result = run_hook(payload("git status", repo), sentinels, env)
