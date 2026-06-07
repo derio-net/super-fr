@@ -11,7 +11,7 @@ from fr.isolation.types import IsolationError
 
 init_app = typer.Typer(
     name="init",
-    help="Repo initialization: devcontainer profile scaffolding (driven by vk-init).",
+    help="Repo initialization: devcontainer profile scaffolding (driven by fr-init).",
     no_args_is_help=True,
 )
 

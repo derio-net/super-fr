@@ -20,6 +20,8 @@ import fcntl
 import json
 import logging
 import os
+
+from fr_vk.config import bridge_env
 import shutil
 import subprocess
 import sys
@@ -57,7 +59,8 @@ _metrics = MetricsPusher(
     reason_aliases=METRICS_REASON_ALIASES,
 )
 
-_DEFAULT_LOCK_PATH = "/var/run/vk-bridge.lock"
+_DEFAULT_LOCK_PATH = "/var/run/fr-bridge.lock"
+_FALLBACK_LOCK_PATH = "/tmp/fr-bridge.lock"
 _SEEN_PLANS_PATH = Path.home() / ".willikins-agent" / "_seen_plans.json"
 
 
@@ -71,11 +74,12 @@ def _emit_banner() -> None:
 def _configured_repos() -> list[Path]:
     """Resolve managed repo checkouts from env / convention.
 
-    `VK_BRIDGE_REPOS` is a comma-separated list of absolute paths. When
+    `FR_BRIDGE_REPOS` (legacy: `VK_BRIDGE_REPOS`) is a comma-separated
+    list of absolute paths. When
     unset, the default is the live bridge convention — every directory
     under `~/repos/<name>/` that contains a `.git` entry.
     """
-    raw = os.environ.get("VK_BRIDGE_REPOS", "").strip()
+    raw = (bridge_env("REPOS") or "").strip()
     if raw:
         return [Path(p).expanduser() for p in raw.split(",") if p.strip()]
     home_repos = Path("~/repos").expanduser()
@@ -190,7 +194,7 @@ def _acquire_lock(path: str) -> IO[str]:
         # /var/run is often read-only for non-root processes; fall back
         # to /tmp so unprivileged operators can still run the daemon.
         if path == _DEFAULT_LOCK_PATH:
-            lock_path = Path("/tmp/vk-bridge.lock")
+            lock_path = Path(_FALLBACK_LOCK_PATH)
         else:
             raise
     fh = open(lock_path, "w")
@@ -224,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("fr_dispatch: dry-run complete")
         return 0
 
-    lock_path = os.environ.get("VK_BRIDGE_LOCK_PATH", _DEFAULT_LOCK_PATH)
+    lock_path = bridge_env("LOCK_PATH") or _DEFAULT_LOCK_PATH
     try:
         lock_fh = _acquire_lock(lock_path)
     except BlockingIOError:

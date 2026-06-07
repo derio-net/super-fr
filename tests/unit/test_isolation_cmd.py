@@ -1,4 +1,4 @@
-"""fr isolation CLI — flag mapping, exec passthrough, error UX (exit 2 + vk-init pointer)."""
+"""fr isolation CLI — flag mapping, exec passthrough, error UX (exit 2 + fr-init pointer)."""
 
 from __future__ import annotations
 
@@ -72,13 +72,13 @@ def test_up_without_profile_outside_repo_exits_2(tmp_path: Path, fake_run: list)
     assert "git repo" in res.output
 
 
-def test_up_no_devcontainer_points_at_vk_init(repo: Path, fake_run: list) -> None:
+def test_up_no_devcontainer_points_at_fr_init(repo: Path, fake_run: list) -> None:
     import shutil
 
     shutil.rmtree(repo / ".devcontainer")
     res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
     assert res.exit_code == 2
-    assert "vk-init" in res.output
+    assert "fr-init" in res.output
 
 
 def test_exec_without_up_exits_2(repo: Path, fake_run: list) -> None:
