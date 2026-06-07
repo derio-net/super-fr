@@ -58,7 +58,10 @@ flowchart TD
 Not quite everything is autonomous — two moments stay operator+agent driven
 around the merge. Manual work (secrets, UI ops, deploys) is back-loaded into
 the plan's last `[manual]` phase: the PR ships with it deliberately
-unimplemented, and the operator implements it and pushes to the same PR. And
+unimplemented, and the operator implements it and pushes to the same PR.
+(Front-loading is the rare exception, only when agentic work genuinely depends
+on the manual output: the run opens a spec+plan PR — the manual instructions
+are the deliverable — pauses, and resumes only on the operator's go.) And
 when the deliverable deploys, the spec carries a post-merge **Test Plan**
 (offered in the batched Q&A) that the agent drives interactively after the
 merge — it runs the checks it can reach, the operator confirms what it can't —
