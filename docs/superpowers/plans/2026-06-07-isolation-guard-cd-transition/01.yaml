@@ -1,0 +1,242 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Guard cd-transition allowance (#279)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Failing tests for the transition allowance
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Extend tests/unit/test_hooks_guard.py. First widen the harness:
+      give run_hook an optional extra_env parameter:
+
+      BEGIN run_hook replacement
+      def run_hook(
+          payload: dict, sentinel_dir: Path, extra_env: dict[str, str] | None = None
+      ) -> subprocess.CompletedProcess[str]:
+          env = {**os.environ, "FR_SENTINEL_DIR": str(sentinel_dir)}
+          if extra_env:
+              env.update(extra_env)
+          return subprocess.run(
+              ["bash", str(SCRIPT)],
+              input=json.dumps(payload),
+              capture_output=True,
+              text=True,
+              env=env,
+          )
+      END run_hook replacement
+
+      Existing callers pass no extra_env and are unaffected.
+  - id: P1.T1.S2
+    text: |-
+      Append a TestCdTransitionAllowance class covering the spec's
+      test table. ALL tests set FR_CD_ALLOW_PREFIXES explicitly to
+      tmp_path-controlled dirs — never rely on the real /tmp or
+      $TMPDIR defaults (pytest's tmp_path lives under /tmp on Linux
+      and $TMPDIR on macOS, which would make breadth tests pass
+      vacuously).
+
+      BEGIN test class
+      class TestCdTransitionAllowance:
+          """#279: a command LEADING with `cd <dir>` whose target resolves
+          inside an allowed prefix (fr worktrees, temp dirs) and outside the
+          base repo is allowed from the base-repo cwd; everything else still
+          falls through to the deny."""
+
+          def _setup(self, tmp_path: Path) -> tuple[Path, Path, Path, Path, dict[str, str]]:
+              repo = tmp_path / "repo"
+              repo.mkdir()
+              worktree = tmp_path / "worktrees" / "repo" / "feat__x"
+              worktree.mkdir(parents=True)
+              tmpd = tmp_path / "tmpd"
+              tmpd.mkdir()
+              sentinels = tmp_path / "sentinels"
+              write_sentinel(sentinels, repo)
+              env = {"FR_CD_ALLOW_PREFIXES": f"{tmp_path / 'worktrees'}:{tmpd}"}
+              return repo, worktree, tmpd, sentinels, env
+
+          def test_cd_worktree_compound_allowed(self, tmp_path: Path) -> None:
+              repo, worktree, _, sentinels, env = self._setup(tmp_path)
+              result = run_hook(payload(f"cd {worktree} && gh pr list", repo), sentinels, env)
+              assert decision(result) is None
+
+          def test_bare_cd_worktree_allowed(self, tmp_path: Path) -> None:
+              repo, worktree, _, sentinels, env = self._setup(tmp_path)
+              result = run_hook(payload(f"cd {worktree}", repo), sentinels, env)
+              assert decision(result) is None
+
+          def test_cd_temp_prefix_allowed(self, tmp_path: Path) -> None:
+              repo, _, tmpd, sentinels, env = self._setup(tmp_path)
+              sub = tmpd / "scratch"
+              sub.mkdir()
+              result = run_hook(payload(f"cd {sub} && ls", repo), sentinels, env)
+              assert decision(result) is None
+
+          def test_cd_quoted_target_with_spaces_allowed(self, tmp_path: Path) -> None:
+              repo, worktree, _, sentinels, env = self._setup(tmp_path)
+              spaced = worktree.parent / "a b"
+              spaced.mkdir()
+              result = run_hook(payload(f'cd "{spaced}" && ls', repo), sentinels, env)
+              assert decision(result) is None
+
+          def test_cd_tilde_target_allowed(self, tmp_path: Path) -> None:
+              repo, worktree, _, sentinels, env = self._setup(tmp_path)
+              env["HOME"] = str(tmp_path)
+              rel = worktree.relative_to(tmp_path)
+              result = run_hook(payload(f"cd ~/{rel} && git push", repo), sentinels, env)
+              assert decision(result) is None
+
+          def test_cd_into_repo_subdir_denied(self, tmp_path: Path) -> None:
+              repo, _, _, sentinels, env = self._setup(tmp_path)
+              sub = repo / "src"
+              sub.mkdir()
+              result = run_hook(payload(f"cd {sub} && git status", repo), sentinels, env)
+              assert decision(result) == "deny"
+
+          def test_cd_outside_prefixes_denied(self, tmp_path: Path) -> None:
+              repo, _, _, sentinels, env = self._setup(tmp_path)
+              elsewhere = tmp_path / "elsewhere"
+              elsewhere.mkdir()
+              result = run_hook(payload(f"cd {elsewhere} && ls", repo), sentinels, env)
+              assert decision(result) == "deny"
+
+          def test_cd_unresolvable_target_denied(self, tmp_path: Path) -> None:
+              repo, _, _, sentinels, env = self._setup(tmp_path)
+              result = run_hook(payload(f"cd {tmp_path}/nope && ls", repo), sentinels, env)
+              assert decision(result) == "deny"
+
+          def test_non_leading_cd_denied(self, tmp_path: Path) -> None:
+              repo, worktree, _, sentinels, env = self._setup(tmp_path)
+              result = run_hook(payload(f"echo x && cd {worktree} && gh pr list", repo), sentinels, env)
+              assert decision(result) == "deny"
+
+          def test_prefix_collision_denied(self, tmp_path: Path) -> None:
+              repo, _, tmpd, sentinels, env = self._setup(tmp_path)
+              sibling = tmp_path / "tmpd-other"
+              sibling.mkdir()
+              result = run_hook(payload(f"cd {sibling} && ls", repo), sentinels, env)
+              assert decision(result) == "deny"
+
+          def test_repo_under_allowed_prefix_still_guarded(self, tmp_path: Path) -> None:
+              """Repo-root precedence: a base repo living under an allowed
+              prefix must still be guarded."""
+              repo, _, tmpd, sentinels, env = self._setup(tmp_path)
+              env["FR_CD_ALLOW_PREFIXES"] = str(tmp_path)  # repo is under tmp_path
+              sub = repo / "pkg"
+              sub.mkdir()
+              result = run_hook(payload(f"cd {sub} && make", repo), sentinels, env)
+              assert decision(result) == "deny"
+
+          def test_deny_reason_mentions_cd_hint(self, tmp_path: Path) -> None:
+              repo, _, _, sentinels, env = self._setup(tmp_path)
+              result = run_hook(payload("git status", repo), sentinels, env)
+              assert decision(result) == "deny"
+              reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+              assert "cd <worktree> &&" in reason
+      END test class
+  - id: P1.T1.S3
+    text: |-
+      Run: fr isolation exec --branch feat/issue-279 -- uv run pytest
+      tests/unit/test_hooks_guard.py -q --no-cov
+
+      Expect: the 8 existing TestIsolationGuard tests pass; the new
+      allowance tests FAIL (allowed cases currently denied; the
+      deny-hint test fails on the old message). Verify the run is not
+      SKIPPED (jq must be present in the container — if the output
+      shows skips, surface that before proceeding).
+- number: 2
+  title: Implement the allowance in fr-isolation-guard.sh
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Edit plugins/super-fr/hooks/fr-isolation-guard.sh. After the
+      `command=$(…)` extraction (line 39) and BEFORE the
+      `fr isolation` allowlist check, insert:
+
+      BEGIN allowance block
+      # Transition allowance (#279): a command LEADING with `cd <dir>` whose
+      # target resolves inside an allowed prefix (fr worktrees, temp dirs)
+      # and outside the base repo is the documented way to move the host
+      # shell to the worktree for git/gh ops (SKILL.md exec-bridge
+      # discipline). Without it, a session that starts in the base repo —
+      # every fr pipeline session — can never reach the prescribed cwd: the
+      # guard would deny the very `cd` it asks for. Each subsequent call is
+      # re-evaluated against its own declared cwd, so nothing is lost.
+      cd_target=$(printf '%s' "$command" | sed -nE 's/^[[:space:]]*cd[[:space:]]+("([^"]+)"|'\''([^'\'']+)'\''|([^[:space:];&|]+)).*/\2\3\4/p')
+      if [ -n "$cd_target" ]; then
+        case "$cd_target" in "~"*) cd_target="$HOME${cd_target#\~}" ;; esac
+        if rtarget=$(cd "$cd_target" 2>/dev/null && pwd -P); then
+          case "$rtarget/" in
+            "$rroot"/*) ;;   # back into the base repo — guard still applies
+            *)
+              prefixes="${FR_CD_ALLOW_PREFIXES:-$HOME/.cache/fr/worktrees:/tmp:${TMPDIR:-}}"
+              old_ifs=$IFS
+              IFS=':'
+              for prefix in $prefixes; do
+                [ -n "$prefix" ] || continue
+                rprefix=$(cd "$prefix" 2>/dev/null && pwd -P) || continue
+                case "$rtarget/" in
+                  "$rprefix"/*) IFS=$old_ifs; exit 0 ;;
+                esac
+              done
+              IFS=$old_ifs
+              ;;
+          esac
+        fi
+      fi
+      END allowance block
+  - id: P1.T2.S2
+    text: |-
+      In the same file, update the deny reason (the jq -n --arg reason
+      line) to:
+
+      "fr pipeline active: run via \`fr isolation exec -- …\` (or \`fr
+      isolation up\` first). Host-side git/gh ops: lead with \`cd
+      <worktree> && …\` — run from the worktree cwd, not the base repo.
+      See plugins/super-fr/skills/fr-isolation (exec-bridge discipline,
+      #265/#279)."
+
+      Also extend the header comment (lines 2-8) with one line noting
+      the #279 transition allowance.
+  - id: P1.T2.S3
+    text: |-
+      Run: fr isolation exec --branch feat/issue-279 -- uv run pytest
+      tests/unit/test_hooks_guard.py -q --no-cov
+
+      Expect: ALL tests green (existing 8 + new allowance class), zero
+      skips.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-07T17:08:46+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-06-07T17:09:06+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-06-07T17:09:29+00:00'
+      note: 'RED: 6 failed (5 allowance + deny-hint), 14 passed, 0 skipped — jq present
+        in container'
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-06-07T17:11:30+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-06-07T17:11:47+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-06-07T17:12:04+00:00'
+      note: 'GREEN: 20 passed, 0 skipped'
+  completion:
+    at: '2026-06-07T17:12:21+00:00'
+    note: null
+    observed_prs: []
