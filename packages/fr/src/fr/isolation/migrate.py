@@ -50,7 +50,7 @@ def _rewrite_devcontainer(config_path: Path) -> str | None:
         customizations["fr"] = customizations.pop("vk")
         changed = True
 
-    return json.dumps(config, indent=2) + "\n" if changed else None
+    return json.dumps(config, indent=2, ensure_ascii=False) + "\n" if changed else None
 
 
 def migrate_repo(repo_root: Path, yes: bool) -> list[str]:

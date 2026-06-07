@@ -144,3 +144,17 @@ def test_untracked_profiles_yaml_plain_rename(tmp_path: Path) -> None:
     res = migrate(r, "--yes")
     assert res.exit_code == 0, res.output
     assert (r / ".devcontainer" / "fr-profiles.yaml").is_file()
+
+
+def test_non_ascii_content_survives_rewrite(legacy_repo: Path) -> None:
+    """json.dumps must not escape non-ASCII (frank#493: 'frank — dev'
+    became 'frank \\u2014 dev'). Rewrites keep literal UTF-8."""
+    cfg_path = legacy_repo / ".devcontainer" / "dev" / "devcontainer.json"
+    cfg = json.loads(cfg_path.read_text())
+    cfg["name"] = "myrepo — dev"
+    cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+    res = migrate(legacy_repo, "--yes")
+    assert res.exit_code == 0, res.output
+    text = cfg_path.read_text()
+    assert "myrepo — dev" in text
+    assert "\\u2014" not in text

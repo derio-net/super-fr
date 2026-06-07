@@ -94,7 +94,7 @@ def scaffold_profile(
         "customizations": {"fr": {"profile": profile, "purpose": purpose}},
     }
     profile_dir.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
     _update_profiles_yaml(repo_root, profile, purpose, secrets, unknown, default)
     _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
