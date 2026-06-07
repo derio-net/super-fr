@@ -66,7 +66,12 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
   `cd <worktree> && gh …` / `cd <worktree> && git push`. The isolation
   guard explicitly allows a leading `cd` whose target resolves under
   `~/.cache/fr/worktrees` or a temp dir (#279) — nothing else leaves the
-  base-repo cwd.
+  base-repo cwd. To stop the resets entirely, `fr isolation up` prints an
+  `/add-dir <worktree>` tip in a Claude Code session (#281); run that slash
+  command once and the worktree becomes an allowed working directory, after
+  which a bare `cd <worktree>` persists and the `cd <worktree> &&` prefix is
+  no longer needed — the compound form stays as the fallback before the dir
+  is added.
 - Never run project commands against the base repo while isolation is live;
   the worktree is the only working copy this run touches.
 
