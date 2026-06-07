@@ -123,3 +123,24 @@ def test_envfile_never_overwritten(repo: Path, tmp_path: Path) -> None:
     text = env.read_text()
     assert "A_KEY=real-secret" in text  # operator's value preserved
     assert "# B_KEY=" in text  # new placeholder appended
+
+
+def test_scaffold_purpose_non_ascii_written_literally(repo: Path) -> None:
+    """Scaffold output keeps UTF-8 literal (same ensure_ascii bug class)."""
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "dev",
+            "--purpose",
+            "day-to-day — checks: pytest",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    text = (repo / ".devcontainer" / "dev" / "devcontainer.json").read_text()
+    assert "day-to-day — checks: pytest" in text
+    assert "\\u2014" not in text
