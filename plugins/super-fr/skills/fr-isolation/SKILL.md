@@ -55,6 +55,12 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
   unauthenticated unless that file provides a token. Push and PR creation
   default to the HOST (run them outside `exec`, from the worktree) — the
   operator's credentials never enter the container implicitly.
+- ALL GitHub interaction relies on an AUTHENTICATED HOST: pushes, PR
+  creation, and `fr isolation status`/`down`'s PR checks (`gh pr view`)
+  all use the host's gh/git auth. The container needs NO GitHub token for
+  the standard pipeline — never ask the operator for one to make
+  isolation work; in-container gh writes are an explicit opt-in profile
+  (e.g. `admin` with GH_TOKEN), not a requirement.
 - Never run project commands against the base repo while isolation is live;
   the worktree is the only working copy this run touches.
 
