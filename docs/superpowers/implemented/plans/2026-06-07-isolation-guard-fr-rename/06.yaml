@@ -42,18 +42,23 @@ tasks:
 state:
   steps:
     P6.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-06-07T16:11:37+00:00'
+      note: 'MacBook: copy-no-clobber done (11 env files + rename-stranded super-fr/admin.env
+        restored); vk dir kept until fallback removal (#276)'
     P6.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-06-07T16:11:41+00:00'
+      note: operator ran scripts/pod-fr-rename-oneshot.sh (willikins#235) on pod @
+        v3.1.1; VK board entry renamed; tick log clean (fr-bridge.lock, no legacy
+        warnings) — confirmed 2026-06-07
     P6.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-06-07T16:11:44+00:00'
+      note: 'merged: frank#493 (+UTF-8 fixup), willikins#234, omada-controller#5;
+        vscode-launchpad swept via its #4 (UTF-8 cleanup #5 open, non-gating)'
   completion:
-    at: null
-    note: null
+    at: '2026-06-07T16:11:48+00:00'
+    note: 'all operator-driven: host secrets move, pod one-shot + VK board entry,
+      4-repo fleet sweep; Test Plan §1-3 verified (guard live-fired in-session 2026-06-07)'
     observed_prs: []
