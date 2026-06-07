@@ -33,18 +33,19 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-07T08:57:58+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-07T08:57:59+00:00'
       note: null
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-06-07T08:58:01+00:00'
+      note: pytest green (58 passed); scripts/validate-skills.sh does not exist in
+        repo — test_skill_validation.py IS the skill validator (stale CLAUDE.md ref)
   completion:
-    at: null
+    at: '2026-06-07T08:58:02+00:00'
     note: null
     observed_prs: []

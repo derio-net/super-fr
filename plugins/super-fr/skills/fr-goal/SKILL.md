@@ -1,26 +1,24 @@
 ---
 name: fr-goal
 description: >
-  Run a feature goal end-to-end autonomously: brainstorm the context, ask one
-  batched Q&A, then spec → review → fr-plan → review → TDD implementation →
-  review → single PR, fixing every review finding, with no intermediate operator
-  approval gates. ALWAYS use when the operator invokes /fr-goal or /goal with a
-  task description. Also use when they say "build this autonomously", "ask your
-  questions once then build it", "take this to a PR", hand over a feature with
-  instructions to run unattended, mention "auto mode", or ask for the full
-  spec-to-PR pipeline in one shot.
+  Run a feature goal end-to-end autonomously: brainstorm, ask one batched
+  Q&A, then spec → review → fr-plan → review → TDD implementation → review →
+  single PR, fixing every review finding, with no intermediate approval
+  gates. ALWAYS use when the operator invokes /fr-goal or /goal, says "build
+  this autonomously", "ask your questions once then build it", "take this to
+  a PR", hands over a feature to run unattended, mentions "auto mode", or
+  asks for the full spec-to-PR pipeline in one shot.
 ---
 
 # fr-goal
 
 One operator touchpoint from goal to reviewed PR: brainstorm context → ONE
-batched Q&A → spec → review → fr-plan → review → TDD implementation → review →
-single PR. Every review fixes all issues it finds. The superpowers approval
-gates catch misunderstanding early; fr-goal front-loads that protection into
-the single Q&A — the operator's autonomy instruction (outranking skill
-defaults) replaces each pause with a review-and-fix pass. Autonomy isn't
-silence on failure: when blocked, stop, state what's blocked and what you
-tried, and ask — a wrong guess shipped in a PR costs more than a paused run.
+batched Q&A → spec → review → fr-plan → review → TDD implementation → review
+→ single PR. Every review fixes all it finds; the operator's autonomy
+instruction (outranking skill defaults) replaces each superpowers approval
+pause with a review-and-fix pass — that protection front-loads into the Q&A.
+When blocked: stop, state what's blocked and what you tried, and ask — a
+wrong guess shipped in a PR costs more than a paused run.
 
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
 
@@ -37,11 +35,15 @@ tried, and ask — a wrong guess shipped in a PR costs more than a paused run.
 ### 1. Brainstorm with batched Q&A — in isolation
 
 Invoke `fr-brainstorming` (runs `fr isolation up` first; no devcontainer
-profile → pause for the fr-init interview). Explore the workspace, collect
-EVERY operator-owned decision, and ask all of them in ONE AskUserQuestion call
-(max 4 questions, recommended option first). Include a post-merge Test Plan
-question ONLY when the deliverable deploys (a service, bot, infra) — never for
-pure code changes. Mid-run stragglers (rare): batch, never drip.
+profile → pause for the fr-init interview). Isolation precedes EVERYTHING —
+read-only exploration, measurements, and cluster ops included; an operator
+"start with X" changes the first work item, never the first action; from the
+start ALL commands run via `fr isolation exec`. Explore the workspace,
+collect EVERY operator-owned decision, and ask all of them in ONE
+AskUserQuestion call (max 4 questions, recommended option first). Include a
+post-merge Test Plan question ONLY when the deliverable deploys (a service,
+bot, infra) — never for pure code changes. Mid-run stragglers (rare): batch,
+never drip.
 
 ### 2. Spec — then review it
 
@@ -75,12 +77,11 @@ phases. fr-goal adds placement policy (a mid-plan manual phase stalls the run):
   phase depending on it. The PR ships with that phase deliberately
   unimplemented, marked for the operator, who implements it and pushes to the
   same PR (`fr plan edit --complete-phase N --note` records what was done).
-- **Front-load only when agentic work genuinely depends on it.** Then finish
-  plan + plan review, open a PR of spec + plan (the manual instructions ARE the
-  deliverable), and pause. The operator merges that PR or pushes evidence to
-  its branch — recommend which (merge when later work dispatches from it or
-  another repo needs it reachable; push when the run continues there). Resume
-  ONLY on the operator's go.
+- **Front-load only when agentic work genuinely depends on it.** Finish plan
+  + plan review, open a PR of spec + plan (the manual instructions ARE the
+  deliverable), pause. The operator merges it (when later work dispatches
+  from it or another repo needs it reachable) or pushes evidence to its
+  branch (when the run continues there). Resume ONLY on the operator's go.
 - **Multi-repo:** same per repo, but model cross-repo dependencies —
   `depends_on` reaches only within a plan, so ordering lives in the spec and
   PR sequencing (a manual secret in one repo may gate another's phases).
@@ -96,12 +97,11 @@ steps and complete phases via `fr plan edit`. Never implement a manual phase.
 
 ### 7. Review at milestones — fix everything found
 
-After each milestone (a completed phase, or the full implementation for small
+After each milestone (a completed phase, or full implementation for small
 plans), invoke `superpowers:requesting-code-review` over spec + plan + code.
-Fix every finding immediately, with tests — that contract makes gate-waiving
-safe. Exception: a factually wrong finding gets refuting reasoning recorded
-(`superpowers:receiving-code-review`) — never a performative wrong fix, never a
-silent drop. Keep the findings+fixes list.
+Fix every finding immediately, with tests. A factually wrong finding gets
+refuting reasoning recorded (`superpowers:receiving-code-review`) — never a
+performative wrong fix, never a silent drop. Keep the findings+fixes list.
 
 ### 8. Deliver — one PR per repo, all artifacts aboard
 
@@ -115,6 +115,6 @@ verbatim, labeled "post-merge — operator-driven". Stop; the operator merges.
 
 When the operator reports the merge: drive the Test Plan interactively if
 present (agent runs checks, operator confirms what the agent can't reach).
-Then confirm phases complete (`fr status` shows the archive nudge), run
-`fr archive <plan-dir>` (gate-checked git mv; the spec follows once all
-its rows are implemented), commit via a housekeeping PR, `fr isolation down`.
+Confirm phases complete (`fr status` nudges), `fr archive <plan-dir>`
+(gate-checked git mv; spec follows once all rows are implemented), commit via
+a housekeeping PR, `fr isolation down`.
