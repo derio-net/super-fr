@@ -33,6 +33,11 @@ session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
 repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -n "$repo_root" ] || exit 0
 
+# Linked worktree (.git is a file, not a dir) → this IS the isolation
+# workspace; keying the sentinel here would make the guard deny the very
+# place work happens. Only the base repo gets a sentinel.
+[ -d "$repo_root/.git" ] || exit 0
+
 dir="${FR_SENTINEL_DIR:-$HOME/.cache/fr/sentinels}"
 mkdir -p "$dir"
 

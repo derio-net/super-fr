@@ -6,10 +6,9 @@ real throwaway repos (cheap, deterministic). Nothing here needs Docker.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
-
-import json
 
 import pytest
 from fr.isolation.local import LocalWorktreeDevcontainerTarget
@@ -67,8 +66,18 @@ def make_repo(
         # committed, as in real repos — worktrees check out .devcontainer/
         subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
         subprocess.run(
-            ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t",
-             "commit", "-qm", "profiles"],
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-qm",
+                "profiles",
+            ],
             check=True,
         )
     return repo
@@ -157,18 +166,14 @@ def test_profiles_config_reads_fr_profiles(tmp_path: Path, capsys: pytest.Captur
     assert "legacy" not in capsys.readouterr().err
 
 
-def test_profiles_config_vk_fallback_warns(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_profiles_config_vk_fallback_warns(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev", profiles_yaml="vk-profiles.yaml")
     assert profiles_config(repo)["default"] == "dev"
     err = capsys.readouterr().err
     assert "legacy" in err and "vk-profiles.yaml" in err and "fr init migrate" in err
 
 
-def test_profiles_config_fr_wins_over_vk(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_profiles_config_fr_wins_over_vk(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev", profiles_yaml="vk-profiles.yaml")
     (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
         "default: dev\nprofiles:\n  dev:\n    purpose: fr-side\n"
@@ -196,9 +201,7 @@ def test_save_state_writes_fr_dir(tmp_path: Path) -> None:
     assert str(state_path(repo, "feat/x")).startswith(str(repo / ".git" / "fr" / "isolation"))
 
 
-def test_load_state_legacy_vk_dir_warns(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_load_state_legacy_vk_dir_warns(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev")
     legacy = repo / ".git" / "vk" / "isolation"
     legacy.mkdir(parents=True)
@@ -214,9 +217,7 @@ def test_load_state_legacy_vk_dir_warns(
     assert "legacy" in capsys.readouterr().err
 
 
-def test_load_state_fr_wins_over_legacy(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_load_state_fr_wins_over_legacy(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev")
     legacy = repo / ".git" / "vk" / "isolation"
     legacy.mkdir(parents=True)

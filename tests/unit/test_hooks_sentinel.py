@@ -16,9 +16,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None, reason="hook scripts require jq"
-)
+pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "fr-pipeline-sentinel.sh"
@@ -81,6 +79,37 @@ class TestSentinelWriter:
         plain.mkdir()
         sentinels = tmp_path / "sentinels"
         result = run_hook(payload("super-fr:fr-goal", plain), sentinels)
+        assert result.returncode == 0
+        assert not (sentinels / "sess-1.json").exists()
+
+    def test_linked_worktree_cwd_writes_no_sentinel(self, tmp_path: Path) -> None:
+        """fr-execute may be invoked with cwd INSIDE the isolation worktree —
+        the sentinel must not key on the worktree, or the guard would deny
+        the very place work happens (review finding #1)."""
+        repo = make_git_repo(tmp_path / "repo")
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-qm",
+                "init",
+                "--allow-empty",
+            ],
+            check=True,
+        )
+        worktree = tmp_path / "wt"
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "add", "-q", str(worktree), "-b", "f/x"],
+            check=True,
+        )
+        sentinels = tmp_path / "sentinels"
+        result = run_hook(payload("super-fr:fr-execute", worktree), sentinels)
         assert result.returncode == 0
         assert not (sentinels / "sess-1.json").exists()
 

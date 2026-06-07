@@ -46,8 +46,18 @@ def legacy_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         )
     subprocess.run(["git", "-C", str(r), "add", "-A"], check=True)
     subprocess.run(
-        ["git", "-C", str(r), "-c", "user.email=t@t", "-c", "user.name=t",
-         "commit", "-qm", "legacy profiles"],
+        [
+            "git",
+            "-C",
+            str(r),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "legacy profiles",
+        ],
         check=True,
     )
     state = r / ".git" / "vk" / "isolation"
@@ -69,9 +79,7 @@ def test_dry_run_previews_without_mutating(legacy_repo: Path) -> None:
     # nothing mutated
     assert (legacy_repo / ".devcontainer" / "vk-profiles.yaml").is_file()
     assert not (legacy_repo / ".devcontainer" / "fr-profiles.yaml").exists()
-    cfg = json.loads(
-        (legacy_repo / ".devcontainer" / "dev" / "devcontainer.json").read_text()
-    )
+    cfg = json.loads((legacy_repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
     assert "vk" in cfg["customizations"]
 
 
@@ -110,6 +118,21 @@ def test_rerun_is_idempotent(legacy_repo: Path) -> None:
     res = migrate(legacy_repo, "--yes")
     assert res.exit_code == 0, res.output
     assert "nothing to migrate" in res.output.lower()
+
+
+def test_jsonc_devcontainer_skipped_not_mangled(legacy_repo: Path) -> None:
+    """devcontainer.json may be JSONC; a json round-trip loses comments —
+    such files are skipped with a hand-migrate warning (review finding #4)."""
+    jsonc = legacy_repo / ".devcontainer" / "dev" / "devcontainer.json"
+    original = "// hand-tuned\n" + jsonc.read_text()
+    jsonc.write_text(original)
+    res = migrate(legacy_repo, "--yes")
+    assert res.exit_code == 0, res.output
+    assert "SKIP" in res.output and "JSONC" in res.output
+    assert jsonc.read_text() == original  # untouched
+    # the other (strict-JSON) profile still migrated
+    admin = legacy_repo / ".devcontainer" / "admin" / "devcontainer.json"
+    assert "/.config/fr/secrets/" in admin.read_text()
 
 
 def test_untracked_profiles_yaml_plain_rename(tmp_path: Path) -> None:

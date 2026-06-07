@@ -16,9 +16,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None, reason="hook scripts require jq"
-)
+pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "fr-isolation-guard.sh"
@@ -74,9 +72,7 @@ class TestIsolationGuard:
         result = run_hook(payload("git status", repo), sentinels)
         assert result.returncode == 0
         assert decision(result) == "deny"
-        reason = json.loads(result.stdout)["hookSpecificOutput"][
-            "permissionDecisionReason"
-        ]
+        reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
         assert "fr isolation exec" in reason
 
     def test_fr_isolation_command_allowed(self, tmp_path: Path) -> None:
@@ -84,9 +80,7 @@ class TestIsolationGuard:
         repo.mkdir()
         sentinels = tmp_path / "sentinels"
         write_sentinel(sentinels, repo)
-        result = run_hook(
-            payload("fr isolation exec -- uv run pytest -q", repo), sentinels
-        )
+        result = run_hook(payload("fr isolation exec -- uv run pytest -q", repo), sentinels)
         assert decision(result) is None
 
     def test_subdir_of_base_repo_denied(self, tmp_path: Path) -> None:
@@ -113,9 +107,7 @@ class TestIsolationGuard:
         repo.mkdir()
         sentinels = tmp_path / "sentinels"
         sentinel = write_sentinel(sentinels, repo)
-        result = run_hook(
-            payload("fr isolation down --branch feat/x", repo), sentinels
-        )
+        result = run_hook(payload("fr isolation down --branch feat/x", repo), sentinels)
         assert decision(result) is None
         assert not sentinel.exists(), "down clears the sentinel"
 

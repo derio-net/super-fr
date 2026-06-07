@@ -88,10 +88,7 @@ def list_states(repo_root: Path) -> list[IsolationState]:
     if d.is_dir():
         for f in d.glob("*.json"):
             files[f.name] = f  # fr copy wins for the same branch
-    return [
-        IsolationState.model_validate_json(f.read_text())
-        for _, f in sorted(files.items())
-    ]
+    return [IsolationState.model_validate_json(f.read_text()) for _, f in sorted(files.items())]
 
 
 def discover_profiles(repo_root: Path) -> list[str]:

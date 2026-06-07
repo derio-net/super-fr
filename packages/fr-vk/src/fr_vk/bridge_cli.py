@@ -20,8 +20,6 @@ import fcntl
 import json
 import logging
 import os
-
-from fr_vk.config import bridge_env
 import shutil
 import subprocess
 import sys
@@ -37,6 +35,7 @@ from fr_dispatch import tick as _tick
 from fr_dispatch.metrics import MetricsPusher
 
 from fr_vk._mcp_client import VkMcpClient
+from fr_vk.config import bridge_env
 from fr_vk.pr_state import tick as _pr_state_tick
 from fr_vk.runner import (
     HEARTBEAT_METRIC,

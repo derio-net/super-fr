@@ -170,9 +170,7 @@ class LocalWorktreeDevcontainerTarget:
                 _warn_legacy("secrets env-file mount", env_file)
             if not env_file.is_file():
                 env_file.parent.mkdir(parents=True, exist_ok=True)
-                env_file.write_text(
-                    f"# fr isolation secrets — {self.repo_root.name}\n"
-                )
+                env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")
 
     def _docker_ps(self, state: IsolationState) -> str:
         result = self.run(

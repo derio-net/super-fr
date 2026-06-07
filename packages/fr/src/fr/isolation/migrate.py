@@ -67,17 +67,29 @@ def migrate_repo(repo_root: Path, yes: bool) -> list[str]:
         if yes:
             if _is_tracked(repo_root, ".devcontainer/vk-profiles.yaml"):
                 subprocess.run(
-                    ["git", "-C", str(repo_root), "mv",
-                     ".devcontainer/vk-profiles.yaml", ".devcontainer/fr-profiles.yaml"],
+                    [
+                        "git",
+                        "-C",
+                        str(repo_root),
+                        "mv",
+                        ".devcontainer/vk-profiles.yaml",
+                        ".devcontainer/fr-profiles.yaml",
+                    ],
                     check=True,
                 )
             else:
                 vk_yaml.rename(fr_yaml)
 
     for config_path in sorted((repo_root / ".devcontainer").glob("*/devcontainer.json")):
-        rewritten = _rewrite_devcontainer(config_path)
+        rel = config_path.relative_to(repo_root)
+        try:
+            rewritten = _rewrite_devcontainer(config_path)
+        except json.JSONDecodeError:
+            # devcontainer.json permits JSONC; a json round-trip would lose
+            # comments anyway — leave the file alone and tell the operator.
+            actions.append(f"SKIP {rel}: not strict JSON (JSONC comments?) — migrate by hand")
+            continue
         if rewritten is not None:
-            rel = config_path.relative_to(repo_root)
             actions.append(f"rewrite {rel}: customizations.vk -> .fr, vk secrets mount -> fr")
             if yes:
                 config_path.write_text(rewritten)
