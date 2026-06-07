@@ -28,10 +28,10 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-06-07T17:58:48+00:00'
+      note: 'filed as #281 (operator-approved gh issue create at close-out)'
   completion:
-    at: null
-    note: null
+    at: '2026-06-07T17:58:51+00:00'
+    note: 'follow-up issue #281 filed'
     observed_prs: []
