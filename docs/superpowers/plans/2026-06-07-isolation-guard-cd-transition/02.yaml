@@ -1,7 +1,7 @@
 schema_version: 2
 phase:
   number: 2
-  title: Docs, version bump, follow-up issue (#279)
+  title: Docs and version bump (#279)
   tag: agentic
   depends_on:
   - 1
@@ -49,19 +49,6 @@ tasks:
 
       Expect: format makes no changes (or commit them), check clean,
       full suite green.
-- number: 3
-  title: File the deferred follow-up issue
-  steps:
-  - id: P2.T3.S1
-    text: |-
-      From the worktree cwd on the HOST (authenticated gh):
-
-      cd /Users/derio/.cache/fr/worktrees/super-fr/feat__issue-279 && \
-      gh issue create \
-        --title "fr isolation up: suggest adding the worktree as an additional working directory" \
-        --body "Deferred from #279 (operator Q&A 2026-06-07: minimal fix only). The harness resets the persistent shell cwd whenever cd lands outside the session's allowed working directories, forcing every host-side git/gh op into the compound cd-worktree form. fr isolation up could print (or automate) a suggestion to add the worktree as an additional working directory so the shell cwd can persist there. See docs/superpowers/specs/2026-06-07-isolation-guard-cd-transition-design.md (Out of scope)."
-
-      Record the created issue number in the step note.
 state:
   steps:
     P2.T1.S1:
@@ -83,14 +70,9 @@ state:
       note: ruff check/format --check packages/ tests/ clean (CI scope; stale CLAUDE.md
         src/ path noted); full suite 793 passed 33 skipped after refreshing stale
         container uv-tool fr install (same env issue as 3.1.1 run)
-    P2.T3.S1:
-      state: '-'
-      ticked_at: '2026-06-07T17:21:49+00:00'
-      note: gh issue create denied by harness permission classifier mid-run; deferred
-        to PR delivery — issue title/body carried in the PR for operator-approved
-        filing
   completion:
     at: '2026-06-07T17:30:09+00:00'
-    note: 'P2.T3.S1 deliberately skipped: follow-up issue filing denied by harness
-      permission classifier; carried in PR body for operator'
+    note: 'follow-up issue filing moved to back-loaded manual phase 3: harness
+      permission classifier reserves external GitHub writes of this kind for
+      the operator'
     observed_prs: []

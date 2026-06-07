@@ -1,0 +1,37 @@
+schema_version: 2
+phase:
+  number: 3
+  title: File the deferred follow-up issue [manual]
+  tag: manual
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: File the working-directory enhancement issue (operator)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      OPERATOR: file the follow-up issue deferred from the #279 Q&A
+      ("minimal fix only"). The agent's attempt was blocked by the
+      harness permission classifier (external GitHub write). From any
+      authenticated shell:
+
+      gh issue create --repo derio-net/super-fr \
+        --title "fr isolation up: suggest adding the worktree as an additional working directory" \
+        --body "Deferred from #279 (operator Q&A 2026-06-07: minimal fix only). The harness resets the persistent shell cwd whenever cd lands outside the session's allowed working directories, forcing every host-side git/gh op into the compound cd-worktree form. fr isolation up could print (or automate) a suggestion to add the worktree as an additional working directory so the shell cwd can persist there. See docs/superpowers/specs/2026-06-07-isolation-guard-cd-transition-design.md (Out of scope)."
+
+      Then record the created issue number:
+      fr plan edit docs/superpowers/plans/2026-06-07-isolation-guard-cd-transition \
+        --tick P3.T1.S1 --state x --note "filed as #<n>" && \
+      fr plan edit docs/superpowers/plans/2026-06-07-isolation-guard-cd-transition \
+        --complete-phase 3 --note "follow-up issue #<n> filed"
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

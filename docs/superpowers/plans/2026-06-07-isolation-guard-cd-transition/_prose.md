@@ -8,7 +8,7 @@ tokenless). Spec:
 
 ## Shape
 
-Two agentic phases, strictly ordered:
+Two agentic phases (strictly ordered) plus one back-loaded manual phase:
 
 1. **Guard allowance (TDD)** — extend `tests/unit/test_hooks_guard.py` with
    a failing `TestCdTransitionAllowance` class, then implement the
@@ -17,11 +17,13 @@ Two agentic phases, strictly ordered:
    (default `$HOME/.cache/fr/worktrees:/tmp:${TMPDIR:-}`) AND outside the
    base repo root (repo-root precedence). Deny message gains the
    `cd <worktree> && …` hint.
-2. **Docs + bump + follow-up** — SKILL.md exec-bridge bullet documenting the
+2. **Docs + bump** — SKILL.md exec-bridge bullet documenting the
    compound shape, `bump-version.py patch` (3.1.1 → 3.1.2, hooks and skill
-   copy are installer-shipped surfaces), full local CI surface, and the
-   deferred follow-up issue for the `fr isolation up` working-directory
-   suggestion.
+   copy are installer-shipped surfaces), full local CI surface.
+3. **File the follow-up issue `[manual]`** — the deferred `fr isolation up`
+   working-directory suggestion. Back-loaded for the operator: the harness
+   permission classifier reserves this external GitHub write; the PR ships
+   with this phase deliberately unimplemented.
 
 ## Decisions baked in (operator Q&A)
 
