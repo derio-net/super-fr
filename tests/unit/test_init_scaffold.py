@@ -129,8 +129,16 @@ def test_scaffold_purpose_non_ascii_written_literally(repo: Path) -> None:
     """Scaffold output keeps UTF-8 literal (same ensure_ascii bug class)."""
     res = runner.invoke(
         app,
-        ["init", "scaffold", "--repo", str(repo), "--profile", "dev",
-         "--purpose", "day-to-day — checks: pytest"],
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "dev",
+            "--purpose",
+            "day-to-day — checks: pytest",
+        ],
     )
     assert res.exit_code == 0, res.output
     text = (repo / ".devcontainer" / "dev" / "devcontainer.json").read_text()
