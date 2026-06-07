@@ -7,6 +7,7 @@ up/exec/status/down identically. IsolationError maps to exit 2.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import typer
@@ -55,6 +56,12 @@ def up(
     typer.echo(
         f"isolation up: worktree={state.worktree} profile={state.profile} branch={state.branch}"
     )
+    if os.environ.get("CLAUDECODE"):
+        typer.echo(
+            "tip: register the worktree as a Claude Code working directory so the "
+            "shell cwd persists there (no more `cd <worktree> && …` for host git/gh):\n"
+            f"    /add-dir {state.worktree}"
+        )
 
 
 @isolation_app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})

@@ -101,3 +101,26 @@ def test_exec_with_no_command_exits_2(repo: Path, fake_run: list) -> None:
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "e"])
     res = runner.invoke(app, ["isolation", "exec", "--repo", str(repo), "--branch", "e"])
     assert res.exit_code == 2
+
+
+def test_up_prints_add_dir_hint_in_claude_code(repo: Path, fake_run: list) -> None:
+    res = runner.invoke(
+        app,
+        ["isolation", "up", "--repo", str(repo), "--branch", "vk-iso/h"],
+        env={"CLAUDECODE": "1"},
+    )
+    assert res.exit_code == 0, res.output
+    assert "/add-dir " in res.output
+    # the absolute worktree path is the /add-dir argument
+    assert "vk-iso__h" in res.output
+
+
+def test_up_omits_add_dir_hint_without_claude_code(repo: Path, fake_run: list) -> None:
+    res = runner.invoke(
+        app,
+        ["isolation", "up", "--repo", str(repo), "--branch", "vk-iso/n"],
+        env={"CLAUDECODE": None},
+    )
+    assert res.exit_code == 0, res.output
+    assert "worktree" in res.output
+    assert "/add-dir" not in res.output
