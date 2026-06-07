@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 4
+  title: fr init migrate + self-migration + doc sweep
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD fr init migrate
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Add failing tests tests/unit/test_init_migrate.py against a tmp
+      git repo fixture seeded with .devcontainer/vk-profiles.yaml, two
+      profiles whose devcontainer.json carry customizations.vk and a
+      /.config/vk/secrets/ --env-file mount, and a populated
+      .git/vk/isolation/:
+      - dry-run (default) prints the 4 pending changes, mutates nothing,
+        exit 0.
+      - --yes: vk-profiles.yaml renamed to fr-profiles.yaml via git mv
+        (tracked) or os.rename (untracked); every devcontainer.json has
+        customizations.fr and /.config/fr/secrets/ mount;
+        .git/vk/isolation moved to .git/fr/isolation; output ends with
+        a printed host-secrets block (mkdir -p ~/.config/fr/secrets &&
+        [ -d ~/.config/vk/secrets ] && cp -an ~/.config/vk/secrets/.
+        ~/.config/fr/secrets/) — printed, never executed.
+      - re-run --yes on a migrated repo → "nothing to migrate", exit 0
+        (idempotent).
+      Run — expect failures (no such command).
+  - id: P4.T1.S2
+    text: |-
+      Implement packages/fr/src/fr/isolation/migrate.py
+      (migrate_repo(repo_root, yes) returning a list of action strings)
+      + wire `fr init migrate` in commands/init_cmd.py (dry-run default,
+      --yes to write — same idiom as fr repair). Run — green.
+- number: 2
+  title: Self-migrate this repo
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Run: uv run fr init migrate --repo . (preview), then --yes.
+      Verify: .devcontainer/fr-profiles.yaml exists, git status shows
+      the rename + both devcontainer.json rewrites; fr isolation
+      up/resolve paths still green via uv run pytest
+      tests/unit/test_isolation.py -q --no-cov.
+- number: 3
+  title: Doc sweep to the new spellings
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Update path mentions: README.md isolation section
+      (~/.cache/vk/worktrees → ~/.cache/fr/worktrees,
+      .devcontainer/vk-profiles.yaml → fr-profiles.yaml,
+      ~/.config/vk/secrets → ~/.config/fr/secrets);
+      plugins/super-fr/skills/fr-init/SKILL.md and fr-isolation/SKILL.md
+      same three substitutions. Verify: grep -rn "vk-profiles\|config/vk/
+      secrets\|cache/vk/worktrees" README.md plugins/ — expect empty.
+      Run: bash scripts/validate-skills.sh — green.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

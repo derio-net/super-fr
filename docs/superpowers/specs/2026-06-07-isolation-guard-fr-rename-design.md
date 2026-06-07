@@ -115,8 +115,10 @@ version, so the guard reaches every install at the next version bump.
    fr-profiles.yaml`, rewrite `customizations.vk` → `.fr` and the
    `--env-file` mount in every `.devcontainer/*/devcontainer.json`, move
    `.git/vk/isolation` → `.git/fr/isolation`. Prints (does not run) an
-   idempotent host command block for the operator's secrets move
-   (`mkdir -p ~/.config/fr && git-style move of ~/.config/vk/secrets`).
+   idempotent host command block for the operator's secrets move —
+   copy-no-clobber (`mkdir -p` + `cp -an` from `~/.config/vk/secrets`), so
+   running containers keep their baked `--env-file` until recreated; the vk
+   dir is deleted at the fallback-removal release, not before.
 3. Fleet sweep (manual phase): run `fr init migrate` in each repo with
    profiles — super-fr, frank, willikins, omada-controller (#262 sweep
    list); move host secrets on each machine; update pod env
@@ -158,8 +160,8 @@ Minor bump → **3.1.0**: new mandatory behavior (Bash guard), new subcommand
    `fr-bridge.lock` and no `VK_BRIDGE_*` fallback warnings; card dispatch
    still works (one ready phase flows to a VibeKanban workspace).
 
-## Implementation plans
+## Implementation Plans
 
-| Repo | Plan | Status |
-|---|---|---|
-| derio-net/super-fr | docs/superpowers/plans/2026-06-07-isolation-guard-fr-rename/ | pending |
+| Plan | Repo | File | Depends on |
+| ---- | ---- | ---- | ---------- |
+| 2026-06-07-isolation-guard-fr-rename | `derio-net/super-fr` | `2026-06-07-isolation-guard-fr-rename` | — |
