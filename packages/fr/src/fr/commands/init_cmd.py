@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from fr.isolation.migrate import SECRETS_BLOCK, migrate_repo
 from fr.isolation.scaffold import scaffold_profile
 from fr.isolation.types import IsolationError
 
@@ -20,7 +21,7 @@ init_app = typer.Typer(
 def scaffold(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
     profile: str = typer.Option(..., help="Profile name (e.g. dev, readonly, admin)."),
-    purpose: str = typer.Option(..., help="One-line purpose, recorded in vk-profiles.yaml."),
+    purpose: str = typer.Option(..., help="One-line purpose, recorded in fr-profiles.yaml."),
     tool: list[str] = typer.Option(
         [], help="Tool to include (repeatable; known tools map to features)."
     ),
@@ -30,7 +31,7 @@ def scaffold(
     default: bool = typer.Option(False, "--default", help="Make this the repo's default profile."),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing profile config."),
 ) -> None:
-    """Write .devcontainer/<profile>/, vk-profiles.yaml entry, and host secrets placeholders."""
+    """Write .devcontainer/<profile>/, fr-profiles.yaml entry, and host secrets placeholders."""
     try:
         path = scaffold_profile(
             repo.resolve(),
@@ -45,3 +46,26 @@ def scaffold(
         typer.echo(f"error: {err}")
         raise typer.Exit(2) from err
     typer.echo(f"scaffolded: {path}")
+
+
+@init_app.command()
+def migrate(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    yes: bool = typer.Option(False, "--yes", help="Apply (default is a dry-run preview)."),
+) -> None:
+    """Rewrite this repo's vk spellings to fr (#272): profiles yaml, devcontainer
+    mounts/customizations, isolation state dir. Prints the host secrets-move
+    block — never executes it."""
+    try:
+        actions = migrate_repo(repo.resolve(), yes=yes)
+    except IsolationError as err:
+        typer.echo(f"error: {err}")
+        raise typer.Exit(2) from err
+    if not actions:
+        typer.echo("nothing to migrate — repo already on fr spellings")
+        return
+    verb = "applied" if yes else "would apply (re-run with --yes)"
+    typer.echo(f"{verb}:")
+    for action in actions:
+        typer.echo(f"  - {action}")
+    typer.echo(SECRETS_BLOCK)

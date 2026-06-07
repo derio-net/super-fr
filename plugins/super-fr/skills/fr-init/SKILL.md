@@ -62,9 +62,9 @@ Each call writes:
 - `.devcontainer/<profile>/devcontainer.json` — committed; base image +
   git/gh features + mapped tool features + vk installed in postCreate +
   `--env-file` pointing at the host secrets path.
-- `.devcontainer/vk-profiles.yaml` — committed; default profile, purpose,
+- `.devcontainer/fr-profiles.yaml` — committed; default profile, purpose,
   expected secret keys, notes for tools without a feature mapping.
-- `~/.config/vk/secrets/<repo>/<profile>.env` — host-only; commented
+- `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.
 
@@ -74,7 +74,7 @@ Unknown tools land in the profile's notes — wire them into
 ## 4. Hand back
 
 - Tell the operator which placeholders to fill
-  (`~/.config/vk/secrets/<repo>/<profile>.env`) before the first
+  (`~/.config/fr/secrets/<repo>/<profile>.env`) before the first
   `fr isolation up`.
 - Commit the `.devcontainer/` files (PR per the repo's conventions —
   some repos block direct pushes to main).
