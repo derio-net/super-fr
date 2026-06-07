@@ -1,0 +1,96 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Docs, version bump, follow-up issue (#279)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Document the compound shape in fr-isolation SKILL.md
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-isolation/SKILL.md, exec-bridge
+      discipline section: after the "ALL GitHub interaction relies on
+      an AUTHENTICATED HOST…" bullet, add:
+
+      "- The Claude Code harness resets the persistent shell cwd back
+        to the base repo between calls, so every host-side git/gh op is
+        a compound `cd <worktree> && gh …` / `cd <worktree> && git
+        push`. The isolation guard explicitly allows a leading `cd`
+        whose target resolves under `~/.cache/fr/worktrees` or a temp
+        dir (#279) — nothing else leaves the base-repo cwd."
+  - id: P2.T1.S2
+    text: |-
+      Run: fr isolation exec --branch feat/issue-279 -- uv run pytest
+      tests/unit/test_skill_validation.py -q --no-cov — expect green
+      (prose-only edit, frontmatter untouched).
+- number: 2
+  title: Version bump and full verification
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Run: fr isolation exec --branch feat/issue-279 -- uv run
+      scripts/bump-version.py patch
+
+      Expect 3.1.1 → 3.1.2 across workspace pyproject.toml, member
+      pyprojects, plugins/*/.claude-plugin/plugin.json,
+      .claude-plugin/marketplace.json, and uv.lock refreshed. Then:
+      fr isolation exec --branch feat/issue-279 -- uv run
+      scripts/bump-version.py --check — expect agreement.
+  - id: P2.T2.S2
+    text: |-
+      Run the full local CI surface inside the container:
+      fr isolation exec --branch feat/issue-279 -- uv run ruff format src/ tests/
+      fr isolation exec --branch feat/issue-279 -- uv run ruff check
+      fr isolation exec --branch feat/issue-279 -- uv run pytest -q --no-cov
+
+      Expect: format makes no changes (or commit them), check clean,
+      full suite green.
+- number: 3
+  title: File the deferred follow-up issue
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      From the worktree cwd on the HOST (authenticated gh):
+
+      cd /Users/derio/.cache/fr/worktrees/super-fr/feat__issue-279 && \
+      gh issue create \
+        --title "fr isolation up: suggest adding the worktree as an additional working directory" \
+        --body "Deferred from #279 (operator Q&A 2026-06-07: minimal fix only). The harness resets the persistent shell cwd whenever cd lands outside the session's allowed working directories, forcing every host-side git/gh op into the compound cd-worktree form. fr isolation up could print (or automate) a suggestion to add the worktree as an additional working directory so the shell cwd can persist there. See docs/superpowers/specs/2026-06-07-isolation-guard-cd-transition-design.md (Out of scope)."
+
+      Record the created issue number in the step note.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-07T17:14:03+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-07T17:14:26+00:00'
+      note: 58 passed (32 skips are pre-existing cross-plugin skips, same as before
+        the edit)
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-07T17:16:12+00:00'
+      note: 3.1.1 → 3.1.2 in 7 files, uv sync ok, fr --version 3.1.2, --check agrees
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-07T17:29:55+00:00'
+      note: ruff check/format --check packages/ tests/ clean (CI scope; stale CLAUDE.md
+        src/ path noted); full suite 793 passed 33 skipped after refreshing stale
+        container uv-tool fr install (same env issue as 3.1.1 run)
+    P2.T3.S1:
+      state: '-'
+      ticked_at: '2026-06-07T17:21:49+00:00'
+      note: gh issue create denied by harness permission classifier mid-run; deferred
+        to PR delivery — issue title/body carried in the PR for operator-approved
+        filing
+  completion:
+    at: '2026-06-07T17:30:09+00:00'
+    note: 'P2.T3.S1 deliberately skipped: follow-up issue filing denied by harness
+      permission classifier; carried in PR body for operator'
+    observed_prs: []

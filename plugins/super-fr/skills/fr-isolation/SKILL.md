@@ -61,6 +61,12 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
   the standard pipeline — never ask the operator for one to make
   isolation work; in-container gh writes are an explicit opt-in profile
   (e.g. `admin` with GH_TOKEN), not a requirement.
+- The Claude Code harness resets the persistent shell cwd back to the base
+  repo between calls, so every host-side git/gh op is a compound
+  `cd <worktree> && gh …` / `cd <worktree> && git push`. The isolation
+  guard explicitly allows a leading `cd` whose target resolves under
+  `~/.cache/fr/worktrees` or a temp dir (#279) — nothing else leaves the
+  base-repo cwd.
 - Never run project commands against the base repo while isolation is live;
   the worktree is the only working copy this run touches.
 
