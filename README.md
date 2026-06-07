@@ -2,6 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/derio-net/super-fr)](https://github.com/derio-net/super-fr/releases)
 [![CI](https://github.com/derio-net/super-fr/actions/workflows/ci.yml/badge.svg)](https://github.com/derio-net/super-fr/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A Claude Code plugin suite that turns a feature description into a reviewed PR.
 It wraps [superpowers](https://github.com/obra/superpowers) with phase-structured
