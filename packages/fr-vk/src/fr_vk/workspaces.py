@@ -7,7 +7,7 @@ Ported from the legacy `agent-images/kali/scripts/vk-issue-bridge.py`:
 
 I5 adds the inverse — when a VK card exists without a workspace, the
 legacy bridge could only log the orphan. Opt-in env flag
-`VK_BRIDGE_RECOVER_ORPHAN_CARDS=1` recreates the workspace so the card
+`FR_BRIDGE_RECOVER_ORPHAN_CARDS=1` recreates the workspace so the card
 isn't stuck silently.
 
 The MCP surface is duck-typed via two Protocols so both
@@ -24,9 +24,10 @@ satisfy them without inheritance:
 from __future__ import annotations
 
 import logging
-import os
 import re
 from typing import Any, Protocol
+
+from fr_vk.config import bridge_env
 
 __all__ = ["archive_for_card", "reap_orphans", "recover_orphan_card"]
 
@@ -212,7 +213,7 @@ def recover_orphan_card(
 ) -> str | None:
     """Recreate a workspace for a card that has none.
 
-    Opt-in via `VK_BRIDGE_RECOVER_ORPHAN_CARDS=1`. With the flag unset,
+    Opt-in via `FR_BRIDGE_RECOVER_ORPHAN_CARDS=1`. With the flag unset,
     the call logs a warning so the orphan is at least visible in the
     cron log — matching the spec I5 "leaves the card alone but logs"
     branch.
@@ -238,10 +239,10 @@ def recover_orphan_card(
             card_id,
         )
         return None
-    if os.environ.get("VK_BRIDGE_RECOVER_ORPHAN_CARDS") != "1":
+    if bridge_env("RECOVER_ORPHAN_CARDS") != "1":
         logger.warning(
             "workspaces: card without workspace (card=%s sid=%s); "
-            "set VK_BRIDGE_RECOVER_ORPHAN_CARDS=1 to recreate",
+            "set FR_BRIDGE_RECOVER_ORPHAN_CARDS=1 to recreate",
             card_id,
             simple_id,
         )

@@ -1,0 +1,122 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'Plugin hook pair: session sentinel + Bash isolation guard (#265b)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD the sentinel writer (PostToolUse on Skill)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Add failing tests tests/unit/test_hooks_sentinel.py. Subprocess
+      plugins/super-fr/hooks/fr-pipeline-sentinel.sh with PostToolUse
+      JSON on stdin and FR_SENTINEL_DIR pointed at tmp_path:
+      - skill_name "super-fr:fr-goal", cwd inside a tmp git repo →
+        sentinel file <session_id>.json exists, contains repo_root ==
+        git toplevel, skill, started_at.
+      - skill_name "fr-brainstorming" (no namespace) → sentinel written.
+      - skill_name "commit-commands:commit" → no sentinel.
+      - cwd not a git repo → no sentinel, exit 0.
+      - a pre-existing sentinel with mtime 49h old is deleted (GC); one
+        47h old survives.
+      Mark module: pytest.mark.skipif(shutil.which("jq") is None,
+      reason="hook scripts require jq"). Run: uv run pytest
+      tests/unit/test_hooks_sentinel.py -q --no-cov — expect failure
+      (script missing).
+  - id: P2.T1.S2
+    text: |-
+      Write plugins/super-fr/hooks/fr-pipeline-sentinel.sh (bash, set
+      -eu, jq — same idiom as ~/.claude/hooks/agent-worktree-required.sh):
+      read stdin; skill=$(jq -r '.tool_input.skill_name //
+      .tool_input.skill // .tool_input.name // empty'); case match
+      (*fr-goal|*fr-brainstorming|*fr-execute with optional super-fr:
+      prefix) else exit 0; repo_root=$(git -C "$cwd" rev-parse
+      --show-toplevel 2>/dev/null) || exit 0; dir="${FR_SENTINEL_DIR:-
+      $HOME/.cache/fr/sentinels}"; GC: find "$dir" -name '*.json' -mmin
+      +2880 -delete; write $dir/<session_id>.json with repo_root, skill,
+      started_at (date -u). chmod +x. Run the S1 tests — expect green.
+- number: 2
+  title: TDD the Bash guard (PreToolUse on Bash)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Add failing tests tests/unit/test_hooks_guard.py. Subprocess
+      plugins/super-fr/hooks/fr-isolation-guard.sh with PreToolUse JSON
+      (session_id, cwd, tool_input.command) and FR_SENTINEL_DIR=tmp:
+      - no sentinel for session → exit 0, empty stdout.
+      - sentinel(repo_root=R) + cwd=R + command "git status" → stdout
+        JSON: hookSpecificOutput.permissionDecision == "deny", reason
+        mentions "fr isolation exec".
+      - cwd=R + command "fr isolation exec -- uv run pytest -q" → allow.
+      - cwd=R/sub/dir + command "ls" → deny (subdir of base repo).
+      - cwd=/tmp/elsewhere (worktree stand-in) → allow.
+      - cwd=R + command "fr isolation down --branch x" → allow AND
+        sentinel file deleted.
+      - symlinked cwd resolving into R → deny (realpath comparison).
+      Run: expect failure (script missing).
+  - id: P2.T2.S2
+    text: |-
+      Write plugins/super-fr/hooks/fr-isolation-guard.sh: read stdin;
+      sentinel="$FR_SENTINEL_DIR/<session_id>.json" (default
+      ~/.cache/fr/sentinels); [ -f ] || exit 0; repo_root=$(jq -r
+      .repo_root "$sentinel"); rcwd=$(cd "$cwd" 2>/dev/null && pwd -P)
+      || exit 0; case "$rcwd/" in "$rroot"/*) inside=1;; esac (compare
+      realpath of repo_root too); outside → exit 0; command=$(jq -r
+      '.tool_input.command // empty'); [[ "$command" =~
+      ^[[:space:]]*fr[[:space:]]+isolation[[:space:]] ]] → allow, and if
+      it also matches ' isolation[[:space:]]+down' delete "$sentinel";
+      otherwise emit deny JSON (printf with jq -n) and exit 0. chmod +x.
+      Run the S1+S2 tests — expect green.
+- number: 3
+  title: Register hooks in the plugin and verify install path
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write plugins/super-fr/hooks/hooks.json:
+      {"hooks": {"PostToolUse": [{"matcher": "Skill", "hooks": [{"type":
+      "command", "command":
+      "${CLAUDE_PLUGIN_ROOT}/hooks/fr-pipeline-sentinel.sh"}]}],
+      "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command",
+      "command": "${CLAUDE_PLUGIN_ROOT}/hooks/fr-isolation-guard.sh"}]}]}}
+  - id: P2.T3.S2
+    text: |-
+      Add test to tests/unit/test_skill_validation.py (or new
+      tests/unit/test_plugin_hooks.py): hooks.json parses as JSON, both
+      referenced scripts exist next to it and are executable
+      (os.access X_OK). Verify scripts/install.sh copies the plugin dir
+      wholesale (grep for the cache copy — `rsync`/`cp -R` of
+      plugins/super-fr); if it enumerates subdirs, add hooks/. Run: uv
+      run pytest tests/unit/test_plugin_hooks.py -q --no-cov — green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-07T09:02:17+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-07T09:02:19+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-07T09:02:20+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-07T09:02:22+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-06-07T09:02:23+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-06-07T09:02:25+00:00'
+      note: null
+  completion:
+    at: '2026-06-07T09:02:26+00:00'
+    note: null
+    observed_prs: []

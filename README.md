@@ -168,12 +168,12 @@ Every run happens in an isolated workspace — there is **no unisolated
 fallback**. Isolation is two layers:
 
 - **Workspace isolation** — a git worktree at
-  `~/.cache/vk/worktrees/<repo>/<branch>`, outside the base repo. The
+  `~/.cache/fr/worktrees/<repo>/<branch>`, outside the base repo. The
   operator's checkout is never touched: no stray checkouts, stashes, or
   half-finished state.
 - **Environment isolation** — a devcontainer per committed profile
-  (`.devcontainer/<profile>/devcontainer.json` + `.devcontainer/vk-profiles.yaml`).
-  Secrets stay host-side in `~/.config/vk/secrets/<repo>/<profile>.env` and are
+  (`.devcontainer/<profile>/devcontainer.json` + `.devcontainer/fr-profiles.yaml`).
+  Secrets stay host-side in `~/.config/fr/secrets/<repo>/<profile>.env` and are
   injected per profile, so a run only sees the credentials its profile grants.
   The default profile is least-privileged (e.g. `dev` with no tokens); an
   `admin` profile can carry `GH_TOKEN` for in-container pushes.

@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
 from pydantic import BaseModel
+
+
+def _warn_legacy(what: str, path: Path) -> None:
+    """Loud dual-read fallback warning (#272). Removed one minor after 3.1."""
+    print(f"[fr] WARNING: legacy {what} at {path} — run `fr init migrate`", file=sys.stderr)
+
+
+def _home() -> Path:
+    return Path(os.environ.get("HOME", str(Path.home())))
 
 
 class IsolationError(Exception):
@@ -30,6 +41,10 @@ def _sanitize(branch: str) -> str:
 
 
 def state_dir(repo_root: Path) -> Path:
+    return repo_root / ".git" / "fr" / "isolation"
+
+
+def _legacy_state_dir(repo_root: Path) -> Path:
     return repo_root / ".git" / "vk" / "isolation"
 
 
@@ -44,18 +59,36 @@ def save_state(state: IsolationState) -> Path:
     return p
 
 
+def delete_state(repo_root: Path, branch: str) -> None:
+    """Unlink fr and legacy copies — down() must retire both spellings."""
+    name = f"{_sanitize(branch)}.json"
+    (state_dir(repo_root) / name).unlink(missing_ok=True)
+    (_legacy_state_dir(repo_root) / name).unlink(missing_ok=True)
+
+
 def load_state(repo_root: Path, branch: str) -> IsolationState | None:
     p = state_path(repo_root, branch)
     if not p.is_file():
-        return None
+        legacy = _legacy_state_dir(repo_root) / p.name
+        if not legacy.is_file():
+            return None
+        _warn_legacy("isolation state", legacy)
+        p = legacy
     return IsolationState.model_validate_json(p.read_text())
 
 
 def list_states(repo_root: Path) -> list[IsolationState]:
+    files: dict[str, Path] = {}
+    legacy_dir = _legacy_state_dir(repo_root)
+    if legacy_dir.is_dir():
+        for f in legacy_dir.glob("*.json"):
+            files[f.name] = f
+            _warn_legacy("isolation state", f)
     d = state_dir(repo_root)
-    if not d.is_dir():
-        return []
-    return [IsolationState.model_validate_json(f.read_text()) for f in sorted(d.glob("*.json"))]
+    if d.is_dir():
+        for f in d.glob("*.json"):
+            files[f.name] = f  # fr copy wins for the same branch
+    return [IsolationState.model_validate_json(f.read_text()) for _, f in sorted(files.items())]
 
 
 def discover_profiles(repo_root: Path) -> list[str]:
@@ -64,23 +97,32 @@ def discover_profiles(repo_root: Path) -> list[str]:
 
 
 def profiles_config(repo_root: Path) -> dict[str, Any]:
-    cfg = repo_root / ".devcontainer" / "vk-profiles.yaml"
-    if not cfg.is_file():
-        return {}
-    return yaml.safe_load(cfg.read_text()) or {}
+    base = repo_root / ".devcontainer"
+    for name in ("fr-profiles.yaml", "vk-profiles.yaml"):
+        cfg = base / name
+        if cfg.is_file():
+            if name.startswith("vk-"):
+                _warn_legacy("vk-profiles.yaml", cfg)
+            return yaml.safe_load(cfg.read_text()) or {}
+    return {}
+
+
+def secrets_env_file(repo_name: str, profile: str) -> Path:
+    """Canonical (fr) host-side secrets env-file for a repo/profile."""
+    return _home() / ".config" / "fr" / "secrets" / repo_name / f"{profile}.env"
 
 
 def resolve_profile(repo_root: Path, name: str | None) -> str:
     """Resolve the requested (or default) profile, or explain how to get one.
 
     Hard requirement by design: no devcontainer profile → refuse with a
-    pointer at vk-init. There is no unisolated fallback.
+    pointer at fr-init. There is no unisolated fallback.
     """
     available = discover_profiles(repo_root)
     if not available:
         raise IsolationError(
             "no devcontainer profiles found (.devcontainer/<profile>/devcontainer.json). "
-            "Run the vk-init skill to scaffold one — isolation never degrades to unisolated."
+            "Run the fr-init skill to scaffold one — isolation never degrades to unisolated."
         )
     if name is None:
         default = profiles_config(repo_root).get("default")
@@ -90,7 +132,7 @@ def resolve_profile(repo_root: Path, name: str | None) -> str:
             return available[0]
         raise IsolationError(
             f"multiple profiles ({', '.join(available)}) and no default in "
-            ".devcontainer/vk-profiles.yaml — pass --profile or set a default via vk-init."
+            ".devcontainer/fr-profiles.yaml — pass --profile or set a default via fr-init."
         )
     if name not in available:
         raise IsolationError(f"unknown profile {name!r}; available: {', '.join(available)}")

@@ -19,9 +19,10 @@ from typing import Any
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
+    _warn_legacy,
+    delete_state,
     resolve_profile,
     save_state,
-    state_path,
 )
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
@@ -58,7 +59,7 @@ class LocalWorktreeDevcontainerTarget:
         worktree = path or (
             _home()
             / ".cache"
-            / "vk"
+            / "fr"
             / "worktrees"
             / self.repo_root.name
             / branch.replace("/", "__")
@@ -66,12 +67,8 @@ class LocalWorktreeDevcontainerTarget:
         worktree.parent.mkdir(parents=True, exist_ok=True)
         self._git_worktree_add(worktree, branch)
 
-        env_file = self._env_file(name)
-        if not env_file.is_file():
-            env_file.parent.mkdir(parents=True, exist_ok=True)
-            env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}/{name}\n")
-
         config = worktree / ".devcontainer" / name / "devcontainer.json"
+        self._ensure_mounted_env_file(config)
         git_dir = self.repo_root / ".git"
         result = self.run(
             [
@@ -137,7 +134,7 @@ class LocalWorktreeDevcontainerTarget:
             ["git", "worktree", "remove", "--force", str(state.worktree)],
             cwd=self.repo_root,
         )
-        state_path(state.repo_root, state.branch).unlink(missing_ok=True)
+        delete_state(state.repo_root, state.branch)
 
     # ---------- helpers ----------
 
@@ -153,8 +150,27 @@ class LocalWorktreeDevcontainerTarget:
         if result.returncode != 0:
             raise IsolationError(f"git worktree add failed: {result.stderr}")
 
-    def _env_file(self, profile: str) -> Path:
-        return _home() / ".config" / "vk" / "secrets" / self.repo_root.name / f"{profile}.env"
+    def _ensure_mounted_env_file(self, config: Path) -> None:
+        """Ensure the env-file the profile's devcontainer.json mounts exists.
+
+        Mount-following (#272): the committed config is the source of truth —
+        an unmigrated repo still mounts the legacy vk path, so creating the
+        fr file would not help docker. Warn on the legacy spelling; no
+        --env-file in runArgs → nothing to ensure.
+        """
+        try:
+            run_args = json.loads(config.read_text()).get("runArgs", [])
+        except (OSError, json.JSONDecodeError):
+            return
+        for flag, value in zip(run_args, run_args[1:]):
+            if flag != "--env-file":
+                continue
+            env_file = Path(value.replace("${localEnv:HOME}", str(_home())))
+            if "/.config/vk/secrets/" in str(env_file):
+                _warn_legacy("secrets env-file mount", env_file)
+            if not env_file.is_file():
+                env_file.parent.mkdir(parents=True, exist_ok=True)
+                env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")
 
     def _docker_ps(self, state: IsolationState) -> str:
         result = self.run(

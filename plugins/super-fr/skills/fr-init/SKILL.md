@@ -44,7 +44,12 @@ Cover, with scan-informed recommended options:
 2. **Tools** — confirm the scan's toolchain list; surface what CI installs
    that local work also needs (kubectl, terraform, docker-in-docker...).
 3. **Credentials per profile** — which env KEYS each profile expects
-   (names only, never values; e.g. GH_TOKEN for admin, none for readonly).
+   (names only, never values). **Do NOT ask for a GitHub token by
+   default:** push, PR creation, and every `fr`-driven gh call run on the
+   authenticated HOST (fr-isolation's credential boundary) — the container
+   needs no GH_TOKEN for the standard pipeline. Offer it only for an
+   explicit in-container-gh-writes profile (e.g. `admin`), never the
+   default.
 4. **Working patterns** — test/build/run commands worth recording in the
    profile's purpose/notes so future runs know the repo's verbs.
 
@@ -62,9 +67,9 @@ Each call writes:
 - `.devcontainer/<profile>/devcontainer.json` — committed; base image +
   git/gh features + mapped tool features + vk installed in postCreate +
   `--env-file` pointing at the host secrets path.
-- `.devcontainer/vk-profiles.yaml` — committed; default profile, purpose,
+- `.devcontainer/fr-profiles.yaml` — committed; default profile, purpose,
   expected secret keys, notes for tools without a feature mapping.
-- `~/.config/vk/secrets/<repo>/<profile>.env` — host-only; commented
+- `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.
 
@@ -74,8 +79,9 @@ Unknown tools land in the profile's notes — wire them into
 ## 4. Hand back
 
 - Tell the operator which placeholders to fill
-  (`~/.config/vk/secrets/<repo>/<profile>.env`) before the first
-  `fr isolation up`.
+  (`~/.config/fr/secrets/<repo>/<profile>.env`) before the first
+  `fr isolation up` — an empty env-file is normal for a default profile
+  (GitHub work needs only the host's `gh auth status` to be green).
 - Commit the `.devcontainer/` files (PR per the repo's conventions —
   some repos block direct pushes to main).
 - If a run was paused on this init, resume it: `fr isolation up` now works.

@@ -21,7 +21,8 @@ that dies leaves the base repo pristine.
 
 ## 0. Isolation first — hard gate
 
-Before ANY exploration command:
+Before ANY command — exploration, measurement, cluster reads included; an
+operator "start with X" never reorders this:
 
 ```bash
 fr isolation up --branch <feature-branch> [--profile <name>]

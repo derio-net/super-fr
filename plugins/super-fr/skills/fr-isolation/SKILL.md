@@ -12,7 +12,7 @@ description: >
 # fr-isolation
 
 A workspace contract, not just a worktree: code lives in a git worktree
-OUTSIDE the repo (`~/.cache/vk/worktrees/<repo>/<branch>`), commands run
+OUTSIDE the repo (`~/.cache/fr/worktrees/<repo>/<branch>`), commands run
 inside the profile's devcontainer, and the base repo is never touched while
 the run is live. The surface is plain shell — any agent or a human drives it
 identically; nothing here assumes a specific agent.
@@ -38,7 +38,7 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
 ```
 
 - `up` resolves the profile (flag → repo default from
-  `.devcontainer/vk-profiles.yaml` → sole profile), creates the worktree,
+  `.devcontainer/fr-profiles.yaml` → sole profile), creates the worktree,
   ensures the host secrets env-file exists, and starts the container with
   the base repo's `.git` mounted at the same absolute path (linked-worktree
   git needs it).
@@ -51,10 +51,16 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
   `fr isolation exec -- ...`. File edits happen in the worktree directly
   (it's host-visible); execution happens in the container.
 - Credential boundary: the container sees only the profile's env-file
-  (`~/.config/vk/secrets/<repo>/<profile>.env`). `gh` in-container is
+  (`~/.config/fr/secrets/<repo>/<profile>.env`). `gh` in-container is
   unauthenticated unless that file provides a token. Push and PR creation
   default to the HOST (run them outside `exec`, from the worktree) — the
   operator's credentials never enter the container implicitly.
+- ALL GitHub interaction relies on an AUTHENTICATED HOST: pushes, PR
+  creation, and `fr isolation status`/`down`'s PR checks (`gh pr view`)
+  all use the host's gh/git auth. The container needs NO GitHub token for
+  the standard pipeline — never ask the operator for one to make
+  isolation work; in-container gh writes are an explicit opt-in profile
+  (e.g. `admin` with GH_TOKEN), not a requirement.
 - Never run project commands against the base repo while isolation is live;
   the worktree is the only working copy this run touches.
 

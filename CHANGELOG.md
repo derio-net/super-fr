@@ -8,6 +8,30 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 3.1.0 — isolation guard hooks + fr-spelling dual-read (#265, #272)
+
+- **Plugin-shipped isolation enforcement (#265).** super-fr now ships a
+  hook pair: PostToolUse(Skill) writes a session-keyed sentinel when
+  fr-goal / fr-brainstorming / fr-execute starts (base repos only — linked
+  worktrees never key a sentinel); PreToolUse(Bash) denies base-repo-cwd
+  commands other than `fr isolation …` while the sentinel lives, clearing
+  it on `fr isolation down` (48 h GC backstop). Skill prose closes the
+  read-only gray zone: isolation precedes EVERYTHING; "start with X"
+  reorders work items, never the first action.
+- **fr-first dual-read for every residual vk spelling (#272).**
+  `fr-profiles.yaml`, `~/.config/fr/secrets/`, `.git/fr/isolation/`,
+  `~/.cache/fr/worktrees/`, `customizations.fr`, `fr-bridge.lock`,
+  `FR_BRIDGE_{REPOS,LOCK_PATH,RECOVER_ORPHAN_CARDS}` — legacy vk
+  spellings still read, with a loud `run fr init migrate` warning.
+  `fr isolation up` now mount-follows the profile's committed
+  `--env-file`. `VK_DERIO_OPS_PROJECT_ID` deliberately keeps its name
+  (VibeKanban product domain). Fallbacks removed one minor later.
+- **New `fr init migrate`** (dry-run default, `--yes` applies): renames
+  the profiles yaml via `git mv`, rewrites devcontainer customizations +
+  secrets mounts (JSONC files are skipped with a hand-migrate warning),
+  moves the state dir, and prints — never executes — the copy-no-clobber
+  host secrets block.
+
 ## 2.1.1 — registry label colors land on GitHub again
 
 - **`vk apply` paints labels with their registry color / description.**

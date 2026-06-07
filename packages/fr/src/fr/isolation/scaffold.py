@@ -1,9 +1,9 @@
-"""Mechanical writer for devcontainer profiles (driven by the vk-init skill).
+"""Mechanical writer for devcontainer profiles (driven by the fr-init skill).
 
 Writes three things per profile:
   - .devcontainer/<profile>/devcontainer.json  (committed)
-  - .devcontainer/vk-profiles.yaml entry       (committed)
-  - ~/.config/vk/secrets/<repo>/<profile>.env  (host-only placeholders;
+  - .devcontainer/fr-profiles.yaml entry       (committed)
+  - ~/.config/fr/secrets/<repo>/<profile>.env  (host-only placeholders;
     existing operator values are NEVER overwritten — only missing keys
     are appended as commented placeholders)
 """
@@ -11,12 +11,11 @@ Writes three things per profile:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import yaml
 
-from fr.isolation.types import IsolationError
+from fr.isolation.types import IsolationError, secrets_env_file
 
 BASE_IMAGE = "mcr.microsoft.com/devcontainers/base:ubuntu"
 
@@ -42,12 +41,8 @@ POST_CREATE = (
 )
 
 
-def _home() -> Path:
-    return Path(os.environ.get("HOME", str(Path.home())))
-
-
 def env_file_path(repo_root: Path, profile: str) -> Path:
-    return _home() / ".config" / "vk" / "secrets" / repo_root.name / f"{profile}.env"
+    return secrets_env_file(repo_root.name, profile)
 
 
 def scaffold_profile(
@@ -94,9 +89,9 @@ def scaffold_profile(
         "workspaceFolder": "${localWorkspaceFolder}",
         "runArgs": [
             "--env-file",
-            f"${{localEnv:HOME}}/.config/vk/secrets/{repo_root.name}/{profile}.env",
+            f"${{localEnv:HOME}}/.config/fr/secrets/{repo_root.name}/{profile}.env",
         ],
-        "customizations": {"vk": {"profile": profile, "purpose": purpose}},
+        "customizations": {"fr": {"profile": profile, "purpose": purpose}},
     }
     profile_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2) + "\n")
@@ -114,7 +109,7 @@ def _update_profiles_yaml(
     unknown_tools: list[str],
     default: bool,
 ) -> None:
-    path = repo_root / ".devcontainer" / "vk-profiles.yaml"
+    path = repo_root / ".devcontainer" / "fr-profiles.yaml"
     data = yaml.safe_load(path.read_text()) if path.is_file() else {}
     data = data or {}
     data.setdefault("profiles", {})

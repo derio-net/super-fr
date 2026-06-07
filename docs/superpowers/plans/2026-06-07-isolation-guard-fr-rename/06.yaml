@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Host, pod, and fleet migration (operator)
+  tag: manual
+  depends_on:
+  - 5
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Host secrets move (each machine with fr workspaces)
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      On the MacBook (and any other host): run the host-secrets block
+      printed by `fr init migrate` (mkdir -p ~/.config/fr/secrets and
+      copy-no-clobber from ~/.config/vk/secrets). Keep the vk dir until
+      the fallback-removal release; live containers hold the old mount
+      until recreated.
+- number: 2
+  title: Pod relics + env cutover
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      On the pod: delete ~/.local/bin/vk-issue-bridge.py (pre-v2 relic);
+      rename ~/repos/superpowers-for-vk → ~/repos/super-fr together with
+      the VibeKanban board repo entry (they move with the FR_REPOS_DIR
+      convention); set FR_BRIDGE_REPOS / FR_BRIDGE_LOCK_PATH /
+      FR_BRIDGE_RECOVER_ORPHAN_CARDS in the willikins K8s manifest
+      (old VK_BRIDGE_* values, new names) and drop the VK_BRIDGE_*
+      entries at the same edit.
+- number: 3
+  title: Fleet sweep
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      After this PR merges and the 3.1.0 fr CLI is installed: run
+      `fr init migrate` (preview, then --yes) in each repo with
+      devcontainer profiles — frank, willikins, omada-controller (#262
+      sweep list; super-fr already self-migrated in P4) — committing
+      each via that repo's normal PR flow.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -57,13 +57,16 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     assert "target=${localWorkspaceFolder}" in cfg["workspaceMount"]
     assert "--env-file" in " ".join(cfg["runArgs"])
     assert "${localEnv:HOME}" in " ".join(cfg["runArgs"])
+    # fr spellings on the new-write side (#272): fr secrets mount + fr key
+    assert "/.config/fr/secrets/" in " ".join(cfg["runArgs"])
+    assert "fr" in cfg["customizations"] and "vk" not in cfg["customizations"]
 
-    profiles = yaml.safe_load((repo / ".devcontainer" / "vk-profiles.yaml").read_text())
+    profiles = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
     assert profiles["default"] == "dev"
     assert profiles["profiles"]["dev"]["purpose"] == "day-to-day development"
     assert profiles["profiles"]["dev"]["secrets"] == ["GH_TOKEN"]
 
-    env = tmp_path / "home" / ".config" / "vk" / "secrets" / "myrepo" / "dev.env"
+    env = tmp_path / "home" / ".config" / "fr" / "secrets" / "myrepo" / "dev.env"
     assert env.is_file()
     assert "# GH_TOKEN=" in env.read_text()
 
@@ -92,7 +95,7 @@ def test_scaffold_second_profile_keeps_first(repo: Path) -> None:
         ],
     )
     assert res.exit_code == 0, res.output
-    profiles = yaml.safe_load((repo / ".devcontainer" / "vk-profiles.yaml").read_text())
+    profiles = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
     assert profiles["default"] == "dev"  # unchanged
     assert set(profiles["profiles"]) == {"dev", "readonly"}
 
@@ -100,7 +103,7 @@ def test_scaffold_second_profile_keeps_first(repo: Path) -> None:
 def test_unknown_tool_recorded_in_notes(repo: Path) -> None:
     res = scaffold(repo, "--tool", "frobnicator9000")
     assert res.exit_code == 0, res.output
-    profiles = yaml.safe_load((repo / ".devcontainer" / "vk-profiles.yaml").read_text())
+    profiles = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
     assert "frobnicator9000" in " ".join(profiles["profiles"]["dev"].get("notes", []))
 
 
@@ -114,7 +117,7 @@ def test_scaffold_outside_repo_exits_2(tmp_path: Path) -> None:
 
 def test_envfile_never_overwritten(repo: Path, tmp_path: Path) -> None:
     scaffold(repo, "--secret", "A_KEY")
-    env = tmp_path / "home" / ".config" / "vk" / "secrets" / "myrepo" / "dev.env"
+    env = tmp_path / "home" / ".config" / "fr" / "secrets" / "myrepo" / "dev.env"
     env.write_text("A_KEY=real-secret\n")
     scaffold(repo, "--force", "--secret", "A_KEY", "--secret", "B_KEY")
     text = env.read_text()

@@ -8,10 +8,10 @@
   "postCreateCommand": "pipx install uv 2>/dev/null || true; uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true",
   "runArgs": [
     "--env-file",
-    "${localEnv:HOME}/.config/vk/secrets/super-fr/admin.env"
+    "${localEnv:HOME}/.config/fr/secrets/super-fr/admin.env"
   ],
   "customizations": {
-    "vk": {
+    "fr": {
       "profile": "admin",
       "purpose": "in-container gh writes (push, PR)"
     }

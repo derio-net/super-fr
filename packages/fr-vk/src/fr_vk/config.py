@@ -118,3 +118,24 @@ def repo_id_for(repo: str, mcp: _RepoLister) -> str | None:
     entry — VK rejects bare names.
     """
     return known_repos(mcp).get(_short_name(repo))
+
+
+def bridge_env(name: str) -> str | None:
+    """FR_BRIDGE_<name> with VK_BRIDGE_<name> fallback (#272 dual-read).
+
+    The VK_ spelling is legacy brand residue — warn loudly so operators
+    migrate before the fallback is removed (one minor after 3.1).
+    """
+    import os
+    import sys
+
+    fr_value = os.environ.get(f"FR_BRIDGE_{name}")
+    if fr_value is not None:
+        return fr_value
+    vk_value = os.environ.get(f"VK_BRIDGE_{name}")
+    if vk_value is not None:
+        print(
+            f"[fr] WARNING: legacy VK_BRIDGE_{name} env var — rename to FR_BRIDGE_{name}",
+            file=sys.stderr,
+        )
+    return vk_value

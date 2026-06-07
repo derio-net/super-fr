@@ -6,6 +6,7 @@ real throwaway repos (cheap, deterministic). Nothing here needs Docker.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -15,14 +16,20 @@ from fr.isolation.types import (
     IsolationError,
     IsolationState,
     load_state,
+    profiles_config,
     resolve_profile,
     save_state,
+    secrets_env_file,
     state_path,
 )
 
 
 def make_repo(
-    tmp_path: Path, profiles: list[str] | None = None, default: str | None = None
+    tmp_path: Path,
+    profiles: list[str] | None = None,
+    default: str | None = None,
+    profiles_yaml: str = "fr-profiles.yaml",
+    env_file_mount: str | None = None,
 ) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -47,10 +54,31 @@ def make_repo(
     for name in profiles or []:
         d = repo / ".devcontainer" / name
         d.mkdir(parents=True)
-        (d / "devcontainer.json").write_text('{"image": "x"}\n')
+        config: dict = {"image": "x"}
+        if env_file_mount:
+            config["runArgs"] = ["--env-file", env_file_mount]
+        (d / "devcontainer.json").write_text(json.dumps(config) + "\n")
     if default:
-        (repo / ".devcontainer" / "vk-profiles.yaml").write_text(
+        (repo / ".devcontainer" / profiles_yaml).write_text(
             f"default: {default}\nprofiles:\n  {default}:\n    purpose: test\n"
+        )
+    if profiles:
+        # committed, as in real repos — worktrees check out .devcontainer/
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-qm",
+                "profiles",
+            ],
+            check=True,
         )
     return repo
 
@@ -111,9 +139,9 @@ def test_resolve_profile_default(tmp_path: Path) -> None:
     assert resolve_profile(repo, "admin") == "admin"
 
 
-def test_resolve_profile_no_devcontainer_points_at_vk_init(tmp_path: Path) -> None:
+def test_resolve_profile_no_devcontainer_points_at_fr_init(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    with pytest.raises(IsolationError, match="vk-init"):
+    with pytest.raises(IsolationError, match="fr-init"):
         resolve_profile(repo, None)
 
 
@@ -129,6 +157,84 @@ def test_resolve_profile_no_default_single_profile(tmp_path: Path) -> None:
     assert resolve_profile(repo, None) == "dev"
 
 
+# ---------- dual-read renames (#272) ----------
+
+
+def test_profiles_config_reads_fr_profiles(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    repo = make_repo(tmp_path, ["dev"], default="dev")  # writes fr-profiles.yaml
+    assert profiles_config(repo)["default"] == "dev"
+    assert "legacy" not in capsys.readouterr().err
+
+
+def test_profiles_config_vk_fallback_warns(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    repo = make_repo(tmp_path, ["dev"], default="dev", profiles_yaml="vk-profiles.yaml")
+    assert profiles_config(repo)["default"] == "dev"
+    err = capsys.readouterr().err
+    assert "legacy" in err and "vk-profiles.yaml" in err and "fr init migrate" in err
+
+
+def test_profiles_config_fr_wins_over_vk(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    repo = make_repo(tmp_path, ["dev"], default="dev", profiles_yaml="vk-profiles.yaml")
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "default: dev\nprofiles:\n  dev:\n    purpose: fr-side\n"
+    )
+    assert profiles_config(repo)["profiles"]["dev"]["purpose"] == "fr-side"
+    assert "legacy" not in capsys.readouterr().err
+
+
+def test_secrets_env_file_is_fr_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    p = secrets_env_file("myrepo", "dev")
+    assert str(p).endswith(".config/fr/secrets/myrepo/dev.env")
+
+
+def test_save_state_writes_fr_dir(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    st = IsolationState(
+        repo_root=repo,
+        branch="feat/x",
+        worktree=tmp_path / "wt",
+        profile="dev",
+        created_at="2026-06-07T00:00:00Z",
+    )
+    save_state(st)
+    assert str(state_path(repo, "feat/x")).startswith(str(repo / ".git" / "fr" / "isolation"))
+
+
+def test_load_state_legacy_vk_dir_warns(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    legacy = repo / ".git" / "vk" / "isolation"
+    legacy.mkdir(parents=True)
+    st = IsolationState(
+        repo_root=repo,
+        branch="feat/x",
+        worktree=tmp_path / "wt",
+        profile="dev",
+        created_at="2026-06-07T00:00:00Z",
+    )
+    (legacy / "feat__x.json").write_text(st.model_dump_json())
+    assert load_state(repo, "feat/x") == st
+    assert "legacy" in capsys.readouterr().err
+
+
+def test_load_state_fr_wins_over_legacy(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    legacy = repo / ".git" / "vk" / "isolation"
+    legacy.mkdir(parents=True)
+    old = IsolationState(
+        repo_root=repo,
+        branch="feat/x",
+        worktree=tmp_path / "old-wt",
+        profile="dev",
+        created_at="2026-06-01T00:00:00Z",
+    )
+    (legacy / "feat__x.json").write_text(old.model_dump_json())
+    new = old.model_copy(update={"worktree": tmp_path / "new-wt"})
+    save_state(new)
+    assert load_state(repo, "feat/x") == new
+    assert "legacy" not in capsys.readouterr().err
+
+
 # ---------- target.up ----------
 
 
@@ -136,15 +242,22 @@ def test_up_creates_worktree_envfile_and_devcontainer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    repo = make_repo(tmp_path, ["dev"], default="dev")
+    repo = make_repo(
+        tmp_path,
+        ["dev"],
+        default="dev",
+        env_file_mount="${localEnv:HOME}/.config/fr/secrets/repo/dev.env",
+    )
     runner = FakeRunner()
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     st = target.up(profile=None, branch="vk-iso/test")
 
     assert st.worktree.is_dir() and (st.worktree / "README.md").is_file()
-    assert str(st.worktree).startswith(str(tmp_path / "home"))  # ~/.cache default
-    env = tmp_path / "home" / ".config" / "vk" / "secrets" / "repo" / "dev.env"
-    assert env.is_file()  # created when missing
+    assert str(st.worktree).startswith(
+        str(tmp_path / "home" / ".cache" / "fr" / "worktrees")
+    )  # ~/.cache/fr default
+    env = tmp_path / "home" / ".config" / "fr" / "secrets" / "repo" / "dev.env"
+    assert env.is_file()  # mount-followed: created when missing
 
     (up,) = runner.argv_for("devcontainer")
     assert up[1] == "up"
@@ -154,6 +267,35 @@ def test_up_creates_worktree_envfile_and_devcontainer(
     # base .git mounted rw at the same absolute path
     assert f"source={repo / '.git'},target={repo / '.git'}" in joined
     assert load_state(repo, "vk-iso/test") == st
+
+
+def test_up_follows_legacy_vk_mount_and_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """Unmigrated repo: committed devcontainer.json still mounts the vk path —
+    up() ensures THAT file (the one docker will read) and warns."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(
+        tmp_path,
+        ["dev"],
+        default="dev",
+        env_file_mount="${localEnv:HOME}/.config/vk/secrets/repo/dev.env",
+    )
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    target.up(profile=None, branch="vk-iso/test")
+    env = tmp_path / "home" / ".config" / "vk" / "secrets" / "repo" / "dev.env"
+    assert env.is_file()
+    assert "legacy" in capsys.readouterr().err
+
+
+def test_up_no_env_file_mount_creates_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")  # no runArgs in fixture
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    target.up(profile=None, branch="vk-iso/test")
+    assert not (tmp_path / "home" / ".config").exists()
 
 
 def test_up_outside_repo_exits_with_isolation_error(tmp_path: Path) -> None:
