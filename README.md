@@ -49,9 +49,23 @@ flowchart TD
     SR --> Exec["fr-execute (local mode)<br/>TDD per step; every command via<br/>fr isolation exec"]
     Exec --> Review["code review after each phase<br/>(superpowers:requesting-code-review)<br/>fix every finding"]
     Review --> PR["single PR<br/>(agent never self-merges)"]
+    PR -. back-loaded manual phase .-> Manual["operator implements it<br/>(secrets, UI ops, deploys)<br/>and pushes to the same PR"] -.-> Merge
     PR --> Merge["operator reviews & merges"]
+    Merge -. spec has a Test Plan .-> TP["post-merge Test Plan, driven together:<br/>agent runs the checks it can,<br/>operator confirms the rest"] -.-> Close
     Merge --> Close["fr archive + fr isolation down"]
 ```
+
+Not quite everything is autonomous — two moments stay operator+agent driven
+around the merge. Manual work (secrets, UI ops, deploys) is back-loaded into
+the plan's last `[manual]` phase: the PR ships with it deliberately
+unimplemented, and the operator implements it and pushes to the same PR.
+(Front-loading is the rare exception, only when agentic work genuinely depends
+on the manual output: the run opens a spec+plan PR — the manual instructions
+are the deliverable — pauses, and resumes only on the operator's go.) And
+when the deliverable deploys, the spec carries a post-merge **Test Plan**
+(offered in the batched Q&A) that the agent drives interactively after the
+merge — it runs the checks it can reach, the operator confirms what it can't —
+before the run closes out with `fr archive` and `fr isolation down`.
 
 ### Flow 2 — dispatch phases to a runner (`fr apply --to vk`)
 
