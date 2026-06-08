@@ -1,7 +1,8 @@
 """fr_dispatch cron entry point — `python -m fr_vk.bridge`.
 
-One tick: pull every managed repo to head-of-main, walk
-`discover_plans` per repo, dispatch eligible phases via
+One tick: sync every managed repo's bridge-OWNED checkout to
+head-of-main (a checkout nothing else writes to — #286), walk
+`discover_plans` per repo against it, dispatch eligible phases via
 `fr_dispatch.tick`, run the PR-state sweep + workspace reaper, push the
 heartbeat. The whole thing is wrapped by a single `flock`-based lock
 file so two cron firings can never overlap (I4), and each plan's
@@ -61,6 +62,9 @@ _metrics = MetricsPusher(
 _DEFAULT_LOCK_PATH = "/var/run/fr-bridge.lock"
 _FALLBACK_LOCK_PATH = "/tmp/fr-bridge.lock"
 _SEEN_PLANS_PATH = Path.home() / ".willikins-agent" / "_seen_plans.json"
+# Base dir for the bridge-owned checkouts (#286). The bridge is the SOLE
+# writer of these, so VK's out-of-band ref moves can never desync them.
+_DEFAULT_BRIDGE_CHECKOUT_BASE = Path("~/.cache/fr/bridge-checkouts")
 
 
 def _emit_banner() -> None:
@@ -112,29 +116,105 @@ def _repo_owner_name(repo_path: Path) -> str | None:
     return None
 
 
-def _pull_managed_repo(repo_path: Path) -> None:
-    """`git fetch && git checkout main && git pull --ff-only` (E4).
+def _bridge_checkout_base() -> Path:
+    """Base dir for bridge-owned checkouts (#286).
 
-    Best-effort — failures log a warning and continue with the stale
-    checkout, because a stale dispatch beats no dispatch.
+    `FR_BRIDGE_CHECKOUT_DIR` (legacy `VK_BRIDGE_CHECKOUT_DIR`) overrides;
+    unset → `~/.cache/fr/bridge-checkouts`.
     """
-    cmds: tuple[list[str], ...] = (
-        ["git", "-C", str(repo_path), "fetch"],
-        ["git", "-C", str(repo_path), "checkout", "main"],
-        ["git", "-C", str(repo_path), "pull", "--ff-only"],
-    )
-    for cmd in cmds:
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            stderr = getattr(e, "stderr", "") or ""
+    raw = (bridge_env("CHECKOUT_DIR") or "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return _DEFAULT_BRIDGE_CHECKOUT_BASE.expanduser()
+
+
+def _ensure_bridge_checkout(configured: Path, name: str, base: Path | None = None) -> Path | None:
+    """Return the bridge-owned checkout for `name`, cloning it if missing (#286).
+
+    The checkout lives at `<base>/<name>` and is cloned from the configured
+    repo's `origin` URL — the real remote, so `fetch origin` +
+    `reset --hard origin/main` always reach true head-of-main. Returns the
+    path, or `None` (logged, no raise) when the origin can't be resolved or
+    the clone fails — the tick skips that repo this round.
+    """
+    base = base or _bridge_checkout_base()
+    dest = base / name
+    if (dest / ".git").exists():
+        return dest
+    try:
+        url = subprocess.run(
+            ["git", "-C", str(configured), "remote", "get-url", "origin"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning("bridge: %s origin lookup failed: %s; skipping", configured, e)
+        return None
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "clone", url, str(dest)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        stderr = getattr(e, "stderr", "") or ""
+        logger.warning(
+            "bridge: clone %s -> %s failed: %s; skipping", url, dest, stderr.strip() or e
+        )
+        return None
+    return dest
+
+
+def _pull_managed_repo(repo_path: Path) -> bool:
+    """`git fetch origin` + `git reset --hard origin/main` (#286).
+
+    Idempotent and self-healing on the bridge-owned checkout: unlike the old
+    `checkout main && pull --ff-only`, an unconditional reset reconciles ANY
+    out-of-band ref move or dirty tree each tick — including the bug
+    signature where `HEAD == origin/main` but the working tree is frozen at
+    the pre-merge parent (a no-op for both `checkout` and `pull --ff-only`).
+
+    Returns `True` iff a desync (dirty working tree) was detected and healed;
+    a clean tree merely behind `origin/main` is a normal fast-forward, not a
+    desync. Best-effort — a git failure logs a warning and returns `False`,
+    and the tick continues against the (possibly stale) checkout because a
+    stale dispatch beats no dispatch.
+    """
+
+    def _run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(repo_path), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+    try:
+        _run("fetch", "origin")
+        dirty = bool(_run("status", "--porcelain").stdout.strip())
+        if dirty:
             logger.warning(
-                "bridge: %s failed for %s: %s; continuing with stale checkout",
-                " ".join(cmd[3:]),
+                "bridge: %s working tree desynced (out-of-band ref move?); "
+                "reconciling to origin/main",
                 repo_path,
-                stderr.strip() or e,
             )
-            return
+        _run("checkout", "main")
+        _run("reset", "--hard", "origin/main")
+        return dirty
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        stderr = getattr(e, "stderr", "") or ""
+        logger.warning(
+            "bridge: sync failed for %s: %s; continuing with stale checkout",
+            repo_path,
+            stderr.strip() or e,
+        )
+        return False
 
 
 def _construct_mcp_client() -> VkMcpClient:
@@ -275,7 +355,6 @@ def main(argv: list[str] | None = None) -> int:
             total_plans_ticked = 0
 
             for repo_path in configured:
-                _pull_managed_repo(repo_path)
                 owner_name = _repo_owner_name(repo_path)
                 if owner_name is None:
                     logger.warning(
@@ -284,8 +363,22 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     continue
                 resolved_owner: str = owner_name
+                # Sync the bridge's OWN checkout (#286) — never the shared one
+                # VK writes from worktrees — so an out-of-band ref move can't
+                # desync it. discover_plans then reads from this checkout via
+                # FR_REPOS_DIR.
+                name = resolved_owner.split("/", 1)[1] if "/" in resolved_owner else resolved_owner
+                bridge_path = _ensure_bridge_checkout(repo_path, name)
+                if bridge_path is None:
+                    logger.warning(
+                        "[bridge] repo %s skipped: could not establish bridge-owned checkout",
+                        repo_path,
+                    )
+                    continue
+                if _pull_managed_repo(bridge_path):
+                    _metrics.push_repo_desync_total(repo=resolved_owner)
                 prev_repos_dir = os.environ.get("FR_REPOS_DIR")
-                os.environ["FR_REPOS_DIR"] = str(repo_path.parent)
+                os.environ["FR_REPOS_DIR"] = str(bridge_path.parent)
                 try:
 
                     def _fetch_plans(r: str = resolved_owner) -> Any:

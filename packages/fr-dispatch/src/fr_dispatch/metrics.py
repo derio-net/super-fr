@@ -8,6 +8,11 @@ adapter-supplied names (`MetricsPusher(namespace=..., job=...)`):
 - `<namespace>_failure_total{reason="<reason>"}` (counter) — one per
   accumulated failure; generic reason kinds may be aliased to an
   adapter's historical wire values via `reason_aliases`.
+- `<namespace>_repo_desync_total{repo="<owner/name>"}` (counter) — one per
+  self-healed managed-repo desync (#286). Kept distinct from
+  `failure_total` so a recovered out-of-band ref move never reads as a tick
+  failure; should be ~0 once the bridge solely owns its checkout, so any
+  nonzero value is a real anomaly signal.
 - the heartbeat gauge (default `<namespace>_heartbeat_last_success_timestamp`)
   — Unix timestamp stamped at end of tick, the liveness signal.
 
@@ -91,6 +96,13 @@ class MetricsPusher:
             self.job,
         )
 
+    def push_repo_desync_total(self, *, repo: str) -> None:
+        m = f"{self.namespace}_repo_desync_total"
+        _push(
+            f"# TYPE {m} counter\n" + f'{m}{{repo="{repo}"}} 1\n',
+            self.job,
+        )
+
     def push_heartbeat(self) -> None:
         m = self.heartbeat_metric
         _push(
@@ -111,6 +123,9 @@ class NullMetrics(MetricsPusher):
         pass
 
     def push_failure_total(self, *, reason: str) -> None:  # pragma: no cover
+        pass
+
+    def push_repo_desync_total(self, *, repo: str) -> None:  # pragma: no cover
         pass
 
     def push_heartbeat(self) -> None:  # pragma: no cover

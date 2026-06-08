@@ -91,6 +91,26 @@ def test_push_heartbeat_emits_gauge(fake_pushgateway):
     assert "willikins_heartbeat_last_success_timestamp" in body
 
 
+def test_push_repo_desync_total_emits_counter_with_repo_label(fake_pushgateway):
+    """#286 — a self-healed desync emits a dedicated counter labelled by repo,
+    kept distinct from failure_total so it never reads as a tick failure."""
+    push = vk_metrics()
+    push.push_repo_desync_total(repo="derio-net/runs-fr")
+    body = _bodies(fake_pushgateway)
+    assert "willikins_vk_bridge_repo_desync_total" in body
+    assert 'repo="derio-net/runs-fr"' in body
+    assert "# TYPE willikins_vk_bridge_repo_desync_total counter" in body
+    # Distinct from failure_total — a heal event is not a failure.
+    assert "willikins_vk_bridge_failure_total" not in body
+
+
+def test_null_metrics_desync_is_noop(fake_pushgateway):
+    from fr_dispatch.metrics import NullMetrics
+
+    NullMetrics().push_repo_desync_total(repo="x/y")  # no push, no raise
+    assert _bodies(fake_pushgateway) == ""
+
+
 def test_push_metric_swallows_network_failure(monkeypatch, fake_pushgateway):
     """A Pushgateway outage must not break the bridge tick."""
     push = vk_metrics()
