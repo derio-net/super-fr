@@ -1,0 +1,167 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Bridge-owned dedicated checkout + self-healing sync
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD _bridge_checkout_base
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. Create tests/unit/test_bridge_checkout.py with failing tests:
+      - test_base_honours_env(monkeypatch, tmp_path):
+          monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(tmp_path / "co"))
+          from fr_vk import bridge_cli
+          assert bridge_cli._bridge_checkout_base() == (tmp_path / "co")
+      - test_base_default(monkeypatch):
+          monkeypatch.delenv("FR_BRIDGE_CHECKOUT_DIR", raising=False)
+          monkeypatch.delenv("VK_BRIDGE_CHECKOUT_DIR", raising=False)
+          from pathlib import Path
+          from fr_vk import bridge_cli
+          assert bridge_cli._bridge_checkout_base() == Path("~/.cache/fr/bridge-checkouts").expanduser()
+      Run: uv run pytest tests/unit/test_bridge_checkout.py -q --no-cov — expect AttributeError.
+  - id: P2.T1.S2
+    text: |-
+      GREEN. In packages/fr-vk/src/fr_vk/bridge_cli.py add:
+          _DEFAULT_BRIDGE_CHECKOUT_BASE = Path("~/.cache/fr/bridge-checkouts")
+          def _bridge_checkout_base() -> Path:
+              raw = (bridge_env("CHECKOUT_DIR") or "").strip()
+              if raw:
+                  return Path(raw).expanduser()
+              return _DEFAULT_BRIDGE_CHECKOUT_BASE.expanduser()
+      Run the two tests — expect green.
+- number: 2
+  title: TDD _ensure_bridge_checkout (clone-if-missing)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED. Add to tests/unit/test_bridge_checkout.py a local bare-origin helper
+      (reuse the pattern in tests/integration/test_bridge_cli.py _init_bare_with_clone:
+      a bare origin + a clone whose `origin` remote points at the bare). Then:
+      - test_ensure_clones_when_missing(tmp_path):
+          clone = _init_bare_with_clone(tmp_path)   # configured shared checkout
+          base = tmp_path / "bridge-co"
+          from fr_vk import bridge_cli
+          dest = bridge_cli._ensure_bridge_checkout(clone, "foo", base)
+          assert dest == base / "foo"
+          assert (dest / ".git").exists()
+          # cloned from the real origin, so origin/main resolves:
+          import subprocess
+          out = subprocess.run(["git","-C",str(dest),"rev-parse","origin/main"],
+                               capture_output=True, text=True)
+          assert out.returncode == 0
+      - test_ensure_returns_existing_without_reclone(tmp_path):
+          second call returns the same dest and does not error when .git already present.
+      - test_ensure_returns_none_on_unresolvable_origin(tmp_path):
+          a configured dir with no origin remote -> returns None (logged, no raise).
+      Run: uv run pytest tests/unit/test_bridge_checkout.py -q --no-cov — expect failures.
+  - id: P2.T2.S2
+    text: |-
+      GREEN. In bridge_cli.py add:
+          def _ensure_bridge_checkout(configured: Path, name: str, base: Path | None = None) -> Path | None:
+              base = base or _bridge_checkout_base()
+              dest = base / name
+              if (dest / ".git").exists():
+                  return dest
+              try:
+                  url = subprocess.run(
+                      ["git", "-C", str(configured), "remote", "get-url", "origin"],
+                      check=True, capture_output=True, text=True, timeout=10,
+                  ).stdout.strip()
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+                  logger.warning("bridge: %s origin lookup failed: %s; skipping", configured, e)
+                  return None
+              try:
+                  base.mkdir(parents=True, exist_ok=True)
+                  subprocess.run(["git", "clone", url, str(dest)],
+                                 check=True, capture_output=True, text=True, timeout=300)
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                  stderr = getattr(e, "stderr", "") or ""
+                  logger.warning("bridge: clone %s -> %s failed: %s; skipping",
+                                 url, dest, stderr.strip() or e)
+                  return None
+              return dest
+      Run the ensure tests — expect green.
+- number: 3
+  title: TDD _pull_managed_repo self-healing sync (fetch + reset --hard)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED. Add to tests/unit/test_bridge_checkout.py (helpers build a clone + advance origin):
+      - test_clean_advance_fast_forwards_and_not_flagged(tmp_path):
+          origin advances by a clean commit; checkout behind. _pull_managed_repo(checkout)
+          returns False; the new file/plan now present; git status --porcelain empty.
+      - test_dirty_tree_at_head_is_healed_and_flagged(tmp_path):
+          reproduce the bug signature — set HEAD==origin/main but dirty the worktree
+          (e.g. `git rm --cached <file>` or delete a tracked file so status shows a
+          staged/working deletion while HEAD already == origin/main).
+          _pull_managed_repo(checkout) returns True (desync), then:
+            status --porcelain is empty (tree reconciled),
+            rev-parse HEAD == rev-parse origin/main.
+      - test_git_failure_logs_and_returns_false(tmp_path, caplog):
+          point at a dir whose `git fetch` fails (e.g. no origin) -> returns False,
+          no exception, a warning logged.
+      Run: uv run pytest tests/unit/test_bridge_checkout.py -q --no-cov — expect failures
+      (signature/behavior mismatch — current _pull_managed_repo does checkout+pull, returns None).
+  - id: P2.T3.S2
+    text: |-
+      GREEN. Rewrite _pull_managed_repo in bridge_cli.py (keep the name; single
+      positional arg; now returns bool = desync-detected):
+          def _pull_managed_repo(repo_path: Path) -> bool:
+              '''fetch origin + reset --hard origin/main on the bridge-owned checkout.
+              Idempotent/self-healing against out-of-band ref moves (#286). Returns
+              True iff a desync (dirty working tree) was detected and healed.
+              Best-effort: a git failure logs a warning and returns False, the tick
+              continues against the (stale) checkout.'''
+              def _run(args: list[str]):
+                  return subprocess.run(["git", "-C", str(repo_path), *args],
+                                        check=True, capture_output=True, text=True, timeout=120)
+              try:
+                  _run(["fetch", "origin"])
+                  dirty = bool(_run(["status", "--porcelain"]).stdout.strip())
+                  if dirty:
+                      logger.warning(
+                          "bridge: %s working tree desynced (out-of-band ref move?); "
+                          "reconciling to origin/main", repo_path)
+                  _run(["checkout", "main"])
+                  _run(["reset", "--hard", "origin/main"])
+                  return dirty
+              except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                  stderr = getattr(e, "stderr", "") or ""
+                  logger.warning("bridge: sync failed for %s: %s; continuing with stale checkout",
+                                 repo_path, stderr.strip() or e)
+                  return False
+      Run: uv run pytest tests/unit/test_bridge_checkout.py -q --no-cov — expect green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-08T14:22:21+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-08T14:22:23+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-08T14:22:24+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-08T14:22:26+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-06-08T14:22:27+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-06-08T14:22:29+00:00'
+      note: null
+  completion:
+    at: '2026-06-08T14:22:31+00:00'
+    note: null
+    observed_prs: []

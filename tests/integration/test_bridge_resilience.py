@@ -377,7 +377,10 @@ def test_per_plan_exception_does_not_kill_daemon(
     repo_path = tmp_path / "repo"
     repo_path.mkdir()
     monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [repo_path])
-    monkeypatch.setattr(bridge_cli, "_pull_managed_repo", lambda p: None)
+    monkeypatch.setattr(
+        bridge_cli, "_ensure_bridge_checkout", lambda configured, name, base=None: repo_path
+    )
+    monkeypatch.setattr(bridge_cli, "_pull_managed_repo", lambda p: False)
     monkeypatch.setattr(bridge_cli, "_repo_owner_name", lambda p: "example/repo")
     monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh: plans)
 

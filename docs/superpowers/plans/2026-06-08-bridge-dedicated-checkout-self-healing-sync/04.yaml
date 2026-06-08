@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Version bump + full verification gates
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Bump version and pass all CI gates
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Bump the patch version (touches src/ per CLAUDE.md):
+        scripts/bump-version.py patch
+      Then run the canonical CI gates (paths per ci.yml, not CLAUDE.md's stale src/):
+        uv run ruff format packages/ tests/
+        uv run ruff check packages/ tests/
+        uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
+        uv run pytest -q --no-cov
+      All must pass. Fix any formatting/type findings.
+  - id: P4.T1.S2
+    text: |-
+      Confirm version sync and CLI report:
+        scripts/bump-version.py --check
+        uv run fr --version
+      Both must agree on the new number.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-06-08T14:32:01+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-06-08T14:32:02+00:00'
+      note: null
+  completion:
+    at: '2026-06-08T14:32:03+00:00'
+    note: null
+    observed_prs: []

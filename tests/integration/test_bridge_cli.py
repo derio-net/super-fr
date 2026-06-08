@@ -14,8 +14,10 @@ from typing import Any
 import pytest
 
 
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    )
 
 
 def _init_bare_with_clone(tmp_path: Path) -> Path:
@@ -70,40 +72,37 @@ def _init_bare_with_clone(tmp_path: Path) -> Path:
     return clone
 
 
-def test_tick_pulls_managed_repos_before_discover(
+def test_tick_syncs_bridge_owned_checkout_before_discover(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:  # E4
-    """Local checkout must be pulled to head-of-main before plans are
-    walked — otherwise plans newly added on `origin/main` go silently
-    undispatched."""
-    clone = _init_bare_with_clone(tmp_path)
-    repos_dir = clone.parent
+) -> None:  # E4 / #286
+    """The bridge clones + syncs its OWN checkout (not the shared one VK
+    uses) to head-of-main before plans are walked. Proves the dedicated
+    checkout is created under FR_BRIDGE_CHECKOUT_DIR and advanced, and that
+    sync precedes discovery."""
+    clone = _init_bare_with_clone(tmp_path)  # configured (VK-shared) checkout
+    bridge_base = tmp_path / "bridge-co"
 
     monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
     monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
-    # `discover_plans` looks up `${FR_REPOS_DIR}/<name>` — the cli sets
-    # this per-iteration to the clone's parent so the lookup resolves
-    # to our clone. Pre-set it for clarity.
-    monkeypatch.setenv("FR_REPOS_DIR", str(repos_dir))
+    monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(bridge_base))
 
     from fr_vk import bridge_cli
 
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "_seen_plans.json")
-    # `clone.name` is "foo" → owner/name "example/foo" matches the
-    # _meta.yaml target_repo above.
     monkeypatch.setattr(
         bridge_cli, "_repo_owner_name", lambda repo_path: f"example/{repo_path.name}"
     )
 
-    # Spy on `_pull_managed_repo` so the ordering assertion (pull
-    # before discover) is testable without needing a fully-valid plan
-    # fixture in the freshly-pushed commit.
+    # Spy on `_pull_managed_repo` so the ordering assertion (sync before
+    # discover) is testable; delegate to the real sync so the bridge
+    # checkout actually advances.
     pull_order: list[str] = []
     real_pull = bridge_cli._pull_managed_repo
 
-    def spy_pull(repo_path: Path) -> None:
-        real_pull(repo_path)
+    def spy_pull(repo_path: Path) -> bool:
+        result = real_pull(repo_path)
         pull_order.append("pull")
+        return result
 
     monkeypatch.setattr(bridge_cli, "_pull_managed_repo", spy_pull)
 
@@ -136,19 +135,21 @@ def test_tick_pulls_managed_repos_before_discover(
 
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
+    monkeypatch.setattr(bridge_cli._metrics, "push_repo_desync_total", lambda *, repo: None)
 
     rc = bridge_cli.main([])
     assert rc == 0
 
-    # Auto-pull ran (the new plan dir now exists on the local checkout)
-    new_plan_dir = clone / "docs" / "superpowers" / "plans" / "new-plan"
-    assert new_plan_dir.is_dir(), (
-        "auto-pull did not advance the local checkout; "
-        f"expected {new_plan_dir} to exist after main()"
+    # The BRIDGE-owned checkout (not the configured clone) was created and
+    # advanced to head-of-main.
+    bridge_plan_dir = bridge_base / "foo" / "docs" / "superpowers" / "plans" / "new-plan"
+    assert bridge_plan_dir.is_dir(), (
+        "bridge-owned checkout was not created/advanced; "
+        f"expected {bridge_plan_dir} to exist after main()"
     )
-    # Order: pull must precede discover_plans
+    # Order: sync must precede discover_plans
     assert pull_order == ["pull", "discover"], (
-        f"expected pull before discover_plans, got {pull_order!r}"
+        f"expected sync before discover_plans, got {pull_order!r}"
     )
 
 
@@ -184,7 +185,12 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
     monkeypatch.setattr(
         bridge_cli, "_repo_owner_name", lambda repo_path: f"example/{repo_path.name}"
     )
-    monkeypatch.setattr(bridge_cli, "_pull_managed_repo", lambda repo_path: None)
+    # Bridge-owned checkout resolves to the clone here (no real clone in CI).
+    monkeypatch.setattr(
+        bridge_cli, "_ensure_bridge_checkout", lambda configured, name, base=None: clone
+    )
+    monkeypatch.setattr(bridge_cli, "_pull_managed_repo", lambda repo_path: False)
+    monkeypatch.setattr(bridge_cli._metrics, "push_repo_desync_total", lambda *, repo: None)
 
     # Stub one fake plan with a slug we'll check in the log.
     class _StubPlan:
@@ -271,3 +277,96 @@ def test_tick_warns_when_owner_name_unresolvable(
     assert rc == 0
     log_text = "\n".join(rec.getMessage() for rec in caplog.records)
     assert "could not resolve owner/name from git remote" in log_text, log_text
+
+
+def _stub_bridge_io(bridge_cli: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the MCP / gh / metric surface so a tick can run for the
+    desync-metric assertions (discovery returns nothing)."""
+    monkeypatch.setattr(
+        bridge_cli, "_repo_owner_name", lambda repo_path: f"example/{repo_path.name}"
+    )
+    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh: [])
+
+    class _StubMcp:
+        def list_workspaces(self, **kwargs: Any) -> list[Any]:
+            return []
+
+        def list_issues(self, **kwargs: Any) -> list[Any]:
+            return []
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
+    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
+    monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
+    # Production calls these with a `project_id=` kwarg — match the real
+    # signature so the post-loop sweep isn't silently swallowing a TypeError.
+    monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda mcp, state, *, project_id=None: None)
+    monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp, *, project_id=None: None)
+
+
+def test_tick_pushes_desync_metric_on_dirty_bridge_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # #286
+    """A desynced (dirty) bridge checkout is healed AND a
+    `repo_desync_total{repo=...}` metric is pushed — no longer silent."""
+    clone = _init_bare_with_clone(tmp_path)
+    bare = tmp_path / "origin.git"
+    bridge_base = tmp_path / "bridge-co"
+    bridge_co = bridge_base / "foo"
+    # Pre-create the bridge-owned checkout in a DIRTY state (a tracked file
+    # removed in the working tree → status is non-empty while HEAD ==
+    # origin/main): the #286 signature the metric must surface.
+    subprocess.run(["git", "clone", str(bare), str(bridge_co)], check=True, capture_output=True)
+    (bridge_co / "README.md").unlink()
+    assert _git(bridge_co, "status", "--porcelain").stdout.strip()  # genuinely dirty
+
+    monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
+    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
+    monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(bridge_base))
+
+    from fr_vk import bridge_cli
+
+    monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "_seen_plans.json")
+    _stub_bridge_io(bridge_cli, monkeypatch)
+    desync_repos: list[str] = []
+    monkeypatch.setattr(
+        bridge_cli._metrics, "push_repo_desync_total", lambda *, repo: desync_repos.append(repo)
+    )
+
+    rc = bridge_cli.main([])
+    assert rc == 0
+    assert desync_repos == ["example/foo"], desync_repos
+    # Tree was healed.
+    assert _git(bridge_co, "status", "--porcelain").stdout.strip() == ""
+
+
+def test_tick_clean_bridge_checkout_does_not_push_desync_metric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # #286
+    """A clean bridge checkout (normal fast-forward) must NOT push the
+    desync metric — it is not a desync."""
+    clone = _init_bare_with_clone(tmp_path)
+    bare = tmp_path / "origin.git"
+    bridge_base = tmp_path / "bridge-co"
+    bridge_co = bridge_base / "foo"
+    subprocess.run(["git", "clone", str(bare), str(bridge_co)], check=True, capture_output=True)
+
+    monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
+    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
+    monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(bridge_base))
+
+    from fr_vk import bridge_cli
+
+    monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "_seen_plans.json")
+    _stub_bridge_io(bridge_cli, monkeypatch)
+    desync_repos: list[str] = []
+    monkeypatch.setattr(
+        bridge_cli._metrics, "push_repo_desync_total", lambda *, repo: desync_repos.append(repo)
+    )
+
+    rc = bridge_cli.main([])
+    assert rc == 0
+    assert desync_repos == [], desync_repos
