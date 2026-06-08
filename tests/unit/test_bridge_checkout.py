@@ -176,6 +176,28 @@ def test_dirty_tree_at_head_is_healed_and_flagged(tmp_path):
     assert (clone / "docs" / "superpowers" / "plans" / "new-plan" / "_meta.yaml").exists()
 
 
+def test_detached_head_dirty_is_healed(tmp_path):
+    """Even from a DETACHED HEAD with a dirty tree, the sync forces back onto
+    main and reconciles to origin/main — a plain `checkout main` would abort
+    here ('local changes would be overwritten'), so this guards the `-f`."""
+    clone = _init_bare_with_clone(tmp_path)
+    _advance_origin(tmp_path)
+    _git(clone, "fetch", "origin")
+    old = _git(clone, "rev-parse", "HEAD").stdout.strip()
+    _git(clone, "checkout", "--detach", old)
+    (clone / "README.md").write_text("locally mangled\n")  # dirty, detached
+    assert _porcelain(clone) != ""
+    from fr_vk import bridge_cli
+
+    desynced = bridge_cli._pull_managed_repo(clone)
+    assert desynced is True
+    assert _porcelain(clone) == ""  # healed
+    assert _head(clone) == _head(clone, "origin/main")
+    # Back on the main branch, not detached.
+    assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "main"
+    assert (clone / "docs" / "superpowers" / "plans" / "new-plan" / "_meta.yaml").exists()
+
+
 def test_git_failure_logs_and_returns_false(tmp_path, caplog):
     no_origin = tmp_path / "no-origin"
     _git_init(no_origin)  # git repo with no `origin` remote → fetch origin fails

@@ -301,8 +301,10 @@ def _stub_bridge_io(bridge_cli: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
-    monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda mcp, state: None)
-    monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp: None)
+    # Production calls these with a `project_id=` kwarg — match the real
+    # signature so the post-loop sweep isn't silently swallowing a TypeError.
+    monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda mcp, state, *, project_id=None: None)
+    monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp, *, project_id=None: None)
 
 
 def test_tick_pushes_desync_metric_on_dirty_bridge_checkout(

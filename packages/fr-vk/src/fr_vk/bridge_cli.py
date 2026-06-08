@@ -204,8 +204,27 @@ def _pull_managed_repo(repo_path: Path) -> bool:
                 "reconciling to origin/main",
                 repo_path,
             )
-        _run("checkout", "main")
+        # Force onto main FIRST (`-f` so a dirty tree or a detached/off-branch
+        # HEAD can't abort the switch — a plain `checkout main` would), then
+        # hard-reset to the fetched head. Every managed repo's default branch
+        # is `main` (VK and `discover_plans` assume it too).
+        _run("checkout", "-f", "main")
         _run("reset", "--hard", "origin/main")
+        # Post-sync heal verification: the tree must now be clean AND at
+        # origin/main. A mismatch means the heal didn't take — surface it
+        # loudly rather than dispatch from a still-broken checkout.
+        head = _run("rev-parse", "HEAD").stdout.strip()
+        upstream = _run("rev-parse", "origin/main").stdout.strip()
+        residual = _run("status", "--porcelain").stdout.strip()
+        if head != upstream or residual:
+            logger.warning(
+                "bridge: %s heal incomplete after reset (HEAD=%s origin/main=%s dirty=%s); "
+                "continuing best-effort",
+                repo_path,
+                head[:12],
+                upstream[:12],
+                bool(residual),
+            )
         return dirty
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         stderr = getattr(e, "stderr", "") or ""
