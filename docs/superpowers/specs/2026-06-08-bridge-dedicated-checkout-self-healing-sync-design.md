@@ -197,3 +197,9 @@ verify in the deployed environment:
 
 Touches `src/` (`fr_dispatch`, `fr_vk`) → version bump required per
 `CLAUDE.md`. Patch bump (`scripts/bump-version.py patch`).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+| ---- | ---- | ---- | ---------- |
+| 2026-06-08-bridge-dedicated-checkout-self-healing-sync | `derio-net/super-fr` | `2026-06-08-bridge-dedicated-checkout-self-healing-sync` | — |

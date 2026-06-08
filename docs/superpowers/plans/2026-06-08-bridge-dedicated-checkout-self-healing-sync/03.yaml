@@ -1,0 +1,74 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Wire the bridge tick loop + integration tests
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD the rewired main() loop
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED. Update tests/integration/test_bridge_cli.py:
+      - test_tick_pulls_managed_repos_before_discover: set
+          monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(tmp_path / "bridge-co"))
+        and assert the BRIDGE checkout — (tmp_path/"bridge-co"/"foo")/docs/superpowers/plans/new-plan
+        — exists after main() (NOT the configured clone). Keep the pull-before-discover
+        ordering assertion (pull_order == ["pull", "discover"]).
+      - Add test_desync_metric_pushed_on_dirty_bridge_checkout: pre-create the bridge
+        checkout in a dirty/desynced state, spy bridge_cli._metrics.push_repo_desync_total
+        (record repo labels), run main(); assert it was called once with
+        repo="example/foo".
+      - Add test_clean_advance_does_not_push_desync_metric: normal origin advance;
+        assert push_repo_desync_total NOT called.
+      Run: uv run pytest tests/integration/test_bridge_cli.py -q --no-cov — expect failures.
+  - id: P3.T1.S2
+    text: |-
+      GREEN. Rewire the per-repo loop in bridge_cli.main() so it:
+        1. resolves owner_name = _repo_owner_name(configured_path) FIRST (skip+warn if None),
+        2. name = owner_name.split("/", 1)[1],
+        3. bridge_path = _ensure_bridge_checkout(configured_path, name); skip+warn if None,
+        4. desynced = _pull_managed_repo(bridge_path),
+        5. if desynced: _metrics.push_repo_desync_total(repo=owner_name),
+        6. os.environ["FR_REPOS_DIR"] = str(bridge_path.parent), then discover_plans(owner_name, gh)
+           (resolves to bridge_path via _repo_checkout_root).
+      Preserve the existing FR_REPOS_DIR save/restore finally-block and the per-plan
+      try/except boundary. Update the module/_pull_managed_repo docstrings (E4 reference)
+      to describe the dedicated-checkout architecture.
+      Run: uv run pytest tests/integration/test_bridge_cli.py -q --no-cov — expect green.
+- number: 2
+  title: Bridge regression sweep
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Run the full bridge test surface and fix any fallout from the
+      signature/architecture change (e.g. tests that monkeypatch _pull_managed_repo
+      with `lambda p: None` / `lambda repo_path: None` still satisfy the bool contract;
+      any test asserting the OLD checkout+pull command sequence must move to the new
+      fetch+reset sequence):
+      uv run pytest tests/unit/test_bridge_metrics.py tests/unit/test_bridge_checkout.py \
+        tests/integration/test_bridge_cli.py tests/integration/test_bridge_resilience.py \
+        tests/unit/test_vk_bridge_discover.py tests/unit/test_vk_bridge_tick.py -q --no-cov
+      Expect green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
