@@ -1,0 +1,76 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Wire observer into the bridge tick + end-to-end regression guard
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD the bridge wiring
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED. In tests/integration/test_bridge_cli.py add test_tick_feeds_real_pr_observations:
+      spy on bridge_cli.observe_pr_status to return {"c1":"merged"} and on
+      bridge_cli._pr_state_tick to capture its 2nd positional arg; run main() (stub the
+      repo loop as the existing tests do); assert _pr_state_tick received {"c1":"merged"},
+      NOT {}. Run: uv run pytest tests/integration/test_bridge_cli.py -q --no-cov
+      -k pr_observations — expect failure (still passes {}).
+  - id: P3.T1.S2
+    text: |-
+      GREEN. In bridge_cli.py: import observe_pr_status from fr_vk.pr_observe; in main(),
+      replace the `# observations are wired in Phase 6` block:
+        try:
+            pr_obs = observe_pr_status(cast(Any, mcp), project_id=project_id)
+            _pr_state_tick(cast(Any, mcp), pr_obs, project_id=project_id)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("bridge: pr_state tick raised: %s", e)
+            _metrics.push_failure_total(reason="pr_state_error")
+      (observe_pr_status is itself defensive, but keep the existing guard.)
+      Drop the stale TODO comment. Run the wiring test — expect green.
+- number: 2
+  title: End-to-end regression guard (merge without Closes
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED. Add tests/unit/test_pr_autoclose_e2e.py: a fake MCP with an "In review" card
+      whose latest_pr_url is a merged PR; build observations via observe_pr_status with an
+      injected pr_status_fetch returning "merged" (NB the PR body has no Closes #N — the
+      close must come from pr_state, not GitHub). Feed the observations to pr_state.tick
+      with an injected close_gh_issue recorder. Assert: the recorder was called with the
+      repo + gh#N parsed from the card title (the Issue is closed) and the card → Done.
+      Run: uv run pytest tests/unit/test_pr_autoclose_e2e.py -q --no-cov — expect it to
+      drive out any integration gaps between observer and tick.
+  - id: P3.T2.S2
+    text: |-
+      GREEN. Make the E2E pass (it should largely pass once Phases 1-2 land; fix any
+      observer/tick seam mismatch — e.g. card-shape keys, title gh#N parsing). Then run
+      the full bridge surface for regressions:
+      uv run pytest tests/unit/test_pr_observe.py tests/unit/test_bridge_pr_state.py \
+        tests/unit/test_pr_autoclose_e2e.py tests/integration/test_bridge_cli.py \
+        tests/integration/test_bridge_resilience.py -q --no-cov — expect green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,96 @@
+schema_version: 2
+phase:
+  number: 1
+  title: PR-status observer (pr_observe.observe_pr_status)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD observe_pr_status mapping
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. Create tests/unit/test_pr_observe.py. Use a fake MCP whose
+      list_issues(status=, project_id=) returns cards per status, e.g.:
+        "In review": [{"id":"c1","simple_id":"1","title":"gh#3: [r]","latest_pr_url":"https://github.com/o/r/pull/13"}]
+        "In progress": [{"id":"c2",...,"latest_pr_url":".../pull/14"},
+                        {"id":"c3",...}]  # c3 has NO latest_pr_url
+      Inject pr_status_fetch as a dict-backed fake:
+        {".../pull/13":"merged", ".../pull/14":"open"}.get(url)
+      Assertions for observe_pr_status(mcp, project_id="p", pr_status_fetch=fake):
+        - returns {"c1":"merged","c2":"open"}  (c3 omitted — no url)
+        - a card whose fetch returns None (draft/closed) is omitted
+        - a fetch that RAISES for one card is logged + skipped, others still mapped (no raise)
+      Run: uv run pytest tests/unit/test_pr_observe.py -q --no-cov — expect ImportError.
+  - id: P1.T1.S2
+    text: |-
+      GREEN. Create packages/fr-vk/src/fr_vk/pr_observe.py:
+        - a minimal `class _CardLister(Protocol): def list_issues(self, **kw)->Any: ...`
+        - reuse pr_state._normalize_issues for the response shape (import it).
+        - def observe_pr_status(mcp, *, project_id=None, pr_status_fetch=None) -> dict[str,str]:
+            fetch = pr_status_fetch or _default_pr_status_fetch
+            out = {}
+            for status in ("In progress", "In review"):
+                kwargs = {"status": status}; project_id is not None -> kwargs["project_id"]=project_id
+                try: resp = mcp.list_issues(**kwargs)
+                except Exception: log warning; continue
+                for card in _normalize_issues(resp):
+                    cid = card.get("id"); url = card.get("latest_pr_url")
+                    if not isinstance(cid,str) or not cid or not isinstance(url,str) or not url: continue
+                    try: st = fetch(url)
+                    except Exception as e: log warning; continue
+                    if st in ("open","merged"): out[cid] = st
+            return out
+      Run the mapping tests — expect green.
+- number: 2
+  title: TDD the default gh PR-status fetcher
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED. Add to tests/unit/test_pr_observe.py tests for _default_pr_status_fetch,
+      monkeypatching subprocess.run to return a CompletedProcess with JSON stdout:
+        - {"state":"MERGED","isDraft":false}                -> "merged"
+        - {"state":"OPEN","isDraft":false}                  -> "open"
+        - {"state":"OPEN","isDraft":true}                   -> None (draft)
+        - {"state":"CLOSED","isDraft":false}                -> None (closed-unmerged)
+        - subprocess failure (rc!=0 / raises)               -> None (no raise)
+      Run: uv run pytest tests/unit/test_pr_observe.py -q --no-cov -k default_pr_status — expect failures.
+  - id: P1.T2.S2
+    text: |-
+      GREEN. In pr_observe.py add:
+        def _default_pr_status_fetch(pr_url: str) -> str | None:
+            try:
+                r = subprocess.run(["gh","pr","view",pr_url,"--json","state,isDraft"],
+                                   check=False, capture_output=True, text=True, timeout=15)
+            except (subprocess.TimeoutExpired, FileNotFoundError) as e: log warning; return None
+            if r.returncode != 0: log warning(stderr[:512]); return None
+            try: data = json.loads(r.stdout)
+            except (json.JSONDecodeError, TypeError): return None
+            state = data.get("state"); draft = bool(data.get("isDraft"))
+            if state == "MERGED": return "merged"
+            if state == "OPEN" and not draft: return "open"
+            return None
+      Run the fetcher tests — expect green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

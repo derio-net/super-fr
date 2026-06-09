@@ -161,3 +161,4 @@ Touches `src/` (`fr_vk`) → patch bump per `CLAUDE.md`.
 
 | Plan | Repo | File | Depends on |
 | ---- | ---- | ---- | ---------- |
+| 2026-06-09-bridge-pr-state-autoclose-wiring | `derio-net/super-fr` | `2026-06-09-bridge-pr-state-autoclose-wiring` | — |

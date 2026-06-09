@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Skip-stage transition (In progress + merged -> Done)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD the skip-stage transition in pr_state.tick
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. In tests/unit/test_bridge_pr_state.py:
+      - Add test_in_progress_merged_skips_to_done: a card status "In progress" with
+        pr_observations={card_id:"merged"} → mcp.update_issue(card_id, status="Done")
+        called, AND the Done cascade fires (archive_for_card + injected close_gh_issue
+        invoked with the gh#N from the title). Model it on
+        test_in_review_transitions_to_done_when_pr_merges + the closer-injection test.
+      - Repurpose test_tick_ignores_mismatched_status_pr_pairs: assert In-progress+merged
+        now TRANSITIONS (no longer skipped); assert a still-genuine mismatch
+        ("In review" + "open") is ignored (no update_issue).
+      Run: uv run pytest tests/unit/test_bridge_pr_state.py -q --no-cov — expect failures.
+  - id: P2.T1.S2
+    text: |-
+      GREEN. In packages/fr-vk/src/fr_vk/pr_state.py tick(), extend the transition table:
+        if current_status == "In progress" and pr_status == "open":
+            new_status = "In review"
+        elif current_status == "In progress" and pr_status == "merged":
+            new_status = "Done"   # skip-stage: PR merged before In-review was observed
+        elif current_status == "In review" and pr_status == "merged":
+            new_status = "Done"
+      The existing `if new_status == "Done":` cascade (archive_for_card + _close_linked_gh_issue)
+      already covers both Done paths. Update the module docstring's transition list.
+      Run: uv run pytest tests/unit/test_bridge_pr_state.py -q --no-cov — expect green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
