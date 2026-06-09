@@ -289,10 +289,17 @@ def _load_done_closed() -> set[str]:
     try:
         with _DONE_CLOSED_PATH.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        if isinstance(data, list):
-            return {str(x) for x in data}
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return set()
+    if isinstance(data, list):
+        return {str(x) for x in data}
+    # Present but malformed (not a list): don't silently fall through to an
+    # empty set — that would re-scan/re-close the whole Done backlog every
+    # tick with no signal. Surface it so the lost bound is observable.
+    logger.warning(
+        "bridge: done-closed state is not a list (%s); ignoring — backlog re-scanned this tick",
+        type(data).__name__,
+    )
     return set()
 
 

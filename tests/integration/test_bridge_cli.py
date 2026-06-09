@@ -447,3 +447,21 @@ def test_tick_reconciles_done_issues_and_persists_seen(
     assert seen_arg, "reconcile_done_issues was not called"
     persisted = _json.loads((tmp_path / "done.json").read_text())
     assert "derio-net/runs-fr#5" in persisted
+
+
+def test_load_done_closed_warns_on_non_list_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:  # #294 review
+    """A present-but-malformed state file (not a list) must not silently
+    fall through to empty — it has to be observable."""
+    from fr_vk import bridge_cli
+
+    p = tmp_path / "done.json"
+    p.write_text("{}")  # a dict, not a list
+    monkeypatch.setattr(bridge_cli, "_DONE_CLOSED_PATH", p)
+
+    with caplog.at_level("WARNING", logger="fr_vk.bridge_cli"):
+        out = bridge_cli._load_done_closed()
+
+    assert out == set()
+    assert any("not a list" in r.getMessage() for r in caplog.records)

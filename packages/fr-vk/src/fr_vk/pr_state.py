@@ -49,6 +49,14 @@ _GH_REPO_FROM_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/(?:pu
 _GH_ISSUE_NUM_FROM_TITLE_RE = re.compile(r"gh#(\d+)")
 # The dispatch title is `gh#N: [owner/repo]` — the Issue's own coordinates.
 _GH_REPO_FROM_TITLE_RE = re.compile(r"\[([\w.-]+/[\w.-]+)\]")
+# Anchored full-title parse for the terminal-Done sweep (#294): num AND repo
+# from the known `gh#N: [owner/repo]` prefix, so a free-text suffix (or a
+# second bracketed token an operator typed) can't inject a mis-target.
+_DONE_TITLE_RE = re.compile(r"^gh#(\d+):\s*\[([\w.-]+/[\w.-]+)\]")
+# Bound the per-tick gh-close burst so a large first-deploy backlog (empty
+# seen-set) is amortized across ticks instead of spawning N `gh issue close`
+# under one flock — avoids secondary-rate-limit throttle loops.
+_MAX_DONE_CLOSES_PER_TICK = 50
 
 
 def _normalize_issues(resp: Any) -> list[dict[str, Any]]:
@@ -245,6 +253,7 @@ def reconcile_done_issues(
     project_id: str | None = None,
     seen: set[str] | None = None,
     close_gh_issue: Callable[[str, str], None] | None = None,
+    max_closes: int = _MAX_DONE_CLOSES_PER_TICK,
 ) -> set[str]:
     """Close the linked GH Issue of every terminal-Done card (#294).
 
@@ -257,8 +266,15 @@ def reconcile_done_issues(
 
     Bounded by `seen`, a set of `"<owner/repo>#<n>"` keys already handled:
     keys in `seen` are skipped (no gh call), so the first post-deploy tick
-    closes the open backlog and every later tick is ~0 gh calls. Returns the
-    updated `seen` for the caller to persist. Fully defensive — never raises.
+    closes (up to `max_closes`) of the open backlog and every later tick is
+    ~0 gh calls. At most `max_closes` Issues are closed per call — a large
+    first-deploy backlog is amortized across ticks rather than bursting under
+    one flock. Returns the updated `seen` for the caller to persist. Fully
+    defensive — never raises.
+
+    The `seen` set grows for the daemon's lifetime (never pruned); keys are
+    short strings and the idempotent closer makes a lost/stale file harmless,
+    so unbounded growth is an accepted trade-off.
     """
     closer = close_gh_issue if close_gh_issue is not None else _default_close_gh_issue
     seen = set(seen or ())
@@ -272,20 +288,30 @@ def reconcile_done_issues(
         logger.warning("pr_state: reconcile list_issues failed: %s", e)
         return seen
 
+    closes = 0
     for card in _normalize_issues(resp):
         # Defensive: the MCP filter is authoritative, but re-check (an
         # in-memory fake returns all cards regardless of the status kwarg).
         if str(card.get("status", "")) != "Done":
             continue
-        title = str(card.get("title") or "")
-        m_num = _GH_ISSUE_NUM_FROM_TITLE_RE.search(title)
-        m_repo = _GH_REPO_FROM_TITLE_RE.search(title)
-        if not m_num or not m_repo:
+        m = _DONE_TITLE_RE.match(str(card.get("title") or ""))
+        if not m:
             continue
-        repo, num = m_repo.group(1), m_num.group(1)
+        num, repo = m.group(1), m.group(2)
         key = f"{repo}#{num}"
+        # A key in `seen` is skipped before any gh call. This also means a
+        # human who REOPENS an Issue we closed is intentionally honoured — the
+        # sweep never re-closes it (manual intent wins).
         if key in seen:
             continue
+        if closes >= max_closes:
+            logger.info(
+                "pr_state: reconcile hit per-tick cap (%d); remaining Done "
+                "Issues deferred to the next tick",
+                max_closes,
+            )
+            break
+        closes += 1
         try:
             closer(repo, num)
         except Exception as e:  # noqa: BLE001 — one bad close mustn't drop the rest
