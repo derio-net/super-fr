@@ -34,11 +34,11 @@ Done`) but Issue #5 stayed OPEN; `_phase_complete(phase 4)` was false
 ### A single Done-card Issue-close sweep (in `pr_state.py`)
 
 A new `reconcile_done_issues` lives in `pr_state.py` — NOT `workspaces.py` —
-because `pr_state` already owns the idempotent close helper
-(`_close_linked_gh_issue`, with the `#291` repo-match guard) and uses
-`mcp.list_issues`. Putting it there avoids the circular import that would arise
-if `workspaces` (which `pr_state` imports `archive_for_card` from) tried to
-import the close helper back.
+because `pr_state` already owns the idempotent default closer
+(`_default_close_gh_issue`), the title regexes, and `mcp.list_issues`. Putting
+it there avoids the circular import that would arise if `workspaces` (which
+`pr_state` imports `archive_for_card` from) tried to import the close helper
+back.
 
 ```python
 def reconcile_done_issues(
@@ -95,9 +95,9 @@ def reconcile_done_issues(
 - **`packages/fr-vk/src/fr_vk/bridge_cli.py`** — `_DONE_CLOSED_PATH`,
   `_load_done_closed`, `_store_done_closed`; call `reconcile_done_issues` after
   `reap_orphans`, guarded.
-- Tests: extend `tests/unit/test_bridge_pr_state.py`; an end-to-end test (Done
+- Tests: new `tests/unit/test_done_reconcile.py`; an end-to-end test (Done
   card + open linked Issue → sweep closes it; seen-set prevents a second close;
-  repo-mismatch skip).
+  title-without-repo skip).
 
 ## Test plan
 
@@ -134,3 +134,4 @@ Touches `src/` (`fr_vk`) → patch bump per `CLAUDE.md`.
 
 | Plan | Repo | File | Depends on |
 | ---- | ---- | ---- | ---------- |
+| 2026-06-09-terminal-done-issue-close | `derio-net/super-fr` | `2026-06-09-terminal-done-issue-close` | — |

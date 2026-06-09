@@ -1,0 +1,62 @@
+schema_version: 2
+phase:
+  number: 1
+  title: reconcile_done_issues sweep (pr_state)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD reconcile_done_issues
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. Create tests/unit/test_done_reconcile.py using FakeMcpClient
+      (mcp.issues[cid] = {id, simple_id, status, title, latest_pr_url}).
+      Cases for reconcile_done_issues(mcp, project_id=None, seen=set(), close_gh_issue=recorder):
+      - closes a Done card's issue from the TITLE: card status "Done",
+        title "gh#5: [derio-net/runs-fr]", latest_pr_url=None →
+        recorder called with ("derio-net/runs-fr", "5"); returned set contains
+        "derio-net/runs-fr#5".
+      - seen-set bounds re-close: pass seen={"derio-net/runs-fr#5"} → recorder NOT called.
+      - title without [owner/repo] (e.g. "gh#5") → not closed (can't target).
+      - non-Done card (status "In review") → not closed.
+      - list_issues failure (a BoomMcp) → returns the input seen unchanged, no raise.
+      Run: uv run pytest tests/unit/test_done_reconcile.py -q --no-cov — expect ImportError.
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In packages/fr-vk/src/fr_vk/pr_state.py add:
+        def reconcile_done_issues(mcp, *, project_id=None, seen=None, close_gh_issue=None) -> set[str]:
+            closer = close_gh_issue if close_gh_issue is not None else _default_close_gh_issue
+            seen = set(seen or ())
+            kwargs = {"status": "Done"}; project_id is not None -> kwargs["project_id"]=project_id
+            try: resp = mcp.list_issues(**kwargs)
+            except Exception as e: logger.warning(...); return seen
+            for card in _normalize_issues(resp):
+                if str(card.get("status","")) != "Done": continue   # defensive (fake returns all)
+                title = str(card.get("title") or "")
+                m_num = _GH_ISSUE_NUM_FROM_TITLE_RE.search(title)
+                m_repo = _GH_REPO_FROM_TITLE_RE.search(title)
+                if not m_num or not m_repo: continue
+                key = f"{m_repo.group(1)}#{m_num.group(1)}"
+                if key in seen: continue
+                try: closer(m_repo.group(1), m_num.group(1))
+                except Exception as e: logger.warning(...); continue
+                seen.add(key)
+            return seen
+      Update the module docstring to mention the terminal-Done reconciliation.
+      Run: uv run pytest tests/unit/test_done_reconcile.py -q --no-cov — expect green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

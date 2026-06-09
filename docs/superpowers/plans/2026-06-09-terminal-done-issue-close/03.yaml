@@ -1,0 +1,38 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Version bump + full verification gates
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Bump version and pass all CI gates
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      uv run python scripts/bump-version.py patch
+      uv run ruff format packages/ tests/
+      uv run ruff check packages/ tests/
+      uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
+      uv run pytest -q --no-cov
+      All must pass; fix any findings (a stale uv-tool test_install_bridge flake is
+      fixed by `uv tool install --force --with packages/fr-vk packages/fr`).
+  - id: P3.T1.S2
+    text: |-
+      uv run python scripts/bump-version.py --check && uv run fr --version — must agree.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
