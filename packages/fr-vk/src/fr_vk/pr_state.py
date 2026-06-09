@@ -8,6 +8,8 @@ up a GhClient.
 
 Transitions:
   - In progress + PR open (non-draft) → In review
+  - In progress + PR merged           → Done   (skip-stage, #290: PR merged
+        before In-review was ever observed — reconciles backlog cards)
   - In review   + PR merged           → Done
       + archive the linked workspace
       + close the linked GH Issue (belt-and-braces for PR bodies missing
@@ -170,6 +172,11 @@ def tick(
             new_status: str | None = None
             if current_status == "In progress" and pr_status == "open":
                 new_status = "In review"
+            elif current_status == "In progress" and pr_status == "merged":
+                # Skip-stage (#290): the PR merged before we ever observed it
+                # In review (e.g. observations were empty the whole time).
+                # Transition straight to Done so backlog cards reconcile.
+                new_status = "Done"
             elif current_status == "In review" and pr_status == "merged":
                 new_status = "Done"
             if new_status is None:

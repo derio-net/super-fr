@@ -370,3 +370,39 @@ def test_tick_clean_bridge_checkout_does_not_push_desync_metric(
     rc = bridge_cli.main([])
     assert rc == 0
     assert desync_repos == [], desync_repos
+
+
+def test_tick_feeds_real_pr_observations_to_pr_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # #290
+    """The bridge must build a real {card: status} map via observe_pr_status
+    and pass it to _pr_state_tick — not the dead `{}` stub."""
+    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+
+    from fr_vk import bridge_cli
+
+    monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
+    monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [])  # skip the repo loop
+
+    class _StubMcp:
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
+    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
+    monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp, *, project_id=None: None)
+
+    monkeypatch.setattr(
+        bridge_cli, "observe_pr_status", lambda mcp, *, project_id=None: {"c1": "merged"}
+    )
+    captured: list[Any] = []
+    monkeypatch.setattr(
+        bridge_cli,
+        "_pr_state_tick",
+        lambda mcp, observations, *, project_id=None: captured.append(observations),
+    )
+
+    rc = bridge_cli.main([])
+    assert rc == 0
+    assert captured == [{"c1": "merged"}], f"pr_state was fed {captured!r}, expected the real map"

@@ -114,14 +114,55 @@ def test_tick_ignores_cards_without_pr_observation():
     assert [c for c in mcp.calls if c[0] == "update_workspace"] == []
 
 
-def test_tick_ignores_mismatched_status_pr_pairs():
-    """In-progress + merged (skip stage) is not auto-transitioned."""
+def test_in_progress_merged_skips_to_done():  # #290 backlog heal
+    """A card stuck 'In progress' whose PR is already merged (it never reached
+    'In review' while observations were empty) transitions straight to Done,
+    running the full cascade (archive + close linked Issue)."""
+    from fr_vk.pr_state import tick
+
+    closed: list[tuple[str, str]] = []
+
+    mcp = FakeMcpClient()
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        status="In progress",
+        title="gh#100: [derio-net/superpowers-for-vk]",
+        latest_pr_url="https://github.com/derio-net/superpowers-for-vk/pull/200",
+    )
+    mcp.workspaces["ws-1"] = {
+        "id": "ws-1",
+        "name": "5 -> gh#100",
+        "pinned": False,
+        "archived": False,
+    }
+
+    count = tick(
+        mcp,
+        pr_observations={"card-1": "merged"},
+        close_gh_issue=lambda repo, n: closed.append((repo, n)),
+    )
+
+    assert count == 1
+    update_issues = [c for c in mcp.calls if c[0] == "update_issue"]
+    assert len(update_issues) == 1
+    assert update_issues[0][1]["status"] == "Done"
+    # Cascade fired: workspace archived + Issue closed.
+    update_ws = [c for c in mcp.calls if c[0] == "update_workspace"]
+    assert update_ws and update_ws[0][1]["archived"] is True
+    assert closed == [("derio-net/superpowers-for-vk", "100")]
+
+
+def test_tick_ignores_genuine_mismatched_status_pr_pairs():
+    """A genuine mismatch — 'In review' + 'open' — is still not transitioned
+    (only In-review+merged advances from review)."""
     from fr_vk.pr_state import tick
 
     mcp = FakeMcpClient()
-    _prime_card(mcp, "card-1", simple_id="5", status="In progress")
+    _prime_card(mcp, "card-1", simple_id="5", status="In review")
 
-    count = tick(mcp, pr_observations={"card-1": "merged"})
+    count = tick(mcp, pr_observations={"card-1": "open"})
 
     assert count == 0
     assert [c for c in mcp.calls if c[0] == "update_issue"] == []

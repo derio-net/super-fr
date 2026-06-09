@@ -37,6 +37,7 @@ from fr_dispatch.metrics import MetricsPusher
 
 from fr_vk._mcp_client import VkMcpClient
 from fr_vk.config import bridge_env
+from fr_vk.pr_observe import observe_pr_status
 from fr_vk.pr_state import tick as _pr_state_tick
 from fr_vk.runner import (
     HEARTBEAT_METRIC,
@@ -454,14 +455,19 @@ def main(argv: list[str] | None = None) -> int:
                 total_skipped,
             )
 
-            # PR state sweep — observations are wired in Phase 6.
+            # PR state sweep (#290): observe each active card's linked-PR
+            # status, then transition cards + close merged Issues. Before this
+            # was wired, the sweep ran with an empty `{}` map (a no-op), so
+            # merged phases never closed their Issue and downstream phases
+            # wedged.
             # The Protocol surfaces in pr_state / workspaces use the
             # FakeMcpClient parameter names (`card_id`, `ws_id`); the
             # real client uses `issue_id` / `workspace_id`. Both bind
             # by position at the call sites in those modules, so the
             # cast is the cheapest fix.
             try:
-                _pr_state_tick(cast(Any, mcp), {}, project_id=project_id)
+                pr_obs = observe_pr_status(cast(Any, mcp), project_id=project_id)
+                _pr_state_tick(cast(Any, mcp), pr_obs, project_id=project_id)
             except Exception as e:  # noqa: BLE001
                 logger.exception("bridge: pr_state tick raised: %s", e)
                 _metrics.push_failure_total(reason="pr_state_error")
