@@ -1,0 +1,6 @@
+schema_version: 2
+plan: 2026-06-09-bridge-pr-state-autoclose-wiring
+spec: docs/superpowers/specs/2026-06-09-bridge-pr-state-autoclose-wiring-design.md
+target_repo: derio-net/super-fr
+fr_version: '>=3.0.0,<4.0.0'
+created: '2026-06-09'

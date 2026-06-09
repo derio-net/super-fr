@@ -8,6 +8,8 @@ up a GhClient.
 
 Transitions:
   - In progress + PR open (non-draft) → In review
+  - In progress + PR merged           → Done   (skip-stage, #290: PR merged
+        before In-review was ever observed — reconciles backlog cards)
   - In review   + PR merged           → Done
       + archive the linked workspace
       + close the linked GH Issue (belt-and-braces for PR bodies missing
@@ -45,6 +47,8 @@ class MCPCardClient(MCPArchiver, Protocol):
 
 _GH_REPO_FROM_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/(?:pull|issues)/\d+")
 _GH_ISSUE_NUM_FROM_TITLE_RE = re.compile(r"gh#(\d+)")
+# The dispatch title is `gh#N: [owner/repo]` — the Issue's own coordinates.
+_GH_REPO_FROM_TITLE_RE = re.compile(r"\[([\w.-]+/[\w.-]+)\]")
 
 
 def _normalize_issues(resp: Any) -> list[dict[str, Any]]:
@@ -98,14 +102,30 @@ def _close_linked_gh_issue(
     pr_url: str | None,
     closer: Callable[[str, str], None],
 ) -> None:
-    """Resolve owner/repo from `pr_url` and Issue number from `title`, then close."""
+    """Resolve owner/repo from `pr_url` and Issue number from `title`, then close.
+
+    Guards against a split-source mismatch: if the card title carries an
+    `[owner/repo]` that disagrees with the PR url's repo (a recycled / mis-
+    linked card), skip the close rather than risk closing the wrong repo's
+    issue N.
+    """
     if not pr_url or not title:
         return
     m_repo = _GH_REPO_FROM_URL_RE.match(pr_url)
     m_num = _GH_ISSUE_NUM_FROM_TITLE_RE.search(title)
     if not m_repo or not m_num:
         return
-    closer(m_repo.group(1), m_num.group(1))
+    repo = m_repo.group(1)
+    m_title_repo = _GH_REPO_FROM_TITLE_RE.search(title)
+    if m_title_repo and m_title_repo.group(1) != repo:
+        logger.warning(
+            "pr_state: skip close — title repo %s != PR url repo %s (issue #%s)",
+            m_title_repo.group(1),
+            repo,
+            m_num.group(1),
+        )
+        return
+    closer(repo, m_num.group(1))
 
 
 def tick(
@@ -170,6 +190,11 @@ def tick(
             new_status: str | None = None
             if current_status == "In progress" and pr_status == "open":
                 new_status = "In review"
+            elif current_status == "In progress" and pr_status == "merged":
+                # Skip-stage (#290): the PR merged before we ever observed it
+                # In review (e.g. observations were empty the whole time).
+                # Transition straight to Done so backlog cards reconcile.
+                new_status = "Done"
             elif current_status == "In review" and pr_status == "merged":
                 new_status = "Done"
             if new_status is None:
@@ -195,11 +220,20 @@ def tick(
             )
 
             if new_status == "Done":
-                archive_for_card(mcp, simple_id)
-                _close_linked_gh_issue(
-                    title,
-                    pr_url if isinstance(pr_url, str) else None,
-                    closer,
-                )
+                # The Done cascade is best-effort and must never abort the
+                # sweep — on the first post-#290 tick the WHOLE backlog flows
+                # through here, so one card's cleanup failure can't be allowed
+                # to starve the rest. (`archive_for_card` and the default
+                # closer are already internally non-fatal; this guard also
+                # covers an injected closer or a future change.)
+                try:
+                    archive_for_card(mcp, simple_id)
+                    _close_linked_gh_issue(
+                        title,
+                        pr_url if isinstance(pr_url, str) else None,
+                        closer,
+                    )
+                except Exception as e:  # noqa: BLE001 — non-fatal cleanup
+                    logger.warning("pr_state: Done cascade for %s failed: %s", simple_id, e)
 
     return transitioned
