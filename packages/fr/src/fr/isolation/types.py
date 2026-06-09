@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Protocol
@@ -40,12 +41,36 @@ def _sanitize(branch: str) -> str:
     return branch.replace("/", "__")
 
 
+def _git_common_dir(repo_root: Path) -> Path:
+    """Shared .git dir, resolved for main checkouts AND linked worktrees.
+
+    In a linked worktree <repo>/.git is a gitfile (a `gitdir:` pointer), not a
+    dir; `--git-common-dir` returns the real shared dir (<main>/.git) that all
+    worktrees of the repo share — the correct key for isolation state (state is
+    repo+branch, not per-worktree). For a main checkout it returns ".git", so
+    this is byte-identical to the legacy literal there. #292
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--git-common-dir"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Not a git repo (e.g. a bare tmp path in a unit test) — degrade to the
+        # legacy literal; there is no worktree to be blind to here.
+        return repo_root / ".git"
+    p = Path(out)
+    return p if p.is_absolute() else (repo_root / p)
+
+
 def state_dir(repo_root: Path) -> Path:
-    return repo_root / ".git" / "fr" / "isolation"
+    return _git_common_dir(repo_root) / "fr" / "isolation"
 
 
 def _legacy_state_dir(repo_root: Path) -> Path:
-    return repo_root / ".git" / "vk" / "isolation"
+    return _git_common_dir(repo_root) / "vk" / "isolation"
 
 
 def state_path(repo_root: Path, branch: str) -> Path:

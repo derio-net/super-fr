@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from fr.isolation.types import IsolationError
+from fr.isolation.types import IsolationError, _git_common_dir
 
 SECRETS_BLOCK = """\
 # host secrets move (run yourself, per machine; copy-no-clobber — the vk dir
@@ -94,8 +94,9 @@ def migrate_repo(repo_root: Path, yes: bool) -> list[str]:
             if yes:
                 config_path.write_text(rewritten)
 
-    vk_state = repo_root / ".git" / "vk" / "isolation"
-    fr_state = repo_root / ".git" / "fr" / "isolation"
+    common = _git_common_dir(repo_root)  # shared .git, worktree-safe (#292)
+    vk_state = common / "vk" / "isolation"
+    fr_state = common / "fr" / "isolation"
     if vk_state.is_dir() and any(vk_state.iterdir()):
         actions.append("move .git/vk/isolation/ -> .git/fr/isolation/")
         if yes:

@@ -158,3 +158,19 @@ def test_non_ascii_content_survives_rewrite(legacy_repo: Path) -> None:
     text = cfg_path.read_text()
     assert "myrepo — dev" in text
     assert "\\u2014" not in text
+
+
+def test_state_move_from_worktree(legacy_repo: Path) -> None:
+    """#292: migrate run from inside a linked worktree must resolve the
+    vk->fr state move under the SHARED .git dir. Pre-fix the worktree gitfile
+    makes <wt>/.git/vk/isolation un-discoverable, so the move is silently
+    skipped and the legacy dir lingers."""
+    wt = legacy_repo.parent / "wt"
+    subprocess.run(
+        ["git", "-C", str(legacy_repo), "worktree", "add", "-q", str(wt), "-b", "feat/y"],
+        check=True,
+    )
+    res = migrate(wt, "--yes")
+    assert res.exit_code == 0, res.output
+    assert not (legacy_repo / ".git" / "vk" / "isolation").exists()
+    assert (legacy_repo / ".git" / "fr" / "isolation" / "feat__x.json").is_file()
