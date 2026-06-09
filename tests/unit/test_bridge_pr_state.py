@@ -201,6 +201,77 @@ def test_tick_invokes_gh_issue_closer_when_pr_merged(monkeypatch):
     assert closed == [("derio-net/superpowers-for-vk", "100")]
 
 
+def test_done_cascade_failure_does_not_abort_the_sweep():
+    """A raising closer on one Done card must not starve the rest of the
+    sweep (the whole backlog flows through the Done cascade on the first
+    post-#290 tick)."""
+    from fr_vk.pr_state import tick
+
+    mcp = FakeMcpClient()
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        status="In review",
+        title="gh#100: [derio-net/superpowers-for-vk]",
+        latest_pr_url="https://github.com/derio-net/superpowers-for-vk/pull/200",
+    )
+    _prime_card(
+        mcp,
+        "card-2",
+        simple_id="6",
+        status="In review",
+        title="gh#101: [derio-net/superpowers-for-vk]",
+        latest_pr_url="https://github.com/derio-net/superpowers-for-vk/pull/201",
+    )
+
+    seen: list[str] = []
+
+    def boom_then_ok(repo: str, n: str) -> None:
+        seen.append(n)
+        if n == "100":
+            raise RuntimeError("gh exploded")
+
+    count = tick(
+        mcp,
+        pr_observations={"card-1": "merged", "card-2": "merged"},
+        close_gh_issue=boom_then_ok,
+    )
+
+    # Both cards transitioned to Done despite card-1's closer raising.
+    assert count == 2
+    assert sorted(seen) == ["100", "101"]
+    done = [c[1]["card_id"] for c in mcp.calls if c[0] == "update_issue"]
+    assert sorted(done) == ["card-1", "card-2"]
+
+
+def test_close_skipped_when_title_repo_disagrees_with_pr_url_repo():
+    """Mismatched title repo vs PR url repo → skip the close (don't risk
+    closing the wrong repo's issue)."""
+    from fr_vk.pr_state import tick
+
+    closed: list[tuple[str, str]] = []
+
+    mcp = FakeMcpClient()
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        status="In review",
+        title="gh#100: [derio-net/OTHER-REPO]",
+        latest_pr_url="https://github.com/derio-net/superpowers-for-vk/pull/200",
+    )
+
+    count = tick(
+        mcp,
+        pr_observations={"card-1": "merged"},
+        close_gh_issue=lambda repo, n: closed.append((repo, n)),
+    )
+
+    assert count == 1  # card still transitions to Done
+    assert closed == []  # but the mismatched close is skipped
+
+
 def test_draft_pr_does_not_transition_in_progress():
     """Spec C3 says transition requires a NON-draft PR. The unit API
     contract is: only the literal `"open"` value triggers In-progress →

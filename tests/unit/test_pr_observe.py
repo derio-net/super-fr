@@ -49,6 +49,26 @@ def test_observe_maps_merged_and_open_skips_no_url():
     ]
 
 
+def test_observe_fetches_each_card_once_across_both_status_lists():
+    """A card returned under BOTH status lists (a server that doesn't honour
+    the filter — like FakeMcpClient) must be PR-fetched exactly once. Pins the
+    `seen`-before-fetch ordering invariant."""
+    from fr_vk.pr_observe import observe_pr_status
+
+    mcp = FakeMcpClient()
+    _prime(mcp, "c1", status="In review", url="https://github.com/o/r/pull/1")
+
+    calls: list[str] = []
+
+    def fetch(url: str) -> str | None:
+        calls.append(url)
+        return "merged"
+
+    out = observe_pr_status(mcp, pr_status_fetch=fetch)
+    assert out == {"c1": "merged"}
+    assert calls == ["https://github.com/o/r/pull/1"]  # exactly once, not twice
+
+
 def test_observe_omits_draft_and_closed():
     from fr_vk.pr_observe import observe_pr_status
 

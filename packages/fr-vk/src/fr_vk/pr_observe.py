@@ -64,6 +64,9 @@ def _default_pr_status_fetch(pr_url: str) -> str | None:
         return "merged"
     if state == "OPEN" and not bool(data.get("isDraft")):
         return "open"
+    # A draft (OPEN+isDraft) or a closed-unmerged PR maps to None — an
+    # intentional "hold this card" (the consumer acts only on open/merged),
+    # NOT an error. Do not "fix" drafts to "open".
     return None
 
 
