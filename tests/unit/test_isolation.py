@@ -165,6 +165,16 @@ def test_state_dir_worktree_safe(tmp_path: Path) -> None:
     assert load_state(wt, "feat/x") is None
 
 
+def test_state_dir_resolves_symlinked_repo_root(tmp_path: Path) -> None:
+    # #292 hardening: _git_common_dir resolves its own input, so a symlinked
+    # repo path keys identically to the real path — closing the macOS
+    # /tmp->/private/tmp realpath split-brain class regardless of caller.
+    repo = make_repo(tmp_path)
+    link = tmp_path / "link"
+    link.symlink_to(repo)
+    assert state_path(link, "feat/x") == state_path(repo, "feat/x")
+
+
 def test_target_normalizes_repo_root_from_worktree(tmp_path: Path) -> None:
     # #292: a Target built from a worktree path keys off the MAIN checkout, so
     # state + teardown survive the (possibly ephemeral) launch worktree.

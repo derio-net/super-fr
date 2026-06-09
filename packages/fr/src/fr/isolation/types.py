@@ -49,7 +49,12 @@ def _git_common_dir(repo_root: Path) -> Path:
     worktrees of the repo share — the correct key for isolation state (state is
     repo+branch, not per-worktree). For a main checkout it returns ".git", so
     this is byte-identical to the legacy literal there. #292
+
+    Resolves its own input so the result is caller-independent: an unresolved
+    vs resolved (or symlinked, e.g. macOS /tmp -> /private/tmp) repo_root key
+    to the SAME state dir, instead of two string-distinct paths to one inode.
     """
+    repo_root = Path(repo_root).resolve()
     try:
         out = subprocess.run(
             ["git", "-C", str(repo_root), "rev-parse", "--git-common-dir"],

@@ -49,6 +49,10 @@ def _main_worktree_root(repo_root: Path) -> Path:
     worktree, e.g. an Agent(isolation:"worktree")) means the persisted state and
     the spawned worktree survive that launch worktree being reaped. No-op for a
     main checkout. #292
+
+    `--separate-git-dir` / non-".git"-named git dirs are out of scope: the
+    guard falls back to repo_root (the bind-mount still resolves correctly via
+    _git_common_dir; only this normalization is skipped).
     """
     common = _git_common_dir(repo_root)
     return common.parent if common.name == ".git" else repo_root
