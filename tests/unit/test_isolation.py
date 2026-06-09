@@ -15,6 +15,7 @@ from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
+    delete_state,
     load_state,
     profiles_config,
     resolve_profile,
@@ -83,6 +84,16 @@ def make_repo(
     return repo
 
 
+def add_worktree(repo: Path, branch: str = "feat/x") -> Path:
+    """Add a linked worktree of `repo` — its .git is a gitfile, not a dir."""
+    wt = repo.parent / "wt"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", str(wt), "-b", branch],
+        check=True,
+    )
+    return wt
+
+
 class FakeRunner:
     """Records non-git argv; delegates git to the real binary."""
 
@@ -128,6 +139,58 @@ def test_state_roundtrip(tmp_path: Path) -> None:
 def test_state_path_sanitizes_branch_slash(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     assert "/" not in state_path(repo, "feat/x").name
+
+
+def test_state_dir_worktree_safe(tmp_path: Path) -> None:
+    # #292: in a linked worktree <wt>/.git is a gitfile, not a dir. State must
+    # resolve under the shared (main) .git dir, identically from either path.
+    repo = make_repo(tmp_path)
+    wt = add_worktree(repo)
+    common = repo / ".git"  # main checkout's real .git dir
+    st = IsolationState(
+        repo_root=wt,
+        branch="feat/x",
+        worktree=wt,
+        profile="dev",
+        created_at="2026-06-09T00:00:00Z",
+    )
+    save_state(st)  # must NOT raise NotADirectoryError
+    p = state_path(wt, "feat/x")
+    assert p.is_file()
+    assert str(p).startswith(str(common / "fr" / "isolation"))
+    # worktree-invariant key: main and worktree resolve to the same path
+    assert state_path(wt, "feat/x") == state_path(repo, "feat/x")
+    assert load_state(wt, "feat/x") == st
+    delete_state(wt, "feat/x")
+    assert load_state(wt, "feat/x") is None
+
+
+def test_state_dir_resolves_symlinked_repo_root(tmp_path: Path) -> None:
+    # #292 hardening: _git_common_dir resolves its own input, so a symlinked
+    # repo path keys identically to the real path — closing the macOS
+    # /tmp->/private/tmp realpath split-brain class regardless of caller.
+    repo = make_repo(tmp_path)
+    link = tmp_path / "link"
+    link.symlink_to(repo)
+    assert state_path(link, "feat/x") == state_path(repo, "feat/x")
+
+
+def test_target_normalizes_repo_root_from_worktree(tmp_path: Path) -> None:
+    # #292: a Target built from a worktree path keys off the MAIN checkout, so
+    # state + teardown survive the (possibly ephemeral) launch worktree.
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    wt = add_worktree(repo, "feat/y")
+    t = LocalWorktreeDevcontainerTarget(wt)
+    assert t.repo_root == repo.resolve()
+
+
+def test_up_on_non_git_path_raises(tmp_path: Path) -> None:
+    # #292: __init__ normalization must not swallow the friendly "not a git
+    # repo" guard. _git_common_dir falls back to repo_root/.git for a non-repo,
+    # so repo_root stays put and up() still raises IsolationError.
+    t = LocalWorktreeDevcontainerTarget(tmp_path)
+    with pytest.raises(IsolationError):
+        t.up(profile=None, branch="x", path=None)
 
 
 # ---------- profiles ----------
@@ -267,6 +330,45 @@ def test_up_creates_worktree_envfile_and_devcontainer(
     # base .git mounted rw at the same absolute path
     assert f"source={repo / '.git'},target={repo / '.git'}" in joined
     assert load_state(repo, "vk-iso/test") == st
+
+
+def test_up_from_worktree_mounts_main_git_and_keys_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#292 headline path: up() launched from a linked worktree mounts the
+    MAIN .git (a real dir), persists main-keyed state, and buckets the spawned
+    worktree under the real repo name — so teardown survives the launch wt."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    wt = add_worktree(repo, "feat/z")
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(wt, runner=runner)
+    st = target.up(profile=None, branch="iso/work")
+    (up,) = runner.argv_for("devcontainer")
+    main_git = repo.resolve() / ".git"
+    assert f"source={main_git},target={main_git}" in " ".join(up)
+    assert st.repo_root == repo.resolve()
+    assert str(st.worktree).startswith(
+        str(tmp_path / "home" / ".cache" / "fr" / "worktrees" / repo.name)
+    )
+
+
+def test_up_mount_resolves_common_git_even_without_normalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#292 belt-and-suspenders: the .git mount resolves the shared common dir
+    directly, so it stays correct even if repo_root somehow points at a
+    worktree (a gitfile) — independent of __init__ normalization."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    wt = add_worktree(repo, "feat/z")
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    target.repo_root = wt.resolve()  # bypass __init__ normalization
+    target.up(profile=None, branch="iso/work")
+    (up,) = runner.argv_for("devcontainer")
+    main_git = repo.resolve() / ".git"
+    assert f"source={main_git},target={main_git}" in " ".join(up)
 
 
 def test_up_follows_legacy_vk_mount_and_warns(

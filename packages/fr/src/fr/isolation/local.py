@@ -19,6 +19,7 @@ from typing import Any
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
+    _git_common_dir,
     _warn_legacy,
     delete_state,
     resolve_profile,
@@ -40,11 +41,30 @@ def _home() -> Path:
     return Path(os.environ.get("HOME", str(Path.home())))
 
 
+def _main_worktree_root(repo_root: Path) -> Path:
+    """The MAIN checkout's toplevel, even when launched from a linked worktree.
+
+    The common dir is <main>/.git; its parent is the main toplevel. Keying
+    isolation off the durable main checkout (not the possibly-ephemeral launch
+    worktree, e.g. an Agent(isolation:"worktree")) means the persisted state and
+    the spawned worktree survive that launch worktree being reaped. No-op for a
+    main checkout. #292
+
+    `--separate-git-dir` / non-".git"-named git dirs are out of scope: the
+    guard falls back to repo_root (the bind-mount still resolves correctly via
+    _git_common_dir; only this normalization is skipped).
+    """
+    common = _git_common_dir(repo_root)
+    return common.parent if common.name == ".git" else repo_root
+
+
 class LocalWorktreeDevcontainerTarget:
     def __init__(self, repo_root: Path, runner: Runner = subprocess_runner):
         # resolve() — the mount target must match the realpath git bakes
-        # into the worktree's gitdir pointer (symlinked /tmp on macOS etc.)
-        self.repo_root = Path(repo_root).resolve()
+        # into the worktree's gitdir pointer (symlinked /tmp on macOS etc.).
+        # Then normalize to the main toplevel so a worktree-launched run keys
+        # off the durable main checkout (#292).
+        self.repo_root = _main_worktree_root(Path(repo_root).resolve())
         self.run = runner
 
     # ---------- lifecycle ----------
@@ -69,7 +89,9 @@ class LocalWorktreeDevcontainerTarget:
 
         config = worktree / ".devcontainer" / name / "devcontainer.json"
         self._ensure_mounted_env_file(config)
-        git_dir = self.repo_root / ".git"
+        # Resolve the shared common dir, not <repo_root>/.git: correct even if
+        # repo_root is a worktree (a gitfile), independent of normalization (#292).
+        git_dir = _git_common_dir(self.repo_root)
         result = self.run(
             [
                 "devcontainer",
