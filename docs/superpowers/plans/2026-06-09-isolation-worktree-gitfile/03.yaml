@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Full CI gate + version bump
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Run the canonical CI gate and bump the version
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Run the canonical gate (from .github/workflows/ci.yml — NOT CLAUDE.md's
+      stale src/ paths):
+        uv run ruff format packages/ tests/
+        uv run ruff check packages/ tests/
+        uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
+        uv run pytest
+      Fix every lint/type/test finding until all four are clean. Expected:
+      ruff/mypy clean, full suite green.
+  - id: P3.T1.S2
+    text: |-
+      Bump the version (src/** changed -> patch per CLAUDE.md release rule).
+      Check current first; there is in-flight 3.1.5 work in another workspace,
+      so resolve to the next FREE patch to avoid a collision:
+        uv run --no-project python scripts/bump-version.py --check   # see current
+        uv run --no-project python scripts/bump-version.py <next-free-patch>
+        uv run --no-project python scripts/bump-version.py --check   # verify agreement
+        uv run fr --version                                          # verify reported
+      Commit the four changed files (three pyproject/manifest sources + uv.lock)
+      together with the implementation.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

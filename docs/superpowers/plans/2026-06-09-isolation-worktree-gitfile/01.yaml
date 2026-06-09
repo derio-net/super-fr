@@ -1,0 +1,136 @@
+schema_version: 2
+phase:
+  number: 1
+  title: State-path layer — worktree-safe git-dir resolution (types.py + migrate.py)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: _git_common_dir helper + worktree-safe state dirs
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. Add failing tests to tests/unit/test_isolation.py. First add a
+      helper that turns make_repo() output into a linked worktree:
+
+          def add_worktree(repo: Path, branch: str = "feat/x") -> Path:
+              wt = repo.parent / "wt"
+              subprocess.run(
+                  ["git", "-C", str(repo), "worktree", "add", "-q", str(wt), "-b", branch],
+                  check=True,
+              )
+              return wt
+
+      Then a test that exercises the state functions FROM the worktree path:
+
+          def test_state_dir_worktree_safe(tmp_path: Path) -> None:
+              repo = make_repo(tmp_path)
+              wt = add_worktree(repo)
+              common = repo / ".git"  # main checkout's real .git dir
+              st = IsolationState(
+                  repo_root=wt, branch="feat/x", worktree=wt,
+                  profile="dev", created_at="2026-06-09T00:00:00Z",
+              )
+              save_state(st)  # must NOT raise NotADirectoryError
+              p = state_path(wt, "feat/x")
+              assert p.is_file()
+              assert str(p).startswith(str(common / "fr" / "isolation"))
+              # worktree-invariant key: main and worktree resolve identically
+              assert state_path(wt, "feat/x") == state_path(repo, "feat/x")
+              assert load_state(wt, "feat/x") == st
+              delete_state(wt, "feat/x")
+              assert load_state(wt, "feat/x") is None
+
+      Import delete_state in the test module's imports.
+      Run: uv run pytest tests/unit/test_isolation.py -q --no-cov
+      Expect FAILURE: NotADirectoryError from save_state -> mkdir on the gitfile.
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/isolation/types.py add `import subprocess`
+      (alongside os/sys) and the helper, then repoint the two state dirs:
+
+          def _git_common_dir(repo_root: Path) -> Path:
+              """Shared .git dir, resolved for main checkouts AND linked
+              worktrees. In a worktree <repo>/.git is a gitfile, not a dir;
+              --git-common-dir returns the real shared dir (<main>/.git) that
+              all worktrees of the repo share — the correct key for isolation
+              state (state is repo+branch, not per-worktree). #292"""
+              try:
+                  out = subprocess.run(
+                      ["git", "-C", str(repo_root), "rev-parse", "--git-common-dir"],
+                      check=True, capture_output=True, text=True,
+                  ).stdout.strip()
+              except (subprocess.CalledProcessError, FileNotFoundError):
+                  return repo_root / ".git"  # non-repo path (tests): legacy literal
+              p = Path(out)
+              return p if p.is_absolute() else (repo_root / p)
+
+          def state_dir(repo_root: Path) -> Path:
+              return _git_common_dir(repo_root) / "fr" / "isolation"
+
+          def _legacy_state_dir(repo_root: Path) -> Path:
+              return _git_common_dir(repo_root) / "vk" / "isolation"
+
+      Run: uv run pytest tests/unit/test_isolation.py -q --no-cov — expect green
+      (new worktree test passes; existing main-path tests unchanged because
+      --git-common-dir returns ".git" for a main checkout).
+- number: 2
+  title: migrate.py worktree-safe
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED. Add a failing test to tests/unit/test_init_migrate.py: run
+      migrate_repo from inside a linked worktree and assert it does not raise
+      and resolves the vk->fr state paths under the shared .git dir.
+
+          def test_migrate_repo_from_worktree(tmp_path: Path) -> None:
+              repo = make_repo(tmp_path)  # import/define a minimal repo with a commit
+              wt = repo.parent / "wt"
+              subprocess.run(
+                  ["git", "-C", str(repo), "worktree", "add", "-q", str(wt), "-b", "feat/x"],
+                  check=True,
+              )
+              # seed a legacy vk state file under the SHARED .git
+              vk_dir = repo / ".git" / "vk" / "isolation"
+              vk_dir.mkdir(parents=True)
+              (vk_dir / "feat__x.json").write_text("{}\n")
+              actions = migrate_repo(wt, yes=True)  # from the worktree path
+              assert any("vk/isolation" in a for a in actions)
+              assert (repo / ".git" / "fr" / "isolation" / "feat__x.json").is_file()
+
+      Match the existing test module's helpers/imports for building a repo.
+      Run: uv run pytest tests/unit/test_init_migrate.py -q --no-cov
+      Expect FAILURE (NotADirectoryError or paths resolved under the gitfile).
+  - id: P1.T2.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/isolation/migrate.py import _git_common_dir
+      from fr.isolation.types and replace lines ~97-98:
+
+          common = _git_common_dir(repo_root)
+          vk_state = common / "vk" / "isolation"
+          fr_state = common / "fr" / "isolation"
+
+      Run: uv run pytest tests/unit/test_init_migrate.py -q --no-cov — expect green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

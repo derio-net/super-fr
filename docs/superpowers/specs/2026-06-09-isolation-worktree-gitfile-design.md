@@ -210,3 +210,9 @@ Per `CLAUDE.md` release rule, this touches `src/**` → **patch** version bump
 via `scripts/bump-version.py`. There is in-flight 3.1.5 work in a separate
 workspace; resolve to the next free patch at delivery to avoid a collision
 (bump as the final implementation step, then `--check`).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+| ---- | ---- | ---- | ---------- |
+| 2026-06-09-isolation-worktree-gitfile | `derio-net/super-fr` | `2026-06-09-isolation-worktree-gitfile` | — |
