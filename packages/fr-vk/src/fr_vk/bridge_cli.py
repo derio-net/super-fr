@@ -38,6 +38,7 @@ from fr_dispatch.metrics import MetricsPusher
 from fr_vk._mcp_client import VkMcpClient
 from fr_vk.config import bridge_env
 from fr_vk.pr_observe import observe_pr_status
+from fr_vk.pr_state import reconcile_done_issues
 from fr_vk.pr_state import tick as _pr_state_tick
 from fr_vk.runner import (
     HEARTBEAT_METRIC,
@@ -63,6 +64,9 @@ _metrics = MetricsPusher(
 _DEFAULT_LOCK_PATH = "/var/run/fr-bridge.lock"
 _FALLBACK_LOCK_PATH = "/tmp/fr-bridge.lock"
 _SEEN_PLANS_PATH = Path.home() / ".willikins-agent" / "_seen_plans.json"
+# Keys (`<owner/repo>#<n>`) of Issues already closed by the terminal-Done
+# reconciliation (#294), so the sweep stays ~0 gh calls once the backlog clears.
+_DONE_CLOSED_PATH = Path.home() / ".willikins-agent" / "_done_closed.json"
 # Base dir for the bridge-owned checkouts (#286). The bridge is the SOLE
 # writer of these, so VK's out-of-band ref moves can never desync them.
 _DEFAULT_BRIDGE_CHECKOUT_BASE = Path("~/.cache/fr/bridge-checkouts")
@@ -281,6 +285,33 @@ def _store_seen_plans(slugs: Iterable[str]) -> None:
         logger.warning("bridge: failed to write seen-plans state: %s", e)
 
 
+def _load_done_closed() -> set[str]:
+    try:
+        with _DONE_CLOSED_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return set()
+    if isinstance(data, list):
+        return {str(x) for x in data}
+    # Present but malformed (not a list): don't silently fall through to an
+    # empty set — that would re-scan/re-close the whole Done backlog every
+    # tick with no signal. Surface it so the lost bound is observable.
+    logger.warning(
+        "bridge: done-closed state is not a list (%s); ignoring — backlog re-scanned this tick",
+        type(data).__name__,
+    )
+    return set()
+
+
+def _store_done_closed(keys: Iterable[str]) -> None:
+    try:
+        _DONE_CLOSED_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _DONE_CLOSED_PATH.open("w", encoding="utf-8") as f:
+            json.dump(sorted(keys), f)
+    except OSError as e:
+        logger.warning("bridge: failed to write done-closed state: %s", e)
+
+
 def _acquire_lock(path: str) -> IO[str]:
     """Acquire `flock(LOCK_EX | LOCK_NB)` on `path` (I4).
 
@@ -477,6 +508,20 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as e:  # noqa: BLE001
                 logger.exception("bridge: reap_orphans raised: %s", e)
                 _metrics.push_failure_total(reason="reap_error")
+
+            # Terminal-Done Issue reconciliation (#294): close the linked GH
+            # Issue for cards that reached Done out-of-band (manual / VK move)
+            # — `pr_state.tick` only closes on its own transition. Bounded by
+            # the persisted seen-set so steady-state is ~0 gh calls.
+            try:
+                done_seen = _load_done_closed()
+                done_seen = reconcile_done_issues(
+                    cast(Any, mcp), project_id=project_id, seen=done_seen
+                )
+                _store_done_closed(done_seen)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("bridge: done reconcile raised: %s", e)
+                _metrics.push_failure_total(reason="done_reconcile_error")
 
             _metrics.push_heartbeat()
         finally:

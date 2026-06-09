@@ -1,0 +1,68 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Wire reconcile into the bridge tick + seen-set persistence
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: TDD seen-set load/store + bridge wiring
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. In tests/integration/test_bridge_cli.py add test_tick_reconciles_done_issues:
+      with _configured_repos→[] and the post-loop stubs, spy bridge_cli.reconcile_done_issues
+      to return {"o/r#5"} and capture that main() calls it; monkeypatch
+      bridge_cli._DONE_CLOSED_PATH to a tmp file; after main(), assert
+      reconcile_done_issues was called AND the tmp file contains "o/r#5"
+      (persisted via _store_done_closed). Run: uv run pytest
+      tests/integration/test_bridge_cli.py -q --no-cov -k reconciles_done — expect failure.
+  - id: P2.T1.S2
+    text: |-
+      GREEN. In bridge_cli.py:
+      - import reconcile_done_issues from fr_vk.pr_state.
+      - add _DONE_CLOSED_PATH = Path.home()/".willikins-agent"/"_done_closed.json"
+        and _load_done_closed()/_store_done_closed(keys) mirroring
+        _load_seen_plans/_store_seen_plans (json list <-> set[str], OSError-safe).
+      - after the reap_orphans try/except, add a guarded block:
+          try:
+              done_seen = _load_done_closed()
+              done_seen = reconcile_done_issues(cast(Any, mcp), project_id=project_id, seen=done_seen)
+              _store_done_closed(done_seen)
+          except Exception as e:  # noqa: BLE001
+              logger.exception("bridge: done reconcile raised: %s", e)
+              _metrics.push_failure_total(reason="done_reconcile_error")
+      Run the wiring test — expect green.
+- number: 2
+  title: End-to-end + bridge regression sweep
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED/GREEN. Add to tests/unit/test_done_reconcile.py an E2E:
+      a FakeMcpClient with a Done card (open linked issue, no Closes keyword anywhere),
+      run reconcile_done_issues with an injected recorder closer → assert the issue key
+      recorded; run AGAIN with the returned seen → recorder not called a second time
+      (idempotent/bounded). Then run the bridge surface for regressions:
+      uv run pytest tests/unit/test_done_reconcile.py tests/unit/test_bridge_pr_state.py \
+        tests/unit/test_pr_observe.py tests/integration/test_bridge_cli.py \
+        tests/integration/test_bridge_resilience.py -q --no-cov — expect green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-09T20:45:21+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-09T20:45:23+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-09T20:45:24+00:00'
+      note: null
+  completion:
+    at: '2026-06-09T20:45:26+00:00'
+    note: null
+    observed_prs: []

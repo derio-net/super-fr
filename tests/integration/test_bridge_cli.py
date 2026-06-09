@@ -406,3 +406,62 @@ def test_tick_feeds_real_pr_observations_to_pr_state(
     rc = bridge_cli.main([])
     assert rc == 0
     assert captured == [{"c1": "merged"}], f"pr_state was fed {captured!r}, expected the real map"
+
+
+def test_tick_reconciles_done_issues_and_persists_seen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # #294
+    """main() must load the done-closed seen-set, call reconcile_done_issues,
+    and persist the returned set."""
+    import json as _json
+
+    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+
+    from fr_vk import bridge_cli
+
+    monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
+    monkeypatch.setattr(bridge_cli, "_DONE_CLOSED_PATH", tmp_path / "done.json")
+    monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [])
+
+    class _StubMcp:
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
+    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
+    monkeypatch.setattr(bridge_cli, "observe_pr_status", lambda mcp, *, project_id=None: {})
+    monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda *a, **k: None)
+    monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp, *, project_id=None: 0)
+
+    seen_arg: list[set] = []
+
+    def fake_reconcile(mcp, *, project_id=None, seen=None, close_gh_issue=None):
+        seen_arg.append(seen)
+        return {"derio-net/runs-fr#5"}
+
+    monkeypatch.setattr(bridge_cli, "reconcile_done_issues", fake_reconcile)
+
+    rc = bridge_cli.main([])
+    assert rc == 0
+    assert seen_arg, "reconcile_done_issues was not called"
+    persisted = _json.loads((tmp_path / "done.json").read_text())
+    assert "derio-net/runs-fr#5" in persisted
+
+
+def test_load_done_closed_warns_on_non_list_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:  # #294 review
+    """A present-but-malformed state file (not a list) must not silently
+    fall through to empty — it has to be observable."""
+    from fr_vk import bridge_cli
+
+    p = tmp_path / "done.json"
+    p.write_text("{}")  # a dict, not a list
+    monkeypatch.setattr(bridge_cli, "_DONE_CLOSED_PATH", p)
+
+    with caplog.at_level("WARNING", logger="fr_vk.bridge_cli"):
+        out = bridge_cli._load_done_closed()
+
+    assert out == set()
+    assert any("not a list" in r.getMessage() for r in caplog.records)
