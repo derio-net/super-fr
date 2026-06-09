@@ -27,7 +27,7 @@ from typing import Any, Protocol
 
 from fr_vk.workspaces import MCPArchiver, archive_for_card
 
-__all__ = ["tick"]
+__all__ = ["reconcile_done_issues", "tick"]
 
 logger = logging.getLogger(__name__)
 
@@ -237,3 +237,60 @@ def tick(
                     logger.warning("pr_state: Done cascade for %s failed: %s", simple_id, e)
 
     return transitioned
+
+
+def reconcile_done_issues(
+    mcp: MCPCardClient,
+    *,
+    project_id: str | None = None,
+    seen: set[str] | None = None,
+    close_gh_issue: Callable[[str, str], None] | None = None,
+) -> set[str]:
+    """Close the linked GH Issue of every terminal-Done card (#294).
+
+    `pr_state.tick` only closes Issues for cards IT transitions In-review→Done.
+    A card moved to Done out-of-band (operator manual move, VK auto-move) is
+    never scanned by `tick`, so its Issue stays open and downstream phases
+    wedge. This sweep closes the linked Issue for ALL Done cards, deriving the
+    Issue's coordinates from the card TITLE (`gh#N: [owner/repo]`) — the Issue's
+    own identity, independent of any PR url (a manually-Done card may have none).
+
+    Bounded by `seen`, a set of `"<owner/repo>#<n>"` keys already handled:
+    keys in `seen` are skipped (no gh call), so the first post-deploy tick
+    closes the open backlog and every later tick is ~0 gh calls. Returns the
+    updated `seen` for the caller to persist. Fully defensive — never raises.
+    """
+    closer = close_gh_issue if close_gh_issue is not None else _default_close_gh_issue
+    seen = set(seen or ())
+
+    list_kwargs: dict[str, Any] = {"status": "Done"}
+    if project_id is not None:
+        list_kwargs["project_id"] = project_id
+    try:
+        resp = mcp.list_issues(**list_kwargs)
+    except Exception as e:  # noqa: BLE001 — non-fatal
+        logger.warning("pr_state: reconcile list_issues failed: %s", e)
+        return seen
+
+    for card in _normalize_issues(resp):
+        # Defensive: the MCP filter is authoritative, but re-check (an
+        # in-memory fake returns all cards regardless of the status kwarg).
+        if str(card.get("status", "")) != "Done":
+            continue
+        title = str(card.get("title") or "")
+        m_num = _GH_ISSUE_NUM_FROM_TITLE_RE.search(title)
+        m_repo = _GH_REPO_FROM_TITLE_RE.search(title)
+        if not m_num or not m_repo:
+            continue
+        repo, num = m_repo.group(1), m_num.group(1)
+        key = f"{repo}#{num}"
+        if key in seen:
+            continue
+        try:
+            closer(repo, num)
+        except Exception as e:  # noqa: BLE001 — one bad close mustn't drop the rest
+            logger.warning("pr_state: reconcile close %s failed: %s", key, e)
+            continue
+        seen.add(key)
+
+    return seen
