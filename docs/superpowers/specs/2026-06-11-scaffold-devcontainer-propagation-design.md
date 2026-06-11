@@ -93,8 +93,12 @@ git commit -m "chore(fr): scaffold <profile> devcontainer profile"
 ### 2. `fr isolation up` — actionable error (complementary UX fix)
 
 `up` logic is otherwise unchanged. Before `devcontainer up`, if the worktree's
-`config` path is missing **and** an uncommitted `.devcontainer/<profile>/`
-exists in the base repo, raise a targeted `IsolationError`:
+`config` path is missing **and** the base repo's copy is **genuinely
+uncommitted** (`git status --porcelain -- <path>` non-empty — untracked or
+dirty), raise a targeted `IsolationError`. The porcelain gate matters: a
+profile that *is* committed (on `main`) but merely absent on an older target
+branch must NOT be misreported as "not committed" — that case falls through to
+the normal path. Message:
 
 > profile `<name>` is written in the base repo but not committed, so the
 > worktree can't see it — run `fr init scaffold --profile <name>` (which now

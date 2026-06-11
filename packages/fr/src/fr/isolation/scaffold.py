@@ -138,24 +138,22 @@ def _commit_profile(repo_root: Path, profile: str) -> None:
         return
     # Pathspec on `commit` records ONLY these paths — any other staged changes
     # the operator had stay staged, never swept into the scaffold commit.
-    _git(
+    result = _git(
         repo_root,
         "commit",
         "-m",
         f"chore(fr): scaffold {profile} devcontainer profile",
         "--",
         *paths,
-        check=True,
     )
+    if result.returncode != 0:
+        # Don't leave the profile half-staged on failure (e.g. no git identity).
+        _git(repo_root, "reset", "-q", "--", *paths)
+        raise IsolationError(f"git commit failed: {result.stderr.strip() or result.stdout.strip()}")
 
 
-def _git(repo_root: Path, *args: str, check: bool = False) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True, text=True)
-    if check and result.returncode != 0:
-        raise IsolationError(
-            f"git {args[0]} failed: {result.stderr.strip() or result.stdout.strip()}"
-        )
-    return result
+def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True, text=True)
 
 
 def _update_profiles_yaml(

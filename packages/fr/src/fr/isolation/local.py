@@ -91,16 +91,21 @@ class LocalWorktreeDevcontainerTarget:
         # super-fr#299 part 2: the worktree is cut from the committed tree. If
         # the profile exists only as an UNCOMMITTED file in the base repo, the
         # worktree won't have it — explain the fix instead of letting
-        # `devcontainer up` fail with a cryptic "config not found".
-        if (
-            not config.exists()
-            and (self.repo_root / ".devcontainer" / name / "devcontainer.json").exists()
-        ):
-            raise IsolationError(
-                f"profile {name!r} is written in the base repo but not committed, so the "
-                f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
-                "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
+        # `devcontainer up` fail with a cryptic "config not found". Gate on the
+        # base copy being GENUINELY uncommitted (porcelain non-empty): a profile
+        # that is committed but merely absent on an older target branch is a
+        # different situation, so we must not misreport it as "not committed".
+        if not config.exists():
+            rel = f".devcontainer/{name}/devcontainer.json"
+            base_status = self.run(
+                ["git", "-C", str(self.repo_root), "status", "--porcelain", "--", rel]
             )
+            if base_status.stdout.strip():
+                raise IsolationError(
+                    f"profile {name!r} is written in the base repo but not committed, so the "
+                    f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
+                    "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
+                )
         self._ensure_mounted_env_file(config)
         # Resolve the shared common dir, not <repo_root>/.git: correct even if
         # repo_root is a worktree (a gitfile), independent of normalization (#292).

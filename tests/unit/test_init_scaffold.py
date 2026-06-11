@@ -89,6 +89,21 @@ def test_scaffold_commit_is_scoped(repo: Path) -> None:
     assert "UNRELATED.txt" in _git(repo, "diff", "--cached", "--name-only").stdout
 
 
+def test_scaffold_commit_preserves_partial_staged_file(repo: Path) -> None:
+    # Hardest case: a file staged at v1 then dirtied to v2 (AM). The scoped
+    # scaffold commit must leave both its index (v1) and worktree (v2) intact.
+    _initial_commit(repo)
+    (repo / "work.txt").write_text("v1\n")
+    _git(repo, "add", "work.txt")  # index = v1
+    (repo / "work.txt").write_text("v2\n")  # worktree = v2 (AM state)
+    res = scaffold(repo)
+    assert res.exit_code == 0, res.output
+    head_files = _git(repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert "work.txt" not in head_files  # not committed by scaffold
+    assert _git(repo, "show", ":work.txt").stdout == "v1\n"  # index split preserved
+    assert (repo / "work.txt").read_text() == "v2\n"  # worktree split preserved
+
+
 def test_rescaffold_unchanged_makes_no_new_commit(repo: Path) -> None:
     _initial_commit(repo)
     scaffold(repo)
