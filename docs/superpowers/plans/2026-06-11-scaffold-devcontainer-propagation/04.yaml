@@ -40,16 +40,18 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-11T15:39:17+00:00'
       note: null
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-06-11T15:39:19+00:00'
+      note: No edit needed — fr-goal/fr-brainstorming only delegate to fr-init ('pause,
+        fr-init, resume'); no manual-commit caveat present. Fixing fr-init resolves
+        the bootstrap end-to-end.
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-11T15:39:21+00:00'
       note: null
   completion:
     at: null
