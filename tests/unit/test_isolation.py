@@ -332,6 +332,33 @@ def test_up_creates_worktree_envfile_and_devcontainer(
     assert load_state(repo, "vk-iso/test") == st
 
 
+def test_up_uncommitted_profile_raises_actionable_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """super-fr#299 part 2: a profile written but NOT committed is absent from
+    the worktree (cut from the committed tree). up() should explain that, not
+    fail cryptically in `devcontainer up`."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)  # committed README, no committed profile
+    # Profile in the base working tree, UNCOMMITTED (as `scaffold --no-commit`
+    # would leave it):
+    d = repo / ".devcontainer" / "dev"
+    d.mkdir(parents=True)
+    (d / "devcontainer.json").write_text('{"image": "x"}\n')
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "default: dev\nprofiles:\n  dev:\n    purpose: test\n"
+    )
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    with pytest.raises(IsolationError) as ei:
+        target.up(profile="dev", branch="feat/x")
+    msg = str(ei.value)
+    assert "not committed" in msg
+    assert "fr init scaffold" in msg
+    assert not runner.argv_for("devcontainer")  # never reached devcontainer up
+
+
 def test_up_from_worktree_mounts_main_git_and_keys_main(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

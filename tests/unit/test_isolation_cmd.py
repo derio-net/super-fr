@@ -20,14 +20,17 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     r.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(r)], check=True)
     (r / "x").write_text("x")
+    # The profile must be COMMITTED — worktrees check out .devcontainer/ from the
+    # committed tree (super-fr#299 part 2); an uncommitted profile is now a
+    # deliberate `up` error, so the fixture commits it as real repos do.
+    d = r / ".devcontainer" / "dev"
+    d.mkdir(parents=True)
+    (d / "devcontainer.json").write_text('{"image": "x"}')
     subprocess.run(["git", "-C", str(r), "add", "-A"], check=True)
     subprocess.run(
         ["git", "-C", str(r), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "i"],
         check=True,
     )
-    d = r / ".devcontainer" / "dev"
-    d.mkdir(parents=True)
-    (d / "devcontainer.json").write_text('{"image": "x"}')
     return r
 
 

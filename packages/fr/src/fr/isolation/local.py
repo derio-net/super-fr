@@ -88,6 +88,19 @@ class LocalWorktreeDevcontainerTarget:
         self._git_worktree_add(worktree, branch)
 
         config = worktree / ".devcontainer" / name / "devcontainer.json"
+        # super-fr#299 part 2: the worktree is cut from the committed tree. If
+        # the profile exists only as an UNCOMMITTED file in the base repo, the
+        # worktree won't have it — explain the fix instead of letting
+        # `devcontainer up` fail with a cryptic "config not found".
+        if (
+            not config.exists()
+            and (self.repo_root / ".devcontainer" / name / "devcontainer.json").exists()
+        ):
+            raise IsolationError(
+                f"profile {name!r} is written in the base repo but not committed, so the "
+                f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
+                "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
+            )
         self._ensure_mounted_env_file(config)
         # Resolve the shared common dir, not <repo_root>/.git: correct even if
         # repo_root is a worktree (a gitfile), independent of normalization (#292).
