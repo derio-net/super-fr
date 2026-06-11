@@ -17,7 +17,12 @@ import yaml
 
 from fr.isolation.types import IsolationError, secrets_env_file
 
-BASE_IMAGE = "mcr.microsoft.com/devcontainers/base:ubuntu"
+# Pinned to an LTS tag, NOT the floating `:ubuntu`. The floating tag now
+# resolves to Ubuntu "resolute", where the docker-in-docker feature fails to
+# install (`moby` packages absent), breaking any profile scaffolded with
+# `--tool docker-in-docker`. Pinning also keeps isolation workspaces
+# reproducible. See super-fr#300.
+BASE_IMAGE = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
 
 # Known tool → devcontainer feature mapping. Unknown tools land in the
 # profile's notes for the skill/operator to wire via postCreateCommand.
