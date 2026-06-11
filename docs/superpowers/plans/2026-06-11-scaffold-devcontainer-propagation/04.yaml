@@ -1,0 +1,57 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Skill wiring, version bump, docs
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Skills reflect scaffold-commits
+  steps:
+  - id: P4.T1.S1
+    text: |
+      Update plugins/super-fr/skills/fr-init/SKILL.md: drop/replace the manual
+      "commit the .devcontainer files" step (gate-blocked for the agent) — note
+      that `fr init scaffold` now commits the profile by default (--no-commit to
+      opt out). Verify the exact file path first (ls plugins/super-fr/skills/fr-init/).
+  - id: P4.T1.S2
+    text: |
+      Align the bootstrap notes in plugins/super-fr/skills/fr-brainstorming/SKILL.md
+      and fr-goal/SKILL.md where they reference the fr-init/scaffold hand-off:
+      with #305 (part 1, gate allows `fr init`) + this (scaffold commits), the
+      fresh-repo bootstrap is now fully agent-completable — remove any "operator
+      must commit" caveat tied to #299. Grep for the relevant lines first; edit
+      only what references the deadlock.
+- number: 2
+  title: Release hygiene
+  steps:
+  - id: P4.T2.S1
+    text: |
+      Bump the version 3.1.7 → 3.1.8 in sync across all version files (the
+      repo's convention; see git log "— 3.1.x" commits). Prefer the script:
+      `uv run --no-project python scripts/bump-version.py --help` to find the
+      bump invocation; else edit packages/*/pyproject.toml + plugins/*/plugin.json.
+      Verify: `uv run --no-project python scripts/bump-version.py --check` exits 0.
+      Commit: `chore: 3.1.8 — scaffold commits devcontainer profile (#299 part 2)`.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

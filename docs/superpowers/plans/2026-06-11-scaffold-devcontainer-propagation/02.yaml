@@ -1,0 +1,39 @@
+schema_version: 2
+phase:
+  number: 2
+  title: --no-commit CLI escape hatch
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Plumb the flag through fr init scaffold
+  steps:
+  - id: P2.T1.S1
+    text: |
+      Add a test to tests/unit/test_init_scaffold.py (RED): `fr init scaffold
+      --no-commit …` writes the files but makes NO commit (capture `git log`
+      count before/after, assert unchanged; files exist on disk untracked).
+      Run pytest (new test red).
+  - id: P2.T1.S2
+    text: |
+      In packages/fr/src/fr/commands/init_cmd.py scaffold command, add
+      `no_commit: bool = typer.Option(False, "--no-commit", help="Write files
+      only; do not commit the profile.")` and pass `commit=not no_commit` into
+      scaffold_profile(...). Run pytest (green). Lint/format the file. Commit:
+      `feat(isolation): fr init scaffold --no-commit escape hatch`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

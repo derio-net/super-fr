@@ -5,6 +5,12 @@
 **Repo:** derio-net/super-fr
 **Closes:** part 2 of #299 (parts 1 & 3 shipped in #305)
 
+## Implementation Plans
+
+| Plan | Target repo | Slug | Status |
+|------|-------------|------|--------|
+| 2026-06-11-scaffold-devcontainer-propagation | `derio-net/super-fr` | `2026-06-11-scaffold-devcontainer-propagation` | — |
+
 ## Problem
 
 On a repo with **no devcontainer profile yet**, the fr-goal bootstrap
