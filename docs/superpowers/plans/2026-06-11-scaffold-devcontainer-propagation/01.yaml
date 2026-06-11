@@ -1,0 +1,74 @@
+schema_version: 2
+phase:
+  number: 1
+  title: scaffold commits the profile (default-on, scoped)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Commit logic in scaffold_profile, test-first
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Write tests in tests/unit/test_init_scaffold.py FIRST (RED). The
+      `repo` fixture already git-inits a real repo, so commits are real.
+      Cover:
+      - default commits: after scaffold, `git -C repo log --oneline` shows a
+        `chore(fr): scaffold <profile> devcontainer profile` commit, and
+        `.devcontainer/<profile>/devcontainer.json` + `.devcontainer/fr-profiles.yaml`
+        are tracked at HEAD (`git ls-files` contains them).
+      - scope: pre-create a dirty file (e.g. repo/UNRELATED.txt, both staged
+        and a second unstaged) BEFORE scaffold; assert it is NOT in the
+        scaffold commit (`git show --name-only HEAD`) and remains dirty after.
+      - re-scaffold unchanged: a second scaffold of the same profile (with
+        --force) makes NO new commit (HEAD unchanged) and does not error.
+      - zero-commit repo: scaffold in a freshly `git init`-ed repo (no commits)
+        creates the initial commit containing the profile.
+      - git-ignored: add `.devcontainer/` to .gitignore (committed) before
+        scaffold; assert NO commit is made and a warning mentioning
+        "git-ignored" is emitted; exit 0.
+      Run: `cd <worktree> && uv run --project packages/fr --with pytest --with pyyaml pytest tests/unit/test_init_scaffold.py -q -o addopts=""`
+      Expected: new tests fail (scaffold doesn't commit yet).
+  - id: P1.T1.S2
+    text: |
+      Implement in packages/fr/src/fr/isolation/scaffold.py: add
+      `commit: bool = True` to scaffold_profile(...). After the writes,
+      when commit is True, run a SCOPED commit via subprocess git (cwd=repo_root):
+        git add -- .devcontainer/<profile>/ .devcontainer/fr-profiles.yaml
+        if `git diff --cached --quiet -- <those paths>` is TRUE (nothing
+          staged): the paths are git-ignored or unchanged → if ignored
+          (`git check-ignore` non-empty) emit a warning ("`.devcontainer`
+          is git-ignored — profile written but not committed; `fr isolation
+          up` won't see it"); else (unchanged re-scaffold) just skip. No commit.
+        else: git -c <identity if needed> commit -m "chore(fr): scaffold <profile> devcontainer profile"
+      Keep the host secrets env-file OUT of the add (it lives outside the repo).
+      Run the same pytest; expected: all green.
+  - id: P1.T1.S3
+    text: |
+      Refactor: extract a small `_commit_profile(repo_root, profile)` helper
+      if it tidies scaffold_profile; ensure subprocess git errors surface as
+      IsolationError. Re-run the full test file (green). Lint+format+typecheck
+      the changed files:
+        uv run --with ruff ruff check packages/fr/src/fr/isolation/scaffold.py tests/unit/test_init_scaffold.py
+        uv run --with ruff ruff format --check packages/fr/src/fr/isolation/scaffold.py tests/unit/test_init_scaffold.py
+        uv run --project packages/fr mypy packages/fr/src
+      Commit: `test(isolation): scaffold commits the profile by default (TDD)`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-11T15:26:43+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-06-11T15:26:45+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-06-11T15:26:46+00:00'
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

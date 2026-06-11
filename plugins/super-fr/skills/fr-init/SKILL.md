@@ -64,11 +64,11 @@ fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
 
 Each call writes:
 
-- `.devcontainer/<profile>/devcontainer.json` — committed; base image +
-  git/gh features + mapped tool features + vk installed in postCreate +
+- `.devcontainer/<profile>/devcontainer.json` — committed by scaffold; base
+  image + git/gh features + mapped tool features + vk installed in postCreate +
   `--env-file` pointing at the host secrets path.
-- `.devcontainer/fr-profiles.yaml` — committed; default profile, purpose,
-  expected secret keys, notes for tools without a feature mapping.
+- `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile,
+  purpose, expected secret keys, notes for tools without a feature mapping.
 - `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.
@@ -82,8 +82,12 @@ Unknown tools land in the profile's notes — wire them into
   (`~/.config/fr/secrets/<repo>/<profile>.env`) before the first
   `fr isolation up` — an empty env-file is normal for a default profile
   (GitHub work needs only the host's `gh auth status` to be green).
-- Commit the `.devcontainer/` files (PR per the repo's conventions —
-  some repos block direct pushes to main).
+- `fr init scaffold` already **committed** the `.devcontainer/` files (scoped
+  commit on the current branch — `main` during bootstrap), so the profile is in
+  the committed tree that `fr isolation up` checks out. No separate commit step
+  — and the agent couldn't do one anyway (base-repo `git commit` is gate-denied).
+  Pass `--no-commit` only if you want to stage/commit them yourself (e.g. to open
+  a PR in a repo that blocks direct pushes to `main`).
 - If a run was paused on this init, resume it: `fr isolation up` now works.
 
 ## Multi-profile principles

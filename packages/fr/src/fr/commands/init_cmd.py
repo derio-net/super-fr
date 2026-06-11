@@ -30,8 +30,13 @@ def scaffold(
     ),
     default: bool = typer.Option(False, "--default", help="Make this the repo's default profile."),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing profile config."),
+    no_commit: bool = typer.Option(
+        False, "--no-commit", help="Write the files only; do not commit the profile."
+    ),
 ) -> None:
-    """Write .devcontainer/<profile>/, fr-profiles.yaml entry, and host secrets placeholders."""
+    """Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus
+    host secrets placeholders. The commit is what lets `fr isolation up` see the
+    profile; pass --no-commit to write only."""
     try:
         path = scaffold_profile(
             repo.resolve(),
@@ -41,6 +46,7 @@ def scaffold(
             secrets=list(secret),
             default=default,
             force=force,
+            commit=not no_commit,
         )
     except IsolationError as err:
         typer.echo(f"error: {err}")

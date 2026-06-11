@@ -1,0 +1,44 @@
+schema_version: 2
+phase:
+  number: 3
+  title: isolation up — actionable missing-config error
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Targeted error when the profile is written but uncommitted
+  steps:
+  - id: P3.T1.S1
+    text: |
+      Add a test (tests/unit/test_isolation.py or test_isolation_cmd.py, using
+      the existing fake_run/runner harness): when the worktree lacks
+      `.devcontainer/<profile>/devcontainer.json` but the BASE repo has an
+      uncommitted one, `up` raises/exits with an IsolationError whose message
+      mentions "not committed" and "fr init scaffold" — NOT the raw
+      "devcontainer up failed". RED.
+  - id: P3.T1.S2
+    text: |
+      In packages/fr/src/fr/isolation/local.py up(), before the `devcontainer
+      up` run (after _git_worktree_add, around the `config =` line): if the
+      worktree `config` path does not exist AND
+      `repo_root/.devcontainer/<name>/devcontainer.json` DOES exist (the
+      uncommitted base copy), raise IsolationError with the actionable message
+      (run `fr init scaffold --profile <name>` which now commits, or commit
+      `.devcontainer/`, then retry). Otherwise proceed unchanged. Run pytest
+      (green) + mypy. Commit: `fix(isolation): up explains an uncommitted profile`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-06-11T15:32:40+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-06-11T15:32:41+00:00'
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
