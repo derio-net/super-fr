@@ -15,7 +15,7 @@ moves.
 Bump if the PR changes any of:
 
 - `plugins/*/skills/**` — skill docs, including frontmatter metadata
-- `src/**` — any Python source
+- `packages/*/src/**` — any Python source
 - `plugins/super-fr/rules/**` — user-level rules installed by the plugin
 - `scripts/install.sh`, `scripts/install-validator-wrapper.sh`,
   `scripts/validate-plans.sh`, `scripts/validate-skills.sh` — anything the
@@ -110,10 +110,13 @@ operator-side update in the PR description so the two stay in sync.
   allowed; branch-protection hooks enforce it.
 - Housekeeping commits (archiving a completed plan, updating the spec index)
   also go through a PR — same hook, no exception.
-- Pre-commit isn't run locally in this repo; CI runs `ruff check`, `ruff format
-  --check`, `mypy src/`, and `pytest`. Before pushing, run
-  `uv run ruff format src/ tests/` and `uv run pytest -q --no-cov` yourself —
-  CI is slow to fail-loud.
+- Pre-commit isn't run locally in this repo; `.github/workflows/ci.yml` is the
+  single source of truth for the gate (read it if the commands below ever
+  disagree). Currently it runs `ruff check packages/ tests/`, `ruff format
+  --check packages/ tests/`, `mypy packages/fr/src packages/fr-dispatch/src
+  packages/fr-vk/src`, `pytest`, and `bump-version.py --check`. Before
+  pushing, run `uv run ruff format packages/ tests/` and
+  `uv run pytest -q --no-cov` yourself — CI is slow to fail-loud.
 - `fr apply --yes` enforces the "plan and spec must be on
   `origin/HEAD`" contract before dispatching a GitHub Issue.
   See `docs/superpowers/specs/2026-05-17-dispatch-reachability-gate-design.md`
@@ -122,7 +125,7 @@ operator-side update in the PR description so the two stay in sync.
 
 ## Follow-up candidates (not urgent)
 
-- Add a CI guard that fails PRs touching `skills/`, `src/`, `rules/`, or
+- Add a CI guard that fails PRs touching `skills/`, `packages/*/src/`, `rules/`, or
   installer scripts without a version bump on `main`. Would make this rule
   load-bearing instead of voluntary. (Drift detection is done — see
   `version-sync` job — but the "did you remember to bump?" guard isn't.)
