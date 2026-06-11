@@ -21,7 +21,29 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     r = tmp_path / "myrepo"
     r.mkdir()
     subprocess.run(["git", "init", "-q", str(r)], check=True)
+    # A real repo has a configured identity; scaffold now commits the profile.
+    subprocess.run(["git", "-C", str(r), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(r), "config", "user.name", "t"], check=True)
     return r
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+
+def _initial_commit(repo: Path) -> None:
+    (repo / "README.md").write_text("seed\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-qm", "seed")
+
+
+def _log_subjects(repo: Path) -> list[str]:
+    out = _git(repo, "log", "--format=%s").stdout
+    return out.splitlines()
+
+
+def _tracked(repo: Path) -> list[str]:
+    return _git(repo, "ls-files").stdout.splitlines()
 
 
 def scaffold(repo: Path, *extra: str):
@@ -39,6 +61,61 @@ def scaffold(repo: Path, *extra: str):
             *extra,
         ],
     )
+
+
+# --- super-fr#299 part 2: scaffold commits the profile by default -----------
+
+
+def test_scaffold_commits_profile_by_default(repo: Path) -> None:
+    _initial_commit(repo)
+    res = scaffold(repo)
+    assert res.exit_code == 0, res.output
+    assert "chore(fr): scaffold dev devcontainer profile" in _log_subjects(repo)
+    tracked = _tracked(repo)
+    assert ".devcontainer/dev/devcontainer.json" in tracked
+    assert ".devcontainer/fr-profiles.yaml" in tracked
+
+
+def test_scaffold_commit_is_scoped(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / "UNRELATED.txt").write_text("x\n")
+    _git(repo, "add", "UNRELATED.txt")  # staged, unrelated to the profile
+    res = scaffold(repo)
+    assert res.exit_code == 0, res.output
+    head_files = _git(repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert ".devcontainer/dev/devcontainer.json" in head_files  # profile committed
+    assert "UNRELATED.txt" not in head_files  # the operator's change is NOT swept in
+    # and it remains staged, untouched by scaffold
+    assert "UNRELATED.txt" in _git(repo, "diff", "--cached", "--name-only").stdout
+
+
+def test_rescaffold_unchanged_makes_no_new_commit(repo: Path) -> None:
+    _initial_commit(repo)
+    scaffold(repo)
+    after_first = _log_subjects(repo)
+    res = scaffold(repo, "--force")  # identical inputs → nothing to stage
+    assert res.exit_code == 0, res.output
+    assert _log_subjects(repo) == after_first  # no empty re-scaffold commit
+
+
+def test_scaffold_zero_commit_repo_makes_initial_commit(repo: Path) -> None:
+    # `repo` has no commits yet — the scaffold commit becomes the first one.
+    res = scaffold(repo)
+    assert res.exit_code == 0, res.output
+    assert _log_subjects(repo) == ["chore(fr): scaffold dev devcontainer profile"]
+    assert ".devcontainer/dev/devcontainer.json" in _tracked(repo)
+
+
+def test_scaffold_gitignored_devcontainer_warns_and_skips(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".gitignore").write_text(".devcontainer/\n")
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "-qm", "ignore devcontainer")
+    before = _log_subjects(repo)
+    res = scaffold(repo)
+    assert res.exit_code == 0, res.output
+    assert _log_subjects(repo) == before  # nothing committed
+    assert "git-ignored" in res.output  # but the operator is warned
 
 
 def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) -> None:

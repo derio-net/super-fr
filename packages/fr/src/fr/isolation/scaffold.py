@@ -11,6 +11,8 @@ Writes three things per profile:
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -58,8 +60,14 @@ def scaffold_profile(
     secrets: list[str],
     default: bool = False,
     force: bool = False,
+    commit: bool = True,
 ) -> Path:
-    """Write the profile. Returns the devcontainer.json path."""
+    """Write the profile and (by default) commit it. Returns the devcontainer.json path.
+
+    The profile must be committed for `fr isolation up` to see it — the
+    worktree is cut from the branch's committed tree (super-fr#299 part 2). So
+    scaffold commits by default; `commit=False` writes the files only.
+    """
     if not (repo_root / ".git").exists():
         raise IsolationError(
             f"{repo_root} is not a git repo — fr init scaffold only runs inside one."
@@ -103,7 +111,51 @@ def scaffold_profile(
 
     _update_profiles_yaml(repo_root, profile, purpose, secrets, unknown, default)
     _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
+    if commit:
+        _commit_profile(repo_root, profile)
     return config_path
+
+
+def _commit_profile(repo_root: Path, profile: str) -> None:
+    """Scoped commit of just the profile files on the current branch (HEAD).
+
+    Stages only what scaffold wrote — `.devcontainer/<profile>/` and
+    `.devcontainer/fr-profiles.yaml` — so the operator's other working-tree
+    changes are never swept in. The host secrets env-file lives outside the
+    repo and is never committed. No-ops cleanly when nothing is staged: a
+    git-ignored `.devcontainer` warns; an unchanged re-scaffold is silent.
+    """
+    paths = [f".devcontainer/{profile}", ".devcontainer/fr-profiles.yaml"]
+    _git(repo_root, "add", "--", *paths)
+    # `git diff --cached --quiet` → rc 0 means nothing staged (ignored/unchanged).
+    if _git(repo_root, "diff", "--cached", "--quiet", "--", *paths).returncode == 0:
+        if _git(repo_root, "check-ignore", "-q", f".devcontainer/{profile}").returncode == 0:
+            print(
+                f"warning: .devcontainer is git-ignored — profile {profile!r} written "
+                "but not committed; `fr isolation up` won't see it.",
+                file=sys.stderr,
+            )
+        return
+    # Pathspec on `commit` records ONLY these paths — any other staged changes
+    # the operator had stay staged, never swept into the scaffold commit.
+    _git(
+        repo_root,
+        "commit",
+        "-m",
+        f"chore(fr): scaffold {profile} devcontainer profile",
+        "--",
+        *paths,
+        check=True,
+    )
+
+
+def _git(repo_root: Path, *args: str, check: bool = False) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True, text=True)
+    if check and result.returncode != 0:
+        raise IsolationError(
+            f"git {args[0]} failed: {result.stderr.strip() or result.stdout.strip()}"
+        )
+    return result
 
 
 def _update_profiles_yaml(
