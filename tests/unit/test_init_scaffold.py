@@ -118,6 +118,16 @@ def test_scaffold_gitignored_devcontainer_warns_and_skips(repo: Path) -> None:
     assert "git-ignored" in res.output  # but the operator is warned
 
 
+def test_scaffold_no_commit_writes_only(repo: Path) -> None:
+    _initial_commit(repo)
+    before = _log_subjects(repo)
+    res = scaffold(repo, "--no-commit")
+    assert res.exit_code == 0, res.output
+    assert _log_subjects(repo) == before  # no commit
+    assert (repo / ".devcontainer" / "dev" / "devcontainer.json").exists()  # written
+    assert ".devcontainer/dev/devcontainer.json" not in _tracked(repo)  # left untracked
+
+
 def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) -> None:
     res = scaffold(repo, "--tool", "uv", "--secret", "GH_TOKEN", "--default")
     assert res.exit_code == 0, res.output
