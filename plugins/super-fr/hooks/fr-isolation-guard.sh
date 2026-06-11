@@ -71,6 +71,16 @@ if [ -n "$cd_target" ]; then
   fi
 fi
 
+# Bootstrap + read-only fr commands are allowed even from the base-repo cwd:
+# `fr init …` is the host-side scaffold the gate's own error chain points to —
+# without it a fresh repo with no devcontainer profile can never bootstrap an
+# fr-goal run (the deadlock in super-fr#299). `fr --version` / `fr skills` are
+# harmless info commands. Everything else (fr plan, fr apply, …) still routes
+# through the worktree.
+if printf '%s' "$command" | grep -Eq '^[[:space:]]*fr[[:space:]]+(init([[:space:]]|$)|skills([[:space:]]|$)|--version([[:space:]]|$))'; then
+  exit 0
+fi
+
 if printf '%s' "$command" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation([[:space:]]|$)'; then
   # The isolation lifecycle itself is the one allowed surface; `down` ends
   # the pipeline, so retire the sentinel (best-effort).

@@ -137,6 +137,48 @@ class TestIsolationGuard:
         assert decision(result) is None
 
 
+class TestBootstrapAllowance:
+    """super-fr#299: `fr init …` (the host-side scaffold the gate's own error
+    points to) plus harmless `fr --version` / `fr skills` are allowed while the
+    pipeline is active, so an fr-goal run can bootstrap a fresh repo without the
+    operator hand-running the scaffold."""
+
+    def _sent(self, tmp_path: Path) -> tuple[Path, Path]:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+        return repo, sentinels
+
+    def test_fr_init_scaffold_allowed(self, tmp_path: Path) -> None:
+        repo, sentinels = self._sent(tmp_path)
+        result = run_hook(payload("fr init scaffold --repo . --profile dev", repo), sentinels)
+        assert decision(result) is None
+
+    def test_fr_init_bare_allowed(self, tmp_path: Path) -> None:
+        repo, sentinels = self._sent(tmp_path)
+        assert decision(run_hook(payload("fr init", repo), sentinels)) is None
+
+    def test_fr_version_allowed(self, tmp_path: Path) -> None:
+        repo, sentinels = self._sent(tmp_path)
+        assert decision(run_hook(payload("fr --version", repo), sentinels)) is None
+
+    def test_fr_skills_allowed(self, tmp_path: Path) -> None:
+        repo, sentinels = self._sent(tmp_path)
+        assert decision(run_hook(payload("fr skills", repo), sentinels)) is None
+
+    def test_fr_plan_still_denied(self, tmp_path: Path) -> None:
+        # not a bootstrap/info command — must still be denied in the base repo
+        repo, sentinels = self._sent(tmp_path)
+        assert decision(run_hook(payload("fr plan create --slug x", repo), sentinels)) == "deny"
+
+    def test_substring_fr_not_confused(self, tmp_path: Path) -> None:
+        # only a LEADING `fr` token is allowed; another binary ending in 'fr'
+        # must still be denied.
+        repo, sentinels = self._sent(tmp_path)
+        assert decision(run_hook(payload("myfr init", repo), sentinels)) == "deny"
+
+
 class TestCdTransitionAllowance:
     """#279: a command LEADING with `cd <dir>` whose target resolves
     inside an allowed prefix (fr worktrees, temp dirs) and outside the
