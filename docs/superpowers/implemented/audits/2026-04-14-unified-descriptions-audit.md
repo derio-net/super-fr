@@ -1,5 +1,13 @@
 # Unified Descriptions — Impact Audit
 
+> **Triage status — 2026-06-11: ADDRESSED (historical).** Phase 0 impact audit
+> for the `archive-and-unified-descriptions` plan, since implemented
+> (`docs/superpowers/implemented/plans/2026-04-14-archive-and-unified-descriptions/`).
+> The "not a singleton" bridge finding was resolved by the 2026-04-19 absorption
+> of `secure-agent-kali` into `agent-images` (noted in the snapshot header below).
+> No open action items. Retained as a posterity record.
+
+
 **Date:** 2026-04-14
 **Phase:** 0 of archive-and-unified-descriptions plan
 **Scope:** All derio-net repos — superpowers-for-vk, secure-agent-kali, frank, willikins, vibe-kanban
