@@ -103,6 +103,33 @@ def test_exec_with_no_command_exits_2(repo: Path, fake_run: list) -> None:
     assert res.exit_code == 2
 
 
+def test_exec_resolves_single_workspace_when_no_branch(repo: Path, fake_run: list) -> None:
+    # super-fr#299 part 3: with exactly one isolation workspace, `exec` without
+    # --branch uses it instead of the hardcoded vk-iso/work default (which made
+    # `exec` after a failed `up --branch feat/x` look for the wrong workspace).
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
+    res = runner.invoke(app, ["isolation", "exec", "--repo", str(repo), "--", "echo", "hi"])
+    assert res.exit_code == 0, res.output
+    execs = [c for c in fake_run if c[:2] == ["devcontainer", "exec"]]
+    assert execs and execs[0][-2:] == ["echo", "hi"]
+
+
+def test_exec_no_branch_zero_workspaces_exits_2(repo: Path, fake_run: list) -> None:
+    res = runner.invoke(app, ["isolation", "exec", "--repo", str(repo), "--", "ls"])
+    assert res.exit_code == 2
+    assert "isolation up" in res.output
+    assert "vk-iso/work" not in res.output  # no misleading hardcoded default-branch name
+
+
+def test_exec_no_branch_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
+    res = runner.invoke(app, ["isolation", "exec", "--repo", str(repo), "--", "ls"])
+    assert res.exit_code == 2
+    assert "--branch" in res.output
+    assert "feat/a" in res.output and "feat/b" in res.output
+
+
 def test_up_prints_add_dir_hint_in_claude_code(repo: Path, fake_run: list) -> None:
     res = runner.invoke(
         app,

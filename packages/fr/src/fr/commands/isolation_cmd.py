@@ -68,16 +68,36 @@ def up(
 def exec(  # noqa: A001 - typer command name
     ctx: typer.Context,
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
-    branch: str = typer.Option(DEFAULT_BRANCH, help="Isolation branch to exec into."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch (default: the single active workspace)."
+    ),
 ) -> None:
     """Run a command inside the isolation container (exit code passthrough)."""
-    state = load_state(repo.resolve(), branch)
-    if state is None:
-        _fail(
-            IsolationError(
-                f"no isolation workspace for branch {branch!r} — run `fr isolation up` first."
+    root = repo.resolve()
+    # super-fr#299 part 3: with --branch omitted, resolve to the single active
+    # workspace instead of a hardcoded vk-iso/work default — so `exec` after an
+    # `up --branch feat/x` targets the workspace the operator actually has,
+    # never a phantom default. Mirrors `status`/`down`'s no-branch handling.
+    if branch is None:
+        states = list_states(root)
+        if len(states) > 1:
+            _fail(
+                IsolationError(
+                    "multiple isolation workspaces — specify --branch: "
+                    + ", ".join(s.branch for s in states)
+                )
             )
+            return
+        state = states[0] if states else None
+    else:
+        state = load_state(root, branch)
+    if state is None:
+        msg = (
+            f"no isolation workspace for branch {branch!r} — run `fr isolation up` first."
+            if branch is not None
+            else "no isolation workspace — run `fr isolation up` first."
         )
+        _fail(IsolationError(msg))
         return
     argv = list(ctx.args)
     if argv and argv[0] == "--":
