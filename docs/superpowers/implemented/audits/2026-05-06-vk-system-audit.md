@@ -1,5 +1,13 @@
 # VK system audit — 2026-05-06
 
+> **Triage status — 2026-06-11: ADDRESSED.** Posterity record whose
+> recommendation — "rebuild around a single state machine" — was acted on. The
+> design `2026-05-06-vk-rebuild-state-machine-design.md` was written and the v2
+> library + v2 bridge rebuilds shipped (see `implemented/plans/2026-05-09-vk-v2-library*`,
+> `implemented/plans/2026-05-17-v2-bridge-rebuild`, and the current v3.x
+> `fr`/`fr-vk`/`fr-dispatch` packages). No open action items.
+
+
 **Status:** Posterity record. Captures the state of the VK plugin after ~4
 weeks of rapid evolution and recurring meta-fix cycles. Used as the
 grounding for the single-state-machine rebuild design that follows.

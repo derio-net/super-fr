@@ -1,5 +1,15 @@
 # Audit — v2 bridge dispatch rebuild gap
 
+> **Triage status — 2026-06-11: ADDRESSED + follow-ups seeded.** The seven
+> wire-shape bugs were fixed (vk 2.2.11) and remain fixed in the current
+> `fr-vk` bridge. The five actionable "What we'd do differently" follow-ups are
+> all still OPEN as of 2026-06-11 (verified against `packages/fr-vk`): per-phase
+> failure-string logging, real-wire contract fixture, transactional card rollback
+> on workspace failure, per-repo base-branch resolution, and card↔workspace link
+> verification. Seeded as `docs/superpowers/specs/2026-06-11-bridge-dispatch-hardening-design.md`
+> (one-shot with `/fr-goal`).
+
+
 **Date:** 2026-05-18 (single session, 19:30–23:50 CEST / 17:30–21:50 UTC)
 **Audience:** future agents/operators touching `vk.bridge.*` or `vk._mcp_client`
 **Outcome:** seven structural mismatches between the bridge code and the real

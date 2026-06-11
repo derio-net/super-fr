@@ -1,5 +1,16 @@
 # Audit — transactional `plan create`, lossless v1→v2 migration, archived-plan reopen guard
 
+> **Triage status — 2026-06-11: PARTIALLY ADDRESSED — follow-ups seeded.**
+> All three code fixes (#133, #245, #246) are present and tested in the current
+> `fr`/`fr-vk` packages (verified 2026-06-11): `plan_ops._validate_spec_section`
+> + `_folder_matches` (set-equality on phase files); `migrate._extract_prose_depends_on`
+> + `_find_task_intro` + fail-loud `target_repo` resolution; `render._phase_complete`
+> ratify-close + `apply_cmd` archived-path refusal. The two "Next steps" follow-ups
+> (cross-repo migration-drift scan; curated frank re-migration decision) remain OPEN
+> and are seeded as `docs/superpowers/specs/2026-06-11-migration-drift-scanner-design.md`
+> (one-shot with `/fr-goal`).
+
+
 **Date:** 2026-05-25 (single session)
 **Audience:** future agents/operators touching `vk.plan_ops`, `vk.migrate`,
 `vk.render`, or `vk apply`
