@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 from fr.cli import app
-from fr.isolation.scaffold import KNOWN_TOOL_FEATURES
+from fr.isolation.scaffold import BASE_IMAGE, KNOWN_TOOL_FEATURES
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -47,6 +47,13 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
 
     cfg = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
     assert "image" in cfg
+    # super-fr#300: the base image must be a PINNED LTS tag, not the floating
+    # `:ubuntu` tag (which now resolves to a release where the docker-in-docker
+    # feature fails to install — `moby` packages absent on Ubuntu "resolute").
+    assert cfg["image"] == BASE_IMAGE
+    assert cfg["image"] == "mcr.microsoft.com/devcontainers/base:ubuntu-24.04", (
+        "base image must be pinned to an LTS tag for reproducible isolation (super-fr#300)"
+    )
     # baseline: gh feature present; requested tool mapped to its feature
     assert any("github-cli" in k for k in cfg["features"])
     assert any(KNOWN_TOOL_FEATURES["uv"] in k for k in cfg["features"])
