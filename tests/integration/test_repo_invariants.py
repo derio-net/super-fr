@@ -55,7 +55,9 @@ def test_v2_bridge_rebuild_spec_has_architectural_ownership_section():
     (Regression guard so the pattern isn't dropped from future specs that
     copy this one as a template.)
     """
-    spec = Path("docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md").read_text()
+    spec = Path(
+        "docs/superpowers/implemented/specs/2026-05-17-v2-bridge-rebuild-design.md"
+    ).read_text()
     # Heading present (case-insensitive on "ownership" because the section
     # header in the spec is "## Architectural ownership ...").
     assert re.search(r"^##\s+Architectural ownership", spec, re.MULTILINE), (

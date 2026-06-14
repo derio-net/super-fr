@@ -99,9 +99,13 @@ def test_card_title_is_minimal_and_description_is_structured():  # H9
     desc = args["description"]
     # The four legacy lines stay pinned as the prefix; enrichment follows.
     assert desc.startswith(expected_prefix)
+    # The fixture's spec ref resolves (via 2026-06-06 spec-path-repair) to the
+    # archived copy under implemented/specs/ once the real doc is swept there —
+    # the card link follows the file. Dedicated coverage of that resolution
+    # lives in test_v2_render::test_spec_url_resolves_archived_spec.
     assert (
         "Spec: https://github.com/derio-net/repo-a/blob/main/"
-        "docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md"
+        "docs/superpowers/implemented/specs/2026-05-17-v2-bridge-rebuild-design.md"
     ) in desc
     # Phase yaml document embedded verbatim (raw 02.yaml content).
     assert plan.phase_texts[2].rstrip() in desc
