@@ -59,8 +59,9 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
   creation, and `fr isolation status`/`down`'s PR checks (`gh pr view`)
   all use the host's gh/git auth. The container needs NO GitHub token for
   the standard pipeline — never ask the operator for one to make
-  isolation work; in-container gh writes are an explicit opt-in profile
-  (e.g. `admin` with GH_TOKEN), not a requirement.
+  isolation work. A non-default profile may carry *other* in-container
+  credentials (e.g. `KUBECONFIG_B64`, a deploy/registry token), but gh
+  itself stays host-side — a container GH_TOKEN is not a thing here.
 - The Claude Code harness resets the persistent shell cwd back to the base
   repo between calls, so every host-side git/gh op is a compound
   `cd <worktree> && gh …` / `cd <worktree> && git push`. The isolation

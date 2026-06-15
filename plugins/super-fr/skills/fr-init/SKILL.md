@@ -47,9 +47,9 @@ Cover, with scan-informed recommended options:
    (names only, never values). **Do NOT ask for a GitHub token by
    default:** push, PR creation, and every `fr`-driven gh call run on the
    authenticated HOST (fr-isolation's credential boundary) — the container
-   needs no GH_TOKEN for the standard pipeline. Offer it only for an
-   explicit in-container-gh-writes profile (e.g. `admin`), never the
-   default.
+   needs no GH_TOKEN — gh is host-side. A non-default profile may still
+   declare *other* in-container credentials (e.g. `KUBECONFIG_B64`, a
+   deploy or registry token), but never a GitHub token.
 4. **Working patterns** — test/build/run commands worth recording in the
    profile's purpose/notes so future runs know the repo's verbs.
 
@@ -58,8 +58,8 @@ Cover, with scan-informed recommended options:
 ```bash
 fr init scaffold --repo . --profile dev --purpose "day-to-day development" \
     --tool uv --tool node --default
-fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
-    --secret GH_TOKEN --secret KUBECONFIG_B64
+fr init scaffold --repo . --profile admin --purpose "in-cluster deploys" \
+    --secret KUBECONFIG_B64 --secret REGISTRY_TOKEN
 ```
 
 Each call writes:
