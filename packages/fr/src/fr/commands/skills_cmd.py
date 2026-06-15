@@ -3,7 +3,7 @@
 Two sections:
   - **Commands** — every top-level command and sub-app, introspected from the
     typer app at runtime (so it stays in sync with the actual surface).
-  - **Skills** — the four `vk-*` SKILL.md files. v2 skills are not 1:1 with
+  - **Skills** — the `fr-*` SKILL.md files. v2 skills are not 1:1 with
     sub-apps (e.g. `fr-execute` orchestrates `fr pickup` + `fr plan edit` +
     `fr apply`), so the skill section is free-form prose pointing at the
     relevant commands rather than a single-app mapping.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import typer
 
-# Free-form skill summaries — what each `vk-*` skill is for and which CLI
+# Free-form skill summaries — what each `fr-*` skill is for and which CLI
 # verbs it orchestrates. Update alongside the SKILL.md files.
 SKILLS: list[tuple[str, str, str]] = [
     (
@@ -61,6 +61,11 @@ SKILLS: list[tuple[str, str, str]] = [
         "fr-brainstorming",
         "Brainstorm inside fr-isolation; hard stop without a profile (skill).",
         "fr isolation up  →  superpowers:brainstorming  →  fr-plan handoff",
+    ),
+    (
+        "fr-debugging",
+        "Debug a bug inside fr-isolation; reuse-or-fresh workspace (skill).",
+        "fr isolation {status,up,exec,down}  →  superpowers:systematic-debugging  →  fix-PR",
     ),
 ]
 

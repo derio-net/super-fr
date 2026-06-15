@@ -17,7 +17,7 @@ anywhere Claude Code runs.
 
 | Component | Type | What it does |
 |-----------|------|--------------|
-| `super-fr` | plugin | 7 skills: brainstorm → plan → execute, isolation, the `/fr-goal` pipeline |
+| `super-fr` | plugin | 8 skills: brainstorm → plan → execute, isolation, debugging, the `/fr-goal` pipeline |
 | `super-fr-dispatch` | plugin | 2 skills: dispatch plan phases to runners, operate/debug a runner |
 | `fr` | Python package | The CLI: plan-as-folder engine, GitHub tracking (render → observe → diff → apply), isolation |
 | `fr-dispatch` | Python package | Runner protocol + tick framework (library, runner-agnostic) |
@@ -206,6 +206,7 @@ First run per repo pays this once.
 |-------|-------------|
 | `fr-goal` | End-to-end pipeline: brainstorm → one batched Q&A → spec → plan → TDD implementation → reviewed PR, no intermediate approval gates |
 | `fr-brainstorming` | superpowers brainstorming, run inside an isolated workspace from the first command on |
+| `fr-debugging` | superpowers systematic-debugging, run inside isolation (reuse-or-fresh `fix/` branch); autonomous to a fix-PR with hard stops at the don't-understand and 3+-fixes architecture checkpoints |
 | `fr-plan` | Phase-structured plans (plan-as-folder) with operator collaboration and spec index maintenance |
 | `fr-execute` | Execute an agentic phase from a plan (agent-facing; Phase > Task > Step) |
 | `fr-isolation` | Worktree + devcontainer lifecycle via the `fr isolation` CLI |

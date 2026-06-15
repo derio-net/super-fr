@@ -1,0 +1,45 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Add fr-debugging skill and wire the drift guard (TDD)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Author the skill, driven by the SKILLS↔dirs drift guard
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Write plugins/super-fr/skills/fr-debugging/SKILL.md. Frontmatter: name: fr-debugging; description triggers on debug / bug / test failure / unexpected behavior / root cause inside an fr repo. Body mirrors fr-brainstorming's shape (owns WHERE + autonomy contract, delegates HOW to superpowers:systematic-debugging, unchanged). Sections: announce line; (0) isolation entry — reuse-if-present-else-fresh (fr isolation status → reuse, else fr isolation up --branch fix/<slug>; no profile → HARD STOP → fr-init); (1) run superpowers:systematic-debugging through its four phases via the exec-bridge; (2) two hard stops — "I don't understand X" (P3.4) and 3+-fixes architecture gate (P4.5) — pause and ask, everything else autonomous; (3) durable log at docs/superpowers/debugging/<YYYY-MM-DD-slug>.md committed with the fix; (4) deliver one PR (failing test + fix), operator merges; scope note ("owns WHERE not HOW"). Do NOT restate the four phases / Iron Law / supporting techniques — delegate them.
+  - id: P1.T1.S2
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_skills_cmd.py::test_skill_files_match_skills_list -q --no-cov`. EXPECT RED — the new dir is on disk but absent from SKILLS (AssertionError: on_disk != listed, fr-debugging extra).
+  - id: P1.T1.S3
+    text: |
+      Add an ("fr-debugging", summary, verbs) tuple to the SKILLS list in packages/fr/src/fr/commands/skills_cmd.py. Summary e.g. "Debug a bug inside fr-isolation; reuse-or-fresh workspace (skill)."; verbs e.g. "fr isolation {status,up,exec,down} → superpowers:systematic-debugging".
+  - id: P1.T1.S4
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_skills_cmd.py -q --no-cov`. EXPECT GREEN — both test_skill_files_match_skills_list and test_skills_list_matches_skill_files pass; subprocess smoke exits 0.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-15T11:59:06+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-06-15T11:59:08+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-06-15T11:59:09+00:00'
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: '2026-06-15T11:59:11+00:00'
+      note: null
+  completion:
+    at: '2026-06-15T11:59:12+00:00'
+    note: null
+    observed_prs: []

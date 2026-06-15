@@ -1,0 +1,25 @@
+schema_version: 2
+phase:
+  number: 4
+  title: '[manual] Operator mirrors the Debugging Override to the user-level rule'
+  tag: manual
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Mirror into ~/.claude/rules/fr-plan-override.md
+  steps:
+  - id: P4.T1.S1
+    text: |
+      MANUAL (operator-owned, outside the repo; back-loaded — no agentic phase depends on it). The operator copies the new "## Debugging Override" section from plugins/super-fr/rules/fr-plan-override.md into the user-level mirror ~/.claude/rules/fr-plan-override.md so the two stay in sync (per CLAUDE.md's rule-mirror convention). The PR ships with this phase unimplemented and flagged in the PR body; the operator applies it at/after merge.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

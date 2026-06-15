@@ -1,0 +1,57 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Version bump and full CI gate
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Minor version bump (new skill)
+  steps:
+  - id: P3.T1.S1
+    text: |
+      Run `cd <worktree> && scripts/bump-version.py minor` — 3.1.8 → 3.2.0 (updates root + member pyproject, plugin.json files, marketplace.json, refreshes uv.lock).
+  - id: P3.T1.S2
+    text: |
+      Run `cd <worktree> && scripts/bump-version.py --check` — EXPECT all sources agree on 3.2.0 (exit 0).
+- number: 2
+  title: Run the full gate locally (ci.yml parity)
+  steps:
+  - id: P3.T2.S1
+    text: |
+      Run `cd <worktree> && uv run ruff format packages/ tests/` then `uv run ruff check packages/ tests/` — EXPECT clean.
+  - id: P3.T2.S2
+    text: |
+      Run `cd <worktree> && uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src` — EXPECT clean.
+  - id: P3.T2.S3
+    text: |
+      Run `cd <worktree> && uv run pytest -q --no-cov` — EXPECT full suite green (drift guard + smoke included).
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-06-15T12:03:39+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-06-15T12:03:41+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-06-15T12:03:42+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-06-15T12:03:44+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-06-15T12:03:45+00:00'
+      note: null
+  completion:
+    at: '2026-06-15T12:03:47+00:00'
+    note: null
+    observed_prs: []
