@@ -16,11 +16,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from fr.isolation.secrets import ensure_mounted_env_file
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
-    _warn_legacy,
     delete_state,
     resolve_profile,
     save_state,
@@ -193,24 +193,11 @@ class LocalWorktreeDevcontainerTarget:
     def _ensure_mounted_env_file(self, config: Path) -> None:
         """Ensure the env-file the profile's devcontainer.json mounts exists.
 
-        Mount-following (#272): the committed config is the source of truth —
-        an unmigrated repo still mounts the legacy vk path, so creating the
-        fr file would not help docker. Warn on the legacy spelling; no
-        --env-file in runArgs → nothing to ensure.
+        Delegates to the shared `secrets.ensure_mounted_env_file` so the
+        EnvFileProvider and this target use one implementation (mount-following,
+        #272). Phase 3 routes this through the provider seam entirely.
         """
-        try:
-            run_args = json.loads(config.read_text()).get("runArgs", [])
-        except (OSError, json.JSONDecodeError):
-            return
-        for flag, value in zip(run_args, run_args[1:]):
-            if flag != "--env-file":
-                continue
-            env_file = Path(value.replace("${localEnv:HOME}", str(_home())))
-            if "/.config/vk/secrets/" in str(env_file):
-                _warn_legacy("secrets env-file mount", env_file)
-            if not env_file.is_file():
-                env_file.parent.mkdir(parents=True, exist_ok=True)
-                env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")
+        ensure_mounted_env_file(config, self.repo_root.name)
 
     def _docker_ps(self, state: IsolationState) -> str:
         result = self.run(
