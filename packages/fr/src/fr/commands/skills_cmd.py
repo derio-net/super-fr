@@ -62,6 +62,11 @@ SKILLS: list[tuple[str, str, str]] = [
         "Brainstorm inside fr-isolation; hard stop without a profile (skill).",
         "fr isolation up  →  superpowers:brainstorming  →  fr-plan handoff",
     ),
+    (
+        "fr-debugging",
+        "Debug a bug inside fr-isolation; reuse-or-fresh workspace (skill).",
+        "fr isolation {status,up,exec,down}  →  superpowers:systematic-debugging  →  fix-PR",
+    ),
 ]
 
 
