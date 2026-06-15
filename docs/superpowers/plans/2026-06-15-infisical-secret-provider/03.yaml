@@ -1,0 +1,95 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Target wiring (up/exec/down) + `fr isolation exec --secret` flag
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Wire the provider into LocalWorktreeDevcontainerTarget, test-first
+  steps:
+  - id: P3.T1.S1
+    text: |
+      Write tests FIRST (RED) extending the existing local-target test module
+      (find it: `tests/unit/test_isolation_local*.py` or equivalent), using the
+      existing `Runner` seam to assert the assembled `devcontainer` argv without
+      Docker. Cover:
+      - `up` calls `provider_for(ctx).up_prepare(ctx)`.
+      - `exec(state, argv, keys=())` with no keys -> plain `devcontainer exec …
+        -- <argv>` (no wrap, no mint).
+      - `exec(..., keys=("DEPLOY_KEY",))` for an infisical profile -> the
+        command is prefixed with the provider's `argv_prefix` and the token is
+        conveyed via the exec env mechanism (assert the minted token value does
+        NOT appear anywhere in the assembled `devcontainer exec` argv).
+      - `down` invokes the provider cleanup (token-file shred).
+      - `exec(..., keys=...)` for an infisical profile whose in-container
+        `infisical` CLI is absent fails with an actionable `IsolationError` at
+        EXEC time (spec Testing assertion (g) — surfaced at exec, not only `up`).
+      Run the module's pytest (RED).
+  - id: P3.T1.S2
+    text: |
+      Implement in packages/fr/src/fr/isolation/local.py: `up()` calls
+      `provider.up_prepare`; `exec()` gains a `keys: Sequence[str] = ()` param,
+      builds `ProfileContext`, applies `provider.exec_wrap(ctx, want_secrets=bool(keys))`
+      — prepend `argv_prefix` to the in-container argv and pass `exec_env`
+      through `devcontainer exec`'s env mechanism (NOT argv); `down()` runs the
+      provider cleanup. Keep env-file profiles byte-for-byte unchanged. pytest green.
+  - id: P3.T1.S3
+    text: |
+      Refactor; lint/format/mypy; commit
+      `feat(isolation): wire SecretProvider into up/exec/down (TDD)`.
+- number: 2
+  title: CLI `--secret` flag with fail-fast key check, test-first
+  steps:
+  - id: P3.T2.S1
+    text: |
+      Write tests FIRST (RED) in the isolation-command test module for
+      packages/fr/src/fr/commands/isolation_cmd.py. Cover:
+      - `fr isolation exec --secret KEY1 --secret KEY2 -- <cmd>` parses repeated
+        `--secret` into a key tuple passed to `Target.exec(keys=...)`.
+      - a `--secret KEY` not declared in the active profile's `secrets:` fails
+        fast with an actionable `IsolationError` BEFORE any exec/mint.
+      - no `--secret` -> `keys=()`.
+      Run the module's pytest (RED).
+  - id: P3.T2.S2
+    text: |
+      Implement the repeatable `--secret/-s` option on the `exec` subcommand in
+      isolation_cmd.py; thread keys to `Target.exec(keys=...)`; do the
+      declared-key fail-fast check against the resolved profile. pytest green.
+  - id: P3.T2.S3
+    text: |
+      Refactor; lint/format/mypy; commit
+      `feat(isolation): fr isolation exec --secret KEY (TDD)`.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,68 @@
+schema_version: 2
+phase:
+  number: 1
+  title: SecretProvider seam + EnvFileProvider (back-compat reseat)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Introduce the provider seam and reseat today's env-file behavior, test-first
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Write tests FIRST (RED) in tests/unit/test_secrets_provider.py. Cover:
+      - `provider_for(ctx)` returns an `EnvFileProvider` when the profile has
+        no `secret_provider` key (back-compat default).
+      - `EnvFileProvider.exec_wrap(ctx, want_secrets=True)` returns
+        `ExecWrap(argv_prefix=(), exec_env={})` — env-file is ambient, no wrap.
+      - `EnvFileProvider.up_prepare(ctx)` ensures the host env-file exists at
+        `secrets_env_file(repo, profile)` (reuses today's path), creating it
+        0600 with the existing header when absent and leaving an existing file
+        untouched (assert via tmp_path-rooted HOME monkeypatch).
+      - `ProfileContext` carries repo, profile, keys (tuple), config (mapping).
+      Run: `cd <worktree> && uv run --project packages/fr --with pytest --with pyyaml pytest tests/unit/test_secrets_provider.py -q -o addopts=""`
+      Expected: import/attribute errors — the module doesn't exist yet.
+  - id: P1.T1.S2
+    text: |
+      Implement packages/fr/src/fr/isolation/secrets.py:
+      - `@dataclass(frozen=True) ProfileContext(repo, profile, keys, config)`.
+      - `@dataclass(frozen=True) ExecWrap(argv_prefix: tuple[str,...], exec_env: Mapping[str,str])`.
+      - `class SecretProvider(Protocol)` with `up_prepare(ctx) -> None` and
+        `exec_wrap(ctx, want_secrets: bool) -> ExecWrap`.
+      - `class EnvFileProvider` — `up_prepare` delegates to the existing
+        env-file ensure logic (factor the body of
+        `local._ensure_mounted_env_file` / `types.secrets_env_file` so both
+        call one helper; do NOT change observable behavior); `exec_wrap`
+        returns the ambient `ExecWrap((), {})`.
+      - `def provider_for(ctx) -> SecretProvider`: read
+        `ctx.config.get("secret_provider", "env-file")`; "env-file" ->
+        EnvFileProvider; unknown -> IsolationError (actionable message).
+      Run the same pytest. Expected: green.
+  - id: P1.T1.S3
+    text: |
+      Refactor for clarity; ensure errors raise `IsolationError`. Confirm NO
+      behavior change for existing env-file profiles by running the existing
+      isolation suite:
+      `cd <worktree> && uv run --project packages/fr --with pytest --with pyyaml pytest tests/unit/test_isolation*.py tests/unit/test_secrets_provider.py -q -o addopts=""`
+      Lint/format/typecheck the changed files:
+      `cd <worktree> && uv run --with ruff ruff check packages/fr/src/fr/isolation/secrets.py tests/unit/test_secrets_provider.py && uv run --with ruff ruff format --check packages/fr/src/fr/isolation/secrets.py tests/unit/test_secrets_provider.py && uv run --project packages/fr mypy packages/fr/src`
+      Commit: `feat(isolation): SecretProvider seam + EnvFileProvider default (TDD)`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

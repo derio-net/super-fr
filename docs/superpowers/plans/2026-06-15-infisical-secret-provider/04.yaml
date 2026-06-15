@@ -1,0 +1,97 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Scaffold + fr-profiles support, skill-doc updates, version bump
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Scaffold an infisical profile, test-first
+  steps:
+  - id: P4.T1.S1
+    text: |
+      Write tests FIRST (RED) extending tests/unit/test_init_scaffold.py. Cover:
+      - `fr init scaffold --secret-provider infisical --infisical-project <id>
+        --infisical-env <env> --infisical-path <p>` writes a profile whose
+        fr-profiles.yaml entry has `secret_provider: infisical` + the `infisical:`
+        block (project_id/env/path/auth with client_id_env/client_secret_env).
+      - for an infisical profile the devcontainer.json runArgs OMIT `--env-file`
+        and the in-container infisical CLI is wired (a `KNOWN_TOOL_FEATURES`
+        entry if present, else APPENDED to `postCreateCommand` — assert the
+        existing POST_CREATE content is preserved, not overwritten).
+      - an env-file profile is unchanged (regression).
+      - scaffold prints the identity-side TTL / least-privilege reminder.
+      Run the test file (RED).
+  - id: P4.T1.S2
+    text: |
+      Implement in packages/fr/src/fr/isolation/scaffold.py (+ the init command
+      options): accept the secret-provider + infisical coordinates; write the
+      fr-profiles block; for infisical profiles omit `--env-file`, wire the
+      token-file mount, compose (not overwrite) the infisical CLI install into
+      postCreateCommand, skip `_ensure_env_placeholders`; emit the reminder.
+      pytest green.
+  - id: P4.T1.S3
+    text: |
+      Refactor; lint/format/mypy; commit
+      `feat(isolation): scaffold infisical profiles (TDD)`.
+- number: 2
+  title: Document `--secret` in the skills, then bump the version
+  steps:
+  - id: P4.T2.S1
+    text: |
+      Update the skill docs (spec scope: fr-isolation, fr-execute, fr-init):
+      - fr-isolation/SKILL.md + fr-execute/SKILL.md: document
+        `fr isolation exec --secret KEY` (on-demand, path-scoped, value never
+        printed; only commands that need a secret request it).
+      - fr-init/SKILL.md: document scaffolding an infisical profile
+        (`--secret-provider infisical` + the infisical coordinates) and the
+        identity-side TTL / least-privilege expectation.
+      Keep it concise and consistent with the existing exec-bridge guidance. No
+      code; verify the files render (no broken markdown).
+  - id: P4.T2.S2
+    text: |
+      Bump the version (user-observable behavior changed — new CLI flag +
+      provider): `cd <worktree> && scripts/bump-version.py patch`, then verify
+      `uv run fr --version` reports the new number and
+      `scripts/bump-version.py --check` passes. Commit the four changed files
+      (three pyproject/plugin sources + uv.lock) together:
+      `chore: bump version for secret-provider feature`.
+  - id: P4.T2.S3
+    text: |
+      Run the FULL gate to confirm green before review:
+      `cd <worktree> && uv run ruff check packages/ tests/ && uv run ruff format --check packages/ tests/ && uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src && uv run pytest -q --no-cov`
+      Fix anything red. Commit only if fixes were needed.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
