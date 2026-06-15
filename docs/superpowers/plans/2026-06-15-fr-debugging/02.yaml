@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Wire the trigger override and README
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Add the Debugging Override to the repo-local rule
+  steps:
+  - id: P2.T1.S1
+    text: |
+      Append a "## Debugging Override" section to plugins/super-fr/rules/fr-plan-override.md, mirroring the Brainstorming Override: in a repo with fr plans (docs/superpowers/plans/) or devcontainer profiles (.devcontainer/<profile>/), debugging a bug / test failure / unexpected behavior uses fr-debugging instead of plain superpowers:systematic-debugging — it enters isolation first. Plain systematic-debugging remains for non-fr repos.
+- number: 2
+  title: Add fr-debugging to the README skills table
+  steps:
+  - id: P2.T2.S1
+    text: |
+      In README.md, add an `fr-debugging` row to the Skills table (near fr-brainstorming): "superpowers systematic-debugging, run inside an isolated workspace; autonomous to a PR with hard stops at the don't-understand and 3+-fixes architecture checkpoints".
+  - id: P2.T2.S2
+    text: |
+      In README.md line ~20, change the super-fr row from "7 skills" to "8 skills".
+  - id: P2.T2.S3
+    text: |
+      Run `cd <worktree> && uv run python -m fr skills` and confirm the new fr-debugging row prints under Skills (exit 0).
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

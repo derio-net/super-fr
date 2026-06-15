@@ -178,6 +178,12 @@ user-level file.
   context) invokes fr-debugging, which reuses the live workspace. A future
   iteration may wire fr-goal's implement step to delegate explicitly.
 
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-06-15-fr-debugging | `derio-net/super-fr` | `2026-06-15-fr-debugging` | — |
+
 ## References
 
 - Wrapped skill: `superpowers:systematic-debugging` (Iron Law, four phases,
