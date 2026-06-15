@@ -1,0 +1,44 @@
+schema_version: 2
+phase:
+  number: 5
+  title: '[manual] Operator: provision Infisical identity + real end-to-end smoke'
+  tag: manual
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Operator-only Infisical setup and live verification
+  steps:
+  - id: P5.T1.S1
+    text: |
+      MANUAL (operator). In Infisical: create a machine identity with
+      **Universal Auth**, scoped **read-only** to the target project + path, and
+      configure a **short Access-Token TTL** on the identity (fr cannot set TTL
+      at mint time — this is the platform-side control the spec relies on).
+      Record its client-id/secret into the host env vars the profile names
+      (`FR_INFISICAL_CLIENT_ID` / `FR_INFISICAL_CLIENT_SECRET`), via the
+      operator's keyring/shell — never committed.
+  - id: P5.T1.S2
+    text: |
+      MANUAL (operator). Create the Infisical project/env/path and the declared
+      secret keys. Scaffold an infisical profile
+      (`fr init scaffold --secret-provider infisical …`), `fr isolation up`, then
+      run a real `fr isolation exec --secret <KEY> -- printenv <KEY>` (or a real
+      consumer) and confirm: the value is injected, it is NOT present without
+      `--secret`, and no token persists after the command. Record results with
+      `fr plan edit <plan-dir> --complete-phase 5 --note "<what was verified>"`.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
