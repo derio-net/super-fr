@@ -11,17 +11,18 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fr.isolation.secrets import ensure_mounted_env_file
+from fr.isolation.secrets import ProfileContext, SecretProvider, provider_for
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
     delete_state,
+    profiles_config,
     resolve_profile,
     save_state,
 )
@@ -59,13 +60,31 @@ def _main_worktree_root(repo_root: Path) -> Path:
 
 
 class LocalWorktreeDevcontainerTarget:
-    def __init__(self, repo_root: Path, runner: Runner = subprocess_runner):
+    def __init__(
+        self,
+        repo_root: Path,
+        runner: Runner = subprocess_runner,
+        provider_factory: Callable[[ProfileContext], SecretProvider] = provider_for,
+    ):
         # resolve() — the mount target must match the realpath git bakes
         # into the worktree's gitdir pointer (symlinked /tmp on macOS etc.).
         # Then normalize to the main toplevel so a worktree-launched run keys
         # off the durable main checkout (#292).
         self.repo_root = _main_worktree_root(Path(repo_root).resolve())
         self.run = runner
+        # provider_factory is a seam (like `runner`) so the secret provider can
+        # be stubbed in tests without a live Infisical / real `infisical` binary.
+        self._provider_factory = provider_factory
+
+    def _profile_context(self, profile: str, worktree: Path) -> ProfileContext:
+        cfg = profiles_config(worktree).get("profiles", {}).get(profile, {}) or {}
+        return ProfileContext(
+            repo=self.repo_root.name,
+            profile=profile,
+            keys=tuple(cfg.get("secrets", []) or []),
+            config=cfg,
+            worktree=worktree,
+        )
 
     # ---------- lifecycle ----------
 
@@ -106,7 +125,8 @@ class LocalWorktreeDevcontainerTarget:
                     f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
                     "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
                 )
-        self._ensure_mounted_env_file(config)
+        ctx = self._profile_context(name, worktree)
+        self._provider_factory(ctx).up_prepare(ctx)
         # Resolve the shared common dir, not <repo_root>/.git: correct even if
         # repo_root is a worktree (a gitfile), independent of normalization (#292).
         git_dir = _git_common_dir(self.repo_root)
@@ -133,19 +153,31 @@ class LocalWorktreeDevcontainerTarget:
         save_state(state)
         return state
 
-    def exec(self, state: IsolationState, argv: list[str]) -> int:
+    def exec(self, state: IsolationState, argv: list[str], keys: Sequence[str] = ()) -> int:
         config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
-        result = self.run(
-            [
-                "devcontainer",
-                "exec",
-                f"--workspace-folder={state.worktree}",
-                f"--config={config}",
-                *argv,
-            ],
-            cwd=state.worktree,
-            capture=False,
-        )
+        ctx = self._profile_context(state.profile, state.worktree)
+        if keys:
+            undeclared = [k for k in keys if k not in ctx.keys]
+            if undeclared:
+                raise IsolationError(
+                    f"--secret {', '.join(undeclared)} not declared in profile "
+                    f"{state.profile!r} (declared: {', '.join(ctx.keys) or 'none'}). "
+                    "Add the key to the profile's `secrets:` or drop --secret."
+                )
+        wrap = self._provider_factory(ctx).exec_wrap(ctx, want_secrets=bool(keys))
+        dev_argv = [
+            "devcontainer",
+            "exec",
+            f"--workspace-folder={state.worktree}",
+            f"--config={config}",
+        ]
+        # exec_env carries only NON-secret env (e.g. nothing for infisical — the
+        # token rides a mounted file, never argv); --remote-env is argv-visible,
+        # so a provider must never put secret material here.
+        for k, v in wrap.exec_env.items():
+            dev_argv += ["--remote-env", f"{k}={v}"]
+        dev_argv += [*wrap.argv_prefix, *argv]
+        result = self.run(dev_argv, cwd=state.worktree, capture=False)
         return result.returncode
 
     def status(self, state: IsolationState) -> dict[str, Any]:
@@ -166,6 +198,10 @@ class LocalWorktreeDevcontainerTarget:
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
+        # Shred any per-request secret material (e.g. the Infisical token-file)
+        # before the workspace goes away. env-file provider: no-op.
+        ctx = self._profile_context(state.profile, state.worktree)
+        self._provider_factory(ctx).cleanup(ctx)
         container = self._container_id(state)
         if container:
             self.run(["docker", "stop", container])
@@ -189,15 +225,6 @@ class LocalWorktreeDevcontainerTarget:
         result = self.run(argv, cwd=self.repo_root)
         if result.returncode != 0:
             raise IsolationError(f"git worktree add failed: {result.stderr}")
-
-    def _ensure_mounted_env_file(self, config: Path) -> None:
-        """Ensure the env-file the profile's devcontainer.json mounts exists.
-
-        Delegates to the shared `secrets.ensure_mounted_env_file` so the
-        EnvFileProvider and this target use one implementation (mount-following,
-        #272). Phase 3 routes this through the provider seam entirely.
-        """
-        ensure_mounted_env_file(config, self.repo_root.name)
 
     def _docker_ps(self, state: IsolationState) -> str:
         result = self.run(
