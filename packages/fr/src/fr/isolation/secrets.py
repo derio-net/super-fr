@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
@@ -49,6 +50,8 @@ class SecretProvider(Protocol):
     def up_prepare(self, ctx: ProfileContext) -> None: ...
 
     def exec_wrap(self, ctx: ProfileContext, want_secrets: bool) -> ExecWrap: ...
+
+    def post_exec(self, ctx: ProfileContext) -> None: ...
 
     def cleanup(self, ctx: ProfileContext) -> None: ...
 
@@ -93,6 +96,9 @@ class EnvFileProvider:
     def exec_wrap(self, ctx: ProfileContext, want_secrets: bool) -> ExecWrap:
         return ExecWrap()
 
+    def post_exec(self, ctx: ProfileContext) -> None:
+        return None
+
     def cleanup(self, ctx: ProfileContext) -> None:
         return None
 
@@ -118,8 +124,10 @@ TokenMinter = Callable[[Sequence[str], Mapping[str, str]], str]
 def _subprocess_mint(argv: Sequence[str], env: Mapping[str, str]) -> str:
     result = subprocess.run(list(argv), env={**os.environ, **env}, capture_output=True, text=True)
     if result.returncode != 0:
+        # Surface stderr only — stdout carries the token on success and must
+        # never leak into an error message / logs.
         raise IsolationError(
-            f"infisical mint failed: {result.stderr.strip() or result.stdout.strip()}"
+            f"infisical mint failed (rc {result.returncode}): {result.stderr.strip()}"
         )
     return result.stdout.strip()
 
@@ -218,20 +226,39 @@ class InfisicalProvider:
             return ExecWrap()
         token = self.auth.mint_token(ctx)
         if token is not None:  # universal-auth host mint; k8s self-auths in-pod
+            # NOTE: a single token-file per (repo, profile). Concurrent
+            # `--secret` execs on one workspace would race on it; serialize or
+            # use per-exec filenames if that becomes real (rework candidate).
             tf = host_token_file(ctx.repo, ctx.profile)
             tf.parent.mkdir(parents=True, exist_ok=True)
             tf.write_text(token)
             tf.chmod(0o600)
         inf = ctx.config["infisical"]
+        # shlex.quote every interpolated value — these come from the committed
+        # fr-profiles.yaml, which is PR/branch-reachable, so an un-quoted value
+        # would be a shell-injection vector into the privileged in-container
+        # shell (where the token is live). The user command rides "$@", never
+        # interpolated.
         run = (
-            f"infisical run --projectId {inf['project_id']} --env {inf['env']} "
-            f"--path {inf['path']} --"
+            "infisical run "
+            f"--projectId {shlex.quote(str(inf['project_id']))} "
+            f"--env {shlex.quote(str(inf['env']))} "
+            f"--path {shlex.quote(str(inf['path']))} --"
         )
         # The token is read from the mounted file INTO the env in-container, so it
         # never appears on any argv (host or container). $0 / "$@" pass the user
         # command through verbatim.
-        script = f'INFISICAL_TOKEN="$(cat {CONTAINER_TOKEN_PATH})" exec {run} "$@"'
+        script = f'INFISICAL_TOKEN="$(cat {shlex.quote(CONTAINER_TOKEN_PATH)})" exec {run} "$@"'
         return ExecWrap(argv_prefix=("sh", "-lc", script, "fr-secret-wrap"), exec_env={})
+
+    def post_exec(self, ctx: ProfileContext) -> None:
+        # Clear the minted token after the command returns (or aborts) — the
+        # fetch happens at command START, so the token is no longer needed.
+        # TRUNCATE, not unlink: the file stays bind-mounted for the next exec;
+        # down() does the full unlink.
+        tf = host_token_file(ctx.repo, ctx.profile)
+        if tf.is_file():
+            tf.write_text("")
 
     def cleanup(self, ctx: ProfileContext) -> None:
         tf = host_token_file(ctx.repo, ctx.profile)

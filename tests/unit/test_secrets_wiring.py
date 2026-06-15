@@ -16,6 +16,7 @@ from fr.isolation.secrets import (
     InfisicalProvider,
     ProfileContext,
     UniversalAuth,
+    host_token_file,
 )
 from fr.isolation.types import IsolationError, IsolationState
 from typer.testing import CliRunner
@@ -104,6 +105,49 @@ def test_exec_undeclared_secret_fails_fast(tmp_path: Path, monkeypatch: pytest.M
     assert fr_.argv_for("devcontainer") == []  # fail-fast: nothing ran, nothing minted
 
 
+def test_exec_secret_uses_no_remote_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The token is conveyed via the mounted file, NOT --remote-env (which is
+    # host-ps-visible). Infisical's exec_env is empty → no --remote-env at all.
+    monkeypatch.setenv("FR_CID", "id")
+    monkeypatch.setenv("FR_CSEC", "secret-val")
+    repo, _, st = _setup(tmp_path, monkeypatch)
+    fr_ = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=fr_, provider_factory=_infisical_factory)
+    target.exec(st, ["pytest"], keys=["DEPLOY_KEY"])
+    (call,) = fr_.argv_for("devcontainer")
+    assert "--remote-env" not in call
+
+
+def test_exec_clears_token_after_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_CID", "id")
+    monkeypatch.setenv("FR_CSEC", "secret-val")
+    repo, _, st = _setup(tmp_path, monkeypatch)
+    target = LocalWorktreeDevcontainerTarget(
+        repo, runner=FakeRunner(), provider_factory=_infisical_factory
+    )
+    target.exec(st, ["pytest"], keys=["DEPLOY_KEY"])
+    # post_exec truncated the token-file after the command returned.
+    assert host_token_file("repo", "sec").read_text() == ""
+
+
+def test_exec_clears_token_on_abort(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_CID", "id")
+    monkeypatch.setenv("FR_CSEC", "secret-val")
+    repo, _, st = _setup(tmp_path, monkeypatch)
+
+    class _Boom:
+        def __call__(self, argv, cwd=None, check=False, capture=True):
+            raise RuntimeError("boom")  # simulate the exec aborting mid-run
+
+    target = LocalWorktreeDevcontainerTarget(
+        repo, runner=_Boom(), provider_factory=_infisical_factory
+    )
+    with pytest.raises(RuntimeError):
+        target.exec(st, ["pytest"], keys=["DEPLOY_KEY"])
+    # finally → post_exec cleared the token even though the run aborted.
+    assert host_token_file("repo", "sec").read_text() == ""
+
+
 class _SpyProvider:
     def __init__(self) -> None:
         self.events: list[str] = []
@@ -114,6 +158,9 @@ class _SpyProvider:
     def exec_wrap(self, ctx: ProfileContext, want_secrets: bool) -> ExecWrap:
         self.events.append("exec_wrap")
         return ExecWrap()
+
+    def post_exec(self, ctx: ProfileContext) -> None:
+        self.events.append("post_exec")
 
     def cleanup(self, ctx: ProfileContext) -> None:
         self.events.append("cleanup")

@@ -52,7 +52,7 @@ POST_CREATE = (
 # feature exists for the Infisical CLI). The operator verifies it on the first
 # real run (see the manual phase / the spec's identity-side TTL note).
 INFISICAL_INSTALL = (
-    "curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash 2>/dev/null; "
+    "curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash; "
     "sudo apt-get install -y infisical || true"
 )
 

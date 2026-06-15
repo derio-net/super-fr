@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fr.isolation.secrets import ProfileContext, SecretProvider, provider_for
+from fr.isolation.secrets import ProfileContext, SecretProvider, host_token_file, provider_for
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -164,7 +164,8 @@ class LocalWorktreeDevcontainerTarget:
                     f"{state.profile!r} (declared: {', '.join(ctx.keys) or 'none'}). "
                     "Add the key to the profile's `secrets:` or drop --secret."
                 )
-        wrap = self._provider_factory(ctx).exec_wrap(ctx, want_secrets=bool(keys))
+        provider = self._provider_factory(ctx)
+        wrap = provider.exec_wrap(ctx, want_secrets=bool(keys))
         dev_argv = [
             "devcontainer",
             "exec",
@@ -177,7 +178,12 @@ class LocalWorktreeDevcontainerTarget:
         for k, v in wrap.exec_env.items():
             dev_argv += ["--remote-env", f"{k}={v}"]
         dev_argv += [*wrap.argv_prefix, *argv]
-        result = self.run(dev_argv, cwd=state.worktree, capture=False)
+        try:
+            result = self.run(dev_argv, cwd=state.worktree, capture=False)
+        finally:
+            # Clear any per-request secret (the infisical token-file) the moment
+            # the command returns OR aborts — the fetch already happened at start.
+            provider.post_exec(ctx)
         return result.returncode
 
     def status(self, state: IsolationState) -> dict[str, Any]:
@@ -202,6 +208,10 @@ class LocalWorktreeDevcontainerTarget:
         # before the workspace goes away. env-file provider: no-op.
         ctx = self._profile_context(state.profile, state.worktree)
         self._provider_factory(ctx).cleanup(ctx)
+        # Defensive (#I1): shred any infisical token-file even if the worktree
+        # config was unreadable (provider_for would then fall back to env-file
+        # and skip cleanup). Idempotent; env-file profiles have no such file.
+        host_token_file(self.repo_root.name, state.profile).unlink(missing_ok=True)
         container = self._container_id(state)
         if container:
             self.run(["docker", "stop", container])

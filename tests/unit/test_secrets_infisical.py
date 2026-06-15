@@ -7,6 +7,7 @@ client-secret or the minted token) ever lands on a command-line argv.
 
 from __future__ import annotations
 
+import shlex
 import stat
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -170,3 +171,40 @@ def test_infisical_cleanup_shreds_token_file(
     assert host_token_file("myrepo", "admin").is_file()
     prov.cleanup(ctx)
     assert not host_token_file("myrepo", "admin").exists()
+
+
+def test_infisical_exec_wrap_quotes_config_values(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A malicious `path` must NOT inject into the in-container shell — shlex.quote
+    # neutralizes it (the value comes from PR/branch-reachable fr-profiles.yaml).
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_CID", "id")
+    monkeypatch.setenv("FR_CSEC", "sec")
+    evil = "/fr/x; touch /tmp/pwned"
+    cfg = {**INFISICAL_CFG, "infisical": {**INFISICAL_CFG["infisical"], "path": evil}}
+    ctx = ProfileContext(
+        repo="myrepo", profile="admin", keys=("DEPLOY_KEY",), config=cfg, worktree=tmp_path
+    )
+    wrap = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter())).exec_wrap(
+        ctx, want_secrets=True
+    )
+    script = wrap.argv_prefix[2]  # the `sh -lc` script
+    assert shlex.quote(evil) in script  # quoted → the `;` is inert
+    assert "--path /fr/x; touch" not in script  # never the raw, injectable form
+
+
+def test_infisical_post_exec_truncates_token_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_CID", "id")
+    monkeypatch.setenv("FR_CSEC", "sec")
+    prov = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter()))
+    ctx = _ctx(tmp_path)
+    prov.exec_wrap(ctx, want_secrets=True)
+    tf = host_token_file("myrepo", "admin")
+    assert tf.read_text() == "tok-abc"
+    prov.post_exec(ctx)
+    assert tf.read_text() == ""  # cleared after the command
+    assert tf.is_file()  # but kept (stays bind-mounted for the next exec)
