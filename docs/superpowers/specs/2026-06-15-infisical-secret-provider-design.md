@@ -16,6 +16,12 @@ devcontainer; "local" is the legacy misnomer) and **k8s** (pods via
 The VK dispatch path is a separate, legacy workflow type (being dropped) and is
 out of scope.
 
+## Implementation Plans
+
+| Plan | Target repo | Slug | Status |
+|------|-------------|------|--------|
+| 2026-06-15-infisical-secret-provider | `derio-net/super-fr` | `2026-06-15-infisical-secret-provider` | — |
+
 ## Problem
 
 Today fr injects secrets into the isolation devcontainer as a **static host
