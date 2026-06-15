@@ -20,6 +20,7 @@ state:
       ticked_at: null
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-06-15T12:32:22+00:00'
+    note: 'User-level rule mirror applied: Debugging Override added to ~/.claude/rules/fr-plan-override.md
+      (matches plugins/super-fr/rules/fr-plan-override.md).'
     observed_prs: []
