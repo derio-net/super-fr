@@ -32,22 +32,23 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-16T16:57:23+00:00'
       note: null
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-06-16T16:57:24+00:00'
+      note: fr repos surfaces in fr skills via dynamic typer introspection; no static
+        edit needed
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-16T16:57:26+00:00'
       note: null
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-16T16:57:28+00:00'
       note: null
   completion:
-    at: null
+    at: '2026-06-16T16:57:29+00:00'
     note: null
     observed_prs: []

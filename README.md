@@ -123,7 +123,23 @@ As a Claude Code plugin (recommended) — add to `~/.claude/settings.json`:
 }
 ```
 
-Or the full user-level install (skills + rules + `fr` CLI + MCP config):
+Or the full user-level install (skills + rules + `fr` CLI + MCP config) — one
+remote line, no manual checkout (it manages a hidden source clone under
+`~/.cache/fr/src` and re-running updates it):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
+```
+
+Prefer to inspect before running:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh -o bootstrap.sh
+less bootstrap.sh
+bash bootstrap.sh
+```
+
+Equivalent from a manual checkout (what the one-liner runs for you):
 
 ```bash
 git clone https://github.com/derio-net/super-fr
@@ -234,6 +250,7 @@ First run per repo pays this once.
 | `fr spec` | Spec status reporting |
 | `fr isolation` | Isolated workspaces: `up`, `exec`, `status`, `down` |
 | `fr init` | Devcontainer profile scaffolding (`scaffold`) |
+| `fr repos` | Instrument locally-checked-out repos with a `plan-config.yaml` (`sync`; never clones) |
 | `fr migrate` | Plan format migration tools |
 | `fr skills` | Condensed overview of the skills + CLI surface |
 
@@ -275,9 +292,23 @@ of main, so anything not on main would be invisible to it.
 
 ## Per-repo profile
 
-Each repo can define `docs/superpowers/plan-config.yaml` to control filename
-patterns, required headers, status values, auto-appended post-deploy phases,
-and dispatch config (project board, labels, target repo).
+Each repo can **optionally** define `docs/superpowers/plan-config.yaml` to
+control filename patterns, required headers, and status values. It is read only
+by `scripts/validate-plans.sh`, which falls back to sane defaults when the file
+is absent — so a repo works without it. (A `dispatch:` block is accepted for
+documentation but is not read by code today.)
+
+To instrument a set of already-checked-out repos with this file in one go —
+without cloning anything — use `fr repos sync`:
+
+```bash
+fr repos sync derio-net/super-fr owner/other          # dry-run preview (default)
+fr repos sync derio-net/super-fr owner/other --yes     # write plan-config.yaml in place
+```
+
+Repos are resolved via `$FR_REPOS_DIR` / `~/repos/<name>` (a missing checkout is
+a warning, not a failure) or a manifest at `~/.config/fr/repos.yaml`; positional
+args are appended to that manifest unless `--no-save`.
 
 ## Requirements
 
