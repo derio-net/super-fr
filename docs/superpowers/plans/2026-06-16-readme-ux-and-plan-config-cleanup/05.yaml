@@ -1,0 +1,54 @@
+schema_version: 2
+phase:
+  number: 5
+  title: README user-first restructure + version bump + full gate
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Restructure README to the user-first IA
+  steps:
+  - id: P5.T1.S1
+    text: |
+      Rewrite README.md to the 7-section IA from the spec: (1) benefit-led intro + "two plugins" one-liner (move the Python-package breakdown out); (2) Quickstart = Install → Run your first goal, placed ABOVE the diagrams; (3) Skills — both tables reformatted to 4 columns (Skill | What it does | How invoked | When) using the exact content in the spec; (4) How it works — relocate the two Mermaid flow diagrams + the "flows compose" note here; (5) Isolation (kept). Lean on crafting-effective-readmes + writing-clearly-and-concisely for prose.
+  - id: P5.T1.S2
+    text: |
+      Continue: (6) Reference — full `fr` CLI table grouped into Everyday vs Maintenance; Plan model; Label lifecycle; Per-repo profile REWORDED (plan-config = live validator profile only; dispatch keys no longer exist; keep `fr repos sync`); a short Components subsection listing fr / fr-dispatch / fr-vk (relocated from the top). (7) Requirements + a one-line pointer to CLAUDE.md for maintainers. Self-check: no broken internal links, no stale mention of the dispatch plan-config keys.
+- number: 2
+  title: Version bump (minor)
+  steps:
+  - id: P5.T2.S1
+    text: |
+      uv run python scripts/bump-version.py minor. Confirm `bump-version.py --check` passes and `uv run fr --version` reports the new number. Reconcile if main moved.
+- number: 3
+  title: Full verification gate
+  steps:
+  - id: P5.T3.S1
+    text: |
+      Full local gate: uv run ruff format --check packages/ tests/; uv run ruff check packages/ tests/; uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src; uv run pytest -q --no-cov; uv run python scripts/bump-version.py --check. All green before delivery.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

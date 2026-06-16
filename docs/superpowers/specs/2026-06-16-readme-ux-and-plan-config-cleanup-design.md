@@ -9,6 +9,7 @@
 
 | Plan | Target repo | Slug | Status |
 |------|-------------|------|--------|
+| 2026-06-16-readme-ux-and-plan-config-cleanup | `derio-net/super-fr` | `2026-06-16-readme-ux-and-plan-config-cleanup` | — |
 
 ## Problem
 

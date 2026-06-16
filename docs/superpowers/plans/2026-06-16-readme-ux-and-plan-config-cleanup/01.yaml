@@ -1,0 +1,58 @@
+schema_version: 2
+phase:
+  number: 1
+  title: fr.plan_config dead-key normalizer
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: strip_dead_keys (text) — TDD
+  steps:
+  - id: P1.T1.S1
+    text: |
+      RED: create tests/unit/test_plan_config.py for strip_dead_keys(text) -> (new_text, removals). Cases: removes the `  save_to:` line inside the top-level `plan:` block; removes a top-level `dispatch:` block at EOF; removes a `dispatch:` block followed by another top-level key (stops at `^\S`); preserves the live keys (plan.filename, header.required, header.status_values), preserves comments, and leaves a COMMENTED `# dispatch:` / `# save_to:` untouched; idempotent on already-clean text (returns input + []); collapses at most one blank line left by a removed block. Run `uv run pytest tests/unit/test_plan_config.py -q --no-cov`; confirm ImportError.
+  - id: P1.T1.S2
+    text: |
+      GREEN: implement strip_dead_keys in packages/fr/src/fr/plan_config.py (stdlib `re` only — text-based, no YAML round-trip, to preserve formatting/comments). Returns (new_text, removals) where removals is a list like ["plan.save_to", "dispatch"]. Rerun; all pass.
+- number: 2
+  title: strip_dead_keys_file — TDD
+  steps:
+  - id: P1.T2.S1
+    text: |
+      RED: add tests for strip_dead_keys_file(path) -> list[str]: writes the stripped file and returns removals; an absent file returns []; an already-clean file returns [] and does not rewrite (mtime/content unchanged). Confirm failure.
+  - id: P1.T2.S2
+    text: |
+      GREEN: implement strip_dead_keys_file in plan_config.py (read → strip → write only if changed). Rerun; pass.
+- number: 3
+  title: REFACTOR + quality gate
+  steps:
+  - id: P1.T3.S1
+    text: |
+      uv run ruff format packages/ tests/; uv run ruff check (fix); uv run mypy packages/fr/src. Rerun test_plan_config.py green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

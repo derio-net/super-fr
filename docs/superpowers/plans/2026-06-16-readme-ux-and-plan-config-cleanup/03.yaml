@@ -1,0 +1,45 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Wire dead-key stripping into fr migrate v1-to-v2
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — migrate strips plan-config dead keys
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED: extend tests/unit/test_v2_migrate.py. Migrating a repo whose docs/superpowers/plan-config.yaml has dead keys also strips them (respecting migrate's dry-run/--yes), and the strip is reported in the migrate summary/result. Confirm failure.
+- number: 2
+  title: GREEN — wire into migrate pass
+  steps:
+  - id: P3.T2.S1
+    text: |
+      GREEN: in migrate.py, add a strip_dead_keys_file call on the repo's plan-config.yaml to the v1-to-v2 pass (same place it rewrites specs), reported in the result and honoring dry-run/--yes. Rerun test_v2_migrate.py; pass.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P3.T3.S1
+    text: |
+      ruff format/check + mypy. Rerun migrate tests green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
