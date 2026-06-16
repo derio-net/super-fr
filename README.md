@@ -4,31 +4,93 @@
 [![CI](https://github.com/derio-net/super-fr/actions/workflows/ci.yml/badge.svg)](https://github.com/derio-net/super-fr/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A Claude Code plugin suite that turns a feature description into a reviewed PR.
-It wraps [superpowers](https://github.com/obra/superpowers) with phase-structured
-plans, mandatory workspace isolation (git worktree + devcontainer), an
-end-to-end goal-to-PR pipeline, and dispatch of plan phases to autonomous
-runners — [VibeKanban](https://github.com/BloopAI/vibe-kanban) today.
+**Describe a feature, get back a reviewed pull request.** Tell super-fr what you
+want, answer one short round of questions, and an agent designs it, writes it
+test-first, reviews its own work, and opens a single PR for you to merge — all
+inside an isolated workspace that never touches your checkout.
+
+It's two Claude Code plugins (plus a small CLI) that wrap
+[superpowers](https://github.com/obra/superpowers) with phase-structured plans,
+mandatory git-worktree + devcontainer isolation, and an optional path to fan a
+plan's phases out to autonomous runners
+([VibeKanban](https://github.com/BloopAI/vibe-kanban) today).
 
 Built and dogfooded by [derio-net](https://github.com/derio-net); installable
 anywhere Claude Code runs.
 
-## What's in the box
+## Quickstart
 
-| Component | Type | What it does |
-|-----------|------|--------------|
-| `super-fr` | plugin | 8 skills: brainstorm → plan → execute, isolation, debugging, the `/fr-goal` pipeline |
-| `super-fr-dispatch` | plugin | 2 skills: dispatch plan phases to runners, operate/debug a runner |
-| `fr` | Python package | The CLI: plan-as-folder engine, GitHub tracking (render → observe → diff → apply), isolation |
-| `fr-dispatch` | Python package | Runner protocol + tick framework (library, runner-agnostic) |
-| `fr-vk` | Python package | VibeKanban adapter: MCP client, card/workspace dispatch, bridge daemon |
+### 1. Install
 
-## Architecture
+As a Claude Code plugin (recommended) — add to `~/.claude/settings.json`:
 
-Both flows share the same artifacts — a spec (`docs/superpowers/specs/`) and a
-plan-as-folder (`docs/superpowers/plans/<slug>/`). Flow 1 is one continuous
-agent session working in isolation on your machine. Flow 2 queues merged plan
-phases to a runner that executes them asynchronously, one agent per phase.
+```json
+{
+  "enabledPlugins": {
+    "super-fr@derio-net": true,
+    "super-fr-dispatch@derio-net": true
+  }
+}
+```
+
+For the full setup (skills + rules + the `fr` CLI + MCP config) in one line — no
+manual checkout; it manages a hidden source clone under `~/.cache/fr/src` and
+re-running updates it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
+```
+
+Prefer to read it first? `curl … -o bootstrap.sh`, inspect, then `bash
+bootstrap.sh`. Just want the CLI? `uv tool install
+'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr'`.
+
+### 2. Run your first goal
+
+In any repo (super-fr scaffolds a devcontainer profile the first time if one is
+missing):
+
+```
+/fr-goal add rate limiting to the webhook receiver
+```
+
+The agent isolates, brainstorms, asks its questions once, then drives
+spec → plan → test-driven implementation → review → a single PR for you to
+merge. That's the whole loop — everything below is detail you can reach for
+when you need it.
+
+## Skills
+
+The two plugins ship ten skills. Most of the time you only type `/fr-goal` and
+the rest are invoked for you; this is the map of what each is and when it fires.
+
+### super-fr
+
+| Skill | What it does | How invoked | When |
+|-------|--------------|-------------|------|
+| `fr-goal` | Brainstorm → spec → plan → TDD → reviewed PR, unattended | `/fr-goal <description>` | You want a feature built end-to-end without babysitting — the usual entry point |
+| `fr-brainstorming` | superpowers brainstorming, inside isolation from the first command | `/fr-brainstorming` or auto (fr-goal step 1) | Designing a feature into a spec before building |
+| `fr-debugging` | systematic-debugging in isolation → fix-PR | `/fr-debugging` or auto | A bug, failing test, or unexpected behavior to root-cause + fix |
+| `fr-plan` | Phase-structured plan-as-folder + spec index | `/fr-plan` or auto (after a spec) | Turning an approved design into an executable plan |
+| `fr-execute` | Implement one agentic phase (Phase > Task > Step), TDD | agent-facing; auto in fr-goal / dispatch | Carrying out assigned phase work (rarely called directly) |
+| `fr-isolation` | Worktree + devcontainer lifecycle | `/fr-isolation` or auto | Running anything that must not touch your base checkout; post-merge cleanup |
+| `fr-init` | Scan repo, interview, scaffold devcontainer profiles | `/fr-init` or auto (first isolated run) | First fr use in a repo with no devcontainer profile |
+| `fr-progress` | Status board, drift audit, spec rollup | `/fr-progress` | "What's in progress?", auditing plan/spec drift |
+
+### super-fr-dispatch
+
+| Skill | What it does | How invoked | When |
+|-------|--------------|-------------|------|
+| `fr-dispatch` | Queue a merged plan's phases to a runner + reconcile Issues | `/fr-dispatch` (`fr apply --to <runner>`) | You merged a plan and want its phases run asynchronously |
+| `fr-runner` | Operate/debug a runner: tick health, stuck phases, metrics | `/fr-runner` | A dispatched phase is stuck, or checking runner/bridge health |
+
+## How it works
+
+There are two ways work flows through super-fr. Both share the same artifacts —
+a spec (`docs/superpowers/specs/`) and a plan-as-folder
+(`docs/superpowers/plans/<slug>/`). **Flow 1** is one continuous agent session
+working in isolation on your machine. **Flow 2** queues merged plan phases to a
+runner that executes them asynchronously, one agent per phase.
 
 ### Flow 1 — goal to PR, locally (`/fr-goal`)
 
@@ -108,76 +170,6 @@ plan → merge), then fan its phases out to a runner with Flow 2. Without
 `--to`, `fr apply` is tracking-only — Issues mirror the plan but no runner is
 involved.
 
-## Quickstart
-
-### Install
-
-As a Claude Code plugin (recommended) — add to `~/.claude/settings.json`:
-
-```json
-{
-  "enabledPlugins": {
-    "super-fr@derio-net": true,
-    "super-fr-dispatch@derio-net": true
-  }
-}
-```
-
-Or the full user-level install (skills + rules + `fr` CLI + MCP config) — one
-remote line, no manual checkout (it manages a hidden source clone under
-`~/.cache/fr/src` and re-running updates it):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
-```
-
-Prefer to inspect before running:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh -o bootstrap.sh
-less bootstrap.sh
-bash bootstrap.sh
-```
-
-Equivalent from a manual checkout (what the one-liner runs for you):
-
-```bash
-git clone https://github.com/derio-net/super-fr
-cd super-fr
-./scripts/install.sh
-```
-
-CLI only:
-
-```bash
-uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr'
-```
-
-### Run a goal end-to-end
-
-In any repo with a devcontainer profile (or let `fr-init` scaffold one):
-
-```
-/fr-goal add rate limiting to the webhook receiver
-```
-
-The agent isolates, brainstorms, asks its questions once, then drives
-spec → plan → TDD implementation → review → a single PR for you to merge.
-
-### Dispatch a merged plan to VibeKanban
-
-```bash
-fr apply docs/superpowers/plans/2026-06-04-my-feature --to vk        # preview (dry-run is the default)
-fr apply docs/superpowers/plans/2026-06-04-my-feature --to vk --yes  # create Issues + queue labels
-```
-
-### Discover state
-
-```bash
-fr status docs/superpowers/plans/<slug>   # read-only plan report (never mutates)
-fr skills                                 # condensed overview of skills + CLI
-```
-
 ## Isolation: worktrees + devcontainers
 
 Every run happens in an isolated workspace — there is **no unisolated
@@ -214,47 +206,34 @@ skill scans the repo, interviews the operator (profiles, tools, credential
 key names, working patterns), and scaffolds profiles via `fr init scaffold`.
 First run per repo pays this once.
 
-## Skills
+## Reference
 
-### super-fr
+### `fr` CLI
 
-| Skill | Description |
-|-------|-------------|
-| `fr-goal` | End-to-end pipeline: brainstorm → one batched Q&A → spec → plan → TDD implementation → reviewed PR, no intermediate approval gates |
-| `fr-brainstorming` | superpowers brainstorming, run inside an isolated workspace from the first command on |
-| `fr-debugging` | superpowers systematic-debugging, run inside isolation (reuse-or-fresh `fix/` branch); autonomous to a fix-PR with hard stops at the don't-understand and 3+-fixes architecture checkpoints |
-| `fr-plan` | Phase-structured plans (plan-as-folder) with operator collaboration and spec index maintenance |
-| `fr-execute` | Execute an agentic phase from a plan (agent-facing; Phase > Task > Step) |
-| `fr-isolation` | Worktree + devcontainer lifecycle via the `fr isolation` CLI |
-| `fr-init` | Scan a repo, interview the operator, scaffold devcontainer profiles |
-| `fr-progress` | Status board, drift audit, spec rollup |
-
-### super-fr-dispatch
-
-| Skill | Description |
-|-------|-------------|
-| `fr-dispatch` | Queue a plan's phases to a runner (`fr apply --to <runner>`) and reconcile its GitHub Issues |
-| `fr-runner` | Operate and debug a runner: tick health, stuck phases, orphan workspace recovery, dispatch metrics |
-
-## `fr` CLI
+Everyday:
 
 | Command | Purpose |
 |---------|---------|
 | `fr apply` | Render + observe + diff + apply a plan to GitHub (dry-run by default; `--to <runner>` queues phases) |
 | `fr status` | Read-only plan report (allowlist-safe; never mutates) |
-| `fr archive` | Move finished plans (and specs) to `implemented/` |
-| `fr undispatch` | Close a plan's tracking Issues and null the fields |
-| `fr pickup` | Output phase scope (markdown) for an agent |
-| `fr repair` | Normalize stale plan/spec refs (dry-run; `--yes` to write) |
-| `fr plan` | Plan editing: `create`, `edit` (tick steps, complete phases), `self-review`, `rework` |
-| `fr spec` | Spec status reporting |
 | `fr isolation` | Isolated workspaces: `up`, `exec`, `status`, `down` |
-| `fr init` | Devcontainer profile scaffolding (`scaffold`) |
-| `fr repos` | Instrument locally-checked-out repos with a `plan-config.yaml` (`sync`; never clones) |
-| `fr migrate` | Plan format migration tools |
+| `fr plan` | Plan editing: `create`, `edit` (tick steps, complete phases), `self-review`, `rework` |
+| `fr archive` | Move finished plans (and specs) to `implemented/` |
 | `fr skills` | Condensed overview of the skills + CLI surface |
 
-## Plan model
+Maintenance:
+
+| Command | Purpose |
+|---------|---------|
+| `fr init` | Devcontainer profile scaffolding (`scaffold`) |
+| `fr repos` | Instrument locally-checked-out repos with a `plan-config.yaml` (`sync`; never clones) |
+| `fr repair` | Normalize stale plan/spec refs **and strip dead `plan-config.yaml` keys** (dry-run; `--yes` to write) |
+| `fr migrate` | Plan format migration (v1→v2; also strips dead `plan-config.yaml` keys) |
+| `fr undispatch` | Close a plan's tracking Issues and null the fields |
+| `fr pickup` | Output phase scope (markdown) for an agent |
+| `fr spec` | Spec status reporting |
+
+### Plan model
 
 - **One plan = one repo's worth of work.** Plans live in the repo they modify.
 - **One phase = one GitHub Issue = one PR.** Phases are scoped for reviewability.
@@ -290,25 +269,34 @@ agent). Tracking-only Issues (no `--to`) carry no lifecycle label.
 and spec are merged to `origin/HEAD` — the runner works from its own checkout
 of main, so anything not on main would be invisible to it.
 
-## Per-repo profile
+### Per-repo profile
 
-Each repo can **optionally** define `docs/superpowers/plan-config.yaml` to
-control filename patterns, required headers, and status values. It is read only
-by `scripts/validate-plans.sh`, which falls back to sane defaults when the file
-is absent — so a repo works without it. (A `dispatch:` block is accepted for
-documentation but is not read by code today.)
+Each repo can **optionally** define `docs/superpowers/plan-config.yaml` to set
+the plan filename pattern, required headers, and status values the plan
+validator enforces. It's read only by `scripts/validate-plans.sh`, which falls
+back to sane defaults when the file is absent — so a repo works without it.
 
-To instrument a set of already-checked-out repos with this file in one go —
-without cloning anything — use `fr repos sync`:
+To drop this file into a set of already-checked-out repos at once — without
+cloning anything — use `fr repos sync`:
 
 ```bash
 fr repos sync derio-net/super-fr owner/other          # dry-run preview (default)
 fr repos sync derio-net/super-fr owner/other --yes     # write plan-config.yaml in place
 ```
 
-Repos are resolved via `$FR_REPOS_DIR` / `~/repos/<name>` (a missing checkout is
-a warning, not a failure) or a manifest at `~/.config/fr/repos.yaml`; positional
-args are appended to that manifest unless `--no-save`.
+Repos resolve via `$FR_REPOS_DIR` / `~/repos/<name>` (a missing checkout is a
+warning, not a failure) or a manifest at `~/.config/fr/repos.yaml`; positional
+args are appended to that manifest unless `--no-save`. `fr repair` and
+`fr migrate` also normalize this file, stripping any legacy keys the toolchain
+no longer reads.
+
+### Components
+
+| Package | What it is |
+|---------|------------|
+| `fr` | The CLI: plan-as-folder engine, GitHub tracking (render → observe → diff → apply), isolation |
+| `fr-dispatch` | Runner protocol + tick framework (library, runner-agnostic) |
+| `fr-vk` | VibeKanban adapter: MCP client, card/workspace dispatch, bridge daemon |
 
 ## Requirements
 
@@ -319,3 +307,8 @@ args are appended to that manifest unless `--no-save`.
 - [uv](https://docs.astral.sh/uv/) (for the `fr` CLI)
 - [VibeKanban](https://github.com/BloopAI/vibe-kanban) MCP server — only for
   dispatch (`npx vibe-kanban@latest --mcp`)
+
+## For maintainers
+
+Contributor workflow, the release/version-bump rule, the bridge-audit rule, and
+the CI gate are documented in [`CLAUDE.md`](CLAUDE.md).
