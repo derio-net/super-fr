@@ -25,6 +25,7 @@ from fr.commands.migrate_cmd import migrate_app
 from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
 from fr.commands.repair_cmd import repair_command
+from fr.commands.repos_cmd import repos_app
 from fr.commands.skills_cmd import skills as skills_command
 from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
@@ -55,6 +56,7 @@ app.add_typer(spec_app, name="spec")
 app.add_typer(migrate_app, name="migrate")
 app.add_typer(isolation_app, name="isolation")
 app.add_typer(init_app, name="init")
+app.add_typer(repos_app, name="repos")
 app.command(name="skills")(skills_command)
 
 

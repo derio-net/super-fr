@@ -1,0 +1,58 @@
+schema_version: 2
+phase:
+  number: 3
+  title: scripts/bootstrap.sh remote one-liner installer
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Integration test (RED)
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED: create tests/integration/test_bootstrap_sh.py following tests/integration/test_install_sh.py patterns. Build a fixture "source" git repo in tmp_path containing scripts/bootstrap.sh (copied from the repo under test) and a STUB scripts/install.sh that writes its argv to a marker file. Run bootstrap.sh with FR_SRC_DIR pointed at a temp dir and the origin set to the fixture (file:// clone). Assert: the source dir is populated, and the stub install.sh ran with forwarded args (e.g. `--uninstall`). Confirm failure (bootstrap.sh absent).
+  - id: P3.T1.S2
+    text: |
+      Confirm the test FAILS for the right reason (missing scripts/bootstrap.sh), not a fixture bug.
+- number: 2
+  title: Implement bootstrap.sh (GREEN)
+  steps:
+  - id: P3.T2.S1
+    text: |
+      GREEN: write scripts/bootstrap.sh per spec Part A — set -euo pipefail; preflight git/uv/jq; SRC=${FR_SRC_DIR:-$HOME/.cache/fr/src/super-fr}; clone if absent else `git -C "$SRC" fetch --quiet origin main && git -C "$SRC" reset --hard origin/main`; `exec "$SRC/scripts/install.sh" "$@"`. Make the origin URL overridable (FR_SRC_REMOTE) so the test can point at a file:// fixture. `chmod +x scripts/bootstrap.sh`.
+  - id: P3.T2.S2
+    text: |
+      Rerun tests/integration/test_bootstrap_sh.py; pass.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P3.T3.S1
+    text: |
+      If shellcheck is available, run it on scripts/bootstrap.sh and fix findings; otherwise note its absence. Rerun the integration test green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-06-16T16:51:01+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-06-16T16:51:02+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-06-16T16:51:03+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-06-16T16:51:05+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-06-16T16:51:06+00:00'
+      note: null
+  completion:
+    at: '2026-06-16T16:51:07+00:00'
+    note: null
+    observed_prs: []
