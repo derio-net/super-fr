@@ -1,6 +1,6 @@
 # super-fr
 
-[![GitHub Release](https://img.shields.io/github/v/release/derio-net/super-fr)](https://github.com/derio-net/super-fr/releases)
+[![GitHub Release](https://badgen.net/github/release/derio-net/super-fr/stable)](https://github.com/derio-net/super-fr/releases)
 [![CI](https://github.com/derio-net/super-fr/actions/workflows/ci.yml/badge.svg)](https://github.com/derio-net/super-fr/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
