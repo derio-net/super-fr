@@ -188,17 +188,3 @@ def is_queued(observed_labels: frozenset[str] | set[str]) -> bool:
     return any(
         label in QUEUE_MARKER_NAMES or label.startswith("runner:") for label in observed_labels
     )
-
-
-def def_for_name(name: str, canonical: LabelDef) -> LabelDef:
-    """Return *canonical* if *name* matches its registry name; otherwise
-    return a default-gray LabelDef with empty description.
-
-    Used by dispatch to handle operator-overridden label names (e.g.
-    ``labels.agentic: "queued"`` in plan-config.yaml).  The fallback
-    ensures ensure_labels always receives a valid LabelDef regardless of
-    whether the configured name is in the registry.
-    """
-    if name == canonical.name:
-        return canonical
-    return LabelDef(name, "ededed", "")

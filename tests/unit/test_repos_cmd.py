@@ -64,8 +64,9 @@ def test_yes_writes_template(env):
     assert "WROTE" in res.output
     text = _cfg(root).read_text()
     assert "YYYY-MM-DD-{name}.md" in text
-    assert "# dispatch:" in text
-    assert "derio-net/super-fr" in text
+    # Live profile only — no dead keys generated.
+    assert "dispatch" not in text
+    assert "save_to" not in text
 
 
 def test_missing_checkout_warns_and_exits_zero(env):

@@ -108,9 +108,8 @@ def sync(
         if not yes:
             console.print(f"DRY-RUN (would write)  {entry.repo}  — {cfg}")
             continue
-        owner, _, name = entry.repo.partition("/")
         cfg.parent.mkdir(parents=True, exist_ok=True)
-        cfg.write_text(render_plan_config(owner, name))
+        cfg.write_text(render_plan_config())
         console.print(f"WROTE           {entry.repo}  — {cfg}")
 
     # Durably record well-formed one-off args (idempotent) unless suppressed or previewing.
