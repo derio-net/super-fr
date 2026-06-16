@@ -33,11 +33,45 @@ def scaffold(
     no_commit: bool = typer.Option(
         False, "--no-commit", help="Write the files only; do not commit the profile."
     ),
+    secret_provider: str = typer.Option(
+        "env-file", "--secret-provider", help="Secret backend: env-file (default) | infisical."
+    ),
+    infisical_project: str | None = typer.Option(
+        None,
+        "--infisical-project",
+        help="Infisical project_id (required for --secret-provider infisical).",
+    ),
+    infisical_env: str | None = typer.Option(
+        None, "--infisical-env", help="Infisical environment slug (e.g. prod)."
+    ),
+    infisical_path: str | None = typer.Option(
+        None,
+        "--infisical-path",
+        help="Infisical secret path — the isolation boundary; scope narrowly.",
+    ),
 ) -> None:
     """Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus
     host secrets placeholders. The commit is what lets `fr isolation up` see the
     profile; pass --no-commit to write only."""
     try:
+        infisical = None
+        if secret_provider == "infisical":
+            if not (infisical_project and infisical_env and infisical_path):
+                missing = [
+                    flag
+                    for flag, val in (
+                        ("--infisical-project", infisical_project),
+                        ("--infisical-env", infisical_env),
+                        ("--infisical-path", infisical_path),
+                    )
+                    if not val
+                ]
+                raise IsolationError(f"--secret-provider infisical requires {', '.join(missing)}.")
+            infisical = {
+                "project_id": infisical_project,
+                "env": infisical_env,
+                "path": infisical_path,
+            }
         path = scaffold_profile(
             repo.resolve(),
             profile,
@@ -47,6 +81,8 @@ def scaffold(
             default=default,
             force=force,
             commit=not no_commit,
+            secret_provider=secret_provider,
+            infisical=infisical,
         )
     except IsolationError as err:
         typer.echo(f"error: {err}")

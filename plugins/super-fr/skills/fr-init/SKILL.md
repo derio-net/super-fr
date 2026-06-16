@@ -47,9 +47,9 @@ Cover, with scan-informed recommended options:
    (names only, never values). **Do NOT ask for a GitHub token by
    default:** push, PR creation, and every `fr`-driven gh call run on the
    authenticated HOST (fr-isolation's credential boundary) — the container
-   needs no GH_TOKEN for the standard pipeline. Offer it only for an
-   explicit in-container-gh-writes profile (e.g. `admin`), never the
-   default.
+   needs no GH_TOKEN — gh is host-side. A non-default profile may still
+   declare *other* in-container credentials (e.g. `KUBECONFIG_B64`, a
+   deploy or registry token), but never a GitHub token.
 4. **Working patterns** — test/build/run commands worth recording in the
    profile's purpose/notes so future runs know the repo's verbs.
 
@@ -58,9 +58,20 @@ Cover, with scan-informed recommended options:
 ```bash
 fr init scaffold --repo . --profile dev --purpose "day-to-day development" \
     --tool uv --tool node --default
-fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
-    --secret GH_TOKEN --secret KUBECONFIG_B64
+fr init scaffold --repo . --profile admin --purpose "in-cluster deploys" \
+    --secret KUBECONFIG_B64 --secret REGISTRY_TOKEN
+# runtime secret fetch instead of a host env-file (docker substrate):
+fr init scaffold --repo . --profile admin --purpose "in-cluster deploys" \
+    --secret DEPLOY_KEY --secret-provider infisical \
+    --infisical-project <uuid> --infisical-env prod --infisical-path /fr/<repo>/admin
 ```
+
+For `--secret-provider infisical`, the profile fetches secrets at runtime
+(see fr-isolation's `--secret`) instead of a host env-file: no plaintext on
+disk, values injected per-command. The operator must create a read-only,
+path-scoped Infisical machine identity with a short Access-Token TTL (set on
+the identity) and export `FR_INFISICAL_CLIENT_ID` / `FR_INFISICAL_CLIENT_SECRET`
+on the host — scaffold prints this reminder.
 
 Each call writes:
 

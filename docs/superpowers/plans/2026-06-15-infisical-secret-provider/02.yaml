@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 2
+  title: InfisicalProvider + UniversalAuth + token-file conveyance
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: InfisicalAuth sub-seam — UniversalAuth host-side mint, KubernetesAuth placeholder,
+    test-first
+  steps:
+  - id: P2.T1.S1
+    text: |
+      Write tests FIRST (RED) in tests/unit/test_secrets_infisical.py. Inject a
+      fake mint runner (subprocess seam, mirroring local.Runner) so no network /
+      no real infisical binary is needed. Cover:
+      - `UniversalAuth(ctx).mint_token()` reads client-id/secret from the env
+        vars named in `ctx.config["infisical"]["auth"]`
+        (`client_id_env`/`client_secret_env`), invokes the mint, returns the
+        token string.
+      - the client-secret is passed to the mint via ENV/stdin, NEVER as an argv
+        element (assert the recorded argv contains neither the secret value nor
+        a `--client-secret=` form).
+      - missing client-id/secret env var -> `IsolationError` naming the missing
+        var.
+      - `KubernetesAuth(ctx).mint_token()` returns None (placeholder; no host mint).
+      Run: `cd <worktree> && uv run --project packages/fr --with pytest --with pyyaml pytest tests/unit/test_secrets_infisical.py -q -o addopts=""` (RED).
+  - id: P2.T1.S2
+    text: |
+      Implement in secrets.py: `class InfisicalAuth(Protocol)` with
+      `mint_token(ctx) -> str | None`; `UniversalAuth` (host-side mint via the
+      injected runner: `infisical login --method=universal-auth --plain --silent`
+      with client-id/secret supplied through the subprocess env, token captured
+      from stdout, never logged); `KubernetesAuth` returning None with a
+      docstring pointing at the spec's implementor note. Select via
+      `infisical.auth.method` (universal-auth | kubernetes-auth). pytest green.
+  - id: P2.T1.S3
+    text: |
+      Refactor; lint/format/mypy the changed files; commit
+      `feat(isolation): InfisicalAuth sub-seam — UniversalAuth host mint (TDD)`.
+- number: 2
+  title: InfisicalProvider — path-scoped exec_wrap + 0600 token-file lifecycle, test-first
+  steps:
+  - id: P2.T2.S1
+    text: |
+      Extend tests/unit/test_secrets_infisical.py (RED). Cover:
+      - `InfisicalProvider.exec_wrap(ctx, want_secrets=True)` returns
+        `argv_prefix == ("infisical","run","--projectId",<id>,"--env",<env>,"--path",<path>,"--")`
+        from the profile's `infisical:` block, and `exec_env` conveys the token
+        by reference to the mounted token-file path (NOT the token value, and
+        NOT on argv).
+      - `exec_wrap(ctx, want_secrets=False)` returns the empty ExecWrap (no wrap,
+        no mint).
+      - `up_prepare` creates a 0600 host token-file and persists no secret;
+        raises `IsolationError` when the host mint path or the configured
+        in-container `infisical` CLI presence cannot be validated (inject the
+        checks).
+      - the provider's `down`/cleanup shreds (unlinks) the token-file, and a
+        simulated abort (exception during exec) still triggers cleanup.
+      Run the pytest (RED).
+  - id: P2.T2.S2
+    text: |
+      Implement `InfisicalProvider` in secrets.py: holds an `InfisicalAuth`
+      chosen by method; `up_prepare` validates config + both infisical
+      touchpoints and creates the 0600 token-file; `exec_wrap` mints per request
+      (via the auth), writes the token into the token-file, and returns the
+      `infisical run --projectId --env --path --` prefix plus an `exec_env` that
+      points the in-container CLI at the mounted token-file (token read into env
+      in-container, not argv); register a cleanup that shreds the token-file on
+      down and on abort. pytest green.
+  - id: P2.T2.S3
+    text: |
+      Refactor; lint/format/mypy; commit
+      `feat(isolation): InfisicalProvider — path-scoped fetch + token-file (TDD)`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-15T20:31:38+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-06-15T20:31:40+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-06-15T20:31:41+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-15T20:31:43+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-15T20:31:44+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-06-15T20:31:46+00:00'
+      note: null
+  completion:
+    at: '2026-06-15T20:31:48+00:00'
+    note: null
+    observed_prs: []

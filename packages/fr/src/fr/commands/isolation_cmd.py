@@ -71,6 +71,13 @@ def exec(  # noqa: A001 - typer command name
     branch: str | None = typer.Option(
         None, help="Isolation branch (default: the single active workspace)."
     ),
+    secret: list[str] = typer.Option(
+        [],
+        "--secret",
+        "-s",
+        help="Secret key this command needs (repeatable). Fetched on demand "
+        "for an infisical profile; must be declared in the profile's secrets.",
+    ),
 ) -> None:
     """Run a command inside the isolation container (exit code passthrough)."""
     root = repo.resolve()
@@ -105,7 +112,12 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target(repo).exec(state, argv))
+    try:
+        code = _target(repo).exec(state, argv, keys=secret)
+    except IsolationError as e:  # e.g. an undeclared --secret key (fail-fast, pre-mint)
+        _fail(e)
+        return
+    raise typer.Exit(code)
 
 
 @isolation_app.command()

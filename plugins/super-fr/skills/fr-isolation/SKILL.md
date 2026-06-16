@@ -50,17 +50,24 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
 - EVERY build, test, lint, and run command goes through
   `fr isolation exec -- ...`. File edits happen in the worktree directly
   (it's host-visible); execution happens in the container.
-- Credential boundary: the container sees only the profile's env-file
-  (`~/.config/fr/secrets/<repo>/<profile>.env`). `gh` in-container is
-  unauthenticated unless that file provides a token. Push and PR creation
-  default to the HOST (run them outside `exec`, from the worktree) — the
-  operator's credentials never enter the container implicitly.
+- Credential boundary: an `env-file` profile (the default) makes its declared
+  secrets ambient in the container via the mounted
+  `~/.config/fr/secrets/<repo>/<profile>.env`. Push and PR creation default to
+  the HOST (run them outside `exec`, from the worktree) — the operator's
+  credentials never enter the container implicitly.
+- On-demand secrets (`infisical` profiles): most commands need no secret; for a
+  command that does, request it explicitly — `fr isolation exec --secret KEY
+  [--secret KEY2] -- CMD` (repeatable). The value is fetched at runtime
+  (path-scoped) and injected into that one command's env; it is never printed to
+  stdout/transcript/logs, and the bootstrap token never lands on any argv. A
+  `--secret` key must be declared in the profile's `secrets:` (fail-fast).
 - ALL GitHub interaction relies on an AUTHENTICATED HOST: pushes, PR
   creation, and `fr isolation status`/`down`'s PR checks (`gh pr view`)
   all use the host's gh/git auth. The container needs NO GitHub token for
   the standard pipeline — never ask the operator for one to make
-  isolation work; in-container gh writes are an explicit opt-in profile
-  (e.g. `admin` with GH_TOKEN), not a requirement.
+  isolation work. A non-default profile may carry *other* in-container
+  credentials (e.g. `KUBECONFIG_B64`, a deploy/registry token), but gh
+  itself stays host-side — a container GH_TOKEN is not a thing here.
 - The Claude Code harness resets the persistent shell cwd back to the base
   repo between calls, so every host-side git/gh op is a compound
   `cd <worktree> && gh …` / `cd <worktree> && git push`. The isolation
