@@ -48,9 +48,10 @@ app.command(name="undispatch", help="Close a plan's tracking Issues and null the
     undispatch_command
 )
 app.command(name="pickup", help="Output phase scope (markdown) for an agent.")(pickup_command)
-app.command(name="repair", help="Normalize stale plan/spec refs (dry-run; --yes to write).")(
-    repair_command
-)
+app.command(
+    name="repair",
+    help="Normalize stale plan/spec refs + strip dead plan-config keys (dry-run; --yes to write).",
+)(repair_command)
 app.add_typer(plan_app, name="plan")
 app.add_typer(spec_app, name="spec")
 app.add_typer(migrate_app, name="migrate")

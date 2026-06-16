@@ -9,8 +9,8 @@ holds the pieces with no CLI/typer coupling so they're unit-testable:
   `$FR_REPOS_DIR` / `~/repos/<name>` convention used by
   `fr_dispatch._repo_checkout_root` (kept here, in the base package, so the
   command never reaches across the `fr_dispatch -> fr` layering boundary).
-- `render_plan_config` — the per-repo template (live validator profile plus a
-  commented, documentation-only dispatch stub).
+- `render_plan_config` — the per-repo template (the live validator profile
+  read by scripts/validate-plans.sh; no dispatch keys).
 - `append_to_manifest` — record one-off args durably, idempotently.
 """
 

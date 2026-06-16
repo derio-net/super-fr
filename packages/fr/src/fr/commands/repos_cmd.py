@@ -75,9 +75,9 @@ def sync(
 ) -> None:
     """Write docs/superpowers/plan-config.yaml into each checked-out repo.
 
-    The file is a per-repo validator profile (read by scripts/validate-plans.sh)
-    plus a commented, documentation-only dispatch stub. It is optional — a repo
-    works without it — so this is convenience instrumentation, never a clone.
+    The file is a per-repo validator profile (read by scripts/validate-plans.sh).
+    It is optional — a repo works without it — so this is convenience
+    instrumentation, never a clone.
     """
     args = list(repos or [])
     mpath = _manifest_path(manifest)

@@ -120,6 +120,20 @@ def test_strip_is_idempotent() -> None:
     assert removals == []
 
 
+def test_strip_only_removes_save_to_inside_plan_block() -> None:
+    from fr.plan_config import strip_dead_keys
+
+    # A `save_to:` nested under some OTHER top-level key is not the dead
+    # `plan.save_to` and must be preserved (spec contract).
+    text = (
+        'plan:\n  filename: "YYYY-MM-DD-{name}.md"\n\n'
+        "header:\n  save_to: keep-me\n  required:\n    - Status\n"
+    )
+    out, removals = strip_dead_keys(text)
+    assert "save_to: keep-me" in out
+    assert removals == []
+
+
 # --- strip_dead_keys_file ----------------------------------------------------
 
 

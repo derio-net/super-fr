@@ -33,24 +33,29 @@ def strip_dead_keys(text: str) -> tuple[str, list[str]]:
     lines = text.splitlines(keepends=True)
     out: list[str] = []
     removals: list[str] = []
+    in_plan_block = False  # only strip `save_to` inside the top-level `plan:` map
     i = 0
     n = len(lines)
     while i < n:
         line = lines[i]
-        stripped = line.rstrip("\n")
-        if _DISPATCH_RE.match(stripped):
+        stripped = line.rstrip("\r\n")
+        is_top_level = bool(stripped) and not stripped[:1].isspace()
+        if is_top_level and _DISPATCH_RE.match(stripped):
             removals.append("dispatch")
+            in_plan_block = False
             i += 1
             # Consume the block body: blank lines and more-indented lines, up to
             # the next top-level key (a line starting with a non-space) or EOF.
             while i < n:
-                body = lines[i].rstrip("\n")
+                body = lines[i].rstrip("\r\n")
                 if body.strip() == "" or body[:1].isspace():
                     i += 1
                     continue
                 break
             continue
-        if _SAVE_TO_RE.match(stripped):
+        if is_top_level:
+            in_plan_block = stripped.startswith("plan:")
+        if in_plan_block and _SAVE_TO_RE.match(stripped):
             removals.append("plan.save_to")
             i += 1
             continue
