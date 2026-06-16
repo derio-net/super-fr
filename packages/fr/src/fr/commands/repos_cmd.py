@@ -44,6 +44,12 @@ def _manifest_path(manifest: Path | None) -> Path:
     return Path(env) if env else DEFAULT_MANIFEST
 
 
+def _is_repo_ref(repo: str) -> bool:
+    """True for a well-formed `owner/name` (exactly one slash, both parts set)."""
+    owner, sep, name = repo.partition("/")
+    return bool(sep) and bool(owner) and bool(name)
+
+
 def _collection(manifest_path: Path, args: list[str]) -> list[RepoEntry]:
     """Manifest entries first, then positional args; deduped by repo (first wins)."""
     entries = load_manifest(manifest_path)
@@ -88,6 +94,9 @@ def sync(
         raise typer.Exit(2)
 
     for entry in entries:
+        if not _is_repo_ref(entry.repo):
+            console.print(f"WARN (malformed)  {entry.repo}  — expected owner/repo")
+            continue
         root = checkout_root(entry)
         if not root.exists() or not (root / ".git").exists():
             console.print(f"WARN (missing)  {entry.repo}  — not checked out at {root}")
@@ -101,10 +110,11 @@ def sync(
             continue
         owner, _, name = entry.repo.partition("/")
         cfg.parent.mkdir(parents=True, exist_ok=True)
-        cfg.write_text(render_plan_config(owner, name or owner))
+        cfg.write_text(render_plan_config(owner, name))
         console.print(f"WROTE           {entry.repo}  — {cfg}")
 
-    # Durably record one-off args (idempotent) unless suppressed or previewing.
+    # Durably record well-formed one-off args (idempotent) unless suppressed or previewing.
     if yes and not no_save:
         for a in args:
-            append_to_manifest(mpath, a)
+            if _is_repo_ref(a):
+                append_to_manifest(mpath, a)

@@ -37,12 +37,23 @@ def _cfg(root: Path) -> Path:
 
 
 def test_dry_run_is_default_and_writes_nothing(env):
-    repos_dir, _ = env
+    repos_dir, manifest = env
     root = _checkout(repos_dir, "super-fr")
     res = runner.invoke(app, ["repos", "sync", "derio-net/super-fr"])
     assert res.exit_code == 0, res.output
     assert "DRY-RUN" in res.output
     assert not _cfg(root).exists()
+    # Dry-run must NOT append the arg to the manifest (side-effect gated on --yes).
+    assert not manifest.exists()
+
+
+def test_malformed_arg_warns_and_is_not_persisted(env):
+    _, manifest = env
+    res = runner.invoke(app, ["repos", "sync", "not-a-repo-ref", "--yes"])
+    assert res.exit_code == 0, res.output
+    assert "WARN (malformed)" in res.output
+    # A malformed ref is never written to the durable manifest.
+    assert not manifest.exists()
 
 
 def test_yes_writes_template(env):

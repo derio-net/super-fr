@@ -38,7 +38,9 @@ if [ -d "$SRC/.git" ]; then
 else
   echo "Cloning super-fr into $SRC ..."
   mkdir -p "$(dirname "$SRC")"
-  git clone "$REMOTE" "$SRC"
+  # install.sh's preflight requires HEAD == main; clone main explicitly so a
+  # fork/mirror with a different default branch fails here, not opaquely later.
+  git clone --branch main "$REMOTE" "$SRC"
 fi
 
 echo "Running installer ..."
