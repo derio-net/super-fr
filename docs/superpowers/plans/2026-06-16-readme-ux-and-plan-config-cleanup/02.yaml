@@ -1,0 +1,52 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Wire dead-key stripping into fr repair
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — repair strips plan-config dead keys
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED: extend tests/unit/test_repair.py. In a tmp repo with docs/superpowers/plan-config.yaml carrying save_to + a dispatch block: (a) repair dry-run reports the removals (e.g. a Rewrite/record naming "plan-config.yaml" + "dispatch") and writes NOTHING; (b) repair --yes writes the stripped file (live profile intact); (c) a repo whose plan-config is already clean reports no plan-config change; (d) repair stays idempotent. Confirm the new assertions fail.
+- number: 2
+  title: GREEN — wire into repair_repo + reporting
+  steps:
+  - id: P2.T2.S1
+    text: |
+      GREEN: in repair.py, call fr.plan_config.strip_dead_keys_file on repo_root/docs/superpowers/plan-config.yaml as part of repair_repo; represent each removal in RepairResult (reuse Rewrite with field="plan-config dead key", old=<key>, new="(removed)", or add a dedicated removals list — whichever keeps _emit_text/_emit_json clean). Respect dry-run: compute removals always, write only when applied.
+  - id: P2.T2.S2
+    text: |
+      Update repair_cmd.py _emit_text/_emit_json to surface the plan-config removals. Rerun test_repair.py + test_repair_cmd.py; all pass.
+- number: 3
+  title: REFACTOR + quality gate
+  steps:
+  - id: P2.T3.S1
+    text: |
+      ruff format/check + mypy packages/fr/src. Rerun repair tests green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-16T21:02:53+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-16T21:02:53+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-16T21:02:54+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-06-16T21:02:55+00:00'
+      note: null
+  completion:
+    at: '2026-06-16T21:02:56+00:00'
+    note: null
+    observed_prs: []

@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Drop dispatch stub from template, remove dead helper, strip repo file
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — render_plan_config emits no dispatch
+  steps:
+  - id: P4.T1.S1
+    text: |
+      RED: update tests/unit/test_repos_module.py render tests. Replace test_render_plan_config_dispatch_is_commented_and_substituted with one asserting the rendered text contains NO "dispatch" line (commented or not) and still carries the live validator profile. Reflect the new signature (render_plan_config() takes no owner/repo). Confirm failure.
+  - id: P4.T1.S2
+    text: |
+      Adjust test_render_plan_config_validator_profile_parses + any caller in test_repos_cmd.py for the new no-arg signature. Confirm the render tests fail for the right reason (old signature/stub still present).
+- number: 2
+  title: GREEN — template + call site + delete def_for_name
+  steps:
+  - id: P4.T2.S1
+    text: |
+      GREEN: in repos.py, drop the commented dispatch block from _PLAN_CONFIG_TEMPLATE and simplify render_plan_config to take no args (no __OWNER__/__REPO__ substitution). Update the call site in repos_cmd.py (drop owner/name split feeding render). Rerun repos tests; pass.
+  - id: P4.T2.S2
+    text: |
+      Delete def_for_name (and its docstring) from packages/fr/src/fr/labels.py — zero callers, not exported, untested. Run `uv run mypy packages/fr/src` and the full unit suite for labels/dispatch to confirm nothing referenced it.
+- number: 3
+  title: Strip this repo's plan-config.yaml (dogfood) + quality
+  steps:
+  - id: P4.T3.S1
+    text: |
+      Strip docs/superpowers/plan-config.yaml in THIS repo to the live profile (run the new normalizer or `uv run fr repair --yes` and confirm only the plan-config dead keys changed). Verify scripts/validate-plans.sh still accepts the repo's plans. ruff format/check + mypy green.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-06-16T21:11:20+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-06-16T21:11:22+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-06-16T21:11:24+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-06-16T21:11:25+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-06-16T21:11:26+00:00'
+      note: null
+  completion:
+    at: '2026-06-16T21:11:28+00:00'
+    note: null
+    observed_prs: []

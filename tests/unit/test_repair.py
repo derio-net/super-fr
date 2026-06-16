@@ -187,3 +187,50 @@ def test_repair_never_touches_fenced_blocks_after_table(repo: Path) -> None:
     assert (
         f"| fake | row | `docs/superpowers/archived-plans/{SLUG}/` | — |" in text
     )  # fence untouched
+
+
+# --- plan-config dead-key stripping (2026-06-16 cleanup) ---------------------
+
+_DEAD_PLAN_CONFIG = (
+    'plan:\n  filename: "YYYY-MM-DD-{name}.md"\n  save_to: docs/superpowers/plans/\n\n'
+    "dispatch:\n  target: github-issues\n  owner: derio-net\n\n"
+    "header:\n  required:\n    - Status\n"
+)
+
+
+def _write_plan_config(repo: Path, text: str) -> Path:
+    cfg = repo / "docs/superpowers/plan-config.yaml"
+    cfg.write_text(text)
+    return cfg
+
+
+def test_repair_reports_plan_config_dead_keys_dry_run(repo: Path) -> None:
+    cfg = _write_plan_config(repo, _DEAD_PLAN_CONFIG)
+    result = repair_repo(repo, write=False)
+    removed = {r.old for r in result.rewrites if r.file.name == "plan-config.yaml"}
+    assert removed == {"plan.save_to", "dispatch"}
+    # Dry-run writes nothing.
+    assert cfg.read_text() == _DEAD_PLAN_CONFIG
+
+
+def test_repair_strips_plan_config_dead_keys_on_write(repo: Path) -> None:
+    cfg = _write_plan_config(repo, _DEAD_PLAN_CONFIG)
+    repair_repo(repo, write=True)
+    text = cfg.read_text()
+    assert "save_to" not in text
+    assert "dispatch:" not in text
+    assert 'filename: "YYYY-MM-DD-{name}.md"' in text  # live key intact
+
+
+def test_repair_clean_plan_config_no_rewrite(repo: Path) -> None:
+    clean = 'plan:\n  filename: "YYYY-MM-DD-{name}.md"\n\nheader:\n  required:\n    - Status\n'
+    _write_plan_config(repo, clean)
+    result = repair_repo(repo, write=True)
+    assert not [r for r in result.rewrites if r.file.name == "plan-config.yaml"]
+
+
+def test_repair_plan_config_is_idempotent(repo: Path) -> None:
+    _write_plan_config(repo, _DEAD_PLAN_CONFIG)
+    repair_repo(repo, write=True)
+    again = repair_repo(repo, write=True)
+    assert not [r for r in again.rewrites if r.file.name == "plan-config.yaml"]

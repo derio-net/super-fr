@@ -113,31 +113,18 @@ def test_checkout_root_explicit_repos_dir_kwarg_wins_over_env(monkeypatch) -> No
 # --- render_plan_config ------------------------------------------------------
 
 
-def _uncommented(text: str) -> str:
-    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
-
-
-def test_render_plan_config_validator_profile_parses() -> None:
+def test_render_plan_config_is_live_profile_only() -> None:
     from fr.repos import render_plan_config
 
-    text = render_plan_config("derio-net", "super-fr")
-    data = yaml.safe_load(_uncommented(text))
+    text = render_plan_config()  # no args — the dispatch stub is gone
+    data = yaml.safe_load(text)
     assert data["plan"]["filename"] == "YYYY-MM-DD-{name}.md"
     assert "Spec" in data["header"]["required"]
     assert "Status" in data["header"]["required"]
     assert "Not Started" in data["header"]["status_values"]
-
-
-def test_render_plan_config_dispatch_is_commented_and_substituted() -> None:
-    from fr.repos import render_plan_config
-
-    text = render_plan_config("derio-net", "super-fr")
-    # The dispatch block must be present but commented (documentation-only).
-    assert "# dispatch:" in text
-    assert "derio-net/super-fr" in text
-    # And it must NOT appear in the live (uncommented) yaml.
-    data = yaml.safe_load(_uncommented(text))
-    assert "dispatch" not in data
+    # No dead keys emitted (neither dispatch nor save_to, commented or live).
+    assert "dispatch" not in text
+    assert "save_to" not in text
 
 
 # --- append_to_manifest ------------------------------------------------------

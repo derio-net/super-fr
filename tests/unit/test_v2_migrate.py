@@ -1008,3 +1008,42 @@ def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
     text = (moved_spec if moved_spec.exists() else spec).read_text()
     assert "| `2026-05-10-old` |" in text
     assert "archived-plans" not in text
+
+
+# --- plan-config dead-key stripping during migration (2026-06-16 cleanup) ----
+
+_DEAD_PLAN_CONFIG = (
+    'plan:\n  filename: "YYYY-MM-DD-{name}.md"\n  save_to: docs/superpowers/plans/\n\n'
+    "dispatch:\n  target: github-issues\n  owner: derio-net\n\n"
+    "header:\n  required:\n    - Status\n"
+)
+
+
+def test_migrate_apply_strips_plan_config_dead_keys(tmp_path):
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-x")
+    cfg = repo / "docs" / "superpowers" / "plan-config.yaml"
+    cfg.write_text(_DEAD_PLAN_CONFIG)
+
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+
+    text = cfg.read_text()
+    assert "save_to" not in text and "dispatch:" not in text
+    assert 'filename: "YYYY-MM-DD-{name}.md"' in text  # live key intact
+    assert any("plan-config" in o.reason for o in outcomes)
+
+
+def test_migrate_dry_run_reports_plan_config_without_writing(tmp_path):
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-x")
+    cfg = repo / "docs" / "superpowers" / "plan-config.yaml"
+    cfg.write_text(_DEAD_PLAN_CONFIG)
+
+    outcomes = migrate_repo(repo, dry_run=True, target_repo="derio-net/test")
+
+    assert cfg.read_text() == _DEAD_PLAN_CONFIG  # untouched on dry-run
+    assert any("plan-config" in o.reason for o in outcomes)

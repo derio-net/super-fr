@@ -75,9 +75,9 @@ def sync(
 ) -> None:
     """Write docs/superpowers/plan-config.yaml into each checked-out repo.
 
-    The file is a per-repo validator profile (read by scripts/validate-plans.sh)
-    plus a commented, documentation-only dispatch stub. It is optional — a repo
-    works without it — so this is convenience instrumentation, never a clone.
+    The file is a per-repo validator profile (read by scripts/validate-plans.sh).
+    It is optional — a repo works without it — so this is convenience
+    instrumentation, never a clone.
     """
     args = list(repos or [])
     mpath = _manifest_path(manifest)
@@ -108,9 +108,8 @@ def sync(
         if not yes:
             console.print(f"DRY-RUN (would write)  {entry.repo}  — {cfg}")
             continue
-        owner, _, name = entry.repo.partition("/")
         cfg.parent.mkdir(parents=True, exist_ok=True)
-        cfg.write_text(render_plan_config(owner, name))
+        cfg.write_text(render_plan_config())
         console.print(f"WROTE           {entry.repo}  — {cfg}")
 
     # Durably record well-formed one-off args (idempotent) unless suppressed or previewing.

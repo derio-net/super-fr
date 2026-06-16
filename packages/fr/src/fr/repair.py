@@ -24,6 +24,7 @@ from pathlib import Path
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
+from fr.plan_config import strip_dead_keys
 from fr.refs import RefResolution
 
 _META_REF_FIELDS = ("parent_plan", "prior_rework", "spec")
@@ -191,4 +192,24 @@ def repair_repo(repo_root: Path, *, write: bool) -> RepairResult:
                 _repair_meta(meta_path, repo_root, out, write=write)
             except OSError as e:  # pragma: no cover
                 out.failures.append(f"{meta_path}: {e}")
+    try:
+        _repair_plan_config(sp / "plan-config.yaml", out, write=write)
+    except OSError as e:  # pragma: no cover
+        out.failures.append(f"{sp / 'plan-config.yaml'}: {e}")
     return out
+
+
+def _repair_plan_config(cfg: Path, out: RepairResult, *, write: bool) -> None:
+    """Strip dead keys (`plan.save_to`, the `dispatch:` block) from a repo's
+    plan-config.yaml. Each removal is reported as a `Rewrite`; the file is
+    written only when `write=True` and something is actually dead."""
+    if not cfg.is_file():
+        return
+    text = cfg.read_text()
+    new_text, removals = strip_dead_keys(text)
+    for key in removals:
+        out.rewrites.append(
+            Rewrite(file=cfg, field="plan-config dead key", old=key, new="(removed)")
+        )
+    if write and removals and new_text != text:
+        cfg.write_text(new_text)

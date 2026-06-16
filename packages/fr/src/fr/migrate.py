@@ -32,6 +32,7 @@ from fr.parser import PlanSchemaError
 from fr.parser import parse as _parse_v2
 from fr.plan.parser import _RE_STEP, _strip_fenced_regions
 from fr.plan.parser import parse_plan as _parse_v1
+from fr.plan_config import strip_dead_keys
 
 
 class MigrationError(Exception):
@@ -133,6 +134,22 @@ def migrate_repo(
     if specs_dir.is_dir() and not dry_run:
         for spec_md in sorted(specs_dir.glob("*.md")):
             _rewrite_spec_table(spec_md, repo_root=repo_root)
+
+    # Strip dead keys from the repo's plan-config.yaml (save_to + dispatch:).
+    cfg = sp / "plan-config.yaml"
+    if cfg.is_file():
+        new_text, removals = strip_dead_keys(cfg.read_text())
+        if removals:
+            verb = "would remove" if dry_run else "removed"
+            outcomes.append(
+                MigrationOutcome(
+                    plan_path=cfg,
+                    new_folder=None,
+                    reason=f"plan-config: {verb} {', '.join(removals)}",
+                )
+            )
+            if not dry_run:
+                cfg.write_text(new_text)
 
     return outcomes
 

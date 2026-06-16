@@ -1,6 +1,5 @@
 plan:
   filename: "YYYY-MM-DD-{name}.md"
-  save_to: docs/superpowers/plans/
 
 header:
   required:
@@ -10,12 +9,3 @@ header:
     - Not Started
     - In Progress
     - Complete
-
-dispatch:
-  target: github-issues
-  owner: derio-net
-  project_board: "Derio Ops"
-  default_repo: derio-net/super-fr
-  labels:
-    agentic: fr:ready
-    manual: manual
