@@ -5,6 +5,12 @@
 - **Slug:** install-bootstrap-and-repo-instrument
 - **Author:** fr-goal (operator: derio)
 
+## Implementation Plans
+
+| Plan | Target repo | Slug | Status |
+|------|-------------|------|--------|
+| 2026-06-16-install-bootstrap-and-repo-instrument | `derio-net/super-fr` | `2026-06-16-install-bootstrap-and-repo-instrument` | — |
+
 ## Problem
 
 Two friction points around adopting super-fr:

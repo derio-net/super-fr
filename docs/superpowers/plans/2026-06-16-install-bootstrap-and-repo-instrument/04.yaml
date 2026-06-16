@@ -1,0 +1,53 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Docs + version bump
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Documentation
+  steps:
+  - id: P4.T1.S1
+    text: |
+      README.md: add the one-liner (`curl -fsSL .../scripts/bootstrap.sh | bash`) to the install section with the inspect-then-run alternative; update the "Per-repo profile" section to mention `fr repos sync` for batch instrumentation and to state plan-config.yaml is optional; add a `fr repos` row to the CLI table.
+  - id: P4.T1.S2
+    text: |
+      packages/fr/src/fr/commands/skills_cmd.py: add a one-line mention of `fr repos sync` to the CLI surface summary.
+- number: 2
+  title: Version bump (minor)
+  steps:
+  - id: P4.T2.S1
+    text: |
+      Run `scripts/bump-version.py minor` (new subcommand + new install mechanism = user-visible workflow addition). Confirm `scripts/bump-version.py --check` passes and `uv run fr --version` reports the new number. If main moved underneath, reconcile first.
+- number: 3
+  title: Full verification gate
+  steps:
+  - id: P4.T3.S1
+    text: |
+      Run the full CI gate locally: `uv run ruff format --check packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src`, `uv run pytest -q --no-cov`, `scripts/bump-version.py --check`. All green before delivery.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

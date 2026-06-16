@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr repos sync command + CLI registration
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Command behavior tests (RED)
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED: create tests/unit/test_repos_cmd.py using typer.testing.CliRunner against the fr app, with tmp_path checkouts and FR_REPOS_DIR monkeypatched. Cases: (a) dry-run by default writes nothing and prints "DRY-RUN (would write)"; (b) --yes writes docs/superpowers/plan-config.yaml with template content; (c) a repo whose checkout dir is missing prints "WARN (missing)" and the command still exits 0; (d) an existing plan-config.yaml is left untouched and reported "SKIP (exists)"; (e) --force overwrites it; (f) collection is the union of --manifest entries and positional args (deduped); (g) a positional arg is appended to the manifest, and --no-save suppresses that. Confirm failure (no `repos` command yet).
+- number: 2
+  title: Implement command + register (GREEN)
+  steps:
+  - id: P2.T2.S1
+    text: |
+      GREEN: create packages/fr/src/fr/commands/repos_cmd.py with a typer group `repos_app` exposing `sync(repos: list[str], manifest: Path|None, yes: bool, force: bool, no_save: bool)`. Resolve collection = manifest ∪ args via fr.repos; for each, resolve checkout_root; missing -> WARN; else write/skip/force the template (dry-run unless --yes). Append args to manifest unless --no-save. Exit 0 on warnings; exit 2 when no repos resolve.
+  - id: P2.T2.S2
+    text: |
+      Register in packages/fr/src/fr/cli.py: `from fr.commands.repos_cmd import repos_app` and `app.add_typer(repos_app, name="repos")` (mirror init_app).
+  - id: P2.T2.S3
+    text: |
+      Rerun tests/unit/test_repos_cmd.py; all pass. Smoke: `fr repos sync --help` renders.
+- number: 3
+  title: REFACTOR + quality gate
+  steps:
+  - id: P2.T3.S1
+    text: |
+      Run ruff format/check + mypy packages/fr/src; fix findings. Rerun the repos command + module tests green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
