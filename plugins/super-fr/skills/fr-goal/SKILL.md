@@ -95,6 +95,20 @@ Implement inline, not via subagents — the implementing context needs the Q&A
 and spec history. TDD per step (`superpowers:test-driven-development`). Tick
 steps and complete phases via `fr plan edit`. Never implement a manual phase.
 
+**The implementing layer pushes the branch ONLY — it never opens the PR.**
+This holds whether you implement inline or, for a multi-repo run (step 3),
+delegate to a subagent: a builder's mandate ends at "branch pushed." PR
+creation belongs to the orchestrator at step 8, *after* step 7's review. A
+builder that opens the PR reorders deliver (8) ahead of review (7), and the
+operator can merge the complete-looking PR before the fixes exist — they then
+push onto a merged branch and orphan from `main` (the #320 merge-race, seen 3×).
+
+**Visibility (after the branch is pushed, before review):** the orchestrator
+MAY open a **draft** PR now. A draft is GitHub-unmergeable, so the review
+window stays closed and the "Draft" badge is itself the "review pending — do
+not merge yet" signal. Draft-from-start is the prescribed default; it never
+becomes mergeable until step 8 marks it ready.
+
 ### 7. Review at milestones — fix everything found
 
 After each milestone (a completed phase, or full implementation for small
@@ -106,15 +120,32 @@ performative wrong fix, never a silent drop. Keep the findings+fixes list.
 ### 8. Deliver — one PR per repo, all artifacts aboard
 
 Verify first (`superpowers:verification-before-completion`): full test-suite
-output, self-review pass, steps ticked. PR body: summary + spec/plan paths;
+output, self-review pass, steps ticked. The PR becomes mergeable ONLY now,
+after step 7's fixes are committed: run `gh pr ready` on the draft (or, if no
+draft was opened, open the PR fresh). PR body: summary + spec/plan paths;
 review findings and their fixes (plus any refuted finding); the back-loaded
 manual phase marked "unimplemented — operator pushes to this PR"; the Test Plan
 verbatim, labeled "post-merge — operator-driven". Stop; the operator merges.
 
+**Hand-off wording.** Never announce "PR is up" or "ready to merge" until the
+fixes are in. While the PR is a draft, say "review pending — do not merge yet";
+only after `gh pr ready` say "reviewed and ready to merge." Every push to the
+branch is also covered by the pre-push guard (the `fr-merged-pr-push-guard.sh`
+hook denies pushing to a MERGED/CLOSED PR's branch) — if it fires, STOP: the
+commit would orphan; cherry-pick it onto `main` or open a fresh branch/PR.
+
 ### 9. Post-merge close-out
 
-When the operator reports the merge: drive the Test Plan interactively if
-present (agent runs checks, operator confirms what the agent can't reach).
-Confirm phases complete (`fr status` nudges), `fr archive <plan-dir>`
-(gate-checked git mv; spec follows once all rows are implemented), commit via
-a housekeeping PR, `fr isolation down`.
+When the operator reports the merge: **first verify the fix actually reached
+`main`** before declaring done. Be squash-aware — `git merge-base
+--is-ancestor <branch-tip> origin/main` FALSE-NEGATIVES on squash merges (the
+squash rewrites SHAs), so check content, not ancestry: `git fetch origin main`,
+then confirm the PR is `MERGED` (`gh pr view --json state`) AND the branch's
+changes are present in `origin/main` (`git diff --quiet origin/main -- <changed
+paths>` shows nothing missing). If anything is missing — the merge-race orphan
+— STOP, surface it, and recover (cherry-pick onto `main` / fresh PR) before
+proceeding. Only then: drive the Test Plan interactively if present (agent runs
+checks, operator confirms what the agent can't reach). Confirm phases complete
+(`fr status` nudges), `fr archive <plan-dir>` (gate-checked git mv; spec
+follows once all rows are implemented), commit via a housekeeping PR,
+`fr isolation down`.
