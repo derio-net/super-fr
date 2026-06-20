@@ -139,3 +139,9 @@ behaviour for the standalone **dispatched** (Issue/VK) flow.
 - **No Test Plan section:** this deliverable is skill/hook code, not a
   deployment; correctness is proven by the pytest hook tests, not a post-merge
   operator-driven run.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-06-20-fr-goal-merge-race-guard | `derio-net/super-fr` | `2026-06-20-fr-goal-merge-race-guard` | — |
