@@ -345,6 +345,7 @@ class LocalWorktreeDevcontainerTarget:
         )
         name = (sym.stdout or "").strip()
         if sym.returncode == 0 and name:
+            # --short yields "origin/main"; strip to the bare branch name.
             return name.removeprefix("origin/")
         gh = self.run(
             ["gh", "repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
@@ -352,7 +353,7 @@ class LocalWorktreeDevcontainerTarget:
         )
         gh_name = (gh.stdout or "").strip()
         if gh.returncode == 0 and gh_name:
-            return gh_name
+            return gh_name  # gh returns a bare branch name — no origin/ prefix to strip
         return "main"
 
     def _ref_exists(self, ref: str) -> bool:

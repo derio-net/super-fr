@@ -566,6 +566,22 @@ def test_up_new_branch_bases_on_origin_default_not_local_head(
     assert _fetched(runner.git_calls)  # the default path fetched
 
 
+def test_up_logs_chosen_base_on_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The non-warning 'basing new branch …' line is informational → stdout
+    (WARNING fallbacks go to stderr; this pins the split)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+
+    target.up(profile="dev", branch="feat/x")
+
+    captured = capsys.readouterr()
+    assert "basing new branch feat/x on origin/main (fetched)" in captured.out
+    assert "WARNING" not in captured.err
+
+
 def test_up_base_head_forks_from_current_checkout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
