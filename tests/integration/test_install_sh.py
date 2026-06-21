@@ -12,6 +12,7 @@ skill cleanup, and PostToolUse hook hint.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,11 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
+
+
+def _plugin_version(name: str = "super-fr") -> str:
+    pj = REPO_ROOT / "plugins" / name / ".claude-plugin" / "plugin.json"
+    return json.loads(pj.read_text())["version"]
 
 
 @pytest.fixture()
@@ -303,3 +309,100 @@ def test_install_sh_smokes_fr_binary_not_vk():
     assert 'fr_bin="$(uv tool dir 2>/dev/null)/fr/bin/fr"' in script
     assert '"$fr_bin" --version' in script
     assert "/fr/bin/vk" not in script
+
+
+# ── Plugin cache: stable `current` symlink as installPath ────────────
+
+
+class TestPluginCacheSymlink:
+    """install.sh must register installPath as a stable `current` symlink and
+    keep current + the most-recent previous version dir, so a running session's
+    path survives a reinstall (root cause: see
+    docs/superpowers/debugging/2026-06-21-plugin-cache-symlink-installpath.md)."""
+
+    @pytest.fixture()
+    def home_with_plugins(self, fake_home: Path) -> Path:
+        """fake_home plus the installed_plugins.json that gates step 4."""
+        plugins = fake_home / ".claude" / "plugins"
+        plugins.mkdir(parents=True)
+        (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 1}))
+        return fake_home
+
+    def _cache_dir(self, home: Path, plugin: str = "super-fr") -> Path:
+        return home / ".claude" / "plugins" / "cache" / "derio-net" / plugin
+
+    def _installed(self, home: Path) -> dict:
+        return json.loads((home / ".claude" / "plugins" / "installed_plugins.json").read_text())
+
+    def test_installpath_is_current_symlink(self, home_with_plugins: Path) -> None:
+        _run_install(home_with_plugins)
+        entry = self._installed(home_with_plugins)["plugins"]["super-fr@derio-net"][0]
+        assert entry["installPath"].endswith("/cache/derio-net/super-fr/current"), (
+            f"installPath should be the stable symlink, got {entry['installPath']}"
+        )
+        # The recorded version still tracks the real plugin version.
+        assert entry["version"] == _plugin_version("super-fr")
+
+    def test_current_symlink_points_to_version_relative(self, home_with_plugins: Path) -> None:
+        _run_install(home_with_plugins)
+        ver = _plugin_version("super-fr")
+        link = self._cache_dir(home_with_plugins) / "current"
+        assert link.is_symlink(), "current must be a symlink"
+        # Relative target (just the version), so the link is path-independent.
+        assert os.readlink(link) == ver
+        assert (link.resolve() / ".claude-plugin" / "plugin.json").exists()
+
+    def test_keeps_current_plus_one_previous(self, home_with_plugins: Path) -> None:
+        # Name-sort and mtime-sort deliberately DISAGREE: the kept-previous dir
+        # (1.0.0) is lexically *smaller* but has the newer mtime, while the
+        # pruned dir (9.9.9) is lexically *larger* but older. A regression to
+        # name-based selection would keep 9.9.9 and fail this test, pinning the
+        # N-1 pick as genuine recency rather than lexical order.
+        cache = self._cache_dir(home_with_plugins)
+        cache.mkdir(parents=True)
+        pruned = cache / "9.9.9"
+        pruned.mkdir()
+        kept_prev = cache / "1.0.0"
+        kept_prev.mkdir()
+        os.utime(pruned, (1, 1))  # older
+        os.utime(kept_prev, (1_000_000_000, 1_000_000_000))  # newer -> kept
+
+        _run_install(home_with_plugins)
+
+        ver = _plugin_version("super-fr")
+        assert (cache / ver).exists(), "current version dir must be kept"
+        assert kept_prev.exists(), (
+            "most-recent previous version (by mtime) must be kept (N-1 buffer)"
+        )
+        assert not pruned.exists(), "older versions must be pruned even when lexically larger"
+        assert (cache / "current").is_symlink(), "symlink must survive pruning"
+
+    def test_idempotent_symlink_repoint(self, home_with_plugins: Path) -> None:
+        _run_install(home_with_plugins)
+        _run_install(home_with_plugins)  # ln -sfn must not fail on existing link
+        link = self._cache_dir(home_with_plugins) / "current"
+        assert link.is_symlink()
+        assert os.readlink(link) == _plugin_version("super-fr")
+
+    def test_first_install_no_previous_leaves_only_current(self, home_with_plugins: Path) -> None:
+        # From-scratch install (no pre-existing cache dir): the zero-previous
+        # path must not error and must leave exactly {current symlink, <version>}.
+        _run_install(home_with_plugins)
+        cache = self._cache_dir(home_with_plugins)
+        ver = _plugin_version("super-fr")
+        entries = sorted(p.name for p in cache.iterdir())
+        assert entries == sorted(["current", ver]), (
+            f"first install should leave only current + {ver}, got {entries}"
+        )
+        assert (cache / "current").is_symlink()
+        assert (cache / ver).is_dir() and not (cache / ver).is_symlink()
+
+    def test_dispatch_plugin_also_symlinked(self, home_with_plugins: Path) -> None:
+        # Symlink + installPath registration is per-plugin; super-fr-dispatch
+        # must get the same treatment as super-fr, not just the first plugin.
+        _run_install(home_with_plugins)
+        link = self._cache_dir(home_with_plugins, "super-fr-dispatch") / "current"
+        assert link.is_symlink(), "super-fr-dispatch/current must also be a symlink"
+        assert os.readlink(link) == _plugin_version("super-fr-dispatch")
+        entry = self._installed(home_with_plugins)["plugins"]["super-fr-dispatch@derio-net"][0]
+        assert entry["installPath"].endswith("/cache/derio-net/super-fr-dispatch/current")

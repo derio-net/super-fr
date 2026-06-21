@@ -268,25 +268,52 @@ if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
   for plugin_name in "${PLUGIN_NAMES[@]}"; do
     plugin_src="$PLUGIN_ROOT/plugins/$plugin_name"
     CURRENT_VERSION=$(jq -r '.version' "$plugin_src/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
-    CACHE_VERSION_DIR="$CACHE_BASE/$plugin_name/$CURRENT_VERSION"
+    PLUGIN_CACHE="$CACHE_BASE/$plugin_name"
+    CACHE_VERSION_DIR="$PLUGIN_CACHE/$CURRENT_VERSION"
+    CACHE_CURRENT_LINK="$PLUGIN_CACHE/current"
     mkdir -p "$CACHE_VERSION_DIR"
     rsync -a --delete --exclude='__pycache__' \
       "$plugin_src/" "$CACHE_VERSION_DIR/"
     echo "  Synced $plugin_name v$CURRENT_VERSION to cache"
 
-    INSTALL_ENTRY='[{"scope":"user","installPath":"'"$CACHE_VERSION_DIR"'","version":"'"$CURRENT_VERSION"'","installedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'","lastUpdated":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'"}]'
+    # Point a stable `current` symlink at the freshly-synced version, AFTER the
+    # sync completes (atomic-ish via -fn). installPath records this symlink, not
+    # the version dir — so a running Claude Code session, which keeps installPath
+    # literal and resolves it at exec time, picks up new hook/command code on the
+    # next fire without a restart. Relative target keeps the link path-independent.
+    ln -sfn "$CURRENT_VERSION" "$CACHE_CURRENT_LINK"
+    echo "  Pointed $plugin_name/current -> $CURRENT_VERSION"
+
+    INSTALL_ENTRY='[{"scope":"user","installPath":"'"$CACHE_CURRENT_LINK"'","version":"'"$CURRENT_VERSION"'","installedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'","lastUpdated":"'"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"'"}]'
     jq --argjson entry "$INSTALL_ENTRY" ".plugins[\"$plugin_name@derio-net\"] = \$entry" \
       "$INSTALLED_PLUGINS" > "${INSTALLED_PLUGINS}.tmp" && mv "${INSTALLED_PLUGINS}.tmp" "$INSTALLED_PLUGINS"
     echo "  Registered $plugin_name@derio-net v$CURRENT_VERSION in installed_plugins.json"
 
-    # Clear stale cache versions for this plugin (keep only current)
-    for version_dir in "$CACHE_BASE/$plugin_name"/*/; do
-      [ -d "$version_dir" ] || continue
-      version_name=$(basename "$version_dir")
+    # Prune to current + the most-recent previous version dir (N-1 buffer): a
+    # session that somehow cached a realpath keeps working until restart. Never
+    # touch the `current` symlink — the `*/` glob matches it, so skip symlinks.
+    PREV_KEEP=""
+    while IFS= read -r prev_dir; do
+      [ -n "$prev_dir" ] || continue
+      PREV_KEEP="$(basename "$prev_dir")"
+      break
+    done < <(ls -dt "$PLUGIN_CACHE"/*/ 2>/dev/null | while IFS= read -r p; do
+               q="${p%/}"
+               [ -L "$q" ] && continue
+               [ "$(basename "$q")" = "$CURRENT_VERSION" ] && continue
+               echo "$q"
+             done)
+
+    for version_dir in "$PLUGIN_CACHE"/*/; do
+      vd="${version_dir%/}"
+      [ -L "$vd" ] && continue   # leave the `current` symlink alone
+      version_name="$(basename "$vd")"
       if [ "$version_name" = "$CURRENT_VERSION" ]; then
         echo "  keeping cache: $plugin_name/$version_name (current)"
+      elif [ "$version_name" = "$PREV_KEEP" ]; then
+        echo "  keeping cache: $plugin_name/$version_name (previous)"
       else
-        rm -rf "$version_dir"
+        rm -rf "$vd"
         echo "  cleared stale cache: $plugin_name/$version_name"
       fi
     done
