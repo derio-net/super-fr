@@ -178,6 +178,7 @@ def test_verify_merge_cmd_verified(
                 "changes_present": True,
                 "missing": [],
                 "pr_state": "MERGED",
+                "fetched": True,
             }
         ),
     )
@@ -202,6 +203,7 @@ def test_verify_merge_cmd_not_verified_exits_1(
                 "changes_present": False,
                 "missing": ["fix2.py"],
                 "pr_state": "MERGED",
+                "fetched": True,
             }
         ),
     )

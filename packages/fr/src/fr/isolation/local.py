@@ -206,23 +206,30 @@ class LocalWorktreeDevcontainerTarget:
     ) -> dict[str, Any]:
         """Confirm the branch's changes reached `<remote>/<default_branch>`.
 
-        Squash/rebase/merge-safe (content-based, not ancestry). `verified` is
-        True iff the changes are present AND the PR is MERGED (or its state is
-        unknown — gh unavailable). The close-out (#320) STOPs when not verified.
+        Squash/rebase/merge-safe (content-based, not ancestry). `verified`
+        requires ALL THREE positive confirmations — content present AND the PR
+        is `MERGED` AND the `<remote>/<default_branch>` ref is fresh (fetch
+        succeeded). The content check alone can be fooled by genuinely
+        convergent content (the same fix landing twice), so the MERGED PR is the
+        load-bearing tiebreak; an unknown PR state or a failed fetch is
+        conservatively NOT verified, never a silent pass. The close-out (#320)
+        STOPs (and the caller inspects which signal is missing) when not
+        verified.
         """
         base_ref = f"{remote}/{default_branch}"
-        # Best-effort refresh; offline / no remote → compare the existing ref.
-        self.run(["git", "fetch", remote, default_branch], cwd=state.worktree)
+        fetch = self.run(["git", "fetch", remote, default_branch], cwd=state.worktree)
+        fetched = fetch.returncode == 0
         res = branch_changes_present(self.run, state.worktree, state.branch, base_ref)
         pr = self._pr(state)
         pr_state = pr.get("state") if pr else None
-        verified = res.changes_present and pr_state in ("MERGED", None)
+        verified = res.changes_present and pr_state == "MERGED" and fetched
         return {
             "branch": state.branch,
             "verified": verified,
             "changes_present": res.changes_present,
             "missing": res.missing,
             "pr_state": pr_state,
+            "fetched": fetched,
         }
 
     def down(self, state: IsolationState, force: bool = False) -> None:

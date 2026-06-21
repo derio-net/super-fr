@@ -202,14 +202,19 @@ def verify_merge(
     if res["verified"]:
         typer.echo(
             f"verify-merge: {res['branch']} ✓ changes present on "
-            f"origin/{default_branch} (PR {res['pr_state']})"
+            f"origin/{default_branch}, PR MERGED."
         )
         return
+    reasons = []
+    if not res["fetched"]:
+        reasons.append(f"could not fetch origin/{default_branch} (check may be stale)")
+    if not res["changes_present"]:
+        reasons.append(f"changes missing from origin/{default_branch}: {res['missing']}")
+    if res["pr_state"] != "MERGED":
+        reasons.append(f"PR state is {res['pr_state']} (expected MERGED)")
     typer.echo(
-        f"verify-merge: {res['branch']} ✗ NOT verified — "
-        f"changes_present={res['changes_present']} pr_state={res['pr_state']} "
-        f"missing={res['missing']}. Do NOT declare done; recover "
-        "(cherry-pick onto the base branch / open a fresh PR).",
+        f"verify-merge: {res['branch']} ✗ NOT verified — {'; '.join(reasons)}. "
+        "Do NOT declare done; recover (cherry-pick onto the base branch / open a fresh PR).",
         err=True,
     )
     raise typer.Exit(1)
