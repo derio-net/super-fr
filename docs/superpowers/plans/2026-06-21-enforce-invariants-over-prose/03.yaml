@@ -47,22 +47,24 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:50:10+00:00'
       note: null
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:50:11+00:00'
       note: null
     P3.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:50:13+00:00'
       note: null
     P3.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:50:14+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-06-21T13:50:15+00:00'
+    note: 'two tripwires: .fr-isolation-never-tracked + no-claude-p-in-src; scan helpers
+      unit-tested with synthetic violations (prose mention ignored); .gitignore entry
+      added; 6 GREEN'
     observed_prs: []
