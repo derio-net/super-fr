@@ -68,6 +68,15 @@ its hooks/commands resolve to the new version on the next fire. The N-1 buffer
 is defensive insurance for any environment/harness that might realpath at
 startup (not observed here, but undocumented and may vary by release).
 
+**First-migration caveat (one-time restart):** the "survives every reinstall"
+guarantee holds only for sessions *already* running on the `current`-symlink
+scheme. A session running on the pre-fix **version-keyed** `installPath` has that
+literal path frozen at process startup, and a follow-up probe confirmed
+`/reload-plugins` re-reads plugin *content* (skills/hooks) but **not** the
+`installPath` binding. So the very first deploy of this fix cannot migrate an
+already-running session onto `current` without **exactly one restart**; every
+reinstall after that restart is restart-free as described above.
+
 ## Rejected hypotheses
 
 - **"Just keep N-1 version dirs, no symlink."** Stops the `rm -rf` breakage but
