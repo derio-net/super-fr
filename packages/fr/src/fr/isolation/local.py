@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -108,7 +109,14 @@ class LocalWorktreeDevcontainerTarget:
 
     # ---------- lifecycle ----------
 
-    def up(self, profile: str | None, branch: str, path: Path | None = None) -> IsolationState:
+    def up(
+        self,
+        profile: str | None,
+        branch: str,
+        path: Path | None = None,
+        base: str | None = None,
+        no_fetch: bool = False,
+    ) -> IsolationState:
         if not (self.repo_root / ".git").exists():
             raise IsolationError(
                 f"{self.repo_root} is not a git repo — fr isolation only runs inside one."
@@ -124,7 +132,7 @@ class LocalWorktreeDevcontainerTarget:
             / branch.replace("/", "__")
         )
         worktree.parent.mkdir(parents=True, exist_ok=True)
-        self._git_worktree_add(worktree, branch)
+        self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
         config = worktree / ".devcontainer" / name / "devcontainer.json"
         # super-fr#299 part 2: the worktree is cut from the committed tree. If
@@ -251,17 +259,107 @@ class LocalWorktreeDevcontainerTarget:
 
     # ---------- helpers ----------
 
-    def _git_worktree_add(self, worktree: Path, branch: str) -> None:
+    def _git_worktree_add(
+        self, worktree: Path, branch: str, base: str | None = None, no_fetch: bool = False
+    ) -> None:
         if worktree.exists():
             return  # already provisioned — up() is idempotent on the worktree
         branches = self.run(["git", "branch", "--list", branch], cwd=self.repo_root)
         if branches.stdout.strip():
+            # Reuse: check the existing branch out as-is. Never fetch or rebase —
+            # continuation/reuse must inherit the branch's own tip (#322 corner 1).
             argv = ["git", "worktree", "add", str(worktree), branch]
         else:
+            # Genuine cold-start: a brand-new branch. Default to freshly-fetched
+            # origin/<default> instead of the base repo's current HEAD (#322).
+            start_point, log_line = self._cold_start_base(branch, base, no_fetch)
+            print(log_line, file=sys.stderr if log_line.startswith("WARNING") else sys.stdout)
             argv = ["git", "worktree", "add", str(worktree), "-b", branch]
+            if start_point is not None:
+                argv.append(start_point)
         result = self.run(argv, cwd=self.repo_root)
         if result.returncode != 0:
             raise IsolationError(f"git worktree add failed: {result.stderr}")
+
+    # ----- cold-start base resolution (#322) -----
+
+    def _cold_start_base(
+        self, branch: str, base: str | None, no_fetch: bool
+    ) -> tuple[str | None, str]:
+        """Resolve the start-point for a NEW branch per the spec matrix.
+
+        Returns (start_point, log_line). start_point is the ref to append after
+        `-b <branch>`, or None meaning "append nothing" — git then defaults to
+        the current HEAD (byte-identical to the legacy behaviour). The log_line
+        is printed by the caller; a `WARNING`-prefixed line goes to stderr.
+        """
+        # Operator named an explicit start-point — use it verbatim, no fetch, no
+        # default-branch resolution. `--base HEAD` is the documented opt-in to the
+        # old "fork from current checkout" behaviour (stacking / current-branch).
+        if base is not None:
+            if base == "HEAD":
+                return None, f"isolation: basing new branch {branch} on HEAD (--base)"
+            return base, f"isolation: basing new branch {branch} on {base} (--base)"
+
+        if no_fetch:
+            default = self._resolve_default_branch()
+            ref = f"origin/{default}"
+            if self._ref_exists(ref):
+                return ref, f"isolation: basing new branch {branch} on {ref} (local, --no-fetch)"
+            return None, (
+                f"WARNING: --no-fetch but no local {ref} tracking ref — "
+                f"basing {branch} on local HEAD"
+            )
+
+        if not self._has_origin_remote():
+            return None, f"WARNING: no origin remote — basing {branch} on local HEAD"
+
+        if not self._fetch_origin():
+            return None, f"WARNING: git fetch origin failed — basing {branch} on local HEAD"
+
+        default = self._resolve_default_branch()
+        ref = f"origin/{default}"
+        if self._ref_exists(ref):
+            return ref, f"isolation: basing new branch {branch} on {ref} (fetched)"
+        return None, f"WARNING: {ref} not found after fetch — basing {branch} on local HEAD"
+
+    def _has_origin_remote(self) -> bool:
+        result = self.run(["git", "remote"], cwd=self.repo_root)
+        return "origin" in (result.stdout or "").split()
+
+    def _fetch_origin(self) -> bool:
+        """git fetch origin; return success. Never raises — a fetch problem
+        degrades to the local-HEAD fallback, it does not abort the run."""
+        result = self.run(["git", "fetch", "origin"], cwd=self.repo_root)
+        if result.returncode != 0:
+            return False
+        # Refresh origin/HEAD so _resolve_default_branch's symbolic-ref hits.
+        # Best-effort: a failure here just falls through to the gh/main chain.
+        self.run(["git", "remote", "set-head", "origin", "--auto"], cwd=self.repo_root)
+        return True
+
+    def _resolve_default_branch(self) -> str:
+        """symbolic-ref refs/remotes/origin/HEAD → gh defaultBranchRef → main."""
+        sym = self.run(
+            ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd=self.repo_root
+        )
+        name = (sym.stdout or "").strip()
+        if sym.returncode == 0 and name:
+            return name.removeprefix("origin/")
+        gh = self.run(
+            ["gh", "repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+            cwd=self.repo_root,
+        )
+        gh_name = (gh.stdout or "").strip()
+        if gh.returncode == 0 and gh_name:
+            return gh_name
+        return "main"
+
+    def _ref_exists(self, ref: str) -> bool:
+        result = self.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=self.repo_root
+        )
+        return result.returncode == 0
 
     def _ensure_mounted_env_file(self, config: Path) -> None:
         """Ensure the env-file the profile's devcontainer.json mounts exists.

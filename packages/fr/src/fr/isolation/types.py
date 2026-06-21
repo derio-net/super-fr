@@ -172,7 +172,14 @@ def resolve_profile(repo_root: Path, name: str | None) -> str:
 class Target(Protocol):
     """Pluggable isolation backend (local worktree+devcontainer now; remote later)."""
 
-    def up(self, profile: str | None, branch: str, path: Path | None = None) -> IsolationState: ...
+    def up(
+        self,
+        profile: str | None,
+        branch: str,
+        path: Path | None = None,
+        base: str | None = None,
+        no_fetch: bool = False,
+    ) -> IsolationState: ...
 
     def exec(self, state: IsolationState, argv: list[str]) -> int: ...
 

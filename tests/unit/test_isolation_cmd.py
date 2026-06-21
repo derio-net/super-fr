@@ -221,3 +221,37 @@ def test_verify_merge_cmd_no_workspace_exits_2(repo: Path, fake_run: list) -> No
     )
     assert res.exit_code == 2
     assert "no isolation workspace" in res.output
+
+
+def test_up_forwards_base_and_no_fetch(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#322: --base / --no-fetch must reach Target.up so cold-start basing works."""
+    from fr.isolation.types import IsolationState
+
+    captured: dict = {}
+
+    class StubTarget:
+        def up(self, profile=None, branch="", path=None, base=None, no_fetch=False):
+            captured.update(profile=profile, branch=branch, base=base, no_fetch=no_fetch)
+            return IsolationState(
+                repo_root=repo,
+                branch=branch,
+                worktree=repo / "wt",
+                profile="dev",
+                created_at="2026-06-21T00:00:00Z",
+            )
+
+    monkeypatch.setattr(isolation_cmd, "_target", lambda _repo: StubTarget())
+
+    res = runner.invoke(
+        app,
+        ["isolation", "up", "--repo", str(repo), "--branch", "feat/x", "--base", "origin/main"],
+    )
+    assert res.exit_code == 0, res.output
+    assert captured["base"] == "origin/main" and captured["no_fetch"] is False
+
+    captured.clear()
+    res = runner.invoke(
+        app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/y", "--no-fetch"]
+    )
+    assert res.exit_code == 0, res.output
+    assert captured["no_fetch"] is True and captured["base"] is None

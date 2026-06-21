@@ -45,6 +45,21 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
 - One profile per run. Pick it once at `up`; changing profile means
   `down --force` and a fresh `up`.
 
+### Cold-start base (#322)
+
+A genuinely NEW branch is cut from a freshly-fetched `origin/<default>`, not
+the base repo's current HEAD — so an isolated run never silently inherits the
+base checkout's un-merged commits. Reuse (an existing branch or worktree) is
+untouched: it keeps that branch's own tip, never rebased.
+
+- `up --branch feat/x` — default: `git fetch origin`, base on `origin/<default>`.
+- `up --branch feat/x --base <ref>` — base on `<ref>` verbatim (no fetch).
+  `--base HEAD` opts back into "fork from the current checkout" (stacking).
+- `up --branch feat/x --no-fetch` — base on the LOCAL `origin/<default>` ref,
+  no network.
+- No remote / fetch fails / ref missing → auto-fallback to local HEAD with a
+  `WARNING` line naming the base used; the run never aborts.
+
 ## Exec-bridge discipline
 
 - EVERY build, test, lint, and run command goes through
