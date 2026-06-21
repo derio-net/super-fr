@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,44 @@ def subprocess_runner(
 
 def _home() -> Path:
     return Path(os.environ.get("HOME", str(Path.home())))
+
+
+@dataclass
+class MergeVerification:
+    """Whether a branch's changes are present on a base ref (#320 close-out)."""
+
+    changed: list[str]  # files the branch changed since its merge-base
+    missing: list[str]  # changed files NOT yet present on the base ref
+    changes_present: bool
+
+
+def branch_changes_present(
+    run: Runner, repo_root: Path, branch: str, base_ref: str
+) -> MergeVerification:
+    """Are the branch's changes present on `base_ref` (e.g. origin/main)?
+
+    Compares FINAL FILE CONTENT, not commit identity / ancestry — so it is
+    correct across squash, merge-commit, and rebase merges alike (an
+    ancestry/patch-id check would false-negative on squash). A commit pushed to
+    the branch AFTER the merge (the #320 orphan) shows up as a changed path that
+    still differs from the base → reported missing. Conservative: if the base
+    later changed the same paths, those read as missing (a safe "STOP and
+    check", never a false "verified").
+    """
+    mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
+    if mb.returncode != 0:
+        raise IsolationError(f"no merge-base for {base_ref} and {branch} — unrelated histories?")
+    merge_base = mb.stdout.strip()
+    names = run(["git", "diff", "--name-only", merge_base, branch], cwd=repo_root)
+    changed = [ln for ln in names.stdout.splitlines() if ln]
+    if not changed:
+        return MergeVerification(changed=[], missing=[], changes_present=True)
+    diff = run(
+        ["git", "diff", "--name-only", branch, base_ref, "--", *changed],
+        cwd=repo_root,
+    )
+    missing = [ln for ln in diff.stdout.splitlines() if ln]
+    return MergeVerification(changed=changed, missing=missing, changes_present=not missing)
 
 
 def _main_worktree_root(repo_root: Path) -> Path:
@@ -157,6 +196,33 @@ class LocalWorktreeDevcontainerTarget:
             "worktree_exists": state.worktree.is_dir(),
             "container": self._container_state(state) or "not running",
             "pr": self._pr(state),
+        }
+
+    def verify_merge(
+        self,
+        state: IsolationState,
+        default_branch: str = "main",
+        remote: str = "origin",
+    ) -> dict[str, Any]:
+        """Confirm the branch's changes reached `<remote>/<default_branch>`.
+
+        Squash/rebase/merge-safe (content-based, not ancestry). `verified` is
+        True iff the changes are present AND the PR is MERGED (or its state is
+        unknown — gh unavailable). The close-out (#320) STOPs when not verified.
+        """
+        base_ref = f"{remote}/{default_branch}"
+        # Best-effort refresh; offline / no remote → compare the existing ref.
+        self.run(["git", "fetch", remote, default_branch], cwd=state.worktree)
+        res = branch_changes_present(self.run, state.worktree, state.branch, base_ref)
+        pr = self._pr(state)
+        pr_state = pr.get("state") if pr else None
+        verified = res.changes_present and pr_state in ("MERGED", None)
+        return {
+            "branch": state.branch,
+            "verified": verified,
+            "changes_present": res.changes_present,
+            "missing": res.missing,
+            "pr_state": pr_state,
         }
 
     def down(self, state: IsolationState, force: bool = False) -> None:

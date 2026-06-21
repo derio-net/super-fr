@@ -111,10 +111,10 @@ operator-driven". Stop; the operator merges.
 ### 9. Post-merge close-out
 
 When the operator reports the merge: **first verify the fix reached `main`** —
-squash-aware: `git merge-base --is-ancestor` false-negatives on squash, so
-check content (`git fetch origin main`; PR `MERGED`; `git diff --quiet
-origin/main -- <changed paths>` clean). Missing → STOP and recover (cherry-pick
-/ fresh PR). Then drive the Test Plan if present (agent runs checks, operator
-confirms what it can't reach), confirm phases complete (`fr status`), `fr
-archive <plan-dir>` (gate-checked git mv; spec follows once all rows ship),
-commit via a housekeeping PR, `fr isolation down`.
+run `fr isolation verify-merge --branch <b>` (squash/rebase/merge-safe: checks
+the branch's changes are present on `origin/main`, not commit ancestry, and the
+PR is MERGED; exit 1 = not verified). Not verified → STOP and recover
+(cherry-pick / fresh PR). Then drive the Test Plan if present (agent runs
+checks, operator confirms what it can't reach), confirm phases complete (`fr
+status`), `fr archive <plan-dir>`, commit via a housekeeping PR, `fr isolation
+down`.

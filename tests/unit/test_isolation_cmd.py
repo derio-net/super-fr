@@ -154,3 +154,68 @@ def test_up_omits_add_dir_hint_without_claude_code(repo: Path, fake_run: list) -
     assert res.exit_code == 0, res.output
     assert "worktree" in res.output
     assert "/add-dir" not in res.output
+
+
+class _StubTarget:
+    def __init__(self, result: dict) -> None:
+        self._result = result
+
+    def verify_merge(self, state, default_branch: str = "main") -> dict:
+        return self._result
+
+
+def test_verify_merge_cmd_verified(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
+    monkeypatch.setattr(
+        isolation_cmd,
+        "_target",
+        lambda root: _StubTarget(
+            {
+                "branch": "feat/v",
+                "verified": True,
+                "changes_present": True,
+                "missing": [],
+                "pr_state": "MERGED",
+            }
+        ),
+    )
+    res = runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "feat/v"]
+    )
+    assert res.exit_code == 0, res.output
+    assert "✓" in res.output
+
+
+def test_verify_merge_cmd_not_verified_exits_1(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
+    monkeypatch.setattr(
+        isolation_cmd,
+        "_target",
+        lambda root: _StubTarget(
+            {
+                "branch": "feat/v",
+                "verified": False,
+                "changes_present": False,
+                "missing": ["fix2.py"],
+                "pr_state": "MERGED",
+            }
+        ),
+    )
+    res = runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "feat/v"]
+    )
+    assert res.exit_code == 1
+    assert "NOT verified" in res.output
+    assert "fix2.py" in res.output
+
+
+def test_verify_merge_cmd_no_workspace_exits_2(repo: Path, fake_run: list) -> None:
+    res = runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "ghost"]
+    )
+    assert res.exit_code == 2
+    assert "no isolation workspace" in res.output

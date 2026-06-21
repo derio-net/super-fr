@@ -105,11 +105,10 @@ orthogonal; a separate, independently-tested hook keeps both single-purpose.
   merge" until fixes are in; say "review pending — do not merge yet" while the
   PR is a draft, and only "reviewed and ready to merge" after `gh pr ready`.
 - **Step 9 (Post-merge close-out):** after the operator reports the merge,
-  **verify the fix reached `main`** before declaring done — squash-aware (see
-  above): confirm PR `MERGED` and the branch's changes are present in
-  `origin/main`. If anything is missing → **stop**, surface it, recover
-  (cherry-pick onto `main` / fresh PR). Only then `fr archive` / `fr isolation
-  down`.
+  **verify the fix reached `main`** before declaring done by running
+  `fr isolation verify-merge --branch <b>` (design E). If not verified → **stop**,
+  surface it, recover (cherry-pick onto `main` / fresh PR). Only then
+  `fr archive` / `fr isolation down`.
 
 ### C. fr-isolation SKILL.md prose (documents fix #2's enforcement)
 
@@ -125,6 +124,39 @@ Step 5 ("Open the PR") gets a caveat: **under fr-goal LOCAL mode, do not open
 a per-phase PR** — push the branch only; the single PR is fr-goal's step 8,
 opened (as a draft) by the orchestrator post-review. Per-phase PRs remain the
 behaviour for the standalone **dispatched** (Issue/VK) flow.
+
+### E. `fr isolation verify-merge` — tested close-out verification (review follow-up)
+
+The close-out verification (fix #3) began as step-9 prose. Prose can't be
+tested, and "works across all merge configs" was a reasoned claim, not a green
+test — the same rely-on-the-agent weakness the Hybrid choice removes elsewhere.
+So the merge-config-sensitive logic moves into a tested CLI command.
+
+`fr isolation verify-merge --branch <b> [--default-branch main]`:
+
+1. `git fetch <remote> <default-branch>` (best-effort; staleness noted).
+2. **Content check** (`branch_changes_present`, the merge-config-sensitive core):
+   `merge_base = git merge-base origin/<default> <branch>`; `changed = git diff
+   --name-only <merge_base> <branch>`; the branch's changes are **present** iff
+   `git diff --name-only <branch> origin/<default> -- <changed>` is empty. This
+   compares **final file content**, not commit identity — so it is correct for
+   **squash, merge-commit, and rebase** alike (an ancestry/patch-id check would
+   false-negative on squash). The #320 orphan (a commit pushed *after* the merge)
+   shows up as a non-empty diff on its paths → **not present**.
+3. **PR-state check** (`gh pr view <branch> --json state`, reusing `_pr`):
+   `MERGED` expected.
+4. Verdict: `verified = changes_present AND pr_state in {MERGED, unknown}`. Exit
+   0 verified, exit 1 otherwise (so step 9 can branch on it).
+
+**Conservative by design:** if `origin/<default>` later changed the *same*
+paths after the merge, the content check reports not-verified (a safe
+false-negative → "STOP and check"), never a false-positive.
+
+**Tests** (the matrix the review asked for — real throwaway git repos, no
+Docker): `branch_changes_present` across **squash / merge-commit / rebase**
+(all → present), **orphaned fix** (commit pushed post-merge → not present),
+and **main diverged on other paths** (→ still present, no false-negative);
+plus `verify_merge` verdict/exit behavior with the PR-state seam.
 
 ## Scope / out of scope
 
