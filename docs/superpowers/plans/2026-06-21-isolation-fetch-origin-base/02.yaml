@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 2
+  title: CLI flags and Target protocol (TDD)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — CLI forwards the new flags
+  steps:
+  - id: P2.T1.S1
+    text: |
+      In tests/unit/test_isolation_cmd.py add `test_up_forwards_base_and_no_fetch`: monkeypatch the module `_target` (or `LocalWorktreeDevcontainerTarget.up`) to capture kwargs; invoke the CLI `up` via CliRunner with `--base origin/main` and separately `--no-fetch`; assert the captured call received `base="origin/main"` / `no_fetch=True`. Follow the existing CliRunner + monkeypatched-runner pattern in that file. RED.
+- number: 2
+  title: GREEN — add the typer options and Protocol params
+  steps:
+  - id: P2.T2.S1
+    text: |
+      In packages/fr/src/fr/commands/isolation_cmd.py add to `up`: `base: str | None = typer.Option(None, "--base", help="Start-point for a NEW branch (e.g. origin/main, HEAD, <sha>); given → no fetch, no default-branch resolution.")` and `no_fetch: bool = typer.Option(False, "--no-fetch", help="Skip git fetch; base a new branch on the local origin/<default> tracking ref (or HEAD if absent).")`. Forward both to `_target(repo).up(profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch)`.
+  - id: P2.T2.S2
+    text: |
+      In packages/fr/src/fr/isolation/types.py extend the `Target` Protocol's `up` signature to `up(self, profile, branch, path=None, base=None, no_fetch=False) -> IsolationState`. Defaulted params keep any other Target impl source-compatible.
+  - id: P2.T2.S3
+    text: |
+      Run `cd <worktree> && uv run pytest -q --no-cov tests/unit/test_isolation_cmd.py tests/unit/test_isolation.py` (GREEN), then `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src` — fix any signature/type drift.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-21T08:29:55+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-21T08:29:56+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-06-21T08:29:58+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-06-21T08:29:59+00:00'
+      note: null
+  completion:
+    at: '2026-06-21T08:30:07+00:00'
+    note: null
+    observed_prs: []

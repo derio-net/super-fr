@@ -46,10 +46,25 @@ def up(
     path: Path | None = typer.Option(
         None, help="Worktree path (default: ~/.cache/fr/worktrees/<repo>/<branch>)."
     ),
+    base: str | None = typer.Option(
+        None,
+        "--base",
+        help="Start-point for a NEW branch (e.g. origin/main, HEAD, <sha>). "
+        "Given → no fetch, no default-branch resolution. New branches otherwise "
+        "default to freshly-fetched origin/<default>.",
+    ),
+    no_fetch: bool = typer.Option(
+        False,
+        "--no-fetch",
+        help="Skip git fetch; base a new branch on the local origin/<default> "
+        "tracking ref (or HEAD if absent).",
+    ),
 ) -> None:
     """Create worktree + start the profile's devcontainer against it."""
     try:
-        state = _target(repo).up(profile=profile, branch=branch, path=path)
+        state = _target(repo).up(
+            profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch
+        )
     except IsolationError as err:
         _fail(err)
         return

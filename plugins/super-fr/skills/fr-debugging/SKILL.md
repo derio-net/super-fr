@@ -38,9 +38,12 @@ included; "just check X first" never reorders this:
   fr isolation up --branch fix/<slug> [--profile <name>]
   ```
   Name the branch for the bug now (`fix/<slug>`); the worktree, PR, and
-  cleanup key off it. **No devcontainer profile → HARD STOP** — offer the
-  fr-init interview; there is no unisolated fallback. (Under fr-goal: treat as
-  a blocker — pause, fr-init, resume.)
+  cleanup key off it. A cold-start `fix/<slug>` is cut from freshly-fetched
+  `origin/<default>` (#322), so the fix is clean of whatever the base checkout
+  is parked on — to debug on the current branch by intent, add `--base HEAD`.
+  **No devcontainer profile → HARD STOP** — offer the fr-init interview; there
+  is no unisolated fallback. (Under fr-goal: treat as a blocker — pause,
+  fr-init, resume.)
 
 From here on follow fr-isolation's exec-bridge discipline: read/edit files in
 the worktree, run every command through `fr isolation exec -- …`.

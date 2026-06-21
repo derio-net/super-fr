@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Cold-start base resolution in the Target (TDD)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Test harness — a real bare origin remote
+  steps:
+  - id: P1.T1.S1
+    text: |
+      In tests/unit/test_isolation.py, add a helper `make_repo_with_origin(tmp_path, profiles=..., default=...)` that builds a repo via the existing `make_repo`, then creates a bare repo `tmp_path/"origin.git"` (`git init --bare -q`), `git -C <repo> remote add origin <origin.git>`, and `git -C <repo> push -q origin main`. Return `(repo, origin_dir)`. Rationale: FakeRunner delegates git to the real binary, so fetch / origin/main resolution must run against a real remote (spec "Testing"). Keep it a thin wrapper — do not duplicate make_repo's commit logic.
+- number: 2
+  title: RED — failing tests for the cold-start base matrix
+  steps:
+  - id: P1.T2.S1
+    text: |
+      Add `test_up_new_branch_bases_on_origin_default_not_local_head`: make_repo_with_origin; in the base repo create+checkout a feature branch with an extra commit (`stray.txt`) so HEAD != main; call `target.up(profile="dev", branch="feat/x")`; assert `git merge-base --is-ancestor origin/main feat/x` succeeds AND the stray commit is NOT an ancestor of feat/x (`git merge-base --is-ancestor <stray-sha> feat/x` returns non-zero). This is the direct regression for the frank#594 incident. Expect ImportError/AttributeError or assertion failure now (RED).
+  - id: P1.T2.S2
+    text: |
+      Add `test_up_base_head_forks_from_current_checkout`: park base repo on a feature branch with a stray commit; `target.up(..., branch="feat/x", base="HEAD")`; assert the stray commit IS an ancestor of feat/x (forked from current HEAD) and that no `git fetch` was issued (inspect a recording seam — see GREEN; for RED assert the fork point only). RED.
+  - id: P1.T2.S3
+    text: |
+      Add `test_up_explicit_base_ref_used_verbatim`: tag a specific commit `v0` on main; advance main by one commit; `target.up(..., branch="feat/x", base="v0")`; assert feat/x tip == the v0 commit (explicit ref, no fetch, no default-branch resolution). RED.
+  - id: P1.T2.S4
+    text: |
+      Add `test_up_no_fetch_uses_local_tracking_ref` and `test_up_no_fetch_missing_tracking_ref_falls_back_to_head`: with origin present and `origin/main` already fetched, `up(..., no_fetch=True)` bases on local `origin/main` without a fetch; with no local tracking ref, it auto-falls-back to local HEAD and emits a WARNING (assert via capsys). RED.
+  - id: P1.T2.S5
+    text: |
+      Add `test_up_no_origin_falls_back_to_head_with_warning` and `test_up_fetch_failure_falls_back_to_head_with_warning`: make_repo with NO origin remote → `up(..., branch="feat/x")` exits cleanly, bases on local HEAD, prints `WARNING` naming the base; simulate fetch failure (point origin at a non-existent path, or a FakeRunner that fails `git fetch`) → same graceful fallback + WARNING. Assert the run does not raise. RED.
+  - id: P1.T2.S6
+    text: |
+      Add `test_resolve_default_branch_chain`: (a) with origin/HEAD set via the real bare remote, `_resolve_default_branch` returns "main" from symbolic-ref; (b) with symbolic-ref unset, a FakeRunner stub returning a gh `defaultBranchRef.name` is used; (c) with both unavailable, it returns "main" fallback. RED.
+  - id: P1.T2.S7
+    text: |
+      Add `test_up_reuse_paths_never_fetch_or_rebase`: (a) existing-worktree idempotency — second `up` returns without a fetch; (b) pre-create the branch in the base repo, then `up` checks it out as-is (tip unchanged) and issues no fetch. Guards corner case #1 (reuse must not rebase onto main). RED.
+- number: 3
+  title: GREEN — implement fetch + base resolution
+  steps:
+  - id: P1.T3.S1
+    text: |
+      In packages/fr/src/fr/isolation/local.py add Runner-seam helpers: `_has_origin_remote()` (`git remote` contains "origin"), `_fetch_origin()` → run `git fetch origin`, return success bool, never raise, and on success run `git remote set-head origin --auto` (best-effort), `_resolve_default_branch()` implementing the symbolic-ref → gh → "main" chain from the spec. All via `self.run` with `cwd=self.repo_root`.
+  - id: P1.T3.S2
+    text: |
+      Add `_cold_start_base(branch, base, no_fetch) -> tuple[str | None, str]` encapsulating the spec matrix: explicit `base` → (base-or-None-for-HEAD, log); `no_fetch` → local `origin/<default>` if the tracking ref exists else (None, WARNING); default → fetch; on success base on `origin/<default>`, else (None, WARNING). Returning `None` means "append no start-point" (git defaults to current HEAD). The second tuple element is the human log/WARNING line.
+  - id: P1.T3.S3
+    text: |
+      Thread params through: `up(self, profile, branch, path=None, base=None, no_fetch=False)` and `_git_worktree_add(self, worktree, branch, base=None, no_fetch=False)`. In `_git_worktree_add` paths (1) existing-worktree and (2) existing-branch stay byte-identical (no fetch, no start-point change); only the new-branch path calls `_cold_start_base` and appends the start-point (when not None) to `["git","worktree","add",str(worktree),"-b",branch, <start-point>]`. Print the log line (use typer.echo / print to stderr for WARNING) before/after creating the branch.
+  - id: P1.T3.S4
+    text: |
+      Run `cd <worktree> && uv run pytest -q --no-cov tests/unit/test_isolation.py` and confirm all new cases pass (GREEN). Fix until green. Then `uv run ruff format packages/ tests/` and `uv run ruff check packages/ tests/`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-21T08:29:43+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-06-21T08:29:44+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-06-21T08:29:45+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-06-21T08:29:46+00:00'
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: '2026-06-21T08:29:47+00:00'
+      note: null
+    P1.T2.S5:
+      state: x
+      ticked_at: '2026-06-21T08:29:48+00:00'
+      note: null
+    P1.T2.S6:
+      state: x
+      ticked_at: '2026-06-21T08:29:49+00:00'
+      note: null
+    P1.T2.S7:
+      state: x
+      ticked_at: '2026-06-21T08:29:50+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-06-21T08:29:51+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-06-21T08:29:52+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-06-21T08:29:53+00:00'
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: '2026-06-21T08:29:54+00:00'
+      note: null
+  completion:
+    at: '2026-06-21T08:30:06+00:00'
+    note: null
+    observed_prs: []

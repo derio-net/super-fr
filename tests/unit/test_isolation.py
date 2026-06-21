@@ -98,11 +98,76 @@ def add_worktree(repo: Path, branch: str = "feat/x") -> Path:
     return wt
 
 
+def _git_out(repo: Path, *args: str) -> str:
+    # Output-capturing git helper. Distinct from the fire-and-forget `_git` the
+    # merge-config tests define later in this file — DON'T merge the two names.
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def make_repo_with_origin(
+    tmp_path: Path,
+    profiles: list[str] | None = None,
+    default: str | None = None,
+) -> tuple[Path, Path]:
+    """A real repo wired to a real bare `origin`, with `main` pushed.
+
+    FakeRunner delegates git to the real binary, so fetch / origin/<default>
+    resolution must run against a real remote (spec "Testing"). Returns
+    (repo, origin_dir).
+    """
+    repo = make_repo(tmp_path, profiles=profiles, default=default)
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "main"], check=True)
+    return repo, origin
+
+
+def _commit_stray_feature_branch(repo: Path, branch: str = "stray-feature") -> str:
+    """Park `repo` on a NEW feature branch carrying an un-merged commit.
+
+    Returns the stray commit sha. Reproduces the incident's precondition: the
+    base repo's HEAD is an un-merged commit that must NOT ride into a fresh
+    isolation branch.
+    """
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", branch], check=True)
+    (repo / "stray.txt").write_text("unrelated\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "stray",
+        ],
+        check=True,
+    )
+    return _git_out(repo, "rev-parse", "HEAD")
+
+
+def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "-C", str(repo), "merge-base", "--is-ancestor", ancestor, descendant]
+        ).returncode
+        == 0
+    )
+
+
 class FakeRunner:
     """Records non-git argv; delegates git to the real binary."""
 
     def __init__(self, fail_on: str | None = None, stdout: dict[str, str] | None = None):
         self.calls: list[list[str]] = []
+        self.git_calls: list[list[str]] = []
         self.captures: list[bool] = []
         self.fail_on = fail_on
         self.stdout = stdout or {}
@@ -112,6 +177,10 @@ class FakeRunner:
     ):
         self.captures.append(capture)
         if argv[0] == "git":
+            # `gh` is faked, but git hits the real binary — record git argv too so
+            # tests can assert mechanism (e.g. a fetch ran / did not run) on top of
+            # the resulting repo state.
+            self.git_calls.append(list(argv))
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         self.calls.append(list(argv))
         rc = 1 if (self.fail_on and self.fail_on in argv[0:2]) else 0
@@ -470,6 +539,218 @@ def test_up_devcontainer_failure_raises(tmp_path: Path, monkeypatch: pytest.Monk
     target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner(fail_on="devcontainer"))
     with pytest.raises(IsolationError, match="devcontainer up"):
         target.up(None, "vk-iso/test")
+
+
+# ---------- cold-start base resolution (#322) ----------
+
+
+def _fetched(git_calls: list[list[str]]) -> bool:
+    return any(c[:2] == ["git", "fetch"] for c in git_calls)
+
+
+def test_up_new_branch_bases_on_origin_default_not_local_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#322 headline: a NEW cold-start branch is cut from freshly-fetched
+    origin/<default>, NOT the base repo's (feature-parked) HEAD."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    stray = _commit_stray_feature_branch(repo)  # base HEAD now != main
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/x")
+
+    assert _is_ancestor(repo, "origin/main", "feat/x")  # cut from origin/main
+    assert not _is_ancestor(repo, stray, "feat/x")  # stray did NOT ride in
+    assert _fetched(runner.git_calls)  # the default path fetched
+
+
+def test_up_logs_chosen_base_on_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The non-warning 'basing new branch …' line is informational → stdout
+    (WARNING fallbacks go to stderr; this pins the split)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+
+    target.up(profile="dev", branch="feat/x")
+
+    captured = capsys.readouterr()
+    assert "basing new branch feat/x on origin/main (fetched)" in captured.out
+    assert "WARNING" not in captured.err
+
+
+def test_up_base_head_forks_from_current_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--base HEAD opts back into 'fork from current checkout' (stacking)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    stray = _commit_stray_feature_branch(repo)
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/x", base="HEAD")
+
+    assert _is_ancestor(repo, stray, "feat/x")  # forked from current HEAD
+    assert not _fetched(runner.git_calls)  # explicit base → no fetch
+
+
+def test_up_explicit_base_ref_used_verbatim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--base <ref> uses the named ref as-is — no fetch, no default resolution."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    v0 = _git_out(repo, "rev-parse", "HEAD")
+    _git_out(repo, "tag", "v0")
+    (repo / "more.txt").write_text("x\n")
+    _git_out(repo, "add", "-A")
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "more",
+        ],
+        check=True,
+    )
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/x", base="v0")
+
+    assert _git_out(repo, "rev-parse", "feat/x") == v0
+    assert not _fetched(runner.git_calls)
+
+
+def test_up_no_fetch_uses_local_tracking_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--no-fetch bases on the LOCAL origin/<default> tracking ref, no network."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    _git_out(repo, "fetch", "origin")  # tracking ref present, set up out-of-band
+    stray = _commit_stray_feature_branch(repo)
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/x", no_fetch=True)
+
+    assert _is_ancestor(repo, "origin/main", "feat/x")
+    assert not _is_ancestor(repo, stray, "feat/x")
+    assert not _fetched(runner.git_calls)  # --no-fetch issued no fetch
+
+
+def test_up_no_fetch_missing_tracking_ref_falls_back_to_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    subprocess.run(["git", "-C", str(repo), "update-ref", "-d", "refs/remotes/origin/main"])
+    stray = _commit_stray_feature_branch(repo)
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/x", no_fetch=True)
+
+    assert _is_ancestor(repo, stray, "feat/x")  # no tracking ref → local HEAD
+    assert "WARNING" in capsys.readouterr().err
+
+
+def test_up_no_origin_falls_back_to_head_with_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")  # NO origin remote
+    stray = _commit_stray_feature_branch(repo)
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/x")  # never aborts
+
+    assert _is_ancestor(repo, stray, "feat/x")  # local HEAD fallback
+    assert "WARNING" in capsys.readouterr().err
+    assert not _fetched(runner.git_calls)  # no origin → fetch never attempted
+
+
+def test_up_fetch_failure_falls_back_to_head_with_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", str(tmp_path / "does-not-exist.git")],
+        check=True,
+    )
+    stray = _commit_stray_feature_branch(repo)
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/x")  # fetch fails → graceful fallback
+
+    assert _is_ancestor(repo, stray, "feat/x")
+    assert "WARNING" in capsys.readouterr().err
+
+
+def test_resolve_default_branch_symbolic_ref(tmp_path: Path) -> None:
+    repo, _origin = make_repo_with_origin(tmp_path)
+    subprocess.run(["git", "-C", str(repo), "fetch", "origin"], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "set-head", "origin", "--auto"], check=True)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    assert target._resolve_default_branch() == "main"
+
+
+def test_resolve_default_branch_gh_fallback(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)  # no origin → symbolic-ref fails
+    runner = FakeRunner(stdout={"gh": "trunk\n"})
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    assert target._resolve_default_branch() == "trunk"
+
+
+def test_resolve_default_branch_main_fallback(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)  # no origin, gh yields nothing
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    assert target._resolve_default_branch() == "main"
+
+
+def test_up_reuse_existing_worktree_never_fetches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    target.up(profile="dev", branch="feat/x")  # first up creates + fetches
+    runner.git_calls.clear()
+
+    target.up(profile="dev", branch="feat/x")  # reuse: worktree already exists
+
+    assert not _fetched(runner.git_calls)  # corner case #1: reuse never rebases
+
+
+def test_up_reuse_existing_branch_no_fetch_no_rebase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    branch_tip = _git_out(repo, "rev-parse", "HEAD")
+    subprocess.run(["git", "-C", str(repo), "branch", "feat/pre"], check=True)
+    runner = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    target.up(profile="dev", branch="feat/pre")  # existing branch → checkout as-is
+
+    assert _git_out(repo, "rev-parse", "feat/pre") == branch_tip  # tip unchanged
+    assert not _fetched(runner.git_calls)
 
 
 # ---------- target.exec / status / down ----------

@@ -29,7 +29,9 @@ fr isolation up --branch <feature-branch> [--profile <name>]
 ```
 
 - Name the branch for the feature now (`feat/<slug>`); the worktree, the
-  eventual PR, and cleanup all key off it.
+  eventual PR, and cleanup all key off it. The new `feat/<slug>` is cut from
+  freshly-fetched `origin/<default>` (#322) — pass `--base <ref>` only to
+  stack on something else.
 - **No devcontainer profile → HARD STOP.** Offer to run the fr-init
   interview immediately; if the operator declines, the brainstorm does not
   proceed — there is no unisolated fallback. (Under fr-goal, treat it as a
