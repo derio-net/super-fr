@@ -62,30 +62,31 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:43:54+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:43:55+00:00'
       note: null
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:43:56+00:00'
       note: null
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:43:58+00:00'
       note: null
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:43:59+00:00'
       note: null
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:44:00+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-06-21T13:44:01+00:00'
+    note: 'marker lifecycle: up writes .fr-isolation + info/exclude (idempotent),
+      down removes; 5 tests GREEN, full file 63 passed'
     observed_prs: []

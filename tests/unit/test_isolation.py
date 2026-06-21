@@ -1048,3 +1048,73 @@ def test_verify_merge_unknown_pr_state_not_verified(
     assert res["fetched"] is True
     assert res["pr_state"] is None
     assert res["verified"] is False
+
+
+# ---------- .fr-isolation marker lifecycle (#328 Task 3) ----------
+
+
+def _exclude_lines(repo: Path) -> list[str]:
+    exclude = repo / ".git" / "info" / "exclude"
+    return exclude.read_text().splitlines() if exclude.is_file() else []
+
+
+def test_up_writes_isolation_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    st = target.up(profile=None, branch="feat/x")
+
+    marker = st.worktree / ".fr-isolation"
+    assert marker.is_file()
+    data = json.loads(marker.read_text())
+    assert data["toplevel"] == str(st.worktree.resolve())
+    assert data["branch"] == "feat/x"
+    assert data["mode"] == "worktree"
+    assert isinstance(data["created_at"], str) and data["created_at"]
+
+
+def test_up_adds_marker_to_info_exclude(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    target.up(profile=None, branch="feat/x")
+    assert ".fr-isolation" in _exclude_lines(repo)
+
+
+def test_up_marker_exclude_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    st = target.up(profile=None, branch="feat/x")
+    # Re-writing the marker must not duplicate the exclude line.
+    target._write_isolation_marker(st.worktree, "feat/x")
+    assert _exclude_lines(repo).count(".fr-isolation") == 1
+
+
+def test_remove_isolation_marker_unit(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".fr-isolation").write_text("{}\n")
+    target._remove_isolation_marker(wt)
+    assert not (wt / ".fr-isolation").exists()
+    target._remove_isolation_marker(wt)  # idempotent — no error when absent
+
+
+def test_down_removes_isolation_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    st = target.up(profile=None, branch="feat/x")
+    assert (st.worktree / ".fr-isolation").is_file()
+
+    removed: list[Path] = []
+    orig = target._remove_isolation_marker
+    monkeypatch.setattr(
+        target,
+        "_remove_isolation_marker",
+        lambda wt: (removed.append(wt), orig(wt))[1],
+    )
+    target.down(st, force=True)
+    assert removed == [st.worktree]  # down retires the marker
