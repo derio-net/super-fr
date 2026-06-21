@@ -178,6 +178,7 @@ class LocalWorktreeDevcontainerTarget:
             created_at=datetime.now(UTC).isoformat(),
         )
         save_state(state)
+        self._write_isolation_marker(worktree, branch)
         return state
 
     def exec(self, state: IsolationState, argv: list[str]) -> int:
@@ -247,6 +248,7 @@ class LocalWorktreeDevcontainerTarget:
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
+        self._remove_isolation_marker(state.worktree)
         container = self._container_id(state)
         if container:
             self.run(["docker", "stop", container])
@@ -280,6 +282,44 @@ class LocalWorktreeDevcontainerTarget:
         result = self.run(argv, cwd=self.repo_root)
         if result.returncode != 0:
             raise IsolationError(f"git worktree add failed: {result.stderr}")
+
+    # ----- .fr-isolation marker lifecycle (#328 Task 3) -----
+
+    def _write_isolation_marker(self, worktree: Path, branch: str, mode: str = "worktree") -> None:
+        """Write the `.fr-isolation` identity marker and git-exclude it.
+
+        The marker is what the `fr-isolation-required` PreToolUse hook reads to
+        decide whether an edit is inside a real isolation workspace (#328 Task
+        3). Identity = the resolved worktree toplevel + branch + mode; the hook
+        blocks when the recorded toplevel does not match the file's actual
+        toplevel (a stale / copied marker) or when the toplevel is not a linked
+        worktree. `up` also appends it to the shared `info/exclude`, so the
+        marker can never be staged into a PR — backed by a committed
+        `.gitignore` entry and a CI tripwire.
+        """
+        worktree.mkdir(parents=True, exist_ok=True)
+        (worktree / ".fr-isolation").write_text(
+            json.dumps(
+                {
+                    "toplevel": str(worktree.resolve()),
+                    "branch": branch,
+                    "mode": mode,
+                    "created_at": datetime.now(UTC).isoformat(),
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        exclude = _git_common_dir(self.repo_root) / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude.read_text().splitlines() if exclude.is_file() else []
+        if ".fr-isolation" not in existing:
+            with exclude.open("a") as fh:
+                fh.write(".fr-isolation\n")
+
+    def _remove_isolation_marker(self, worktree: Path) -> None:
+        """Retire the marker on `down` (idempotent — absent is fine)."""
+        (worktree / ".fr-isolation").unlink(missing_ok=True)
 
     # ----- cold-start base resolution (#322) -----
 

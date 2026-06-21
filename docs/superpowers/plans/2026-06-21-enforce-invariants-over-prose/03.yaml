@@ -1,0 +1,70 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Leak prevention + CI tripwires (Task 3 marker, Task 2 claude -p) (TDD)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED+GREEN — .fr-isolation never tracked
+  steps:
+  - id: P3.T1.S1
+    text: |
+      Add tests/unit/test_tripwire_isolation_marker.py with a pure helper
+      tracked_matching(names: Iterable[str], needle: str) -> list[str]
+      returning names whose basename == needle. Unit-test it:
+      [".fr-isolation","a.py"] → ['.fr-isolation']; ["a.py"] → []. Then the
+      real guard: run `git -C <repo root> ls-files`, assert
+      tracked_matching(lines, ".fr-isolation") == [] (REPO_ROOT =
+      Path(__file__).resolve().parents[2]).
+  - id: P3.T1.S2
+    text: |
+      Add ".fr-isolation" to .gitignore under a "# fr isolation marker
+      (never commit)" comment. Run `cd <worktree> && uv run pytest
+      tests/unit/test_tripwire_isolation_marker.py -q --no-cov`. EXPECT
+      GREEN (marker is untracked + gitignored). Sanity-RED: confirm the
+      synthetic-violation unit case asserts detection.
+- number: 2
+  title: RED+GREEN — no claude -p batch calls in package source
+  steps:
+  - id: P3.T2.S1
+    text: |
+      Add tests/unit/test_tripwire_claude_p.py with a pure helper
+      scan_claude_p(text: str) -> bool that matches claude invoked with
+      -p/--print across spellings: regex
+      r"""claude["']?\s*,?\s*["']?(-p|--print)\b""". Unit-test it:
+      'subprocess.run(["claude","-p",x])' → True; 'claude --print' → True;
+      'claude chat' → False; 'applauded -поворот' non-match safety → False.
+  - id: P3.T2.S2
+    text: |
+      In the same file, the real guard: glob packages/*/src/**/*.py from
+      REPO_ROOT, assert no file's text triggers scan_claude_p (collect and
+      report offending paths in the assertion message). Run `cd <worktree>
+      && uv run pytest tests/unit/test_tripwire_claude_p.py -q --no-cov`.
+      EXPECT GREEN — super-fr packages never shell out to claude.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-06-21T13:50:10+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-06-21T13:50:11+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-06-21T13:50:13+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-06-21T13:50:14+00:00'
+      note: null
+  completion:
+    at: '2026-06-21T13:50:15+00:00'
+    note: 'two tripwires: .fr-isolation-never-tracked + no-claude-p-in-src; scan helpers
+      unit-tested with synthetic violations (prose mention ignored); .gitignore entry
+      added; 6 GREEN'
+    observed_prs: []

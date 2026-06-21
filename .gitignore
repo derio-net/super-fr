@@ -15,6 +15,10 @@ build/
 # Local git worktrees.
 .worktrees/
 
+# fr isolation marker (never commit — `fr isolation up` also adds it to
+# info/exclude; a CI tripwire fails if it is ever tracked). #328
+.fr-isolation
+
 # Operator scratch dir (ad-hoc runnable scripts handed to the operator).
 scripts/tmp/
 

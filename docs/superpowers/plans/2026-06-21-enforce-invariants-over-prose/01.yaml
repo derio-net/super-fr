@@ -1,0 +1,92 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Marker lifecycle — up writes/excludes .fr-isolation, down removes it (TDD)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — tests for marker write, info/exclude, idempotency, removal
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Read tests/unit/test_isolation.py to mirror its FakeRunner + tmp-repo
+      setup (how it builds LocalWorktreeDevcontainerTarget and what `up`
+      returns). Note the helper that fakes `git`/`devcontainer` calls.
+  - id: P1.T1.S2
+    text: |
+      Add to tests/unit/test_isolation.py four tests:
+      (a) test_up_writes_isolation_marker — after up(), <worktree>/.fr-isolation
+      exists; json.loads it; assert toplevel == str(worktree.resolve()),
+      branch == the up branch, mode == "worktree", and created_at is a
+      non-empty string.
+      (b) test_up_adds_marker_to_info_exclude — after up(), the shared
+      info/exclude (<git_common_dir>/info/exclude) contains a line
+      ".fr-isolation".
+      (c) test_up_exclude_is_idempotent — calling the marker-exclude path
+      twice leaves exactly one ".fr-isolation" line in info/exclude.
+      (d) test_down_removes_isolation_marker — with a .fr-isolation present
+      in the (faked) worktree, down() unlinks it.
+  - id: P1.T1.S3
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_isolation.py -q --no-cov -k "marker or exclude"`.
+      EXPECT RED — AttributeError/AssertionError: up() writes no marker yet.
+- number: 2
+  title: GREEN — implement marker write/exclude/remove in local.py
+  steps:
+  - id: P1.T2.S1
+    text: |
+      In packages/fr/src/fr/isolation/local.py add two methods to
+      LocalWorktreeDevcontainerTarget:
+      _write_isolation_marker(self, worktree: Path, branch: str, mode: str = "worktree")
+      — write <worktree>/.fr-isolation with
+      json.dumps({"toplevel": str(worktree.resolve()), "branch": branch,
+      "mode": mode, "created_at": datetime.now(UTC).isoformat()}, indent=2)+"\n";
+      then append ".fr-isolation" to <_git_common_dir(self.repo_root)>/info/exclude
+      (mkdir parents; read existing lines; only append if ".fr-isolation"
+      not already a line). _remove_isolation_marker(self, worktree: Path)
+      — (worktree / ".fr-isolation").unlink(missing_ok=True).
+  - id: P1.T2.S2
+    text: |
+      Call self._write_isolation_marker(worktree, branch) in up() immediately
+      before `return state` (after save_state). Call
+      self._remove_isolation_marker(state.worktree) at the START of down()
+      (before the docker/worktree teardown), so the marker is retired even
+      if the runner is faked / the worktree dir is not really removed.
+  - id: P1.T2.S3
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_isolation.py -q --no-cov`.
+      EXPECT GREEN — all four new tests pass and the existing isolation
+      tests are unaffected.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-21T13:43:54+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-06-21T13:43:55+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-06-21T13:43:56+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-06-21T13:43:58+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-06-21T13:43:59+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-06-21T13:44:00+00:00'
+      note: null
+  completion:
+    at: '2026-06-21T13:44:01+00:00'
+    note: 'marker lifecycle: up writes .fr-isolation + info/exclude (idempotent),
+      down removes; 5 tests GREEN, full file 63 passed'
+    observed_prs: []

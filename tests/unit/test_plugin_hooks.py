@@ -15,7 +15,10 @@ class TestPluginHooks:
         data = json.loads((HOOKS_DIR / "hooks.json").read_text())
         events = data["hooks"]
         assert {m["matcher"] for m in events["PostToolUse"]} == {"Skill"}
-        assert {m["matcher"] for m in events["PreToolUse"]} == {"Bash"}
+        assert {m["matcher"] for m in events["PreToolUse"]} == {
+            "Bash",
+            "Edit|Write|MultiEdit|NotebookEdit",
+        }
 
     def test_registered_scripts_exist_and_are_executable(self) -> None:
         data = json.loads((HOOKS_DIR / "hooks.json").read_text())

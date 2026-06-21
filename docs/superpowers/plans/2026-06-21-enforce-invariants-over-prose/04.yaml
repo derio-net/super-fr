@@ -1,0 +1,103 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Rules, docs, install wiring (+ install-drift guard)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — install copies every shipped rule
+  steps:
+  - id: P4.T1.S1
+    text: |
+      Add tests/unit/test_install_copies_rules.py: read scripts/install.sh
+      and plugins/super-fr/rules/*.md basenames; assert each rule basename
+      appears in a `cp ... rules/<name>` reference in install.sh. Run `cd
+      <worktree> && uv run pytest tests/unit/test_install_copies_rules.py -q
+      --no-cov`. EXPECT RED for the new rules (added next) — or write the
+      rules first then watch it go red until install.sh is updated.
+- number: 2
+  title: GREEN — author rules, mirror, CLAUDE.md, SKILL.md, install.sh
+  steps:
+  - id: P4.T2.S1
+    text: |
+      Write plugins/super-fr/rules/fr-isolation-required.md (operator rule,
+      mirrors agent-worktree-default.md): the invariant; the .fr-isolation
+      marker + identity/linked-worktree validity; the Edit/Write hook;
+      .fr-isolation-allow example globlist (projects/**, data/**,
+      context/**, memory/**, caches); FR_BASE_OK=1 escape; the two-file
+      (operator + repo) pattern; note the existing Bash sentinel guard is
+      complementary.
+  - id: P4.T2.S2
+    text: |
+      Write .claude/rules/fr-isolation-required.md — a host-neutral
+      repo-level mirror (no /Users paths, no host-specific bits; safe to
+      auto-load in clones incl. pods). Reference the shipped operator rule
+      for install details.
+  - id: P4.T2.S3
+    text: |
+      Write plugins/super-fr/rules/no-claude-p-batch.md (Task 2): never use
+      `claude -p` for batch/per-element LLM work; measured cost (~22k input
+      tokens, ~$0.37, ~5s/call — full cold-start each call); alternatives in
+      order (persistent agent session → subagent fan-out → batch K per
+      prompt) + cleanup; engine/transport separation principle; single
+      one-off `claude -p` is fine.
+  - id: P4.T2.S4
+    text: |
+      Add cp lines to scripts/install.sh (next to the fr-plan-override.md
+      cp) for fr-isolation-required.md and no-claude-p-batch.md into
+      "$RULES_DIR". Update the "Installing rules..." echo / verification
+      footer if it enumerates rule names.
+  - id: P4.T2.S5
+    text: |
+      Add a "Conventions" pointer in CLAUDE.md: link no-claude-p-batch +
+      the fr-isolation enforcement hook; add the operator-side rule-sync
+      note (mirrors the fr-plan-override sync note) so ~/.claude/rules stays
+      in step. Add a concise marker/hook + FR_BASE_OK mention to
+      plugins/super-fr/skills/fr-isolation/SKILL.md WITHOUT exceeding 120
+      lines (check `wc -l` first; compress existing prose if needed).
+  - id: P4.T2.S6
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_install_copies_rules.py
+      tests/unit/test_skills_cmd.py -q --no-cov`. EXPECT GREEN — install
+      covers all rules and the SKILLS↔dirs guard is unaffected (no new
+      skill dir).
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-06-21T13:53:48+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-06-21T13:53:49+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-06-21T13:53:50+00:00'
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-06-21T13:53:52+00:00'
+      note: null
+    P4.T2.S4:
+      state: x
+      ticked_at: '2026-06-21T13:53:53+00:00'
+      note: null
+    P4.T2.S5:
+      state: x
+      ticked_at: '2026-06-21T13:53:54+00:00'
+      note: null
+    P4.T2.S6:
+      state: x
+      ticked_at: '2026-06-21T13:53:56+00:00'
+      note: null
+  completion:
+    at: '2026-06-21T13:53:57+00:00'
+    note: 3 rules (fr-isolation-required operator+repo-mirror, no-claude-p-batch)
+      + install.sh cp + CLAUDE.md Conventions + SKILL.md mention (118 lines); install-drift
+      guard GREEN (15)
+    observed_prs: []

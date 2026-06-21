@@ -95,6 +95,10 @@ untouched: it keeps that branch's own tip, never rebased.
   is added.
 - Never run project commands against the base repo while isolation is live;
   the worktree is the only working copy this run touches.
+- `up` writes a gitignored `.fr-isolation` marker the `fr-isolation-required`
+  PreToolUse hook reads to ALLOW edits; editing tracked files in an fr-enabled
+  base clone is blocked (escape: `FR_BASE_OK=1` or a `.fr-isolation-allow`
+  globlist). `down` removes it. See the fr-isolation-required rule (#328).
 
 ## Cleanup contract
 
