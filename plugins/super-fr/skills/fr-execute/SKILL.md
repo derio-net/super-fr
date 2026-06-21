@@ -80,6 +80,12 @@ take the PR out of draft.
 5. **Open the PR.** Delegate to `superpowers:finishing-a-development-branch`.
    Use the PR title from `fr pickup` and the body shape above.
 
+   **Caveat — under fr-goal LOCAL mode, do NOT open a per-phase PR.** Push the
+   branch only; the single PR is fr-goal's step 8, opened (as a draft) by the
+   orchestrator *after* its review pass. Opening a PR here reorders deliver
+   ahead of review and reintroduces the #320 merge-race. Per-phase PRs remain
+   the behaviour for the standalone **dispatched** (Issue/VK) flow only.
+
 6. **Reconcile GitHub state:**
    ```bash
    fr apply <plan-dir>           # preview the projected mutations

@@ -11,7 +11,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.local import (
+    LocalWorktreeDevcontainerTarget,
+    branch_changes_present,
+    subprocess_runner,
+)
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -557,3 +561,209 @@ def test_up_twice_is_idempotent_on_worktree(
 def test_pr_malformed_gh_json_is_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _, runner, target, st = _upped(tmp_path, monkeypatch, stdout={"gh": "not-json {"})
     assert target.status(st)["pr"] is None
+
+
+# ---------- merge-config verification (#320 review follow-up) ----------
+# The content check must be correct across EVERY merge strategy (squash,
+# merge-commit, rebase) — these hit real throwaway repos, base_ref is a local
+# ref so no remote/network is needed.
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
+
+
+def _commit(repo: Path, path: str, content: str, msg: str) -> None:
+    (repo / path).write_text(content)
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", msg)
+
+
+def _squash_merge(repo: Path, branch: str, msg: str) -> None:
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "--squash", branch)
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", msg)
+
+
+def _state(repo: Path, branch: str) -> IsolationState:
+    return IsolationState(
+        repo_root=repo, branch=branch, worktree=repo, profile="dev", created_at="t"
+    )
+
+
+def test_branch_changes_present_squash(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash fix")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_merge_commit(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _git(repo, "checkout", "-q", "main")
+    _git(
+        repo, "-c", "user.email=t@t", "-c", "user.name=t", "merge", "--no-ff", "-m", "m", "feature"
+    )
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+
+
+def test_branch_changes_present_rebase(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "feature"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "cherry-pick", sha)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+
+
+def test_branch_changes_present_orphan(tmp_path: Path) -> None:
+    # fix1 squash-merged; fix2 pushed to the branch AFTER the merge (#320).
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix1.py", "one\n", "fix1")
+    _squash_merge(repo, "feature", "squash fix1")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "fix2.py", "two\n", "fix2 after merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert "fix2.py" in res.missing
+    assert "fix1.py" not in res.missing
+
+
+def test_branch_changes_present_main_diverged_other_path(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash fix")
+    _commit(repo, "other.py", "unrelated\n", "other on main")  # main moves on a different file
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+
+
+def test_branch_changes_present_multi_file_squash(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / "a.py").write_text("a\n")
+    (repo / "b.py").write_text("b\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "two files")
+    _squash_merge(repo, "feature", "squash two files")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_deletion_squash(tmp_path: Path) -> None:
+    # make_repo seeds README.md; the branch deletes it.
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _git(repo, "rm", "-q", "README.md")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "delete readme")
+    _squash_merge(repo, "feature", "squash delete")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+
+
+def test_branch_changes_present_multi_commit_rebase(tmp_path: Path) -> None:
+    # GitHub rebase-merge replays ALL branch commits onto main; model with a
+    # range cherry-pick of two commits.
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "a.py", "1\n", "c1")
+    _commit(repo, "b.py", "2\n", "c2")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "cherry-pick", "main..feature")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def _with_origin(repo: Path) -> None:
+    """Add a bare remote and push main so `git fetch origin main` succeeds —
+    verify_merge requires a fresh fetch, so the verdict tests need a real one."""
+    remote = repo.parent / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    _git(repo, "remote", "add", "origin", str(remote))
+    _git(repo, "push", "-q", "origin", "main")
+
+
+def test_verify_merge_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+    assert res["changes_present"] is True
+    assert res["fetched"] is True
+    assert res["pr_state"] == "MERGED"
+
+
+def test_verify_merge_orphan_not_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix1.py", "one\n", "fix1")
+    _squash_merge(repo, "feature", "squash fix1")
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "fix2.py", "two\n", "fix2 after merge")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert "fix2.py" in res["missing"]
+
+
+def test_verify_merge_fetch_failure_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Content present + PR MERGED, but NO remote → fetch fails → NOT verified
+    # (a stale origin/main must never green-light — the false-positive guard).
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "main")  # ref exists, but no remote
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["fetched"] is False
+    assert res["changes_present"] is True
+    assert res["verified"] is False
+
+
+def test_verify_merge_unknown_pr_state_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # gh unavailable (pr_state None) must NOT pass — PR-MERGED is the tiebreak.
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: None)
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["changes_present"] is True
+    assert res["fetched"] is True
+    assert res["pr_state"] is None
+    assert res["verified"] is False

@@ -157,3 +157,64 @@ def down(
         _fail(err)
         return
     typer.echo(f"isolation down: {branch} cleaned up.")
+
+
+@isolation_app.command(name="verify-merge")
+def verify_merge(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    branch: str | None = typer.Option(
+        None, help="Branch whose merge to verify (default: the single active workspace)."
+    ),
+    default_branch: str = typer.Option(
+        "main", "--default-branch", help="Base branch the PR merged into."
+    ),
+) -> None:
+    """Verify a merged branch's changes actually reached the base branch.
+
+    Squash/rebase/merge-safe: checks content presence on `origin/<default>`,
+    not commit ancestry (the #320 close-out). Exit 1 if not verified — the fix
+    may have orphaned (a commit pushed after the PR merged).
+    """
+    root = repo.resolve()
+    if branch is None:
+        states = list_states(root)
+        if len(states) > 1:
+            _fail(
+                IsolationError(
+                    "multiple isolation workspaces — specify --branch: "
+                    + ", ".join(s.branch for s in states)
+                )
+            )
+            return
+        state = states[0] if states else None
+    else:
+        state = load_state(root, branch)
+    if state is None:
+        _fail(
+            IsolationError(
+                f"no isolation workspace for branch {branch!r}."
+                if branch is not None
+                else "no isolation workspace — run `fr isolation up` first."
+            )
+        )
+        return
+    res = _target(root).verify_merge(state, default_branch=default_branch)
+    if res["verified"]:
+        typer.echo(
+            f"verify-merge: {res['branch']} ✓ changes present on "
+            f"origin/{default_branch}, PR MERGED."
+        )
+        return
+    reasons = []
+    if not res["fetched"]:
+        reasons.append(f"could not fetch origin/{default_branch} (check may be stale)")
+    if not res["changes_present"]:
+        reasons.append(f"changes missing from origin/{default_branch}: {res['missing']}")
+    if res["pr_state"] != "MERGED":
+        reasons.append(f"PR state is {res['pr_state']} (expected MERGED)")
+    typer.echo(
+        f"verify-merge: {res['branch']} ✗ NOT verified — {'; '.join(reasons)}. "
+        "Do NOT declare done; recover (cherry-pick onto the base branch / open a fresh PR).",
+        err=True,
+    )
+    raise typer.Exit(1)

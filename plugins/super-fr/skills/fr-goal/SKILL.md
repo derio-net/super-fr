@@ -15,9 +15,8 @@ description: >
 One operator touchpoint from goal to reviewed PR: brainstorm context → ONE
 batched Q&A → spec → review → fr-plan → review → TDD implementation → review
 → single PR. Every review fixes all it finds; the operator's autonomy
-instruction (outranking skill defaults) replaces each superpowers approval
-pause with a review-and-fix pass — that protection front-loads into the Q&A.
-When blocked: stop, state what's blocked and what you tried, and ask — a
+instruction replaces each superpowers approval pause with a review-and-fix
+pass. When blocked: stop, say what's blocked and what you tried, and ask — a
 wrong guess shipped in a PR costs more than a paused run.
 
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
@@ -36,85 +35,86 @@ wrong guess shipped in a PR costs more than a paused run.
 
 Invoke `fr-brainstorming` (runs `fr isolation up` first; no devcontainer
 profile → pause for the fr-init interview). Isolation precedes EVERYTHING —
-read-only exploration, measurements, and cluster ops included; an operator
-"start with X" changes the first work item, never the first action; from the
-start ALL commands run via `fr isolation exec`. Explore the workspace,
-collect EVERY operator-owned decision, and ask all of them in ONE
-AskUserQuestion call (max 4 questions, recommended option first). Include a
-post-merge Test Plan question ONLY when the deliverable deploys (a service,
-bot, infra) — never for pure code changes. Mid-run stragglers (rare): batch,
-never drip.
+exploration, measurements, cluster ops included; an operator "start with X"
+changes the first work item, never the first action. Explore, collect EVERY
+operator-owned decision, ask all in ONE AskUserQuestion call (max 4 questions,
+recommended first). Include a post-merge Test Plan question ONLY when the
+deliverable deploys (service/bot/infra), never pure code. Batch stragglers.
 
 ### 2. Spec — then review it
 
 Write `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`, then review it
-against the Q&A answers AND codebase reality (do the files, helpers, and
-services it names exist?). Fix every finding before moving on. If the operator
-chose a Test Plan, the spec carries a `## Test Plan` of post-merge steps.
+against the Q&A answers AND codebase reality (do the files/helpers/services it
+names exist?). Fix every finding. Test Plan chosen → spec carries a `## Test
+Plan` of post-merge steps.
 
 ### 3. Multi-project check
 
-For a cross-repo spec (`owner/repo:path` ref form), this session owns ONE
-repo's plan and PR. For each other repo: locate its working copy yourself
-(sibling dirs, usual project roots); ask for a path or clone permission only
-if not found — batched into the Q&A when the shape is known up front. Dispatch
-one agent per repo (`isolation: "worktree"`) with the spec ref and this
-pipeline from step 4. One plan, one PR per repo.
+For a cross-repo spec (`owner/repo:path` form), this session owns ONE repo's
+plan and PR. For each other repo: locate its working copy yourself (sibling
+dirs, usual roots); ask for a path/clone only if not found — batch into the
+Q&A. Dispatch one agent per repo (`isolation: "worktree"`) with the spec ref
+and this pipeline from step 4. One plan, one PR per repo.
 
 ### 4. Plan — fr-plan, then review it
 
-Invoke `fr-plan`, skipping the section-by-section approval (the spec already
-encodes the approved design). Keep v2 plan-as-folder format and TDD-shaped
-steps. Review: `fr plan self-review <plan-dir>` must pass; read the phases back
-against the spec — all covered, nothing assumed. Fix everything, then implement.
+Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the
+design). Keep v2 plan-as-folder, TDD-shaped steps. Review: `fr plan self-review`
+must pass and the phases read back against the spec (all covered). Fix, implement.
 
 ### 5. Manual phases — back-load by default
 
 fr-plan's agentic-purity gate collects manual work into dedicated `[manual]`
 phases. fr-goal adds placement policy (a mid-plan manual phase stalls the run):
 
-- **Back-load by default:** ALL manual work in the LAST phase, no agentic
-  phase depending on it. The PR ships with that phase deliberately
-  unimplemented, marked for the operator, who implements it and pushes to the
-  same PR (`fr plan edit --complete-phase N --note` records what was done).
-- **Front-load only when agentic work genuinely depends on it.** Finish plan
-  + plan review, open a PR of spec + plan (the manual instructions ARE the
-  deliverable), pause. The operator merges it (when later work dispatches
-  from it or another repo needs it reachable) or pushes evidence to its
-  branch (when the run continues there). Resume ONLY on the operator's go.
-- **Multi-repo:** same per repo, but model cross-repo dependencies —
-  `depends_on` reaches only within a plan, so ordering lives in the spec and
-  PR sequencing (a manual secret in one repo may gate another's phases).
+- **Back-load by default:** ALL manual work in the LAST phase, no agentic phase
+  depending on it. The PR ships it deliberately unimplemented, marked for the
+  operator, who implements and pushes to the same PR (`fr plan edit --complete-phase N --note`).
+- **Front-load only when agentic work genuinely depends on it.** Finish plan +
+  review, open a PR of spec + plan (the manual instructions ARE the
+  deliverable), pause; resume ONLY on the operator's go.
+- **Multi-repo:** model cross-repo deps — `depends_on` is within-plan only, so
+  ordering lives in the spec and PR sequencing (a secret in one repo may gate
+  another's phases).
 
 ### 6. Implement — fr-execute local mode, TDD, no subagents
 
 The step-1 isolation workspace is the working copy — every command through
 `fr isolation exec`. Run phases via `fr-execute` in LOCAL mode (plan-dir +
-phase) — NOT dispatched: spec/plan aren't on main, `fr apply --yes` refuses.
-Implement inline, not via subagents — the implementing context needs the Q&A
-and spec history. TDD per step (`superpowers:test-driven-development`). Tick
-steps and complete phases via `fr plan edit`. Never implement a manual phase.
+phase), NOT dispatched (spec/plan aren't on main, `fr apply --yes` refuses).
+Implement inline, not via subagents (the context needs the Q&A + spec history).
+TDD per step; tick steps / complete phases via `fr plan edit`. Never a manual phase.
+
+**The implementing layer pushes the branch ONLY — it never opens the PR**
+(inline, or a delegated multi-repo builder). Opening it here reorders deliver
+(8) ahead of review (7), letting the operator merge before fixes exist — they
+orphan onto a merged branch (#320, 3×). The orchestrator opens a **draft** PR
+for visibility — unmergeable until step 8, its "Draft" badge meaning "do not merge yet".
 
 ### 7. Review at milestones — fix everything found
 
-After each milestone (a completed phase, or full implementation for small
-plans), invoke `superpowers:requesting-code-review` over spec + plan + code.
-Fix every finding immediately, with tests. A factually wrong finding gets
-refuting reasoning recorded (`superpowers:receiving-code-review`) — never a
-performative wrong fix, never a silent drop. Keep the findings+fixes list.
+After each milestone (completed phase, or full implementation for small plans),
+invoke `superpowers:requesting-code-review` over spec + plan + code. Fix every
+finding immediately, with tests; a factually wrong one gets refuting reasoning
+(`superpowers:receiving-code-review`), never a silent drop. Keep a findings list.
 
 ### 8. Deliver — one PR per repo, all artifacts aboard
 
 Verify first (`superpowers:verification-before-completion`): full test-suite
-output, self-review pass, steps ticked. PR body: summary + spec/plan paths;
-review findings and their fixes (plus any refuted finding); the back-loaded
-manual phase marked "unimplemented — operator pushes to this PR"; the Test Plan
-verbatim, labeled "post-merge — operator-driven". Stop; the operator merges.
+output, self-review pass, steps ticked. The PR goes mergeable ONLY now (after
+step 7's fixes): `gh pr ready` on the draft — never say "ready to merge" before
+this. PR body: summary + spec/plan paths; review findings and their fixes (plus
+any refuted finding); the back-loaded manual phase marked "unimplemented —
+operator pushes to this PR"; the Test Plan verbatim, labeled "post-merge —
+operator-driven". Stop; the operator merges.
 
 ### 9. Post-merge close-out
 
-When the operator reports the merge: drive the Test Plan interactively if
-present (agent runs checks, operator confirms what the agent can't reach).
-Confirm phases complete (`fr status` nudges), `fr archive <plan-dir>`
-(gate-checked git mv; spec follows once all rows are implemented), commit via
-a housekeeping PR, `fr isolation down`.
+When the operator reports the merge: **first verify the fix reached `main`** —
+run `fr isolation verify-merge --branch <b>` (squash/rebase/merge-safe: checks
+the branch's changes are present on `origin/main`, not commit ancestry, and the
+PR is MERGED; exit 1 = not verified). Not verified → STOP and recover
+(cherry-pick / fresh PR). Then drive the Test Plan if present (agent runs
+checks, operator confirms what it can't reach), confirm phases complete (`fr
+status`), `fr archive <plan-dir>`, commit via a housekeeping PR, `fr isolation
+down`.

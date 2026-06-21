@@ -1,0 +1,93 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Skill prose — fr-goal, fr-isolation, fr-execute
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: fr-goal SKILL.md — ordering, draft PR, close-out, wording
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md:
+
+      - Step 6 (Implement): add that the implementing layer — inline OR a
+        delegated subagent (multi-repo step 3) — PUSHES THE BRANCH ONLY
+        and NEVER opens the PR; a subagent's mandate ends at "branch
+        pushed". PR creation is the orchestrator's, at step 8.
+      - Bridge line (after build, before review): the orchestrator opens a
+        DRAFT PR for visibility; drafts are GitHub-unmergeable so the
+        review window stays closed and the "Draft" badge is the
+        "review pending" signal.
+      - Step 8 (Deliver): the PR becomes mergeable ONLY after step 7's
+        fixes are committed — run `gh pr ready` now (and only now).
+        Wording: never say "PR is up / ready to merge" until fixes are in;
+        say "review pending — do not merge yet" while draft, only
+        "reviewed and ready to merge" after `gh pr ready`.
+      - Step 9 (close-out): after the operator reports merge, VERIFY the
+        fix reached `main` before declaring done — squash-aware: confirm
+        PR MERGED and the branch's changes are present in origin/main
+        (`git fetch origin main` then `git diff --quiet origin/main --
+        <changed paths>`); NOT `git merge-base --is-ancestor` (squash
+        false-negative). Missing → STOP, recover (cherry-pick / fresh PR).
+
+      Verify the guardrails landed:
+        fr isolation exec --branch fix/fr-goal-merge-race -- bash -c \
+          "grep -q 'never opens the PR' plugins/super-fr/skills/fr-goal/SKILL.md && \
+           grep -q 'gh pr ready' plugins/super-fr/skills/fr-goal/SKILL.md && \
+           grep -q 'squash' plugins/super-fr/skills/fr-goal/SKILL.md && \
+           grep -qi 'do not merge yet' plugins/super-fr/skills/fr-goal/SKILL.md"
+      Expect exit 0.
+- number: 2
+  title: fr-isolation SKILL.md — document the enforced pre-push guard
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      In plugins/super-fr/skills/fr-isolation/SKILL.md, in the exec-bridge
+      "Push and PR creation default to the HOST" area, add: before pushing
+      to a feature branch, its PR must not be MERGED/CLOSED (pushing there
+      orphans the commit — #320); a PreToolUse hook
+      (fr-merged-pr-push-guard.sh) now ENFORCES this during fr pipelines,
+      so a denied push is understood, not worked around.
+
+      Verify:
+        fr isolation exec --branch fix/fr-goal-merge-race -- \
+          grep -q 'fr-merged-pr-push-guard' plugins/super-fr/skills/fr-isolation/SKILL.md
+      Expect exit 0.
+- number: 3
+  title: fr-execute SKILL.md — step-5 caveat (no per-phase PR under fr-goal)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      In plugins/super-fr/skills/fr-execute/SKILL.md step 5 ("Open the
+      PR"), add a caveat: under fr-goal LOCAL mode, DO NOT open a per-phase
+      PR — push the branch only; the single PR is fr-goal's step 8, opened
+      (as a draft) by the orchestrator post-review. Per-phase PRs remain
+      the behaviour for the standalone dispatched (Issue/VK) flow.
+
+      Verify:
+        fr isolation exec --branch fix/fr-goal-merge-race -- bash -c \
+          "grep -qi 'fr-goal' plugins/super-fr/skills/fr-execute/SKILL.md && \
+           grep -qi 'local mode' plugins/super-fr/skills/fr-execute/SKILL.md"
+      Expect exit 0.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-06-20T22:01:15+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-06-20T22:02:32+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-06-20T22:02:36+00:00'
+      note: null
+  completion:
+    at: '2026-06-20T22:02:54+00:00'
+    note: null
+    observed_prs: []

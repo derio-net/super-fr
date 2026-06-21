@@ -1,0 +1,203 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Tested close-out verification — fr isolation verify-merge (review follow-up)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — merge-config matrix tests for branch_changes_present + verify_merge
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED. In tests/unit/test_isolation.py add local helpers (_commit, _branch,
+      _checkout, _sha building on the existing make_repo) and tests proving the
+      content check is correct across every merge strategy. Import
+      branch_changes_present, verify_merge entry from fr.isolation.local, plus
+      subprocess_runner / IsolationState.
+
+      Matrix (real throwaway repos — base_ref is a local ref):
+        - test_branch_changes_present_squash: feature has fix; `git merge
+          --squash feature` + commit onto main → changes_present is True,
+          missing == [].
+        - test_branch_changes_present_merge_commit: `git merge --no-ff feature`
+          → present.
+        - test_branch_changes_present_rebase: cherry-pick feature's commit onto
+          main (models GitHub rebase-merge) → present.
+        - test_branch_changes_present_orphan: fix1 squash-merged to main, THEN
+          fix2.py committed to feature (pushed post-merge) → changes_present is
+          False and "fix2.py" in missing. (The #320 bug.)
+        - test_branch_changes_present_main_diverged_other_path: fix squash-merged,
+          then main commits an unrelated other.py → still present (changed set
+          is scoped to the branch's files).
+        - test_verify_merge_verified: real repo, origin/main ref set via
+          `git update-ref refs/remotes/origin/main main`, monkeypatch
+          target._pr → {"state": "MERGED"} → verify_merge(...)["verified"] True.
+        - test_verify_merge_orphan_not_verified: orphan setup + _pr MERGED →
+          verified False, "fix2.py" in missing.
+
+      Run: fr isolation exec --branch fix/fr-goal-merge-race -- \
+        uv run pytest tests/unit/test_isolation.py -q --no-cov -k "branch_changes or verify_merge"
+      Expect FAILURE: ImportError (branch_changes_present / verify_merge absent).
+- number: 2
+  title: GREEN — implement branch_changes_present + Target.verify_merge
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      GREEN. In packages/fr/src/fr/isolation/local.py add a dataclass + the
+      pure-git content check, and a Target method that combines it with the PR
+      state. Use the existing `self.run` seam; base_ref compares final file
+      content (correct for squash/merge/rebase — never ancestry).
+
+      Add near the top (after imports) a dataclass and function:
+
+          @dataclass
+          class MergeVerification:
+              changed: list[str]
+              missing: list[str]
+              changes_present: bool
+
+          def branch_changes_present(
+              run: Runner, repo_root: Path, branch: str, base_ref: str
+          ) -> MergeVerification:
+              mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
+              if mb.returncode != 0:
+                  raise IsolationError(
+                      f"no merge-base for {base_ref} and {branch} — unrelated histories?"
+                  )
+              merge_base = mb.stdout.strip()
+              names = run(
+                  ["git", "diff", "--name-only", merge_base, branch], cwd=repo_root
+              )
+              changed = [ln for ln in names.stdout.splitlines() if ln]
+              if not changed:
+                  return MergeVerification(changed=[], missing=[], changes_present=True)
+              diff = run(
+                  ["git", "diff", "--name-only", branch, base_ref, "--", *changed],
+                  cwd=repo_root,
+              )
+              missing = [ln for ln in diff.stdout.splitlines() if ln]
+              return MergeVerification(
+                  changed=changed, missing=missing, changes_present=not missing
+              )
+
+      Add `from dataclasses import dataclass` to imports. Then a Target method:
+
+          def verify_merge(
+              self, state: IsolationState, default_branch: str = "main",
+              remote: str = "origin",
+          ) -> dict[str, Any]:
+              base_ref = f"{remote}/{default_branch}"
+              # best-effort refresh; offline/no-remote → compare existing ref
+              self.run(["git", "fetch", remote, default_branch], cwd=state.worktree)
+              res = branch_changes_present(self.run, state.worktree, state.branch, base_ref)
+              pr = self._pr(state)
+              pr_state = pr.get("state") if pr else None
+              verified = res.changes_present and pr_state in ("MERGED", None)
+              return {
+                  "branch": state.branch,
+                  "verified": verified,
+                  "changes_present": res.changes_present,
+                  "missing": res.missing,
+                  "pr_state": pr_state,
+              }
+
+      Run the same -k pytest — expect GREEN.
+- number: 3
+  title: CLI — fr isolation verify-merge command
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Add the command to packages/fr/src/fr/commands/isolation_cmd.py. Import
+      branch is resolved like `status` (load_state, or single active workspace).
+
+          @isolation_app.command(name="verify-merge")
+          def verify_merge(
+              repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+              branch: str | None = typer.Option(
+                  None, help="Branch whose merge to verify (default: single workspace)."
+              ),
+              default_branch: str = typer.Option(
+                  "main", "--default-branch", help="Base branch the PR merged into."
+              ),
+          ) -> None:
+              """Verify a merged branch's changes actually reached the base branch.
+
+              Squash/rebase/merge-safe: checks content presence on
+              origin/<default>, not commit ancestry. Exit 1 if not verified."""
+              root = repo.resolve()
+              if branch is None:
+                  states = list_states(root)
+                  if len(states) > 1:
+                      _fail(IsolationError(
+                          "multiple isolation workspaces — specify --branch: "
+                          + ", ".join(s.branch for s in states)))
+                      return
+                  state = states[0] if states else None
+              else:
+                  state = load_state(root, branch)
+              if state is None:
+                  _fail(IsolationError(
+                      f"no isolation workspace for branch {branch!r}."
+                      if branch else "no isolation workspace — run `fr isolation up` first."))
+                  return
+              res = _target(root).verify_merge(state, default_branch=default_branch)
+              if res["verified"]:
+                  typer.echo(
+                      f"verify-merge: {res['branch']} ✓ changes present on "
+                      f"{root and 'origin/' + default_branch} (PR {res['pr_state']})")
+                  return
+              typer.echo(
+                  f"verify-merge: {res['branch']} ✗ NOT verified — "
+                  f"changes_present={res['changes_present']} pr_state={res['pr_state']} "
+                  f"missing={res['missing']}. Do NOT declare done; recover "
+                  "(cherry-pick onto the base branch / open a fresh PR).", err=True)
+              raise typer.Exit(1)
+
+      Add a unit test (tests/unit/test_isolation_cmd.py if present, else
+      test_isolation.py) using the typer CliRunner / monkeypatched _target that
+      asserts exit 0 on verified and exit 1 on not-verified. Run:
+        fr isolation exec --branch fix/fr-goal-merge-race -- \
+          uv run pytest tests/unit/ -q --no-cov -k "verify_merge or verify-merge"
+      Expect GREEN.
+- number: 4
+  title: Wire step 9 + full gate
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Update plugins/super-fr/skills/fr-goal/SKILL.md step 9 to call
+      `fr isolation verify-merge --branch <b>` instead of the inline git
+      commands (squash/rebase/merge-safe; exit 1 → STOP). Keep the skill ≤120
+      lines:
+        fr isolation exec --branch fix/fr-goal-merge-race -- \
+          uv run pytest tests/unit/test_skill_validation.py -q --no-cov
+      Expect GREEN (≤120). Then the full gate:
+        ruff format --check + ruff check packages/ tests/
+        mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
+        uv run pytest -q --no-cov
+        uv run python scripts/bump-version.py --check
+      Expect all green (version stays 3.4.1 — unreleased, no re-bump).
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-06-21T07:00:33+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-06-21T07:01:49+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-06-21T07:03:50+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-06-21T07:05:40+00:00'
+      note: null
+  completion:
+    at: '2026-06-21T07:05:44+00:00'
+    note: null
+    observed_prs: []

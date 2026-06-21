@@ -55,6 +55,12 @@ fr isolation down --branch <feature-branch> [--force]           # post-merge cle
   unauthenticated unless that file provides a token. Push and PR creation
   default to the HOST (run them outside `exec`, from the worktree) — the
   operator's credentials never enter the container implicitly.
+- Pre-push guard: before pushing to a feature branch, its PR must not be
+  `MERGED`/`CLOSED` — pushing there orphans the commit from `main` (the #320
+  merge-race). A `PreToolUse` hook (`fr-merged-pr-push-guard.sh`) ENFORCES this
+  during an active fr pipeline: a `git push` whose current-branch PR is
+  merged/closed is denied. A denied push is the guard working, not a glitch —
+  cherry-pick the commit onto `main` (or open a fresh branch/PR) instead.
 - ALL GitHub interaction relies on an AUTHENTICATED HOST: pushes, PR
   creation, and `fr isolation status`/`down`'s PR checks (`gh pr view`)
   all use the host's gh/git auth. The container needs NO GitHub token for

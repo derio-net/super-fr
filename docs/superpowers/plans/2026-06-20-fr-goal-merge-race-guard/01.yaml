@@ -1,0 +1,262 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Pre-push guard hook — deny pushes to MERGED/CLOSED PR branches
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — failing hook tests with a fake-gh harness
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. Create tests/unit/test_hooks_push_guard.py mirroring
+      test_hooks_guard.py's harness, but inject a fake `gh` on PATH so PR
+      state is controllable. Full file (BEGIN/END):
+
+      BEGIN tests/unit/test_hooks_push_guard.py
+      """fr-merged-pr-push-guard.sh — PreToolUse(Bash) hook denies pushes
+      to a MERGED/CLOSED PR's branch while an fr pipeline is active
+      (#320). Fail-open on every ambiguity.
+      """
+      from __future__ import annotations
+
+      import json
+      import os
+      import shutil
+      import subprocess
+      from pathlib import Path
+
+      import pytest
+
+      pytestmark = pytest.mark.skipif(
+          shutil.which("jq") is None, reason="hook scripts require jq"
+      )
+
+      REPO_ROOT = Path(__file__).resolve().parents[2]
+      SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "fr-merged-pr-push-guard.sh"
+
+
+      def fake_gh(bin_dir: Path, *, state: str | None = None, fail: bool = False) -> Path:
+          bin_dir.mkdir(parents=True, exist_ok=True)
+          gh = bin_dir / "gh"
+          if fail:
+              gh.write_text("#!/bin/bash\nexit 1\n")
+          else:
+              payload = json.dumps({"state": state, "mergedAt": None})
+              gh.write_text(f"#!/bin/bash\ncat <<'JSON'\n{payload}\nJSON\n")
+          gh.chmod(0o755)
+          return bin_dir
+
+
+      def run_hook(payload: dict, sentinel_dir: Path, gh_bin: Path | None = None):
+          env = {**os.environ, "FR_SENTINEL_DIR": str(sentinel_dir)}
+          if gh_bin is not None:
+              env["PATH"] = f"{gh_bin}{os.pathsep}{env['PATH']}"
+          return subprocess.run(
+              ["bash", str(SCRIPT)],
+              input=json.dumps(payload),
+              capture_output=True,
+              text=True,
+              env=env,
+          )
+
+
+      def write_sentinel(sentinel_dir: Path, session: str = "sess-1") -> None:
+          sentinel_dir.mkdir(parents=True, exist_ok=True)
+          (sentinel_dir / f"{session}.json").write_text(
+              json.dumps({"repo_root": "/x", "skill": "fr-goal"})
+          )
+
+
+      def payload(command: str, cwd: Path, session: str = "sess-1") -> dict:
+          return {
+              "session_id": session,
+              "cwd": str(cwd),
+              "hook_event_name": "PreToolUse",
+              "tool_name": "Bash",
+              "tool_input": {"command": command},
+          }
+
+
+      def decision(result: subprocess.CompletedProcess[str]) -> str | None:
+          if not result.stdout.strip():
+              return None
+          return json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"]
+
+
+      def test_no_sentinel_allows(tmp_path: Path) -> None:
+          gh = fake_gh(tmp_path / "bin", state="MERGED")
+          r = run_hook(payload("git push", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) is None
+
+
+      def test_non_push_command_allows(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", state="MERGED")
+          r = run_hook(payload("git status", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) is None
+
+
+      def test_push_open_pr_allows(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", state="OPEN")
+          r = run_hook(payload("git push", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) is None
+
+
+      def test_push_merged_pr_denies(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", state="MERGED")
+          r = run_hook(payload("git push", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) == "deny"
+
+
+      def test_push_closed_pr_denies(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", state="CLOSED")
+          r = run_hook(payload("git push", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) == "deny"
+
+
+      def test_push_gh_error_fails_open(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", fail=True)
+          r = run_hook(payload("git push", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) is None
+
+
+      def test_force_push_merged_denies(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", state="MERGED")
+          cmd = "cd /tmp && git push --force-with-lease origin HEAD"
+          r = run_hook(payload(cmd, tmp_path), tmp_path / "sent", gh)
+          assert decision(r) == "deny"
+
+
+      def test_git_c_push_merged_denies(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", state="MERGED")
+          r = run_hook(payload("git -C /tmp push", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) == "deny"
+
+
+      def test_mygit_not_matched(tmp_path: Path) -> None:
+          write_sentinel(tmp_path / "sent")
+          gh = fake_gh(tmp_path / "bin", state="MERGED")
+          r = run_hook(payload("mygit push", tmp_path), tmp_path / "sent", gh)
+          assert decision(r) is None
+      END tests/unit/test_hooks_push_guard.py
+
+      Run: fr isolation exec --branch fix/fr-goal-merge-race -- \
+        uv run pytest tests/unit/test_hooks_push_guard.py -q --no-cov
+      Expect FAILURE: the SCRIPT path does not exist yet (bash: No such file).
+- number: 2
+  title: GREEN — implement the hook
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN. Create the hook. Full file (BEGIN/END):
+
+      BEGIN plugins/super-fr/hooks/fr-merged-pr-push-guard.sh
+      #!/bin/bash
+      # PreToolUse(Bash) hook: while an fr pipeline is active (session
+      # sentinel present, written by fr-pipeline-sentinel.sh), DENY a
+      # `git push` when the current branch's PR is MERGED/CLOSED — pushing
+      # there orphans the commit from `main` (the #320 merge-race).
+      #
+      # Fail-open on EVERY ambiguity (no sentinel, no push in the command,
+      # no PR for the branch, gh/jq absent, network/auth error): this is a
+      # discipline backstop, not a security boundary. Companion to
+      # fr-isolation-guard.sh.
+      set -eu
+
+      input=$(cat)
+
+      tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty')
+      [ "$tool_name" = "Bash" ] || exit 0
+
+      session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
+      [ -n "$session_id" ] || exit 0
+
+      dir="${FR_SENTINEL_DIR:-$HOME/.cache/fr/sentinels}"
+      sentinel="$dir/$session_id.json"
+      [ -f "$sentinel" ] || exit 0   # no active pipeline for this session
+
+      command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+
+      # Act only on a real `git push` subcommand. The (^|[^[:alnum:]_])
+      # prefix avoids matching `mygit push`; the optional flag / `-C <path>`
+      # groups allow `git -C <dir> push` and `git push --force…`; requiring
+      # whitespace before `push` avoids `--grep=push` / message false hits.
+      if ! printf '%s' "$command" | grep -Eq '(^|[^[:alnum:]_])git([[:space:]]+-[^[:space:]]+|[[:space:]]+-C[[:space:]]+[^[:space:]]+)*[[:space:]]+push([[:space:]]|$)'; then
+        exit 0
+      fi
+
+      # Need gh + jq to resolve PR state; absent → fail-open.
+      command -v gh >/dev/null 2>&1 || exit 0
+      command -v jq >/dev/null 2>&1 || exit 0
+
+      cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
+      [ -n "$cwd" ] || exit 0
+
+      # Current branch's PR state, read from the command's cwd (the
+      # worktree). No PR for the branch / gh error / network failure →
+      # fail-open. Checks the CHECKED-OUT branch (the near-universal push
+      # case); an explicit `git push origin HEAD:other` is out of scope.
+      pr_json=$(cd "$cwd" 2>/dev/null && gh pr view --json state,mergedAt 2>/dev/null) || exit 0
+      [ -n "$pr_json" ] || exit 0
+      state=$(printf '%s' "$pr_json" | jq -r '.state // empty' 2>/dev/null) || exit 0
+
+      case "$state" in
+        MERGED|CLOSED)
+          jq -n --arg reason "Pre-push guard: this branch's PR is $state. Pushing here orphans the commit from \`main\` (#320 merge-race). Stop — cherry-pick the commit onto \`main\` (or open a fresh branch/PR) instead. See plugins/super-fr/skills/fr-isolation (pre-push guard)." \
+            '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+          exit 0
+          ;;
+      esac
+      exit 0
+      END plugins/super-fr/hooks/fr-merged-pr-push-guard.sh
+
+      chmod +x the file. Run the same pytest — expect ALL GREEN.
+- number: 3
+  title: Register the hook in hooks.json
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Add a second entry to the PreToolUse(Bash) hooks array in
+      plugins/super-fr/hooks/hooks.json, after fr-isolation-guard.sh:
+
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/fr-merged-pr-push-guard.sh"
+          }
+
+      Keep it inside the SAME matcher:"Bash" block (two command hooks in
+      one matcher's "hooks" list). Verify JSON parses:
+        fr isolation exec --branch fix/fr-goal-merge-race -- \
+          python3 -c "import json; json.load(open('plugins/super-fr/hooks/hooks.json'))"
+      Then run the plugin-hooks test; if it enumerates expected hook files,
+      add the new script to its expected set:
+        fr isolation exec --branch fix/fr-goal-merge-race -- \
+          uv run pytest tests/unit/test_plugin_hooks.py -q --no-cov
+      Expect GREEN.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-06-20T21:58:05+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-06-20T21:59:01+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-06-20T21:59:48+00:00'
+      note: null
+  completion:
+    at: '2026-06-20T21:59:52+00:00'
+    note: null
+    observed_prs: []
