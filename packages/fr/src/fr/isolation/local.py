@@ -285,9 +285,7 @@ class LocalWorktreeDevcontainerTarget:
 
     # ----- .fr-isolation marker lifecycle (#328 Task 3) -----
 
-    def _write_isolation_marker(
-        self, worktree: Path, branch: str, mode: str = "worktree"
-    ) -> None:
+    def _write_isolation_marker(self, worktree: Path, branch: str, mode: str = "worktree") -> None:
         """Write the `.fr-isolation` identity marker and git-exclude it.
 
         The marker is what the `fr-isolation-required` PreToolUse hook reads to

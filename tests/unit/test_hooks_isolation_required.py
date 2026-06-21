@@ -58,7 +58,9 @@ def linked_worktree(repo: Path, branch: str = "feat/x") -> Path:
     return wt
 
 
-def write_marker(root: Path, toplevel: Path, branch: str = "feat/x", mode: str = "worktree") -> None:
+def write_marker(
+    root: Path, toplevel: Path, branch: str = "feat/x", mode: str = "worktree"
+) -> None:
     (root / ".fr-isolation").write_text(
         json.dumps({"toplevel": str(toplevel.resolve()), "branch": branch, "mode": mode})
     )

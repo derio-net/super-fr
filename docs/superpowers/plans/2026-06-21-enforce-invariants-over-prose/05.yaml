@@ -30,18 +30,20 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:58:04+00:00'
       note: null
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:58:05+00:00'
       note: null
     P5.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:58:06+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-06-21T13:58:07+00:00'
+    note: bumped 3.4.2->3.5.0; full gate green (ruff/mypy/977 pytest/bump-check);
+      test_plugin_hooks updated for new matcher; hook chmod+x in git; bridge flake
+      was stale uv tool
     observed_prs: []
