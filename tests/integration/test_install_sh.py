@@ -12,6 +12,7 @@ skill cleanup, and PostToolUse hook hint.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,11 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
+
+
+def _plugin_version(name: str = "super-fr") -> str:
+    pj = REPO_ROOT / "plugins" / name / ".claude-plugin" / "plugin.json"
+    return json.loads(pj.read_text())["version"]
 
 
 @pytest.fixture()
@@ -303,3 +309,71 @@ def test_install_sh_smokes_fr_binary_not_vk():
     assert 'fr_bin="$(uv tool dir 2>/dev/null)/fr/bin/fr"' in script
     assert '"$fr_bin" --version' in script
     assert "/fr/bin/vk" not in script
+
+
+# ── Plugin cache: stable `current` symlink as installPath ────────────
+
+
+class TestPluginCacheSymlink:
+    """install.sh must register installPath as a stable `current` symlink and
+    keep current + the most-recent previous version dir, so a running session's
+    path survives a reinstall (root cause: see
+    docs/superpowers/debugging/2026-06-21-plugin-cache-symlink-installpath.md)."""
+
+    @pytest.fixture()
+    def home_with_plugins(self, fake_home: Path) -> Path:
+        """fake_home plus the installed_plugins.json that gates step 4."""
+        plugins = fake_home / ".claude" / "plugins"
+        plugins.mkdir(parents=True)
+        (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 1}))
+        return fake_home
+
+    def _cache_dir(self, home: Path, plugin: str = "super-fr") -> Path:
+        return home / ".claude" / "plugins" / "cache" / "derio-net" / plugin
+
+    def _installed(self, home: Path) -> dict:
+        return json.loads((home / ".claude" / "plugins" / "installed_plugins.json").read_text())
+
+    def test_installpath_is_current_symlink(self, home_with_plugins: Path) -> None:
+        _run_install(home_with_plugins)
+        entry = self._installed(home_with_plugins)["plugins"]["super-fr@derio-net"][0]
+        assert entry["installPath"].endswith("/cache/derio-net/super-fr/current"), (
+            f"installPath should be the stable symlink, got {entry['installPath']}"
+        )
+        # The recorded version still tracks the real plugin version.
+        assert entry["version"] == _plugin_version("super-fr")
+
+    def test_current_symlink_points_to_version_relative(self, home_with_plugins: Path) -> None:
+        _run_install(home_with_plugins)
+        ver = _plugin_version("super-fr")
+        link = self._cache_dir(home_with_plugins) / "current"
+        assert link.is_symlink(), "current must be a symlink"
+        # Relative target (just the version), so the link is path-independent.
+        assert os.readlink(link) == ver
+        assert (link.resolve() / ".claude-plugin" / "plugin.json").exists()
+
+    def test_keeps_current_plus_one_previous(self, home_with_plugins: Path) -> None:
+        cache = self._cache_dir(home_with_plugins)
+        cache.mkdir(parents=True)
+        old = cache / "0.0.1"
+        old.mkdir()
+        recent = cache / "9.9.9"
+        recent.mkdir()
+        # Make `recent` newer than `old` so it is the kept previous.
+        os.utime(old, (1, 1))
+        os.utime(recent, (1_000_000_000, 1_000_000_000))
+
+        _run_install(home_with_plugins)
+
+        ver = _plugin_version("super-fr")
+        assert (cache / ver).exists(), "current version dir must be kept"
+        assert recent.exists(), "most-recent previous version must be kept (N-1 buffer)"
+        assert not old.exists(), "older versions must be pruned"
+        assert (cache / "current").is_symlink(), "symlink must survive pruning"
+
+    def test_idempotent_symlink_repoint(self, home_with_plugins: Path) -> None:
+        _run_install(home_with_plugins)
+        _run_install(home_with_plugins)  # ln -sfn must not fail on existing link
+        link = self._cache_dir(home_with_plugins) / "current"
+        assert link.is_symlink()
+        assert os.readlink(link) == _plugin_version("super-fr")

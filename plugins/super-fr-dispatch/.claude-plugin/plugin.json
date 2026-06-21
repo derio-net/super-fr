@@ -1,7 +1,7 @@
 {
     "name": "super-fr-dispatch",
     "description": "super-fr dispatch: queue phases to autonomous runners (VibeKanban adapter included) with per-PR quality gates",
-    "version": "3.5.0",
+    "version": "3.5.1",
     "author": {
         "name": "Ioannis Dermitzakis"
     },
