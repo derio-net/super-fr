@@ -25,10 +25,13 @@ sentinel="$dir/$session_id.json"
 command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 
 # Act only on a real `git push` subcommand. The (^|[^[:alnum:]_]) prefix avoids
-# matching `mygit push`; the optional flag / `-C <path>` groups allow
-# `git -C <dir> push` and `git push --force…`; requiring whitespace before
-# `push` avoids `--grep=push` / commit-message false positives.
-if ! printf '%s' "$command" | grep -Eq '(^|[^[:alnum:]_])git([[:space:]]+-[^[:space:]]+|[[:space:]]+-C[[:space:]]+[^[:space:]]+)*[[:space:]]+push([[:space:]]|$)'; then
+# matching `mygit push`. Each global flag may carry an optional bareword value,
+# so `git -C <dir> push`, `git -c k=v push`, and `git push --force…` all match.
+# The trailing ($|[^[:alnum:]_-]) anchor catches metachar terminators
+# (`git push;`, `git push|tee`) while still rejecting `git pushy` and
+# `git push-foo`; requiring whitespace before `push` avoids `--grep=push` /
+# commit-message false positives.
+if ! printf '%s' "$command" | grep -Eq '(^|[^[:alnum:]_])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^[:space:]-][^[:space:]]*)?)*[[:space:]]+push($|[^[:alnum:]_-])'; then
   exit 0
 fi
 
@@ -43,7 +46,7 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 # for the branch / gh error / network failure → fail-open. Checks the
 # CHECKED-OUT branch (the near-universal push case); an explicit
 # `git push origin HEAD:other` is out of scope.
-pr_json=$(cd "$cwd" 2>/dev/null && gh pr view --json state,mergedAt 2>/dev/null) || exit 0
+pr_json=$(cd "$cwd" 2>/dev/null && gh pr view --json state 2>/dev/null) || exit 0
 [ -n "$pr_json" ] || exit 0
 state=$(printf '%s' "$pr_json" | jq -r '.state // empty' 2>/dev/null) || exit 0
 

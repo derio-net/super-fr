@@ -69,7 +69,7 @@ in `plugins/super-fr/hooks/hooks.json`.
   uses — scopes the guard to active fr pipelines, matching blast radius), and
   (c) the command contains a `git push` subcommand.
 - When those hold, it `cd`s to the command's declared `.cwd` and reads the
-  **current branch's** PR state: `gh pr view --json state,mergedAt`.
+  **current branch's** PR state: `gh pr view --json state`.
   - PR `state` is `MERGED` or `CLOSED` → **deny** with a reason explaining the
     orphan risk and pointing at cherry-pick-onto-main / fresh-branch recovery.
   - Any other state (`OPEN`, draft) → **allow**.
