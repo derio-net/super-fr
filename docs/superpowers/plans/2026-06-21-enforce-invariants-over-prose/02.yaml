@@ -78,30 +78,32 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:47:37+00:00'
       note: null
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:47:38+00:00'
       note: null
     P2.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:47:40+00:00'
       note: null
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:47:41+00:00'
       note: null
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:47:42+00:00'
       note: null
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-06-21T13:47:43+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-06-21T13:47:44+00:00'
+    note: fr-isolation-required.sh (Edit/Write guard) + hooks.json registration; 9-case
+      decision matrix GREEN over real git worktrees; sibling hooks unaffected (56
+      total)
     observed_prs: []
