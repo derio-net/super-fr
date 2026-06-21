@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Edit/Write enforcement hook — fr-isolation-required.sh (TDD)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — decision-matrix tests shelling out to the hook over real git
+  steps:
+  - id: P2.T1.S1
+    text: |
+      Read tests/unit/test_hooks_guard.py for the shell-out pattern
+      (run bash <SCRIPT> with a JSON payload on stdin, assert exit code /
+      parse stdout JSON for permissionDecision; pytest.mark.skipif when jq
+      missing).
+  - id: P2.T1.S2
+    text: |
+      Add tests/unit/test_hooks_isolation_required.py. Skipif jq or git
+      missing. A fixture builds a real repo: `git init` a tmp dir, make it
+      fr-enabled (mkdir .devcontainer/dev, write devcontainer.json), then
+      `git worktree add` a linked worktree. A run_hook(payload, env) helper
+      shells the script with {tool_name, tool_input:{file_path}} on stdin.
+      Tests (assert allow = exit 0 + no deny json; deny = stdout has
+      permissionDecision=="deny"):
+      - test_non_edit_tool_allows (tool_name Bash → allow)
+      - test_fr_base_ok_env_allows (FR_BASE_OK=1 → allow even with no marker)
+      - test_file_outside_git_allows (file in a non-git tmp dir → allow)
+      - test_non_fr_repo_allows (git repo without .devcontainer or
+        docs/superpowers/plans → allow)
+      - test_valid_marker_in_worktree_allows (linked worktree + .fr-isolation
+        whose toplevel matches → allow)
+      - test_no_marker_blocks (fr-enabled worktree, no marker → deny)
+      - test_mismatched_toplevel_blocks (marker toplevel points elsewhere → deny)
+      - test_marker_in_main_clone_blocks (marker present in the MAIN clone,
+        not a linked worktree → deny)
+      - test_allowlist_path_allows (no marker but file matches a glob in
+        <toplevel>/.fr-isolation-allow → allow)
+  - id: P2.T1.S3
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_hooks_isolation_required.py -q --no-cov`.
+      EXPECT RED — the script does not exist yet (bash: No such file → all fail).
+- number: 2
+  title: GREEN — write the hook and register it in hooks.json
+  steps:
+  - id: P2.T2.S1
+    text: |
+      Write plugins/super-fr/hooks/fr-isolation-required.sh (chmod +x via
+      git update-index later is not needed; plugin hooks run with `bash`).
+      Logic, in order: read stdin; tool_name must match
+      Edit|Write|MultiEdit|NotebookEdit else exit 0; [ "${FR_BASE_OK:-}" = 1 ]
+      && exit 0; file=$(jq -r .tool_input.file_path); [ -n "$file" ] || exit 0;
+      resolve dir = nearest existing ancestor of dirname "$file";
+      toplevel=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || exit 0;
+      fr-enabled iff <toplevel>/.devcontainer/*/devcontainer.json exists OR
+      <toplevel>/docs/superpowers/plans is a dir, else exit 0;
+      marker=<toplevel>/.fr-isolation; if marker valid → exit 0 where valid =
+      file exists AND recorded toplevel (jq -r .toplevel) resolves equal to
+      the current resolved toplevel AND (mode != "worktree" OR git -C toplevel
+      rev-parse --git-common-dir != --git-dir, i.e. a linked worktree);
+      else if <toplevel>/.fr-isolation-allow exists and the file's
+      toplevel-relative path matches any glob line → exit 0; else emit deny
+      JSON (jq -n with hookSpecificOutput.permissionDecision="deny" and a
+      reason naming `fr isolation up` / fr-goal, `.fr-isolation-allow`, and
+      FR_BASE_OK=1) and exit 0. Mirror fr-isolation-guard.sh's deny shape.
+  - id: P2.T2.S2
+    text: |
+      Register the hook in plugins/super-fr/hooks/hooks.json: add a
+      PreToolUse entry with "matcher": "Edit|Write|MultiEdit|NotebookEdit"
+      whose hooks run ${CLAUDE_PLUGIN_ROOT}/hooks/fr-isolation-required.sh.
+      Keep the existing Bash matcher block intact.
+  - id: P2.T2.S3
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_hooks_isolation_required.py -q --no-cov`.
+      EXPECT GREEN — every decision-matrix case passes.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

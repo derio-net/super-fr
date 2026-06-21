@@ -171,6 +171,12 @@ demonstrates the enforce-over-prose pattern the rule preaches.
   `uv run pytest -q --no-cov`, `bump-version.py --check`. New shell hook gated
   on `jq` like the existing hook tests (`pytest.mark.skipif`).
 
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-06-21-enforce-invariants-over-prose | `derio-net/super-fr` | `2026-06-21-enforce-invariants-over-prose` | — |
+
 ## Out of scope
 
 - Task 1 (already shipped).
