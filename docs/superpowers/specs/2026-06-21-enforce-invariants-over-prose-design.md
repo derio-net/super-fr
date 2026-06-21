@@ -120,7 +120,7 @@ Decision order (fail-closed; ambiguity blocks, with explicit escapes):
 | Stale marker in base clone | false-allow (dangerous) | Linked-worktree check: main clone has `git-common-dir == git-dir` → not a worktree → block even with a marker present |
 | Marker copied to another path | false-allow | Identity: recorded toplevel ≠ current toplevel → block |
 | Marker missing in a legit workspace | false-block (safe) | `FR_BASE_OK=1` escape + the deny message names it |
-| Container-native isolation (future) | detection gap | `mode` recorded; `mode!=worktree` skips the host linked-worktree check |
+| Container-native isolation (future) | detection gap → must not false-allow | `mode` recorded, but the hook honors ONLY `worktree`; any other mode (typo, or a not-yet-built `devcontainer`) fails CLOSED until a container-native Target ships its own in-container probe (review fix) |
 
 ### Deliverables (Task 3)
 

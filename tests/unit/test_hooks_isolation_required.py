@@ -149,3 +149,39 @@ def test_marker_in_main_clone_blocks(tmp_path: Path) -> None:
     repo = fr_repo(tmp_path)  # the MAIN clone, not a linked worktree
     write_marker(repo, repo)
     assert decision(run_hook(payload(repo / "a.py"))) == "deny"
+
+
+def test_non_worktree_mode_blocks(tmp_path: Path) -> None:
+    # mode != "worktree" is forward-compat data; until a container-native Target
+    # ships its own probe, a non-worktree marker must fail CLOSED, not allow on
+    # a bare toplevel match (review #328: latent false-allow).
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt, mode="devcontainer")
+    assert decision(run_hook(payload(wt / "a.py"))) == "deny"
+
+
+def test_garbage_mode_blocks(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt, mode="nonsense")
+    assert decision(run_hook(payload(wt / "a.py"))) == "deny"
+
+
+# ---------- robustness ----------
+
+
+def test_allowlist_nested_new_path_allows(tmp_path: Path) -> None:
+    # The repo-relative path must survive a not-yet-created nested Write target
+    # (data/ and sub/ do not exist) — the symlink-robust rel computation keeps
+    # the full path, so `data/**` still matches.
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    (wt / ".fr-isolation-allow").write_text("data/**\n")
+    assert allowed(run_hook(payload(wt / "data" / "sub" / "x.json")))
+
+
+def test_relative_file_path_allows(tmp_path: Path) -> None:
+    # A relative path can't be keyed to the right repo — allow (explicit), don't
+    # misfire against the session cwd.
+    assert allowed(run_hook({"tool_name": "Edit", "tool_input": {"file_path": "a.py"}}))
