@@ -231,6 +231,12 @@ CI gate (per CLAUDE.md): `uv run ruff format packages/ tests/`,
 `ruff check`, `mypy packages/fr/src ...`, `uv run pytest -q --no-cov`,
 `bump-version.py --check`.
 
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-06-21-isolation-fetch-origin-base | `derio-net/super-fr` | `2026-06-21-isolation-fetch-origin-base` | — |
+
 ## Out of scope / YAGNI
 
 - Per-repo config key for the base branch/policy (the Q&A chose flags +
