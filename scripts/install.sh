@@ -317,6 +317,10 @@ mkdir -p "$RULES_DIR"
 rm -f "$RULES_DIR/vk-plan-override.md" "$RULES_DIR/fr-plan-override.md"
 cp "$PLUGIN_ROOT/plugins/super-fr/rules/fr-plan-override.md" "$RULES_DIR/fr-plan-override.md"
 echo "  Installed $RULES_DIR/fr-plan-override.md (retired vk-plan-override.md)"
+cp "$PLUGIN_ROOT/plugins/super-fr/rules/fr-isolation-required.md" "$RULES_DIR/fr-isolation-required.md"
+echo "  Installed $RULES_DIR/fr-isolation-required.md (#328 isolation Edit/Write guard)"
+cp "$PLUGIN_ROOT/plugins/super-fr/rules/no-claude-p-batch.md" "$RULES_DIR/no-claude-p-batch.md"
+echo "  Installed $RULES_DIR/no-claude-p-batch.md (#328 batch-LLM convention)"
 
 # 8. VK MCP server at user level
 if [ "$SKIP_MCP" = true ]; then

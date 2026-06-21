@@ -104,6 +104,31 @@ The user-level mirror of this rule lives in `~/.claude/rules/fr-plan-override.md
 (operator-owned, outside this repo). When this section changes, flag the
 operator-side update in the PR description so the two stay in sync.
 
+## Conventions (enforce, don't prose) — #328
+
+Two standing conventions ship as rules **and** as enforcement (the umbrella
+principle of #328 is "invariants get a hook / CI gate, not prose"):
+
+- **`no-claude-p-batch`** — never use `claude -p` for batch / per-element LLM
+  work (each call cold-starts a full session: ~22k tokens, ~$0.37, ~5s). Use a
+  persistent agent session → subagent fan-out → batched prompts. Rule:
+  `plugins/super-fr/rules/no-claude-p-batch.md`; CI tripwire:
+  `tests/unit/test_tripwire_claude_p.py` (fails if `packages/*/src/**` shells
+  out to `claude -p`).
+- **`fr-isolation-required`** — edits to tracked source in an fr-enabled repo
+  must happen inside an fr-isolation workspace. Enforced by the PreToolUse hook
+  `plugins/super-fr/hooks/fr-isolation-required.sh` (registered in `hooks.json`,
+  gates Edit/Write/MultiEdit/NotebookEdit), keyed on the `.fr-isolation` marker
+  `fr isolation up`/`down` write/remove. Rule:
+  `plugins/super-fr/rules/fr-isolation-required.md` (operator) +
+  `.claude/rules/fr-isolation-required.md` (repo mirror). A `.fr-isolation`
+  tracking tripwire is `tests/unit/test_tripwire_isolation_marker.py`.
+
+Both operator rules install to `~/.claude/rules/` via `install.sh` (a drift
+test, `tests/unit/test_install_copies_rules.py`, fails if a shipped rule isn't
+wired). When either rule's content changes, flag the operator-side
+`~/.claude/rules/` update in the PR description so the two stay in sync.
+
 ## PR workflow expectations
 
 - Feature branch → PR → review → merge. Direct commits to `main` are not
