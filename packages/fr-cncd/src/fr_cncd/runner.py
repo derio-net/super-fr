@@ -124,10 +124,20 @@ class CncdRunner:
 
     def _post_json(self, url: str, payload: dict[str, Any]) -> None:
         body = json.dumps(payload).encode("utf-8")
+        # cncd authenticates every /v1 request: a forward-auth identity
+        # header for human principals (plan pushes REQUIRE one — agent run
+        # tokens are refused for /v1/ingest). Name/value are operator
+        # config mirroring cncd's AUTH_HEADER contract.
+        auth_header = os.environ.get("CNCD_AUTH_HEADER", "X-Forwarded-User")
+        auth_user = os.environ.get("CNCD_AUTH_USER", "fr-cncd")
         req = urllib.request.Request(  # noqa: S310 — url comes from operator config
             url,
             data=body,
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                auth_header: auth_user,
+            },
             method="POST",
         )
         try:

@@ -56,6 +56,7 @@ def stub_cncd() -> Iterator[StubCncd]:
                     "method": "POST",
                     "path": self.path,
                     "content_type": self.headers.get("Content-Type"),
+                    "auth_user": self.headers.get("X-Forwarded-User"),
                     "body": json.loads(raw) if raw else None,
                 }
             )
@@ -96,6 +97,8 @@ def test_dispatch_posts_plan_folder_to_v1_ingest(stub_cncd: StubCncd) -> None:
     req = stub_cncd.requests[0]
     assert req["path"] == "/v1/ingest"
     assert req["content_type"] == "application/json"
+    # The forward-auth identity must reach cncd (default CNCD_AUTH_USER).
+    assert req["auth_user"] == "fr-cncd"
     body = req["body"]
     assert body["kind"] == "plan_folder"
     assert body["schema_version"] == 2
