@@ -1,12 +1,12 @@
-# Workspace root — the three packages live under packages/.
+# Workspace root — the four packages live under packages/.
 # Lockstep versioning: scripts/bump-version.py writes every member +
 # both plugin manifests; the version-sync CI job checks the set.
 [project]
 name = "super-fr-workspace"
 version = "3.5.1"
-description = "super-fr workspace root (fr / fr-dispatch / fr-vk)"
+description = "super-fr workspace root (fr / fr-dispatch / fr-vk / fr-cncd)"
 requires-python = ">=3.11"
-dependencies = ["fr", "fr-dispatch", "fr-vk"]
+dependencies = ["fr", "fr-dispatch", "fr-vk", "fr-cncd"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
@@ -15,6 +15,7 @@ members = ["packages/*"]
 fr = { workspace = true }
 fr-dispatch = { workspace = true }
 fr-vk = { workspace = true }
+fr-cncd = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -41,7 +42,7 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --cov=fr --cov=fr_dispatch --cov=fr_vk --cov-report=term-missing --cov-fail-under=75"
+addopts = "--strict-markers --cov=fr --cov=fr_dispatch --cov=fr_vk --cov=fr_cncd --cov-report=term-missing --cov-fail-under=75"
 
 [tool.coverage.run]
 omit = ["packages/fr/src/fr/__main__.py"]

@@ -56,6 +56,32 @@ def test_fr_dispatch_never_imports_fr_vk() -> None:
     assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
 
 
+def test_fr_dispatch_never_imports_fr_cncd() -> None:
+    offenders = {
+        str(f): roots & {"fr_cncd"}
+        for f, roots in _imports_of(PACKAGES / "fr-dispatch" / "src" / "fr_dispatch").items()
+        if "fr_cncd" in roots
+    }
+    assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
+
+
+def test_adapters_never_import_each_other() -> None:
+    """fr_cncd is a peer of fr_vk: each may import the base and the
+    framework, never the sibling adapter."""
+    cncd_offenders = {
+        str(f): roots & {"fr_vk"}
+        for f, roots in _imports_of(PACKAGES / "fr-cncd" / "src" / "fr_cncd").items()
+        if "fr_vk" in roots
+    }
+    assert not cncd_offenders, f"fr_cncd must not import fr_vk: {cncd_offenders}"
+    vk_offenders = {
+        str(f): roots & {"fr_cncd"}
+        for f, roots in _imports_of(PACKAGES / "fr-vk" / "src" / "fr_vk").items()
+        if "fr_cncd" in roots
+    }
+    assert not vk_offenders, f"fr_vk must not import fr_cncd: {vk_offenders}"
+
+
 def test_fr_vk_strings_stay_in_the_adapter() -> None:
     """The framework carries no VK vocabulary: no MCP client types, no
     VibeKanban wire shapes, no willikins metric names."""
