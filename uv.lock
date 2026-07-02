@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 [manifest]
 members = [
     "fr",
+    "fr-cncd",
     "fr-dispatch",
     "fr-vk",
     "super-fr-workspace",
@@ -172,6 +173,21 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "rich", specifier = ">=13" },
     { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
+name = "fr-cncd"
+version = "3.5.1"
+source = { editable = "packages/fr-cncd" }
+dependencies = [
+    { name = "fr" },
+    { name = "fr-dispatch" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
 ]
 
 [[package]]
@@ -653,6 +669,7 @@ version = "3.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "fr" },
+    { name = "fr-cncd" },
     { name = "fr-dispatch" },
     { name = "fr-vk" },
 ]
@@ -669,6 +686,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fr", editable = "packages/fr" },
+    { name = "fr-cncd", editable = "packages/fr-cncd" },
     { name = "fr-dispatch", editable = "packages/fr-dispatch" },
     { name = "fr-vk", editable = "packages/fr-vk" },
 ]

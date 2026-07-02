@@ -1,0 +1,18 @@
+schema_version: 2
+plan: corpus-full-featured
+spec: "agentic-stoa/cnc-fr:docs/superpowers/specs/2026-07-02-cncd-phase1-ledger-api.md"
+target_repo: agentic-stoa/cnc-demo
+vk_version: ">=1.0.0,<3.0.0"
+fr_version: ">=3.0.0"
+created: "2026-07-02"
+parent_plan: corpus-parent
+prior_rework: corpus-full-featured-rework-1
+origin_items:
+  - id: 1
+    item: Port the ingest parser
+    source: design review
+    track: development
+  - id: 2
+    item: Decide the retention window
+    source: operator
+    track: "decision → development"

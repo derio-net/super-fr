@@ -1,0 +1,39 @@
+# Parity-corpus manifest — cnc-fr spec 2026-07-02 §3.3.
+#
+# The umbrella repo (agentic-stoa/cnc-fr) vendors this whole
+# `plan_folders/` subtree; cncd's Go plan-as-folder parser must accept
+# every `valid/` fixture and reject every `invalid/` fixture. Contract
+# fields per invalid case:
+#
+#   code   — stable machine-readable failure token; the Go golden tests
+#            key on this, NOT on any human-readable message.
+#   match  — substring of the Python-side error (fr.parser.parse_strict
+#            raises PlanSchemaError); used only by super-fr's own
+#            round-trip test (tests/unit/test_plan_folder_corpus.py).
+#
+# The Python authority for this corpus is `fr.parser.parse_strict`:
+# pydantic schema validation (fr.types) + mandatory `_prose.md` +
+# contiguous 1..N phase numbering.
+schema_version: 2
+valid:
+  - minimal
+  - full-featured
+invalid:
+  missing-prose:
+    code: missing_prose
+    match: "_prose.md"
+  bad-step-id:
+    code: bad_step_id
+    match: "String should match pattern"
+  state-keys-mismatch:
+    code: state_keys_mismatch
+    match: "state.steps keys must match"
+  bad-tag:
+    code: bad_tag
+    match: "Input should be 'agentic' or 'manual'"
+  noncontiguous-phases:
+    code: noncontiguous_phases
+    match: "contiguous"
+  meta-unknown-field:
+    code: unknown_field
+    match: "Extra inputs are not permitted"
