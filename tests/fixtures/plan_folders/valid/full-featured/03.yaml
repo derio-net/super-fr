@@ -1,0 +1,17 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Operator sign-off
+  tag: manual
+  depends_on: [1, 2]
+  tracking_issue: null
+tasks:
+  - number: 1
+    title: Walkthrough
+    steps:
+      - id: P3.T1.S1
+        text: Inspect the finished rooms with the operator
+state:
+  steps:
+    P3.T1.S1: { state: " ", ticked_at: null, note: null }
+  completion: { at: null, note: null, observed_prs: [] }
