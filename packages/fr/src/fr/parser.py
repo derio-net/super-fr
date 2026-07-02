@@ -189,3 +189,40 @@ def parse(plan_dir: Path) -> Plan:
         phase_texts=phase_texts,
         spec_path=spec_path,
     )
+
+
+def parse_strict(plan_dir: Path) -> Plan:
+    """`parse()` plus the folder-level invariants of the parity contract.
+
+    The cncd schema-parity harness (cnc-fr spec 2026-07-02, §3.3) pins
+    the plan-as-folder contract that cncd's Go parser must mirror. Two
+    invariants live at folder level rather than in the pydantic models,
+    so `parse()` cannot enforce them without breaking wild plans:
+
+      - `_prose.md` is mandatory. Every authoring path (`fr plan
+        create`, `fr plan rework`) writes it; a folder without one is
+        not a complete v2 plan.
+      - Phase numbers are contiguous 1..N (and at least one phase
+        exists). `parse()` tolerates gaps because historical plans
+        carry them; new-world consumers must not.
+
+    `parse()` itself stays lenient — the bridge keeps skipping
+    gracefully and `prose=None` plans keep parsing. Use this entry
+    point wherever the corpus contract applies (the fixtures corpus
+    test, ingestion-bound tooling).
+
+    Raises `PlanSchemaError` — same class, same "name the offending
+    file" doctrine as `parse()`.
+    """
+    plan = parse(plan_dir)
+    if plan.prose is None:
+        raise PlanSchemaError(f"{plan.dir}: missing _prose.md (mandatory in strict/parity mode)")
+    numbers = [p.phase.number for p in plan.phases]
+    if not numbers:
+        raise PlanSchemaError(f"{plan.dir}: no phase files (NN.yaml) found")
+    expected = list(range(1, len(numbers) + 1))
+    if numbers != expected:
+        raise PlanSchemaError(
+            f"{plan.dir}: phase numbers must be contiguous 1..{len(numbers)}, got {numbers}"
+        )
+    return plan

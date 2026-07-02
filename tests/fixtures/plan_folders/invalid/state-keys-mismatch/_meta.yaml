@@ -1,0 +1,5 @@
+schema_version: 2
+plan: corpus-state-keys-mismatch
+spec: null
+target_repo: agentic-stoa/cnc-demo
+created: "2026-07-02"
