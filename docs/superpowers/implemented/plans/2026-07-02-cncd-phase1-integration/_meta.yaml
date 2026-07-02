@@ -1,0 +1,6 @@
+schema_version: 2
+plan: 2026-07-02-cncd-phase1-integration
+spec: agentic-stoa/cnc-fr:docs/superpowers/specs/2026-07-02-cncd-phase1-ledger-api.md
+target_repo: derio-net/super-fr
+fr_version: '>=3.0.0,<4.0.0'
+created: '2026-07-02'

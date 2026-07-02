@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'CncdRunner: fr-cncd package + fr.runners entry point'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Package scaffold + registry wiring
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Scaffold packages/fr-cncd (pyproject with fr.runners entry point cncd, src/fr_cncd with py.typed) and wire the uv workspace: root dependencies + tool.uv.sources + coverage addopts + CI mypy path
+  - id: P2.T1.S2
+    text: |-
+      Write tests: fr_dispatch registry exposes the cncd runner name; import-direction invariants extended (fr_cncd imports only fr/fr_dispatch; fr_dispatch never imports fr_cncd)
+- number: 2
+  title: Runner protocol unit behavior
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Write failing unit tests for CncdRunner config + non-HTTP protocol methods: preflight (CNCD_URL unset -> error string, set -> None), name == cncd, dedup_key(repo, issue) shape, can_dispatch_repo True, slot_budget default + CNCD_SLOT_BUDGET override, refresh no-op, existing_dispatches empty (server-side content-hash idempotence)
+  - id: P2.T2.S2
+    text: |-
+      Implement CncdRunner in packages/fr-cncd/src/fr_cncd/runner.py satisfying fr_dispatch.protocols.Runner; tests green
+- number: 3
+  title: Ingest dispatch + stub-server integration
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write failing tests against a local stub HTTP server (pytest fixture): dispatch() POSTs the plan folder bundle as JSON to /v1/ingest with source_path/repo/issue/phase context; non-2xx and connection errors raise; payload includes _meta.yaml, _prose.md and every NN.yaml verbatim
+  - id: P2.T3.S2
+    text: |-
+      Implement the thin HTTP client (stdlib urllib) + bundle payload builder in fr_cncd; tests green
+  - id: P2.T3.S3
+    text: |-
+      Integration tests: fr apply --to cncd accepts the runner name via the registry; fr_dispatch.tick with FakeGhClient + CncdRunner against the stub server dispatches an eligible phase and stamps fr:synced; full suite + ruff + mypy green
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-02T14:20:26+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-02T14:20:27+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-02T14:20:28+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-02T14:20:29+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-07-02T14:20:30+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-07-02T14:20:31+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-07-02T14:20:32+00:00'
+      note: null
+  completion:
+    at: '2026-07-02T14:20:33+00:00'
+    note: fr-cncd package + CncdRunner, stub-server integration, full suite green
+    observed_prs: []
