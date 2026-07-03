@@ -19,14 +19,17 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-07-03T20:39:07+00:00'
+      note: cncd was a botched-archive DUPLICATE (already in implemented/, identical)
+        — removed stale plans/ copy via git rm; added archive_plan_dir dest-exists
+        guard + test to prevent the nesting corruption
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-07-03T20:39:08+00:00'
+      note: tripwire green; full suite 1047 pass after known bridge-env reinstall
   completion:
-    at: null
-    note: null
+    at: '2026-07-03T20:39:09+00:00'
+    note: plans/ clean; tripwire green; archive mover hardened against duplicate-destination
+      nesting
     observed_prs: []

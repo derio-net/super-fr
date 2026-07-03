@@ -118,6 +118,16 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"run fr archive from the repo that owns the plan"
         ) from e
     dst_rel = Path("docs/superpowers/implemented/plans") / plan_dir.name
+    if (repo_root / dst_rel).exists():
+        # A prior botched archive (copied to implemented/ but never removed
+        # from plans/) leaves a duplicate; `git mv` would nest src INTO the
+        # existing dir (implemented/plans/X/X), corrupting the tree. Refuse
+        # with a clear next step instead. (#334)
+        raise ArchiveError(
+            f"destination already exists: {dst_rel} — this plan appears already "
+            f"archived. Remove the stale plans/ copy ({src_rel}) instead "
+            f"(e.g. `git rm -r {src_rel}`)."
+        )
     _git_mv(repo_root, src_rel, dst_rel)
     return repo_root / dst_rel
 
