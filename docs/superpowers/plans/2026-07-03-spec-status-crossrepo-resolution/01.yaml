@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Remote read surface — list_dir / read_file on GhClient
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: FakeGhClient gains list_dir / read_file (contents-API test double)
+  steps:
+  - id: P1.T1.S1
+    text: |
+      RED: in tests/unit/test_fakes_remote.py, add tests that a FakeGhClient with `remote_tree = {("owner/repo","docs/superpowers/plans/p/_meta.yaml"):"..."}` returns the entry names via `list_dir("owner/repo","docs/superpowers/plans/p")`, returns the raw text via `read_file(...)`, returns `[]` from list_dir on an absent dir, and raises FakeGhError from read_file on an absent file. Run `uv run pytest tests/unit/test_fakes_remote.py -q` — fails (no such methods).
+  - id: P1.T1.S2
+    text: |
+      GREEN: add `remote_tree: dict[tuple[str,str],str]` to FakeGhClient.__init__, plus `list_dir(repo, path)` (names of children one level under path) and `read_file(repo, path)` (returns remote_tree[(repo,path)] or raises FakeGhError). Record each in `.calls` like `file_exists` does. Rerun — green.
+- number: 2
+  title: GhClient Protocol + RealGhClient implementations
+  steps:
+  - id: P1.T2.S1
+    text: |
+      RED: in tests/unit/test_real_ghclient_remote.py, monkeypatch `fr.gh._run_gh` to capture argv and return canned output; assert RealGhClient().list_dir builds `["api","repos/owner/repo/contents/PATH","--jq",".[].name"]` and returns split lines, returns [] on GhError; assert read_file builds `["api","repos/owner/repo/contents/PATH","-H","Accept: application/vnd.github.raw"]` and returns the raw stdout, propagating GhError. Run pytest — fails.
+  - id: P1.T2.S2
+    text: |
+      GREEN: add `list_dir` and `read_file` to the GhClient Protocol (packages/fr/src/fr/ghclient.py, read-only docstrings mirroring file_exists) and implement both on RealGhClient (packages/fr/src/fr/real_ghclient.py) per the captured argv. Rerun — green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

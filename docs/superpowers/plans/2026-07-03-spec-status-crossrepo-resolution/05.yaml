@@ -1,0 +1,35 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Docs + version bump
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Refresh docstrings and the fr-progress skill note
+  steps:
+  - id: P5.T1.S1
+    text: |
+      Rewrite compute_status's docstring (drop 'Local-fs only' / 'Phase 3') and _resolve_local_plan_dir's note ('out of scope for Phase 3' -> 'resolved remotely by compute_status when a GhClient is supplied') in spec.py; update plugins/super-fr/skills/fr-progress/SKILL.md (~L52-54) so cross-repo rows are described as resolved via the gh contents API, degrading to Unreachable under --no-gh / offline. No behavior change — no test.
+- number: 2
+  title: Version bump + full green gate
+  steps:
+  - id: P5.T2.S1
+    text: |
+      Run `scripts/bump-version.py patch`; verify `scripts/bump-version.py --check` and `uv run fr --version` report the new number. Then `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, and `uv run pytest -q --no-cov` — all green. Commit the four version files with the code.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

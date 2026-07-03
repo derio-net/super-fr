@@ -1,0 +1,38 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Extract shared _status_counts (behavior-preserving)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Pull the per-plan status arithmetic into one pure helper
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED: in tests/unit/test_status_counts.py, build small PhaseDoc lists (via the existing test builders / parse fixtures) and assert `fr.spec._status_counts(phases)` returns (state, phases_complete, phases_total, steps_ticked, steps_total) for: all-complete -> "Complete"; partially-ticked -> "In Progress"; zero-steps -> "Not Started". Run pytest — fails (no such function).
+  - id: P2.T1.S2
+    text: |
+      GREEN: add `_status_counts(phases: Sequence[PhaseDoc])` to spec.py holding the steps_total / steps_ticked / phases_complete(plan_locally_complete) / state-machine logic verbatim from compute_status's local branch, and rewrite that branch to call it (plans_complete increment stays in the caller). Rerun the new test AND the existing compute_status tests — all green (no behavior change).
+  - id: P2.T1.S3
+    text: |
+      REFACTOR (optional): confirm no duplicated arithmetic remains in compute_status; tidy the helper's type hints/imports. Stay green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

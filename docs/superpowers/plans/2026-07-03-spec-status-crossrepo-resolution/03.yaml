@@ -1,0 +1,64 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Remote resolution in compute_status
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: _resolve_remote_plan_phases — probe variants, gate on _meta.yaml, parse NN.yaml
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED: in tests/unit/test_spec_remote_resolve.py, preload a FakeGhClient remote_tree with a plan folder (_meta.yaml + 01.yaml/02.yaml) under docs/superpowers/plans/<slug>/ on "owner/repo". Assert `fr.spec._resolve_remote_plan_phases(gh, "owner/repo", "<slug>", {})` returns the parsed PhaseDoc list; that active-path wins when both plans/ and implemented/plans/ exist; that a folder lacking _meta.yaml yields None; that a non-owner/repo repo cell yields None with no gh call; that the memo dict suppresses a second list_dir on a repeated (repo, slug). Run pytest — fails.
+  - id: P3.T1.S2
+    text: |
+      GREEN: implement `_resolve_remote_plan_phases(gh, repo, file_cell, cache)` in spec.py — guard on "/" in repo; candidate paths from `migrate._archive_path_variants(file_cell)` (function-level import to avoid the cycle); first variant whose list_dir contains "_meta.yaml" wins; read each NN.yaml (match _PHASE_FILE_RE), PhaseDoc.model_validate(yaml.safe_load); memoize on (repo, slug) including negatives. Rerun — green.
+  - id: P3.T1.S3
+    text: |
+      REFACTOR (optional): extract the variant-probe loop if it clarifies; ensure _meta.yaml is never fetched (status needs only phases). Stay green.
+- number: 2
+  title: compute_status gains gh param + graceful degrade
+  steps:
+  - id: P3.T2.S1
+    text: |
+      RED: in tests/unit/test_spec_status_remote.py, drive `compute_status(meta, repo_root, gh=fake)` on a spec whose row is cross-repo: archived-remote plan (all phases complete) -> state "Complete", counted in aggregate.plans_complete and its steps in the step total; active partial remote -> "In Progress" with exact (pc/pt, ticked/total); gh=None -> "Unreachable" and output identical to today; read_file raising mid-fetch -> "Unreachable" with a note (no crash); path found in no variant -> "Unreachable" with a note. Run pytest — fails.
+  - id: P3.T2.S2
+    text: |
+      GREEN: add `gh: GhClient | None = None` to compute_status; create the per-call memo dict; in the unresolved-local, non-manual branch: gh is None -> Unreachable (unchanged); else _resolve_remote_plan_phases wrapped in try/except (any failure -> Unreachable + repo-named note); on success feed phases through _status_counts, build PlanStatus with a remote-origin note, and count toward plans_complete / aggregate like a local plan. Rerun — green.
+  - id: P3.T2.S3
+    text: |
+      REFACTOR (optional): unify the Unreachable-construction so the gh-None and gh-failure paths share one PlanStatus builder; confirm warnings vs notes are consistent. Stay green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
