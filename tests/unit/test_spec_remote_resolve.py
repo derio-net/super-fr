@@ -3,10 +3,11 @@ parse NN.yaml, memoize (the cross-repo resolver behind #339)."""
 
 from __future__ import annotations
 
+import pytest
 import yaml
 from fr.types import PhaseDoc
 
-from tests.unit.fakes import FakeGhClient
+from tests.unit.fakes import FakeGhClient, FakeGhError
 
 
 def _phase_yaml(number: int, steps: dict[str, str], completion_at: str | None = None) -> str:
@@ -119,3 +120,24 @@ def test_memo_suppresses_second_lookup() -> None:
     n_after_first = len(gh.calls)
     _resolve_remote_plan_phases(gh, "owner/repo", "myplan", cache)
     assert len(gh.calls) == n_after_first  # cache hit — no new gh calls
+
+
+def test_failure_is_cached_negatively() -> None:
+    """A read failure is memoized so a repeat (repo, slug) degrades from the
+    cache instead of re-hitting the network (review finding #1)."""
+    from fr.spec import _resolve_remote_plan_phases
+
+    gh = FakeGhClient()
+    _put_plan(gh, "owner/repo", "plans", "myplan", {"01.yaml": _phase_yaml(1, {"P1.T1.S1": "x"})})
+
+    def boom(repo: str, path: str) -> str:
+        raise FakeGhError("network down")
+
+    gh.read_file = boom  # type: ignore[method-assign]
+    cache: dict[tuple[str, str], list[PhaseDoc] | None] = {}
+    with pytest.raises(FakeGhError):
+        _resolve_remote_plan_phases(gh, "owner/repo", "myplan", cache)
+    n_after_fail = len(gh.calls)
+    # second lookup: served from the negative cache, no new gh calls, no raise
+    assert _resolve_remote_plan_phases(gh, "owner/repo", "myplan", cache) is None
+    assert len(gh.calls) == n_after_fail

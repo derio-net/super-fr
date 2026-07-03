@@ -210,18 +210,25 @@ def _resolve_remote_plan_phases(
         return cache[key]
 
     result: list[PhaseDoc] | None = None
-    for path in _archive_path_variants(file_cell):
-        if path is None:
-            continue
-        names = gh.list_dir(repo, path)
-        if "_meta.yaml" not in names:
-            continue
-        phases: list[PhaseDoc] = []
-        for name in sorted(n for n in names if _PHASE_FILE_RE.match(n)):
-            raw = gh.read_file(repo, f"{path}/{name}")
-            phases.append(PhaseDoc.model_validate(yaml.safe_load(raw)))
-        result = phases
-        break
+    try:
+        for path in _archive_path_variants(file_cell):
+            if path is None:
+                continue
+            names = gh.list_dir(repo, path)
+            if "_meta.yaml" not in names:
+                continue
+            phases: list[PhaseDoc] = []
+            for name in sorted(n for n in names if _PHASE_FILE_RE.match(n)):
+                raw = gh.read_file(repo, f"{path}/{name}")
+                phases.append(PhaseDoc.model_validate(yaml.safe_load(raw)))
+            result = phases
+            break
+    except Exception:
+        # Cache the negative before re-raising so a second row with the same
+        # (repo, slug) degrades from the memo instead of re-hitting the network;
+        # the caller still catches this to build the failure note (review #1).
+        cache[key] = None
+        raise
 
     cache[key] = result
     return result
