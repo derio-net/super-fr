@@ -1,0 +1,38 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Pure predicate — completed_unarchived_plans
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: completed_unarchived_plans(repo_root) in fr.archive
+  steps:
+  - id: P1.T1.S1
+    text: |
+      RED — add tests/unit/test_completed_unarchived_plans.py with fixtures written to a tmp repo: (a) a fully-locally-complete plan dir (every phase has all steps ticked and completion.at set) is returned; (b) an in-progress plan (some un-ticked steps, no completion.at) is NOT returned; (c) a malformed plan dir (unparseable _meta.yaml) is skipped, not returned. Import `from fr.archive import completed_unarchived_plans`. Construct fixtures with `fr plan create` or by writing the _meta.yaml/_prose.md/NN.yaml files directly in the test. Run `uv run pytest tests/unit/test_completed_unarchived_plans.py -q --no-cov` → expect red (ImportError, symbol does not exist yet).
+  - id: P1.T1.S2
+    text: |
+      GREEN — implement `completed_unarchived_plans(repo_root: Path) -> list[str]` in packages/fr/src/fr/archive.py. Glob `docs/superpowers/plans/*/` dirs that contain `_meta.yaml` (same selection as archive_cmd), `parser.parse()` each (skip on PlanSchemaError), and flag a plan when EVERY phase satisfies `render.plan_locally_complete(phase)`. Return the sorted list of plan-dir names. Import render lazily/at top (render does not import archive → no cycle). Run the test → green.
+  - id: P1.T1.S3
+    text: |
+      REFACTOR (optional) — if the plans-glob duplicates archive_cmd's target-selection logic, extract a shared `iter_plan_dirs(repo_root)` helper and have both call it; stay green, add no behavior. Skip entirely if there is nothing to clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-03T20:30:32+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-03T20:30:33+00:00'
+      note: null
+    P1.T1.S3:
+      state: '-'
+      ticked_at: '2026-07-03T20:30:34+00:00'
+      note: 'skipped: predicate self-contained, no duplication worth extracting'
+  completion:
+    at: '2026-07-03T20:30:45+00:00'
+    note: predicate + tests green (5 passing); refactor skipped
+    observed_prs: []

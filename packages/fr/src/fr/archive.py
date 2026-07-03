@@ -22,7 +22,49 @@ from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
 
-__all__ = ["ArchiveError", "archive_plan_dir", "paths_dirty", "spec_archive_sweep"]
+__all__ = [
+    "ArchiveError",
+    "archive_plan_dir",
+    "completed_unarchived_plans",
+    "paths_dirty",
+    "spec_archive_sweep",
+]
+
+
+def completed_unarchived_plans(repo_root: Path) -> list[str]:
+    """Plan-dir names under ``docs/superpowers/plans/`` that are fully locally
+    complete and therefore should have been archived (#334).
+
+    The gh-free ("merged-but-unarchived") signal, shared by the ``fr status``
+    repo sweep and the ``test_tripwire_unarchived_plans`` CI backstop so there
+    is exactly one definition of the drift.
+
+    A plan counts iff it has at least one phase and *every* phase satisfies
+    ``render.plan_locally_complete`` (``completion.at`` set, or all steps
+    ticked). This is the same offline arm ``archive_gate`` uses for
+    never-dispatched plans, so it never flags a plan the mover would refuse.
+    Deliberately offline (no gh observation) so plain ``pytest`` can enforce
+    it. Malformed plan dirs are skipped, not flagged — a parse failure is a
+    different problem and must not wedge the check red.
+    """
+    from fr.parser import PlanSchemaError, parse
+    from fr.render import plan_locally_complete
+
+    plans_dir = repo_root / "docs" / "superpowers" / "plans"
+    if not plans_dir.is_dir():
+        return []
+
+    complete: list[str] = []
+    for plan_dir in sorted(plans_dir.iterdir()):
+        if not (plan_dir / "_meta.yaml").exists():
+            continue
+        try:
+            plan = parse(plan_dir)
+        except PlanSchemaError:
+            continue
+        if plan.phases and all(plan_locally_complete(p) for p in plan.phases):
+            complete.append(plan_dir.name)
+    return complete
 
 
 class ArchiveError(Exception):
@@ -76,6 +118,16 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"run fr archive from the repo that owns the plan"
         ) from e
     dst_rel = Path("docs/superpowers/implemented/plans") / plan_dir.name
+    if (repo_root / dst_rel).exists():
+        # A prior botched archive (copied to implemented/ but never removed
+        # from plans/) leaves a duplicate; `git mv` would nest src INTO the
+        # existing dir (implemented/plans/X/X), corrupting the tree. Refuse
+        # with a clear next step instead. (#334)
+        raise ArchiveError(
+            f"destination already exists: {dst_rel} — this plan appears already "
+            f"archived. Remove the stale plans/ copy ({src_rel}) instead "
+            f"(e.g. `git rm -r {src_rel}`)."
+        )
     _git_mv(repo_root, src_rel, dst_rel)
     return repo_root / dst_rel
 

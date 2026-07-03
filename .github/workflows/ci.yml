@@ -23,6 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # test_tripwire_unarchived_plans reads origin/main to scope the
+          # merged-but-unarchived check (#334); full history makes the ref
+          # available.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
       - run: uv run pytest
