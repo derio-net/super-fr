@@ -255,3 +255,131 @@ def test_up_forwards_base_and_no_fetch(repo: Path, monkeypatch: pytest.MonkeyPat
     )
     assert res.exit_code == 0, res.output
     assert captured["no_fetch"] is True and captured["base"] is None
+
+
+def _sentinel(tmp_path, repo, monkeypatch, session="sess"):
+    import json
+
+    sdir = tmp_path / "sent"
+    sdir.mkdir(exist_ok=True)
+    monkeypatch.setenv("FR_SENTINEL_DIR", str(sdir))
+    (sdir / f"{session}.json").write_text(json.dumps({"repo_root": str(repo.resolve())}))
+    return sdir
+
+
+def test_down_all_tears_down_and_clears_sentinels(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #341 Task 2A: `down --all` tears down every workspace and drops the
+    # pipeline sentinel(s) — the explicit escape from the orphaned-sentinel
+    # deadlock. gh returns MERGED here, so no open-PR safety kicks in.
+    sdir = _sentinel(tmp_path, repo, monkeypatch)
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
+    from fr.isolation.types import list_states
+
+    assert len(list_states(repo.resolve())) == 2
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all"])
+    assert res.exit_code == 0, res.output
+    assert list_states(repo.resolve()) == []
+    assert not (sdir / "sess.json").exists(), "pipeline sentinel cleared"
+    assert "cleared" in res.output.lower()
+
+
+def test_down_all_keeps_open_pr_without_force(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[list[str]] = []
+
+    def run(argv, cwd=None, check=False, capture=True):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        calls.append(list(argv))
+        out = '{"state": "OPEN", "url": "u"}' if argv[0] == "gh" else ""
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+    monkeypatch.setattr(isolation_cmd, "_runner", run)
+    _sentinel(tmp_path, repo, monkeypatch)
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    from fr.isolation.types import list_states
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all"])
+    assert res.exit_code == 0, res.output
+    assert [s.branch for s in list_states(repo.resolve())] == ["feat/a"], "open-PR workspace kept"
+    assert "kept" in res.output.lower()
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all", "--force"])
+    assert res.exit_code == 0, res.output
+    assert list_states(repo.resolve()) == [], "--force tears down the open-PR workspace"
+
+
+def _docker_run(container: str = "cid running"):
+    def run(argv, cwd=None, check=False, capture=True):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        out = ""
+        if argv[0] == "docker":
+            out = container
+        elif argv[0] == "gh":
+            out = '{"state": "MERGED", "url": "u"}'
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+    return run
+
+
+def test_restart_resolves_single_workspace_no_branch(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(isolation_cmd, "_runner", _docker_run())
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
+    res = runner.invoke(app, ["isolation", "restart", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "bounced" in res.output
+
+
+def test_restart_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
+    res = runner.invoke(app, ["isolation", "restart", "--repo", str(repo)])
+    assert res.exit_code == 2
+    assert "--branch" in res.output
+
+
+def _stats_run(record: list | None = None):
+    def run(argv, cwd=None, check=False, capture=True):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        if record is not None:
+            record.append(list(argv))
+        if argv[:2] == ["docker", "ps"]:
+            return subprocess.CompletedProcess(argv, 0, stdout="cid running", stderr="")
+        if argv[:2] == ["docker", "stats"]:
+            return subprocess.CompletedProcess(argv, 0, stdout="9.0%|2GiB / 4GiB|50.0%", stderr="")
+        if argv[0] == "gh":
+            return subprocess.CompletedProcess(
+                argv, 0, stdout='{"state": "MERGED", "url": "u"}', stderr=""
+            )
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    return run
+
+
+def test_status_stats_flag_shows_resource_row(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(isolation_cmd, "_runner", _stats_run())
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    res = runner.invoke(
+        app, ["isolation", "status", "--repo", str(repo), "--stats", "--format", "json"]
+    )
+    assert res.exit_code == 0, res.output
+    assert '"stats"' in res.output
+    assert "9.0%" in res.output
+
+
+def test_status_default_makes_no_stats_call(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(isolation_cmd, "_runner", _stats_run(record=calls))
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    calls.clear()
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert not any(c[:2] == ["docker", "stats"] for c in calls), "default status skips docker stats"

@@ -90,6 +90,22 @@ if printf '%s' "$command" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation([[:sp
   exit 0
 fi
 
-jq -n --arg reason "fr pipeline active: run via \`fr isolation exec -- …\` (or \`fr isolation up\` first). Host-side git/gh ops: lead with \`cd <worktree> && …\` — run from the worktree cwd, not the base repo. See plugins/super-fr/skills/fr-isolation (exec-bridge discipline, #265/#279)." \
+# Self-heal (#341 Task 2A): if the pipeline's sentinel has outlived all
+# worktrees, the `cd <worktree>` escape below is unsatisfiable — denying is pure
+# deadlock. Detect zero linked worktrees via a SUCCESSFUL `git worktree list`
+# (exactly one `worktree ` line = the main checkout) and fail open, clearing the
+# orphaned sentinel so the next command sees no active pipeline. Gated on git
+# success so a non-git cwd fails closed (keeps the discipline; the `fr isolation
+# down --all` escape and the guard tests both rely on this). Companion:
+# clear_repo_sentinels() in fr/isolation/types.py (the eager, explicit lever).
+if wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
+  n=$(printf '%s\n' "$wt" | grep -c '^worktree ' || true)
+  if [ "${n:-0}" -eq 1 ]; then
+    rm -f "$sentinel" || true
+    exit 0
+  fi
+fi
+
+jq -n --arg reason "fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the isolation worktree. Run via \`fr isolation exec -- …\` (or \`fr isolation up\` first), or lead with \`cd <worktree> && …\` to work from the worktree cwd. No worktree left? \`fr isolation down --all\` clears the pipeline. See plugins/super-fr/skills/fr-isolation (exec-bridge discipline, #265/#279/#329)." \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
 exit 0

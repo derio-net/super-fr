@@ -196,6 +196,57 @@ class LocalWorktreeDevcontainerTarget:
         )
         return result.returncode
 
+    def restart(self, state: IsolationState, force: bool = False) -> str:
+        """Bounce the devcontainer without dropping the worktree (#341 Task 3).
+
+        `docker restart` cycles only the process tree — the container filesystem
+        and the bind-mounted worktree survive, so node_modules / local DB stacks
+        / in-container installs are kept (unlike down+up). `force` uses
+        `--time=0` (immediate SIGKILL then start) for a container too wedged to
+        stop gracefully. Returns the restarted container id.
+        """
+        container = self._container_id(state)
+        if not container:
+            raise IsolationError(
+                f"no container for {state.branch} — nothing to restart "
+                "(run `fr isolation up` first)."
+            )
+        argv = ["docker", "restart", *(["--time=0"] if force else []), container]
+        result = self.run(argv)
+        if result.returncode != 0:
+            raise IsolationError(
+                f"docker restart failed: {result.stderr or result.stdout}. If the container "
+                "is too wedged to stop gracefully, retry with --force."
+            )
+        return container
+
+    def stats(self, state: IsolationState) -> dict[str, str] | None:
+        """Host-side `docker stats --no-stream` for a RUNNING container (#341
+        Task 3B), so an agent can detect a thrashing container instead of
+        inferring it from hung execs. Returns None (never raises) for a missing,
+        non-running, or unreadable container — the caller renders `n/a`."""
+        # One `docker ps` for both id and state (id state, space-joined).
+        parts = self._docker_ps(state).split()
+        if len(parts) < 2 or parts[1] != "running":
+            return None
+        container = parts[0]
+        # Pipe-delimited: MemUsage ("1.2GiB / 4GiB") itself contains spaces.
+        result = self.run(
+            [
+                "docker",
+                "stats",
+                "--no-stream",
+                "--format",
+                "{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}",
+                container,
+            ]
+        )
+        line = (result.stdout or "").strip()
+        if result.returncode != 0 or line.count("|") != 2:
+            return None
+        cpu, mem, mem_perc = line.split("|")
+        return {"cpu": cpu, "mem": mem, "mem_perc": mem_perc}
+
     def status(self, state: IsolationState) -> dict[str, Any]:
         return {
             "repo": str(state.repo_root),

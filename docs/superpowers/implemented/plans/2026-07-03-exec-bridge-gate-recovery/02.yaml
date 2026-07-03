@@ -1,0 +1,56 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'CLI escape hatch: `fr isolation down --all` + clear_repo_sentinels (Task
+    2A CLI-side)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: clear_repo_sentinels helper (shared sentinel contract)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_isolation.py add TestClearRepoSentinels — with FR_SENTINEL_DIR pointed at a tmp dir holding <session>.json files, clear_repo_sentinels(repo_root) removes only sentinels whose "repo_root" resolves to that repo, leaves a foreign-repo sentinel, skips a malformed (non-JSON) file without raising, returns the count removed, and returns 0 when the dir is absent. Fails (function does not exist).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/isolation/types.py add sentinel_dir() (reads FR_SENTINEL_DIR, default ~/.cache/fr/sentinels) and clear_repo_sentinels(repo_root)->int, with a docstring naming the shared contract with fr-pipeline-sentinel.sh (writer) and fr-isolation-guard.sh (reader). Run `uv run pytest tests/unit/test_isolation.py -q --no-cov` — green.
+- number: 2
+  title: '`fr isolation down --all` flag'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_isolation_cmd.py add tests — `fr isolation down --all` (monkeypatched runner + list_states returning two states) calls target.down for each and clears sentinels via clear_repo_sentinels; a state whose _pr reports OPEN is KEPT without --force (reported, target.down raises IsolationError which is caught) and torn WITH --force; output names torn/kept/cleared counts. Fails (no --all option).
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add `all_: bool = typer.Option(False, "--all", ...)` to the down command in isolation_cmd.py; when set, ignore --branch, iterate list_states(root), call target.down(state, force=force) catching IsolationError into a "kept" list, then clear_repo_sentinels(root); echo `N torn down, M kept (open PR — rerun with --force), K sentinel(s) cleared`. Run `uv run pytest tests/unit/test_isolation_cmd.py -q --no-cov` — green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR (optional): dedupe the single-branch vs --all resolution if it reads cleanly as one helper; keep green. Skip if nothing to clean.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-03T20:23:52+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-03T20:23:53+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-03T20:23:54+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-03T20:23:55+00:00'
+      note: null
+    P2.T2.S3:
+      state: '-'
+      ticked_at: '2026-07-03T20:23:56+00:00'
+      note: single-branch and --all paths already distinct; nothing to dedupe
+  completion:
+    at: '2026-07-03T20:23:57+00:00'
+    note: down --all + clear_repo_sentinels; 82 isolation tests green
+    observed_prs: []
