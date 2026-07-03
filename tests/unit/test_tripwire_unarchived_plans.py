@@ -16,7 +16,6 @@ import shutil
 from pathlib import Path
 
 import yaml as _yaml
-
 from fr.archive import completed_unarchived_plans
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -7,7 +7,6 @@ import shutil
 from pathlib import Path
 
 import yaml as _yaml
-
 from fr.archive import completed_unarchived_plans
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"

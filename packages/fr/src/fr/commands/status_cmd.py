@@ -150,9 +150,7 @@ def _sweep_text(archivable: list[str], in_progress: list[str]) -> str:
         lines.append(f"archivable — merged but not archived ({len(archivable)}):")
         lines.extend(f"  {n}" for n in archivable)
         lines.append("")
-        lines.append(
-            f"run `fr archive --all` to move {len(archivable)} plan(s) to implemented/."
-        )
+        lines.append(f"run `fr archive --all` to move {len(archivable)} plan(s) to implemented/.")
     else:
         lines.append("no archivable plans — plans/ is clean.")
     if in_progress:
@@ -187,9 +185,7 @@ def status_command(
     if plan_dir is None:
         archivable, in_progress = _sweep_lists(resolve_repo_root())
         if output_format == "json":
-            console.print_json(
-                _json.dumps({"archivable": archivable, "in_progress": in_progress})
-            )
+            console.print_json(_json.dumps({"archivable": archivable, "in_progress": in_progress}))
         else:
             console.print(_sweep_text(archivable, in_progress))
         return

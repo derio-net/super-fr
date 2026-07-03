@@ -13,7 +13,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from fr.archive import ArchiveError, archive_plan_dir
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -40,5 +39,13 @@ def test_archive_refuses_when_destination_exists(tmp_path: Path) -> None:
     with pytest.raises(ArchiveError, match="already exists"):
         archive_plan_dir(repo, plan_dir)
     # The tree must be untouched — no nested implemented/plans/X/X.
-    nested = repo / "docs" / "superpowers" / "implemented" / "plans" / "2026-02-02-dup" / "2026-02-02-dup"
+    nested = (
+        repo
+        / "docs"
+        / "superpowers"
+        / "implemented"
+        / "plans"
+        / "2026-02-02-dup"
+        / "2026-02-02-dup"
+    )
     assert not nested.exists()

@@ -20,14 +20,14 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-07-03T20:41:15+00:00'
+      note: bumped 3.5.3 -> 3.5.4; --check passes; fr --version 3.5.4
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-07-03T20:41:16+00:00'
+      note: ruff format+check clean, mypy clean, 1047 passed
   completion:
-    at: null
-    note: null
+    at: '2026-07-03T20:41:17+00:00'
+    note: version 3.5.4; full quality gate green
     observed_prs: []
