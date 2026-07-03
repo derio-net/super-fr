@@ -19,14 +19,15 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:34:07+00:00'
       note: null
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-07-03T20:34:08+00:00'
+      note: unit tests pass; repo-level assertion red until phase 4 archives cncd
+        (by design)
   completion:
-    at: null
-    note: null
+    at: '2026-07-03T20:34:09+00:00'
+    note: tripwire authored; RED on cncd as designed
     observed_prs: []
