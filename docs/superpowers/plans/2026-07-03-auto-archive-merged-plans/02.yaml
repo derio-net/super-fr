@@ -22,18 +22,18 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:32:52+00:00'
       note: null
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:32:54+00:00'
       note: null
     P2.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-07-03T20:32:55+00:00'
+      note: rendering already factored into _sweep_text; nothing to clean
   completion:
-    at: null
-    note: null
+    at: '2026-07-03T20:32:56+00:00'
+    note: fr status no-arg sweep green (10 tests); dogfooded — flags cncd
     observed_prs: []

@@ -19,7 +19,12 @@ from typing import TYPE_CHECKING, Any
 import typer
 from rich.console import Console
 
-from fr.commands.common import PlanReport, build_plan_report, require_migrated_layout
+from fr.commands.common import (
+    PlanReport,
+    build_plan_report,
+    require_migrated_layout,
+    resolve_repo_root,
+)
 from fr.labels import FR_SYNCED
 from fr.parser import PlanSchemaError
 from fr.render import archive_gate
@@ -119,8 +124,49 @@ def _report_json(report: PlanReport) -> dict[str, Any]:
     }
 
 
+def _sweep_lists(repo_root: Path) -> tuple[list[str], list[str]]:
+    """(archivable, in_progress) plan-dir names under docs/superpowers/plans/.
+
+    archivable = the gh-free `completed_unarchived_plans` set (#334);
+    in_progress = every other plan folder (a malformed dir is neither
+    archivable nor a false positive — it lands in in_progress)."""
+    from fr.archive import completed_unarchived_plans
+
+    archivable = completed_unarchived_plans(repo_root)
+    plans_dir = repo_root / "docs" / "superpowers" / "plans"
+    all_plans = (
+        sorted(p.name for p in plans_dir.iterdir() if (p / "_meta.yaml").exists())
+        if plans_dir.is_dir()
+        else []
+    )
+    done = set(archivable)
+    in_progress = [n for n in all_plans if n not in done]
+    return archivable, in_progress
+
+
+def _sweep_text(archivable: list[str], in_progress: list[str]) -> str:
+    lines: list[str] = []
+    if archivable:
+        lines.append(f"archivable — merged but not archived ({len(archivable)}):")
+        lines.extend(f"  {n}" for n in archivable)
+        lines.append("")
+        lines.append(
+            f"run `fr archive --all` to move {len(archivable)} plan(s) to implemented/."
+        )
+    else:
+        lines.append("no archivable plans — plans/ is clean.")
+    if in_progress:
+        lines.append("")
+        lines.append(f"in progress ({len(in_progress)}):")
+        lines.extend(f"  {n}" for n in in_progress)
+    return "\n".join(lines)
+
+
 def status_command(
-    plan_dir: Path = typer.Argument(..., help="Path to plan folder."),
+    plan_dir: Path | None = typer.Argument(
+        None,
+        help="Path to plan folder. Omit for a repo-wide sweep of archivable plans.",
+    ),
     output_format: str = typer.Option(
         "text",
         "--format",
@@ -129,12 +175,24 @@ def status_command(
 ) -> None:
     """Read-only plan report: tick counts, dispatch state, drift, archive hint.
 
-    Never mutates GitHub. Safe to allowlist as `fr status*`.
+    With no PLAN_DIR, sweeps docs/superpowers/plans/ and lists archivable
+    ("merged-but-unarchived") plans. Never mutates GitHub. Safe to allowlist
+    as `fr status*`.
     """
     require_migrated_layout()
     if output_format not in ("text", "json"):
         err_console.print(f"--format must be 'text' or 'json', got {output_format!r}")
         raise typer.Exit(2)
+
+    if plan_dir is None:
+        archivable, in_progress = _sweep_lists(resolve_repo_root())
+        if output_format == "json":
+            console.print_json(
+                _json.dumps({"archivable": archivable, "in_progress": in_progress})
+            )
+        else:
+            console.print(_sweep_text(archivable, in_progress))
+        return
 
     gh = _make_gh_client()
     try:
