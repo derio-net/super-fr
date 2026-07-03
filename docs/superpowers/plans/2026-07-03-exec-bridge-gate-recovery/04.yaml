@@ -1,0 +1,37 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Docs + version bump (user-observable surface)
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Document new subcommands in fr-isolation SKILL.md (respect 120-line cap)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-isolation/SKILL.md to document `fr isolation down --all` (drop session state / clear orphaned sentinel), `fr isolation restart [--force]` (bounce a wedged container, worktree intact), `fr isolation status --stats`, and the guard self-heal (no worktree left → gate auto-clears). The file is at 118/120 lines — compress existing prose so `wc -l` stays ≤ 120. Verify with the skill-length cap test: `uv run pytest tests/unit -k skill_length -q --no-cov` (or the test that enforces the cap) — green.
+- number: 2
+  title: Version bump 3.5.3 → 3.6.0 (minor — new subcommands)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Run `scripts/bump-version.py minor` (3.5.3 → 3.6.0), then verify: `scripts/bump-version.py --check` passes, `fr --version` reports 3.6.0. Then the full gate — `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run pytest -q --no-cov` all green. Commit the four version files with the phase.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

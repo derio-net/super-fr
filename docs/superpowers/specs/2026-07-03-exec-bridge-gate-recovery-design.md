@@ -157,6 +157,12 @@ foreign + malformed files. `restart` calls `docker restart <id>`; `--force` →
 parsed stats for a running container, `None`/`n/a` for exited; default status
 makes no stats call.
 
+## Implementation Plans
+
+| Plan | Target repo | Slug | Status |
+|------|-------------|------|--------|
+| 2026-07-03-exec-bridge-gate-recovery | `derio-net/super-fr` | `2026-07-03-exec-bridge-gate-recovery` | — |
+
 ## Non-goals
 
 - Narrowing the gate to git/gh (rejected in Q&A — keep broad).

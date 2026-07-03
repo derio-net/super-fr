@@ -1,0 +1,56 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Guard hardening: self-heal fail-open + accurate deny message (Task 2A guard-side
+    + 2B)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Deny message names its true breadth (Task 2B)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_hooks_guard.py add test_deny_message_names_full_breadth — a base-repo-cwd deny's permissionDecisionReason must (a) still contain "fr isolation exec" and "cd <worktree> &&" (existing escapes), AND (b) signal the gate blocks everything, not just git/gh — assert it contains "ALL" and "down --all" and does NOT read as git/gh-only. Fails against the current message.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: rewrite the deny permissionDecisionReason in plugins/super-fr/hooks/fr-isolation-guard.sh (the final jq -n) to state the gate covers ALL base-repo commands (not just git/gh), keep the `fr isolation exec -- …` and `cd <worktree> && …` escapes, and name `fr isolation down --all` as the no-worktree-left escape. Run `uv run pytest tests/unit/test_hooks_guard.py -q --no-cov` — all green.
+- number: 2
+  title: Self-heal fail-open when no linked worktree exists (Task 2A guard-side)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: add TestOrphanedSentinelSelfHeal to tests/unit/test_hooks_guard.py. Cases (build real git repos with subprocess `git init` + a commit; git worktree add for the linked case): (1) git repo + sentinel + ZERO linked worktrees + `git status` from base cwd → decision is None (allowed) AND the sentinel file is removed; (2) git repo + sentinel + ONE linked worktree added → still deny; (3) non-git tmp dir + sentinel (existing pattern) → still deny (fail-closed on git error). Fails now (guard denies case 1, sentinel survives).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in fr-isolation-guard.sh, immediately before the final deny jq, add the self-heal block — `if wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then n=$(printf '%s\n' "$wt" | grep -c '^worktree ' || true); [ "${n:-0}" -eq 1 ] && { rm -f "$sentinel" || true; exit 0; }; fi`. Gated on git SUCCESS so a non-git cwd fails closed; `|| true` keeps set -e happy on 0 matches. Run `uv run pytest tests/unit/test_hooks_guard.py -q --no-cov` — all green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR (optional): review the guard's added block for a shared cwd/repo-root resolution helper or comment clarity; keep tests green, add no behavior. Skip if nothing to clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
