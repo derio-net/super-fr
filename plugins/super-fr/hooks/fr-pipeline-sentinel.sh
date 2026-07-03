@@ -4,9 +4,11 @@
 # When fr-goal / fr-brainstorming / fr-execute is invoked, write a
 # session-keyed sentinel naming the base repo. The companion PreToolUse hook
 # (fr-isolation-guard.sh) denies base-repo-cwd Bash commands while the
-# sentinel lives. Cleared by `fr isolation down` (guard-observed) and by the
-# 48h GC below. See #265; same philosophy as agent-worktree-required.sh,
-# extended from the Agent tool to inline Bash.
+# sentinel lives. Cleared by `fr isolation down` (guard-observed), by the
+# guard's self-heal when no worktree survives, by `fr isolation down --all`
+# (clear_repo_sentinels() in fr/isolation/types.py — the Python mirror of this
+# writer's contract), and by the 48h GC below. See #265/#341; same philosophy
+# as agent-worktree-required.sh, extended from the Agent tool to inline Bash.
 
 set -eu
 

@@ -1118,3 +1118,143 @@ def test_down_removes_isolation_marker(tmp_path: Path, monkeypatch: pytest.Monke
     )
     target.down(st, force=True)
     assert removed == [st.worktree]  # down retires the marker
+
+
+class TestClearRepoSentinels:
+    """#341 Task 2A: clear_repo_sentinels owns the Python side of the sentinel
+    contract shared with fr-pipeline-sentinel.sh (writer) and
+    fr-isolation-guard.sh (reader): $FR_SENTINEL_DIR/<session>.json files each
+    carrying {"repo_root": ...}. `fr isolation down --all` uses it to drop
+    session state explicitly."""
+
+    def test_removes_only_matching_repo(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fr.isolation.types import clear_repo_sentinels
+
+        sdir = tmp_path / "sentinels"
+        sdir.mkdir()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        other = tmp_path / "other"
+        other.mkdir()
+        monkeypatch.setenv("FR_SENTINEL_DIR", str(sdir))
+        (sdir / "s1.json").write_text(json.dumps({"repo_root": str(repo)}))
+        (sdir / "s2.json").write_text(json.dumps({"repo_root": str(other)}))
+        (sdir / "bad.json").write_text("{ not json")
+
+        n = clear_repo_sentinels(repo)
+
+        assert n == 1
+        assert not (sdir / "s1.json").exists()
+        assert (sdir / "s2.json").exists(), "foreign-repo sentinel untouched"
+        assert (sdir / "bad.json").exists(), "malformed sentinel skipped, not removed"
+
+    def test_absent_dir_returns_zero(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from fr.isolation.types import clear_repo_sentinels
+
+        monkeypatch.setenv("FR_SENTINEL_DIR", str(tmp_path / "nope"))
+        assert clear_repo_sentinels(tmp_path / "repo") == 0
+
+
+# ---------- target.restart / target.stats (#341 Task 3) ----------
+
+
+def _target_state(tmp_path: Path, runner: FakeRunner) -> tuple:
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    st = IsolationState(
+        repo_root=repo,
+        branch="feat/x",
+        worktree=tmp_path / "wt",
+        profile="dev",
+        created_at="2026-07-03T00:00:00Z",
+    )
+    return target, st
+
+
+class TestRestart:
+    def test_graceful_restart(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        target.restart(st)
+        restarts = [c for c in runner.argv_for("docker") if c[1:2] == ["restart"]]
+        assert restarts == [["docker", "restart", "cid1"]]
+
+    def test_force_restart_uses_time_zero(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        target.restart(st, force=True)
+        restarts = [c for c in runner.argv_for("docker") if c[1:2] == ["restart"]]
+        assert restarts == [["docker", "restart", "--time=0", "cid1"]]
+
+    def test_no_container_errors(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={})  # docker ps → "" → no container
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="nothing to restart"):
+            target.restart(st)
+
+    def test_failure_suggests_force(self, tmp_path: Path) -> None:
+        runner = FakeRunner(fail_on="restart", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="--force"):
+            target.restart(st)
+
+
+class _DockerRunner:
+    """Runner distinguishing `docker ps` from `docker stats` (FakeRunner keys
+    stdout by argv[0] only, so it can't give the two docker calls different
+    output). git hits the real binary."""
+
+    def __init__(self, ps: str = "cid running", stats: str = "", stats_rc: int = 0):
+        self.ps = ps
+        self.stats = stats
+        self.stats_rc = stats_rc
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv, cwd=None, check=False, capture=True):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        self.calls.append(list(argv))
+        if argv[:2] == ["docker", "ps"]:
+            return subprocess.CompletedProcess(argv, 0, stdout=self.ps, stderr="")
+        if argv[:2] == ["docker", "stats"]:
+            return subprocess.CompletedProcess(argv, self.stats_rc, stdout=self.stats, stderr="")
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+
+class TestStats:
+    def _target_state(self, tmp_path: Path, runner) -> tuple:
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+        st = IsolationState(
+            repo_root=repo,
+            branch="feat/x",
+            worktree=tmp_path / "wt",
+            profile="dev",
+            created_at="2026-07-03T00:00:00Z",
+        )
+        return target, st
+
+    def test_running_container_parses_pipe_row(self, tmp_path: Path) -> None:
+        r = _DockerRunner(ps="cid running", stats="12.5%|1.2GiB / 4GiB|30.0%")
+        target, st = self._target_state(tmp_path, r)
+        assert target.stats(st) == {"cpu": "12.5%", "mem": "1.2GiB / 4GiB", "mem_perc": "30.0%"}
+        # id + state come from ONE `docker ps`, not two (state check + id lookup).
+        assert len([c for c in r.calls if c[:2] == ["docker", "ps"]]) == 1
+
+    def test_exited_container_returns_none_without_stats_call(self, tmp_path: Path) -> None:
+        r = _DockerRunner(ps="cid exited")
+        target, st = self._target_state(tmp_path, r)
+        assert target.stats(st) is None
+        assert not any(c[:2] == ["docker", "stats"] for c in r.calls)
+
+    def test_no_container_returns_none(self, tmp_path: Path) -> None:
+        r = _DockerRunner(ps="")
+        target, st = self._target_state(tmp_path, r)
+        assert target.stats(st) is None
+
+    def test_stats_command_failure_returns_none(self, tmp_path: Path) -> None:
+        r = _DockerRunner(ps="cid running", stats="", stats_rc=1)
+        target, st = self._target_state(tmp_path, r)
+        assert target.stats(st) is None
