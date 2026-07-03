@@ -109,14 +109,23 @@ is expected.)
 `test_tripwire_isolation_marker.py` / `test_tripwire_claude_p.py`:
 
 - **Unit tests** on `completed_unarchived_plans` against fixture plan dirs: a
-  fully-complete plan is flagged; an in-progress plan is not; a malformed plan
-  is skipped, not flagged.
-- **Repo-level integration test**: `completed_unarchived_plans(REPO_ROOT)` over
-  the live `docs/superpowers/plans/` must be `== []`. This is the backstop —
-  once a plan is complete, CI stays red until it's archived, making the archive
+  fully-complete plan is flagged; an in-progress plan is not.
+- **Repo-level integration test** — the backstop. The signal is
+  `completed_unarchived_plans(REPO_ROOT)` (completeness in the **working tree**,
+  i.e. the post-merge state) **∩ "already present on `origin/main`"**. The
+  intersection is load-bearing:
+  - checking the *working tree* lets the PR that **removes** a stale plan pass
+    (the plan is gone from the tree → not a candidate);
+  - the *origin/main* intersection keeps the PR that **introduces** a plan green
+    (a brand-new plan isn't on main yet → excluded). Without it, the tripwire
+    would red-flag its own PR the moment the plan's last phase completes, since
+    fr-goal archives post-merge (step 9).
+  So it fires only on a plan that **actually merged** and was then left
+  unarchived — exactly issue #334's tell — making the post-merge archive
   non-skippable.
-- `REPO_ROOT = Path(__file__).resolve().parents[2]`, mirroring the existing
-  tripwires. Runs in the plain `test` job (`uv run pytest`) — no extra wiring.
+- `REPO_ROOT = Path(__file__).resolve().parents[2]`. Reads only the local
+  `origin/main` ref; the `test` CI job gains `fetch-depth: 0` so the ref is
+  present, and the test skips cleanly if it isn't.
 
 ### 5. Archive the lingering cncd plan (delivery, not code)
 
@@ -175,7 +184,14 @@ plan.
 - **A plan legitimately kept in `plans/` while its archive-PR is pending.** The
   hard-fail is intentional here — #334's whole point is that the follow-up
   archive gets forgotten. CI red is the forcing function; the fix is to archive,
-  which is one command.
+  which is one command. Enforcement is **post-merge**: the plan must have landed
+  on `origin/main` (the origin/main intersection above), so the feature PR that
+  finishes it is never blocked — the guard fires on the next CI run after merge.
+- **Botched archive (copy left in `plans/`).** Surfaced live: the cncd plan was
+  copied to `implemented/plans/` but never removed from `plans/`, so `fr archive`
+  would `git mv` it *into* the existing dir (`implemented/plans/X/X`).
+  `archive_plan_dir` now refuses when the destination already exists
+  (`test_archive_dest_guard.py`), and the stale copy is removed with `git rm`.
 - **Malformed / partially-migrated plan dirs.** Skipped by the predicate (parse
   failure ≠ complete), so they can't wedge CI red for the wrong reason.
 - **gh-observation drift.** The tripwire deliberately uses the offline signal,

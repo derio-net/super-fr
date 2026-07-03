@@ -2,19 +2,27 @@
 
 The fr lifecycle moves a completed plan from docs/superpowers/plans/ to
 implemented/plans/. That archive step kept getting skipped (issue #334). This
-guard fails loud when any plan under plans/ is fully locally complete — CI
-stays red until it is archived, so the archive can never be silently forgotten.
+guard fails loud when a plan that has ALREADY MERGED to origin/main is still
+sitting complete in plans/ — so a forgotten post-merge archive turns CI red
+until it is done, while an in-progress plan (new in the current branch, not yet
+on main) is deliberately NOT flagged.
 
-Uses the same gh-free `fr.archive.completed_unarchived_plans` predicate as the
-`fr status` sweep, so the CLI and the gate can't disagree. Offline by design
-(no gh observation) so plain `pytest` enforces it.
+Signal = `fr.archive.completed_unarchived_plans` (completeness in the working
+tree, i.e. the post-merge state) ∩ "already present on origin/main". The
+working-tree read is what lets the PR that REMOVES a stale plan pass: the plan
+is gone from the tree, so it is not a candidate. The origin/main intersection
+is what keeps the PR that INTRODUCES a plan green: a brand-new plan is not on
+main yet. Offline apart from reading the local origin/main ref (CI fetches it
+via fetch-depth: 0); skips cleanly when origin/main is unavailable.
 """
 
 from __future__ import annotations
 
 import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml as _yaml
 from fr.archive import completed_unarchived_plans
 
@@ -45,11 +53,43 @@ def test_predicate_ignores_in_progress_plan(tmp_path: Path) -> None:
     assert completed_unarchived_plans(tmp_path) == []
 
 
-def test_live_plans_dir_has_no_unarchived_completed_plans() -> None:
-    """The backstop. If this fails, a completed plan is stranded in plans/ —
-    run `fr archive --all` (or `fr status` to see which) and commit the move."""
-    offenders = completed_unarchived_plans(REPO_ROOT)
+def _origin_main_available(repo_root: Path) -> bool:
+    return (
+        subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--verify", "--quiet", "origin/main"],
+            capture_output=True,
+        ).returncode
+        == 0
+    )
+
+
+def _plan_on_origin_main(repo_root: Path, name: str) -> bool:
+    return (
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "cat-file",
+                "-e",
+                f"origin/main:docs/superpowers/plans/{name}/_meta.yaml",
+            ],
+            capture_output=True,
+        ).returncode
+        == 0
+    )
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
+def test_no_merged_but_unarchived_plans() -> None:
+    """The backstop. A plan that is complete in the tree AND already on
+    origin/main was merged and never archived — run `fr archive --all`."""
+    if not _origin_main_available(REPO_ROOT):
+        pytest.skip("origin/main not available (shallow checkout?)")
+    complete = completed_unarchived_plans(REPO_ROOT)
+    offenders = [n for n in complete if _plan_on_origin_main(REPO_ROOT, n)]
     assert offenders == [], (
-        "merged-but-unarchived plan(s) in docs/superpowers/plans/: "
-        f"{offenders}. Run `fr archive --all` to move them to implemented/."
+        "merged-but-unarchived plan(s) in docs/superpowers/plans/ (complete and "
+        f"already on origin/main): {offenders}. Run `fr archive --all` to move "
+        "them to implemented/."
     )
