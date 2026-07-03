@@ -225,11 +225,11 @@ class LocalWorktreeDevcontainerTarget:
         Task 3B), so an agent can detect a thrashing container instead of
         inferring it from hung execs. Returns None (never raises) for a missing,
         non-running, or unreadable container — the caller renders `n/a`."""
-        if self._container_state(state) != "running":
+        # One `docker ps` for both id and state (id state, space-joined).
+        parts = self._docker_ps(state).split()
+        if len(parts) < 2 or parts[1] != "running":
             return None
-        container = self._container_id(state)
-        if not container:
-            return None
+        container = parts[0]
         # Pipe-delimited: MemUsage ("1.2GiB / 4GiB") itself contains spaces.
         result = self.run(
             [

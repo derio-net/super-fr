@@ -1240,6 +1240,8 @@ class TestStats:
         r = _DockerRunner(ps="cid running", stats="12.5%|1.2GiB / 4GiB|30.0%")
         target, st = self._target_state(tmp_path, r)
         assert target.stats(st) == {"cpu": "12.5%", "mem": "1.2GiB / 4GiB", "mem_perc": "30.0%"}
+        # id + state come from ONE `docker ps`, not two (state check + id lookup).
+        assert len([c for c in r.calls if c[:2] == ["docker", "ps"]]) == 1
 
     def test_exited_container_returns_none_without_stats_call(self, tmp_path: Path) -> None:
         r = _DockerRunner(ps="cid exited")

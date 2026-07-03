@@ -260,10 +260,10 @@ def _down_all(root: Path, force: bool) -> None:
     """Tear down every workspace + drop session sentinel(s) (#341 Task 2A).
 
     A workspace whose PR is still OPEN is KEPT (never silently destroyed) unless
-    --force; the same IsolationError path also catches a genuine teardown
-    failure, reported as kept. Sentinels are cleared regardless — `down --all`
-    is the deliberate "end this pipeline" lever, with the guard self-heal as the
-    lazy backstop.
+    --force — that open-PR check is the only IsolationError `down` raises, so
+    "kept" always means an open PR. Sentinels are cleared regardless — `down
+    --all` is the deliberate "end this pipeline" lever, with the guard self-heal
+    as the lazy backstop.
     """
     target = _target(root)
     torn: list[str] = []
