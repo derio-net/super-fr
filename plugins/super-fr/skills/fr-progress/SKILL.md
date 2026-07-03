@@ -50,8 +50,10 @@ fr spec status --all            # every spec in docs/superpowers/specs/
 
 Output is markdown: per-plan state (Not Started / In Progress / Complete /
 Missing / Unreachable), step + phase counts, and an aggregate. Cross-repo
-plans surface as `Unreachable` in this layer (a future cross-repo lookup
-will resolve them via the gh contents API).
+plans are resolved via the gh contents API (the same capability `fr archive`
+uses) — their remote phase files are read and given the same phase/step
+counts as a local plan, so they count toward the aggregate. Pass `--no-gh`
+(or run offline) and cross-repo rows degrade to `Unreachable`.
 
 The reusable `.github/workflows/fr-spec-status.yml` posts this output as a
 PR comment when a PR touching `docs/superpowers/{plans,implemented/plans}/`

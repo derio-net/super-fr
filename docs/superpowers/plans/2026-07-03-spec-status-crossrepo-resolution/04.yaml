@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 4
+  title: CLI wiring — default-on gh + --no-gh
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: 'spec_cmd: _make_gh_client seam + --no-gh flag'
+  steps:
+  - id: P4.T1.S1
+    text: |
+      RED: in tests/unit/test_spec_cmd_gh.py, use Typer's CliRunner and monkeypatch `fr.commands.spec_cmd._make_gh_client` to return a preloaded FakeGhClient. Assert the default `fr spec status <spec>` run resolves a cross-repo row (Complete appears in output); assert `--no-gh` does NOT call _make_gh_client (row stays Unreachable). Run pytest — fails.
+  - id: P4.T1.S2
+    text: |
+      GREEN: add `_make_gh_client()` factory (RealGhClient, mirroring archive_cmd) and a `no_gh: bool = typer.Option(False, "--no-gh", ...)` to status_cmd; `gh = None if no_gh else _make_gh_client()`; thread gh into every compute_status call (single + --all). Rerun — green.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-07-03T20:51:38+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-07-03T20:51:39+00:00'
+      note: null
+  completion:
+    at: '2026-07-03T20:51:40+00:00'
+    note: null
+    observed_prs: []

@@ -47,6 +47,9 @@ class FakeGhClient:
         self.fail_on_mutation: int | None = None
         # (repo, path) pairs the fake contents API reports as existing.
         self.remote_files: set[tuple[str, str]] = set()
+        # (repo, path) -> raw file content, backing list_dir / read_file
+        # (the cross-repo spec-status resolver, #339).
+        self.remote_tree: dict[tuple[str, str], str] = {}
 
     # ---- preload helpers (test setup) ----
 
@@ -92,6 +95,22 @@ class FakeGhClient:
     def file_exists(self, repo: str, path: str) -> bool:
         self.calls.append(("file_exists", {"repo": repo, "path": path}))
         return (repo, path) in self.remote_files
+
+    def list_dir(self, repo: str, path: str) -> list[str]:
+        self.calls.append(("list_dir", {"repo": repo, "path": path}))
+        prefix = f"{path.rstrip('/')}/"
+        names: set[str] = set()
+        for r, p in self.remote_tree:
+            if r == repo and p.startswith(prefix):
+                names.add(p[len(prefix) :].split("/", 1)[0])
+        return sorted(names)
+
+    def read_file(self, repo: str, path: str) -> str:
+        self.calls.append(("read_file", {"repo": repo, "path": path}))
+        try:
+            return self.remote_tree[(repo, path)]
+        except KeyError as e:
+            raise FakeGhError(f"no such remote file: {repo}:{path}") from e
 
     # ---- mutation methods ----
 
