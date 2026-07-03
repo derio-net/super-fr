@@ -22,7 +22,49 @@ from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
 
-__all__ = ["ArchiveError", "archive_plan_dir", "paths_dirty", "spec_archive_sweep"]
+__all__ = [
+    "ArchiveError",
+    "archive_plan_dir",
+    "completed_unarchived_plans",
+    "paths_dirty",
+    "spec_archive_sweep",
+]
+
+
+def completed_unarchived_plans(repo_root: Path) -> list[str]:
+    """Plan-dir names under ``docs/superpowers/plans/`` that are fully locally
+    complete and therefore should have been archived (#334).
+
+    The gh-free ("merged-but-unarchived") signal, shared by the ``fr status``
+    repo sweep and the ``test_tripwire_unarchived_plans`` CI backstop so there
+    is exactly one definition of the drift.
+
+    A plan counts iff it has at least one phase and *every* phase satisfies
+    ``render.plan_locally_complete`` (``completion.at`` set, or all steps
+    ticked). This is the same offline arm ``archive_gate`` uses for
+    never-dispatched plans, so it never flags a plan the mover would refuse.
+    Deliberately offline (no gh observation) so plain ``pytest`` can enforce
+    it. Malformed plan dirs are skipped, not flagged — a parse failure is a
+    different problem and must not wedge the check red.
+    """
+    from fr.parser import PlanSchemaError, parse
+    from fr.render import plan_locally_complete
+
+    plans_dir = repo_root / "docs" / "superpowers" / "plans"
+    if not plans_dir.is_dir():
+        return []
+
+    complete: list[str] = []
+    for plan_dir in sorted(plans_dir.iterdir()):
+        if not (plan_dir / "_meta.yaml").exists():
+            continue
+        try:
+            plan = parse(plan_dir)
+        except PlanSchemaError:
+            continue
+        if plan.phases and all(plan_locally_complete(p) for p in plan.phases):
+            complete.append(plan_dir.name)
+    return complete
 
 
 class ArchiveError(Exception):

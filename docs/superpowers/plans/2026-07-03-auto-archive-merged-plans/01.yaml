@@ -21,18 +21,18 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:30:32+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:30:33+00:00'
       note: null
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-07-03T20:30:34+00:00'
+      note: 'skipped: predicate self-contained, no duplication worth extracting'
   completion:
-    at: null
-    note: null
+    at: '2026-07-03T20:30:45+00:00'
+    note: predicate + tests green (5 passing); refactor skipped
     observed_prs: []
