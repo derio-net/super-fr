@@ -1,0 +1,39 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Repo-wide detection — fr status no-arg sweep
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: fr status with no PLAN_DIR sweeps plans/ (read-only)
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED — add tests (tests/unit/test_status_sweep.py) driving `status_command` with plan_dir=None over a tmp repo containing one complete and one in-progress plan: text output lists the archivable plan and prints a `run \`fr archive --all\`` nudge, and lists the in-progress plan; `--format json` emits {"archivable": [<names>], "in_progress": [<names>]}; the single-plan path (plan_dir set) is unchanged. Monkeypatch _make_gh_client is unneeded for the no-arg path (gh-free). Run → red.
+  - id: P2.T1.S2
+    text: |
+      GREEN — in packages/fr/src/fr/commands/status_cmd.py change the signature to `plan_dir: Optional[Path] = typer.Argument(None, ...)`. When plan_dir is None: call `resolve_repo_root()` (fr.commands.common), `completed_unarchived_plans(repo_root)`, and the plans glob to get the in-progress remainder; print the two sections (text) or the {"archivable", "in_progress"} object (json). Keep exit 0. When plan_dir is set, run the existing per-plan report untouched. Run → green.
+  - id: P2.T1.S3
+    text: |
+      REFACTOR (optional) — factor the sweep text/json rendering into small helpers (`_sweep_text`, `_sweep_json`) mirroring `_report_text`/`_report_json`; stay green. Skip if trivial.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

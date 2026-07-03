@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Hard-fail CI tripwire
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: tests/unit/test_tripwire_unarchived_plans.py
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED — write tests/unit/test_tripwire_unarchived_plans.py mirroring test_tripwire_isolation_marker.py: (1) unit tests on `completed_unarchived_plans` against tmp-repo fixtures (complete → flagged, in-progress → not, malformed → skipped); (2) a repo-level integration test asserting `completed_unarchived_plans(REPO_ROOT) == []` with `REPO_ROOT = Path(__file__).resolve().parents[2]`, guarded by `@pytest.mark.skipif(shutil.which("git") is None)`. Run `uv run pytest tests/unit/test_tripwire_unarchived_plans.py -q --no-cov` → the repo-level test is RED (cncd plan still in plans/).
+  - id: P3.T1.S2
+    text: |
+      GREEN(-partial) — this tripwire needs no production code (the predicate exists from phase 1). Confirm the unit-fixture tests pass now; the repo-level assertion stays red until phase 4 archives cncd. Leave the file complete and committed.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

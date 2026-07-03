@@ -161,6 +161,12 @@ plan. Verification is the full `uv run pytest` suite (including the new
 tripwire) + `fr status` / `fr archive --all` exercised locally against the cncd
 plan.
 
+## Implementation Plans
+
+| Plan | Target repo | Slug | Status |
+|------|-------------|------|--------|
+| 2026-07-03-auto-archive-merged-plans | `derio-net/super-fr` | `2026-07-03-auto-archive-merged-plans` | — |
+
 ## Risks / edge cases
 
 - **False positives on in-progress plans.** Mitigated: the predicate requires
