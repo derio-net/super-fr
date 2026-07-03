@@ -116,6 +116,23 @@ class TestIsolationGuard:
         assert decision(result) is None
         assert not sentinel.exists(), "down clears the sentinel"
 
+    def test_deny_message_names_full_breadth(self, tmp_path: Path) -> None:
+        # #341 Task 2B: the gate blocks ALL base-repo commands, not just git/gh.
+        # The deny message must say so, keep both existing escapes, and name the
+        # new `down --all` no-worktree escape.
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+        result = run_hook(payload("cat README.md", repo), sentinels)
+        assert decision(result) == "deny"
+        reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "fr isolation exec" in reason  # existing escape preserved
+        assert "cd <worktree> &&" in reason  # existing escape preserved
+        assert "ALL" in reason  # names the true breadth
+        assert "not just git/gh" in reason  # no longer implies git/gh-only
+        assert "down --all" in reason  # names the no-worktree-left escape
+
     def test_symlinked_cwd_resolves_into_repo(self, tmp_path: Path) -> None:
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -135,6 +152,62 @@ class TestIsolationGuard:
         write_sentinel(sentinels, repo)
         result = run_hook(payload("ls", sibling), sentinels)
         assert decision(result) is None
+
+
+def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, env=env)
+
+
+def _git_repo(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "-q")
+    (path / "f").write_text("x\n")
+    _git(path, "add", "f")
+    _git(path, "commit", "-q", "-m", "init")
+    return path
+
+
+class TestOrphanedSentinelSelfHeal:
+    """#341 Task 2A: when the sentinel outlives all worktrees, the `cd
+    <worktree>` escape is unsatisfiable — the guard fails open AND clears the
+    orphaned sentinel, but ONLY on a successful `git worktree list` showing zero
+    linked worktrees. A non-git cwd or a repo that still has a linked worktree
+    stays denied."""
+
+    def test_no_linked_worktree_self_heals(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path / "repo")
+        sentinels = tmp_path / "sentinels"
+        sentinel = write_sentinel(sentinels, repo)
+        result = run_hook(payload("git status", repo), sentinels)
+        assert decision(result) is None, "no worktree to cd into → fail open"
+        assert not sentinel.exists(), "orphaned sentinel is cleared on self-heal"
+
+    def test_linked_worktree_present_still_denies(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path / "repo")
+        wt = tmp_path / "wt"
+        _git(repo, "worktree", "add", "-q", str(wt), "-b", "feat/x")
+        sentinels = tmp_path / "sentinels"
+        sentinel = write_sentinel(sentinels, repo)
+        result = run_hook(payload("git status", repo), sentinels)
+        assert decision(result) == "deny", "a live worktree exists → keep the discipline"
+        assert sentinel.exists(), "sentinel preserved while a worktree lives"
+
+    def test_non_git_cwd_fails_closed(self, tmp_path: Path) -> None:
+        # git worktree list errors on a non-git dir → must NOT self-heal.
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        sentinels = tmp_path / "sentinels"
+        sentinel = write_sentinel(sentinels, repo)
+        result = run_hook(payload("git status", repo), sentinels)
+        assert decision(result) == "deny"
+        assert sentinel.exists()
 
 
 class TestBootstrapAllowance:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -121,6 +122,44 @@ def list_states(repo_root: Path) -> list[IsolationState]:
     return [IsolationState.model_validate_json(f.read_text()) for _, f in sorted(files.items())]
 
 
+def sentinel_dir() -> Path:
+    """Directory holding pipeline session sentinels.
+
+    Shared contract with the two bash hooks: fr-pipeline-sentinel.sh writes one
+    `<session_id>.json` here per active fr-goal / fr-brainstorming / fr-execute
+    session ({"repo_root": ...}); fr-isolation-guard.sh reads it to gate
+    base-repo commands. `$FR_SENTINEL_DIR` overrides the default (both hooks
+    honour the same env var).
+    """
+    return Path(os.environ.get("FR_SENTINEL_DIR", str(_home() / ".cache" / "fr" / "sentinels")))
+
+
+def clear_repo_sentinels(repo_root: Path) -> int:
+    """Remove pipeline sentinels pointing at `repo_root`; return the count.
+
+    The explicit "drop session state" lever behind `fr isolation down --all`
+    (#341 Task 2A). Foreign-repo sentinels are left alone; a malformed /
+    unreadable file is skipped, never removed (it isn't ours to interpret). The
+    guard's own self-heal (fail open + clear when no worktree survives) is the
+    lazy backstop; this is the eager path.
+    """
+    d = sentinel_dir()
+    if not d.is_dir():
+        return 0
+    target = str(Path(repo_root).resolve())
+    removed = 0
+    for f in sorted(d.glob("*.json")):
+        try:
+            data = json.loads(f.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        root = data.get("repo_root") if isinstance(data, dict) else None
+        if root and str(Path(root).resolve()) == target:
+            f.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
 def discover_profiles(repo_root: Path) -> list[str]:
     base = repo_root / ".devcontainer"
     return sorted(p.parent.name for p in base.glob("*/devcontainer.json"))
@@ -182,6 +221,10 @@ class Target(Protocol):
     ) -> IsolationState: ...
 
     def exec(self, state: IsolationState, argv: list[str]) -> int: ...
+
+    def restart(self, state: IsolationState, force: bool = False) -> str: ...
+
+    def stats(self, state: IsolationState) -> dict[str, str] | None: ...
 
     def status(self, state: IsolationState) -> dict[str, Any]: ...
 

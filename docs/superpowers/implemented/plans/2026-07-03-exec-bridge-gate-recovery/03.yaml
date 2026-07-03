@@ -1,0 +1,56 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'Container recovery: `fr isolation restart` + `status --stats` (Task 3)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Target.restart + `fr isolation restart` command
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: add tests — Target.restart(state, force=False) calls `docker restart <id>` (id from _container_id); force=True calls `docker restart --time=0 <id>`; no container (docker ps empty) raises IsolationError; non-zero docker rc raises IsolationError suggesting --force (test_isolation.py). CLI (test_isolation_cmd.py): `fr isolation restart` with --branch omitted resolves the single active workspace and errors listing branches when >1. Fails (no restart).
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement Target.restart in packages/fr/src/fr/isolation/local.py (docker restart / --time=0 on force; IsolationError on no-container / non-zero rc), add restart to the Target Protocol in types.py, and add the restart command to isolation_cmd.py mirroring exec's no-branch resolution; echo `isolation restart: <branch> bounced (<id>).`. Run the two test modules — green.
+- number: 2
+  title: Target.stats + `fr isolation status --stats`
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: add tests — Target.stats(state) returns {cpu,mem,mem_perc} parsed from a mocked `docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}'` for a RUNNING container, returns None for exited / no-container / non-zero rc (never raises); `fr isolation status --stats` includes the parsed stats in text + json rows while `fr isolation status` (no flag) makes NO docker stats call (assert runner never called with "stats"). Fails (no stats / no flag).
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement Target.stats in local.py (guard on _container_state=="running"; pipe-split the format), add stats to the Target Protocol, add `--stats` to the status command in isolation_cmd.py (text: append `stats=cpu=<c> mem=<m> (<p>)` or `stats=n/a`; json: a "stats" key). Run the two test modules — green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR (optional): extract shared container-id lookup / stats parsing if duplicated with restart; keep green. Skip if nothing to clean.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-03T20:30:01+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-03T20:30:02+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-03T20:30:03+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-03T20:30:04+00:00'
+      note: null
+    P3.T2.S3:
+      state: '-'
+      ticked_at: '2026-07-03T20:30:05+00:00'
+      note: _container_id already shared; restart resolution mirrors existing exec/verify_merge
+        — no in-scope duplication to extract
+  completion:
+    at: '2026-07-03T20:30:06+00:00'
+    note: fr isolation restart + status --stats; 94 isolation tests green
+    observed_prs: []

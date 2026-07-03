@@ -1,0 +1,33 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Version bump + quality gate
+  tag: agentic
+  depends_on:
+  - 2
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Patch bump + ruff + full suite
+  steps:
+  - id: P5.T1.S1
+    text: |
+      Run `scripts/bump-version.py patch` (user-observable CLI change → bump required per CLAUDE.md). Verify `scripts/bump-version.py --check` passes and `uv run fr --version` reports the new number. Commit the four changed files (3 sources + uv.lock).
+  - id: P5.T1.S2
+    text: |
+      Run `uv run ruff format packages/ tests/` and `uv run ruff check packages/ tests/` → clean. Full `uv run pytest -q --no-cov` → green. This is the pre-push quality gate (mirrors ci.yml).
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-07-03T20:41:15+00:00'
+      note: bumped 3.5.3 -> 3.5.4; --check passes; fr --version 3.5.4
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-07-03T20:41:16+00:00'
+      note: ruff format+check clean, mypy clean, 1047 passed
+  completion:
+    at: '2026-07-03T20:41:17+00:00'
+    note: version 3.5.4; full quality gate green
+    observed_prs: []
