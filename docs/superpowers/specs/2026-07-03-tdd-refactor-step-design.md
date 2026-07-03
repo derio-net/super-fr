@@ -116,8 +116,11 @@ produced #340.
 
 Touches `plugins/*/skills/**` and `tests/**` (the tests alone wouldn't require
 it, but the skill edits do), so bump per `CLAUDE.md`'s release policy:
-`scripts/bump-version.py patch` → `3.5.2` → `3.5.3`. Commit the four changed
-files (three version sources + `uv.lock`) together.
+`scripts/bump-version.py patch` → `3.5.2` → `3.5.3`. The helper rewrites every
+version source (root + 4 package `pyproject.toml`, both `plugin.json`, and both
+`marketplace.json` entries) and refreshes `uv.lock`; commit all of them
+together. `scripts/bump-version.py --check` is the source of truth that they
+agree.
 
 ## Affected files
 
@@ -126,7 +129,7 @@ files (three version sources + `uv.lock`) together.
 | `plugins/super-fr/skills/fr-plan/SKILL.md` | Expand TDD rule (§1) + step-shape convention (§2) |
 | `plugins/super-fr/skills/fr-goal/SKILL.md` | Route to canonical skill, net-zero lines (§3) |
 | `tests/unit/test_skill_validation.py` | Three guard tests (§4) |
-| `pyproject.toml` + 3 mirrors + `uv.lock` | Version bump 3.5.2 → 3.5.3 (§5) |
+| version sources (root + 4 pkg `pyproject.toml`, 2 `plugin.json`, `marketplace.json`) + `uv.lock` | Version bump 3.5.2 → 3.5.3 (§5) |
 
 ## Verification
 

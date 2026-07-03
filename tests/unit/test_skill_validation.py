@@ -111,3 +111,20 @@ class TestSkillValidation:
         assert "superpowers:test-driven-development" in text, (
             "fr-goal must route to superpowers:test-driven-development (#340)"
         )
+
+    def test_fr_plan_documents_refactor_step_shape(self, skill_dir: Path) -> None:
+        """fr-plan must document the optional refactor step-shape convention.
+
+        Guards the convention block itself, not just the beat token — a future
+        edit could drop the step-shape guidance while keeping the token, and
+        the other #340 guards would stay green. Pins both documented forms.
+        """
+        if skill_dir.name != "fr-plan":
+            pytest.skip("Only applies to fr-plan")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "Refactor step shape" in text, (
+            "fr-plan must document the optional refactor step-shape convention (#340)"
+        )
+        assert "REFACTOR + quality gate" in text, (
+            "fr-plan must name the separate REFACTOR + quality gate task form (#340)"
+        )
