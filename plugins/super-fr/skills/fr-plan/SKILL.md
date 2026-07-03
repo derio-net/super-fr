@@ -62,7 +62,15 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 
 ## Rules
 
-- TDD: test first, always. No speculative generality.
+- TDD (`superpowers:test-driven-development`): red → green → refactor. Test
+  first (red → green), then an **optional** refactor step per task when there's
+  duplication / naming / extraction to clean — stay green, add no behavior;
+  skip it when there's nothing to clean. No speculative generality.
+- **Refactor step shape (optional):** after a task's red→green steps
+  (`P<n>.T<n>.S1` test, `S2` implement), the default is a trailing **optional**
+  refactor step (`P<n>.T<n>.S3`) for small cleanups; use a separate
+  `REFACTOR + quality gate` **task** for larger ones. Omit it entirely when
+  there's nothing to clean — trivial tasks carry no empty refactor step.
 - **Pure agentic phases:** an agentic phase must be fully agent-completable
   end-to-end. Collect ALL manual work (secrets, UI operations, deploy actions,
   cluster-dependent config) into a dedicated `[manual]` phase — never author a

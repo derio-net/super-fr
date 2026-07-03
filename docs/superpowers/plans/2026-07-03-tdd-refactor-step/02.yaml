@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Version bump + verification
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Version bump 3.5.2 -> 3.5.3
+  steps:
+  - id: P2.T1.S1
+    text: |
+      The change touches plugins/*/skills/**, so bump per CLAUDE.md's
+      release policy: `scripts/bump-version.py patch` (3.5.2 -> 3.5.3). It
+      updates the four version sources + uv.lock and verifies
+      `uv run fr --version` reports 3.5.3. Then `scripts/bump-version.py
+      --check` must report all sources agree.
+- number: 2
+  title: Full verification gate
+  steps:
+  - id: P2.T2.S1
+    text: |
+      `uv run ruff format packages/ tests/` then `uv run ruff check
+      packages/ tests/` — clean.
+  - id: P2.T2.S2
+    text: |
+      `uv run pytest -q --no-cov` — full suite green, including the three new
+      guard tests and the still-passing `test_under_120_lines`. Capture the
+      pass count as verification evidence.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-03T19:24:58+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-03T19:25:00+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-03T19:25:03+00:00'
+      note: null
+  completion:
+    at: '2026-07-03T19:25:05+00:00'
+    note: null
+    observed_prs: []

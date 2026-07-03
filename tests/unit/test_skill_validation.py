@@ -79,3 +79,52 @@ class TestSkillValidation:
         assert "[{owner}/{repo}]" in text or "[owner/repo]" in text, (
             "fr-execute must document the unified PR title format"
         )
+
+    def test_fr_plan_tdd_names_all_three_beats(self, skill_dir: Path) -> None:
+        """fr-plan's TDD rule must name the full red → green → refactor cycle.
+
+        Guards against the #340 paraphrase leak where "test first, always"
+        silently dropped the Refactor beat.
+        """
+        if skill_dir.name != "fr-plan":
+            pytest.skip("Only applies to fr-plan")
+        text = (skill_dir / "SKILL.md").read_text().lower()
+        assert "red → green → refactor" in text, (
+            "fr-plan's TDD rule must name all three beats (red → green → refactor), "
+            "not just test-first — see #340"
+        )
+
+    def test_fr_plan_routes_to_canonical_tdd_skill(self, skill_dir: Path) -> None:
+        """fr-plan must route to the canonical TDD skill, not re-paraphrase it."""
+        if skill_dir.name != "fr-plan":
+            pytest.skip("Only applies to fr-plan")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "superpowers:test-driven-development" in text, (
+            "fr-plan must route to superpowers:test-driven-development (#340)"
+        )
+
+    def test_fr_goal_routes_to_canonical_tdd_skill(self, skill_dir: Path) -> None:
+        """fr-goal's TDD references must route to the canonical skill (#340)."""
+        if skill_dir.name != "fr-goal":
+            pytest.skip("Only applies to fr-goal")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "superpowers:test-driven-development" in text, (
+            "fr-goal must route to superpowers:test-driven-development (#340)"
+        )
+
+    def test_fr_plan_documents_refactor_step_shape(self, skill_dir: Path) -> None:
+        """fr-plan must document the optional refactor step-shape convention.
+
+        Guards the convention block itself, not just the beat token — a future
+        edit could drop the step-shape guidance while keeping the token, and
+        the other #340 guards would stay green. Pins both documented forms.
+        """
+        if skill_dir.name != "fr-plan":
+            pytest.skip("Only applies to fr-plan")
+        text = (skill_dir / "SKILL.md").read_text()
+        assert "Refactor step shape" in text, (
+            "fr-plan must document the optional refactor step-shape convention (#340)"
+        )
+        assert "REFACTOR + quality gate" in text, (
+            "fr-plan must name the separate REFACTOR + quality gate task form (#340)"
+        )

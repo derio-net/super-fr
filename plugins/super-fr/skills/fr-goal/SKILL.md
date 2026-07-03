@@ -61,7 +61,7 @@ and this pipeline from step 4. One plan, one PR per repo.
 ### 4. Plan — fr-plan, then review it
 
 Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the
-design). Keep v2 plan-as-folder, TDD-shaped steps. Review: `fr plan self-review`
+design). Keep v2 plan-as-folder, TDD-shaped steps (red → green → refactor per `superpowers:test-driven-development`). Review: `fr plan self-review`
 must pass and the phases read back against the spec (all covered). Fix, implement.
 
 ### 5. Manual phases — back-load by default
@@ -85,7 +85,7 @@ The step-1 isolation workspace is the working copy — every command through
 `fr isolation exec`. Run phases via `fr-execute` in LOCAL mode (plan-dir +
 phase), NOT dispatched (spec/plan aren't on main, `fr apply --yes` refuses).
 Implement inline, not via subagents (the context needs the Q&A + spec history).
-TDD per step; tick steps / complete phases via `fr plan edit`. Never a manual phase.
+Full red → green → refactor per step; tick steps / complete phases via `fr plan edit`. Never a manual phase.
 
 **The implementing layer pushes the branch ONLY — it never opens the PR**
 (inline, or a delegated multi-repo builder). Opening it here reorders deliver
