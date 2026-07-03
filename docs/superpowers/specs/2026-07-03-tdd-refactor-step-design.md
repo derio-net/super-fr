@@ -136,3 +136,9 @@ files (three version sources + `uv.lock`) together.
   `test_under_120_lines` still passing for fr-goal).
 - `scripts/bump-version.py --check` — three version sources agree.
 - `uv run ruff format packages/ tests/` and `ruff check` clean.
+
+## Implementation Plans
+
+| Plan | Target repo | Slug | Status |
+|------|-------------|------|--------|
+| 2026-07-03-tdd-refactor-step | `derio-net/super-fr` | `2026-07-03-tdd-refactor-step` | — |
