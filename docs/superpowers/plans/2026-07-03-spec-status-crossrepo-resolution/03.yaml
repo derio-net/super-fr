@@ -35,30 +35,30 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:49:04+00:00'
       note: null
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:49:05+00:00'
       note: null
     P3.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:49:06+00:00'
       note: null
     P3.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:49:07+00:00'
       note: null
     P3.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:49:08+00:00'
       note: null
     P3.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:49:09+00:00'
       note: null
   completion:
-    at: null
+    at: '2026-07-03T20:49:10+00:00'
     note: null
     observed_prs: []

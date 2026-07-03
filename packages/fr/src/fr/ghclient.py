@@ -76,3 +76,19 @@ class GhClient(Protocol):
         2026-06-05 spec's narrow gh-contents lookup.
         """
         ...
+
+    def list_dir(self, repo: str, path: str) -> list[str]:
+        """Names of the entries directly under `path` on `repo`'s default
+        branch (contents API). Empty list when `path` is absent or not a
+        directory. Read-only. Used by `fr spec status` to enumerate a
+        cross-repo plan folder's `NN.yaml` files (#339).
+        """
+        ...
+
+    def read_file(self, repo: str, path: str) -> str:
+        """Raw text of `path` on `repo`'s default branch (contents API).
+
+        Raises on absence / non-file (caller degrades the row). Read-only.
+        Used by `fr spec status` to read a cross-repo plan's phase files (#339).
+        """
+        ...

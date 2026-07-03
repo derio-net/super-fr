@@ -209,6 +209,31 @@ class RealGhClient:
         except GhError:
             return False
 
+    def list_dir(self, repo: str, path: str) -> list[str]:
+        """Entry names under `path` (contents API). `[]` on any GhError.
+
+        A 404 (missing dir) reads as "no such dir" — the safe direction, same
+        fail-soft posture as `file_exists`. The contents API returns a JSON
+        array for a directory; `--jq .[].name` yields one name per line.
+        """
+        from fr.gh import GhError
+
+        try:
+            out = _gh._run_gh(["api", f"repos/{repo}/contents/{path}", "--jq", ".[].name"])
+        except GhError:
+            return []
+        return [line for line in out.splitlines() if line.strip()]
+
+    def read_file(self, repo: str, path: str) -> str:
+        """Raw file text (contents API, raw media type). Propagates GhError.
+
+        The `application/vnd.github.raw` Accept header returns the file bytes
+        directly, so there's no base64 to decode.
+        """
+        return _gh._run_gh(
+            ["api", f"repos/{repo}/contents/{path}", "-H", "Accept: application/vnd.github.raw"]
+        )
+
 
 _CI_PASS = {"SUCCESS"}
 _CI_FAIL = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}

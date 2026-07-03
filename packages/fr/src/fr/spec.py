@@ -13,13 +13,23 @@ store it."
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+import yaml
 
 from fr import refs
-from fr.parser import PlanSchemaError, parse
+from fr.parser import _PHASE_FILE_RE, PlanSchemaError, parse
 from fr.render import plan_locally_complete
+from fr.types import PhaseDoc
+
+if TYPE_CHECKING:
+    from fr.ghclient import GhClient
+
+# Reused by PlanStatus.state and the shared `_status_counts` helper.
+PlanState = Literal["Not Started", "In Progress", "Complete", "Missing", "Unreachable"]
 
 _TABLE_HEADER_RE = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE)
 # A row is `| col1 | col2 | col3 | col4 |`. We strip backticks for path matching.
@@ -44,7 +54,7 @@ class SpecMeta:
 @dataclass(frozen=True)
 class PlanStatus:
     plan_ref: PlanRef
-    state: Literal["Not Started", "In Progress", "Complete", "Missing", "Unreachable"]
+    state: PlanState
     phases_complete: int
     phases_total: int
     steps_ticked: int
@@ -126,8 +136,9 @@ def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     annotated cell — every form resolves against every lifecycle root,
     active first. An exact on-disk path wins before normalization.
 
-    Cross-repo / manual-action rows return None — those need cross-repo
-    gh-API resolution which is out of scope for Phase 3.
+    Cross-repo / manual-action rows return None here — a cross-repo plan is
+    resolved remotely by `compute_status` via the gh contents API (when a
+    GhClient is supplied); a manual row has no plan file to resolve.
     """
     if not plan_ref.file or plan_ref.file in ("—", "-"):
         return None
@@ -143,32 +154,107 @@ def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
-    """Aggregate plan statuses for the spec. Local-fs only at this layer.
+def _status_counts(phases: Sequence[PhaseDoc]) -> tuple[PlanState, int, int, int, int]:
+    """(state, phases_complete, phases_total, steps_ticked, steps_total).
 
-    Cross-repo plans (where `repo` != current repo's owner/repo or the
-    file path doesn't resolve locally) are reported as `Unreachable`.
-    The GHA / future cross-repo wiring will reach into them via the
-    gh contents API.
+    The per-plan status arithmetic shared by compute_status's local and
+    cross-repo branches, so the two can't diverge. `plan_locally_complete`
+    is the same phase-completion predicate the dispatch guard and the
+    archive gate use.
+    """
+    steps_total = sum(len(t.steps) for p in phases for t in p.tasks)
+    steps_ticked = sum(1 for p in phases for ss in p.state.steps.values() if ss.state in ("x", "-"))
+    phases_complete = sum(1 for p in phases if plan_locally_complete(p))
+    phases_total = len(phases)
+    state: PlanState
+    if steps_total == 0:
+        state = "Not Started"
+    elif phases_complete == phases_total:
+        state = "Complete"
+    elif steps_ticked > 0 or phases_complete > 0:
+        state = "In Progress"
+    else:
+        state = "Not Started"
+    return state, phases_complete, phases_total, steps_ticked, steps_total
+
+
+def _resolve_remote_plan_phases(
+    gh: GhClient,
+    repo: str,
+    file_cell: str,
+    cache: dict[tuple[str, str], list[PhaseDoc] | None],
+) -> list[PhaseDoc] | None:
+    """Resolve a cross-repo plan's phases via the gh contents API, or None.
+
+    Probes the active / implemented / legacy path variants (active first, per
+    `refs.PLAN_ROOTS`) and returns the parsed phases of the first folder that
+    looks like a v2 plan (contains `_meta.yaml`). A merged-but-not-yet-archived
+    plan is read from `plans/` (current progress); an archived one from
+    `implemented/plans/` (its final, complete state).
+
+    `_meta.yaml` itself is never fetched — status needs only the phase docs,
+    and skipping it avoids coupling remote resolution to the parser's
+    `fr_version` gate. Memoized per run on `(repo, slug)`, negatives included.
+    Returns None for a non-`owner/repo` cell or when no variant resolves;
+    gh/parse errors propagate to the caller, which degrades the row.
+    """
+    from fr.migrate import _archive_path_variants
+
+    if "/" not in repo:
+        return None
+    slug = refs.plan_slug(file_cell)
+    if not slug:
+        return None
+    key = (repo, slug)
+    if key in cache:
+        return cache[key]
+
+    result: list[PhaseDoc] | None = None
+    for path in _archive_path_variants(file_cell):
+        if path is None:
+            continue
+        names = gh.list_dir(repo, path)
+        if "_meta.yaml" not in names:
+            continue
+        phases: list[PhaseDoc] = []
+        for name in sorted(n for n in names if _PHASE_FILE_RE.match(n)):
+            raw = gh.read_file(repo, f"{path}/{name}")
+            phases.append(PhaseDoc.model_validate(yaml.safe_load(raw)))
+        result = phases
+        break
+
+    cache[key] = result
+    return result
+
+
+def compute_status(spec: SpecMeta, repo_root: Path, gh: GhClient | None = None) -> SpecStatus:
+    """Aggregate plan statuses for the spec.
+
+    Same-repo plans resolve on the local filesystem. A plan whose folder
+    doesn't resolve locally (the normal multi-repo shape) is resolved via the
+    gh contents API when `gh` is supplied — its remote `NN.yaml` files are read
+    and given the exact same phase/step arithmetic as a local plan, so it
+    counts toward `plans_complete` and the aggregate. When `gh` is absent
+    (`--no-gh` / offline) or the remote read fails, the row degrades to
+    `Unreachable` — never a silent pass. Contents-API results are memoized per
+    call, keyed on `(repo, slug)`.
     """
     plan_statuses: list[PlanStatus] = []
     warnings: list[str] = []
     plans_complete = 0
     total_steps_ticked = 0
     total_steps_total = 0
+    remote_cache: dict[tuple[str, str], list[PhaseDoc] | None] = {}
 
     for ref in spec.plans:
         local = _resolve_local_plan_dir(ref, repo_root)
         if local is None:
             # Either manual-action row (file == "—") or cross-repo
             if ref.file in ("—", "-", ""):
-                state: Literal[
-                    "Not Started", "In Progress", "Complete", "Missing", "Unreachable"
-                ] = "Not Started"  # placeholder for manual rows
                 plan_statuses.append(
                     PlanStatus(
                         plan_ref=ref,
-                        state=state,
+                        state="Not Started",  # placeholder for manual rows
                         phases_complete=0,
                         phases_total=0,
                         steps_ticked=0,
@@ -177,10 +263,50 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
                     )
                 )
                 continue
-            note = (
-                f"file {ref.file!r} not resolvable locally "
-                f"(cross-repo lookup not implemented in Phase 3)"
-            )
+
+            # Cross-repo: resolve via the gh contents API when a client is
+            # given (same capability `fr archive` uses); degrade to Unreachable
+            # when absent / offline / not found / read failure.
+            remote_phases: list[PhaseDoc] | None = None
+            fail_note: str | None = None
+            if gh is not None:
+                try:
+                    remote_phases = _resolve_remote_plan_phases(
+                        gh, ref.repo, ref.file, remote_cache
+                    )
+                except Exception as e:  # noqa: BLE001 — any gh/parse failure degrades the row
+                    fail_note = f"cross-repo read of {ref.repo} failed: {e}"
+
+            if remote_phases is not None:
+                state, phases_complete, phases_total, steps_ticked, steps_total = _status_counts(
+                    remote_phases
+                )
+                if state == "Complete":
+                    plans_complete += 1
+                total_steps_ticked += steps_ticked
+                total_steps_total += steps_total
+                plan_statuses.append(
+                    PlanStatus(
+                        plan_ref=ref,
+                        state=state,
+                        phases_complete=phases_complete,
+                        phases_total=phases_total,
+                        steps_ticked=steps_ticked,
+                        steps_total=steps_total,
+                        note=f"resolved via gh contents API ({ref.repo})",
+                    )
+                )
+                continue
+
+            if gh is None:
+                note = (
+                    f"file {ref.file!r} is cross-repo ({ref.repo}); "
+                    f"run without --no-gh to resolve it via the gh contents API"
+                )
+            elif fail_note is not None:
+                note = fail_note
+            else:
+                note = f"plan {ref.file!r} not found in {ref.repo} via the gh contents API"
             warnings.append(f"plan {ref.name!r}: {note}.")
             plan_statuses.append(
                 PlanStatus(
@@ -229,27 +355,11 @@ def compute_status(spec: SpecMeta, repo_root: Path) -> SpecStatus:
             )
             continue
 
-        steps_total = sum(len(t.steps) for p in plan.phases for t in p.tasks)
-        steps_ticked = sum(
-            1 for p in plan.phases for ss in p.state.steps.values() if ss.state in ("x", "-")
+        state, phases_complete, phases_total, steps_ticked, steps_total = _status_counts(
+            plan.phases
         )
-        # Phase-level: the shared LOCAL-only predicate (completion.at set,
-        # OR all steps ticked) — spec status doesn't observe gh, it's a
-        # local roll-up only. Same predicate drives the dispatch guard in
-        # vk.diff and the fr archive gate.
-        phases_complete = sum(1 for p in plan.phases if plan_locally_complete(p))
-        phases_total = len(plan.phases)
-
-        if steps_total == 0:
-            state = "Not Started"
-        elif phases_complete == phases_total:
-            state = "Complete"
+        if state == "Complete":
             plans_complete += 1
-        elif steps_ticked > 0 or phases_complete > 0:
-            state = "In Progress"
-        else:
-            state = "Not Started"
-
         total_steps_ticked += steps_ticked
         total_steps_total += steps_total
 
