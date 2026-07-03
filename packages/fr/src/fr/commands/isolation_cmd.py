@@ -13,7 +13,12 @@ from pathlib import Path
 import typer
 
 from fr.isolation.local import LocalWorktreeDevcontainerTarget, subprocess_runner
-from fr.isolation.types import IsolationError, list_states, load_state
+from fr.isolation.types import (
+    IsolationError,
+    clear_repo_sentinels,
+    list_states,
+    load_state,
+)
 
 isolation_app = typer.Typer(
     name="isolation",
@@ -124,10 +129,65 @@ def exec(  # noqa: A001 - typer command name
 
 
 @isolation_app.command()
+def restart(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch (default: the single active workspace)."
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Immediate SIGKILL (docker restart --time=0) when a graceful stop hangs.",
+    ),
+) -> None:
+    """Bounce a resource-wedged devcontainer, keeping the worktree intact.
+
+    Unlike `down` + `up`, `restart` cycles only the container process tree — the
+    worktree, node_modules, local DB stack, and in-container installs survive.
+    """
+    root = repo.resolve()
+    # Mirror exec's no-branch resolution: the single active workspace, or error.
+    if branch is None:
+        states = list_states(root)
+        if len(states) > 1:
+            _fail(
+                IsolationError(
+                    "multiple isolation workspaces — specify --branch: "
+                    + ", ".join(s.branch for s in states)
+                )
+            )
+            return
+        state = states[0] if states else None
+    else:
+        state = load_state(root, branch)
+    if state is None:
+        _fail(
+            IsolationError(
+                f"no isolation workspace for branch {branch!r} — run `fr isolation up` first."
+                if branch is not None
+                else "no isolation workspace — run `fr isolation up` first."
+            )
+        )
+        return
+    try:
+        container = _target(root).restart(state, force=force)
+    except IsolationError as err:
+        _fail(err)
+        return
+    typer.echo(f"isolation restart: {state.branch} bounced ({container}).")
+
+
+@isolation_app.command()
 def status(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
     branch: str | None = typer.Option(None, help="Limit to one isolation branch."),
     format: str = typer.Option("text", "--format", help="text | json"),
+    stats: bool = typer.Option(
+        False,
+        "--stats",
+        help="Include container resource use (docker stats --no-stream) — opt-in "
+        "to keep the default status fast; helps spot a thrashing container (#341).",
+    ),
 ) -> None:
     """Show worktree, container, and PR state for isolation workspaces."""
     root = repo.resolve()
@@ -139,6 +199,9 @@ def status(
         return
     target = _target(root)
     rows = [target.status(s) for s in states]
+    if stats:
+        for row, s in zip(rows, states):
+            row["stats"] = target.stats(s)
     if format == "json":
         typer.echo(json.dumps(rows, indent=2))
         return
@@ -148,10 +211,16 @@ def status(
     for r in rows:
         pr = r["pr"]
         pr_text = f"{pr['state']} {pr.get('url', '')}".strip() if pr else "none"
-        typer.echo(
+        line = (
             f"{r['branch']}: profile={r['profile']} container={r['container']} "
             f"worktree={r['worktree']} pr={pr_text}"
         )
+        if stats:
+            st = r.get("stats")
+            line += (
+                f" stats=cpu={st['cpu']} mem={st['mem']} ({st['mem_perc']})" if st else " stats=n/a"
+            )
+        typer.echo(line)
 
 
 @isolation_app.command()
@@ -159,9 +228,22 @@ def down(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
     branch: str = typer.Option(DEFAULT_BRANCH, help="Isolation branch to tear down."),
     force: bool = typer.Option(False, "--force", help="Tear down even with an open PR."),
+    all_: bool = typer.Option(
+        False,
+        "--all",
+        help="Tear down EVERY workspace for the repo and clear the pipeline "
+        "sentinel(s) — the escape from an orphaned-sentinel deadlock (#341).",
+    ),
 ) -> None:
-    """Stop the container, remove the worktree, drop the state."""
+    """Stop the container, remove the worktree, drop the state.
+
+    With --all, ignore --branch: tear down all workspaces (keeping any with an
+    OPEN PR unless --force) and clear this repo's pipeline sentinel(s).
+    """
     root = repo.resolve()
+    if all_:
+        _down_all(root, force=force)
+        return
     state = load_state(root, branch)
     if state is None:
         _fail(IsolationError(f"no isolation workspace for branch {branch!r}."))
@@ -172,6 +254,32 @@ def down(
         _fail(err)
         return
     typer.echo(f"isolation down: {branch} cleaned up.")
+
+
+def _down_all(root: Path, force: bool) -> None:
+    """Tear down every workspace + drop session sentinel(s) (#341 Task 2A).
+
+    A workspace whose PR is still OPEN is KEPT (never silently destroyed) unless
+    --force; the same IsolationError path also catches a genuine teardown
+    failure, reported as kept. Sentinels are cleared regardless — `down --all`
+    is the deliberate "end this pipeline" lever, with the guard self-heal as the
+    lazy backstop.
+    """
+    target = _target(root)
+    torn: list[str] = []
+    kept: list[str] = []
+    for state in list_states(root):
+        try:
+            target.down(state, force=force)
+            torn.append(state.branch)
+        except IsolationError:
+            kept.append(state.branch)
+    cleared = clear_repo_sentinels(root)
+    summary = f"isolation down --all: {len(torn)} torn down"
+    if kept:
+        summary += f", {len(kept)} kept (open PR — rerun with --force): {', '.join(kept)}"
+    summary += f", {cleared} sentinel(s) cleared."
+    typer.echo(summary)
 
 
 @isolation_app.command(name="verify-merge")

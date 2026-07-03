@@ -31,26 +31,26 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:23:52+00:00'
       note: null
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:23:53+00:00'
       note: null
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:23:54+00:00'
       note: null
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-03T20:23:55+00:00'
       note: null
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-07-03T20:23:56+00:00'
+      note: single-branch and --all paths already distinct; nothing to dedupe
   completion:
-    at: null
-    note: null
+    at: '2026-07-03T20:23:57+00:00'
+    note: down --all + clear_repo_sentinels; 82 isolation tests green
     observed_prs: []
