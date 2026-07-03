@@ -25,7 +25,7 @@ wrong guess shipped in a PR costs more than a paused run.
 
 | Moment | Why |
 |---|---|
-| The batched Q&A (once, at brainstorm) | Design decisions are operator-owned |
+| The batched Q&A (once, at brainstorm) | Design decisions are operator-owned — unanswered = stop, never default |
 | Multi-project repo location | Access question — only if the filesystem can't answer it |
 | Manual phases | Secrets, UI ops, deploys are human-only — see placement policy |
 | PR merge | The agent never self-merges |
@@ -40,6 +40,8 @@ changes the first work item, never the first action. Explore, collect EVERY
 operator-owned decision, ask all in ONE AskUserQuestion call (max 4 questions,
 recommended first). Include a post-merge Test Plan question ONLY when the
 deliverable deploys (service/bot/infra), never pure code. Batch stragglers.
+**Hard gate:** an unanswered call is a stop signal — end the turn restating
+the open questions and wait; never substitute the defaults for a real answer.
 
 ### 2. Spec — then review it
 
@@ -111,10 +113,8 @@ operator-driven". Stop; the operator merges.
 ### 9. Post-merge close-out
 
 When the operator reports the merge: **first verify the fix reached `main`** —
-run `fr isolation verify-merge --branch <b>` (squash/rebase/merge-safe: checks
-the branch's changes are present on `origin/main`, not commit ancestry, and the
-PR is MERGED; exit 1 = not verified). Not verified → STOP and recover
-(cherry-pick / fresh PR). Then drive the Test Plan if present (agent runs
-checks, operator confirms what it can't reach), confirm phases complete (`fr
-status`), `fr archive <plan-dir>`, commit via a housekeeping PR, `fr isolation
-down`.
+run `fr isolation verify-merge --branch <b>` (squash/rebase/merge-safe; exit 1
+= not verified). Not verified → STOP and recover (cherry-pick / fresh PR).
+Then drive the Test Plan if present (agent runs checks, operator confirms
+what it can't reach), confirm phases complete (`fr status`), `fr archive
+<plan-dir>`, commit via a housekeeping PR, `fr isolation down`.
