@@ -129,6 +129,14 @@ test, `tests/unit/test_install_copies_rules.py`, fails if a shipped rule isn't
 wired). When either rule's content changes, flag the operator-side
 `~/.claude/rules/` update in the PR description so the two stay in sync.
 
+A third standing convention (2026-07-04, #352): **the acceptance matrix** —
+business-level acceptance tests live in `docs/acceptance/matrix.yaml` and are
+updated in the SAME PR that changes a Test Plan, adds tests, or ships a
+surface. Gate: `fr acceptance check` via
+`.github/workflows/acceptance-report.yml` (staleness guard fails a Test-Plan
+spec no row cites); repo rule: `.claude/rules/acceptance-matrix.md`; agent
+driver: the `fr-acceptance` skill.
+
 ## PR workflow expectations
 
 - Feature branch → PR → review → merge. Direct commits to `main` are not
