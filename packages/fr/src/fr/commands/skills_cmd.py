@@ -32,6 +32,11 @@ SKILLS: list[tuple[str, str, str]] = [
         "fr pickup --phase N  →  fr plan edit --tick / --complete-phase  →  fr apply --yes",
     ),
     (
+        "fr-acceptance",
+        "Acceptance matrix: backfill, status flips, honest coverage (skill).",
+        "fr acceptance {check,report,status,add,init,backfill,digest}",
+    ),
+    (
         "fr-progress",
         "Plan / spec progress reporting (skill).",
         "fr status <plan-dir>  +  fr spec status [--all]  +  fr plan edit  +  fr archive [--all]"

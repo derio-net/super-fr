@@ -76,6 +76,12 @@ number). The renderer / observer / diff / apply chain depends on this shape.
   cluster-dependent config) into a dedicated `[manual]` phase — never author a
   manual step into an agentic phase planning to defer it. `fr plan
   self-review` enforces this with error severity (#252).
+- **Acceptance linkage:** a phase that advances a matrix row carries
+  `acceptance: [row-ids]` in its header. `fr plan self-review` errors when the
+  spec has a Test Plan but zero linked rows (matrix present) and on unknown
+  ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when
+  decomposition exposes a missed business acceptance — flagged as an
+  addition, defended at PR time, never ironed over.
 - No placeholders: every step has actual code, commands, expected output.
 - Bite-sized steps: 2-5 minutes each.
 - Use BEGIN/END markers for full-file embeds, not nested fences.
@@ -110,6 +116,5 @@ rework plan — do not reopen the parent.
 
 ## Integration
 
-- Upstream: brainstorming hands off via fr-plan-override.
-- Downstream: `fr apply` for GitHub-side work; `executing-plans` for the
-  agent loop.
+Upstream: brainstorming hands off via fr-plan-override. Downstream:
+`fr apply` for GitHub-side work; `executing-plans` for the agent loop.

@@ -76,6 +76,10 @@ take the PR out of draft.
    # manual phases require --note describing what was done
    fr plan edit <plan-dir> --complete-phase N --note "<runbook ref>"
    ```
+   A phase carrying `acceptance: [row-ids]` — flip those matrix rows now
+   (`not-implemented` → `skipped`/`ci`), citing the test refs; the CLI warns
+   on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows
+   (`fr acceptance add`) — defended at PR time, never silent scope drift.
 
 5. **Open the PR.** Delegate to `superpowers:finishing-a-development-branch`.
    Use the PR title from `fr pickup` and the body shape above.
@@ -98,11 +102,9 @@ take the PR out of draft.
 
 ## Constraints
 
-- One phase = one PR.
-- Don't touch other phases.
+- One phase = one PR. Don't touch other phases.
 - Stop if blocked — report what's missing.
 - Step IDs: `P<n>.T<n>.S<n>`.
-- Migration from v1 (.md) plans is a separate concern — see `fr migrate v1-to-v2`.
 
 ## v1 plan migration
 
@@ -114,6 +116,5 @@ fr migrate v1-to-v2           # preview (default)
 fr migrate v1-to-v2 --yes     # apply: creates <slug>/ folders, moves .md to .md.v1-archive
 ```
 
-Migration is repo-wide: it converts every v1 plan in
-`docs/superpowers/{plans,implemented/plans}/` and rewrites spec tables;
-commit as its own PR. "Legacy layout detected" → `fr migrate dirs --yes`.
+Migration is repo-wide (converts every v1 plan, rewrites spec tables); commit
+as its own PR. "Legacy layout detected" → `fr migrate dirs --yes`.
