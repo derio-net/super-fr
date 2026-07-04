@@ -87,42 +87,43 @@ tasks:
 state:
   steps:
     P6.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:14:52+00:00'
       note: null
     P6.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:00+00:00'
       note: null
     P6.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:08+00:00'
       note: null
     P6.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:15+00:00'
       note: null
     P6.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:23+00:00'
       note: null
     P6.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:30+00:00'
       note: null
     P6.T4.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:38+00:00'
       note: null
     P6.T4.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:40+00:00'
       note: null
     P6.T4.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:15:41+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-04T17:15:44+00:00'
+    note: PhaseHeader.acceptance + round-trip, 3 self-review lints, complete-phase
+      nudge, fr status section; 14 tests; full suite 1190 green
     observed_prs: []

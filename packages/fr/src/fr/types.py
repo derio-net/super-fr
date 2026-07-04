@@ -91,6 +91,11 @@ class PhaseHeader(BaseModel):
     tag: Literal["agentic", "manual"]
     depends_on: tuple[int, ...] = ()
     tracking_issue: str | None = None
+    # Acceptance-matrix row ids this phase advances (2026-07-04 spec,
+    # decision 2). Optional and omitted when empty, so pre-acceptance plans
+    # stay byte-stable; `fr plan self-review` validates the ids against
+    # docs/acceptance/matrix.yaml.
+    acceptance: tuple[str, ...] = ()
 
 
 class StepState(BaseModel):

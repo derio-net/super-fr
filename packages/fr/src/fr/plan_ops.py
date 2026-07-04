@@ -107,6 +107,8 @@ class PhaseSpec:
     tag: Literal["agentic", "manual"] = "agentic"
     depends_on: tuple[int, ...] = ()
     tasks: tuple[TaskSpec, ...] = ()
+    # Acceptance-matrix row ids (2026-07-04 spec) — emitted only when set.
+    acceptance: tuple[str, ...] = ()
 
 
 def create(
@@ -250,15 +252,19 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
             steps_out.append({"id": s["id"], "text": s["text"]})
             state_steps[s["id"]] = {"state": " ", "ticked_at": None, "note": None}
         tasks.append({"number": t["number"], "title": t["title"], "steps": steps_out})
+    phase_header: dict[str, Any] = {
+        "number": ps.number,
+        "title": ps.title,
+        "tag": ps.tag,
+        "depends_on": list(ps.depends_on),
+        "tracking_issue": None,
+    }
+    if ps.acceptance:
+        # Omitted when empty so pre-acceptance plans stay byte-stable.
+        phase_header["acceptance"] = list(ps.acceptance)
     return {
         "schema_version": 2,
-        "phase": {
-            "number": ps.number,
-            "title": ps.title,
-            "tag": ps.tag,
-            "depends_on": list(ps.depends_on),
-            "tracking_issue": None,
-        },
+        "phase": phase_header,
         "tasks": tasks,
         "state": {
             "steps": state_steps,
@@ -869,6 +875,9 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                         )
                     )
 
+    # Acceptance linkage (2026-07-04 acceptance-matrix spec, decision 2).
+    issues.extend(_acceptance_link_issues(plan))
+
     # Same-repo-form spec that doesn't resolve locally (#248): almost always a
     # malformed cross-repo ref missing the `owner/repo:` prefix, which apply's
     # reachability gate treats as a missing same-repo file and flags unreachable.
@@ -917,6 +926,74 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
         )
 
     return issues
+
+
+def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
+    """Decision 2 of the acceptance-matrix spec: a plan whose spec carries a
+    Test Plan must link >=1 matrix row (`acceptance: [row-ids]` on phases),
+    and every linked id must exist. Error only when the repo HAS a matrix —
+    matrix-less repos get an adoption nudge, not a broken self-review.
+    Cross-repo specs are exempt in v1 (the matrix lives with the spec's repo,
+    which this checkout cannot see)."""
+    from fr.acceptance.model import AcceptanceError, load_matrix
+
+    root = plan.repo_root
+    if root is None:
+        return []
+    spec_rel = plan.spec_path or plan.meta.spec
+    if not spec_rel or is_cross_repo_spec(spec_rel):
+        return []
+    spec_file = root / spec_rel
+    if not spec_file.exists() or "## Test Plan" not in spec_file.read_text():
+        return []
+
+    linked: dict[str, int] = {}  # row id → first phase that links it
+    for ph in plan.phases:
+        for rid in ph.phase.acceptance:
+            linked.setdefault(rid, ph.phase.number)
+
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    if not matrix_path.exists():
+        return [
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    "spec has a Test Plan but the repo has no acceptance matrix — "
+                    "run `fr acceptance init`, add rows with `fr acceptance add`, "
+                    "then link them via `acceptance: [row-ids]` on phases."
+                ),
+            )
+        ]
+    try:
+        matrix = load_matrix(matrix_path)
+    except AcceptanceError as e:
+        return [ReviewIssue(severity="warn", message=f"acceptance matrix unreadable: {e}")]
+
+    out: list[ReviewIssue] = []
+    if not linked:
+        out.append(
+            ReviewIssue(
+                severity="error",
+                message=(
+                    "spec has a Test Plan but no acceptance rows linked — add "
+                    "`acceptance: [row-ids]` to the phases that advance them "
+                    "(`fr acceptance add` creates rows)."
+                ),
+            )
+        )
+    known = {r.id for r in matrix.rows}
+    for rid, phase_n in sorted(linked.items(), key=lambda kv: (kv[1], kv[0])):
+        if rid not in known:
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {phase_n} links unknown acceptance row id {rid!r} "
+                        f"(not in docs/acceptance/matrix.yaml)"
+                    ),
+                )
+            )
+    return out
 
 
 def _has_cycle(graph: dict[int, set[int]], start: int) -> bool:
