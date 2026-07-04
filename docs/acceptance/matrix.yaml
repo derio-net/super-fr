@@ -31,7 +31,7 @@ rows:
     acceptance: fr acceptance init scaffolds matrix + CI workflow + backfill rule into
       any repo; check is green on the skeleton
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_init.py
@@ -42,7 +42,7 @@ rows:
     acceptance: Schema/status violations are rejected; failing rows exit 2 and fail
       CI; staleness and plan linkage are guarded
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_model.py
@@ -55,7 +55,7 @@ rows:
     acceptance: 'Archiving a cited spec never breaks the gate: check downgrades to a
       warning and report links follow the file'
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_cmd.py
@@ -67,7 +67,7 @@ rows:
     acceptance: Rows are born at brainstorm (presented with defenses), linked in plans,
       flipped at execution; self-review fails unlinked plans
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_plan_acceptance_links.py
@@ -79,7 +79,7 @@ rows:
     acceptance: Mid-flight row additions are diffable against a base ref and defended
       in the delivered PR body
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_status_add.py
@@ -91,7 +91,7 @@ rows:
     acceptance: Session start surfaces open debt (capped), fr status carries the summary,
       and the weekly digest issue upserts and closes at zero
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py
