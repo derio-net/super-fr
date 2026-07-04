@@ -6,6 +6,8 @@ phase:
   depends_on:
   - 2
   tracking_issue: null
+  acceptance:
+  - acceptance-init-scaffold
 tasks:
 - number: 1
   title: init scaffolding (matrix, rule, gitignore)

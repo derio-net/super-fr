@@ -247,6 +247,16 @@ def add_cmd(
     if any(r.id == new_row.id for r in matrix.rows):
         err_console.print(f"[red]error:[/red] duplicate row id: {new_row.id}")
         raise typer.Exit(2)
+    # Ref grammar validated NOW, not at the next check — a shell-mangled ref
+    # (e.g. zsh's `$VAR:t` modifier eating "…:tests/…") must not land.
+    from fr.acceptance.model import split_ref
+
+    for ref in new_row.refs():
+        try:
+            split_ref(ref)
+        except AcceptanceError as e:
+            err_console.print(f"[red]error:[/red] {e}")
+            raise typer.Exit(2) from e
 
     # Textual append: a load→dump cycle would destroy the header comments.
     block_data = {

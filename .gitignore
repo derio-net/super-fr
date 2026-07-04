@@ -30,3 +30,4 @@ scripts/tmp/
 package.json
 package-lock.json
 .claude/worktrees/
+docs/acceptance/report.html

@@ -141,6 +141,28 @@ def test_add_accumulates_levels_and_origins(
     assert new.levels["unit"] and new.levels["api"]
 
 
+@pytest.mark.parametrize(
+    "flag,value",
+    [
+        ("--origin", "no-colon-ref"),
+        ("--level", "unit=own/slash-in-repo:tests/x.py"),
+        ("--level", "unit=own:"),
+    ],
+)
+def test_add_rejects_malformed_refs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str, value: str
+) -> None:
+    """Dog-food finding: a shell-mangled ref (zsh `$VAR:t` modifier) sailed
+    through `add` and only failed at the next `check`. Ref grammar is
+    validated at add time, before the file is touched."""
+    root = make_repo(tmp_path, row())
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    before = matrix_path.read_text()
+    result = _invoke(root, monkeypatch, *ADD_ARGS, flag, value)
+    assert result.exit_code == 2, result.output
+    assert matrix_path.read_text() == before
+
+
 # ── T3: --added-since ──────────────────────────────────────────────────────
 
 

@@ -6,6 +6,9 @@ phase:
   depends_on:
   - 1
   tracking_issue: null
+  acceptance:
+  - acceptance-check-gate
+  - acceptance-archive-twin
 tasks:
 - number: 1
   title: CLI group skeleton + repo/org resolution

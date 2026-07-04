@@ -6,6 +6,8 @@ phase:
   depends_on:
   - 2
   tracking_issue: null
+  acceptance:
+  - acceptance-added-since
 tasks:
 - number: 1
   title: fr acceptance status (terminal nag)

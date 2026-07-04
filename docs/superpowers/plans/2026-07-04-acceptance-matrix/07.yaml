@@ -8,6 +8,9 @@ phase:
   - 5
   - 6
   tracking_issue: null
+  acceptance:
+  - acceptance-nag-channels
+  - acceptance-pipeline-rows
 tasks:
 - number: 1
   title: SessionStart acceptance-nag hook

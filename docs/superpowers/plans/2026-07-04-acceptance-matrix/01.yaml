@@ -5,6 +5,8 @@ phase:
   tag: agentic
   depends_on: []
   tracking_issue: null
+  acceptance:
+  - acceptance-check-gate
 tasks:
 - number: 1
   title: Ref grammar + archive-twin helpers
