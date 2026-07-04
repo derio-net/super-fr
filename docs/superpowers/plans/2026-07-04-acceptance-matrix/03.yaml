@@ -64,30 +64,30 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:25:00+00:00'
       note: null
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:25:02+00:00'
       note: null
     P3.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:25:04+00:00'
       note: null
     P3.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:25:06+00:00'
       note: null
     P3.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:25:08+00:00'
       note: null
     P3.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:25:10+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-04T16:25:13+00:00'
+    note: report.py ported+genericized; 16 tests incl. traps 1/2/3/5; CSS E501 per-file-ignore
     observed_prs: []

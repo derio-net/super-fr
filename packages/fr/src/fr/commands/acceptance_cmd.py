@@ -71,3 +71,57 @@ def check_cmd(
     if result.exit_code == 0:
         typer.echo(result.summary)
     raise typer.Exit(result.exit_code)
+
+
+@acceptance_app.command("report")
+def report_cmd(
+    link_mode: str = typer.Option(
+        "local", "--link-mode", help="github (CI) | local (sibling checkouts)."
+    ),
+    ref: str = typer.Option("main", "--ref", help="Own-repo ref for github links."),
+    sibling_root: str = typer.Option(
+        "..", "--sibling-root", help="Where sister repos live, relative to the repo root."
+    ),
+    out: Path = typer.Option(
+        Path("docs/acceptance/report.html"), "--out", help="Output path (repo-relative)."
+    ),
+) -> None:
+    """Render the HTML report."""
+    import subprocess
+
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.report import LinkBuilder, render
+
+    if link_mode not in ("github", "local"):
+        err_console.print(f"--link-mode must be github|local, got {link_mode!r}")
+        raise typer.Exit(2)
+    root = resolve_repo_root()
+    matrix = _load(root)
+    try:
+        org, own_repo = resolve_identity(matrix, root)
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(1) from e
+    out_path = (root / out).resolve()
+    links = LinkBuilder(
+        mode=link_mode,
+        ref=ref,
+        root=root,
+        out_dir=out_path.parent,
+        sibling_root=sibling_root,
+        org=org,
+        own_repo=own_repo,
+    )
+    ts = subprocess.run(
+        ["git", "log", "-1", "--format=%cs %h"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    stamp = f"matrix @ {ts} · links: {link_mode}" + (
+        f" (ref {ref})" if link_mode == "github" else ""
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(render(matrix, links, stamp))
+    typer.echo(f"wrote {out_path}")
