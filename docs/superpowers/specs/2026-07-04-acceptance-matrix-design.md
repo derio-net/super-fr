@@ -43,6 +43,18 @@ This spec makes acceptance rows first-class fr citizens:
    statuses; `fr plan self-review` fails a plan whose spec has zero linked rows.
 3. **New `fr acceptance` group** (not folded into existing verbs).
 4. **Backfill is agent-driven via a skill** wrapping `fr acceptance backfill`.
+5. **Rows are presented and defended at the end of brainstorming** (operator,
+   2026-07-04): the brainstorm closes with the draft rows as a first-class
+   deliverable — each with a one-line defense (which business claim it pins,
+   why that verification level is the target). Silent row creation is not
+   acceptance-of-scope; the presentation is.
+6. **Mid-flight additions are encouraged, then defended at PR time** (operator,
+   2026-07-04): during planning or implementation the agent is explicitly
+   flexible — and encouraged — to ADD rows when a legitimate business need
+   surfaces (an edge the spec missed, a failure mode discovered in review, a
+   constraint that became load-bearing). Additions are **presented and
+   defended in the PR body when the PR is created — never ironed over** into
+   the diff as if they had always been there.
 
 ## 3. The registry (schema — ported unchanged from the reference impl)
 
@@ -115,19 +127,36 @@ stated, not hidden.
 - **fr-brainstorming**: the brainstorm's design output includes **draft
   acceptance rows** — each key "operator can do X" claim becomes a row
   (`status: not-implemented`, origin = the new spec) via `fr acceptance add`.
-  The spec hand-off checklist includes "rows added".
+  **The brainstorm ENDS by presenting the rows to the operator with a
+  one-line defense each** (decision 5): the claim it pins, the target level,
+  why it is business-level rather than an implementation detail. Under
+  fr-goal's batched contract the presentation rides the spec-review step
+  (rows appear in the spec and the run's report); standalone, it is the
+  brainstorm's closing exchange. The spec hand-off checklist includes "rows
+  added AND presented".
 - **fr-plan**: phase YAML gains optional `acceptance: [row-ids]` (plan-level
   linkage, backward-only like `depends_on`). `fr plan self-review` errors when
   the plan's spec has a Test Plan but zero linked rows, and when a linked id
-  does not exist.
+  does not exist. **Planning may ADD rows** (decision 6): when decomposition
+  exposes a business acceptance the brainstorm missed, the agent adds it
+  (`fr acceptance add`, origin = spec + plan) rather than burying it in a
+  step description — flagged as an addition, defended later at PR time.
 - **fr-execute**: completing a phase that carries `acceptance:` ids prompts
   the status flip (`not-implemented` → `skipped`/`ci`), with the test refs
   that justify it — an unflipped row is called out in the phase completion
-  note.
-- **fr-goal**: the close-out step runs `fr acceptance status` and MUST carry
-  any remaining `skipped`/`not-implemented` rows into the PR body ("acceptance
-  debt") and the final operator report. This mechanizes the nag that today
-  only happens if an agent volunteers it.
+  note. **Implementation may ADD rows too** (decision 6): a discovered edge,
+  a review finding that reveals a missing business guarantee, a constraint
+  that turned load-bearing — the agent is encouraged to add, never to
+  silently widen or narrow scope.
+- **fr-goal / PR delivery**: the close-out step runs `fr acceptance status`
+  and MUST carry any remaining `skipped`/`not-implemented` rows into the PR
+  body ("acceptance debt") and the final operator report. **The PR body also
+  carries an "Acceptance rows added since brainstorm" section** (decision 6):
+  every mid-flight row with its one-line defense — presented for the
+  operator's judgment at review, never ironed over. Mechanical support:
+  `fr acceptance check --added-since <ref>` diffs row ids against a base ref
+  so the PR section can be generated, and an addition missing from the PR
+  body is a self-review finding.
 - **fr-progress**: the status board includes the acceptance section.
 
 ## 6. The nag channels (decision 1, mechanics)
@@ -185,10 +214,15 @@ updated.
    errors; with `status: failing` → `check` exits 2 and the workflow fails.
 3. Archive a cited spec → `check` warns (does not error); report links follow
    the file.
-4. Brainstorm → plan → execute a toy feature: rows born at brainstorm, linked
-   in the plan, flipped at execution; `fr plan self-review` catches a plan
-   with no linked rows.
-5. Session start in the scratch repo surfaces the open warnings; the weekly
+4. Brainstorm → plan → execute a toy feature: rows born at brainstorm and
+   **presented with per-row defenses at the brainstorm's close**; linked in
+   the plan; flipped at execution; `fr plan self-review` catches a plan with
+   no linked rows.
+5. Mid-flight addition: add a row during the toy implementation →
+   `fr acceptance check --added-since <base>` lists it, and the delivered PR
+   body carries the "rows added since brainstorm" section with its defense;
+   an addition omitted from the PR body surfaces as a self-review finding.
+6. Session start in the scratch repo surfaces the open warnings; the weekly
    digest issue upserts and closes when the debt hits zero.
 
 ## Implementation Plans
