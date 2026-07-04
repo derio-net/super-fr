@@ -81,14 +81,15 @@ state:
       ticked_at: '2026-07-04T17:30:48+00:00'
       note: null
     P8.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:34:31+00:00'
       note: null
     P8.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T17:34:32+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-04T17:34:33+00:00'
+    note: 'init+backfill on super-fr (15 rows: 11 ci, 4 skipped); plan phases linked;
+      bump 3.6.2→3.7.0 minor; CHANGELOG; full gate green (1211 passed)'
     observed_prs: []
