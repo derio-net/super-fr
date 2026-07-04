@@ -81,42 +81,43 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:16+00:00'
       note: null
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:17+00:00'
       note: null
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:18+00:00'
       note: null
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:19+00:00'
       note: null
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:21+00:00'
       note: null
     P4.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:22+00:00'
       note: null
     P4.T4.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:23+00:00'
       note: null
     P4.T4.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:24+00:00'
       note: null
     P4.T4.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:28:25+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-04T16:28:27+00:00'
+    note: status/--brief, add (textual append + rollback), check --added-since, digest
+      verb; 13 new tests
     observed_prs: []
