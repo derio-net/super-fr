@@ -187,7 +187,8 @@ def status_cmd(
     root = resolve_repo_root()
     matrix = _load(root)
     counts = Counter(r.status for r in matrix.rows)
-    typer.echo("acceptance: " + ", ".join(f"{s}: {counts.get(s, 0)}" for s in sorted(counts) or []))
+    summary = ", ".join(f"{s}: {n}" for s, n in sorted(counts.items())) or "empty matrix"
+    typer.echo(f"acceptance: {summary}")
     opens = open_rows(matrix)
     if not opens:
         typer.echo("no acceptance debt.")

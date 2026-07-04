@@ -95,12 +95,32 @@ def _resolve_ref(row_id: str, ref: str, base: Path, result: CheckResult) -> None
     result.errors.append(f"row {row_id}: ref does not resolve: {ref}")
 
 
+def _actions_glob_match(pattern: str, path: str) -> bool:
+    """GitHub Actions path-filter semantics: `**` spans `/`; `*` and `?` do
+    NOT (fnmatch's `*` spans, which would report "covered" for paths Actions
+    never triggers on — the false negative trap 7 exists to prevent)."""
+    parts: list[str] = []
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**", i):
+            parts.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            parts.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            parts.append("[^/]")
+            i += 1
+        else:
+            parts.append(re.escape(pattern[i]))
+            i += 1
+    return re.fullmatch("".join(parts), path) is not None
+
+
 def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[str]:
     """Trap 7, code-enforced: every own-repo path the matrix references must
     fall inside the workflow's PR-time path filters, or a rename merges clean
     and the break surfaces only at the weekly cron."""
-    import fnmatch
-
     import yaml
 
     wf_path = root / ".github" / "workflows" / "acceptance-report.yml"
@@ -125,7 +145,7 @@ def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[st
                 continue
             if repo != own:
                 continue  # sister-repo refs are honestly out of PR-time reach
-            if not any(fnmatch.fnmatch(path, g) for g in globs):
+            if not any(_actions_glob_match(g, path) for g in globs):
                 uncovered.append(path)
     return [
         f"{p} is matrix-referenced but outside {wf_path.name}'s pull_request "

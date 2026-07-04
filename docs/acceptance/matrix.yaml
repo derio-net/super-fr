@@ -20,7 +20,8 @@
 #
 # Rule: .claude/rules/acceptance-matrix.md — update rows in the SAME PR that
 # changes a Test Plan, adds tests, ships a surface, or touches CI.
-# Add rows with `fr acceptance add` (schema-validated append).
+# Add rows with `fr acceptance add` (schema-validated append). Keep `rows:`
+# as the LAST top-level key — `add` appends to the end of this file.
 
 org: derio-net
 repo: super-fr

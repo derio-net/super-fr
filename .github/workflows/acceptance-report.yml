@@ -42,8 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
-      - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+      - name: Install fr (from this checkout — super-fr self-hosts)
+        # Deviation from the scaffolded template on purpose: installing from
+        # @main would gate every PR that changes `fr acceptance` behavior
+        # with the PRE-PR fr (version skew — review finding on #352).
+        run: uv tool install ./packages/fr
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
       - name: Build report (GitHub links at this ref)
@@ -62,7 +65,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           fr acceptance digest > /tmp/digest.md
-          num=$(gh issue list --state open --search "Acceptance debt in:title" \
+          # Idempotence keyed on the body marker `fr acceptance digest` emits,
+          # not the title — a pre-existing issue that merely says "Acceptance
+          # debt" in its title must not be hijacked.
+          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \
                 --json number --jq '.[0].number // empty')
           if grep -q "No open acceptance debt." /tmp/digest.md; then
             if [ -n "$num" ]; then

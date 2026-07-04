@@ -62,6 +62,18 @@ restated in the spec §4, so the plan is executable without that checkout.
   the test-enforced ceiling — their Phase 7 additions must compress existing
   text, verified by the existing `test_under_120_lines`.
 
+- **Sibling github links pin literal `main`** (not "their default branch" —
+  spec §4 report). A master-defaulted sibling gets stale links; v1 shortcut,
+  per-repo override deferred to demand. (Recorded post-review, #352.)
+- **Digest upsert keys on the body marker** (`fr-acceptance-digest` via
+  `in:body` search), not the issue title — a pre-existing issue titled
+  "Acceptance debt" must not be hijacked. (Review finding, #352.)
+- **super-fr's own workflow installs fr from the checkout**
+  (`uv tool install ./packages/fr`), deviating from the scaffolded template's
+  git+https install — installing from `@main` would gate every PR that
+  changes `fr acceptance` behavior with the pre-PR fr (version skew; review
+  finding, #352). Downstream repos keep the template's remote install.
+
 ## Chicken-and-egg notes (dog food, §9)
 
 super-fr's own matrix is born in Phase 8: `fr acceptance init`, then backfill

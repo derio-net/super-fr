@@ -184,6 +184,42 @@ def test_check_no_warning_when_covered(tmp_path: Path, monkeypatch: pytest.Monke
     assert "path filters" not in result.output
 
 
+def test_check_glob_star_does_not_span_slash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding (#352): GitHub Actions' `*` stops at `/` (only `**`
+    spans) — fnmatch's `*` spans, which would report "covered" for a path
+    Actions would never trigger on. Exactly the false negative trap 7 exists
+    to prevent."""
+    root = make_repo(tmp_path, row(id="a", unit='"own:docs/sub/x.md"'))
+    (root / "docs" / "sub").mkdir(parents=True)
+    (root / "docs" / "sub" / "x.md").write_text("x\n")
+    wf_dir = root / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    wf_dir.joinpath("acceptance-report.yml").write_text(
+        "on:\n  pull_request:\n    paths:\n"
+        "      - docs/*.md\n"  # does NOT cover docs/sub/x.md in Actions
+        "      - docs/acceptance/**\n      - docs/superpowers/**\n      - tests/**\n"
+    )
+    result = _invoke(root, monkeypatch, "check")
+    assert result.exit_code == 0, result.output
+    assert "docs/sub/x.md" in result.output
+    assert "path filters" in result.output
+
+
+def test_check_globstar_spans_slash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row(id="a", unit='"own:docs/sub/x.md"'))
+    (root / "docs" / "sub").mkdir(parents=True)
+    (root / "docs" / "sub" / "x.md").write_text("x\n")
+    wf_dir = root / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    wf_dir.joinpath("acceptance-report.yml").write_text(
+        "on:\n  pull_request:\n    paths:\n      - docs/**\n      - tests/**\n"
+    )
+    result = _invoke(root, monkeypatch, "check")
+    assert "path filters" not in result.output
+
+
 def test_check_no_workflow_no_coverage_warning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -993,6 +993,28 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
                     ),
                 )
             )
+
+    # `acceptance:` is a 3.7.0 schema field on the closed-world PhaseHeader —
+    # a plan that uses it while its fr_version admits an older fr would pass
+    # the version gate there and die on a raw "extra field" pydantic error
+    # (#352 review). Probe: does the constraint admit any pre-3.7.0 version?
+    if linked and plan.meta.fr_version:
+        from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
+        try:
+            if SpecifierSet(plan.meta.fr_version).contains("3.6.99", prereleases=True):
+                out.append(
+                    ReviewIssue(
+                        severity="warn",
+                        message=(
+                            f"phases link acceptance rows but fr_version "
+                            f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
+                            f"floor it at '>=3.7.0,<4.0.0'."
+                        ),
+                    )
+                )
+        except InvalidSpecifier:
+            pass  # the parser already fails loud on malformed constraints
     return out
 
 

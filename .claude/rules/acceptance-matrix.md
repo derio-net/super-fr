@@ -26,7 +26,10 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
 - Add rows: `fr acceptance add --id ... --capability ... --acceptance ...
   --origin <repo>:<path> --level unit=<repo>:<path> --status ... --notes ...`
 - Check: `fr acceptance check` (refs, staleness, statuses; exit 2 on
-  `failing`). Nag: `fr acceptance status`.
+  `failing`). Nag: `fr acceptance status` — **any agent session in this repo
+  runs `fr acceptance status --brief` at session start** (Claude Code does it
+  automatically via the super-fr SessionStart hook; other harnesses honor
+  this line).
 - Local report: `fr acceptance report` → `docs/acceptance/report.html`
   (gitignored), links relative to sibling checkouts (`--sibling-root`,
   default `..`).

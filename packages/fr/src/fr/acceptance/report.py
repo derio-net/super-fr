@@ -65,6 +65,9 @@ class LinkBuilder:
         repo, path, frag = split_ref(ref)
         path = self._actual_path(repo, path)
         if self.mode == "github":
+            # v1 shortcut: sibling repos are pinned to literal `main` (a
+            # master-defaulted sibling gets stale links). Recorded in the
+            # plan's _prose.md; a per-repo override can come with demand.
             branch = self.ref if repo == self.own_repo else "main"
             anchor = f"#{frag}" if frag else ""
             return f"https://github.com/{self.org}/{repo}/blob/{branch}/{path}{anchor}"

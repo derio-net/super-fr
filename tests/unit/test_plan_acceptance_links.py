@@ -189,6 +189,8 @@ def test_self_review_passes_with_valid_links(tmp_path: Path) -> None:
     repo = _repo(tmp_path, matrix=True)
     _spec(repo, test_plan=True)
     plan_dir = _create_plan(repo, acceptance=("row-a",))
+    meta = plan_dir / "_meta.yaml"  # acceptance: requires the 3.7.0 floor
+    meta.write_text(meta.read_text().replace(">=3.0.0,<4.0.0", ">=3.7.0,<4.0.0"))
     issues = _issues(repo, plan_dir)
     assert not any("acceptance" in i.message for i in issues), issues
 
@@ -199,6 +201,28 @@ def test_self_review_spec_without_test_plan_exempt(tmp_path: Path) -> None:
     plan_dir = _create_plan(repo)
     issues = _issues(repo, plan_dir)
     assert not any("acceptance" in i.message for i in issues), issues
+
+
+def test_self_review_warns_low_fr_version_floor(tmp_path: Path) -> None:
+    """Review finding (#352): `acceptance:` is a schema-version event — a plan
+    that uses it while its fr_version admits a pre-acceptance fr would pass
+    the version gate on old tooling and die on a raw pydantic error."""
+    repo = _repo(tmp_path, matrix=True)
+    _spec(repo, test_plan=True)
+    plan_dir = _create_plan(repo, acceptance=("row-a",))  # default floor >=3.0.0
+    issues = _issues(repo, plan_dir)
+    warns = [i for i in issues if i.severity == "warn"]
+    assert any("fr_version" in i.message and "3.7.0" in i.message for i in warns)
+
+
+def test_self_review_no_version_warn_with_raised_floor(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, matrix=True)
+    _spec(repo, test_plan=True)
+    plan_dir = _create_plan(repo, acceptance=("row-a",))
+    meta = plan_dir / "_meta.yaml"
+    meta.write_text(meta.read_text().replace(">=3.0.0,<4.0.0", ">=3.7.0,<4.0.0"))
+    issues = _issues(repo, plan_dir)
+    assert not any("fr_version" in i.message for i in issues), issues
 
 
 # ── T3: complete-phase nudge ───────────────────────────────────────────────

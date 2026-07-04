@@ -11,6 +11,8 @@
 
 set -eu
 
+command -v jq >/dev/null 2>&1 || exit 0
+
 input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 [ -n "$cwd" ] && [ -d "$cwd" ] || exit 0

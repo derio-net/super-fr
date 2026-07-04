@@ -143,6 +143,18 @@ def test_sibling_absent_warns_once_per_repo(
     assert result.output.count("gone not checked out") == 1
 
 
+def test_check_runs_from_repo_subdirectory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Trap 6 pinned directly: no VK_REPO_ROOT, cwd = a subdirectory of a
+    real git repo — the root resolves via git, not the process cwd."""
+    root = make_repo(tmp_path, row(), git=False)
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    monkeypatch.delenv("VK_REPO_ROOT", raising=False)
+    monkeypatch.chdir(root / "docs" / "acceptance")
+    result = runner.invoke(app, ["acceptance", "check"])
+    assert result.exit_code == 0, result.output
+    assert "1 rows OK" in result.output
+
+
 # ── T3: archive twins + staleness ──────────────────────────────────────────
 
 

@@ -32,7 +32,8 @@ MATRIX_TEMPLATE = """\
 #
 # Rule: .claude/rules/acceptance-matrix.md — update rows in the SAME PR that
 # changes a Test Plan, adds tests, ships a surface, or touches CI.
-# Add rows with `fr acceptance add` (schema-validated append).
+# Add rows with `fr acceptance add` (schema-validated append). Keep `rows:`
+# as the LAST top-level key — `add` appends to the end of this file.
 
 org: {org}
 repo: {repo}
@@ -68,7 +69,10 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
 - Add rows: `fr acceptance add --id ... --capability ... --acceptance ...
   --origin <repo>:<path> --level unit=<repo>:<path> --status ... --notes ...`
 - Check: `fr acceptance check` (refs, staleness, statuses; exit 2 on
-  `failing`). Nag: `fr acceptance status`.
+  `failing`). Nag: `fr acceptance status` — **any agent session in this repo
+  runs `fr acceptance status --brief` at session start** (Claude Code does it
+  automatically via the super-fr SessionStart hook; other harnesses honor
+  this line).
 - Local report: `fr acceptance report` → `docs/acceptance/report.html`
   (gitignored), links relative to sibling checkouts (`--sibling-root`,
   default `..`).
@@ -142,7 +146,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           fr acceptance digest > /tmp/digest.md
-          num=$(gh issue list --state open --search "Acceptance debt in:title" \\
+          # Idempotence keyed on the body marker `fr acceptance digest` emits,
+          # not the title — a pre-existing issue that merely says "Acceptance
+          # debt" in its title must not be hijacked.
+          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \\
                 --json number --jq '.[0].number // empty')
           if grep -q "No open acceptance debt." /tmp/digest.md; then
             if [ -n "$num" ]; then
