@@ -1,11 +1,9 @@
 # Acceptance Matrix — first-class acceptance tests across the fr pipeline
 
 > Status: **approved 2026-07-04** (operator Q&A in-session; decisions §2) — awaiting plan.
-> Origin: a reference implementation was built and shipped the same day in a
-> **private downstream fr-enabled repo** (details withheld per that org's
-> privacy rule); this spec generalizes it into fr itself. Reference semantics
-> and review-caught traps are restated here in full — the implementing agent
-> does not need (and must not request) access to the downstream repo.
+> Origin: generalizes a reference implementation from a downstream fr-enabled
+> repo, shipped the same day. Reference semantics and review-caught traps are
+> restated here in full, so this spec is self-contained.
 
 ## 1. Summary
 
