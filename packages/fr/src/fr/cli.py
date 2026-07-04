@@ -17,6 +17,7 @@ from __future__ import annotations
 import typer
 
 from fr import __version__
+from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
 from fr.commands.init_cmd import init_app
@@ -52,6 +53,7 @@ app.command(
     name="repair",
     help="Normalize stale plan/spec refs + strip dead plan-config keys (dry-run; --yes to write).",
 )(repair_command)
+app.add_typer(acceptance_app, name="acceptance")
 app.add_typer(plan_app, name="plan")
 app.add_typer(spec_app, name="spec")
 app.add_typer(migrate_app, name="migrate")
