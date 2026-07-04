@@ -82,30 +82,31 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:33:41+00:00'
       note: null
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:33:43+00:00'
       note: null
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:33:45+00:00'
       note: null
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:33:47+00:00'
       note: null
     P5.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:33:49+00:00'
       note: null
     P5.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-04T16:33:51+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-04T16:33:54+00:00'
+    note: scaffold.py (matrix/rule/workflow/gitignore, write-if-missing), trap-7 coverage
+      warning in check, backfill emitter; 11 tests
     observed_prs: []

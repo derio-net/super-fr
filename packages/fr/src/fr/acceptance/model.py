@@ -88,6 +88,14 @@ class Matrix(BaseModel):
     repo: StrictStr | None = None
     rows: tuple[Row, ...] = ()
 
+    @field_validator("rows", mode="before")
+    @classmethod
+    def _none_is_empty(cls, v: object) -> object:
+        # The init skeleton ends with a bare `rows:` (implicit null) so that
+        # `fr acceptance add` can append list items textually; `rows: []`
+        # would make the first append invalid YAML.
+        return () if v is None else v
+
 
 def load_matrix(path: Path) -> Matrix:
     """Parse + validate `matrix.yaml`; every failure is an AcceptanceError."""

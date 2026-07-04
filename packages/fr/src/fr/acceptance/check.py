@@ -95,6 +95,45 @@ def _resolve_ref(row_id: str, ref: str, base: Path, result: CheckResult) -> None
     result.errors.append(f"row {row_id}: ref does not resolve: {ref}")
 
 
+def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[str]:
+    """Trap 7, code-enforced: every own-repo path the matrix references must
+    fall inside the workflow's PR-time path filters, or a rename merges clean
+    and the break surfaces only at the weekly cron."""
+    import fnmatch
+
+    import yaml
+
+    wf_path = root / ".github" / "workflows" / "acceptance-report.yml"
+    if not wf_path.exists():
+        return []
+    try:
+        doc = yaml.safe_load(wf_path.read_text()) or {}
+    except yaml.YAMLError:
+        return [f"{wf_path.name}: unparseable YAML — path-filter coverage not verified"]
+    # YAML 1.1 parses the `on:` key as boolean True.
+    triggers = doc.get("on", doc.get(True)) or {}
+    pr = triggers.get("pull_request") or {}
+    globs = pr.get("paths") or []
+    if not globs:
+        return []
+    uncovered: list[str] = []
+    for r in matrix.rows:
+        for ref in r.refs():
+            try:
+                repo, path, _ = split_ref(ref)
+            except AcceptanceError:
+                continue
+            if repo != own:
+                continue  # sister-repo refs are honestly out of PR-time reach
+            if not any(fnmatch.fnmatch(path, g) for g in globs):
+                uncovered.append(path)
+    return [
+        f"{p} is matrix-referenced but outside {wf_path.name}'s pull_request "
+        f"path filters — a rename would only surface at the weekly cron"
+        for p in sorted(set(uncovered))
+    ]
+
+
 def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     result = CheckResult()
     own = resolve_identity(matrix, root)[1]
@@ -143,6 +182,8 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
                     f"staleness: {rel} has a Test Plan but no matrix row cites it "
                     f"(add rows or fold it into an existing origin)"
                 )
+
+    result.warnings.extend(_workflow_coverage_warnings(matrix, root, own))
 
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]
     result.warning_rows = open_rows(matrix)

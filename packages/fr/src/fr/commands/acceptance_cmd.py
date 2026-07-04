@@ -62,9 +62,7 @@ def _added_since(root: Path, ref: str, matrix: Matrix) -> list[str]:
             old = yaml.safe_load(out.stdout) or {}
         except yaml.YAMLError as e:
             raise AcceptanceError(f"--added-since {ref}: base matrix unparseable: {e}") from e
-        old_ids = {
-            str(r["id"]) for r in old.get("rows") or [] if isinstance(r, dict) and "id" in r
-        }
+        old_ids = {str(r["id"]) for r in old.get("rows") or [] if isinstance(r, dict) and "id" in r}
     return [r.id for r in matrix.rows if r.id not in old_ids]
 
 
@@ -274,6 +272,103 @@ def add_cmd(
         err_console.print(f"[red]error:[/red] append produced an invalid matrix, rolled back: {e}")
         raise typer.Exit(2) from e
     typer.echo(f"added row {new_row.id} ({new_row.status})")
+
+
+@acceptance_app.command("init")
+def init_cmd() -> None:
+    """Scaffold matrix + CI workflow + backfill rule + gitignore (idempotent)."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.scaffold import init
+
+    root = resolve_repo_root()
+    try:
+        org, repo = resolve_identity(Matrix(), root)
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(1) from e
+    outcome = init(root, org, repo)
+    for rel in outcome.created:
+        typer.echo(f"created {rel}")
+    for rel in outcome.skipped:
+        typer.echo(f"exists  {rel} (left untouched)")
+
+
+BACKFILL_PROTOCOL = """\
+## Backfill work-protocol (agent-driven — see the fr-acceptance skill)
+
+1. Inventory: the uncited Test Plan specs and unlinked plans above, plus any
+   design/study docs with acceptance-like tables, and the test tree(s).
+2. DRAFT rows — one row per business acceptance, not per test — with real
+   refs and HONEST statuses: per-PR-automated evidence ⇒ `ci`; anything
+   proven only by hand or once-live ⇒ `skipped`; absent ⇒ `not-implemented`.
+   The drift channel is precisely the hand-tracked claims — when in doubt
+   between `ci` and `skipped`, choose skipped.
+3. Add rows via `fr acceptance add` (never hand-edit YAML shapes), run
+   `fr acceptance check`, fix, and open a review PR — the operator audits
+   statuses; do not inflate coverage.
+"""
+
+
+@acceptance_app.command("backfill")
+def backfill_cmd() -> None:
+    """Emit the agent backfill protocol + deterministic inventory (markdown)."""
+    import yaml
+
+    from fr.acceptance.check import SPEC_DIRS, TEST_PLAN_MARKER
+    from fr.acceptance.model import archive_twin, split_ref
+
+    root = resolve_repo_root()
+    matrix = _load(root)
+
+    referenced: set[str] = set()
+    for r in matrix.rows:
+        for ref in r.origin:
+            try:
+                _, path, _ = split_ref(ref)
+            except AcceptanceError:
+                continue
+            referenced.add(path)
+            twin = archive_twin(path)
+            if twin:
+                referenced.add(twin)
+    uncited = [
+        str(spec.relative_to(root))
+        for spec_dir in SPEC_DIRS
+        for spec in sorted((root / spec_dir).glob("*.md"))
+        if TEST_PLAN_MARKER in spec.read_text() and str(spec.relative_to(root)) not in referenced
+    ]
+
+    unlinked_plans: list[str] = []
+    plans_dir = root / "docs" / "superpowers" / "plans"
+    if plans_dir.is_dir():
+        for plan_dir in sorted(p for p in plans_dir.iterdir() if p.is_dir()):
+            linked = False
+            for phase_file in sorted(plan_dir.glob("[0-9][0-9].yaml")):
+                try:
+                    doc = yaml.safe_load(phase_file.read_text()) or {}
+                except yaml.YAMLError:
+                    continue  # unparseable plans are skipped gracefully
+                if (doc.get("phase") or {}).get("acceptance"):
+                    linked = True
+                    break
+            if not linked:
+                unlinked_plans.append(plan_dir.name)
+
+    lines = ["# Acceptance backfill — inventory + protocol", ""]
+    lines.append("## Specs with a Test Plan not yet cited by any row")
+    lines += [f"- {p}" for p in uncited] or ["- (none — every Test Plan spec is cited)"]
+    lines += ["", "## Live plans with no `acceptance:` links"]
+    lines += [f"- {p}" for p in unlinked_plans] or ["- (none)"]
+    lines += ["", "## Test-tree hints"]
+    tests_dir = root / "tests"
+    if tests_dir.is_dir():
+        lines += [f"- tests/{d.name}/" for d in sorted(tests_dir.iterdir()) if d.is_dir()] or [
+            "- tests/ (flat)"
+        ]
+    else:
+        lines.append("- (no tests/ directory found)")
+    lines += ["", BACKFILL_PROTOCOL]
+    typer.echo("\n".join(lines))
 
 
 DIGEST_MARKER = "<!-- fr-acceptance-digest -->"
