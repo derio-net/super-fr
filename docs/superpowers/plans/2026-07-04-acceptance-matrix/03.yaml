@@ -1,0 +1,93 @@
+schema_version: 2
+phase:
+  number: 3
+  title: fr acceptance report — HTML renderer, link modes
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: 'LinkBuilder: github/local modes, twins, fragments'
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_report.py: LinkBuilder cases —
+      (a) github mode: own-repo ref → https://github.com/<org>/<own>/
+      blob/<--ref>/<path>#<frag>; sibling ref → …/<sibling>/blob/main/…;
+      fragment appended only when present (trap 3); (b) local mode: path
+      relative to the emitted HTML's dir; sibling resolved via
+      sibling_root ".." (trap 2: assert tmp/<sib>/file from
+      tmp/<own>/docs/acceptance/report.html is ../../../<sib>/file);
+      (c) an archived-spec ref renders a link to the implemented/ twin
+      when the checkout shows the move (trap 1). Run → red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/acceptance/report.py: port
+      LinkBuilder (org/own-repo injected from resolve_identity, not
+      constants), _actual_path twin-following gated on (base/".git")
+      .exists(). Tests pass.
+- number: 2
+  title: 'render(): tiles, tables, panels, escaping'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests: (a) summary tiles are computed from rows — a matrix
+      with 2 ci + 1 skipped renders tile values 2/0/1/0/0 (cannot
+      disagree with tables); (b) capability groups render in first-seen
+      row order; (c) a row with acceptance text `<script>alert("x")</
+      script>` and notes with quotes renders escaped (&lt;script&gt;,
+      &quot;) — trap 5; (d) level chips: level with refs renders an <a
+      class="on"> linking the first ref, empty level renders <span
+      class="off">; (e) failing/skipped/not-implemented panels appear
+      only when such rows exist. Run → red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: port CSS + render() from the reference (esc() everywhere a
+      YAML string lands in HTML), title/kicker generalized ("Acceptance
+      coverage — <repo>"). Tests pass.
+- number: 3
+  title: report verb wiring
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: CliRunner tests: `fr acceptance report` writes
+      docs/acceptance/report.html (default --out, --link-mode local
+      default); `--link-mode github --ref abc123` embeds abc123 in
+      own-repo URLs; stamp line includes link mode; runs from a
+      subdirectory of the repo (cwd-independent, trap 6). Run → red.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: @acceptance_app.command("report") with --matrix/--link-mode/
+      --ref/--sibling-root/--out; git log stamp (port). mkdir -p the out
+      dir. Tests pass.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

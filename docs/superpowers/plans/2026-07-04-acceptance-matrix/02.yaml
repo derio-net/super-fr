@@ -1,0 +1,139 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr acceptance check — gate, ref resolution, staleness, exit contract
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: CLI group skeleton + repo/org resolution
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: create tests/unit/test_acceptance_cmd.py using
+      typer.testing.CliRunner against fr.cli.app (pattern: existing
+      command tests). In a tmp git repo (git init, remote origin
+      https://github.com/derio-net/tmprepo.git) with a minimal valid
+      matrix at docs/acceptance/matrix.yaml: `fr acceptance check` exits
+      0 and prints a "N rows OK" summary with status counts. Also: repo
+      without matrix → exit 1 "no docs/acceptance/matrix.yaml (run fr
+      acceptance init)". own_repo(): matrix repo: key wins over remote;
+      remote https and ssh forms both parse (unit tests in
+      test_acceptance_model.py for resolve_identity(matrix, root)).
+      Run → fails (no acceptance command).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/acceptance/check.py with
+      resolve_identity(matrix, root) -> (org, repo) (matrix keys, else
+      parse `git remote get-url origin` for https/ssh github URLs, else
+      AcceptanceError asking for explicit keys) and check(matrix_path,
+      sibling_root) -> CheckResult(errors, warnings, failing_ids,
+      summary). Create commands/acceptance_cmd.py: acceptance_app =
+      typer.Typer(...); @acceptance_app.command("check") mapping
+      CheckResult to the exit contract; register in cli.py via
+      app.add_typer(acceptance_app, name="acceptance"). cwd-independence:
+      resolve repo root via fr.commands.common.resolve_repo_root (spec
+      trap 6). Tests pass.
+- number: 2
+  title: 'Ref resolution: .git heuristic, sibling-root, fragments'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests: (a) own-repo ref to an existing file → OK; to a missing
+      file → error "does not resolve"; (b) ref with #L10 fragment checks
+      existence of the stripped path (trap 3); (c) sibling repo ref where
+      sibling dir exists WITH .git → resolved (missing file → error);
+      (d) sibling dir exists WITHOUT .git → warning "not checked out",
+      NOT an error (trap 4); (e) sibling absent → same warning, one line
+      per missing repo; (f) sibling_root defaults to ".." — a sibling
+      checkout created as tmp/<repo> next to tmp/<own> is found (trap 2).
+      Run → red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement in check.py: repo_base(repo) returning the base
+      path only when (base/".git").exists(); iterate every origin +
+      levels ref through split_ref; collect errors/warnings per the
+      reference check() (port, adapted to Matrix model). Tests pass.
+- number: 3
+  title: Archive-twin downgrade + staleness guard
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests: (a) a row citing docs/superpowers/specs/x.md while the
+      file now lives under implemented/specs/ → warning "moved to …
+      update the matrix ref when convenient", exit stays 0 (trap 1);
+      (b) staleness: a spec with "## Test Plan" under either specs dir
+      cited by zero rows → error naming the spec rel path; (c) a spec
+      cited via its PRE-archive path stays counted as cited after the
+      move (twin-aware referenced set); (d) specs without a Test Plan
+      section are exempt. Run → red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: port the twin fallback in ref resolution (error → warning
+      when archive_twin exists) and the staleness guard (scan both spec
+      dirs for "## Test Plan", referenced set includes each origin path
+      AND its twin). Tests pass.
+- number: 4
+  title: Exit contract + CI annotations
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests: (a) any status: failing row → exit 2 and stderr lists
+      the failing ids; (b) resolution/staleness/schema error → exit 1;
+      (c) skipped/not-implemented rows → exit 0 with one
+      "::warning title=acceptance-matrix::<id> is <status>: …" line each
+      on stdout; (d) fully-ci matrix → exit 0, no warnings. Run → red.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: finish check verb wiring: print ::warning:: lines for
+      warning rows + collected warnings, ERROR lines to stderr, exit
+      2/1/0 per contract (failing beats errors). Tests pass.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR (optional): extract shared fixture-repo builders into
+      tests/unit/acceptance_helpers.py (plain module, repo test style);
+      ruff + mypy clean. Stay green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -227,3 +227,4 @@ updated.
 
 | Plan | Target repo | Slug | Status |
 |---|---|---|---|
+| 2026-07-04-acceptance-matrix | `derio-net/super-fr` | `2026-07-04-acceptance-matrix` | — |

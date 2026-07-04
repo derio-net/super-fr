@@ -1,0 +1,98 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Acceptance core: ref grammar, archive twins, matrix model + load'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Ref grammar + archive-twin helpers
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_acceptance_model.py with tests for
+      fr.acceptance.model.split_ref and archive_twin:
+      - split_ref("fr:docs/a.md") == ("fr", "docs/a.md", "")
+      - split_ref("fr:pkg/x.py#L12") == ("fr", "pkg/x.py", "L12") — fragment
+        kept separately (spec trap 3)
+      - split_ref("fr:docs/spec.md#anchor") fragment == "anchor"
+      - "no-colon", "repo/slash:path", "fr:" each raise AcceptanceError with
+        a message containing "<repo>:<path>"
+      - archive_twin("docs/superpowers/specs/x.md") ==
+        "docs/superpowers/implemented/specs/x.md" and the inverse; a path
+        under neither dir returns None (spec trap 1).
+      Run: uv run pytest tests/unit/test_acceptance_model.py -q --no-cov
+      → fails with ModuleNotFoundError (fr.acceptance does not exist).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/acceptance/__init__.py and model.py.
+      model.py: class AcceptanceError(Exception); split_ref(ref) ->
+      tuple[repo, path, fragment] (partition on first ":", partition path on
+      first "#"; reject empty repo/path and "/" in repo); ARCHIVE_TWIN_DIRS
+      = ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/");
+      archive_twin(path) -> str | None (prefix swap, port of reference).
+      Tests pass.
+- number: 2
+  title: Matrix pydantic model + load_matrix validation
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: extend test_acceptance_model.py with load_matrix tests over tmp
+      matrix.yaml fixtures (write a _write_matrix(tmp_path, text) helper):
+      - happy row loads: all six fields; levels keys not given default to
+        []; rows order preserved (row ids in file order)
+      - optional top-level org:/repo: keys load into Matrix.org/Matrix.repo
+        (None when absent)
+      - duplicate row ids -> AcceptanceError naming the dupes
+      - status "sheduled" -> AcceptanceError listing allowed statuses
+      - unknown levels key "unti:" -> AcceptanceError naming the key and
+        "silently drop" rationale (spec trap 5)
+      - id: yes (YAML bool) -> AcceptanceError (id must be a string —
+        spec trap 5 "bool is not a number" class of bug)
+      - missing file -> AcceptanceError, not FileNotFoundError.
+      Run → fails (load_matrix undefined).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in model.py add pydantic models (frozen=True, extra="forbid",
+      repo style per fr/types.py): Row(id: str, capability: str,
+      acceptance: str, origin: tuple[str, ...] = (), levels: dict[str,
+      tuple[str, ...]], status: Literal["ci","scheduled","skipped",
+      "not-implemented","failing"], notes: str = "") with a
+      model_validator filling missing LEVELS keys ([]) and rejecting
+      unknown ones; strict str for id (pydantic StrictStr) so YAML bools
+      fail; Matrix(org: str | None, repo: str | None, rows: tuple[Row,
+      ...]) validating unique ids. LEVELS = ("unit","api","int","ui").
+      load_matrix(path: Path) -> Matrix wraps yaml.safe_load +
+      ValidationError into AcceptanceError. Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR (optional): dedupe fixture helpers; ensure ruff + mypy
+      clean: uv run ruff check packages/ tests/ && uv run mypy
+      packages/fr/src. Stay green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,111 @@
+schema_version: 2
+phase:
+  number: 5
+  title: fr acceptance init + backfill emitter
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: init scaffolding (matrix, rule, gitignore)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_init.py: in a tmp git repo with an
+      origin remote, `fr acceptance init` creates (a)
+      docs/acceptance/matrix.yaml with the schema-comment header, org: +
+      repo: keys resolved from the remote, and rows: []; (b)
+      .claude/rules/acceptance-matrix.md carrying the backfill rule
+      (assert on "SAME PR" and the status ladder line); (c) appends
+      docs/acceptance/report.html to .gitignore (creating it if absent);
+      (d) `fr acceptance check` passes on the scaffold (exit 0);
+      (e) idempotent: second run exits 0, changes nothing (byte-compare
+      all three), and does NOT duplicate the gitignore line; (f) a
+      user-edited matrix is left untouched by re-run. Run → red.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/acceptance/scaffold.py with template
+      constants + init(root) writing files only when absent
+      (write-if-missing semantics; gitignore line-presence check);
+      init verb in acceptance_cmd.py printing created/skipped per
+      artifact. Tests pass.
+- number: 2
+  title: 'init: CI workflow + trap-7 coverage warning in check'
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: tests: (a) init writes .github/workflows/acceptance-report.yml
+      — yaml.safe_load it and assert: pull_request+push path filters
+      include docs/acceptance/**, both spec dirs, and
+      .github/workflows/**; a schedule cron entry exists;
+      workflow_dispatch present; job steps run `fr acceptance check`,
+      `fr acceptance report --link-mode github`, upload the report
+      artifact, and a scheduled-only step upserts the digest issue via
+      `gh` keyed on the `<!-- fr-acceptance-digest -->` marker and
+      closes it when the digest says no debt; header comment states
+      sister-repo refs are out of PR-time reach (trap 7 honesty).
+      (b) trap-7 gate in check: with a workflow whose path filters
+      do NOT cover a matrix-referenced own-repo path (e.g. ref
+      fr:scripts/x.sh, no scripts/** filter) → check emits a warning
+      naming the uncovered path; covered → no warning; no workflow file
+      → no warning. Run → red.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: workflow template in scaffold.py (digest upsert step: `gh
+      search issues`-free — `gh issue list --search 'in:body fr-
+      acceptance-digest' --state open --json number` then create/edit/
+      close; guarded by `if: github.event_name == 'schedule'`);
+      check.py gains workflow_path_coverage(matrix, root): parse the
+      workflow's pull_request.paths globs (fnmatch, ** spans /) against
+      own-repo ref paths. Tests pass.
+- number: 3
+  title: backfill emitter (agent work-protocol)
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      RED: tests: `fr acceptance backfill` prints markdown containing:
+      (a) inventory — every spec under both spec dirs with "## Test
+      Plan" not yet cited by a row (deterministic, from the staleness
+      scanner); (b) live plans under docs/superpowers/plans/ whose
+      phase YAMLs carry no acceptance: keys (yaml.safe_load, skip
+      unparseable gracefully); (c) test-tree hints (top-level dirs under
+      tests/ when present); (d) the work-protocol text: one row per
+      business acceptance, honest statuses, "when in doubt between ci
+      and skipped, choose skipped", finish with `fr acceptance check` +
+      review PR (spec §7). Exit 0. Run → red.
+  - id: P5.T3.S2
+    text: |-
+      GREEN: backfill verb: reuse staleness scan from check.py for (a);
+      small plan scan for (b); PROTOCOL template string for (d). Tests
+      pass.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

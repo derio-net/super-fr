@@ -1,0 +1,92 @@
+schema_version: 2
+phase:
+  number: 8
+  title: Dog food super-fr + release (version bump, CHANGELOG)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  tracking_issue: null
+tasks:
+- number: 1
+  title: init on super-fr
+  steps:
+  - id: P8.T1.S1
+    text: |-
+      Run `uv run fr acceptance init` at the worktree root; verify the
+      four artifacts (matrix skeleton with org: derio-net / repo:
+      super-fr, workflow, rule mirror, gitignore line); `uv run fr
+      acceptance check` → exit 1 initially (staleness: 10 specs carry
+      Test Plans, zero rows) — this red IS the feature working; commit
+      the scaffold.
+- number: 2
+  title: backfill rows (10 specs), link this plan
+  steps:
+  - id: P8.T2.S1
+    text: |-
+      Run `uv run fr acceptance backfill`, follow it: draft rows via
+      `fr acceptance add` for every Test Plan spec (4 live + 6
+      archived — archived ones exercise the twin guard for real). This
+      spec's §Test Plan items become rows acceptance-init-scaffold,
+      acceptance-check-gate, acceptance-archive-twin,
+      acceptance-pipeline-rows, acceptance-added-since,
+      acceptance-nag-channels (statuses: ci where a unit test from
+      phases 1-7 pins it — cite the test file; skipped for
+      operator-walk items). Honest statuses everywhere: per-PR pytest
+      evidence ⇒ ci; hand-proven ⇒ skipped; absent ⇒ not-implemented.
+  - id: P8.T2.S2
+    text: |-
+      Link rows into THIS plan: add `acceptance: [...]` to phases 1-8
+      YAML headers (e.g. phase 2 → acceptance-check-gate, phase 5 →
+      acceptance-init-scaffold, phase 7 → acceptance-nag-channels,
+      acceptance-pipeline-rows on phases 6-7). Run `uv run fr plan
+      self-review docs/superpowers/plans/2026-07-04-acceptance-matrix`
+      → passes; `uv run fr acceptance check` → exit 0 (warnings for
+      skipped rows OK).
+- number: 3
+  title: Release chores
+  steps:
+  - id: P8.T3.S1
+    text: |-
+      `uv run python scripts/bump-version.py minor` (new subcommand +
+      new skill = minor per CLAUDE.md; updates pyproject, plugin.json,
+      marketplace.json, uv.lock); CHANGELOG.md entry under the new
+      version: fr acceptance group, plan acceptance links, nag
+      channels, init/backfill. Verify `uv run fr --version`.
+  - id: P8.T3.S2
+    text: |-
+      Full gate: uv run ruff format packages/ tests/ && uv run ruff
+      check packages/ tests/ && uv run mypy packages/fr/src
+      packages/fr-dispatch/src packages/fr-vk/src && uv run pytest -q
+      --no-cov && uv run python scripts/bump-version.py --check. All
+      green before push.
+state:
+  steps:
+    P8.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

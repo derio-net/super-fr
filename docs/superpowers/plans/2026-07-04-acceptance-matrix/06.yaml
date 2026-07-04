@@ -1,0 +1,128 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Plan schema acceptance links, self-review lints, status surfaces
+  tag: agentic
+  depends_on:
+  - 1
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: PhaseHeader.acceptance + create/round-trip
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: tests/unit/test_plan_acceptance_links.py: (a) an NN.yaml with
+      `acceptance: [row-a, row-b]` in the phase header parses;
+      PhaseHeader.acceptance == ("row-a", "row-b"); absent → (); (b)
+      `fr plan edit --tick` on such a plan preserves the key verbatim
+      (raw-dict round-trip); (c) fr plan create --phases-file with an
+      acceptance list on a phase lands it in the scaffolded NN.yaml; (d)
+      export-plan-schema (tests/unit/test_export_plan_schema.py
+      regenerates? check its mechanism) stays green — regenerate the
+      exported schema if the repo keeps one. Run → red.
+  - id: P6.T1.S2
+    text: |-
+      GREEN: types.py PhaseHeader gains `acceptance: tuple[str, ...] =
+      ()`; plan_ops.PhaseSpec + _build_phase_doc pass it through (omit
+      the key when empty, keeping existing plans byte-stable); plan_cmd
+      create_cmd forwards p.get("acceptance"). Update the exported
+      schema artifact if test_export_plan_schema asserts one. Tests
+      pass.
+- number: 2
+  title: self-review lints (decision 2)
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      RED: tests: (a) plan whose spec (same-repo, has "## Test Plan")
+      + repo matrix exists + zero acceptance ids across all phases →
+      error "no acceptance rows linked"; (b) same but NO matrix in repo
+      → warning mentioning `fr acceptance init`; (c) a linked id absent
+      from the matrix → error naming id and phase; (d) plan with linked
+      ids that exist → no acceptance issues; (e) spec without a Test
+      Plan → exempt. Run → red.
+  - id: P6.T2.S2
+    text: |-
+      GREEN: plan_ops.self_review gains the three lints (load matrix
+      via fr.acceptance.model when docs/acceptance/matrix.yaml exists;
+      spec path from plan.meta resolved same-repo only — cross-repo
+      specs are exempt v1, noted in the lint docstring). Tests pass.
+- number: 3
+  title: complete-phase unflipped-row nudge
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED: tests: completing a phase whose acceptance ids include a row
+      still not-implemented in the matrix prints a warning listing the
+      unflipped ids and "flip via fr acceptance add/edit or record why";
+      completion still succeeds; rows already skipped/ci → no warning;
+      no matrix / no acceptance key → no warning. Run → red.
+  - id: P6.T3.S2
+    text: |-
+      GREEN: plan_ops.complete_phase returns (or plan_cmd prints) the
+      nudge by loading the matrix best-effort (broken matrix must not
+      block completion — swallow AcceptanceError into a generic
+      warning). Tests pass.
+- number: 4
+  title: fr status + fr-progress acceptance section
+  steps:
+  - id: P6.T4.S1
+    text: |-
+      RED: tests: `fr status <plan-dir>` in a repo WITH a matrix prints
+      an "Acceptance" section: counts by status + open-row count +
+      "fr acceptance status" pointer; repo without matrix → section
+      absent (no nag on unadopted repos — the hook owns that); `fr spec
+      status` untouched. Run → red.
+  - id: P6.T4.S2
+    text: |-
+      GREEN: status_cmd renders the section from open_rows()/counts
+      (import from fr.acceptance.check); guard on matrix existence.
+      Tests pass.
+  - id: P6.T4.S3
+    text: |-
+      REFACTOR (optional): ruff + mypy across packages/; ensure no
+      import cycles (fr.plan_ops must not import typer-layer modules).
+      Stay green.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
