@@ -76,6 +76,7 @@ def create_cmd(
                     tag=p.get("tag", "agentic"),
                     depends_on=tuple(p.get("depends_on") or ()),
                     tasks=tuple(p.get("tasks") or ()),
+                    acceptance=tuple(p.get("acceptance") or ()),
                 )
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
@@ -122,9 +123,38 @@ def edit(
             assert complete_phase_n is not None
             complete_phase(plan_dir, complete_phase_n, note=note)
             console.print(f"phase {complete_phase_n}: marked complete")
+            _acceptance_flip_nudge(plan_dir, complete_phase_n)
     except PlanEditError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
+
+
+def _acceptance_flip_nudge(plan_dir: Path, phase_n: int) -> None:
+    """A completed phase whose linked acceptance rows are still
+    `not-implemented` gets a warning naming them (2026-07-04 spec, fr-execute
+    integration). Best-effort: a broken plan or matrix must never block the
+    completion that already happened."""
+    try:
+        plan = parse(plan_dir)
+        phase = next(p for p in plan.phases if p.phase.number == phase_n)
+        ids = phase.phase.acceptance
+        if not ids or plan.repo_root is None:
+            return
+        from fr.acceptance.model import load_matrix
+
+        matrix_path = plan.repo_root / "docs" / "acceptance" / "matrix.yaml"
+        if not matrix_path.exists():
+            return
+        status_by_id = {r.id: r.status for r in load_matrix(matrix_path).rows}
+        unflipped = [rid for rid in ids if status_by_id.get(rid) == "not-implemented"]
+        if unflipped:
+            typer.echo(
+                f"warning: phase {phase_n} completed but its acceptance rows are "
+                f"still not-implemented: {', '.join(unflipped)} — flip them "
+                f"(edit status + cite the test refs) or record why in notes."
+            )
+    except Exception as e:  # noqa: BLE001 — nudge only, never a gate
+        typer.echo(f"warning: acceptance flip-nudge skipped ({e})")
 
 
 @plan_app.command("rework")

@@ -9,7 +9,28 @@ PLUGINS_DIR = Path(__file__).parent.parent.parent / "plugins"
 # Every skill across both plugins; a glob miss collapses the matrix
 # silently, so a floor assertion guards collection (2026-06-06).
 _SKILL_DIRS = sorted(PLUGINS_DIR.glob("*/skills/fr-*"))
-assert len(_SKILL_DIRS) >= 9, f"skill glob collapsed: {_SKILL_DIRS}"
+assert len(_SKILL_DIRS) >= 10, f"skill glob collapsed: {_SKILL_DIRS}"
+
+# Acceptance-matrix pipeline integration (2026-07-04 spec §5): each pipeline
+# skill must carry its acceptance duty. Substrings, not prose — the duty can
+# be reworded but not dropped.
+_ACCEPTANCE_CONTENT: dict[str, tuple[str, ...]] = {
+    "fr-acceptance": ("fr acceptance backfill", "fr acceptance check", "choose skipped"),
+    "fr-brainstorming": ("fr acceptance add", "defense"),
+    "fr-plan": ("acceptance:", "fr acceptance add"),
+    "fr-execute": ("flip", "fr acceptance"),
+    "fr-goal": ("acceptance debt", "--added-since"),
+    "fr-progress": ("fr acceptance status",),
+}
+
+
+@pytest.mark.parametrize("skill_name", sorted(_ACCEPTANCE_CONTENT))
+def test_acceptance_duty_present(skill_name: str) -> None:
+    matches = [d for d in _SKILL_DIRS if d.name == skill_name]
+    assert matches, f"skill {skill_name} not found"
+    text = (matches[0] / "SKILL.md").read_text()
+    for needle in _ACCEPTANCE_CONTENT[skill_name]:
+        assert needle in text, f"{skill_name}/SKILL.md lost its acceptance duty: {needle!r}"
 
 
 @pytest.mark.parametrize(

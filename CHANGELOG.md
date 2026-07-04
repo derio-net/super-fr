@@ -8,6 +8,35 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 3.7.0 — acceptance matrix: first-class acceptance tests (#352)
+
+- **New `fr acceptance` CLI group.** `check` (the gate: ref resolution with
+  archive-twin fallback, staleness guard, plan-linkage, workflow path-filter
+  coverage; exit 2 on `failing` rows / 1 on errors / 0 with `::warning::`
+  annotations), `report` (HTML, github/local link modes, `--sibling-root`),
+  `status [--brief]` (terminal nag), `add` (schema- and ref-grammar-validated
+  append that preserves header comments), `init` (idempotent scaffold:
+  matrix + CI workflow + backfill rule + gitignore), `backfill` (agent
+  work-protocol + deterministic inventory), `digest` (issue-body markdown
+  with idempotence marker), and `check --added-since <ref>` (row diff for
+  the PR-body "added since brainstorm" section).
+- **Plan linkage.** Phase headers gain optional `acceptance: [row-ids]`;
+  `fr plan self-review` errors on a Test-Plan spec with zero linked rows
+  (matrix present) and on unknown ids; `fr plan edit --complete-phase`
+  warns on rows left `not-implemented`; `fr status` appends an acceptance
+  summary in matrix-adopting repos.
+- **Nag channels.** New SessionStart hook (`fr-acceptance-nag.sh`) injects
+  capped open-debt context; the scaffolded workflow upserts a weekly
+  "Acceptance debt" issue and closes it at zero.
+- **Skills.** New `fr-acceptance` (backfill driver, honest-status
+  calibration); fr-brainstorming / fr-plan / fr-execute / fr-goal /
+  fr-progress carry their pipeline duties (rows born at brainstorm with
+  defenses, linked at planning, flipped at execution, debt surfaced at
+  delivery).
+- **Dog food.** super-fr's own matrix ships with 15 backfilled rows
+  (11 ci, 4 skipped) covering every spec with a Test Plan; the
+  acceptance-report workflow gates this repo's PRs.
+
 ## 3.1.0 — isolation guard hooks + fr-spelling dual-read (#265, #272)
 
 - **Plugin-shipped isolation enforcement (#265).** super-fr now ships a

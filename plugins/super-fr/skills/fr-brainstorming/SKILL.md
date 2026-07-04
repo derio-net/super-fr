@@ -61,6 +61,17 @@ worktree). Hand off to `fr-plan` (the fr-plan-override rule already routes
 implementation continue in it; cleanup belongs to whoever finishes the run
 (`fr isolation down` after the PR merges).
 
+## 3. Acceptance rows — born with the spec, presented at the close
+
+Each key "operator can do X" claim in the design becomes a matrix row:
+`fr acceptance add --status not-implemented --origin <repo>:<new-spec-path>`
+(run `fr acceptance init` first if the repo has no matrix). **The brainstorm
+ENDS by presenting the rows to the operator with a one-line defense each** —
+the business claim it pins, the target verification level, why it is
+business-level rather than an implementation detail. Silent row creation is
+not acceptance-of-scope; the presentation is. Under fr-goal the presentation
+rides the spec-review step. Hand-off checklist: rows added AND presented.
+
 ## Scope notes
 
 - This skill owns WHERE brainstorming happens, not HOW — brainstorming's

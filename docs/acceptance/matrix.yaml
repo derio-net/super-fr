@@ -1,0 +1,208 @@
+# Acceptance matrix — the registry of business-level acceptance tests and
+# where each is verified. Rendered by `fr acceptance report`; gated in CI by
+# .github/workflows/acceptance-report.yml (`fr acceptance check`).
+#
+# Row schema:
+#   id:         kebab-case, stable
+#   capability: grouping (tables render in first-seen order)
+#   acceptance: the business-level statement
+#   origin:     list of "repo:path[#anchor]" refs (spec §, design doc)
+#   levels:     unit/api/int/ui → list of "repo:path[#Lline]" test refs
+#               ([] = level does not verify this row)
+#   status:     ci | scheduled | skipped | not-implemented | failing
+#     ci               automated on every PR — cannot drift silently
+#     scheduled        automated on cron/path triggers
+#     skipped          verification exists but does not run in CI (proven
+#                      live once / manual walk) → CI warning, backfill owed
+#     not-implemented  no test or surface exists yet → CI warning
+#     failing          known red → `fr acceptance check` exits 2, CI FAILS
+#   notes:      evidence detail, drift context
+#
+# Rule: .claude/rules/acceptance-matrix.md — update rows in the SAME PR that
+# changes a Test Plan, adds tests, ships a surface, or touches CI.
+# Add rows with `fr acceptance add` (schema-validated append). Keep `rows:`
+# as the LAST top-level key — `add` appends to the end of this file.
+
+org: derio-net
+repo: super-fr
+rows:
+  - id: acceptance-init-scaffold
+    capability: Acceptance matrix
+    acceptance: fr acceptance init scaffolds matrix + CI workflow + backfill rule into
+      any repo; check is green on the skeleton
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init.py
+    status: ci
+    notes: Idempotence, skeleton-passes-check, workflow shape pinned per-PR.
+  - id: acceptance-check-gate
+    capability: Acceptance matrix
+    acceptance: Schema/status violations are rejected; failing rows exit 2 and fail
+      CI; staleness and plan linkage are guarded
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_model.py
+      - super-fr:tests/unit/test_acceptance_cmd.py
+    status: ci
+    notes: Exit contract 2/1/0, ref grammar traps, trap-7 path-filter coverage pinned
+      per-PR.
+  - id: acceptance-archive-twin
+    capability: Acceptance matrix
+    acceptance: 'Archiving a cited spec never breaks the gate: check downgrades to a
+      warning and report links follow the file'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_cmd.py
+      - super-fr:tests/unit/test_acceptance_report.py
+    status: ci
+    notes: Twin resolution both directions; citation survives the move.
+  - id: acceptance-pipeline-rows
+    capability: Acceptance matrix
+    acceptance: Rows are born at brainstorm (presented with defenses), linked in plans,
+      flipped at execution; self-review fails unlinked plans
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_acceptance_links.py
+    status: skipped
+    notes: Mechanics unit-pinned per-PR; end-to-end toy walk (Test Plan item 4) owed
+      post-merge.
+  - id: acceptance-added-since
+    capability: Acceptance matrix
+    acceptance: Mid-flight row additions are diffable against a base ref and defended
+      in the delivered PR body
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_status_add.py
+    status: skipped
+    notes: 'CLI diff ci-pinned; the PR-body defense is process — demonstrated in PR
+      #352, not automated.'
+  - id: acceptance-nag-channels
+    capability: Acceptance matrix
+    acceptance: Session start surfaces open debt (capped), fr status carries the summary,
+      and the weekly digest issue upserts and closes at zero
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_acceptance_nag.py
+      - super-fr:tests/unit/test_plan_acceptance_links.py
+    status: skipped
+    notes: Hook + digest formatter ci-pinned; live weekly upsert/close unverified until
+      the first scheduled run.
+  - id: isolation-suite-lifecycle
+    capability: Isolation
+    acceptance: 'Operator can init a devcontainer profile and run isolated work: up
+      → exec → status → down, with PR-aware down refusal'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-04-vk-isolation-suite-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/unit/test_init_scaffold.py
+    status: skipped
+    notes: CLI + scaffold unit-pinned; the live worktree+container walk was proven at
+      the 2.4.0 release, not in CI.
+  - id: isolation-guard-base-deny
+    capability: Isolation
+    acceptance: While an fr pipeline is active, base-repo-cwd Bash is denied and worktree
+      cwd (including cd into it) is allowed
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-07-isolation-guard-cd-transition-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: ci
+    notes: Guard allow/deny matrix incl. FR_CD_ALLOW_PREFIXES pinned per-PR.
+  - id: isolation-fr-rename
+    capability: Isolation
+    acceptance: Guard, sentinel, and exec-bridge operate under the fr names after the
+      vk→fr rename
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-07-isolation-guard-fr-rename-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+      - super-fr:tests/unit/test_hooks_sentinel.py
+    status: ci
+    notes: Migration + pod-bridge walk done live 2026-06; hook logic pinned per-PR.
+  - id: isolation-up-add-dir-hint
+    capability: Isolation
+    acceptance: fr isolation up prints the /add-dir worktree tip only under Claude Code
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-07-isolation-up-add-dir-hint-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: Claude-Code gating unit-pinned; cwd-persistence walk done live at 3.1.3.
+  - id: bridge-checkout-self-heal
+    capability: Bridge
+    acceptance: A desynced bridge checkout self-heals to origin/main, pushes the desync
+      metric, and dispatch resumes
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-08-bridge-dedicated-checkout-self-healing-sync-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bridge_checkout.py
+      - super-fr:tests/unit/test_bridge_metrics.py
+    status: ci
+    notes: Live cluster assert done at the 2026-06-08 deploy; sync logic pinned per-PR.
+  - id: bridge-pr-autoclose
+    capability: Bridge
+    acceptance: A merged PR without close keywords still lands the card Done, archives
+      the workspace, closes the tracking Issue, and unblocks dependents
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-09-bridge-pr-state-autoclose-wiring-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bridge_pr_state.py
+    status: ci
+    notes: PR-state wiring pinned per-PR; deployed-cron walk done 2026-06-09.
+  - id: bridge-done-issue-close
+    capability: Bridge
+    acceptance: A card moved Done out-of-band closes its tracking Issue exactly once
+      and unblocks the dependent phase
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-09-terminal-done-issue-close-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bridge_lifecycle.py
+      - super-fr:tests/unit/test_done_reconcile.py
+    status: ci
+    notes: Seen-set idempotence pinned per-PR.
+  - id: invariants-tripwires
+    capability: Conventions
+    acceptance: 'Org conventions are code-enforced: no claude -p batch in packages,
+      the isolation marker is never tracked, shipped rules install'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-06-21-enforce-invariants-over-prose-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_claude_p.py
+      - super-fr:tests/unit/test_tripwire_isolation_marker.py
+      - super-fr:tests/unit/test_install_copies_rules.py
+    status: ci
+    notes: Tripwires ARE the acceptance (#328).
+  - id: auto-archive-merged-plans
+    capability: Lifecycle
+    acceptance: Merged-but-unarchived plans are detected by the fr status sweep and
+      enforced archived by a CI tripwire
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-07-03-auto-archive-merged-plans-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_completed_unarchived_plans.py
+      - super-fr:tests/unit/test_tripwire_unarchived_plans.py
+    status: ci
+    notes: Tripwire checks completeness on origin/main (#334).

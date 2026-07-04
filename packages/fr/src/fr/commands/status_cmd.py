@@ -201,3 +201,28 @@ def status_command(
         console.print_json(_json.dumps({"plans": [_report_json(report)]}))
     else:
         console.print(_report_text(report))
+        section = _acceptance_section(resolve_repo_root())
+        if section:
+            console.print(section)
+
+
+def _acceptance_section(root: Path) -> str | None:
+    """One-line acceptance nag (2026-07-04 spec, decision 1b). Only when the
+    repo has adopted a matrix — unadopted repos are the hook's business, not
+    every status call's. Best-effort read-only."""
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    if not matrix_path.exists():
+        return None
+    try:
+        from collections import Counter
+
+        from fr.acceptance.check import open_rows
+        from fr.acceptance.model import load_matrix
+
+        matrix = load_matrix(matrix_path)
+        counts = Counter(r.status for r in matrix.rows)
+        summary = ", ".join(f"{s}: {n}" for s, n in sorted(counts.items())) or "empty"
+        n_open = len(open_rows(matrix))
+        return f"\nAcceptance: {summary} — {n_open} open (details: fr acceptance status)"
+    except Exception as e:  # noqa: BLE001 — a broken matrix must not break status
+        return f"\nAcceptance: matrix unreadable ({e}) — fr acceptance check"

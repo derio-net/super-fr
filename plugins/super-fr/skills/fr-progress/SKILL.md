@@ -65,6 +65,14 @@ per-phase table, completion-guard refusals, drift warnings (including
 "Issue closed but plan is incomplete" reverse drift), and the archive
 nudge. Safe to allowlist — it never mutates.
 
+## Acceptance debt
+
+`fr acceptance status` — counts by status + the open `skipped` /
+`not-implemented` rows (backfill owed, oldest first); `--brief` is the capped
+session-start form. `fr status <plan-dir>` appends the same one-line summary
+when the repo has `docs/acceptance/matrix.yaml`. Gate: `fr acceptance check`
+(exit 2 on `failing` rows). See the `fr-acceptance` skill for backfill.
+
 ## Tick / complete phases
 
 ```bash

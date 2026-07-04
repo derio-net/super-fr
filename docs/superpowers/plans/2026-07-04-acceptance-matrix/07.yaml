@@ -1,0 +1,123 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Nag hook + skills (new fr-acceptance, five edits)
+  tag: agentic
+  depends_on:
+  - 4
+  - 5
+  - 6
+  tracking_issue: null
+  acceptance:
+  - acceptance-nag-channels
+  - acceptance-pipeline-rows
+tasks:
+- number: 1
+  title: SessionStart acceptance-nag hook
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: tests/unit/test_hooks_acceptance_nag.py (pattern:
+      test_hooks_sentinel.py — invoke the script with a fake stdin
+      payload + tmp repo): (a) repo with matrix + open warning rows →
+      stdout JSON/context contains the counts line and ≤3 row ids
+      (capped, spec §6.1); (b) matrix with zero debt → empty output,
+      exit 0; (c) no matrix / not a git repo / fr binary absent →
+      silent exit 0 (never break session start); (d) hooks.json gains a
+      SessionStart entry pointing at fr-acceptance-nag.sh (assert JSON
+      structure). Run → red.
+  - id: P7.T1.S2
+    text: |-
+      GREEN: plugins/super-fr/hooks/fr-acceptance-nag.sh: cd to CWD from
+      the hook payload, [ -f docs/acceptance/matrix.yaml ] || exit 0,
+      command -v fr || exit 0, emit `fr acceptance status --brief`
+      output as additionalContext (SessionStart hook output contract),
+      always exit 0. Register in hooks.json under SessionStart. Tests
+      pass.
+- number: 2
+  title: fr-acceptance skill + fr skills entry
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      RED: extend tests/unit/test_skill_validation.py with content
+      assertions: fr-acceptance/SKILL.md exists (glob floor 9→10),
+      references `fr acceptance backfill` and `fr acceptance check`,
+      and carries the calibration line "when in doubt between ci and
+      skipped, choose skipped"; test_cli/skills: `fr skills` output
+      includes fr-acceptance. Run → red.
+  - id: P7.T2.S2
+    text: |-
+      GREEN: write plugins/super-fr/skills/fr-acceptance/SKILL.md (≤120
+      lines): frontmatter (name, description with backfill/matrix/
+      acceptance-debt triggers), the backfill drive protocol (§7):
+      inventory → draft rows via `fr acceptance add` → honest statuses →
+      check → review PR; status-flip guidance for fr-execute handoffs;
+      mid-flight addition etiquette (decision 6). Add SKILLS entry in
+      skills_cmd.py. Tests pass.
+- number: 3
+  title: Pipeline skill edits (brainstorm/plan/execute/goal/progress)
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      RED: content assertions in test_skill_validation.py:
+      fr-brainstorming mentions `fr acceptance add` and "defense";
+      fr-plan mentions `acceptance:` phase linkage; fr-execute mentions
+      flipping statuses at phase completion; fr-goal mentions
+      "acceptance debt" and `--added-since`; fr-progress mentions
+      `fr acceptance status`. All five must stay ≤120 lines
+      (test_under_120_lines already enforces). Run → red.
+  - id: P7.T3.S2
+    text: |-
+      GREEN: edit the five SKILL.md files per spec §5: fr-brainstorming
+      — draft rows born with the spec, closing presentation with per-row
+      one-line defenses (decision 5); fr-plan — phases carry acceptance:
+      ids, self-review enforces, planning may ADD rows (decision 6);
+      fr-execute — completing a phase flips linked rows with test refs,
+      unflipped rows called out in the completion note, may ADD rows;
+      fr-goal — close-out runs fr acceptance status, PR body carries
+      remaining debt + "rows added since brainstorm" via --added-since;
+      fr-progress — acceptance section. fr-goal (120/120) and
+      fr-execute (119/120): compress existing prose to fit (tighten the
+      step-1/step-6 wording; no content loss). Tests pass incl. line
+      caps.
+  - id: P7.T3.S3
+    text: |-
+      REFACTOR (optional): re-read the five diffs for voice consistency
+      with each skill's register; shellcheck fr-acceptance-nag.sh. Stay
+      green.
+state:
+  steps:
+    P7.T1.S1:
+      state: x
+      ticked_at: '2026-07-04T17:24:49+00:00'
+      note: null
+    P7.T1.S2:
+      state: x
+      ticked_at: '2026-07-04T17:24:50+00:00'
+      note: null
+    P7.T2.S1:
+      state: x
+      ticked_at: '2026-07-04T17:24:51+00:00'
+      note: null
+    P7.T2.S2:
+      state: x
+      ticked_at: '2026-07-04T17:24:52+00:00'
+      note: null
+    P7.T3.S1:
+      state: x
+      ticked_at: '2026-07-04T17:24:54+00:00'
+      note: null
+    P7.T3.S2:
+      state: x
+      ticked_at: '2026-07-04T17:24:55+00:00'
+      note: null
+    P7.T3.S3:
+      state: x
+      ticked_at: '2026-07-04T17:24:56+00:00'
+      note: null
+  completion:
+    at: '2026-07-04T17:24:58+00:00'
+    note: SessionStart nag hook + hooks.json; fr-acceptance skill; 5 pipeline skill
+      edits within 120-line cap (fr-goal/fr-execute compressed); content-assertion
+      tests
+    observed_prs: []
