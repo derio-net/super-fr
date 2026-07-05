@@ -1,0 +1,76 @@
+schema_version: 2
+phase:
+  number: 3
+  title: fr isolation gc — host-wide discovery, classification, reap, CLI
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+  acceptance:
+  - isolation-gc-reconciles-merged
+tasks:
+- number: 1
+  title: Host-wide workspace discovery
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED. test_gc_discovers_label_and_worktree_union: stub `docker ps -a --filter label=devcontainer.local_folder` to list a container→worktree path, create real worktrees under HOME/.cache/fr/worktrees/<repo>/<branch> via _upped, and assert _discover_workspaces() returns one entry per distinct worktree (union of docker-label paths + on-disk worktree dirs), each git-resolved to (repo_root, branch, state|None). Run → fails (no such method).
+  - id: P3.T1.S2
+    text: |-
+      GREEN. Add _discover_workspaces() on LocalWorktreeDevcontainerTarget: parse `docker ps -a --filter label=devcontainer.local_folder --format '{{.ID}}\t{{.Label \"devcontainer.local_folder\"}}'`; glob HOME/.cache/fr/worktrees/*/*; for each worktree path resolve the owning repo via `git -C <wt> rev-parse --git-common-dir` and load_state from there. Return a list of dataclass records (container_id, worktree, repo, branch, state). Re-run → passes.
+- number: 2
+  title: Classification + reap (dry-run aware, per-workspace error isolation)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED. test_gc_classifies_and_reaps: five discovered workspaces — MERGED (gh), OPEN (gh), no-PR (gh returns none), orphan (worktree dir absent, container by label), no-state (worktree present, no state file). Assert gc() calls down() on MERGED only, skips OPEN, warns (no reap) on no-PR and no-state, and label-reaps the orphan (docker stop/rm/rmi on its id + deletes any dangling state). Add test_gc_one_failure_does_not_abort_sweep: make the MERGED down() raise (surviving container) and assert the sweep still processes the remaining workspaces and reports the failure. Add test_gc_dry_run_mutates_nothing. Run → fails.
+  - id: P3.T2.S2
+    text: |-
+      GREEN. Add gc(dry_run=False) → GcReport(list of per-workspace verdict+action). Classify per the spec table; for MERGED call self.down(state, force=False) inside try/except IsolationError (log + continue); orphan → _label_reap(container_id) + delete dangling state; no-PR / no-state → record warn; OPEN → skip. dry_run short-circuits before any mutation. Re-run → passes.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR (optional). Extract the classify decision into a pure helper (record → verdict) if the branch logic reads densely; keep behavior identical, tests green. Skip if already clean.
+- number: 3
+  title: 'CLI: fr isolation gc'
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED. In tests/unit/test_isolation_cmd.py add test_gc_cli_reports (CliRunner invoke ["isolation","gc","--dry-run"], StubTarget or _runner fake) → exit 0, human-readable per-workspace lines; and test_gc_cli_json (`--format json`) → parseable JSON list of {branch, verdict, action}. Run → fails (no gc command).
+  - id: P3.T3.S2
+    text: |-
+      GREEN. Add `@isolation_app.command(name=\"gc\")` in packages/fr/src/fr/commands/isolation_cmd.py: options --dry-run and --format (text|json); delegate to _target(cwd).gc(dry_run=...); render the report; map IsolationError via _fail. Re-run → passes.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-05T16:15:54+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-05T16:15:55+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-05T16:15:57+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-05T16:15:58+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-07-05T16:15:59+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-07-05T16:16:00+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-07-05T16:16:02+00:00'
+      note: null
+  completion:
+    at: '2026-07-05T16:16:03+00:00'
+    note: null
+    observed_prs: []

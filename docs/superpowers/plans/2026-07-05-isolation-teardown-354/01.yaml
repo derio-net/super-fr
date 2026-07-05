@@ -1,0 +1,60 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Task A — down() verifies container + worktree teardown before deleting state
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - isolation-down-verified
+tasks:
+- number: 1
+  title: Stateful docker fake + container-gone verification
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. In tests/unit/test_isolation.py add a stateful docker fake (extend FakeRunner or add StatefulDockerRunner) that records `docker rm <id>` removals and drops removed ids from subsequent `docker ps` output — unless the rm is failed. Write test_down_raises_when_container_survives_stop_rm: build an upped workspace (MERGED gh stub so the open-PR guard passes), fail the `docker rm` so the container survives, call target.down(state), assert it raises IsolationError, and assert the state file (load_state(...) is not None) AND the .fr-isolation marker still exist and the worktree is NOT removed. Run `uv run pytest -q --no-cov tests/unit/test_isolation.py -k down_raises_when_container` → fails (down currently ignores rc and deletes state).
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/isolation/local.py down(): after `docker stop` + `docker rm`, re-query `self._container_id(state)`; if it is not None, raise IsolationError("container for <branch> still present after docker stop/rm — workspace left intact (still visible to `fr isolation status`); retry `down`."). Move `self._remove_isolation_marker(state.worktree)` to AFTER the (later) worktree removal so a raise leaves the marker in place. Re-run the test → passes. Confirm existing down tests (test_down_force_removes_worktree_and_state, test_down_merged_pr_cleans_without_force) still pass.
+- number: 2
+  title: Worktree-remove verification
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED. test_down_raises_when_worktree_remove_fails: upped workspace, MERGED gh, container removes cleanly, but `git worktree remove` fails AND the worktree dir still exists (force the git call to fail via the fake while leaving the dir on disk). Assert down() raises IsolationError and load_state(...) is not None (delete_state NOT reached). Run pytest -k worktree_remove_fails → fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN. In down(): capture the `git worktree remove` CompletedProcess; if returncode != 0 AND state.worktree.exists(), raise IsolationError naming the path + stderr and "state left intact; retry `down`." Only reach _remove_isolation_marker + delete_state when the worktree is gone. Re-run → passes.
+- number: 3
+  title: Orphan-down + success/guard regression
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED→GREEN. test_down_completes_when_worktree_already_gone: worktree dir removed out-of-band before down(); `git worktree remove` fails but state.worktree.exists() is False → down() completes and delete_state runs (load_state is None). Also assert the happy path (test_down_force_removes_worktree_and_state) and the open-PR guard (test_down_refuses_open_pr_without_force) are unchanged, and that `--force` does NOT bypass the new container-gone check (a force down with a surviving container still raises). Run the full test_isolation.py → green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-05T15:43:19+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-05T15:43:20+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-07-05T15:43:21+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-07-05T15:43:22+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-07-05T15:43:22+00:00'
+      note: null
+  completion:
+    at: '2026-07-05T15:43:23+00:00'
+    note: null
+    observed_prs: []

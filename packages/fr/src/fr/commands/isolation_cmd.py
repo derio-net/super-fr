@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 import typer
 
-from fr.isolation.local import LocalWorktreeDevcontainerTarget, subprocess_runner
+from fr.isolation.local import (
+    LocalWorktreeDevcontainerTarget,
+    _detached_gc_spawn,
+    subprocess_runner,
+)
 from fr.isolation.types import (
     IsolationError,
     clear_repo_sentinels,
@@ -28,12 +33,15 @@ isolation_app = typer.Typer(
 
 # Module-level runner seam so tests can monkeypatch every external call.
 _runner = subprocess_runner
+# Production entry point opts into the real detached gc spawn on up/down; the
+# library default is a no-op. Module seam so tests never fork a real sweep.
+_gc_spawner = _detached_gc_spawn
 
 DEFAULT_BRANCH = "vk-iso/work"
 
 
 def _target(repo: Path) -> LocalWorktreeDevcontainerTarget:
-    return LocalWorktreeDevcontainerTarget(repo.resolve(), runner=_runner)
+    return LocalWorktreeDevcontainerTarget(repo.resolve(), runner=_runner, gc_spawner=_gc_spawner)
 
 
 def _fail(err: IsolationError) -> None:
@@ -341,3 +349,31 @@ def verify_merge(
         err=True,
     )
     raise typer.Exit(1)
+
+
+@isolation_app.command()
+def gc(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Classify + report only; mutate nothing."
+    ),
+    format: str = typer.Option("text", "--format", help="text | json"),
+) -> None:
+    """Reconcile isolation workspaces host-wide (#354).
+
+    Tears down workspaces whose PR merged, skips open PRs, warns on no-PR work,
+    and reaps orphaned containers — so end-to-end runs no longer depend on a
+    human running `down` in the originating session. Fired opportunistically on
+    every up/down; also runnable standalone or on a schedule.
+    """
+    actions = _target(Path.cwd()).gc(dry_run=dry_run)
+    if format == "json":
+        typer.echo(json.dumps([asdict(a) for a in actions], indent=2))
+        return
+    if not actions:
+        typer.echo("gc: no isolation workspaces.")
+        return
+    for a in actions:
+        line = f"gc: {a.branch or a.worktree}: {a.verdict} → {a.action}"
+        if a.detail:
+            line += f" ({a.detail})"
+        typer.echo(line)

@@ -8,6 +8,8 @@ and down re-find the container.
 
 from __future__ import annotations
 
+import errno
+import fcntl
 import json
 import os
 import subprocess
@@ -16,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from fr.isolation.types import (
     IsolationError,
@@ -24,6 +26,7 @@ from fr.isolation.types import (
     _git_common_dir,
     _warn_legacy,
     delete_state,
+    list_states,
     resolve_profile,
     save_state,
 )
@@ -43,6 +46,41 @@ def _home() -> Path:
     return Path(os.environ.get("HOME", str(Path.home())))
 
 
+# --- opportunistic gc spawn seam (#354 Task B) ---
+#
+# `up`/`down` fire a detached `fr isolation gc` after their own work — the
+# primary auto-trigger that bounds the steady-state leak to <=1 workspace with
+# no daemon. Routed through an INJECTABLE seam (not the Runner: a fire-and-forget
+# Popen is a different shape than subprocess.run) so the non-blocking /
+# non-raising contract is testable. The library default is a NO-OP — production
+# opts into the real spawn at the CLI boundary, so a Target built directly (every
+# unit test, and gc's own sibling teardown Targets) never spawns.
+GcSpawner = Callable[[], None]
+
+
+def _detached_gc_spawn() -> None:
+    """Fire-and-forget `fr isolation gc`: detached (own session), non-blocking,
+    output to a rotating-ish log. Any spawn error is swallowed — a caller must
+    never fail because a background reap could not start."""
+    try:
+        log_path = _home() / ".cache" / "fr" / "isolation-gc.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log = open(log_path, "a")  # noqa: SIM115 — handed to the child; not ours to close
+        subprocess.Popen(
+            [sys.executable, "-m", "fr", "isolation", "gc"],
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+        )
+    except Exception:
+        pass
+
+
+def _noop_gc_spawn() -> None:
+    """The safe default — no background sweep (see GcSpawner)."""
+
+
 @dataclass
 class MergeVerification:
     """Whether a branch's changes are present on a base ref (#320 close-out)."""
@@ -50,6 +88,30 @@ class MergeVerification:
     changed: list[str]  # files the branch changed since its merge-base
     missing: list[str]  # changed files NOT yet present on the base ref
     changes_present: bool
+
+
+@dataclass
+class GcWorkspace:
+    """A workspace discovered by the host-wide gc sweep (#354 Task B).
+
+    `state` is None for a true orphan (worktree gone, container found only by
+    docker label) or an ambiguous label-less directory with no fr state.
+    """
+
+    worktree: Path
+    container_id: str | None
+    state: IsolationState | None
+
+
+@dataclass
+class GcAction:
+    """One workspace's gc verdict + what gc did about it (#354 Task B)."""
+
+    worktree: str
+    branch: str | None
+    verdict: str  # merged | open | no-pr | orphan | no-state
+    action: str  # reaped | skipped | warned | reap-failed | would-reap
+    detail: str = ""
 
 
 def branch_changes_present(
@@ -99,13 +161,19 @@ def _main_worktree_root(repo_root: Path) -> Path:
 
 
 class LocalWorktreeDevcontainerTarget:
-    def __init__(self, repo_root: Path, runner: Runner = subprocess_runner):
+    def __init__(
+        self,
+        repo_root: Path,
+        runner: Runner = subprocess_runner,
+        gc_spawner: GcSpawner = _noop_gc_spawn,
+    ):
         # resolve() — the mount target must match the realpath git bakes
         # into the worktree's gitdir pointer (symlinked /tmp on macOS etc.).
         # Then normalize to the main toplevel so a worktree-launched run keys
         # off the durable main checkout (#292).
         self.repo_root = _main_worktree_root(Path(repo_root).resolve())
         self.run = runner
+        self._gc_spawner = gc_spawner
 
     # ---------- lifecycle ----------
 
@@ -179,6 +247,7 @@ class LocalWorktreeDevcontainerTarget:
         )
         save_state(state)
         self._write_isolation_marker(worktree, branch)
+        self._spawn_gc()
         return state
 
     def exec(self, state: IsolationState, argv: list[str]) -> int:
@@ -226,7 +295,7 @@ class LocalWorktreeDevcontainerTarget:
         inferring it from hung execs. Returns None (never raises) for a missing,
         non-running, or unreadable container — the caller renders `n/a`."""
         # One `docker ps` for both id and state (id state, space-joined).
-        parts = self._docker_ps(state).split()
+        parts = self._docker_ps_line(state).split()
         if len(parts) < 2 or parts[1] != "running":
             return None
         container = parts[0]
@@ -293,22 +362,280 @@ class LocalWorktreeDevcontainerTarget:
         }
 
     def down(self, state: IsolationState, force: bool = False) -> None:
+        """Tear down the workspace, verifying each destructive step's
+        POST-CONDITION before deleting the bookkeeping (#354 Task A).
+
+        Historically `down` ran `docker stop`/`rm` and `git worktree remove`
+        with their return codes ignored, then `delete_state()` unconditionally —
+        so a transient docker hiccup left a running container that `fr isolation
+        status` could no longer see (state gone). Now: re-query the container /
+        worktree AFTER the teardown call and, if it survived, raise
+        `IsolationError` while LEAVING the state file + `.fr-isolation` marker in
+        place, so the workspace stays visible and a retry (or `--force` for the
+        open-PR case) can finish the job.
+
+        Re-query — not the return code — is authoritative: `docker rm` on an
+        already-gone container returns non-zero while the post-condition (gone)
+        holds, and a `rm` can return 0 yet leave a wedged container. `--force`
+        bypasses the open-PR guard ONLY; it never skips this verification (that
+        would re-introduce the invisible-leak bug).
+        """
         pr = self._pr(state)
         if pr and pr.get("state") == "OPEN" and not force:
             raise IsolationError(
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
-        self._remove_isolation_marker(state.worktree)
-        container = self._container_id(state)
+        # A FAILED `docker ps` (daemon unreachable) must NOT be read as "no
+        # container" — that path would `delete_state()` while a container may
+        # still be running once the daemon recovers, the exact #354 leak. So the
+        # probe raises on query failure, only a successful-but-empty result means
+        # "genuinely absent".
+        probe = self._docker_ps(state)
+        if probe.returncode != 0:
+            raise IsolationError(
+                f"docker ps failed while tearing down {state.branch} "
+                f"({(probe.stderr or probe.stdout or '').strip()}) — cannot verify teardown; "
+                "state left intact, retry `fr isolation down` once docker recovers."
+            )
+        line = (probe.stdout or "").strip()
+        container = line.split()[0] if line else None
+        # Capture the image id BEFORE `docker rm` (the container must still exist
+        # to inspect it); reclaim it AFTER the container is confirmed gone.
+        image = self._image_for(container) if container else None
         if container:
             self.run(["docker", "stop", container])
             self.run(["docker", "rm", container])
-        self.run(
+            verify = self._docker_ps(state)
+            if verify.returncode != 0 or (verify.stdout or "").strip():
+                raise IsolationError(
+                    f"container for {state.branch} still present (or unverifiable) after "
+                    "docker stop/rm — workspace left intact (still visible to `fr isolation "
+                    "status`); retry `fr isolation down` once docker recovers."
+                )
+            self._reclaim_image(image)
+        wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
             cwd=self.repo_root,
         )
+        if wt.returncode != 0 and state.worktree.exists():
+            raise IsolationError(
+                f"git worktree remove failed for {state.worktree}: "
+                f"{wt.stderr or wt.stdout} — state left intact; retry `fr isolation down`."
+            )
+        # Marker removal is LAST: a raise above leaves the marker inside the
+        # still-present worktree, so the workspace stays a valid isolation
+        # workspace. When the worktree is gone the marker went with it — the
+        # unlink is then an idempotent no-op.
+        self._remove_isolation_marker(state.worktree)
         delete_state(state.repo_root, state.branch)
+        self._spawn_gc()
+
+    def _spawn_gc(self) -> None:
+        """Fire the opportunistic background sweep — best-effort, never raises
+        into up()/down()."""
+        try:
+            self._gc_spawner()
+        except Exception:
+            pass
+
+    # ---------- gc: host-wide reconciliation (#354 Task B) ----------
+
+    def gc(self, dry_run: bool = False) -> list[GcAction]:
+        """Reconcile every isolation workspace on the host: tear down the ones
+        whose PR merged, leave open-PR and no-PR work alone, and reap orphaned
+        containers. Host-wide (an `up` in repo A reaps completed work in B…F),
+        so end-to-end workflows no longer depend on a human remembering to run
+        `down` in the originating session.
+
+        Classification is authoritative BEFORE any action — a blind `down()`
+        would reap in-progress no-PR work (its guard only blocks OPEN PRs). Each
+        workspace is handled in isolation: one failed teardown is recorded and
+        the sweep continues.
+
+        A host-wide flock serializes concurrent sweeps (two near-simultaneous
+        up/down each fork a gc): the second gets `EWOULDBLOCK` and short-circuits
+        to an empty report. The sweep is idempotent, so a skipped overlap is
+        harmless — the next up/down re-runs it.
+        """
+        try:
+            lock = self._acquire_gc_lock()
+        except BlockingIOError:
+            return []
+        try:
+            actions = [self._gc_one(rec, dry_run) for rec in self._discover_workspaces()]
+            actions.extend(self._sweep_dangling_images(dry_run))
+            return actions
+        finally:
+            lock.close()
+
+    def _acquire_gc_lock(self) -> IO[str]:
+        """flock(LOCK_EX | LOCK_NB) on the host-wide gc lock; BlockingIOError if
+        another sweep holds it. Idiom mirrored from fr_vk.bridge_cli (reimplemented
+        locally — `fr` must not depend on `fr_vk`, which is being dropped)."""
+        lock_path = _home() / ".cache" / "fr" / "isolation-gc.lock"
+        try:
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            lock_path = Path("/tmp/fr-isolation-gc.lock")  # noqa: S108 — unprivileged fallback
+        fh = open(lock_path, "w")
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            fh.close()
+            if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                raise BlockingIOError("gc sweep already in progress") from e
+            raise
+        return fh
+
+    def _gc_one(self, rec: GcWorkspace, dry_run: bool) -> GcAction:
+        wt = str(rec.worktree)
+        if not rec.worktree.is_dir():
+            # Orphan: worktree gone. If a container lingers (found by label),
+            # reap it directly — no PR check needed (worktree gone ⇒ done).
+            if not rec.container_id:
+                return GcAction(wt, None, "orphan", "skipped", "no container")
+            if dry_run:
+                return GcAction(wt, None, "orphan", "would-reap")
+            try:
+                self._label_reap(rec.container_id)
+                if rec.state is not None:  # dangling state file, if any
+                    delete_state(rec.state.repo_root, rec.state.branch)
+                return GcAction(wt, None, "orphan", "reaped", rec.container_id)
+            except Exception as e:  # reap is best-effort; never abort the sweep
+                return GcAction(wt, None, "orphan", "reap-failed", str(e))
+        state = rec.state
+        if state is None:
+            return GcAction(wt, None, "no-state", "warned", "worktree present, no fr state")
+        pr = self._pr_from(state.worktree, state.branch)
+        pr_state = pr.get("state") if pr else None
+        if pr_state == "MERGED":
+            if dry_run:
+                return GcAction(wt, state.branch, "merged", "would-reap")
+            try:
+                # Tear down through a Target rooted at the workspace's OWN repo
+                # (down() keys git/gh off its repo_root) — substrate-neutral: gc
+                # orchestrates Targets, it doesn't reach past them. The sibling
+                # gets the NO-OP spawner so a reap never re-triggers a sweep.
+                type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
+                    state, force=False
+                )
+                return GcAction(wt, state.branch, "merged", "reaped")
+            except Exception as e:
+                # Broad by design (matches the orphan branch): one workspace's
+                # teardown — IsolationError, a missing binary, an OSError from
+                # delete_state — must NEVER abort the host-wide sweep.
+                return GcAction(wt, state.branch, "merged", "reap-failed", str(e))
+        if pr_state == "OPEN":
+            return GcAction(wt, state.branch, "open", "skipped")
+        return GcAction(
+            wt, state.branch, "no-pr", "warned", "no PR — `fr isolation down` when done"
+        )
+
+    def _discover_workspaces(self) -> list[GcWorkspace]:
+        """Union docker-label containers with on-disk worktree dirs, then
+        git-resolve each existing worktree to its fr state. State is per-repo
+        (no host registry), so the worktree is the discovery root."""
+        by_path: dict[Path, GcWorkspace] = {}
+        for cid, path in self._labelled_containers():
+            by_path[path] = GcWorkspace(worktree=path, container_id=cid, state=None)
+        for path in self._worktree_dirs():
+            by_path.setdefault(path, GcWorkspace(worktree=path, container_id=None, state=None))
+        for path, rec in by_path.items():
+            if path.is_dir():
+                try:
+                    rec.state = self._resolve_state(path)
+                except Exception:
+                    # A single corrupt/unreadable state JSON must not abort the
+                    # host-wide sweep — treat as no-state (the workspace is then
+                    # warned, never blindly reaped).
+                    rec.state = None
+        return list(by_path.values())
+
+    def _labelled_containers(self) -> list[tuple[str, Path]]:
+        result = self.run(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                "label=devcontainer.local_folder",
+                "--format",
+                '{{.ID}}\t{{.Label "devcontainer.local_folder"}}',
+            ]
+        )
+        out: list[tuple[str, Path]] = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split("\t")
+            if len(parts) == 2 and parts[0] and parts[1]:
+                out.append((parts[0], Path(parts[1])))
+        return out
+
+    def _worktree_dirs(self) -> list[Path]:
+        root = _home() / ".cache" / "fr" / "worktrees"
+        if not root.is_dir():
+            return []
+        return [
+            child
+            for repo in root.iterdir()
+            if repo.is_dir()
+            for child in repo.iterdir()
+            if child.is_dir()
+        ]
+
+    def _resolve_state(self, worktree: Path) -> IsolationState | None:
+        common = _git_common_dir(worktree)
+        repo_root = common.parent if common.name == ".git" else common
+        for st in list_states(repo_root):
+            if st.worktree == worktree or st.worktree.resolve() == worktree.resolve():
+                return st
+        return None
+
+    def _label_reap(self, container_id: str) -> None:
+        """Reap a container found only by docker label (worktree already gone):
+        stop + rm + best-effort image rmi."""
+        image = self._image_for(container_id)
+        self.run(["docker", "stop", container_id])
+        self.run(["docker", "rm", container_id])
+        self._reclaim_image(image)
+
+    def _sweep_dangling_images(self, dry_run: bool) -> list[GcAction]:
+        """rmi `vsc-*` devcontainer images no live container references — the
+        ~1 GB layers that accumulate as workspaces come and go (#354). Each rmi
+        is best-effort: a still-referenced image failing is recorded, never
+        raised."""
+        referenced = self._referenced_images()
+        out: list[GcAction] = []
+        for image_id, repo in self._vsc_images():
+            if image_id in referenced or repo in referenced:
+                continue
+            if dry_run:
+                out.append(GcAction(repo, None, "dangling-image", "would-reap", image_id))
+                continue
+            r = self.run(["docker", "rmi", image_id])
+            out.append(
+                GcAction(
+                    repo,
+                    None,
+                    "dangling-image",
+                    "reaped" if r.returncode == 0 else "reap-failed",
+                    image_id,
+                )
+            )
+        return out
+
+    def _vsc_images(self) -> list[tuple[str, str]]:
+        result = self.run(["docker", "images", "--format", "{{.ID}}\t{{.Repository}}"])
+        out: list[tuple[str, str]] = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split("\t")
+            if len(parts) == 2 and parts[1].startswith("vsc-"):
+                out.append((parts[0], parts[1]))
+        return out
+
+    def _referenced_images(self) -> set[str]:
+        result = self.run(["docker", "ps", "-a", "--format", "{{.Image}}"])
+        return {ln.strip() for ln in (result.stdout or "").splitlines() if ln.strip()}
 
     # ---------- helpers ----------
 
@@ -475,8 +802,8 @@ class LocalWorktreeDevcontainerTarget:
                 env_file.parent.mkdir(parents=True, exist_ok=True)
                 env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")
 
-    def _docker_ps(self, state: IsolationState) -> str:
-        result = self.run(
+    def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:
+        return self.run(
             [
                 "docker",
                 "ps",
@@ -485,20 +812,53 @@ class LocalWorktreeDevcontainerTarget:
                 "--format={{.ID}} {{.State}}",
             ]
         )
-        return (result.stdout or "").strip()
+
+    def _docker_ps_line(self, state: IsolationState) -> str:
+        """Tolerant read for status/stats — empty on absent OR query failure.
+        `down()` uses the raw `_docker_ps` so it can tell those two apart: a
+        FAILED query must never be read as 'container gone' (that would re-open
+        the #354 leak under a down daemon), only a successful-but-empty one."""
+        return (self._docker_ps(state).stdout or "").strip()
 
     def _container_id(self, state: IsolationState) -> str | None:
-        line = self._docker_ps(state)
+        line = self._docker_ps_line(state)
         return line.split()[0] if line else None
 
+    def _image_for(self, container: str) -> str | None:
+        """The image id backing a container (for post-teardown reclamation)."""
+        result = self.run(["docker", "inspect", "--format", "{{.Image}}", container])
+        img = (result.stdout or "").strip()
+        return img if result.returncode == 0 and img else None
+
+    def _reclaim_image(self, image: str | None) -> None:
+        """Best-effort `docker rmi` — #354. A devcontainer's `vsc-*` image is
+        ~1 GB and leaks today (down never removed it). Reclamation is OFF the
+        verification path: a shared / in-use image failing `rmi` is logged, never
+        fatal — image cleanup must not block a teardown whose container is
+        already gone."""
+        if not image:
+            return
+        result = self.run(["docker", "rmi", image])
+        if result.returncode != 0:
+            print(
+                f"warning: could not remove image {image} (shared or in use?): "
+                f"{(result.stderr or result.stdout or '').strip()}",
+                file=sys.stderr,
+            )
+
     def _container_state(self, state: IsolationState) -> str | None:
-        line = self._docker_ps(state)
-        return line.split()[1] if line and len(line.split()) > 1 else None
+        parts = self._docker_ps_line(state).split()
+        return parts[1] if len(parts) > 1 else None
 
     def _pr(self, state: IsolationState) -> dict[str, Any] | None:
+        return self._pr_from(self.repo_root, state.branch)
+
+    def _pr_from(self, cwd: Path, branch: str) -> dict[str, Any] | None:
+        """`gh pr view` from an arbitrary repo cwd — gc reconciles workspaces
+        across repos, so it can't assume `self.repo_root`. gh uses host auth."""
         result = self.run(
-            ["gh", "pr", "view", state.branch, "--json", "state,url"],
-            cwd=self.repo_root,
+            ["gh", "pr", "view", branch, "--json", "state,url"],
+            cwd=cwd,
         )
         if result.returncode != 0 or not (result.stdout or "").strip():
             return None
