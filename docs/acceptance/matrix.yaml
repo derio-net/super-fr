@@ -213,10 +213,13 @@ rows:
       silent state delete that orphans the container.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-05-isolation-teardown-354-design.md
-    levels: {}
-    status: not-implemented
-    notes: '#354 Task A. Unit-pinnable over the Runner seam (fail_on docker/git); real-docker
-      leg is Test-Plan item 1, post-merge.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+    status: skipped
+    notes: '#354 Task A. Verification + image reclamation unit-pinned over the Runner
+      seam (stateful docker fake: surviving container/worktree → raise + state kept);
+      the real-docker transient-failure leg is Test-Plan item 1, post-merge.'
   - id: isolation-gc-reconciles-merged
     capability: Isolation teardown
     acceptance: A merged-PR isolation workspace is torn down (container, worktree, state,

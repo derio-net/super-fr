@@ -318,6 +318,9 @@ class LocalWorktreeDevcontainerTarget:
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
         container = self._container_id(state)
+        # Capture the image id BEFORE `docker rm` (the container must still exist
+        # to inspect it); reclaim it AFTER the container is confirmed gone.
+        image = self._image_for(container) if container else None
         if container:
             self.run(["docker", "stop", container])
             self.run(["docker", "rm", container])
@@ -327,6 +330,7 @@ class LocalWorktreeDevcontainerTarget:
                     "workspace left intact (still visible to `fr isolation status`); "
                     "retry `fr isolation down` once docker recovers."
                 )
+            self._reclaim_image(image)
         wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
             cwd=self.repo_root,
@@ -523,6 +527,28 @@ class LocalWorktreeDevcontainerTarget:
     def _container_id(self, state: IsolationState) -> str | None:
         line = self._docker_ps(state)
         return line.split()[0] if line else None
+
+    def _image_for(self, container: str) -> str | None:
+        """The image id backing a container (for post-teardown reclamation)."""
+        result = self.run(["docker", "inspect", "--format", "{{.Image}}", container])
+        img = (result.stdout or "").strip()
+        return img if result.returncode == 0 and img else None
+
+    def _reclaim_image(self, image: str | None) -> None:
+        """Best-effort `docker rmi` — #354. A devcontainer's `vsc-*` image is
+        ~1 GB and leaks today (down never removed it). Reclamation is OFF the
+        verification path: a shared / in-use image failing `rmi` is logged, never
+        fatal — image cleanup must not block a teardown whose container is
+        already gone."""
+        if not image:
+            return
+        result = self.run(["docker", "rmi", image])
+        if result.returncode != 0:
+            print(
+                f"warning: could not remove image {image} (shared or in use?): "
+                f"{(result.stderr or result.stdout or '').strip()}",
+                file=sys.stderr,
+            )
 
     def _container_state(self, state: IsolationState) -> str | None:
         line = self._docker_ps(state)

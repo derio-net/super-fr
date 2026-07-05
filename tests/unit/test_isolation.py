@@ -199,6 +199,8 @@ class FakeRunner:
         out = self.stdout.get(argv[0], "")
         if argv[0:2] == ["docker", "ps"]:
             out = self._docker_ps_out()
+        elif argv[0:2] == ["docker", "inspect"]:
+            out = self.stdout.get("docker_image", "")
         return subprocess.CompletedProcess(argv, rc, stdout=out, stderr="")
 
     def _docker_ps_out(self) -> str:
@@ -917,6 +919,46 @@ def test_down_force_still_verifies_container(
     with pytest.raises(IsolationError, match="still present"):
         target.down(st, force=True)
     assert load_state(repo, "vk-iso/test") is not None
+
+
+def test_down_reclaims_image(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target, st = _upped(
+        tmp_path,
+        monkeypatch,
+        stdout={
+            "docker": "abc123 running\n",
+            "docker_image": "vsc-img-sha\n",
+            "gh": '{"state": "MERGED", "url": "u"}',
+        },
+    )
+    target.down(st, force=False)
+    assert not st.worktree.exists()
+    assert ["docker", "rmi", "vsc-img-sha"] in runner.argv_for("docker")
+
+
+def test_down_rmi_failure_is_non_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A shared / in-use image failing `docker rmi` must NOT fail a teardown
+    # whose container is already gone.
+    repo, runner, target, st = _upped(
+        tmp_path,
+        monkeypatch,
+        fail_on="rmi",
+        stdout={
+            "docker": "abc123 running\n",
+            "docker_image": "vsc-img-sha\n",
+            "gh": '{"state": "MERGED", "url": "u"}',
+        },
+    )
+    target.down(st, force=False)  # no raise
+    assert load_state(repo, "vk-iso/test") is None
+
+
+def test_down_no_container_skips_rmi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    target.down(st, force=False)
+    assert not any(c[0:2] == ["docker", "rmi"] for c in runner.argv_for("docker"))
 
 
 def test_up_twice_is_idempotent_on_worktree(
