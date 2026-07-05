@@ -206,3 +206,25 @@ rows:
       - super-fr:tests/unit/test_tripwire_unarchived_plans.py
     status: ci
     notes: Tripwire checks completeness on origin/main (#334).
+  - id: isolation-down-verified
+    capability: Isolation teardown
+    acceptance: A teardown that cannot complete (transient docker/git failure) leaves
+      the workspace visible to `fr isolation status` and its state intact — never a
+      silent state delete that orphans the container.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-05-isolation-teardown-354-design.md
+    levels: {}
+    status: not-implemented
+    notes: '#354 Task A. Unit-pinnable over the Runner seam (fail_on docker/git); real-docker
+      leg is Test-Plan item 1, post-merge.'
+  - id: isolation-gc-reconciles-merged
+    capability: Isolation teardown
+    acceptance: A merged-PR isolation workspace is torn down (container, worktree, state,
+      image) without the originating session — host-wide, fired opportunistically on
+      every up/down, bounded to <=1 stale workspace with no daemon.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-05-isolation-teardown-354-design.md
+    levels: {}
+    status: not-implemented
+    notes: '#354 Task B. gc classification unit-pinnable over the Runner seam; real-docker
+      reap + opportunistic trigger are Test-Plan items 3-4, post-merge.'
