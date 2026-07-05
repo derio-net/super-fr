@@ -263,3 +263,14 @@ rows:
     status: ci
     notes: 'issue #351; manual escape (idea c). Pinned by
       test_no_spec_sweep_flag_skips_sweep.'
+  - id: repair-quiet-on-pending
+    capability: Archive spec-sweep
+    acceptance: fr repair / repair-in-passing leaves a pending/tbd placeholder row untouched
+      and emits NO unresolved-ref warning — the pending-slice convention is quiet and
+      consistent across sweep, migrate dirs, and repair.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-05-repair-skip-pending-359-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'issue #359 (follow-up to #351). Flips to ci when the repair-no-warning test
+      lands.'
