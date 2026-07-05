@@ -56,6 +56,11 @@ def archive_command(
     """Move a finished plan to implemented/plans/ (and its spec when ready).
 
     Moves are `git mv`; review and commit them (PR per repo workflow).
+
+    Sliced specs: to keep a spec from being swept while a decided-but-unbuilt
+    slice is still pending, add a plan row with a `pending` (or `tbd`) File cell
+    for that slice. `--no-spec-sweep` is the per-run escape that skips the sweep
+    entirely.
     """
     require_migrated_layout()
     if all_plans and plan_dir is not None:
