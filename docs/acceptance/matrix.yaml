@@ -270,7 +270,9 @@ rows:
       consistent across sweep, migrate dirs, and repair.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-05-repair-skip-pending-359-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'issue #359 (follow-up to #351). Flips to ci when the repair-no-warning test
-      lands.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_repair.py
+    status: ci
+    notes: 'issue #359 (follow-up to #351). Pinned by test_repair_quiet_on_pending_row;
+      recognizer promoted to fr.refs (test_refs.py::test_is_pending_placeholder).'

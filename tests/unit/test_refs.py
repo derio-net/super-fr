@@ -146,3 +146,37 @@ def test_resolve_spec_ref_duplicate_roots_active_wins(repo: Path) -> None:
     res = resolve_spec_ref(SPEC, repo)
     assert res.path == active
     assert res.matches == (active, archived)
+
+
+# ── pending-slice recognizer (#359, promoted from fr.migrate) ──
+
+
+def test_is_pending_placeholder():
+    """The first whitespace-delimited token is exactly `pending`/`tbd`
+    (case-insensitive): a decided-but-unbuilt slice marker (#351/#359).
+    A hyphen/slash continuation is a real slug, not a hold."""
+    from fr.refs import is_pending_placeholder
+
+    for cell in (
+        "pending",
+        "PENDING",
+        "Pending",
+        "tbd",
+        "TBD",
+        "pending — no plan yet",
+        "pending (slice B)",
+    ):
+        assert is_pending_placeholder(cell), cell
+    for cell in (
+        "—",
+        "-",
+        "",
+        "2026-05-10-x",
+        "docs/superpowers/plans/2026-05-10-x/",
+        "pendingish",
+        "depending",
+        "pending-cleanup",
+        "tbd-foo",
+        "pending/x",
+    ):
+        assert not is_pending_placeholder(cell), cell

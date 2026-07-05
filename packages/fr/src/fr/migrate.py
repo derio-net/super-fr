@@ -764,23 +764,12 @@ def _archive_path_variants(
     return tuple(f"docs/superpowers/{root}/{slug}" for root in refs.PLAN_ROOTS)  # type: ignore[return-value]
 
 
-# A plan row whose File cell is one of these placeholders marks a slice that is
-# decided but not yet built (no plan folder exists). It holds the spec from the
-# archive sweep — see `_spec_fully_implemented` and #351. The rule is "the first
-# whitespace-delimited token is exactly `pending`/`tbd`": a bare token, or one
-# followed by a note ("pending — no plan yet", "pending (slice B)"). A hyphen or
-# slash continuation ("pending-cleanup", "tbd/x") is a real slug, not a hold, so
-# it must NOT match; likewise "pendingish".
-_PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)(\s|$)", re.IGNORECASE)
-
-
-def _is_pending_placeholder(file_cell: str) -> bool:
-    """True when a spec table's File cell marks a decided-but-unbuilt slice.
-
-    Cells are already backtick-stripped by `parse_spec`; the `.strip()` guards
-    raw callers.
-    """
-    return bool(_PENDING_PLACEHOLDER_RE.match(file_cell.strip()))
+# The pending-slice recognizer is the canonical classifier in `fr.refs` (beside
+# `plan_slug`), shared by the archive sweep, `fr migrate dirs`, and `fr repair`
+# (#351, #359). Kept as a module-local alias so `_spec_fully_implemented`'s
+# bare-name call and the `from fr.migrate import _is_pending_placeholder` test
+# import resolve unchanged.
+_is_pending_placeholder = refs.is_pending_placeholder
 
 
 def _spec_fully_implemented(
