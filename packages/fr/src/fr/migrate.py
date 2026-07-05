@@ -766,9 +766,12 @@ def _archive_path_variants(
 
 # A plan row whose File cell is one of these placeholders marks a slice that is
 # decided but not yet built (no plan folder exists). It holds the spec from the
-# archive sweep — see `_spec_fully_implemented` and #351. Word-bounded so a real
-# slug never collides ("pendingish" is not a hold).
-_PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)\b", re.IGNORECASE)
+# archive sweep — see `_spec_fully_implemented` and #351. The rule is "the first
+# whitespace-delimited token is exactly `pending`/`tbd`": a bare token, or one
+# followed by a note ("pending — no plan yet", "pending (slice B)"). A hyphen or
+# slash continuation ("pending-cleanup", "tbd/x") is a real slug, not a hold, so
+# it must NOT match; likewise "pendingish".
+_PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)(\s|$)", re.IGNORECASE)
 
 
 def _is_pending_placeholder(file_cell: str) -> bool:

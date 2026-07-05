@@ -1075,6 +1075,12 @@ def test_is_pending_placeholder():
         "docs/superpowers/plans/2026-05-10-x/",
         "pendingish",  # word boundary: must NOT match
         "depending",
+        # A real plan slug beginning with the token is NOT a placeholder: the
+        # rule is "the first whitespace-delimited token is exactly pending/tbd",
+        # so a hyphen/slug continuation disqualifies it (review #351).
+        "pending-cleanup",
+        "tbd-foo",
+        "pending/x",
     ):
         assert not _is_pending_placeholder(cell), cell
 
@@ -1167,7 +1173,15 @@ def test_spec_archive_sweep_holds_pending_spec(tmp_path):
 
 def test_migrate_dirs_holds_pending_spec(tmp_path, monkeypatch):
     """`fr migrate dirs` shares `_spec_fully_implemented`, so a pending-slice
-    spec is held from the sweep there too (not moved to implemented/specs/)."""
+    spec is held from the sweep there too (not moved to implemented/specs/).
+
+    Regression-lock, not a red-first test: a `pending` cell already failed
+    resolution on baseline (via the misleading "unresolved locally" branch),
+    so the "not moved" assertion held before this change too. It pins that
+    `migrate dirs` keeps honoring the hold; the discriminating red-first
+    assertions (clean note, no gh probe) live in the `_spec_fully_implemented`
+    unit tests above.
+    """
     import subprocess
 
     from fr.cli import app
