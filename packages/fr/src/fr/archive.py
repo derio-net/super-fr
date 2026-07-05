@@ -139,6 +139,11 @@ def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
     spec whose last plans archived in the same run qualifies. Cross-repo
     rows resolve via the gh contents API when `gh` is given; unresolved
     rows leave the spec in place with a note — never a silent pass.
+
+    A spec delivered in slices holds itself: a plan row whose File cell is a
+    `pending`/`tbd` placeholder marks a decided-but-unbuilt slice and keeps
+    the spec in place (a note is emitted) until that slice's plan is built and
+    archived (#351).
     """
     moves: list[DirsMove] = []
     notes: list[str] = []

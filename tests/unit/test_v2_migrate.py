@@ -1047,3 +1047,158 @@ def test_migrate_dry_run_reports_plan_config_without_writing(tmp_path):
 
     assert cfg.read_text() == _DEAD_PLAN_CONFIG  # untouched on dry-run
     assert any("plan-config" in o.reason for o in outcomes)
+
+
+# ── 2026-07-05 spec-sweep slice guard (#351): pending-slice rows hold a spec ──
+
+
+def test_is_pending_placeholder():
+    """The recognizer: a File cell whose first token is `pending`/`tbd`
+    (case-insensitive, word-bounded) marks a decided-but-unbuilt slice."""
+    from fr.migrate import _is_pending_placeholder
+
+    for cell in (
+        "pending",
+        "PENDING",
+        "Pending",
+        "tbd",
+        "TBD",
+        "pending — no plan yet",
+        "pending (slice B)",
+    ):
+        assert _is_pending_placeholder(cell), cell
+    for cell in (
+        "—",
+        "-",
+        "",
+        "2026-05-10-x",
+        "docs/superpowers/plans/2026-05-10-x/",
+        "pendingish",  # word boundary: must NOT match
+        "depending",
+        # A real plan slug beginning with the token is NOT a placeholder: the
+        # rule is "the first whitespace-delimited token is exactly pending/tbd",
+        # so a hyphen/slug continuation disqualifies it (review #351).
+        "pending-cleanup",
+        "tbd-foo",
+        "pending/x",
+    ):
+        assert not _is_pending_placeholder(cell), cell
+
+
+def _sliced_spec(tmp_path, *, pending_repo="derio-net/other"):
+    """A spec whose rows are one archived plan + one pending slice."""
+    sp = tmp_path / "docs" / "superpowers"
+    (sp / "specs").mkdir(parents=True)
+    (sp / "implemented" / "plans" / "2026-07-01-a").mkdir(parents=True)
+    (sp / "implemented" / "plans" / "2026-07-01-a" / "_meta.yaml").write_text(
+        "schema_version: 2\nplan: 2026-07-01-a\n"
+    )
+    spec = sp / "specs" / "2026-07-01-sliced.md"
+    spec.write_text(
+        "# Sliced\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+        "| Slice A | `derio-net/super-fr` | "
+        "`docs/superpowers/implemented/plans/2026-07-01-a/` | — |\n"
+        f"| Slice B | `{pending_repo}` | `pending` | — |\n"
+    )
+    return spec
+
+
+def test_spec_fully_implemented_pending_row_holds(tmp_path):
+    """A pending-placeholder row holds the spec with a clear 'pending' note —
+    NOT the misleading 'unresolved locally' branch (the guard precedes
+    resolution)."""
+    from fr.migrate import _spec_fully_implemented
+
+    spec = _sliced_spec(tmp_path)
+    implemented, note = _spec_fully_implemented(spec, tmp_path, None)
+    assert implemented is False
+    assert note is not None
+    assert "pending" in note.lower()
+    assert "Slice B" in note
+    assert "unresolved locally" not in note
+
+
+def test_spec_fully_implemented_pending_deterministic_with_gh(tmp_path):
+    """The hold never reaches the gh contents probe — deterministic offline,
+    on outage, and for cross-repo cells."""
+    from fr.migrate import _spec_fully_implemented
+
+    from tests.unit.fakes import FakeGhClient
+
+    spec = _sliced_spec(tmp_path, pending_repo="derio-net/other")
+    gh = FakeGhClient()  # no remote_files preloaded
+    implemented, note = _spec_fully_implemented(spec, tmp_path, gh)
+    assert implemented is False
+    assert "pending" in (note or "").lower()
+    # No gh probe was made for the pending row.
+    assert not any(c[0] == "file_exists" for c in gh.calls)
+
+
+def test_spec_fully_implemented_no_pending_row_still_sweeps(tmp_path):
+    """Regression: a spec whose rows are all archived (no pending row) still
+    qualifies — this change is a pure superset."""
+    from fr.migrate import _spec_fully_implemented
+
+    sp = tmp_path / "docs" / "superpowers"
+    (sp / "specs").mkdir(parents=True)
+    (sp / "implemented" / "plans" / "2026-07-01-a").mkdir(parents=True)
+    (sp / "implemented" / "plans" / "2026-07-01-a" / "_meta.yaml").write_text(
+        "schema_version: 2\nplan: 2026-07-01-a\n"
+    )
+    spec = sp / "specs" / "2026-07-01-done.md"
+    spec.write_text(
+        "# Done\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+        "| Slice A | `derio-net/super-fr` | "
+        "`docs/superpowers/implemented/plans/2026-07-01-a/` | — |\n"
+    )
+    assert _spec_fully_implemented(spec, tmp_path, None) == (True, None)
+
+
+def test_spec_archive_sweep_holds_pending_spec(tmp_path):
+    """Integration: the sweep leaves a pending-slice spec in place and reports
+    a note; it does not appear in moves."""
+    from fr.archive import spec_archive_sweep
+
+    from tests.unit.fakes import FakeGhClient
+
+    _sliced_spec(tmp_path)  # archived row + pending Slice B
+    result = spec_archive_sweep(tmp_path, FakeGhClient())
+    assert all("2026-07-01-sliced.md" not in str(m.src) for m in result.moves)
+    assert any("pending" in n.lower() and "2026-07-01-sliced" in n for n in result.notes)
+    # still on disk under specs/
+    assert (tmp_path / "docs" / "superpowers" / "specs" / "2026-07-01-sliced.md").is_file()
+
+
+def test_migrate_dirs_holds_pending_spec(tmp_path, monkeypatch):
+    """`fr migrate dirs` shares `_spec_fully_implemented`, so a pending-slice
+    spec is held from the sweep there too (not moved to implemented/specs/).
+
+    Regression-lock, not a red-first test: a `pending` cell already failed
+    resolution on baseline (via the misleading "unresolved locally" branch),
+    so the "not moved" assertion held before this change too. It pins that
+    `migrate dirs` keeps honoring the hold; the discriminating red-first
+    assertions (clean note, no gh probe) live in the `_spec_fully_implemented`
+    unit tests above.
+    """
+    import subprocess
+
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    _sliced_spec(tmp_path)  # archived row + pending Slice B
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True, exist_ok=True)
+    for cmd in (
+        ["git", "init", "-q"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+    ):
+        subprocess.run(cmd, cwd=tmp_path, check=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["migrate", "dirs", "--yes"])
+    assert result.exit_code == 0, result.output
+    sp = tmp_path / "docs" / "superpowers"
+    assert (sp / "specs" / "2026-07-01-sliced.md").is_file()
+    assert not (sp / "implemented" / "specs" / "2026-07-01-sliced.md").exists()

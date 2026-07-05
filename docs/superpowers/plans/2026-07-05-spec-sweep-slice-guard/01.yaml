@@ -1,0 +1,50 @@
+schema_version: 2
+phase:
+  number: 1
+  title: --no-spec-sweep flag on fr archive
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - archive-no-spec-sweep-flag
+tasks:
+- number: 1
+  title: Skip the spec sweep for one invocation
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. In tests/unit/test_archive_cmd.py add test_no_spec_sweep_flag_skips_sweep: build a tmp repo (git init) with (a) one finished plan under docs/superpowers/plans/ whose gate passes and (b) a spec under docs/superpowers/specs/ whose only Implementation Plans row points at an already-archived plan (so a normal run WOULD sweep it to implemented/specs/). Monkeypatch the gh factory as the other archive tests do. Invoke `fr archive <plan> --no-spec-sweep`. Assert exit 0, the plan moved to implemented/plans/, the output contains "(spec sweep skipped)", and the spec is STILL under docs/superpowers/specs/ (NOT moved). Run `uv run pytest -q --no-cov tests/unit/test_archive_cmd.py -k no_spec_sweep` → fails (unknown option --no-spec-sweep).
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/commands/archive_cmd.py add a typer option `no_spec_sweep: bool = typer.Option(False, "--no-spec-sweep", help="Archive the plan(s) but skip the spec-archival sweep for this run.")`. Gate the existing sweep block: change `if archived or all_plans:` to `if (archived or all_plans) and not no_spec_sweep:`; in an `elif no_spec_sweep and (archived or all_plans):` branch `typer.echo("  (spec sweep skipped)")`. Leave repair-in-passing keyed on `archived or specs_moved` (specs_moved stays False when skipped). Re-run the test → passes. Confirm the rest of test_archive_cmd.py still passes.
+  - id: P1.T1.S3
+    text: |-
+      Flip acceptance row archive-no-spec-sweep-flag from not-implemented to ci and add its level ref. Run: `uv run fr acceptance add` is NOT used to edit; instead Edit docs/acceptance/matrix.yaml for that row — set `status: ci` and add `levels: {unit: [super-fr:tests/unit/test_archive_cmd.py]}`. Run `uv run fr acceptance check` → exit 0, row now counted under ci.
+- number: 2
+  title: REFACTOR + quality gate
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Optional cleanup only if the sweep-gate branch reads awkwardly (e.g. extract a small local `run_sweep = (archived or all_plans) and not no_spec_sweep`). Stay green, add no behavior. Then run the phase-1 quality gate: `uv run ruff format packages/ tests/` and `uv run ruff check packages/ tests/` and `uv run pytest -q --no-cov tests/unit/test_archive_cmd.py` → all green. Skip the extraction if the inline condition is already clear.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-05T20:50:03+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-05T20:50:04+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-05T20:50:05+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-07-05T20:50:07+00:00'
+      note: null
+  completion:
+    at: '2026-07-05T20:50:08+00:00'
+    note: null
+    observed_prs: []

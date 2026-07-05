@@ -1,0 +1,43 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Docs + version bump
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Document the pending-row convention
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Document the convention where operators will find it. In packages/fr/src/fr/archive.py update the module/`spec_archive_sweep` docstring to note that a plan row whose File cell is a `pending`/`tbd` placeholder holds the spec (a decided-but-unbuilt slice). In packages/fr/src/fr/commands/archive_cmd.py extend the `archive_command` docstring with a one-line "Sliced specs: add a `pending` File-cell row for a decided-but-unbuilt slice to keep the spec from being swept; `--no-spec-sweep` is the per-run escape." No behavior change. Run `uv run ruff format packages/ tests/` → clean.
+- number: 2
+  title: Version bump
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Bump the patch version (bugfix + small flag). Run `uv run python scripts/bump-version.py patch` (from 3.8.1 → 3.8.2). Verify with `uv run python scripts/bump-version.py --check` and `uv run fr --version` reports 3.8.2. This updates the three source files + uv.lock. Do NOT hand-edit versions.
+  - id: P3.T2.S2
+    text: |-
+      Full gate before hand-off: `uv run ruff format --check packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src`, `uv run pytest -q --no-cov`, and `uv run python scripts/bump-version.py --check`. All green. Capture the pytest summary line for verification-before-completion.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-05T20:59:58+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-05T20:59:59+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-05T21:00:00+00:00'
+      note: null
+  completion:
+    at: '2026-07-05T21:00:02+00:00'
+    note: null
+    observed_prs: []

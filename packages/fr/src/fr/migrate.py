@@ -764,6 +764,25 @@ def _archive_path_variants(
     return tuple(f"docs/superpowers/{root}/{slug}" for root in refs.PLAN_ROOTS)  # type: ignore[return-value]
 
 
+# A plan row whose File cell is one of these placeholders marks a slice that is
+# decided but not yet built (no plan folder exists). It holds the spec from the
+# archive sweep — see `_spec_fully_implemented` and #351. The rule is "the first
+# whitespace-delimited token is exactly `pending`/`tbd`": a bare token, or one
+# followed by a note ("pending — no plan yet", "pending (slice B)"). A hyphen or
+# slash continuation ("pending-cleanup", "tbd/x") is a real slug, not a hold, so
+# it must NOT match; likewise "pendingish".
+_PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)(\s|$)", re.IGNORECASE)
+
+
+def _is_pending_placeholder(file_cell: str) -> bool:
+    """True when a spec table's File cell marks a decided-but-unbuilt slice.
+
+    Cells are already backtick-stripped by `parse_spec`; the `.strip()` guards
+    raw callers.
+    """
+    return bool(_PENDING_PLACEHOLDER_RE.match(file_cell.strip()))
+
+
 def _spec_fully_implemented(
     spec_path: Path, repo_root: Path, gh: Any | None = None
 ) -> tuple[bool, str | None]:
@@ -774,6 +793,11 @@ def _spec_fully_implemented(
     archived-plans/, which `migrate dirs` is about to rename). Manual rows
     (File cell `—`) never block. A row resolving to an ACTIVE plans/ dir
     blocks, with a note naming the row.
+
+    A row whose File cell is a `pending`/`tbd` placeholder marks a
+    decided-but-unbuilt slice (no plan folder yet) and holds the spec
+    deterministically — before any local/gh resolution — so a spec delivered
+    in slices is never swept while a later slice is pending (#351).
 
     Cross-repo rows (no local resolution): when `gh` is supplied, the
     narrow contents-API lookup (2026-06-05 spec) checks the OTHER repo —
@@ -790,6 +814,11 @@ def _spec_fully_implemented(
     for ref in meta.plans:
         if not ref.file or ref.file in ("—", "-"):
             continue  # manual/informational row — non-blocking
+        if _is_pending_placeholder(ref.file):
+            # Decided-but-unbuilt slice (no plan folder yet): hold the spec
+            # deterministically, before any local/gh resolution, with an
+            # intentional note (#351). Never silently passes.
+            return False, f"row {ref.name!r} pending — slice not yet built; leaving spec in place"
         resolved = _resolve_local_plan_dir(ref, repo_root)
         if resolved is None:
             note = f"row {ref.name!r} unresolved locally (cross-repo?) — confirm and re-run"

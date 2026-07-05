@@ -1,0 +1,67 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Pending-slice rows hold a spec in _spec_fully_implemented
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - spec-sweep-pending-slice-hold
+tasks:
+- number: 1
+  title: _is_pending_placeholder recognizer
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add test_is_pending_placeholder covering the recognizer's contract: True for "pending", "PENDING", "Pending", "tbd", "TBD", "pending — no plan yet", "pending (slice B)"; False for "—", "-", "", "2026-05-10-x", "docs/superpowers/plans/2026-05-10-x/", "depending" (must NOT match a word merely starting with "pending"... actually "depending" starts with "de"; include "pendingish" to prove the word-boundary: "pendingish" → False). Import `from fr.migrate import _is_pending_placeholder`. Run `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k is_pending_placeholder` → fails (no such attribute).
+  - id: P2.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/migrate.py add near _spec_fully_implemented: a module constant `_PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)\b", re.IGNORECASE)` and `def _is_pending_placeholder(file_cell: str) -> bool:` that returns `bool(_PENDING_PLACEHOLDER_RE.match(file_cell.strip()))`. (Cells are already backtick-stripped by parse_spec; strip guards raw callers.) `\b` after the token makes "pendingish" False while "pending — no plan" is True. Re-run the test → passes.
+- number: 2
+  title: Wire the hold into _spec_fully_implemented (+ integration)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add: (1) test_spec_fully_implemented_pending_row_holds — a spec whose rows are one archived plan (resolves under implemented/plans/) + one pending row `| Slice B | derio-net/other | pending | — |`; assert `_spec_fully_implemented(spec, root, None)` returns (False, note) where note contains "pending" and the row name, and does NOT contain "unresolved locally" (proves the pending branch precedes resolution). (2) test_spec_fully_implemented_pending_deterministic_with_gh — same spec but pass a FakeGhClient with NO remote files; assert still (False, pending-note) and that the fake's file_exists was NOT called (add a call-counter to FakeGhClient or assert remote_files untouched) — proves no gh probe. (3) test_spec_fully_implemented_no_pending_row_still_sweeps — regression: the archived-only spec (no pending row) still returns (True, None). (4) test_spec_archive_sweep_holds_pending_spec — integration: build a repo, run `spec_archive_sweep(root, gh)`; assert the pending spec is NOT in moves and a note mentioning it is present. Run `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k "pending_row or pending_deterministic or no_pending_row or holds_pending"` → all fail (guard not wired; baseline gives "unresolved locally" note / would move).
+  - id: P2.T2.S2
+    text: |-
+      GREEN. In _spec_fully_implemented, immediately AFTER the manual-row skip `if not ref.file or ref.file in ("—", "-"): continue` and BEFORE `resolved = _resolve_local_plan_dir(...)`, insert: `if _is_pending_placeholder(ref.file): return False, f"row {ref.name!r} pending — slice not yet built; leaving spec in place"`. Update the function docstring to name the pending-row hold. Re-run the -k selection → all pass. Then run the FULL `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py` to confirm no regression in existing sweep/migrate tests.
+  - id: P2.T2.S3
+    text: |-
+      Lock `fr migrate dirs` inherits the hold (shared helper) and flip acceptance. RED→GREEN: add test_migrate_dirs_holds_pending_spec — a repo with a spec carrying an archived row + a pending row; run `fr migrate dirs --yes` via CliRunner; assert the pending spec is NOT moved to implemented/specs/ and remains under specs/. Run it → passes on phase-2 code (fails on baseline). Then Edit docs/acceptance/matrix.yaml: set row spec-sweep-pending-slice-hold `status: ci` with `levels: {unit: [super-fr:tests/unit/test_v2_migrate.py]}`. Run `uv run fr acceptance check` → exit 0.
+- number: 3
+  title: REFACTOR + quality gate
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Optional cleanup only if needed (e.g. a shared "pending note" string if reused). Stay green. Phase-2 quality gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src`, and `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py` → all green. Skip the extraction if nothing is duplicated.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-05T20:55:24+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-05T20:55:25+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-05T20:55:26+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-05T20:55:27+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-07-05T20:55:28+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-07-05T20:55:29+00:00'
+      note: null
+  completion:
+    at: '2026-07-05T20:55:30+00:00'
+    note: null
+    observed_prs: []

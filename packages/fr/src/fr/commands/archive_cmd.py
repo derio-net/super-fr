@@ -47,10 +47,20 @@ def archive_command(
         "--force",
         help="Archive even when the gate reports incomplete phases (single plan only).",
     ),
+    no_spec_sweep: bool = typer.Option(
+        False,
+        "--no-spec-sweep",
+        help="Archive the plan(s) but skip the spec-archival sweep for this run.",
+    ),
 ) -> None:
     """Move a finished plan to implemented/plans/ (and its spec when ready).
 
     Moves are `git mv`; review and commit them (PR per repo workflow).
+
+    Sliced specs: to keep a spec from being swept while a decided-but-unbuilt
+    slice is still pending, add a plan row with a `pending` (or `tbd`) File cell
+    for that slice. `--no-spec-sweep` is the per-run escape that skips the sweep
+    entirely.
     """
     require_migrated_layout()
     if all_plans and plan_dir is not None:
@@ -139,13 +149,15 @@ def archive_command(
     # swept — `fr migrate dirs` evaluates specs unconditionally and the two
     # archive paths must agree (review finding, 2026-06-06).
     specs_moved = False
-    if archived or all_plans:
+    if (archived or all_plans) and not no_spec_sweep:
         sweep = spec_archive_sweep(repo_root, gh)
         specs_moved = bool(sweep.moves)
         for m in sweep.moves:
             typer.echo(f"  archived spec: {m.src} -> {m.dst}")
         for n in sweep.notes:
             typer.echo(f"  note: {n}")
+    elif (archived or all_plans) and no_spec_sweep:
+        typer.echo("  (spec sweep skipped)")
 
     # Repair in passing (2026-06-06 spec-path-repair): the move and the
     # ref normalization land in the same operator commit.
