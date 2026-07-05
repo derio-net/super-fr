@@ -24,6 +24,7 @@ from fr.isolation.types import (
     _git_common_dir,
     _warn_legacy,
     delete_state,
+    list_states,
     resolve_profile,
     save_state,
 )
@@ -50,6 +51,30 @@ class MergeVerification:
     changed: list[str]  # files the branch changed since its merge-base
     missing: list[str]  # changed files NOT yet present on the base ref
     changes_present: bool
+
+
+@dataclass
+class GcWorkspace:
+    """A workspace discovered by the host-wide gc sweep (#354 Task B).
+
+    `state` is None for a true orphan (worktree gone, container found only by
+    docker label) or an ambiguous label-less directory with no fr state.
+    """
+
+    worktree: Path
+    container_id: str | None
+    state: IsolationState | None
+
+
+@dataclass
+class GcAction:
+    """One workspace's gc verdict + what gc did about it (#354 Task B)."""
+
+    worktree: str
+    branch: str | None
+    verdict: str  # merged | open | no-pr | orphan | no-state
+    action: str  # reaped | skipped | warned | reap-failed | would-reap
+    detail: str = ""
 
 
 def branch_changes_present(
@@ -347,6 +372,121 @@ class LocalWorktreeDevcontainerTarget:
         self._remove_isolation_marker(state.worktree)
         delete_state(state.repo_root, state.branch)
 
+    # ---------- gc: host-wide reconciliation (#354 Task B) ----------
+
+    def gc(self, dry_run: bool = False) -> list[GcAction]:
+        """Reconcile every isolation workspace on the host: tear down the ones
+        whose PR merged, leave open-PR and no-PR work alone, and reap orphaned
+        containers. Host-wide (an `up` in repo A reaps completed work in B…F),
+        so end-to-end workflows no longer depend on a human remembering to run
+        `down` in the originating session.
+
+        Classification is authoritative BEFORE any action — a blind `down()`
+        would reap in-progress no-PR work (its guard only blocks OPEN PRs). Each
+        workspace is handled in isolation: one failed teardown is recorded and
+        the sweep continues.
+        """
+        return [self._gc_one(rec, dry_run) for rec in self._discover_workspaces()]
+
+    def _gc_one(self, rec: GcWorkspace, dry_run: bool) -> GcAction:
+        wt = str(rec.worktree)
+        if not rec.worktree.is_dir():
+            # Orphan: worktree gone. If a container lingers (found by label),
+            # reap it directly — no PR check needed (worktree gone ⇒ done).
+            if not rec.container_id:
+                return GcAction(wt, None, "orphan", "skipped", "no container")
+            if dry_run:
+                return GcAction(wt, None, "orphan", "would-reap")
+            try:
+                self._label_reap(rec.container_id)
+                if rec.state is not None:  # dangling state file, if any
+                    delete_state(rec.state.repo_root, rec.state.branch)
+                return GcAction(wt, None, "orphan", "reaped", rec.container_id)
+            except Exception as e:  # reap is best-effort; never abort the sweep
+                return GcAction(wt, None, "orphan", "reap-failed", str(e))
+        state = rec.state
+        if state is None:
+            return GcAction(wt, None, "no-state", "warned", "worktree present, no fr state")
+        pr = self._pr_from(state.worktree, state.branch)
+        pr_state = pr.get("state") if pr else None
+        if pr_state == "MERGED":
+            if dry_run:
+                return GcAction(wt, state.branch, "merged", "would-reap")
+            try:
+                # Tear down through a Target rooted at the workspace's OWN repo
+                # (down() keys git/gh off its repo_root) — substrate-neutral: gc
+                # orchestrates Targets, it doesn't reach past them.
+                type(self)(state.repo_root, runner=self.run).down(state, force=False)
+                return GcAction(wt, state.branch, "merged", "reaped")
+            except IsolationError as e:
+                return GcAction(wt, state.branch, "merged", "reap-failed", str(e))
+        if pr_state == "OPEN":
+            return GcAction(wt, state.branch, "open", "skipped")
+        return GcAction(
+            wt, state.branch, "no-pr", "warned", "no PR — `fr isolation down` when done"
+        )
+
+    def _discover_workspaces(self) -> list[GcWorkspace]:
+        """Union docker-label containers with on-disk worktree dirs, then
+        git-resolve each existing worktree to its fr state. State is per-repo
+        (no host registry), so the worktree is the discovery root."""
+        by_path: dict[Path, GcWorkspace] = {}
+        for cid, path in self._labelled_containers():
+            by_path[path] = GcWorkspace(worktree=path, container_id=cid, state=None)
+        for path in self._worktree_dirs():
+            by_path.setdefault(path, GcWorkspace(worktree=path, container_id=None, state=None))
+        for path, rec in by_path.items():
+            if path.is_dir():
+                rec.state = self._resolve_state(path)
+        return list(by_path.values())
+
+    def _labelled_containers(self) -> list[tuple[str, Path]]:
+        result = self.run(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                "label=devcontainer.local_folder",
+                "--format",
+                '{{.ID}}\t{{.Label "devcontainer.local_folder"}}',
+            ]
+        )
+        out: list[tuple[str, Path]] = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split("\t")
+            if len(parts) == 2 and parts[0] and parts[1]:
+                out.append((parts[0], Path(parts[1])))
+        return out
+
+    def _worktree_dirs(self) -> list[Path]:
+        root = _home() / ".cache" / "fr" / "worktrees"
+        if not root.is_dir():
+            return []
+        return [
+            child
+            for repo in root.iterdir()
+            if repo.is_dir()
+            for child in repo.iterdir()
+            if child.is_dir()
+        ]
+
+    def _resolve_state(self, worktree: Path) -> IsolationState | None:
+        common = _git_common_dir(worktree)
+        repo_root = common.parent if common.name == ".git" else common
+        for st in list_states(repo_root):
+            if st.worktree == worktree or st.worktree.resolve() == worktree.resolve():
+                return st
+        return None
+
+    def _label_reap(self, container_id: str) -> None:
+        """Reap a container found only by docker label (worktree already gone):
+        stop + rm + best-effort image rmi."""
+        image = self._image_for(container_id)
+        self.run(["docker", "stop", container_id])
+        self.run(["docker", "rm", container_id])
+        self._reclaim_image(image)
+
     # ---------- helpers ----------
 
     def _git_worktree_add(
@@ -555,9 +695,14 @@ class LocalWorktreeDevcontainerTarget:
         return line.split()[1] if line and len(line.split()) > 1 else None
 
     def _pr(self, state: IsolationState) -> dict[str, Any] | None:
+        return self._pr_from(self.repo_root, state.branch)
+
+    def _pr_from(self, cwd: Path, branch: str) -> dict[str, Any] | None:
+        """`gh pr view` from an arbitrary repo cwd — gc reconciles workspaces
+        across repos, so it can't assume `self.repo_root`. gh uses host auth."""
         result = self.run(
-            ["gh", "pr", "view", state.branch, "--json", "state,url"],
-            cwd=self.repo_root,
+            ["gh", "pr", "view", branch, "--json", "state,url"],
+            cwd=cwd,
         )
         if result.returncode != 0 or not (result.stdout or "").strip():
             return None

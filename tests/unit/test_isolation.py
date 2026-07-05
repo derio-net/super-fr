@@ -174,13 +174,26 @@ class FakeRunner:
     path without call-sequence stubbing.
     """
 
-    def __init__(self, fail_on: str | None = None, stdout: dict[str, str] | None = None):
+    def __init__(
+        self,
+        fail_on: str | None = None,
+        stdout: dict[str, str] | None = None,
+        docker_labels: list[tuple[str, str]] | None = None,
+        pr_by_branch: dict[str, str] | None = None,
+    ):
         self.calls: list[list[str]] = []
         self.git_calls: list[list[str]] = []
         self.captures: list[bool] = []
         self.fail_on = fail_on
         self.stdout = stdout or {}
         self.removed: set[str] = set()
+        # gc host-wide discovery: (container_id, worktree_path) pairs the
+        # `docker ps -a --filter label=... --format '{{.ID}}\t{{.Label ...}}'`
+        # call returns (minus already-rm'd ids).
+        self.docker_labels = docker_labels or []
+        # gc classification: per-branch `gh pr view` JSON. A branch absent from
+        # the map ⇒ gh returns nothing (no PR).
+        self.pr_by_branch = pr_by_branch
 
     def __call__(
         self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
@@ -198,16 +211,25 @@ class FakeRunner:
             self.removed.update(argv[2:])
         out = self.stdout.get(argv[0], "")
         if argv[0:2] == ["docker", "ps"]:
-            out = self._docker_ps_out()
+            out = self._docker_labels_out() if any(".Label" in a for a in argv) else self._ps_out()
         elif argv[0:2] == ["docker", "inspect"]:
             out = self.stdout.get("docker_image", "")
+        elif argv[0:3] == ["gh", "pr", "view"] and self.pr_by_branch is not None:
+            body = self.pr_by_branch.get(argv[3], "")
+            return subprocess.CompletedProcess(argv, 0 if body else 1, stdout=body, stderr="")
         return subprocess.CompletedProcess(argv, rc, stdout=out, stderr="")
 
-    def _docker_ps_out(self) -> str:
-        """Configured `docker` line, minus any container id already `rm`'d."""
+    def _ps_out(self) -> str:
+        """Per-state `docker ps` line, minus any container id already `rm`'d."""
         out = self.stdout.get("docker", "")
         first = out.split()[0] if out.split() else ""
         return "" if first in self.removed else out
+
+    def _docker_labels_out(self) -> str:
+        """gc discovery listing: `id\\tpath` per labelled container, minus rm'd."""
+        return "".join(
+            f"{cid}\t{path}\n" for cid, path in self.docker_labels if cid not in self.removed
+        )
 
     def argv_for(self, binary: str) -> list[list[str]]:
         return [c for c in self.calls if c[0] == binary]
@@ -959,6 +981,102 @@ def test_down_no_container_skips_rmi(tmp_path: Path, monkeypatch: pytest.MonkeyP
     )
     target.down(st, force=False)
     assert not any(c[0:2] == ["docker", "rmi"] for c in runner.argv_for("docker"))
+
+
+# ---------- target.gc — host-wide reconciliation (#354 Task B) ----------
+
+
+def _gc_env(tmp_path, monkeypatch, **runner_kw):
+    """A repo + runner sharing one HOME cache, plus an `up(branch)` helper that
+    returns the created worktree path. gc discovers across the whole HOME."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    runner = FakeRunner(**runner_kw)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    def up(branch: str) -> Path:
+        st = target.up(None, branch)
+        return st.worktree
+
+    return repo, runner, target, up
+
+
+def test_gc_discovers_label_and_worktree_union(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, runner, target, up = _gc_env(tmp_path, monkeypatch)
+    wt = up("feat/a")
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / "other" / "gone"
+    runner.docker_labels = [("cA", str(wt)), ("cOrph", str(gone))]
+    recs = {r.worktree: r for r in target._discover_workspaces()}
+    assert set(recs) == {wt, gone}
+    assert recs[wt].container_id == "cA"
+    assert recs[wt].state is not None and recs[wt].state.branch == "feat/a"
+    assert recs[gone].container_id == "cOrph" and recs[gone].state is None
+
+
+def test_gc_classifies_and_reaps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        pr_by_branch={
+            "feat/merged": '{"state": "MERGED", "url": "u"}',
+            "feat/open": '{"state": "OPEN", "url": "u"}',
+            # feat/nopr intentionally absent → no PR
+        },
+    )
+    wt_m, wt_o, wt_n = up("feat/merged"), up("feat/open"), up("feat/nopr")
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / "other" / "gone"
+    nostate = tmp_path / "home" / ".cache" / "fr" / "worktrees" / "x" / "nostate"
+    nostate.mkdir(parents=True)
+    runner.docker_labels = [("cOrph", str(gone))]
+
+    by_wt = {a.worktree: a for a in target.gc()}
+    assert by_wt[str(wt_m)].action == "reaped" and not wt_m.exists()
+    assert load_state(repo, "feat/merged") is None
+    assert by_wt[str(wt_o)].verdict == "open" and by_wt[str(wt_o)].action == "skipped"
+    assert wt_o.is_dir()
+    assert by_wt[str(wt_n)].verdict == "no-pr" and by_wt[str(wt_n)].action == "warned"
+    assert wt_n.is_dir()
+    assert by_wt[str(gone)].action == "reaped"
+    assert ["docker", "rm", "cOrph"] in runner.argv_for("docker")
+    assert by_wt[str(nostate)].verdict == "no-state" and by_wt[str(nostate)].action == "warned"
+
+
+def test_gc_one_failure_does_not_abort_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two merged workspaces whose container survives `docker rm` (fail_on='rm')
+    # → both down() raise; the sweep records both and does not abort.
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        fail_on="rm",
+        stdout={"docker": "cX running\n"},
+        pr_by_branch={
+            "feat/m1": '{"state": "MERGED", "url": "u"}',
+            "feat/m2": '{"state": "MERGED", "url": "u"}',
+        },
+    )
+    up("feat/m1")
+    up("feat/m2")
+    actions = target.gc()
+    reap_failed = [a for a in actions if a.verdict == "merged"]
+    assert len(reap_failed) == 2
+    assert all(a.action == "reap-failed" for a in reap_failed)
+
+
+def test_gc_dry_run_mutates_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        pr_by_branch={"feat/merged": '{"state": "MERGED", "url": "u"}'},
+    )
+    wt = up("feat/merged")
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/merged"]
+    assert action.action == "would-reap"
+    assert wt.is_dir() and load_state(repo, "feat/merged") is not None
+    assert not any(c[0:2] == ["docker", "rm"] for c in runner.argv_for("docker"))
 
 
 def test_up_twice_is_idempotent_on_worktree(

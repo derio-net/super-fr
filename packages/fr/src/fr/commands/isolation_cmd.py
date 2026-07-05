@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 import typer
@@ -341,3 +342,31 @@ def verify_merge(
         err=True,
     )
     raise typer.Exit(1)
+
+
+@isolation_app.command()
+def gc(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Classify + report only; mutate nothing."
+    ),
+    format: str = typer.Option("text", "--format", help="text | json"),
+) -> None:
+    """Reconcile isolation workspaces host-wide (#354).
+
+    Tears down workspaces whose PR merged, skips open PRs, warns on no-PR work,
+    and reaps orphaned containers — so end-to-end runs no longer depend on a
+    human running `down` in the originating session. Fired opportunistically on
+    every up/down; also runnable standalone or on a schedule.
+    """
+    actions = _target(Path.cwd()).gc(dry_run=dry_run)
+    if format == "json":
+        typer.echo(json.dumps([asdict(a) for a in actions], indent=2))
+        return
+    if not actions:
+        typer.echo("gc: no isolation workspaces.")
+        return
+    for a in actions:
+        line = f"gc: {a.branch or a.worktree}: {a.verdict} → {a.action}"
+        if a.detail:
+            line += f" ({a.detail})"
+        typer.echo(line)

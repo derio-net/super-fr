@@ -383,3 +383,64 @@ def test_status_default_makes_no_stats_call(repo: Path, monkeypatch: pytest.Monk
     res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
     assert res.exit_code == 0, res.output
     assert not any(c[:2] == ["docker", "stats"] for c in calls), "default status skips docker stats"
+
+
+# ---------- gc CLI (#354 Task B) ----------
+
+
+def _stub_gc(monkeypatch: pytest.MonkeyPatch, actions, captured=None):
+    from fr.isolation.local import GcAction  # noqa: F401 (referenced by callers)
+
+    class StubTarget:
+        def gc(self, dry_run=False):
+            if captured is not None:
+                captured["dry_run"] = dry_run
+            return actions
+
+    monkeypatch.setattr(isolation_cmd, "_target", lambda _repo: StubTarget())
+
+
+def test_gc_cli_reports(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.isolation.local import GcAction
+
+    captured: dict = {}
+    _stub_gc(
+        monkeypatch,
+        [
+            GcAction("/wt/m", "feat/m", "merged", "would-reap"),
+            GcAction("/wt/o", "feat/o", "open", "skipped"),
+        ],
+        captured,
+    )
+    res = runner.invoke(app, ["isolation", "gc", "--dry-run"])
+    assert res.exit_code == 0, res.output
+    assert captured["dry_run"] is True
+    assert "feat/m: merged → would-reap" in res.output
+    assert "feat/o: open → skipped" in res.output
+
+
+def test_gc_cli_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    from fr.isolation.local import GcAction
+
+    _stub_gc(monkeypatch, [GcAction("/wt/m", "feat/m", "merged", "reaped", "cX")])
+    res = runner.invoke(app, ["isolation", "gc", "--format", "json"])
+    assert res.exit_code == 0, res.output
+    data = json.loads(res.output)
+    assert data == [
+        {
+            "worktree": "/wt/m",
+            "branch": "feat/m",
+            "verdict": "merged",
+            "action": "reaped",
+            "detail": "cX",
+        }
+    ]
+
+
+def test_gc_cli_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_gc(monkeypatch, [])
+    res = runner.invoke(app, ["isolation", "gc"])
+    assert res.exit_code == 0, res.output
+    assert "no isolation workspaces" in res.output
