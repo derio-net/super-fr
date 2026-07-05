@@ -1,0 +1,41 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr repair skips pending-slice rows (no warning, no rewrite)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - repair-quiet-on-pending
+tasks:
+- number: 1
+  title: Guard in _repair_spec_table
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. In tests/unit/test_repair.py add test_repair_quiet_on_pending_row: build a repo dir with a spec whose ## Implementation Plans table has an archived-resolving row plus a pending row `| Slice B | derio-net/other | pending | — |`. Call `repair_repo(repo_root, write=True)` (import from fr.repair). Assert: no warning mentions "pending" or the pending row's name (i.e. `not any("pending" in w.lower() for w in result.warnings)` AND no "does not resolve" warning for row 'Slice B'), AND no Rewrite targets the pending cell (`all("Slice B" not in r.field for r in result.rewrites)`), AND the spec text still contains "| Slice B" (untouched). Run `uv run pytest -q --no-cov tests/unit/test_repair.py -k quiet_on_pending` → fails (baseline warns "does not resolve").
+  - id: P2.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/repair.py::_repair_spec_table, after the header/separator skip (`if name.lower() == "plan" or set(name) <= {"-", " ", ":"}: continue`) and BEFORE `token_slug = refs.plan_slug(file_cell)`, insert `if refs.is_pending_placeholder(file_cell): continue  # intentional pending-slice placeholder (#351/#359) — not a ref`. Re-run the test → passes. Then run the FULL `uv run pytest -q --no-cov tests/unit/test_repair.py` → no regression.
+  - id: P2.T1.S3
+    text: |-
+      Flip acceptance row repair-quiet-on-pending: Edit docs/acceptance/matrix.yaml — set `status: ci` and `levels: {unit: [super-fr:tests/unit/test_repair.py]}`. Run `uv run fr acceptance check` → exit 0, row counted under ci.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-05T21:58:29+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-05T21:58:30+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-07-05T21:58:31+00:00'
+      note: null
+  completion:
+    at: '2026-07-05T21:58:32+00:00'
+    note: null
+    observed_prs: []

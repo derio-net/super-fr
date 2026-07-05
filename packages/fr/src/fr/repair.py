@@ -110,6 +110,8 @@ def _repair_spec_table(spec_path: Path, repo_root: Path, out: RepairResult, *, w
         name, _repo, file_cell = cells[0].strip(), cells[1].strip(), cells[2].strip()
         if name.lower() == "plan" or set(name) <= {"-", " ", ":"}:
             continue  # header / separator
+        if refs.is_pending_placeholder(file_cell):
+            continue  # intentional pending-slice placeholder (#351/#359) — not a ref
         token_slug = refs.plan_slug(file_cell)
         if not token_slug:
             continue  # placeholder row

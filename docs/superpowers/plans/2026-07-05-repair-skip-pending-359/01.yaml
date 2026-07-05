@@ -1,0 +1,38 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Promote is_pending_placeholder to fr.refs (behavior-preserving move)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Public recognizer in fr.refs, migrate keeps a thin alias
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. In tests/unit/test_refs.py add test_is_pending_placeholder mirroring the shipped contract: True for "pending", "PENDING", "tbd", "TBD", "pending — no plan yet", "pending (slice B)"; False for "—", "-", "", "2026-05-10-x", "docs/superpowers/plans/2026-05-10-x/", "pendingish", "pending-cleanup", "tbd-foo", "pending/x". Import `from fr.refs import is_pending_placeholder`. Run `uv run pytest -q --no-cov tests/unit/test_refs.py -k is_pending_placeholder` → fails (no such attribute).
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/refs.py, next to `_PLACEHOLDERS = ("—", "-", "")`, add `_PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)(\s|$)", re.IGNORECASE)` and a public `def is_pending_placeholder(cell: str) -> bool:` returning `bool(_PENDING_PLACEHOLDER_RE.match(cell.strip()))`, with a docstring noting it marks a decided-but-unbuilt slice (#351/#359) and the "first whitespace-delimited token is exactly pending/tbd" rule. Re-run → passes.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR (the move). In packages/fr/src/fr/migrate.py DELETE the local `_PENDING_PLACEHOLDER_RE` and the `def _is_pending_placeholder(...)` body; replace with `from fr import refs` (already imported) + module-level alias `_is_pending_placeholder = refs.is_pending_placeholder` (keeps `_spec_fully_implemented`'s bare-name call and `test_v2_migrate.py`'s `from fr.migrate import _is_pending_placeholder` working). Run BOTH `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k is_pending_placeholder tests/unit/test_refs.py -k is_pending_placeholder` and the full `tests/unit/test_v2_migrate.py` → all green (byte-for-byte behavior preserved).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-05T21:55:18+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-05T21:55:19+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-05T21:55:20+00:00'
+      note: null
+  completion:
+    at: '2026-07-05T21:55:21+00:00'
+    note: null
+    observed_prs: []

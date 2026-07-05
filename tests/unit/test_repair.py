@@ -234,3 +234,25 @@ def test_repair_plan_config_is_idempotent(repo: Path) -> None:
     repair_repo(repo, write=True)
     again = repair_repo(repo, write=True)
     assert not [r for r in again.rewrites if r.file.name == "plan-config.yaml"]
+
+
+def test_repair_quiet_on_pending_row(repo: Path) -> None:
+    """A `pending`/`tbd` placeholder row is an intentional decided-but-unbuilt
+    slice (#351/#359): repair leaves it untouched with NO unresolved-ref
+    warning and NO rewrite."""
+    (repo / "docs/superpowers/implemented/plans" / SLUG).mkdir()
+    spec = repo / "docs/superpowers/specs" / "2026-05-10-sliced.md"
+    spec.write_text(
+        "# Sliced\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|---|---|---|---|\n"
+        f"| Slice A | `derio-net/test` | `docs/superpowers/implemented/plans/{SLUG}/` | — |\n"
+        "| Slice B | `derio-net/other` | `pending` | — |\n"
+    )
+    result = repair_repo(repo, write=True)
+    # no warning about the pending row
+    assert not any("pending" in w.lower() for w in result.warnings), result.warnings
+    assert not any("Slice B" in w for w in result.warnings), result.warnings
+    # no rewrite targets the pending cell; the row is left verbatim
+    assert all("Slice B" not in r.field for r in result.rewrites)
+    assert "| Slice B | `derio-net/other` | `pending` | — |" in spec.read_text()

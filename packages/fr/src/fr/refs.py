@@ -27,6 +27,29 @@ SPEC_ROOTS = ("specs", "implemented/specs", "archived-specs")
 
 _BACKTICK_RE = re.compile(r"`([^`]*)`")
 
+# A File cell whose first whitespace-delimited token is exactly `pending`/`tbd`
+# marks a decided-but-unbuilt slice (no plan folder yet). The archive sweep,
+# `fr migrate dirs`, and `fr repair` all treat such a row as intentional — held,
+# not resolved, not rewritten (#351, #359). A hyphen/slash continuation
+# ("pending-cleanup") is a real slug, so it must NOT match; likewise "pendingish".
+_PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)(\s|$)", re.IGNORECASE)
+
+
+def is_pending_placeholder(cell: str) -> bool:
+    """True when a spec table's File cell marks a decided-but-unbuilt slice.
+
+    The rule is "the first whitespace-delimited token is exactly
+    `pending`/`tbd`". Only *outer* backticks are stripped (a raw table cell like
+    `` `pending` `` from repair vs. an already-stripped cell from parse_spec via
+    migrate) — NOT `_token`, whose backtick-span precedence would let a trailing
+    `` `path` `` in the note steal the token (`` pending — see `x` ``) and wrongly
+    return False (review #359).
+    """
+    s = cell.strip()
+    if len(s) >= 2 and s[0] == "`" and s[-1] == "`":
+        s = s[1:-1].strip()
+    return bool(_PENDING_PLACEHOLDER_RE.match(s))
+
 
 @dataclass(frozen=True)
 class RefResolution:
