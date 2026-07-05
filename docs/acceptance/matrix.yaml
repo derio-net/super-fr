@@ -269,7 +269,7 @@ rows:
       and emits NO unresolved-ref warning — the pending-slice convention is quiet and
       consistent across sweep, migrate dirs, and repair.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-05-repair-skip-pending-359-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-05-repair-skip-pending-359-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_repair.py
