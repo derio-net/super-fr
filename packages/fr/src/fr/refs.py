@@ -38,11 +38,17 @@ _PENDING_PLACEHOLDER_RE = re.compile(r"^(pending|tbd)(\s|$)", re.IGNORECASE)
 def is_pending_placeholder(cell: str) -> bool:
     """True when a spec table's File cell marks a decided-but-unbuilt slice.
 
-    Uses `_token` so the check is identical whether the caller passes an
-    already-stripped cell (parse_spec, via migrate) or a raw backticked table
-    cell (`` `pending` ``, via repair) — the token is what the rule is about.
+    The rule is "the first whitespace-delimited token is exactly
+    `pending`/`tbd`". Only *outer* backticks are stripped (a raw table cell like
+    `` `pending` `` from repair vs. an already-stripped cell from parse_spec via
+    migrate) — NOT `_token`, whose backtick-span precedence would let a trailing
+    `` `path` `` in the note steal the token (`` pending — see `x` ``) and wrongly
+    return False (review #359).
     """
-    return bool(_PENDING_PLACEHOLDER_RE.match(_token(cell)))
+    s = cell.strip()
+    if len(s) >= 2 and s[0] == "`" and s[-1] == "`":
+        s = s[1:-1].strip()
+    return bool(_PENDING_PLACEHOLDER_RE.match(s))
 
 
 @dataclass(frozen=True)

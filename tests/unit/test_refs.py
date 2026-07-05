@@ -165,6 +165,14 @@ def test_is_pending_placeholder():
         "TBD",
         "pending — no plan yet",
         "pending (slice B)",
+        # Raw backticked table cells (what `fr repair` passes) — outer
+        # backticks stripped, then the first-token rule applies.
+        "`pending`",
+        "`tbd`",
+        "`pending — no plan yet`",
+        # First token is `pending` even with a LATER backtick span in the note
+        # (must not let a trailing `path` steal precedence — review #359).
+        "pending — see `docs/x`",
     ):
         assert is_pending_placeholder(cell), cell
     for cell in (
@@ -173,9 +181,11 @@ def test_is_pending_placeholder():
         "",
         "2026-05-10-x",
         "docs/superpowers/plans/2026-05-10-x/",
+        "`docs/superpowers/plans/2026-05-10-x/`",
         "pendingish",
         "depending",
         "pending-cleanup",
+        "`pending-cleanup`",
         "tbd-foo",
         "pending/x",
     ):
