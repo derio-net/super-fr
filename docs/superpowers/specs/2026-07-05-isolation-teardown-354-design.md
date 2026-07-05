@@ -278,3 +278,9 @@ New rows registered against this spec (business claims → matrix; see
   visible to `fr isolation status` (never a silent state delete).
 - `isolation-gc-reconciles-merged` — a merged-PR workspace is torn down without
   the originating session, host-wide, bounded to ≤1 stale.
+
+## Implementation Plans
+
+| Plan | Target repo | Slug | Status |
+|------|-------------|------|--------|
+| 2026-07-05-isolation-teardown-354 | `derio-net/super-fr` | `2026-07-05-isolation-teardown-354` | — |

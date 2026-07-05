@@ -1,0 +1,51 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Opportunistic background gc spawn on up/down + host-wide flock
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - isolation-gc-reconciles-merged
+tasks:
+- number: 1
+  title: GcSpawner seam — fire on up and down
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED. test_up_spawns_background_gc / test_down_spawns_background_gc: inject a recording spawner into LocalWorktreeDevcontainerTarget; assert up() and down() each request exactly one spawn AFTER their own work. Add test_spawn_failure_does_not_break_flow: a spawner that raises must not propagate out of up()/down(). Run → fails.
+  - id: P5.T1.S2
+    text: |-
+      GREEN. Add a GcSpawner constructor arg (default _detached_gc_spawn: subprocess.Popen([sys.executable,\"-m\",\"fr\",\"isolation\",\"gc\"], start_new_session=True, stdin/stdout/stderr → HOME/.cache/fr/isolation-gc.log), wrapped so any error is swallowed+logged). Call self._spawn_gc() at the end of up() (after save_state+marker) and down() (after delete_state); guard so it never raises into the flow. Re-run → passes.
+- number: 2
+  title: Host-wide gc flock — second sweep no-ops
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED. test_gc_second_concurrent_sweep_noops: acquire the gc lock, then run gc() and assert it exits immediately doing no reaping (BlockingIOError path). Run → fails.
+  - id: P5.T2.S2
+    text: |-
+      GREEN. Add _acquire_gc_lock() mirroring fr_vk.bridge_cli._acquire_lock (flock LOCK_EX|LOCK_NB on HOME/.cache/fr/isolation-gc.lock, /tmp fallback, reimplemented locally — no fr_vk import). gc() takes the lock first; on BlockingIOError it returns an empty/short-circuit report. Re-run → passes; run full `uv run pytest -q --no-cov` → green.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

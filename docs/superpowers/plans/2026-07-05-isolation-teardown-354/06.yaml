@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Doc reconciliation (120-line cap) + version bump
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  tracking_issue: null
+  acceptance:
+  - isolation-gc-reconciles-merged
+  - isolation-down-verified
+tasks:
+- number: 1
+  title: 'Skill docs: gc in lifecycle + cleanup-contract reconciliation'
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-isolation/SKILL.md: add `fr isolation gc` to the Lifecycle block and rewrite the Cleanup contract to "gc reconciles merged workspaces automatically (fired on every up/down, host-wide, ≤1 stale); `down` is the immediate-teardown lever and still refuses an open PR without --force." Edit fr-goal step 9 and fr-debugging cleanup line to "gc reconciles merged workspaces even if the session never resumes; the explicit `down` remains for immediate close-out." Compress elsewhere to keep each SKILL.md ≤120 lines. Verify: `wc -l` on all three ≤120.
+- number: 2
+  title: Version bump (minor — new subcommand + new mandatory behavior)
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Run `uv run python scripts/bump-version.py minor` (new `fr isolation gc` subcommand + opportunistic auto-teardown = user-visible workflow addition). Then `uv run python scripts/bump-version.py --check` and `uv run fr --version` to confirm all sources agree. Commit the four bump files with the feature.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
