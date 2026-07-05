@@ -236,3 +236,25 @@ rows:
       per-workspace error isolation, image sweep, opportunistic spawn seam, and flock
       no-op all unit-pinned over the Runner seam; the real-docker reap + live
       opportunistic trigger are Test-Plan items 3-4, post-merge.'
+  - id: spec-sweep-pending-slice-hold
+    capability: Archive spec-sweep
+    acceptance: A spec with a decided-but-unbuilt slice (a pending-placeholder plan
+      row) is held in place — not swept to implemented/specs/ — when unrelated plans
+      archive; the hold emits a clear 'pending slice' note, deterministically and without
+      a gh probe.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-05-spec-sweep-slice-guard-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'issue #351; born at brainstorm (fr-goal 2026-07-05). Levels flip to ci when
+      unit + integration tests land.'
+  - id: archive-no-spec-sweep-flag
+    capability: Archive spec-sweep
+    acceptance: fr archive --no-spec-sweep archives the plan(s) but skips the spec sweep
+      entirely for that invocation, leaving all specs untouched.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-05-spec-sweep-slice-guard-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'issue #351; manual escape (idea c). Level flips to ci with test_archive_cmd
+      --no-spec-sweep case.'
