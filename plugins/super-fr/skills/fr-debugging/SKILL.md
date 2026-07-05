@@ -95,8 +95,10 @@ Verify first (`superpowers:verification-before-completion`: failing test now
 passes, no others broken). Open ONE PR via
 `superpowers:finishing-a-development-branch`; the body summarizes and links the
 debugging log (root cause + fix + the failing-test-first narrative). Stop —
-the operator merges. Cleanup (`fr isolation down`) belongs to whoever finishes
-the run, only when this skill brought the workspace up cold.
+the operator merges. Cleanup: `fr isolation down` for immediate teardown when
+this skill brought the workspace up cold — otherwise `fr isolation gc` reaps the
+merged workspace automatically (fired on any up/down), so a missed `down` no
+longer leaks it.
 
 ## Scope notes
 

@@ -35,8 +35,9 @@ fr isolation up --branch <feature-branch> [--profile <name>]   # worktree + cont
 fr isolation exec --branch <feature-branch> -- CMD ...          # every build/test/run
 fr isolation status [--branch ...] [--format json] [--stats]    # state; --stats: docker resource use
 fr isolation restart [--branch ...] [--force]                   # bounce a wedged container, worktree kept
-fr isolation down --branch <feature-branch> [--force]           # post-merge cleanup
+fr isolation down --branch <feature-branch> [--force]           # immediate teardown (verifies + reaps image)
 fr isolation down --all [--force]                               # tear down ALL + clear pipeline sentinel(s)
+fr isolation gc [--dry-run] [--format json]                     # host-wide: reap merged workspaces + dangling images
 ```
 
 - `up` resolves the profile (flag → repo default from
@@ -70,20 +71,16 @@ untouched: it keeps that branch's own tip, never rebased.
   unauthenticated unless that file provides a token. Push and PR creation
   default to the HOST (run them outside `exec`, from the worktree) — the
   operator's credentials never enter the container implicitly.
-- Pre-push guard: pushing to a feature branch whose PR is `MERGED`/`CLOSED`
-  orphans the commit from `main` (#320 merge-race). A `PreToolUse` hook
-  (`fr-merged-pr-push-guard.sh`) denies it during an active pipeline — a denied
-  push is the guard working; cherry-pick onto `main` (or a fresh PR) instead.
-- ALL GitHub interaction relies on an AUTHENTICATED HOST — pushes, PR creation,
-  and `status`/`down`'s `gh pr view` checks all use host auth. The container
-  needs NO GitHub token for the standard pipeline (in-container gh writes are an
-  opt-in profile, e.g. `admin` with GH_TOKEN); never ask the operator for one.
-- The harness resets the shell cwd to the base repo between calls, so each
-  host-side git/gh op is a compound `cd <worktree> && …`. The guard allows a
-  leading `cd` resolving under `~/.cache/fr/worktrees` or a temp dir (#279);
-  nothing else leaves the base-repo cwd. `fr isolation up` prints an
-  `/add-dir <worktree>` tip (#281) — run it once and a bare `cd <worktree>`
-  persists, dropping the prefix. The deny message names ALL of these escapes.
+- Pre-push guard: pushing to a branch whose PR is `MERGED`/`CLOSED` orphans the
+  commit from `main` (#320). The `fr-merged-pr-push-guard.sh` PreToolUse hook
+  denies it during a pipeline — cherry-pick onto `main` (or a fresh PR) instead.
+- ALL GitHub interaction uses the AUTHENTICATED HOST — pushes, PR creation, and
+  `status`/`down`/`gc`'s `gh pr view` checks. The container needs NO GitHub token
+  for the standard pipeline (in-container gh writes are an opt-in profile).
+- The harness resets cwd to the base repo between calls, so host-side git/gh is a
+  compound `cd <worktree> && …`; the guard allows a leading `cd` under
+  `~/.cache/fr/worktrees` / a temp dir (#279). `up`'s `/add-dir` tip (#281) makes
+  a bare `cd` persist. The deny message names every escape.
 - Never run project commands against the base repo while isolation is live.
 - `up` writes a gitignored `.fr-isolation` marker the `fr-isolation-required`
   PreToolUse hook reads to ALLOW edits; editing tracked files in an fr-enabled
@@ -92,14 +89,17 @@ untouched: it keeps that branch's own tip, never rebased.
 
 ## Cleanup contract
 
-The worktree and container PERSIST after the PR is created — the operator
-may push to the PR branch (back-loaded manual phases land this way).
+The worktree + container PERSIST after the PR is created (the operator may push
+to the PR branch — back-loaded manual phases land this way).
 
-- `fr isolation status` shows the linked PR's state via gh.
-- After the PR is observed MERGED, `fr isolation down` cleans up (it
-  refuses while the PR is open unless `--force` — protect the operator's
-  pending pushes, don't fight the guard).
-- Close-out of a fr-goal run includes the `down`.
+- **gc auto-reconciles merged work.** `fr isolation gc` fires detached on every
+  `up`/`down` — host-wide, no daemon, ≤1 stale — tearing down MERGED-PR
+  workspaces and reaping orphaned containers + dangling `vsc-*` images; open-PR
+  and no-PR work is untouched.
+- **`down` is the immediate lever** — it verifies the container + worktree are
+  actually gone before dropping state (a transient docker failure leaves the
+  workspace VISIBLE, never silently leaked) and refuses an open PR unless
+  `--force`. An fr-goal close-out MAY run it, but no longer must.
 
 ## Recovery (#341)
 

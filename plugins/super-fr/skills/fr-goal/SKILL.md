@@ -117,4 +117,4 @@ When the operator reports the merge: **first verify it reached `main`** via
 `fr isolation verify-merge --branch <b>`; not verified → STOP and recover
 (cherry-pick / fresh PR). Then drive the Test Plan if present, surface
 remaining acceptance debt in the final report, confirm phases complete
-(`fr status`), `fr archive <plan-dir>`, housekeeping PR, `fr isolation down`.
+(`fr status`), `fr archive <plan-dir>`, housekeeping PR, `fr isolation down` (or let gc reap it — it auto-reconciles merged workspaces on any up/down).
