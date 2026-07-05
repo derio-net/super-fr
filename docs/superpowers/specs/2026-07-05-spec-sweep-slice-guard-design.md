@@ -42,14 +42,13 @@ Two orthogonal changes, both in the `fr` package.
 Establish a convention: **when a slice is decided but unbuilt, add a row for it
 to the spec's `## Implementation Plans` table with a recognized pending
 placeholder in the File cell.** The sweep treats such a row as a hold.
+Illustration (the `## Implementation Plans` table of a two-slice spec):
 
-```
-## Implementation Plans
-
-| Plan    | Repo          | File          | Depends on |
-|---------|---------------|---------------|------------|
-| Slice A | derio-net/x   | `2026-07-01-a/` | —        |  ← archived
-| Slice B | derio-net/x   | `pending`     | —          |  ← holds the spec
+```text
+Plan     | Repo        | File            | Depends on
+-------- | ----------- | --------------- | ----------
+Slice A  | derio-net/x | 2026-07-01-a/   | —           ← archived
+Slice B  | derio-net/x | pending         | —           ← holds the spec
 ```
 
 **Recognition** (`fr.migrate`, new helper `_is_pending_placeholder`): the File
@@ -133,8 +132,7 @@ simulate):
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
-| Spec-sweep slice guard | `derio-net/super-fr` | `pending` | — |
+| 2026-07-05-spec-sweep-slice-guard | `derio-net/super-fr` | `2026-07-05-spec-sweep-slice-guard` | — |
 
-_(This row is a `pending` placeholder until `fr-plan` creates the plan folder;
-it is rewritten to the plan path when the build starts — and, fittingly, it
-exercises the very convention this spec introduces.)_
+_(Single slice, built in one plan; the row points at the active plan folder and
+resolves to `implemented/plans/` when the plan archives at close-out.)_
