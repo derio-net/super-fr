@@ -956,6 +956,24 @@ def test_down_force_still_verifies_container(
     assert load_state(repo, "vk-iso/test") is not None
 
 
+def test_down_raises_when_docker_query_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `docker ps` ITSELF failing (daemon unreachable) must not be read as "no
+    # container" — down must raise and keep state, or it re-opens the #354 leak
+    # (delete state while a container survives once docker recovers).
+    repo, runner, target, st = _upped(
+        tmp_path,
+        monkeypatch,
+        fail_on="ps",
+        stdout={"docker": "abc123 running\n", "gh": '{"state": "MERGED", "url": "u"}'},
+    )
+    with pytest.raises(IsolationError, match="docker ps failed"):
+        target.down(st, force=False)
+    assert load_state(repo, "vk-iso/test") is not None
+    assert not any(c[1] in ("stop", "rm") for c in runner.argv_for("docker"))
+
+
 def test_down_reclaims_image(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo, runner, target, st = _upped(
         tmp_path,
@@ -1090,6 +1108,44 @@ def test_gc_dry_run_mutates_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert action.action == "would-reap"
     assert wt.is_dir() and load_state(repo, "feat/merged") is not None
     assert not any(c[0:2] == ["docker", "rm"] for c in runner.argv_for("docker"))
+
+
+def test_gc_merged_reap_unexpected_error_does_not_abort_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An UNEXPECTED error (not IsolationError) from a sibling down() must be
+    # caught per-workspace, not abort the whole host-wide sweep.
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        pr_by_branch={
+            "feat/m": '{"state": "MERGED", "url": "u"}',
+            "feat/o": '{"state": "OPEN", "url": "u"}',
+        },
+    )
+    up("feat/m")
+    up("feat/o")
+
+    def boom(self, state, force=False):  # noqa: ANN001, ANN202
+        raise RuntimeError("unexpected teardown failure")
+
+    monkeypatch.setattr(LocalWorktreeDevcontainerTarget, "down", boom)
+    by_branch = {a.branch: a for a in target.gc()}
+    assert by_branch["feat/m"].action == "reap-failed"
+    assert by_branch["feat/o"].action == "skipped"  # sweep continued past the failure
+
+
+def test_gc_corrupt_state_does_not_abort_discovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.isolation.types import state_path
+
+    repo, runner, target, up = _gc_env(tmp_path, monkeypatch)
+    wt = up("feat/a")
+    state_path(repo, "feat/a").write_text("{ not valid json")  # corrupt
+    recs = target._discover_workspaces()  # must not raise
+    rec = next(r for r in recs if r.worktree == wt)
+    assert rec.state is None  # degrades to no-state (warned, never blindly reaped)
 
 
 def test_gc_sweeps_dangling_vsc_images(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

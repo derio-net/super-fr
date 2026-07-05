@@ -295,7 +295,7 @@ class LocalWorktreeDevcontainerTarget:
         inferring it from hung execs. Returns None (never raises) for a missing,
         non-running, or unreadable container — the caller renders `n/a`."""
         # One `docker ps` for both id and state (id state, space-joined).
-        parts = self._docker_ps(state).split()
+        parts = self._docker_ps_line(state).split()
         if len(parts) < 2 or parts[1] != "running":
             return None
         container = parts[0]
@@ -386,18 +386,32 @@ class LocalWorktreeDevcontainerTarget:
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
-        container = self._container_id(state)
+        # A FAILED `docker ps` (daemon unreachable) must NOT be read as "no
+        # container" — that path would `delete_state()` while a container may
+        # still be running once the daemon recovers, the exact #354 leak. So the
+        # probe raises on query failure, only a successful-but-empty result means
+        # "genuinely absent".
+        probe = self._docker_ps(state)
+        if probe.returncode != 0:
+            raise IsolationError(
+                f"docker ps failed while tearing down {state.branch} "
+                f"({(probe.stderr or probe.stdout or '').strip()}) — cannot verify teardown; "
+                "state left intact, retry `fr isolation down` once docker recovers."
+            )
+        line = (probe.stdout or "").strip()
+        container = line.split()[0] if line else None
         # Capture the image id BEFORE `docker rm` (the container must still exist
         # to inspect it); reclaim it AFTER the container is confirmed gone.
         image = self._image_for(container) if container else None
         if container:
             self.run(["docker", "stop", container])
             self.run(["docker", "rm", container])
-            if self._container_id(state) is not None:
+            verify = self._docker_ps(state)
+            if verify.returncode != 0 or (verify.stdout or "").strip():
                 raise IsolationError(
-                    f"container for {state.branch} still present after docker stop/rm — "
-                    "workspace left intact (still visible to `fr isolation status`); "
-                    "retry `fr isolation down` once docker recovers."
+                    f"container for {state.branch} still present (or unverifiable) after "
+                    "docker stop/rm — workspace left intact (still visible to `fr isolation "
+                    "status`); retry `fr isolation down` once docker recovers."
                 )
             self._reclaim_image(image)
         wt = self.run(
@@ -507,7 +521,10 @@ class LocalWorktreeDevcontainerTarget:
                     state, force=False
                 )
                 return GcAction(wt, state.branch, "merged", "reaped")
-            except IsolationError as e:
+            except Exception as e:
+                # Broad by design (matches the orphan branch): one workspace's
+                # teardown — IsolationError, a missing binary, an OSError from
+                # delete_state — must NEVER abort the host-wide sweep.
                 return GcAction(wt, state.branch, "merged", "reap-failed", str(e))
         if pr_state == "OPEN":
             return GcAction(wt, state.branch, "open", "skipped")
@@ -526,7 +543,13 @@ class LocalWorktreeDevcontainerTarget:
             by_path.setdefault(path, GcWorkspace(worktree=path, container_id=None, state=None))
         for path, rec in by_path.items():
             if path.is_dir():
-                rec.state = self._resolve_state(path)
+                try:
+                    rec.state = self._resolve_state(path)
+                except Exception:
+                    # A single corrupt/unreadable state JSON must not abort the
+                    # host-wide sweep — treat as no-state (the workspace is then
+                    # warned, never blindly reaped).
+                    rec.state = None
         return list(by_path.values())
 
     def _labelled_containers(self) -> list[tuple[str, Path]]:
@@ -779,8 +802,8 @@ class LocalWorktreeDevcontainerTarget:
                 env_file.parent.mkdir(parents=True, exist_ok=True)
                 env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")
 
-    def _docker_ps(self, state: IsolationState) -> str:
-        result = self.run(
+    def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:
+        return self.run(
             [
                 "docker",
                 "ps",
@@ -789,10 +812,16 @@ class LocalWorktreeDevcontainerTarget:
                 "--format={{.ID}} {{.State}}",
             ]
         )
-        return (result.stdout or "").strip()
+
+    def _docker_ps_line(self, state: IsolationState) -> str:
+        """Tolerant read for status/stats — empty on absent OR query failure.
+        `down()` uses the raw `_docker_ps` so it can tell those two apart: a
+        FAILED query must never be read as 'container gone' (that would re-open
+        the #354 leak under a down daemon), only a successful-but-empty one."""
+        return (self._docker_ps(state).stdout or "").strip()
 
     def _container_id(self, state: IsolationState) -> str | None:
-        line = self._docker_ps(state)
+        line = self._docker_ps_line(state)
         return line.split()[0] if line else None
 
     def _image_for(self, container: str) -> str | None:
@@ -818,8 +847,8 @@ class LocalWorktreeDevcontainerTarget:
             )
 
     def _container_state(self, state: IsolationState) -> str | None:
-        line = self._docker_ps(state)
-        return line.split()[1] if line and len(line.split()) > 1 else None
+        parts = self._docker_ps_line(state).split()
+        return parts[1] if len(parts) > 1 else None
 
     def _pr(self, state: IsolationState) -> dict[str, Any] | None:
         return self._pr_from(self.repo_root, state.branch)
