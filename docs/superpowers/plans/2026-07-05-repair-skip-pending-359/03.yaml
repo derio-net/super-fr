@@ -1,0 +1,33 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Version bump + gate
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Patch bump and full gate
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Patch bump (bugfix). Run `uv run python scripts/bump-version.py patch` (3.8.2 → 3.8.3); verify with `uv run python scripts/bump-version.py --check` and `uv run fr --version` → 3.8.3. Do NOT hand-edit versions.
+  - id: P3.T1.S2
+    text: |-
+      Full gate: `uv run ruff format packages/ tests/`, `uv run ruff format --check packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src`, `uv run pytest -q --no-cov`, `uv run python scripts/bump-version.py --check`. All green. Capture the pytest summary for verification-before-completion.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
