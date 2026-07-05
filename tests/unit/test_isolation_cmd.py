@@ -13,6 +13,13 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_gc_spawn(monkeypatch: pytest.MonkeyPatch):
+    """Never fork a real `fr isolation gc` during CLI tests — up/down would
+    otherwise reap the developer's live workspaces (#354)."""
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda: None)
+
+
 @pytest.fixture()
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))

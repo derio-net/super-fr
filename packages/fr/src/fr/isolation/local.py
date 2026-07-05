@@ -8,6 +8,8 @@ and down re-find the container.
 
 from __future__ import annotations
 
+import errno
+import fcntl
 import json
 import os
 import subprocess
@@ -16,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from fr.isolation.types import (
     IsolationError,
@@ -42,6 +44,41 @@ def subprocess_runner(
 
 def _home() -> Path:
     return Path(os.environ.get("HOME", str(Path.home())))
+
+
+# --- opportunistic gc spawn seam (#354 Task B) ---
+#
+# `up`/`down` fire a detached `fr isolation gc` after their own work — the
+# primary auto-trigger that bounds the steady-state leak to <=1 workspace with
+# no daemon. Routed through an INJECTABLE seam (not the Runner: a fire-and-forget
+# Popen is a different shape than subprocess.run) so the non-blocking /
+# non-raising contract is testable. The library default is a NO-OP — production
+# opts into the real spawn at the CLI boundary, so a Target built directly (every
+# unit test, and gc's own sibling teardown Targets) never spawns.
+GcSpawner = Callable[[], None]
+
+
+def _detached_gc_spawn() -> None:
+    """Fire-and-forget `fr isolation gc`: detached (own session), non-blocking,
+    output to a rotating-ish log. Any spawn error is swallowed — a caller must
+    never fail because a background reap could not start."""
+    try:
+        log_path = _home() / ".cache" / "fr" / "isolation-gc.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log = open(log_path, "a")  # noqa: SIM115 — handed to the child; not ours to close
+        subprocess.Popen(
+            [sys.executable, "-m", "fr", "isolation", "gc"],
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+        )
+    except Exception:
+        pass
+
+
+def _noop_gc_spawn() -> None:
+    """The safe default — no background sweep (see GcSpawner)."""
 
 
 @dataclass
@@ -124,13 +161,19 @@ def _main_worktree_root(repo_root: Path) -> Path:
 
 
 class LocalWorktreeDevcontainerTarget:
-    def __init__(self, repo_root: Path, runner: Runner = subprocess_runner):
+    def __init__(
+        self,
+        repo_root: Path,
+        runner: Runner = subprocess_runner,
+        gc_spawner: GcSpawner = _noop_gc_spawn,
+    ):
         # resolve() — the mount target must match the realpath git bakes
         # into the worktree's gitdir pointer (symlinked /tmp on macOS etc.).
         # Then normalize to the main toplevel so a worktree-launched run keys
         # off the durable main checkout (#292).
         self.repo_root = _main_worktree_root(Path(repo_root).resolve())
         self.run = runner
+        self._gc_spawner = gc_spawner
 
     # ---------- lifecycle ----------
 
@@ -204,6 +247,7 @@ class LocalWorktreeDevcontainerTarget:
         )
         save_state(state)
         self._write_isolation_marker(worktree, branch)
+        self._spawn_gc()
         return state
 
     def exec(self, state: IsolationState, argv: list[str]) -> int:
@@ -371,6 +415,15 @@ class LocalWorktreeDevcontainerTarget:
         # unlink is then an idempotent no-op.
         self._remove_isolation_marker(state.worktree)
         delete_state(state.repo_root, state.branch)
+        self._spawn_gc()
+
+    def _spawn_gc(self) -> None:
+        """Fire the opportunistic background sweep — best-effort, never raises
+        into up()/down()."""
+        try:
+            self._gc_spawner()
+        except Exception:
+            pass
 
     # ---------- gc: host-wide reconciliation (#354 Task B) ----------
 
@@ -385,10 +438,41 @@ class LocalWorktreeDevcontainerTarget:
         would reap in-progress no-PR work (its guard only blocks OPEN PRs). Each
         workspace is handled in isolation: one failed teardown is recorded and
         the sweep continues.
+
+        A host-wide flock serializes concurrent sweeps (two near-simultaneous
+        up/down each fork a gc): the second gets `EWOULDBLOCK` and short-circuits
+        to an empty report. The sweep is idempotent, so a skipped overlap is
+        harmless — the next up/down re-runs it.
         """
-        actions = [self._gc_one(rec, dry_run) for rec in self._discover_workspaces()]
-        actions.extend(self._sweep_dangling_images(dry_run))
-        return actions
+        try:
+            lock = self._acquire_gc_lock()
+        except BlockingIOError:
+            return []
+        try:
+            actions = [self._gc_one(rec, dry_run) for rec in self._discover_workspaces()]
+            actions.extend(self._sweep_dangling_images(dry_run))
+            return actions
+        finally:
+            lock.close()
+
+    def _acquire_gc_lock(self) -> IO[str]:
+        """flock(LOCK_EX | LOCK_NB) on the host-wide gc lock; BlockingIOError if
+        another sweep holds it. Idiom mirrored from fr_vk.bridge_cli (reimplemented
+        locally — `fr` must not depend on `fr_vk`, which is being dropped)."""
+        lock_path = _home() / ".cache" / "fr" / "isolation-gc.lock"
+        try:
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            lock_path = Path("/tmp/fr-isolation-gc.lock")  # noqa: S108 — unprivileged fallback
+        fh = open(lock_path, "w")
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            fh.close()
+            if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                raise BlockingIOError("gc sweep already in progress") from e
+            raise
+        return fh
 
     def _gc_one(self, rec: GcWorkspace, dry_run: bool) -> GcAction:
         wt = str(rec.worktree)
@@ -417,8 +501,11 @@ class LocalWorktreeDevcontainerTarget:
             try:
                 # Tear down through a Target rooted at the workspace's OWN repo
                 # (down() keys git/gh off its repo_root) — substrate-neutral: gc
-                # orchestrates Targets, it doesn't reach past them.
-                type(self)(state.repo_root, runner=self.run).down(state, force=False)
+                # orchestrates Targets, it doesn't reach past them. The sibling
+                # gets the NO-OP spawner so a reap never re-triggers a sweep.
+                type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
+                    state, force=False
+                )
                 return GcAction(wt, state.branch, "merged", "reaped")
             except IsolationError as e:
                 return GcAction(wt, state.branch, "merged", "reap-failed", str(e))

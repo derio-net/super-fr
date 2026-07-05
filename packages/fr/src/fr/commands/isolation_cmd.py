@@ -13,7 +13,11 @@ from pathlib import Path
 
 import typer
 
-from fr.isolation.local import LocalWorktreeDevcontainerTarget, subprocess_runner
+from fr.isolation.local import (
+    LocalWorktreeDevcontainerTarget,
+    _detached_gc_spawn,
+    subprocess_runner,
+)
 from fr.isolation.types import (
     IsolationError,
     clear_repo_sentinels,
@@ -29,12 +33,15 @@ isolation_app = typer.Typer(
 
 # Module-level runner seam so tests can monkeypatch every external call.
 _runner = subprocess_runner
+# Production entry point opts into the real detached gc spawn on up/down; the
+# library default is a no-op. Module seam so tests never fork a real sweep.
+_gc_spawner = _detached_gc_spawn
 
 DEFAULT_BRANCH = "vk-iso/work"
 
 
 def _target(repo: Path) -> LocalWorktreeDevcontainerTarget:
-    return LocalWorktreeDevcontainerTarget(repo.resolve(), runner=_runner)
+    return LocalWorktreeDevcontainerTarget(repo.resolve(), runner=_runner, gc_spawner=_gc_spawner)
 
 
 def _fail(err: IsolationError) -> None:

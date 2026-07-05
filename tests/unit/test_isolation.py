@@ -1119,6 +1119,68 @@ def test_gc_image_rmi_failure_is_non_fatal(tmp_path: Path, monkeypatch: pytest.M
     assert img.action == "reap-failed"
 
 
+# ---------- opportunistic gc spawn + flock (#354 Task B) ----------
+
+
+def _spawn_target(tmp_path, monkeypatch, spawner, **runner_kw):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    runner = FakeRunner(**runner_kw)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner, gc_spawner=spawner)
+    return repo, runner, target
+
+
+def test_up_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spawns: list[int] = []
+    _, _, target = _spawn_target(tmp_path, monkeypatch, lambda: spawns.append(1))
+    target.up(None, "feat/a")
+    assert spawns == [1], "up() fires exactly one background gc after its work"
+
+
+def test_down_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spawns: list[int] = []
+    repo, runner, target = _spawn_target(
+        tmp_path, monkeypatch, lambda: spawns.append(1), stdout={"gh": '{"state": "MERGED"}'}
+    )
+    st = target.up(None, "feat/a")
+    spawns.clear()
+    target.down(st, force=False)
+    assert spawns == [1], "down() fires exactly one background gc after teardown"
+
+
+def test_spawn_failure_does_not_break_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom() -> None:
+        raise RuntimeError("no fork today")
+
+    _, _, target = _spawn_target(tmp_path, monkeypatch, boom)
+    st = target.up(None, "feat/a")  # must not raise
+    assert st.worktree.is_dir()
+
+
+def test_default_target_does_not_spawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The library default spawner is a no-op — a directly-constructed Target
+    # (as in tests, and gc's own sibling teardowns) never forks a real sweep.
+    from fr.isolation.local import _noop_gc_spawn
+
+    target = LocalWorktreeDevcontainerTarget(make_repo(tmp_path, ["dev"], default="dev"))
+    assert target._gc_spawner is _noop_gc_spawn
+
+
+def test_gc_second_concurrent_sweep_noops(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        pr_by_branch={"feat/merged": '{"state": "MERGED", "url": "u"}'},
+    )
+    up("feat/merged")
+    held = target._acquire_gc_lock()  # simulate a concurrent sweep holding the lock
+    try:
+        assert target.gc() == [], "a second concurrent sweep short-circuits"
+        assert not any(c[0:2] == ["docker", "rm"] for c in runner.argv_for("docker"))
+    finally:
+        held.close()
+
+
 def test_up_twice_is_idempotent_on_worktree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

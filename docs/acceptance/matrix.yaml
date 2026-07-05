@@ -227,7 +227,12 @@ rows:
       every up/down, bounded to <=1 stale workspace with no daemon.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-05-isolation-teardown-354-design.md
-    levels: {}
-    status: not-implemented
-    notes: '#354 Task B. gc classification unit-pinnable over the Runner seam; real-docker
-      reap + opportunistic trigger are Test-Plan items 3-4, post-merge.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: skipped
+    notes: '#354 Task B. Classification (merged/open/no-pr/orphan/no-state), discovery,
+      per-workspace error isolation, image sweep, opportunistic spawn seam, and flock
+      no-op all unit-pinned over the Runner seam; the real-docker reap + live
+      opportunistic trigger are Test-Plan items 3-4, post-merge.'
