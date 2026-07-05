@@ -293,21 +293,54 @@ class LocalWorktreeDevcontainerTarget:
         }
 
     def down(self, state: IsolationState, force: bool = False) -> None:
+        """Tear down the workspace, verifying each destructive step's
+        POST-CONDITION before deleting the bookkeeping (#354 Task A).
+
+        Historically `down` ran `docker stop`/`rm` and `git worktree remove`
+        with their return codes ignored, then `delete_state()` unconditionally —
+        so a transient docker hiccup left a running container that `fr isolation
+        status` could no longer see (state gone). Now: re-query the container /
+        worktree AFTER the teardown call and, if it survived, raise
+        `IsolationError` while LEAVING the state file + `.fr-isolation` marker in
+        place, so the workspace stays visible and a retry (or `--force` for the
+        open-PR case) can finish the job.
+
+        Re-query — not the return code — is authoritative: `docker rm` on an
+        already-gone container returns non-zero while the post-condition (gone)
+        holds, and a `rm` can return 0 yet leave a wedged container. `--force`
+        bypasses the open-PR guard ONLY; it never skips this verification (that
+        would re-introduce the invisible-leak bug).
+        """
         pr = self._pr(state)
         if pr and pr.get("state") == "OPEN" and not force:
             raise IsolationError(
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
-        self._remove_isolation_marker(state.worktree)
         container = self._container_id(state)
         if container:
             self.run(["docker", "stop", container])
             self.run(["docker", "rm", container])
-        self.run(
+            if self._container_id(state) is not None:
+                raise IsolationError(
+                    f"container for {state.branch} still present after docker stop/rm — "
+                    "workspace left intact (still visible to `fr isolation status`); "
+                    "retry `fr isolation down` once docker recovers."
+                )
+        wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
             cwd=self.repo_root,
         )
+        if wt.returncode != 0 and state.worktree.exists():
+            raise IsolationError(
+                f"git worktree remove failed for {state.worktree}: "
+                f"{wt.stderr or wt.stdout} — state left intact; retry `fr isolation down`."
+            )
+        # Marker removal is LAST: a raise above leaves the marker inside the
+        # still-present worktree, so the workspace stays a valid isolation
+        # workspace. When the worktree is gone the marker went with it — the
+        # unlink is then an idempotent no-op.
+        self._remove_isolation_marker(state.worktree)
         delete_state(state.repo_root, state.branch)
 
     # ---------- helpers ----------

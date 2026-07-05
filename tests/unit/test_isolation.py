@@ -7,6 +7,7 @@ real throwaway repos (cheap, deterministic). Nothing here needs Docker.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -163,7 +164,15 @@ def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
 
 
 class FakeRunner:
-    """Records non-git argv; delegates git to the real binary."""
+    """Records non-git argv; delegates git to the real binary.
+
+    Stateful docker model (#354): a successful `docker rm <id>` records the id
+    as removed, and subsequent `docker ps` output drops that id — so `down`'s
+    post-condition re-query reflects reality. Fail the `rm` (`fail_on="rm"`) and
+    the id survives → the re-query still sees it → `down` raises. This is what
+    lets the same fixture exercise both the happy path and the transient-failure
+    path without call-sequence stubbing.
+    """
 
     def __init__(self, fail_on: str | None = None, stdout: dict[str, str] | None = None):
         self.calls: list[list[str]] = []
@@ -171,6 +180,7 @@ class FakeRunner:
         self.captures: list[bool] = []
         self.fail_on = fail_on
         self.stdout = stdout or {}
+        self.removed: set[str] = set()
 
     def __call__(
         self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
@@ -184,8 +194,18 @@ class FakeRunner:
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         self.calls.append(list(argv))
         rc = 1 if (self.fail_on and self.fail_on in argv[0:2]) else 0
+        if argv[0:2] == ["docker", "rm"] and rc == 0:
+            self.removed.update(argv[2:])
         out = self.stdout.get(argv[0], "")
+        if argv[0:2] == ["docker", "ps"]:
+            out = self._docker_ps_out()
         return subprocess.CompletedProcess(argv, rc, stdout=out, stderr="")
+
+    def _docker_ps_out(self) -> str:
+        """Configured `docker` line, minus any container id already `rm`'d."""
+        out = self.stdout.get("docker", "")
+        first = out.split()[0] if out.split() else ""
+        return "" if first in self.removed else out
 
     def argv_for(self, binary: str) -> list[list[str]]:
         return [c for c in self.calls if c[0] == binary]
@@ -824,6 +844,79 @@ def test_down_merged_pr_cleans_without_force(
     )
     target.down(st, force=False)
     assert not st.worktree.exists()
+
+
+def _orphan_worktree(repo: Path, st: IsolationState, *, keep_dir: bool) -> None:
+    """Remove the worktree from git out-of-band. keep_dir=True leaves a stray
+    directory at the path (so real `git worktree remove` fails while the dir
+    still exists); keep_dir=False leaves nothing behind."""
+    shutil.rmtree(st.worktree)
+    subprocess.run(["git", "-C", str(repo), "worktree", "prune"], check=True)
+    if keep_dir:
+        st.worktree.mkdir(parents=True)
+
+
+def test_down_raises_when_container_survives_stop_rm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A transient docker failure: `docker rm` fails, so the re-query still sees
+    # the container. down() must raise and LEAVE state + marker + worktree in
+    # place, so `fr isolation status` still sees the workspace.
+    repo, runner, target, st = _upped(
+        tmp_path,
+        monkeypatch,
+        fail_on="rm",
+        stdout={"docker": "abc123 running\n", "gh": '{"state": "MERGED", "url": "u"}'},
+    )
+    with pytest.raises(IsolationError, match="still present"):
+        target.down(st, force=False)
+    assert load_state(repo, "vk-iso/test") is not None, "state must survive"
+    assert (st.worktree / ".fr-isolation").exists(), "marker must survive"
+    assert st.worktree.is_dir(), "worktree must be untouched"
+
+
+def test_down_raises_when_worktree_remove_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Container tears down cleanly, but the worktree remove fails while the dir
+    # still exists (a stray dir git no longer tracks) → raise, keep state.
+    repo, runner, target, st = _upped(
+        tmp_path,
+        monkeypatch,
+        stdout={"docker": "abc123 running\n", "gh": '{"state": "MERGED", "url": "u"}'},
+    )
+    _orphan_worktree(repo, st, keep_dir=True)
+    with pytest.raises(IsolationError, match="worktree remove failed"):
+        target.down(st, force=False)
+    assert load_state(repo, "vk-iso/test") is not None, "state must survive a worktree failure"
+
+
+def test_down_completes_when_worktree_already_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Worktree removed out of band: `git worktree remove` fails but the dir is
+    # gone, so the post-condition holds → down completes and deletes state.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    _orphan_worktree(repo, st, keep_dir=False)
+    target.down(st, force=False)
+    assert load_state(repo, "vk-iso/test") is None
+
+
+def test_down_force_still_verifies_container(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # --force bypasses the open-PR guard, NOT the container-gone verification.
+    repo, runner, target, st = _upped(
+        tmp_path,
+        monkeypatch,
+        fail_on="rm",
+        stdout={"docker": "abc123 running\n", "gh": '{"state": "OPEN", "url": "u"}'},
+    )
+    with pytest.raises(IsolationError, match="still present"):
+        target.down(st, force=True)
+    assert load_state(repo, "vk-iso/test") is not None
 
 
 def test_up_twice_is_idempotent_on_worktree(
