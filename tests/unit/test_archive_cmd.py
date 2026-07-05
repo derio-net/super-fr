@@ -343,3 +343,38 @@ def test_archive_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
     text = (moved_spec if moved_spec.exists() else spec).read_text()
     assert "| `2026-06-06-done` |" in text
     assert "docs/superpowers/plans/2026-06-06-done" not in text
+
+
+# --- --no-spec-sweep flag (2026-07-05 spec-sweep slice guard, #351) ---
+
+
+def test_no_spec_sweep_flag_skips_sweep(tmp_path, monkeypatch):
+    """`--no-spec-sweep` archives the plan but leaves the spec sweep unrun:
+    a spec that a normal run WOULD move to implemented/specs/ stays put."""
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(
+        repo, "2026-05-25-bookmarks", ticked=True, spec_name="2026-05-25-bm-design.md"
+    )
+    # Only row points at THIS plan; after archive it resolves to
+    # implemented/plans/, so without the flag the spec would sweep.
+    _add_spec(
+        repo,
+        "2026-05-25-bm-design.md",
+        [("bm", "derio-net/test", "docs/superpowers/plans/2026-05-25-bookmarks")],
+    )
+    _git_seed(repo)
+    result = _invoke(
+        monkeypatch,
+        repo,
+        FakeGhClient(),
+        ["archive", str(plan_dir.relative_to(repo)), "--no-spec-sweep"],
+    )
+    assert result.exit_code == 0, result.output
+    sp = repo / "docs" / "superpowers"
+    # plan archived …
+    assert (sp / "implemented" / "plans" / "2026-05-25-bookmarks").is_dir()
+    assert not plan_dir.exists()
+    # … but the spec was NOT swept
+    assert (sp / "specs" / "2026-05-25-bm-design.md").is_file()
+    assert not (sp / "implemented" / "specs" / "2026-05-25-bm-design.md").exists()
+    assert "spec sweep skipped" in result.output

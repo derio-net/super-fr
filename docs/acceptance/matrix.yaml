@@ -254,7 +254,9 @@ rows:
       entirely for that invocation, leaving all specs untouched.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-05-spec-sweep-slice-guard-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'issue #351; manual escape (idea c). Level flips to ci with test_archive_cmd
-      --no-spec-sweep case.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_cmd.py
+    status: ci
+    notes: 'issue #351; manual escape (idea c). Pinned by
+      test_no_spec_sweep_flag_skips_sweep.'
