@@ -386,7 +386,9 @@ class LocalWorktreeDevcontainerTarget:
         workspace is handled in isolation: one failed teardown is recorded and
         the sweep continues.
         """
-        return [self._gc_one(rec, dry_run) for rec in self._discover_workspaces()]
+        actions = [self._gc_one(rec, dry_run) for rec in self._discover_workspaces()]
+        actions.extend(self._sweep_dangling_images(dry_run))
+        return actions
 
     def _gc_one(self, rec: GcWorkspace, dry_run: bool) -> GcAction:
         wt = str(rec.worktree)
@@ -486,6 +488,44 @@ class LocalWorktreeDevcontainerTarget:
         self.run(["docker", "stop", container_id])
         self.run(["docker", "rm", container_id])
         self._reclaim_image(image)
+
+    def _sweep_dangling_images(self, dry_run: bool) -> list[GcAction]:
+        """rmi `vsc-*` devcontainer images no live container references — the
+        ~1 GB layers that accumulate as workspaces come and go (#354). Each rmi
+        is best-effort: a still-referenced image failing is recorded, never
+        raised."""
+        referenced = self._referenced_images()
+        out: list[GcAction] = []
+        for image_id, repo in self._vsc_images():
+            if image_id in referenced or repo in referenced:
+                continue
+            if dry_run:
+                out.append(GcAction(repo, None, "dangling-image", "would-reap", image_id))
+                continue
+            r = self.run(["docker", "rmi", image_id])
+            out.append(
+                GcAction(
+                    repo,
+                    None,
+                    "dangling-image",
+                    "reaped" if r.returncode == 0 else "reap-failed",
+                    image_id,
+                )
+            )
+        return out
+
+    def _vsc_images(self) -> list[tuple[str, str]]:
+        result = self.run(["docker", "images", "--format", "{{.ID}}\t{{.Repository}}"])
+        out: list[tuple[str, str]] = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split("\t")
+            if len(parts) == 2 and parts[1].startswith("vsc-"):
+                out.append((parts[0], parts[1]))
+        return out
+
+    def _referenced_images(self) -> set[str]:
+        result = self.run(["docker", "ps", "-a", "--format", "{{.Image}}"])
+        return {ln.strip() for ln in (result.stdout or "").splitlines() if ln.strip()}
 
     # ---------- helpers ----------
 

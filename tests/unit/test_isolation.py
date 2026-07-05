@@ -180,6 +180,8 @@ class FakeRunner:
         stdout: dict[str, str] | None = None,
         docker_labels: list[tuple[str, str]] | None = None,
         pr_by_branch: dict[str, str] | None = None,
+        docker_images: list[tuple[str, str]] | None = None,
+        referenced_images: list[str] | None = None,
     ):
         self.calls: list[list[str]] = []
         self.git_calls: list[list[str]] = []
@@ -194,6 +196,10 @@ class FakeRunner:
         # gc classification: per-branch `gh pr view` JSON. A branch absent from
         # the map ⇒ gh returns nothing (no PR).
         self.pr_by_branch = pr_by_branch
+        # gc image sweep: `docker images` listing (id, repo) and the set of
+        # images referenced by a live container (`docker ps -a --format {{.Image}}`).
+        self.docker_images = docker_images or []
+        self.referenced_images = referenced_images or []
 
     def __call__(
         self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
@@ -211,7 +217,14 @@ class FakeRunner:
             self.removed.update(argv[2:])
         out = self.stdout.get(argv[0], "")
         if argv[0:2] == ["docker", "ps"]:
-            out = self._docker_labels_out() if any(".Label" in a for a in argv) else self._ps_out()
+            if any(".Label" in a for a in argv):
+                out = self._docker_labels_out()
+            elif any(".Image" in a for a in argv):
+                out = "".join(f"{ref}\n" for ref in self.referenced_images)
+            else:
+                out = self._ps_out()
+        elif argv[0:2] == ["docker", "images"]:
+            out = "".join(f"{i}\t{r}\n" for i, r in self.docker_images)
         elif argv[0:2] == ["docker", "inspect"]:
             out = self.stdout.get("docker_image", "")
         elif argv[0:3] == ["gh", "pr", "view"] and self.pr_by_branch is not None:
@@ -1077,6 +1090,33 @@ def test_gc_dry_run_mutates_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert action.action == "would-reap"
     assert wt.is_dir() and load_state(repo, "feat/merged") is not None
     assert not any(c[0:2] == ["docker", "rm"] for c in runner.argv_for("docker"))
+
+
+def test_gc_sweeps_dangling_vsc_images(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # vsc-a is referenced by a live container (keep); vsc-b is dangling (rmi);
+    # ubuntu is not a devcontainer image (ignore).
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        docker_images=[("img-a", "vsc-a"), ("img-b", "vsc-b"), ("img-u", "ubuntu")],
+        referenced_images=["img-a"],
+    )
+    images = [a for a in target.gc() if a.verdict == "dangling-image"]
+    assert [a.detail for a in images] == ["img-b"]
+    assert ["docker", "rmi", "img-b"] in runner.argv_for("docker")
+    assert not any(c == ["docker", "rmi", "img-a"] for c in runner.argv_for("docker"))
+    assert not any(c == ["docker", "rmi", "img-u"] for c in runner.argv_for("docker"))
+
+
+def test_gc_image_rmi_failure_is_non_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        fail_on="rmi",
+        docker_images=[("img-b", "vsc-b")],
+    )
+    (img,) = [a for a in target.gc() if a.verdict == "dangling-image"]  # no raise
+    assert img.action == "reap-failed"
 
 
 def test_up_twice_is_idempotent_on_worktree(
