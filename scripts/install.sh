@@ -397,13 +397,48 @@ fi
 if command -v uv &>/dev/null; then
   echo ""
   echo "Installing fr CLI globally (workspace member fr + the VK adapter)..."
-  uv tool install --force \
-    --with "$PLUGIN_ROOT/packages/fr-vk" \
-    "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'
-  # Smoke check — a tool env without a working entry point must fail loud.
+  # `uv tool install --force` removes the tool env in place; on macOS that
+  # rmdir intermittently fails with "Directory not empty" (ENOTEMPTY), and a
+  # freshly built env can fail a one-shot `fr --version` before it quiesces.
+  # Both self-heal on a retry (the operator hit fail→fail→succeed). Retry
+  # rather than turn a momentary hiccup into a hard install abort; on a stuck
+  # tool dir, an explicit uninstall clears the ENOTEMPTY before the next try.
+  # See docs/superpowers/debugging/2026-07-05-install-uv-tool-flaky.md.
+  fr_install_retry_sleep="${FR_INSTALL_RETRY_SLEEP:-2}"
+  fr_installed=""
+  for attempt in 1 2 3; do
+    # Pipeline lives in the `if` condition so a `uv` failure (propagated by
+    # `pipefail` through `sed`) is caught here instead of tripping `set -e`.
+    if uv tool install --force \
+      --with "$PLUGIN_ROOT/packages/fr-vk" \
+      "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'; then
+      fr_installed=1
+      break
+    fi
+    if [ "$attempt" -lt 3 ]; then
+      echo "  uv tool install attempt $attempt failed; clearing tool env and retrying..." >&2
+      uv tool uninstall fr >/dev/null 2>&1 || true
+      rm -rf "$(uv tool dir 2>/dev/null)/fr" 2>/dev/null || true
+      sleep "$fr_install_retry_sleep"
+    fi
+  done
+  if [ -z "$fr_installed" ]; then
+    echo "  ERROR: uv tool install failed after 3 attempts" >&2
+    exit 1
+  fi
+  # Smoke check — a tool env without a working entry point must fail loud,
+  # but give a just-installed env a couple of beats to quiesce first.
   fr_bin="$(uv tool dir 2>/dev/null)/fr/bin/fr"
   if [ -x "$fr_bin" ]; then
-    if ! "$fr_bin" --version >/dev/null 2>&1; then
+    fr_runs=""
+    for _ in 1 2 3; do
+      if "$fr_bin" --version >/dev/null 2>&1; then
+        fr_runs=1
+        break
+      fi
+      sleep "$fr_install_retry_sleep"
+    done
+    if [ -z "$fr_runs" ]; then
       echo "  ERROR: fr CLI installed but does not run" >&2
       exit 1
     fi

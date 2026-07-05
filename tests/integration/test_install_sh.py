@@ -311,6 +311,135 @@ def test_install_sh_smokes_fr_binary_not_vk():
     assert "/fr/bin/vk" not in script
 
 
+# ── fr CLI install resilience (transient uv-tool flakiness) ──────────
+#
+# Root cause (docs/superpowers/debugging/2026-07-05-install-uv-tool-flaky.md):
+# `uv tool install --force` removes the tool env in place; on macOS that rmdir
+# intermittently fails with "Directory not empty" (ENOTEMPTY), and a freshly
+# built env can fail a one-shot `fr --version` before it quiesces. Both are
+# transient (the operator saw fail→fail→succeed with no manual fix). Step 10
+# must retry rather than turn a momentary hiccup into a hard install abort.
+
+# A stateful `uv` stub: `tool install` fails its first $UV_STUB_INSTALL_FAILS
+# invocations with the real ENOTEMPTY message, then installs an `fr` entry
+# point that fails its first $UV_STUB_SMOKE_FAILS `--version` calls.
+_UV_RESILIENCE_STUB = r"""#!/bin/sh
+case "$1 $2" in
+"tool dir")
+  printf '%s\n' "$UV_STUB_TOOLDIR"
+  ;;
+"tool install")
+  c="$UV_STUB_STATE/install_count"
+  n=$(cat "$c" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$c"
+  if [ "$n" -le "${UV_STUB_INSTALL_FAILS:-0}" ]; then
+    echo "error: failed to remove directory \`$UV_STUB_TOOLDIR/fr/lib\`:" \
+         "Directory not empty (os error 66)" >&2
+    exit 2
+  fi
+  mkdir -p "$UV_STUB_TOOLDIR/fr/bin"
+  cat > "$UV_STUB_TOOLDIR/fr/bin/fr" <<'FR'
+#!/bin/sh
+if [ "$1" = "--version" ]; then
+  sc="$UV_STUB_STATE/smoke_count"
+  m=$(cat "$sc" 2>/dev/null || echo 0); m=$((m + 1)); echo "$m" > "$sc"
+  if [ "$m" -le "${UV_STUB_SMOKE_FAILS:-0}" ]; then exit 1; fi
+  echo "fr 9.9.9"
+fi
+FR
+  chmod +x "$UV_STUB_TOOLDIR/fr/bin/fr"
+  echo "Installed 1 executable: fr"
+  ;;
+"tool uninstall")
+  rm -rf "$UV_STUB_TOOLDIR/fr"
+  ;;
+*)
+  exit 0
+  ;;
+esac
+"""
+
+
+class TestFrCliInstallResilience:
+    def _run(
+        self,
+        fake_home: Path,
+        tmp_path: Path,
+        *,
+        install_fails: int = 0,
+        smoke_fails: int = 0,
+    ) -> tuple[subprocess.CompletedProcess[str], Path]:
+        bin_dir = fake_home / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        uv_stub = bin_dir / "uv"
+        uv_stub.write_text(_UV_RESILIENCE_STUB)
+        uv_stub.chmod(0o755)
+
+        tooldir = tmp_path / "uv-tools"
+        tooldir.mkdir()
+        state = tmp_path / "uv-state"
+        state.mkdir()
+
+        env = {
+            "HOME": str(fake_home),
+            "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
+            "VK_INSTALL_SKIP_PREFLIGHT": "1",
+            "UV_STUB_TOOLDIR": str(tooldir),
+            "UV_STUB_STATE": str(state),
+            "UV_STUB_INSTALL_FAILS": str(install_fails),
+            "UV_STUB_SMOKE_FAILS": str(smoke_fails),
+            # Keep retries instant in CI.
+            "FR_INSTALL_RETRY_SLEEP": "0",
+        }
+        result = subprocess.run(
+            ["bash", str(INSTALL_SH)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        return result, state
+
+    def _install_count(self, state: Path) -> int:
+        f = state / "install_count"
+        return int(f.read_text()) if f.exists() else 0
+
+    def test_retries_transient_enotempty_then_succeeds(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        """One ENOTEMPTY from `uv tool install` must not abort the install —
+        step 10 retries and recovers (the operator's fail→succeed)."""
+        result, state = self._run(fake_home, tmp_path, install_fails=1)
+
+        assert result.returncode == 0, (
+            f"transient ENOTEMPTY should be retried, not fatal:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert self._install_count(state) >= 2, "install should have been retried"
+        assert "Installation complete" in result.stdout
+
+    def test_retries_flaky_smoke_check(self, fake_home: Path, tmp_path: Path) -> None:
+        """A freshly built env that fails its first `fr --version` must be
+        retried, not reported as 'installed but does not run'."""
+        result, _ = self._run(fake_home, tmp_path, install_fails=0, smoke_fails=1)
+
+        assert result.returncode == 0, (
+            f"transient smoke-check failure should be retried:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "does not run" not in result.stderr
+        assert "Installation complete" in result.stdout
+
+    def test_gives_up_loudly_after_max_install_attempts(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        """A persistent (non-transient) install failure must still fail loud —
+        retry must be bounded, never an infinite loop or a silent pass."""
+        result, state = self._run(fake_home, tmp_path, install_fails=99)
+
+        assert result.returncode != 0, "persistent failure must not be masked"
+        assert self._install_count(state) >= 2, "should have retried before giving up"
+        assert "Directory not empty" in (result.stdout + result.stderr)
+
+
 # ── Plugin cache: stable `current` symlink as installPath ────────────
 
 
