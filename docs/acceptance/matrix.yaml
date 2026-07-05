@@ -244,10 +244,13 @@ rows:
       a gh probe.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-05-spec-sweep-slice-guard-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'issue #351; born at brainstorm (fr-goal 2026-07-05). Levels flip to ci when
-      unit + integration tests land.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_migrate.py
+    status: ci
+    notes: 'issue #351; born at brainstorm (fr-goal 2026-07-05). Pinned by the pending-row
+      guard tests (hold, clean note, gh-independent determinism) + spec_archive_sweep
+      and migrate-dirs integration.'
   - id: archive-no-spec-sweep-flag
     capability: Archive spec-sweep
     acceptance: fr archive --no-spec-sweep archives the plan(s) but skips the spec sweep
