@@ -225,6 +225,6 @@ updated.
 
 ## Implementation Plans
 
-| Plan | Target repo | Slug | Status |
+| Plan | Repo | File | Depends on |
 |---|---|---|---|
 | 2026-07-04-acceptance-matrix | `derio-net/super-fr` | `2026-07-04-acceptance-matrix` | — |

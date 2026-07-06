@@ -7,7 +7,7 @@
 
 ## Implementation Plans
 
-| Plan | Target repo | Slug | Status |
+| Plan | Repo | File | Depends on |
 |------|-------------|------|--------|
 | 2026-06-16-readme-ux-and-plan-config-cleanup | `derio-net/super-fr` | `2026-06-16-readme-ux-and-plan-config-cleanup` | — |
 

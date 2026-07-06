@@ -279,6 +279,38 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
 
 _SPEC_TABLE_HEADER_RE = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE)
 
+# `_append_spec_row` writes `| name | \`repo\` | \`file\` | depends_on |` into
+# columns 2-4 unconditionally — it never reads the header text. A table whose
+# header labels those columns differently (e.g. a hand-authored spec with
+# `Phases | Status | Created`) still accepts the append silently, producing a
+# table that lies about what each column holds. Both entry points below check
+# the header names against this contract before writing.
+_CANONICAL_HEADER_CELLS = ("plan", "repo", "file", "depends on")
+
+
+def _first_table_line(text: str, m: re.Match[str]) -> str | None:
+    """First pipe-delimited line after the heading match, or None."""
+    after = text[m.end() :]
+    for line in after.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            return stripped
+    return None
+
+
+def _check_table_header(spec_path: Path, text: str, m: re.Match[str]) -> None:
+    header_line = _first_table_line(text, m)
+    if header_line is None:
+        raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
+    cells = tuple(c.strip().lower() for c in header_line.strip("|").split("|"))
+    if cells != _CANONICAL_HEADER_CELLS:
+        raise PlanEditError(
+            f"{spec_path}: '## Implementation Plans' table header is {header_line!r}, "
+            f"expected '| Plan | Repo | File | Depends on |'. fr plan create appends rows "
+            f"assuming those exact column semantics — a differently-labeled header would "
+            f"silently mislabel the row it writes. Fix the header before scaffolding a plan."
+        )
+
 
 def _validate_spec_section(spec_path: Path) -> None:
     """Pre-flight: confirm the spec has an appendable Implementation Plans table.
@@ -293,9 +325,7 @@ def _validate_spec_section(spec_path: Path) -> None:
             f"{spec_path}: no '## Implementation Plans' section found. "
             f"Add the section (with a 4-column table header) before scaffolding plans."
         )
-    after = text[m.end() :]
-    if not any(line.strip().startswith("|") for line in after.splitlines()):
-        raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
+    _check_table_header(spec_path, text, m)
 
 
 def _append_spec_row(
@@ -317,6 +347,7 @@ def _append_spec_row(
             f"{spec_path}: no '## Implementation Plans' section found. "
             f"Add the section (with a 4-column table header) before scaffolding plans."
         )
+    _check_table_header(spec_path, text, m)
     if f"`{file}`" in text or f"| {file} |" in text:
         return  # already present
 

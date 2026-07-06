@@ -159,7 +159,7 @@ makes no stats call.
 
 ## Implementation Plans
 
-| Plan | Target repo | Slug | Status |
+| Plan | Repo | File | Depends on |
 |------|-------------|------|--------|
 | 2026-07-03-exec-bridge-gate-recovery | `derio-net/super-fr` | `2026-07-03-exec-bridge-gate-recovery` | — |
 

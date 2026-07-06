@@ -114,6 +114,39 @@ def test_create_preflight_validates_spec_before_creating_folder(tmp_path):
     assert not (repo / "docs" / "superpowers" / "plans" / slug).exists()
 
 
+def test_create_rejects_spec_with_mislabeled_table_header(tmp_path):
+    """A header that doesn't match 'Plan | Repo | File | Depends on' must fail
+    preflight — `_append_spec_row` writes repo/file/depends-on into columns
+    2-4 unconditionally, so a differently-labeled header (e.g. a stray
+    'Phases | Status | Created') would silently mislabel the appended row."""
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-bad-header.md"
+    spec_path.write_text(
+        "# Test spec\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Phases | Status | Created |\n"
+        "|------|--------|--------|---------|\n"
+    )
+
+    slug = "2026-05-10-bad-header-plan"
+    with pytest.raises(PlanEditError, match="table header"):
+        create(
+            repo_root=repo,
+            slug=slug,
+            spec=str(spec_path.relative_to(repo)),
+            target_repo="derio-net/test",
+            fr_version=">=1.0.0,<4.0.0",
+            phases=[PhaseSpec(number=1, title="t", tasks=())],
+            prose="# x\n",
+        )
+    # Preflight failure — no folder created, and the spec's bad header
+    # untouched (no row silently written under the wrong labels).
+    assert not (repo / "docs" / "superpowers" / "plans" / slug).exists()
+    assert slug not in spec_path.read_text()
+
+
 def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
     """#133: re-running create with matching content finishes the job (appends
     the missing spec row) instead of dead-ending at 'already exists'."""

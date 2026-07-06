@@ -7,6 +7,15 @@ lifecycle-independent form (2026-06-06 spec-path-repair design):
   other columns preserved byte-for-byte;
 - plan `_meta.yaml` `parent_plan:` / `prior_rework:` → bare slug;
   `spec:` (same-repo only) → bare filename.
+- spec-table `## Implementation Plans` headers → the canonical
+  `Plan | Repo | File | Depends on` column labels (2026-07-06
+  spec-table-header-guard design): `_append_spec_row` writes repo/file/
+  depends-on into columns 2-4 unconditionally, so a differently-labeled
+  header (hand-authored, no canonical template exists) leaves a table
+  that lies about what it holds even though parsing is positional and
+  unaffected. Repair walks both active and implemented specs, so a
+  header mislabeled at authoring time or carried into an archived spec
+  is fixed either way.
 
 A ref is rewritten ONLY when it resolves via `vk.refs`; anything
 unresolvable produces a loud warning naming the file, the row/field,
@@ -30,6 +39,9 @@ from fr.refs import RefResolution
 _META_REF_FIELDS = ("parent_plan", "prior_rework", "spec")
 _ROW_RE = re.compile(r"^\|(.+)\|\s*$")
 _PLACEHOLDERS = ("—", "-", "", "null", "~", "none")  # incl. YAML nulls + the 'none' sentinel
+
+_CANONICAL_HEADER_CELLS = ("plan", "repo", "file", "depends on")
+_CANONICAL_HEADER_LINE = "| Plan | Repo | File | Depends on |\n"
 
 
 @dataclass(frozen=True)
@@ -134,6 +146,56 @@ def _repair_spec_table(spec_path: Path, repo_root: Path, out: RepairResult, *, w
         spec_path.write_text("".join(lines))
 
 
+def _repair_spec_table_header(spec_path: Path, out: RepairResult, *, write: bool) -> None:
+    """Normalize a mislabeled `## Implementation Plans` header.
+
+    Only exact 4-column headers are touched — a different column count
+    (e.g. the pre-migrate `Status` column) is `migrate.py`'s shape to
+    change, not a mislabeling this repair corrects. The row data is
+    never touched; only the header line's text.
+    """
+    text = spec_path.read_text()
+    if "## Implementation Plans" not in text:
+        return
+    lines = text.splitlines(keepends=True)
+    in_table = False
+    in_fence = False
+    for i, line in enumerate(lines):
+        if line.startswith("## Implementation Plans"):
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if not stripped.startswith("|"):
+            continue  # blank line / prose before the header — keep scanning
+        # First pipe row after the heading is the header.
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if len(cells) != 4:
+            return  # different column count — out of scope for this repair
+        if tuple(c.lower() for c in cells) == _CANONICAL_HEADER_CELLS:
+            return  # already canonical — fixed point
+        if line == _CANONICAL_HEADER_LINE:
+            return
+        lines[i] = _CANONICAL_HEADER_LINE
+        out.rewrites.append(
+            Rewrite(
+                file=spec_path,
+                field="Implementation Plans header",
+                old=line.strip(),
+                new=_CANONICAL_HEADER_LINE.strip(),
+            )
+        )
+        if write:
+            spec_path.write_text("".join(lines))
+        return
+
+
 def _repair_meta(meta_path: Path, repo_root: Path, out: RepairResult, *, write: bool) -> None:
     text = meta_path.read_text()
     lines = text.splitlines(keepends=True)
@@ -183,6 +245,7 @@ def repair_repo(repo_root: Path, *, write: bool) -> RepairResult:
             continue
         for spec_path in sorted(d.glob("*.md")):
             try:
+                _repair_spec_table_header(spec_path, out, write=write)
                 _repair_spec_table(spec_path, repo_root, out, write=write)
             except OSError as e:  # pragma: no cover - exercised via failures test
                 out.failures.append(f"{spec_path}: {e}")
