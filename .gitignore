@@ -31,3 +31,4 @@ package.json
 package-lock.json
 .claude/worktrees/
 docs/acceptance/report.html
+.DS_STORE
