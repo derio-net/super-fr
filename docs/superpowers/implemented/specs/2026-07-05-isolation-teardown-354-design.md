@@ -281,6 +281,6 @@ New rows registered against this spec (business claims → matrix; see
 
 ## Implementation Plans
 
-| Plan | Target repo | Slug | Status |
+| Plan | Repo | File | Depends on |
 |------|-------------|------|--------|
 | 2026-07-05-isolation-teardown-354 | `derio-net/super-fr` | `2026-07-05-isolation-teardown-354` | — |

@@ -174,7 +174,7 @@ plan.
 
 ## Implementation Plans
 
-| Plan | Target repo | Slug | Status |
+| Plan | Repo | File | Depends on |
 |------|-------------|------|--------|
 | 2026-07-03-auto-archive-merged-plans | `derio-net/super-fr` | `2026-07-03-auto-archive-merged-plans` | — |
 
