@@ -135,6 +135,94 @@ def test_repair_walks_implemented_specs_too(repo: Path) -> None:
     assert len(result.rewrites) == 1
 
 
+# --- Implementation Plans header normalization (spec-table-header-guard) ----
+
+
+def test_repair_normalizes_mislabeled_header(repo: Path) -> None:
+    """A header that mislabels its own columns (e.g. `Phases | Status |
+    Created` over Repo/File/Depends-on data) is rewritten to the canonical
+    `Plan | Repo | File | Depends on` form — the row data is untouched."""
+    spec = repo / "docs/superpowers/specs/2026-05-10-bad-header.md"
+    spec.write_text(
+        "# Bad header\n\n## Implementation Plans\n\n"
+        "| Plan | Phases | Status | Created |\n"
+        "|------|--------|--------|---------|\n"
+        "| 2026-05-10-bad-header | `derio-net/test` | `2026-05-10-bad-header` | — |\n"
+    )
+    result = repair_repo(repo, write=True)
+    text = spec.read_text()
+    assert "| Plan | Repo | File | Depends on |\n" in text
+    assert "Phases" not in text
+    assert "| 2026-05-10-bad-header | `derio-net/test` | `2026-05-10-bad-header` | — |" in text
+    assert any(r.field == "Implementation Plans header" for r in result.rewrites)
+
+
+def test_repair_normalizes_mislabeled_header_in_implemented_specs(repo: Path) -> None:
+    spec = repo / "docs/superpowers/implemented/specs/2026-05-10-done.md"
+    spec.write_text(
+        "# Done\n\n## Implementation Plans\n\n"
+        "| Plan | Target repo | Slug | Status |\n"
+        "|------|-------------|------|--------|\n"
+        "| 2026-05-10-done | `derio-net/test` | `2026-05-10-done` | — |\n"
+    )
+    result = repair_repo(repo, write=True)
+    assert "| Plan | Repo | File | Depends on |\n" in spec.read_text()
+    assert any(r.file.name == "2026-05-10-done.md" for r in result.rewrites)
+
+
+def test_repair_header_already_canonical_no_rewrite(repo: Path) -> None:
+    spec = _spec_with_cell(repo, "`docs/superpowers/plans/2026-05-10-x/`")
+    before = spec.read_text()
+    result = repair_repo(repo, write=True)
+    assert spec.read_text().splitlines()[4] == before.splitlines()[4]  # header line untouched
+    assert not any(r.field == "Implementation Plans header" for r in result.rewrites)
+
+
+def test_repair_header_normalization_idempotent(repo: Path) -> None:
+    spec = repo / "docs/superpowers/specs/2026-05-10-bad-header.md"
+    spec.write_text(
+        "# Bad header\n\n## Implementation Plans\n\n"
+        "| Plan | Phases | Status | Created |\n"
+        "|------|--------|--------|---------|\n"
+        "| 2026-05-10-bad-header | `derio-net/test` | `2026-05-10-bad-header` | — |\n"
+    )
+    repair_repo(repo, write=True)
+    after_first = spec.read_text()
+    second = repair_repo(repo, write=True)
+    assert spec.read_text() == after_first
+    assert not any(r.field == "Implementation Plans header" for r in second.rewrites)
+
+
+def test_repair_leaves_non_canonical_column_count_untouched(repo: Path) -> None:
+    """A 5-column header (the pre-migrate `Status` column) is out of scope
+    for this repair — that's `migrate.py`'s job, not a mislabeling."""
+    spec = repo / "docs/superpowers/specs/2026-05-10-five-col.md"
+    spec.write_text(
+        "# Five col\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Status | Depends on |\n"
+        "|------|------|------|--------|------------|\n"
+        "| Some plan | `derio-net/test` | `2026-05-10-five-col` | Complete | — |\n"
+    )
+    before = spec.read_text()
+    result = repair_repo(repo, write=True)
+    assert spec.read_text() == before
+    assert not any(r.field == "Implementation Plans header" for r in result.rewrites)
+
+
+def test_repair_header_dry_run_writes_nothing(repo: Path) -> None:
+    spec = repo / "docs/superpowers/specs/2026-05-10-bad-header.md"
+    spec.write_text(
+        "# Bad header\n\n## Implementation Plans\n\n"
+        "| Plan | Phases | Status | Created |\n"
+        "|------|--------|--------|---------|\n"
+        "| 2026-05-10-bad-header | `derio-net/test` | `2026-05-10-bad-header` | — |\n"
+    )
+    before = spec.read_text()
+    result = repair_repo(repo, write=False)
+    assert spec.read_text() == before
+    assert any(r.field == "Implementation Plans header" for r in result.rewrites)
+
+
 def test_repair_meta_null_and_tilde_are_placeholders(repo: Path) -> None:
     """`spec: null` / `~` / `none` are sentinels, not refs — no warning, no
     rewrite ('none' parity with self_review's placeholder list; spuriously
