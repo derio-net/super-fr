@@ -3,25 +3,23 @@ set -euo pipefail
 
 # fr-repair-sweep — personal cross-repo maintenance tool, not part of the
 # plugin's install surface (install.sh/bootstrap.sh don't ship or invoke
-# this). Scans a fixed set of project roots for fr-enabled repos, runs
-# `fr repair` on each one that's cleanly on a synced `main`, commits the
-# result, and asks before pushing. Grew out of the 2026-07-06
-# spec-table-header-guard fix (#364): that PR taught `fr repair` to
-# normalize a mislabeled `## Implementation Plans` header, and this script
-# is how that repair actually gets applied across every repo it might have
-# drifted in, instead of one-off by hand.
+# this). Scans one or more given root directories for fr-enabled repos
+# (each root's immediate subdirectories), runs `fr repair` on each one
+# that's cleanly on a synced `main`, commits the result, and asks before
+# pushing. Grew out of the 2026-07-06 spec-table-header-guard fix (#364):
+# that PR taught `fr repair` to normalize a mislabeled `## Implementation
+# Plans` header, and this script is how that repair actually gets applied
+# across every repo it might have drifted in, instead of one-off by hand.
 #
 # Requires `fr` >= 3.8.4 (the version that added the header-normalization
 # rewrite) on PATH — `fr --version` is printed at startup so a stale
 # install is obvious rather than silently doing nothing.
 #
-# The ROOTS list below is hardcoded to this operator's layout
-# (~/Docs/projects/{DERIO_NET,STOA,HOMELAB}) — edit it directly if you copy
-# this script for a different machine/layout; it isn't parameterized via
-# flags or config on purpose (a single edit is simpler than a flag you'd
-# only ever set once).
+# Usage: scripts/fr-repair-sweep.sh <all|one-by-one> <root>...
+#   all|one-by-one   see push behavior below
+#   root...          one or more directories whose immediate subdirectories
+#                     are candidate repos (at least one required)
 #
-# Usage: scripts/fr-repair-sweep.sh <all|one-by-one>
 #   one-by-one   confirm push after each repo individually
 #   all          process every eligible repo first (no push), then one
 #                final prompt to push everything that got committed
@@ -40,22 +38,24 @@ MODE="${1:-}"
 case "$MODE" in
   all|one-by-one) ;;
   *)
-    echo "usage: $(basename "$0") <all|one-by-one>" >&2
+    echo "usage: $(basename "$0") <all|one-by-one> <root>..." >&2
     exit 2
     ;;
 esac
+shift
+
+if [[ "$#" -eq 0 ]]; then
+  echo "usage: $(basename "$0") <all|one-by-one> <root>..." >&2
+  echo "  at least one root directory is required." >&2
+  exit 2
+fi
+ROOTS=("$@")
 
 if ! command -v fr >/dev/null 2>&1; then
   echo "fr not found on PATH — install it first." >&2
   exit 2
 fi
 echo "using: $(command -v fr) ($(fr --version))"
-
-ROOTS=(
-  "$HOME/Docs/projects/DERIO_NET"
-  "$HOME/Docs/projects/STOA"
-  "$HOME/Docs/projects/HOMELAB"
-)
 
 REPORT=()       # summary lines, printed once at the end
 PUSH_QUEUE=()   # repo paths with a local commit ready to push
