@@ -347,10 +347,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
-    status: not-implemented
-    notes: Spec-time row (2026-07-08 fr-goal run). CI unit test will guard mirror drift
-      only; the live-TUI claim needs a post-merge operator walk (Test Plan step 1-2),
-      same pattern as the sibling opencode-skills-in-repo row.
+    status: skipped
+    notes: Unit test guards mirror drift (CI) — tests/unit/test_tripwire_opencode_commands_sync.py
+      passes (2026-07-08). The live-TUI claim (typing /fr-goal in a real opencode
+      session) needs a post-merge operator walk (Test Plan steps 1-2) — not yet
+      performed, same pattern as the sibling opencode-skills-in-repo row.
   - id: opencode-commands-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
