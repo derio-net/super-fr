@@ -28,6 +28,7 @@ MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/derio-net"
 CACHE_BASE="$CLAUDE_DIR/plugins/cache/derio-net"
 PLUGIN_NAMES=(super-fr super-fr-dispatch)
 OPENCODE_SKILLS_DIR="$HOME/.config/opencode/skills"
+OPENCODE_COMMANDS_DIR="$HOME/.config/opencode/commands"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
 INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
@@ -93,6 +94,15 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       if [ -d "$OPENCODE_SKILLS_DIR/$skill" ]; then
         rm -rf "$OPENCODE_SKILLS_DIR/$skill"
         echo "  Removed $OPENCODE_SKILLS_DIR/$skill"
+      fi
+    done
+  fi
+  if [ -d "$OPENCODE_COMMANDS_DIR" ]; then
+    for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
+      skill="$(basename "$skill_dir")"
+      if [ -f "$OPENCODE_COMMANDS_DIR/$skill.md" ]; then
+        rm -f "$OPENCODE_COMMANDS_DIR/$skill.md"
+        echo "  Removed $OPENCODE_COMMANDS_DIR/$skill.md"
       fi
     done
   fi
@@ -359,8 +369,9 @@ echo "  Installed $RULES_DIR/fr-isolation-required.md (#328 isolation Edit/Write
 cp "$PLUGIN_ROOT/plugins/super-fr/rules/no-claude-p-batch.md" "$RULES_DIR/no-claude-p-batch.md"
 echo "  Installed $RULES_DIR/no-claude-p-batch.md (#328 batch-LLM convention)"
 
-# 7b. OpenCode skill delivery — opt-in only (OpenCode has no plugin/marketplace
-# concept; it discovers plain SKILL.md files from its own global skills dir).
+# 7b. OpenCode skill + command delivery — opt-in only (OpenCode has no
+# plugin/marketplace concept; it discovers plain SKILL.md files and
+# commands/<name>.md files from its own global dirs).
 # Gate on an explicit opt-in or evidence the operator already uses OpenCode,
 # so installs on machines without it stay untouched.
 if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; then
@@ -373,9 +384,20 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
     cp "$skill_dir/SKILL.md" "$OPENCODE_SKILLS_DIR/$skill/SKILL.md"
     echo "  Installed $OPENCODE_SKILLS_DIR/$skill/SKILL.md"
   done
+  echo ""
+  echo "Installing OpenCode slash commands ($OPENCODE_COMMANDS_DIR)..."
+  mkdir -p "$OPENCODE_COMMANDS_DIR"
+  for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
+    skill="$(basename "$skill_dir")"
+    # Copies from the repo's own already-synced, CI-guarded .opencode/commands/
+    # mirror (scripts/sync-opencode.py) rather than regenerating — install.sh
+    # stays bash+jq only, no Python/yaml dependency added here.
+    cp "$PLUGIN_ROOT/.opencode/commands/$skill.md" "$OPENCODE_COMMANDS_DIR/$skill.md"
+    echo "  Installed $OPENCODE_COMMANDS_DIR/$skill.md"
+  done
 else
   echo ""
-  echo "Skipping OpenCode skill delivery (no ~/.config/opencode found; set"
+  echo "Skipping OpenCode skill/command delivery (no ~/.config/opencode found; set"
   echo "OPENCODE_SKILLS_INSTALL=1 to force)."
 fi
 

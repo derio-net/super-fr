@@ -361,7 +361,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
-    status: not-implemented
-    notes: Spec-time row (2026-07-08 fr-goal run). CI unit test will guard the install.sh
-      wiring only; the live-install claim needs a post-merge operator walk (Test Plan
-      step 3), same pattern as the sibling opencode-skills-installer row.
+    status: skipped
+    notes: Unit test guards the install.sh wiring (CI) — tests/unit/test_install_copies_opencode_commands.py
+      passes (2026-07-08). Also live-verified once pre-merge (2026-07-08, scratch HOME,
+      VK_INSTALL_SKIP_PREFLIGHT=1) — full scripts/install.sh delivered all 9 command
+      files byte-identical to .opencode/commands/, and --uninstall removed them
+      cleanly without touching unrelated files. Not yet re-verified post-merge on a
+      real merged main — backfill owed (Test Plan step 3), same pattern as the
+      sibling opencode-skills-installer row.
