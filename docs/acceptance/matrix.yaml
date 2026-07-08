@@ -286,9 +286,15 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
     status: skipped
-    notes: Unit test guards mirror drift (CI); the end-to-end "OpenCode actually
-      loads it" claim is proven live once per Test Plan step 1 (post-merge,
-      operator-driven) — backfill to `ci` owed if that becomes automatable.
+    notes: >-
+      Unit test guards mirror drift (CI). Test Plan step 1 walked post-merge
+      (2026-07-09, fresh isolation devcontainer on merged main, no prior
+      install step): `opencode debug skill` in the checkout discovered all
+      9 `fr-*` skills, each resolving to
+      `.opencode/skills/<name>/SKILL.md` in the worktree — confirms the
+      "clone and use, no install" claim. Not automated in CI (requires a
+      live `opencode` binary) — backfill to `ci` owed if that becomes
+      scriptable.
   - id: opencode-skills-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get super-fr's skills available
@@ -299,10 +305,14 @@ rows:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_skills.py
     status: skipped
-    notes: Unit test guards the install.sh wiring (CI); a live install.sh run
-      was smoke-tested against a scratch $HOME in the isolation container
-      (2026-07-08), not automated in CI — backfill owed if that becomes
-      scriptable end-to-end.
+    notes: >-
+      Unit test guards the install.sh wiring (CI). Test Plan step 2 walked
+      post-merge (2026-07-09, fresh isolation devcontainer, scratch $HOME,
+      merged main): `scripts/install.sh` with `OPENCODE_SKILLS_INSTALL=1`
+      delivered all 9 skills to `$HOME/.config/opencode/skills/`, and
+      `scripts/install.sh --uninstall` removed them cleanly (dir emptied).
+      Not automated in CI — backfill owed if that becomes scriptable
+      end-to-end.
   - id: opencode-isolation-enforcement
     capability: OpenCode adaptation
     acceptance: Edits to tracked source in an fr-isolation-enabled repo are blocked
@@ -317,11 +327,14 @@ rows:
     status: skipped
     notes: >-
       12 bun unit tests cover the hook + marker logic, including a real
-      `git worktree add` scenario (CI). Additionally live-verified (2026-07-08,
-      isolation container) with a real `opencode run` session against a
-      free public model (opencode/north-mini-code-free) targeting a scratch
-      fr-enabled repo with the plugin wired into `.opencode/plugins/` — the
-      model's `edit` tool call (`args.filePath`) was denied with the exact
-      hook message, confirming the assumed OpenCode tool name/arg shape was
-      correct. Not automated in CI (requires a live model call) — backfill
-      owed if that becomes scriptable/offline-mockable.
+      `git worktree add` scenario (CI). Live-verified twice with a real
+      `opencode run` session against a free public model
+      (opencode/north-mini-code-free) targeting a scratch fr-enabled repo
+      with the plugin wired into `.opencode/plugins/`: first during
+      development (2026-07-08) and re-confirmed post-merge as Test Plan
+      step 3 (2026-07-09, fresh isolation devcontainer, merged main) — both
+      times the model's `edit` tool call (`args.filePath`) was denied with
+      the exact hook message, confirming the assumed OpenCode tool
+      name/arg shape is correct against the real plugin API. Not automated
+      in CI (requires a live model call) — backfill owed if that becomes
+      scriptable/offline-mockable.
