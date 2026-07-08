@@ -338,3 +338,29 @@ rows:
       name/arg shape is correct against the real plugin API. Not automated
       in CI (requires a live model call) — backfill owed if that becomes
       scriptable/offline-mockable.
+  - id: opencode-commands-in-repo
+    capability: OpenCode adaptation
+    acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)
+      as a real OpenCode slash command inside a super-fr clone, with no install step
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-08-opencode-command-support-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
+    status: not-implemented
+    notes: Spec-time row (2026-07-08 fr-goal run). CI unit test will guard mirror drift
+      only; the live-TUI claim needs a post-merge operator walk (Test Plan step 1-2),
+      same pattern as the sibling opencode-skills-in-repo row.
+  - id: opencode-commands-installer
+    capability: OpenCode adaptation
+    acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
+      as OpenCode slash commands globally, with clean --uninstall removal
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-08-opencode-command-support-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_commands.py
+    status: not-implemented
+    notes: Spec-time row (2026-07-08 fr-goal run). CI unit test will guard the install.sh
+      wiring only; the live-install claim needs a post-merge operator walk (Test Plan
+      step 3), same pattern as the sibling opencode-skills-installer row.
