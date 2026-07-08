@@ -28,20 +28,28 @@ def test_v2_plan_cross_repo_fixture_exists():
     assert undispatched, "no undispatched phase in fixture"
 
 
-def test_claude_md_has_bridge_audit_rule():
+def test_agents_md_has_bridge_audit_rule():
     """
-    GIVEN CLAUDE.md in the repo root
+    GIVEN AGENTS.md in the repo root (the canonical internal-agent-instructions
+          file; CLAUDE.md is a thin `@AGENTS.md` import so Claude Code sessions
+          see the same content)
     WHEN  searching its content
     THEN  it contains a section/paragraph mentioning 'bridge audit rule'
           AND references fr_dispatch.* as the canonical read-target post-rebuild
+    AND   CLAUDE.md still imports AGENTS.md, so the two never drift apart
     """
-    body = Path("CLAUDE.md").read_text()
+    body = Path("AGENTS.md").read_text()
     assert re.search(r"bridge audit rule", body, re.IGNORECASE), (
-        "CLAUDE.md is missing a 'bridge audit rule' section"
+        "AGENTS.md is missing a 'bridge audit rule' section"
     )
     assert "fr_dispatch" in body, (
-        "CLAUDE.md's bridge audit rule must reference `fr_dispatch.*` as the canonical "
+        "AGENTS.md's bridge audit rule must reference `fr_dispatch.*` as the canonical "
         "read-target after the v2 rebuild"
+    )
+    claude_md = Path("CLAUDE.md").read_text()
+    assert "@AGENTS.md" in claude_md, (
+        "CLAUDE.md must import AGENTS.md (`@AGENTS.md`) so Claude Code sessions see "
+        "the same agent instructions"
     )
 
 

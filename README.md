@@ -311,4 +311,5 @@ no longer reads.
 ## For maintainers
 
 Contributor workflow, the release/version-bump rule, the bridge-audit rule, and
-the CI gate are documented in [`CLAUDE.md`](CLAUDE.md).
+the CI gate are documented in [`AGENTS.md`](AGENTS.md) (imported by `CLAUDE.md`
+for Claude Code sessions).
