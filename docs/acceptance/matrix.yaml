@@ -349,9 +349,14 @@ rows:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
     status: skipped
     notes: Unit test guards mirror drift (CI) — tests/unit/test_tripwire_opencode_commands_sync.py
-      passes (2026-07-08). The live-TUI claim (typing /fr-goal in a real opencode
-      session) needs a post-merge operator walk (Test Plan steps 1-2) — not yet
-      performed, same pattern as the sibling opencode-skills-in-repo row.
+      passes (2026-07-08). Test Plan steps 1-2 walked post-merge (2026-07-08, fresh
+      clone of merged main) — `opencode debug config` resolved all 9 generated commands
+      (fr-goal, fr-plan, ... — zero install), and a live `opencode run --command fr-progress`
+      call (opencode/north-mini-code-free, no arguments) correctly invoked the skill
+      tool with name=fr-progress and got a sensible response — confirms the empty-$ARGUMENTS
+      case end to end. Not automated in CI (requires a live opencode binary + model
+      call) — backfill owed if that becomes scriptable, same pattern as the sibling
+      opencode-skills-in-repo row.
   - id: opencode-commands-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
@@ -363,9 +368,11 @@ rows:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
     status: skipped
     notes: Unit test guards the install.sh wiring (CI) — tests/unit/test_install_copies_opencode_commands.py
-      passes (2026-07-08). Also live-verified once pre-merge (2026-07-08, scratch HOME,
-      VK_INSTALL_SKIP_PREFLIGHT=1) — full scripts/install.sh delivered all 9 command
-      files byte-identical to .opencode/commands/, and --uninstall removed them
-      cleanly without touching unrelated files. Not yet re-verified post-merge on a
-      real merged main — backfill owed (Test Plan step 3), same pattern as the
+      passes (2026-07-08). Live-verified twice — pre-merge (2026-07-08, scratch HOME,
+      VK_INSTALL_SKIP_PREFLIGHT=1) and re-confirmed post-merge as Test Plan step 3
+      (2026-07-08, fresh clone of merged main, real preflight passing — no skip
+      needed) — both times full scripts/install.sh delivered all 9 commands
+      byte-identical to .opencode/commands/, and --uninstall removed them cleanly
+      with no collateral damage. Not automated in CI (requires real filesystem/HOME
+      side effects) — backfill owed if that becomes scriptable, same pattern as the
       sibling opencode-skills-installer row.
