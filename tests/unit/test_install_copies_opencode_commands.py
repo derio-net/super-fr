@@ -31,8 +31,7 @@ def test_install_copies_every_generated_command_to_opencode_dir() -> None:
         "own global path"
     )
     assert ".opencode/commands" in install and "OPENCODE_COMMANDS_DIR" in install, (
-        "install.sh must copy from the repo's own .opencode/commands/ into "
-        "OPENCODE_COMMANDS_DIR"
+        "install.sh must copy from the repo's own .opencode/commands/ into OPENCODE_COMMANDS_DIR"
     )
 
 
