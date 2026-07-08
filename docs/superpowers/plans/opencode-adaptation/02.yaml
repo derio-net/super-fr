@@ -1,0 +1,44 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Installer support for OpenCode skill delivery to consumers
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-skills-installer
+tasks:
+- number: 1
+  title: Write failing test for install.sh's opencode skills step
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: add a test (extend tests/unit/test_install_copies_rules.py style — new tests/unit/test_install_copies_opencode_skills.py) asserting install.sh contains a step copying every plugins/super-fr/skills/<name>/SKILL.md into ~/.config/opencode/skills/<name>/SKILL.md, gated on OPENCODE_SKILLS_INSTALL=1 or an existing ~/.config/opencode dir. Confirm it fails.
+- number: 2
+  title: Implement the install.sh opencode step
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      GREEN: add the copy step to scripts/install.sh (own function, mirroring the existing rules-copy step's structure), plus the --uninstall counterpart removing the same files. Confirm the new test passes.
+  - id: P2.T2.S2
+    text: |-
+      REFACTOR: run scripts/install.sh --uninstall locally in a scratch HOME to confirm it cleans up without touching unrelated ~/.config/opencode files.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-08T12:51:50+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-08T12:51:51+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-08T12:51:52+00:00'
+      note: null
+  completion:
+    at: '2026-07-08T12:51:54+00:00'
+    note: null
+    observed_prs: []

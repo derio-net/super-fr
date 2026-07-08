@@ -27,6 +27,7 @@ VK_MCP_BINARY="$HOME/bin/vibe-kanban-mcp"
 MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/derio-net"
 CACHE_BASE="$CLAUDE_DIR/plugins/cache/derio-net"
 PLUGIN_NAMES=(super-fr super-fr-dispatch)
+OPENCODE_SKILLS_DIR="$HOME/.config/opencode/skills"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
 INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
@@ -86,6 +87,15 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       echo "  Removed stale $CLAUDE_DIR/skills/$skill"
     fi
   done
+  if [ -d "$OPENCODE_SKILLS_DIR" ]; then
+    for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
+      skill="$(basename "$skill_dir")"
+      if [ -d "$OPENCODE_SKILLS_DIR/$skill" ]; then
+        rm -rf "$OPENCODE_SKILLS_DIR/$skill"
+        echo "  Removed $OPENCODE_SKILLS_DIR/$skill"
+      fi
+    done
+  fi
   echo "Done. Note: Plugin and PostToolUse hook in settings.json were NOT removed (manual cleanup)."
   exit 0
 fi
@@ -349,6 +359,26 @@ echo "  Installed $RULES_DIR/fr-isolation-required.md (#328 isolation Edit/Write
 cp "$PLUGIN_ROOT/plugins/super-fr/rules/no-claude-p-batch.md" "$RULES_DIR/no-claude-p-batch.md"
 echo "  Installed $RULES_DIR/no-claude-p-batch.md (#328 batch-LLM convention)"
 
+# 7b. OpenCode skill delivery — opt-in only (OpenCode has no plugin/marketplace
+# concept; it discovers plain SKILL.md files from its own global skills dir).
+# Gate on an explicit opt-in or evidence the operator already uses OpenCode,
+# so installs on machines without it stay untouched.
+if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; then
+  echo ""
+  echo "Installing skills for OpenCode ($OPENCODE_SKILLS_DIR)..."
+  mkdir -p "$OPENCODE_SKILLS_DIR"
+  for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
+    skill="$(basename "$skill_dir")"
+    mkdir -p "$OPENCODE_SKILLS_DIR/$skill"
+    cp "$skill_dir/SKILL.md" "$OPENCODE_SKILLS_DIR/$skill/SKILL.md"
+    echo "  Installed $OPENCODE_SKILLS_DIR/$skill/SKILL.md"
+  done
+else
+  echo ""
+  echo "Skipping OpenCode skill delivery (no ~/.config/opencode found; set"
+  echo "OPENCODE_SKILLS_INSTALL=1 to force)."
+fi
+
 # 8. VK MCP server at user level
 if [ "$SKIP_MCP" = true ]; then
   echo ""
@@ -449,6 +479,29 @@ else
   echo ""
   echo "  WARNING: uv not found — install vk CLI manually:"
   echo "    uv tool install $PLUGIN_ROOT"
+fi
+
+# 11. devcontainer CLI (fr-isolation dependency)
+# `fr isolation up` shells out to `devcontainer` unconditionally; without it,
+# the failure mode is a bare "command not found" deep inside isolation code,
+# not a clear preflight message. Best-effort only (not a hard preflight
+# requirement above): plenty of installs never touch fr isolation, and
+# forcing an npm-global install on every operator would be too heavy-handed.
+if command -v devcontainer &>/dev/null; then
+  echo ""
+  echo "  OK: devcontainer CLI already installed ($(devcontainer --version 2>/dev/null || echo present))"
+elif command -v npm &>/dev/null; then
+  echo ""
+  echo "Installing devcontainer CLI (npm -g @devcontainers/cli, needed by fr isolation up)..."
+  if npm install -g @devcontainers/cli >/dev/null 2>&1; then
+    echo "  Installed devcontainer CLI"
+  else
+    echo "  WARNING: npm install -g @devcontainers/cli failed — install manually if you plan to use fr isolation" >&2
+  fi
+else
+  echo ""
+  echo "  WARNING: devcontainer CLI not found and npm not available — 'fr isolation up' will fail until"
+  echo "  you install it manually: npm install -g @devcontainers/cli"
 fi
 
 echo ""

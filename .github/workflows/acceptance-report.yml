@@ -19,6 +19,7 @@ on:
       - docs/superpowers/implemented/specs/**
       - .github/workflows/**
       - tests/**
+      - packages/**
   push:
     branches: [main]
     paths:
@@ -27,6 +28,7 @@ on:
       - docs/superpowers/implemented/specs/**
       - .github/workflows/**
       - tests/**
+      - packages/**
   schedule:
     - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
   workflow_dispatch:
