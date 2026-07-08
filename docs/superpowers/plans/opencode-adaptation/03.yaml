@@ -1,0 +1,41 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Adapt operator rules to OpenCode's AGENTS.md/instructions surface
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Write failing drift test for .opencode/instructions
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: add tests/unit/test_tripwire_opencode_instructions_sync.py asserting .opencode/instructions/<rule>.md exists and matches plugins/super-fr/rules/<rule>.md for every shipped rule, plus .claude/rules/acceptance-matrix.md has a matching .opencode/instructions/acceptance-matrix.md copy. Confirm it fails.
+- number: 2
+  title: Generate .opencode/instructions and wire opencode.json
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      GREEN: extend scripts/sync-opencode-skills.py (rename to scripts/sync-opencode.py, keep skills behavior, add rules/ instructions sync) to also populate .opencode/instructions/, and add a repo-root opencode.json with "instructions": [".opencode/instructions/*.md"]. Re-run the drift test, confirm green.
+  - id: P3.T2.S2
+    text: |-
+      REFACTOR: update tests/unit/test_tripwire_opencode_skills_sync.py references to the renamed script if needed; run the full tripwire + install test group together to confirm nothing regressed from the rename.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-08T13:00:43+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-08T13:00:44+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-08T13:00:45+00:00'
+      note: null
+  completion:
+    at: '2026-07-08T13:00:47+00:00'
+    note: null
+    observed_prs: []

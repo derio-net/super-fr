@@ -22,13 +22,20 @@ build/
 # Operator scratch dir (ad-hoc runnable scripts handed to the operator).
 scripts/tmp/
 
-# Dormant npm scaffolding. PR #173 removed package.json and
-# package-lock.json (nothing reads them since the 2026-04-13
-# installer rewrite that switched to .claude-plugin/*.json). Some
-# editor / IDE tooling regenerates an empty package-lock.json on
-# scan; ignore both names so it doesn't leak into git status.
-package.json
-package-lock.json
+# Dormant npm scaffolding at the repo root. PR #173 removed package.json and
+# package-lock.json (nothing reads them since the 2026-04-13 installer
+# rewrite that switched to .claude-plugin/*.json). Some editor / IDE tooling
+# regenerates an empty package-lock.json on scan; ignore both names *only at
+# the root* — packages/fr-opencode-plugin legitimately ships a package.json
+# and an unanchored pattern here was silently swallowing it.
+/package.json
+/package-lock.json
 .claude/worktrees/
 docs/acceptance/report.html
 .DS_STORE
+
+# Node/bun package artifacts (packages/fr-opencode-plugin/ and any future
+# JS/TS packages). bun.lock is intentionally NOT ignored — it's committed
+# for reproducible installs, same spirit as uv.lock.
+node_modules/
+*.tsbuildinfo

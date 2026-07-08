@@ -1,0 +1,67 @@
+schema_version: 2
+phase:
+  number: 4
+  title: OpenCode plugin reimplementing fr-isolation-required enforcement
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-isolation-enforcement
+tasks:
+- number: 1
+  title: Scaffold the TypeScript plugin package with a failing test
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: create packages/fr-opencode-plugin/ (package.json, tsconfig.json, src/index.ts stub, test/index.test.ts) using Bun's test runner. Write a test asserting tool.execute.before rejects an edit-class tool call when no .fr-isolation marker is present in the target repo. Confirm it fails (stub throws/not implemented).
+- number: 2
+  title: Implement isolation-marker enforcement logic
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      GREEN: implement tool.execute.before in src/index.ts mirroring plugins/super-fr/hooks/fr-isolation-required.sh's decision logic (nearest tracked ancestor dir, .fr-isolation marker check, FR_BASE_OK=1 escape, .fr-isolation-allow globlist escape). Run `bun test`, confirm the 4.1.1 test passes.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: add a second test asserting the FR_BASE_OK=1 and .fr-isolation-allow escapes both permit the edit. Confirm green.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: extract the shared marker-resolution logic (used by both the allow/deny paths) into its own function with a unit test, matching the shell script's own separation of concerns.
+- number: 3
+  title: Wire the plugin for in-repo and consumer delivery
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Add .opencode/plugins/fr-isolation-required.ts in this repo (thin re-export from packages/fr-opencode-plugin/src/index.ts) so this repo's own OpenCode sessions load it automatically; add packages/fr-opencode-plugin/README.md documenting the npm/ opencode.json "plugin" consumption path for other repos.
+  - id: P4.T3.S2
+    text: |-
+      Install opencode-ai globally in the isolation container (npm i -g opencode-ai, verified installable) and drive the plugin end-to-end via a scripted OpenCode invocation against a scratch git repo with/without the marker, recording the observed behavior in the PR description.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-07-08T13:05:50+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-07-08T13:05:51+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-07-08T13:05:52+00:00'
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-07-08T13:05:53+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-07-08T13:15:21+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-07-08T13:15:22+00:00'
+      note: null
+  completion:
+    at: '2026-07-08T13:15:23+00:00'
+    note: null
+    observed_prs: []
