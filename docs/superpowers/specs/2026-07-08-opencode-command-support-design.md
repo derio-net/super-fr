@@ -154,6 +154,12 @@ Mirrors the sibling OpenCode-adaptation spec's approach — this needs a live
   as OpenCode slash commands globally, with clean `--uninstall` removal" —
   verified via Test Plan step 3.
 
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-07-08-opencode-command-support | `derio-net/super-fr` | `2026-07-08-opencode-command-support` | — |
+
 ## References
 
 - `docs/superpowers/implemented/specs/2026-07-08-opencode-adaptation-design.md`

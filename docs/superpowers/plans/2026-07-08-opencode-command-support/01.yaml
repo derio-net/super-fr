@@ -1,0 +1,43 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Generate .opencode/commands/ from skill frontmatter (sync-opencode.py)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-commands-in-repo
+tasks:
+- number: 1
+  title: Write failing drift tripwire test for .opencode/commands sync
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_tripwire_opencode_commands_sync.py, structurally identical to tests/unit/test_tripwire_opencode_skills_sync.py (dynamically imports scripts/sync-opencode.py via importlib.util.spec_from_file_location). Assert sync_opencode.canonical_commands() is non-empty (floor check guarding a collapsed glob) and sync_opencode.find_commands_drift() returns no problems. Run pytest, confirm it fails (canonical_commands / find_commands_drift don't exist yet).
+- number: 2
+  title: Implement the commands mirror in sync-opencode.py
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: in scripts/sync-opencode.py, add `import yaml` (already a packages/fr/pyproject.toml dependency; the script and its tripwire tests only ever run under `uv run`). Add `COMMANDS_MIRROR_DIR = REPO_ROOT / ".opencode" / "commands"`. Add a `_skill_frontmatter(skill_md: Path) -> dict[str, object]` helper using the same `text.split("---", 2)` + `yaml.safe_load(parts[1])` idiom as tests/unit/test_skill_validation.py. Add `render_command(name: str, description: str) -> str` that builds `---\n<yaml.safe_dump({"description": description}, sort_keys=False, allow_unicode=True)>---\nUse the \`<name>\` skill to handle this request.\n\n$ARGUMENTS\n` (no agent/subtask/model frontmatter keys). Add `canonical_commands() -> dict[str, str]` (name -> rendered content, derived from `canonical_skills()` + each skill's frontmatter description), `mirror_commands() -> dict[str, Path]` (glob `COMMANDS_MIRROR_DIR/*.md`), `find_commands_drift() -> list[str]` (missing/extra/content-differs, same shape as find_drift/find_instructions_drift), and `sync_commands()` (delete stale, write/overwrite from canonical_commands()). Wire find_commands_drift() into the --check branch's combined drift list and sync_commands() into the default (write) path in main(). Update the printed summary and the module docstring to describe the third mirror.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: run `uv run scripts/sync-opencode.py` to generate `.opencode/commands/<name>.md` for all 9 already-mirrored skills. Run `uv run scripts/sync-opencode.py --check` to confirm it reports in sync. Re-run the test from 1.1, confirm it passes. `git add .opencode/commands/ scripts/sync-opencode.py tests/unit/test_tripwire_opencode_commands_sync.py`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

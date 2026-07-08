@@ -1,0 +1,44 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Installer delivery for OpenCode commands
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-commands-installer
+tasks:
+- number: 1
+  title: Write failing test for install.sh's opencode commands step
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: add tests/unit/test_install_copies_opencode_commands.py, structurally identical to tests/unit/test_install_copies_opencode_skills.py's three tests (delivery wiring present, opt-in gate reused not reinvented, --uninstall cleanup present), adjusted for a new OPENCODE_COMMANDS_DIR variable pointing at ~/.config/opencode/commands and a copy step reading from the repo's own .opencode/commands/<name>.md. Confirm it fails (OPENCODE_COMMANDS_DIR doesn't exist in install.sh yet).
+- number: 2
+  title: Implement the install.sh opencode commands step
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      GREEN: in scripts/install.sh, declare `OPENCODE_COMMANDS_DIR="$HOME/.config/opencode/commands"` alongside the existing OPENCODE_SKILLS_DIR. Extend the existing "OpenCode skill delivery" block (step 7b, same if-gate, same loop over plugins/super-fr/skills/*/) to also `mkdir -p "$OPENCODE_COMMANDS_DIR"` and `cp "$PLUGIN_ROOT/.opencode/commands/$skill.md" "$OPENCODE_COMMANDS_DIR/$skill.md"` per skill — copying from the repo's own already-synced mirror, no Python/yaml needed at install time. Extend the --uninstall block's existing OPENCODE_SKILLS_DIR removal loop to also remove `$OPENCODE_COMMANDS_DIR/$skill.md`. Confirm the new test passes.
+  - id: P2.T2.S2
+    text: |-
+      REFACTOR: run scripts/install.sh with OPENCODE_SKILLS_INSTALL=1 against a scratch HOME to confirm ~/.config/opencode/commands/fr-goal.md (and siblings) appear with the expected content, then run scripts/install.sh --uninstall against the same scratch HOME and confirm they're removed without touching unrelated files.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

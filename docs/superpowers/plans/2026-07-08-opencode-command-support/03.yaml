@@ -1,0 +1,46 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Version bump, acceptance status, and final review
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Bump version
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Run `uv run --no-project python scripts/bump-version.py minor`. Confirm `uv run --no-project python scripts/bump-version.py --check` passes and `uv run fr --version` reports the new number. This plan does not touch packages/fr-opencode-plugin, so its separate package.json version field is out of scope and stays untouched.
+- number: 2
+  title: Confirm acceptance rows resolve
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Run `fr acceptance check`. Confirm the opencode-commands-in-repo and opencode-commands-installer rows' unit-level refs (tests/unit/test_tripwire_opencode_commands_sync.py, tests/unit/test_install_copies_opencode_commands.py) now resolve cleanly (no ERROR-level ref-resolution failures) — both rows stay status: not-implemented until the post-merge Test Plan walk flips them, matching the sibling opencode-skills-in-repo / opencode-skills-installer rows' own history.
+- number: 3
+  title: Full verification pass
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Run `uv run ruff check packages/ tests/`, `uv run ruff format --check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`, and `uv run pytest -q --no-cov`. Fix any failures before declaring the plan complete.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
