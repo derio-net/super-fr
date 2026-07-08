@@ -281,7 +281,7 @@ rows:
     acceptance: An operator can git clone super-fr and use its fr-* skills directly
       from OpenCode with no install step
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-08-opencode-adaptation-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-08-opencode-adaptation-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
@@ -300,7 +300,7 @@ rows:
     acceptance: An operator can run scripts/install.sh and get super-fr's skills available
       globally in OpenCode
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-08-opencode-adaptation-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-08-opencode-adaptation-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_skills.py
@@ -319,7 +319,7 @@ rows:
       from OpenCode outside an isolation workspace, matching the Claude Code hook's
       guarantee
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-08-opencode-adaptation-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-08-opencode-adaptation-design.md
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/index.test.ts
