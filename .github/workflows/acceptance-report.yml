@@ -40,16 +40,7 @@ jobs:
         run: fr acceptance check
       - name: Write Actions summary (branch / PR / main)
         if: always()
-        run: |
-          {
-            echo "## Acceptance matrix"
-            echo
-            fr acceptance status
-            echo
-            fr acceptance digest
-            echo
-            echo "Full HTML report remains attached as the acceptance-report artifact."
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: fr acceptance summary >> "$GITHUB_STEP_SUMMARY"
       - name: Build report (GitHub links at this ref)
         env:
           REF: ${{ github.event.pull_request.head.sha || github.sha }}

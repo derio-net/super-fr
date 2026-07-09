@@ -135,7 +135,7 @@ def test_workflow_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     scripted = "\n".join(s.get("run", "") for s in steps)
     assert "fr acceptance check" in scripted
     assert "GITHUB_STEP_SUMMARY" in scripted
-    assert "fr acceptance status" in scripted
+    assert "fr acceptance summary" in scripted
     assert "fr acceptance report --link-mode github" in scripted
     assert "fr acceptance digest" in scripted
     digest_steps = [s for s in steps if "gh issue" in s.get("run", "")]
