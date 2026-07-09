@@ -33,9 +33,8 @@ def is_super_fr_validator_wrapper(path: Path) -> bool:
     if not path.exists() or not path.is_file():
         return False
     text = path.read_text(errors="ignore")
-    return (
-        ".claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh" in text
-        and ("superpowers-for-vk" in text or "super-fr" in text)
+    return ".claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh" in text and (
+        "superpowers-for-vk" in text or "super-fr" in text
     )
 
 
@@ -45,8 +44,7 @@ def ensure_validator_wrapper(repo_root: Path) -> bool:
     target = validator_wrapper_path(repo_root)
     if target.exists() and not is_super_fr_validator_wrapper(target):
         raise ValidatorWrapperError(
-            f"{target} already exists and is not a super-fr wrapper. "
-            "Refusing to overwrite it."
+            f"{target} already exists and is not a super-fr wrapper. Refusing to overwrite it."
         )
 
     before = target.read_text(errors="ignore") if target.exists() else None
