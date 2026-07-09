@@ -22,20 +22,11 @@ anywhere Claude Code runs.
 
 ### 1. Install
 
-As a Claude Code plugin (recommended) — add to `~/.claude/settings.json`:
-
-```json
-{
-  "enabledPlugins": {
-    "super-fr@derio-net": true,
-    "super-fr-dispatch@derio-net": true
-  }
-}
-```
-
-For the full setup (skills + rules + the `fr` CLI + MCP config) in one line — no
-manual checkout; it manages a hidden source clone under `~/.cache/fr/src` and
-re-running updates it:
+Recommended: run the full setup script. It installs the `fr` CLI, registers and
+enables the Claude Code plugins, installs the rules/MCP config, and, when
+OpenCode is present, installs the matching OpenCode skills and slash commands.
+No manual checkout needed; it manages a hidden source clone under
+`~/.cache/fr/src` and re-running updates it.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
@@ -47,6 +38,13 @@ Prefer to read it first?
 curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh -o bootstrap.sh
 bash bootstrap.sh
 ```
+
+Claude Code: the installer registers the `derio-net` marketplace and enables
+`super-fr@derio-net` plus `super-fr-dispatch@derio-net` for you.
+
+OpenCode: the installer copies skills and slash commands when
+`~/.config/opencode` already exists. On a fresh OpenCode setup, force that step
+with `OPENCODE_SKILLS_INSTALL=1`.
 
 Just want the CLI? `uv tool install
 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr'`.

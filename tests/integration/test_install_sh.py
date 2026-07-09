@@ -4,9 +4,9 @@ Each test runs install.sh with a fake $HOME so nothing touches the real
 user directory.  The VK MCP binary requirement is satisfied by a tiny
 stub script.
 
-Skills are delivered by the plugin system (enabledPlugins), not by
-install.sh.  install.sh handles: MCP config, rules, vk CLI, stale
-skill cleanup, and PostToolUse hook hint.
+install.sh handles Claude Code plugin registration, OpenCode skill/command
+delivery, MCP config, rules, the fr CLI, stale skill cleanup, and the
+PostToolUse hook hint.
 """
 
 from __future__ import annotations
