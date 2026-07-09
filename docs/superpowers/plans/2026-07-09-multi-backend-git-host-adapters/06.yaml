@@ -1,0 +1,68 @@
+schema_version: 2
+phase:
+  number: 6
+  title: fr-dispatch prompt genericization
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — backend-parameterized prompt text
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: in fr-dispatch's prompt test file, add a case building a prompt
+      for a phase whose tracking_issue is a GitLab-shape URL, asserting the
+      rendered text says "GitLab Issue gl#N" (not "GitHub Issue gh#N") and
+      the dependency-check line tells the agent to run `glab issue view <n>
+      -R <owner/repo> --output json` (not `gh issue view ... --json state`).
+      Run pytest, confirm it fails.
+- number: 2
+  title: GREEN — implement the phrase table in prompt.py
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      GREEN: in packages/fr-dispatch/src/fr_dispatch/prompt.py, derive the
+      backend from the phase's tracking_issue URL (reuse the same host-match
+      logic as fr._hosts, imported not reimplemented) and select the noun
+      ("GitHub Issue"/"GitLab Issue"/"Gitea Issue"), the tag ("gh"/"gl"/"gt"
+      via fr_vk._cardref's map or a small local mirror if importing fr_vk
+      from fr_dispatch is the wrong dependency direction — check
+      packages/*/pyproject.toml's existing dependency graph before deciding;
+      if fr_dispatch doesn't already depend on fr_vk, put the tag map in
+      fr._hosts instead, shared by both), and the verify-command text from a
+      small per-backend table. Run the Task 1 test plus the full existing
+      prompt test suite, confirm green.
+- number: 3
+  title: GREEN — regression-confirm fr_dispatch.tick() needs no label-stamp change
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      GREEN: add one test to fr-dispatch's tick() test suite that passes a
+      FakeGlabClient-shaped fake (not literally named FakeGhClient) as the
+      `gh` parameter and confirms the fr:synced label-stamp
+      (`gh.ensure_labels`/`gh.edit_issue_labels` calls in tick()) works
+      unchanged — proving tick() itself needed zero code changes, only its
+      `from fr._urls import parse_issue_url` import benefits from Phase 1's
+      generalization. This documents (via a passing test, not just a spec
+      sentence) the correction noted in the design doc. Run it, confirm
+      green with no production code changes in this step.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

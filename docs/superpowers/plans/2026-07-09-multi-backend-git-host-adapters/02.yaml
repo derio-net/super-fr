@@ -1,0 +1,95 @@
+schema_version: 2
+phase:
+  number: 2
+  title: GitLab adapter — fr/glab.py + RealGlabClient
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — low-level glab CLI wrapper tests
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: create tests/unit/test_glab.py, mirroring tests/unit/test_gh.py's
+      structure and subprocess-mocking style. Cover: `_run_glab` (success,
+      CalledProcessError -> GlabError with stderr/returncode); `create_issue`
+      (repo, title, body, labels -> `glab issue create --repo ... --title ...
+      --label ...` per label); `view_issue` (`glab issue view <n> -R <repo>
+      --output json`, parse title/body/labels/state); `swap_issue_labels`
+      (`glab issue update <n> -R <repo> --label a,b --unlabel c,d` — confirmed
+      flag names, comma-joined per glab's own `--help`); `ensure_label`
+      (`glab label create --name <name> --color "#<hex>" --description <d>
+      -R <repo>` — note the adapter prepends `#` here, LabelDef itself stays
+      unchanged); `close_issue`/reopen (`glab issue close`/`glab issue reopen`);
+      `_classify_error`/`is_transient`/`with_retry` tuned to glab's own stderr
+      text (do not assume gh's substrings match — write glab-specific fixture
+      stderr strings for 429/5xx/network-error cases and confirm classification
+      against those, not copy-pasted gh ones). Run pytest, confirm fails
+      (fr.glab doesn't exist).
+- number: 2
+  title: GREEN — implement fr/glab.py
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/glab.py implementing every function
+      covered by Task 1's tests, structured identically to fr/gh.py (same
+      function names/shapes where the operation maps 1:1, so a future reader
+      can diff the two files). Run the Task 1 tests, confirm green. `git add
+      packages/fr/src/fr/glab.py tests/unit/test_glab.py`.
+- number: 3
+  title: RED — RealGlabClient Protocol-conformance tests
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: create tests/unit/test_real_glabclient.py, mirroring
+      tests/unit/test_real_ghclient.py's coverage but with GitLab's OWN raw
+      JSON shapes (not GitHub's GraphQL-shaped fixtures — they don't
+      generalize, per the spec's research). Cover: view_issue (GitLab issue
+      REST shape: state opened/closed lowercase — coerce to fr's OPEN/CLOSED);
+      list_linked_prs via a `glab api projects/:id/issues/:iid/related_merge_requests`
+      fixture response, shaped into fr's PrObservation contract
+      (url/state/merged/draft/ci); edit_issue_labels/edit_issue_state/
+      edit_issue_body/comment_issue/create_issue/ensure_labels (delegate to
+      fr.glab, thin pass-through tests); file_exists/list_dir/read_file via
+      `glab api projects/:id/repository/files/:path` fixtures (base64-encoded
+      content — confirm the adapter decodes it, unlike GitHub's raw-media-type
+      trick); a CI-status coercion table test for GitLab's own pipeline-status
+      vocabulary (success/failed/running/pending/canceled/skipped -> fr's
+      PASS/FAIL/PENDING/NONE, a NEW table distinct from real_ghclient.py's
+      GraphQL-enum one). Run pytest, confirm fails.
+- number: 4
+  title: GREEN — implement fr/real_glabclient.py
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/real_glabclient.py implementing
+      `RealGlabClient`, satisfying the `fr.ghclient.GhClient` Protocol exactly
+      (same method signatures as RealGhClient — Python Protocols are
+      structural, no inheritance needed). Run the Task 3 tests, confirm green.
+      Run `uv run mypy packages/fr/src`, confirm RealGlabClient type-checks
+      against GhClient with no errors. `git add packages/fr/src/fr/real_glabclient.py
+      tests/unit/test_real_glabclient.py`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

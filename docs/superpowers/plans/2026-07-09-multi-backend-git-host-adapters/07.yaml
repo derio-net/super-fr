@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Isolation lifecycle genericization
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - multibackend-isolation-lifecycle
+tasks:
+- number: 1
+  title: RED — _resolve_default_branch backend branch
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: in isolation/local.py's test suite, add cases for
+      `_resolve_default_branch` when `_hosts.detect_backend` reports
+      "gitlab" (expect a `glab repo view -F json --jq .default_branch`-shaped
+      call through the injected `run` seam, falling back to "main" on
+      failure exactly like today's gh path does) and "gitea" (`tea repos
+      --output json`-shaped call, field name confirmed against Task 2's
+      implementation — write the test to match whatever field name
+      implementation settles on, then confirm it against a live tea in
+      Phase 9's manual verification). Run pytest, confirm fails.
+- number: 2
+  title: GREEN — implement the backend branch in _resolve_default_branch
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/isolation/local.py, branch
+      `_resolve_default_branch` on `_hosts.detect_backend(self.repo_root)`
+      after the symbolic-ref check fails, choosing the gh/glab/tea command
+      per backend before falling back to "main". Run the Task 1 tests,
+      confirm green. Run the full existing isolation/local.py test suite,
+      confirm no regression to the github path.
+- number: 3
+  title: RED — _pr_from backend branch
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      RED: add cases for `_pr_from` when the backend is "gitlab" (`glab mr
+      view <branch> --output json`-shaped call) and "gitea" (tea's CLI has
+      no direct branch->PR lookup per the spec's research — write the test
+      expecting a list-and-filter fallback: list open PRs, match `head`
+      branch client-side; document in the test's docstring that this is a
+      real, bounded degradation vs. gh/glab's single-shot query, not a bug).
+      Run pytest, confirm fails.
+- number: 4
+  title: GREEN — implement the backend branch in _pr_from
+  steps:
+  - id: P7.T4.S1
+    text: |-
+      GREEN: implement per Task 3. Run the Task 3 tests plus the full
+      existing isolation/local.py test suite (status/down/gc/verify_merge
+      all call through _pr_from — confirm none of them regress on the
+      github path). `git add packages/fr/src/fr/isolation/local.py` plus its
+      test file.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
