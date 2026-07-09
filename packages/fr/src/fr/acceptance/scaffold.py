@@ -176,6 +176,10 @@ GITIGNORE_LINE = "docs/acceptance/report.html"
 # `--link-mode` has no gitea/gitlab mode yet. The workflow itself (check +
 # report generation + artifact upload) works regardless; only the
 # report's cross-links would point at the wrong host.
+#
+# Trigger shape and the summary step mirror WORKFLOW_TEMPLATE's own
+# simplification (path filters dropped — keeping them in sync with the
+# matrix was a maintenance burden; runs on every PR/branch push instead).
 WORKFLOW_TEMPLATE_GITEA = """\
 name: acceptance-report
 
@@ -183,6 +187,9 @@ name: acceptance-report
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
 # - `skipped` / `not-implemented` rows surface as warning annotations; the
 #   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - A Markdown summary is written to each Actions run (branch, PR, main) —
+#   Gitea Actions supports GITHUB_STEP_SUMMARY (aliased GITEA_STEP_SUMMARY,
+#   confirmed against Gitea's own Actions-variables docs).
 # - The built report is uploaded as an artifact.
 # - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
 #
@@ -190,28 +197,20 @@ name: acceptance-report
 # Enable Repository Actions) even if the instance has Actions on globally,
 # and needs a self-hosted act_runner registered — there is no SaaS-hosted
 # runner the way GitHub/GitLab provide. This file lives at
-# .gitea/workflows/, not .github/workflows/.
+# .gitea/workflows/, not .github/workflows/. `timeout-minutes` below is
+# kept for forward-compat but is currently a no-op — Gitea Actions ignores
+# jobs.<job_id>.timeout-minutes (confirmed against Gitea's own
+# Compared-to-GitHub-Actions docs).
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
 # check` warns and verifies them on local runs, where siblings exist.
-# PR-time path filters must include every own-repo path the matrix
-# references — `fr acceptance check` warns when one falls outside them.
+# If PR-time path filters are added later, they must include every
+# own-repo path the matrix references — `fr acceptance check` warns when
+# one falls outside them.
 
 on:
-  pull_request:
-    paths:
-      - docs/acceptance/**
-      - docs/superpowers/specs/**
-      - docs/superpowers/implemented/specs/**
-      - .gitea/workflows/**
-      - tests/**
+  pull_request: {}
   push:
-    branches: [main]
-    paths:
-      - docs/acceptance/**
-      - docs/superpowers/specs/**
-      - docs/superpowers/implemented/specs/**
-      - .gitea/workflows/**
-      - tests/**
+    branches: ["**"]
   schedule:
     - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
   workflow_dispatch:
@@ -227,6 +226,9 @@ jobs:
         run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
+      - name: Write Actions summary (branch / PR / main)
+        if: always()
+        run: fr acceptance summary >> "$GITHUB_STEP_SUMMARY"
       - name: Build report
         env:
           REF: ${{ gitea.sha }}
@@ -269,7 +271,11 @@ jobs:
 # on:/jobs:/steps:) — not a reuse of WORKFLOW_TEMPLATE's shape. Written to
 # `.gitlab-ci.yml` at the repo root (GitLab's fixed convention, not a
 # configurable directory). Same residual link-mode gap as the Gitea
-# template above.
+# template above. GitLab CI also has no generic job-summary feature
+# analogous to GITHUB_STEP_SUMMARY (confirmed against GitLab's own
+# artifacts:reports docs — every report type is a specific structured
+# format: junit, sast, codequality, etc., not an arbitrary Markdown blob),
+# so `fr acceptance summary` is only wired into the GitHub/Gitea templates.
 WORKFLOW_TEMPLATE_GITLAB = """\
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this pipeline (by design — fix or re-classify).
@@ -277,11 +283,12 @@ WORKFLOW_TEMPLATE_GITLAB = """\
 #   rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - The built report is kept as a pipeline artifact.
 # - The weekly (scheduled) run upserts one "Acceptance debt" issue.
+# - No step-summary equivalent — GitLab CI has none (see module comment).
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
 # check` warns and verifies them on local runs, where siblings exist.
-# PR-time path filters (`rules:changes:`) must include every own-repo path
-# the matrix references — `fr acceptance check` warns when one falls
-# outside them.
+# If path filters (`rules:changes:`) are added later, they must include
+# every own-repo path the matrix references — `fr acceptance check` warns
+# when one falls outside them.
 
 stages:
   - acceptance
@@ -291,19 +298,7 @@ acceptance-report:
   image: python:3.12
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - docs/acceptance/**/*
-        - docs/superpowers/specs/**/*
-        - docs/superpowers/implemented/specs/**/*
-        - .gitlab-ci.yml
-        - tests/**/*
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - docs/acceptance/**/*
-        - docs/superpowers/specs/**/*
-        - docs/superpowers/implemented/specs/**/*
-        - .gitlab-ci.yml
-        - tests/**/*
+    - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
   before_script:

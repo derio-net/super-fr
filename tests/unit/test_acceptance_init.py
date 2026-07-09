@@ -304,6 +304,16 @@ def test_init_gitea_backend_writes_gitea_workflows_dir(
     # Same trigger/job/step YAML shape as GitHub Actions.
     doc = yaml.safe_load(text)
     assert "jobs" in doc
+    # Mirrors WORKFLOW_TEMPLATE's own simplification (#371): no path
+    # filters, and a GITHUB_STEP_SUMMARY write (Gitea Actions supports the
+    # GitHub-aliased env var).
+    on = doc.get("on", doc.get(True))
+    assert on["pull_request"] == {}
+    assert on["push"]["branches"] == ["**"]
+    assert "paths" not in on["push"]
+    scripted = "\n".join(s.get("run", "") for s in doc["jobs"]["matrix"]["steps"])
+    assert "GITHUB_STEP_SUMMARY" in scripted
+    assert "fr acceptance summary" in scripted
 
 
 def test_init_gitlab_backend_writes_gitlab_ci_at_root(
@@ -321,5 +331,9 @@ def test_init_gitlab_backend_writes_gitlab_ci_at_root(
     text = ci_file.read_text()
     assert "glab " in text
     assert "gh issue" not in text
+    assert "GITHUB_STEP_SUMMARY" not in text  # no equivalent — GitLab CI has none
     doc = yaml.safe_load(text)
     assert "stages" in doc
+    # No `changes:` path filters on any rule (mirrors #371's simplification).
+    rules = doc["acceptance-report"]["rules"]
+    assert rules and all("changes" not in rule for rule in rules)
