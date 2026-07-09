@@ -376,3 +376,53 @@ rows:
       with no collateral damage. Not automated in CI (requires real filesystem/HOME
       side effects) — backfill owed if that becomes scriptable, same pattern as the
       sibling opencode-skills-installer row.
+  - id: multibackend-gitlab-tracking
+    capability: Multi-backend git hosting
+    acceptance: An operator can run fr apply against a GitLab-backed repo and see phases
+      rendered/observed/diffed/applied as GitLab Issues with correctly-shaped GitLab
+      labels (color, length)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels: {}
+    status: not-implemented
+    notes: Core GitLab-support claim; lands with the RealGlabClient adapter phase.
+  - id: multibackend-gitea-tracking
+    capability: Multi-backend git hosting
+    acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
+      rendered/observed/diffed/applied as Gitea Issues with correctly-shaped labels
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels: {}
+    status: not-implemented
+    notes: Core Gitea-support claim; lands with the RealTeaClient adapter phase.
+  - id: multibackend-isolation-lifecycle
+    capability: Multi-backend git hosting
+    acceptance: fr isolation up/status/down/gc resolves the default branch and checks
+      PR/MR-merge state correctly against a GitLab- or Gitea-backed repo, with zero
+      gh-specific calls
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels: {}
+    status: not-implemented
+    notes: Distinguishes isolation actually working on non-GitHub repos from silently
+      shelling out to gh.
+  - id: multibackend-vk-dispatch
+    capability: Multi-backend git hosting
+    acceptance: The VK dispatch bridge polls PR/MR status and auto-closes tracking Issues
+      correctly for a GitLab- or Gitea-backed phase
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'The full-pipeline scope decision (Q2): tracking alone is not enough without
+      this.'
+  - id: multibackend-scaffold
+    capability: Multi-backend git hosting
+    acceptance: fr init scaffold on a GitLab- or Gitea-backed repo installs the right
+      CLI into the devcontainer (not github-cli), and fr acceptance init generates a
+      working CI workflow in the right location and schema for that backend
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels: {}
+    status: not-implemented
+    notes: What an operator sees the first time they scaffold a non-GitHub repo.
