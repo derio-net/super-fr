@@ -212,7 +212,7 @@ rows:
       the workspace visible to `fr isolation status` and its state intact — never a
       silent state delete that orphans the container.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-05-isolation-teardown-354-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-05-isolation-teardown-354-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -226,7 +226,7 @@ rows:
       image) without the originating session — host-wide, fired opportunistically on
       every up/down, bounded to <=1 stale workspace with no daemon.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-05-isolation-teardown-354-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-05-isolation-teardown-354-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -343,7 +343,7 @@ rows:
     acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)
       as a real OpenCode slash command inside a super-fr clone, with no install step
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-08-opencode-command-support-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-08-opencode-command-support-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
@@ -362,7 +362,7 @@ rows:
     acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
       as OpenCode slash commands globally, with clean --uninstall removal
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-08-opencode-command-support-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-08-opencode-command-support-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
@@ -376,3 +376,16 @@ rows:
       with no collateral damage. Not automated in CI (requires real filesystem/HOME
       side effects) — backfill owed if that becomes scriptable, same pattern as the
       sibling opencode-skills-installer row.
+  - id: cncd-runner-ingest-dispatch
+    capability: CNCD runner
+    acceptance: An operator can dispatch an eligible tracked plan phase to cncd via
+      the cncd runner; the plan folder is posted to /v1/ingest and the phase is stamped
+      synced only after success
+    origin:
+    - super-fr:packages/fr-cncd/src/fr_cncd/runner.py
+    levels:
+      int:
+      - super-fr:tests/integration/test_cncd_stub_server.py
+    status: ci
+    notes: Loopback stub server pins the cncd wire contract, entry-point registration,
+      preflight failure, and fr_dispatch.tick end-to-end path in CI.
