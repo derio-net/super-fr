@@ -640,21 +640,71 @@ class LocalWorktreeDevcontainerTarget:
 
     # ---------- helpers ----------
 
+    def _ensure_validator_wrapper_in_ref(self, ref: str) -> None:
+        """Plan repos need the wrapper in the ref used for worktree add.
+
+        `fr isolation up` creates/reuses a linked worktree from git state, not
+        the base checkout's uncommitted files. A filesystem-only wrapper check
+        would let an untracked wrapper pass, then the isolated worktree would
+        still lack the validator entry point.
+        """
+        plans = self.run(
+            ["git", "ls-tree", ref, "--", "docs/superpowers/plans"],
+            cwd=self.repo_root,
+        )
+        if plans.returncode != 0 or not plans.stdout.strip():
+            return
+        result = self.run(
+            ["git", "ls-tree", ref, "--", "scripts/validate-plans.sh"],
+            cwd=self.repo_root,
+        )
+        line = result.stdout.strip()
+        if result.returncode != 0 or not line:
+            raise IsolationError(
+                "plan repo has scripts/validate-plans.sh in the working tree but not in "
+                f"{ref}; run `bash ~/.claude/plugins/marketplaces/derio-net/scripts/"
+                "install-validator-wrapper.sh` if needed, commit it to the isolation start "
+                "ref, then retry `fr isolation up`."
+            )
+        mode = line.split(maxsplit=1)[0]
+        if mode != "100755":
+            raise IsolationError(
+                f"plan repo has scripts/validate-plans.sh in {ref} but it is not executable; "
+                "run `chmod +x scripts/validate-plans.sh`, commit it to the isolation "
+                "start ref, then retry `fr isolation up`."
+            )
+
+    def _ensure_validator_wrapper_in_worktree(self, worktree: Path) -> None:
+        plans = worktree / "docs" / "superpowers" / "plans"
+        if not plans.is_dir():
+            return
+        wrapper = worktree / "scripts" / "validate-plans.sh"
+        if not wrapper.is_file() or not (wrapper.stat().st_mode & 0o111):
+            raise IsolationError(
+                f"existing isolation worktree {worktree} is missing executable "
+                "scripts/validate-plans.sh; run `bash ~/.claude/plugins/marketplaces/"
+                "derio-net/scripts/install-validator-wrapper.sh`, commit it on the worktree "
+                "branch, then retry `fr isolation up`."
+            )
+
     def _git_worktree_add(
         self, worktree: Path, branch: str, base: str | None = None, no_fetch: bool = False
     ) -> None:
         if worktree.exists():
+            self._ensure_validator_wrapper_in_worktree(worktree)
             return  # already provisioned — up() is idempotent on the worktree
         branches = self.run(["git", "branch", "--list", branch], cwd=self.repo_root)
         if branches.stdout.strip():
             # Reuse: check the existing branch out as-is. Never fetch or rebase —
             # continuation/reuse must inherit the branch's own tip (#322 corner 1).
+            self._ensure_validator_wrapper_in_ref(branch)
             argv = ["git", "worktree", "add", str(worktree), branch]
         else:
             # Genuine cold-start: a brand-new branch. Default to freshly-fetched
             # origin/<default> instead of the base repo's current HEAD (#322).
             start_point, log_line = self._cold_start_base(branch, base, no_fetch)
             print(log_line, file=sys.stderr if log_line.startswith("WARNING") else sys.stdout)
+            self._ensure_validator_wrapper_in_ref(start_point or "HEAD")
             argv = ["git", "worktree", "add", str(worktree), "-b", branch]
             if start_point is not None:
                 argv.append(start_point)

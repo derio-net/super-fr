@@ -19,6 +19,11 @@ import yaml
 
 from fr._hosts import HostBackend
 from fr.isolation.types import IsolationError, secrets_env_file
+from fr.plan_validator_wrapper import (
+    ValidatorWrapperError,
+    ensure_validator_wrapper,
+    plans_dir_exists,
+)
 
 # Pinned to an LTS tag, NOT the floating `:ubuntu`. The floating tag now
 # resolves to Ubuntu "resolute", where the docker-in-docker feature fails to
@@ -170,12 +175,21 @@ def scaffold_profile(
 
     _update_profiles_yaml(repo_root, profile, purpose, secrets, unknown, default, backend, host)
     _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
+    include_validator_wrapper = False
+    if plans_dir_exists(repo_root):
+        try:
+            ensure_validator_wrapper(repo_root)
+        except ValidatorWrapperError as err:
+            raise IsolationError(str(err)) from err
+        include_validator_wrapper = True
     if commit:
-        _commit_profile(repo_root, profile)
+        _commit_profile(repo_root, profile, include_validator_wrapper=include_validator_wrapper)
     return config_path
 
 
-def _commit_profile(repo_root: Path, profile: str) -> None:
+def _commit_profile(
+    repo_root: Path, profile: str, *, include_validator_wrapper: bool = False
+) -> None:
     """Scoped commit of just the profile files on the current branch (HEAD).
 
     Stages only what scaffold wrote — `.devcontainer/<profile>/` and
@@ -185,6 +199,8 @@ def _commit_profile(repo_root: Path, profile: str) -> None:
     git-ignored `.devcontainer` warns; an unchanged re-scaffold is silent.
     """
     paths = [f".devcontainer/{profile}", ".devcontainer/fr-profiles.yaml"]
+    if include_validator_wrapper:
+        paths.append("scripts/validate-plans.sh")
     _git(repo_root, "add", "--", *paths)
     # `git diff --cached --quiet` → rc 0 means nothing staged (ignored/unchanged).
     if _git(repo_root, "diff", "--cached", "--quiet", "--", *paths).returncode == 0:

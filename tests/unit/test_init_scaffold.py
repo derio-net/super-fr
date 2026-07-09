@@ -96,6 +96,119 @@ def test_scaffold_commit_is_scoped(repo: Path) -> None:
     assert "UNRELATED.txt" in _git(repo, "diff", "--cached", "--name-only").stdout
 
 
+def test_scaffold_plan_repo_installs_validator_wrapper(repo: Path) -> None:
+    _initial_commit(repo)
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    _git(repo, "add", "docs/superpowers/plans/.gitkeep")
+    _git(repo, "commit", "-qm", "add plans dir")
+
+    res = scaffold(repo)
+
+    assert res.exit_code == 0, res.output
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    assert wrapper.exists()
+    assert wrapper.stat().st_mode & 0o111
+    assert "super-fr plugin" in wrapper.read_text()
+    head_files = _git(repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert "scripts/validate-plans.sh" in head_files
+    assert "scripts/validate-plans.sh" in _tracked(repo)
+
+
+def test_scaffold_without_plans_does_not_install_validator_wrapper(repo: Path) -> None:
+    _initial_commit(repo)
+
+    res = scaffold(repo)
+
+    assert res.exit_code == 0, res.output
+    assert not (repo / "scripts" / "validate-plans.sh").exists()
+
+
+def test_scaffold_plan_repo_refuses_custom_validator(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    scripts = repo / "scripts"
+    scripts.mkdir()
+    custom = scripts / "validate-plans.sh"
+    custom.write_text("#!/usr/bin/env bash\nexit 0\n")
+    custom.chmod(0o755)
+
+    res = scaffold(repo)
+
+    assert res.exit_code == 2
+    assert "already exists" in res.output
+    assert "not a super-fr wrapper" in res.output
+    assert custom.read_text() == "#!/usr/bin/env bash\nexit 0\n"
+
+
+def test_scaffold_plan_repo_refuses_custom_validator_that_mentions_super_fr(
+    repo: Path,
+) -> None:
+    _initial_commit(repo)
+    (repo / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    scripts = repo / "scripts"
+    scripts.mkdir()
+    custom = scripts / "validate-plans.sh"
+    custom.write_text("#!/usr/bin/env bash\n# custom super-fr validator\nexit 0\n")
+    custom.chmod(0o755)
+
+    res = scaffold(repo)
+
+    assert res.exit_code == 2
+    assert "not a super-fr wrapper" in res.output
+    assert custom.read_text() == "#!/usr/bin/env bash\n# custom super-fr validator\nexit 0\n"
+
+
+def test_scaffold_plan_repo_commits_existing_untracked_wrapper(repo: Path) -> None:
+    _initial_commit(repo)
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        "# Thin wrapper — delegates to the canonical validator from the\n"
+        "# super-fr plugin installed at the user level.\n"
+        "exec \"$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh\" \"$@\"\n"
+    )
+    wrapper.chmod(0o755)
+    _git(repo, "add", "docs/superpowers/plans/.gitkeep")
+    _git(repo, "commit", "-qm", "plans")
+
+    res = scaffold(repo)
+
+    assert res.exit_code == 0, res.output
+    assert "scripts/validate-plans.sh" in _tracked(repo)
+    head_files = _git(repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert "scripts/validate-plans.sh" in head_files
+
+
+def test_scaffold_plan_repo_commits_existing_wrapper_mode_fix(repo: Path) -> None:
+    _initial_commit(repo)
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        "# Thin wrapper — delegates to the canonical validator from the\n"
+        "# super-fr plugin installed at the user level.\n"
+        "exec \"$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh\" \"$@\"\n"
+    )
+    wrapper.chmod(0o644)
+    _git(repo, "add", "docs/superpowers/plans/.gitkeep", "scripts/validate-plans.sh")
+    _git(repo, "commit", "-qm", "plans and non-executable wrapper")
+
+    res = scaffold(repo)
+
+    assert res.exit_code == 0, res.output
+    mode = _git(repo, "ls-tree", "HEAD", "--", "scripts/validate-plans.sh").stdout.split()[0]
+    assert mode == "100755"
+
+
 def test_scaffold_commit_preserves_partial_staged_file(repo: Path) -> None:
     # Hardest case: a file staged at v1 then dirtied to v2 (AM). The scoped
     # scaffold commit must leave both its index (v1) and worktree (v2) intact.

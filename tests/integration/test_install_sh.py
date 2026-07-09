@@ -311,6 +311,13 @@ def test_install_sh_smokes_fr_binary_not_vk():
     assert "/fr/bin/vk" not in script
 
 
+def test_install_sh_no_longer_prints_validator_wrapper_per_repo_step(fake_home: Path) -> None:
+    result = _run_install(fake_home)
+
+    assert "Per-repo step" not in result.stdout
+    assert "install-validator-wrapper.sh" not in result.stdout
+
+
 # ── fr CLI install resilience (transient uv-tool flakiness) ──────────
 #
 # Root cause (docs/superpowers/debugging/2026-07-05-install-uv-tool-flaky.md):
