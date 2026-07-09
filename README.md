@@ -132,7 +132,7 @@ before the run closes out with `fr archive` and `fr isolation down`.
 ### Flow 2 — dispatch phases to a runner (`fr apply --to vk`)
 
 Once a plan is merged, its phases can be queued to a runner instead of being
-executed locally. `fr apply` mirrors each phase to a GitHub Issue; a cron
+executed locally. `fr apply` mirrors each phase to a tracking Issue; a cron
 bridge daemon hands ready phases to VibeKanban, which spawns one agent
 workspace per phase. Each phase comes back as its own PR.
 
@@ -164,6 +164,10 @@ sequenceDiagram
     Bridge->>VK: PR merged → card "Done", archive workspace
     Bridge->>GH: close Issue
 ```
+
+> The diagram illustrates GitHub as the default backend; `fr` speaks GitLab
+> (`glab`) and Gitea (`tea`) equally — see `docs/superpowers/specs/
+> 2026-07-09-multi-backend-git-host-adapters-design.md`.
 
 The flows compose: author a plan with Flow 1's front half (brainstorm → spec →
 plan → merge), then fan its phases out to a runner with Flow 2. Without
@@ -214,7 +218,7 @@ Everyday:
 
 | Command | Purpose |
 |---------|---------|
-| `fr apply` | Render + observe + diff + apply a plan to GitHub (dry-run by default; `--to <runner>` queues phases) |
+| `fr apply` | Render + observe + diff + apply a plan to the repo's git host (dry-run by default; `--to <runner>` queues phases) |
 | `fr status` | Read-only plan report (allowlist-safe; never mutates) |
 | `fr isolation` | Isolated workspaces: `up`, `exec`, `status`, `down` |
 | `fr plan` | Plan editing: `create`, `edit` (tick steps, complete phases), `self-review`, `rework` |
@@ -236,7 +240,7 @@ Maintenance:
 ### Plan model
 
 - **One plan = one repo's worth of work.** Plans live in the repo they modify.
-- **One phase = one GitHub Issue = one PR.** Phases are scoped for reviewability.
+- **One phase = one tracking Issue = one PR.** Phases are scoped for reviewability.
 - **Cross-repo features use multiple plans**, coordinated through the shared
   spec's "Implementation Plans" section (maintained by `fr-plan`).
 
@@ -253,7 +257,8 @@ docs/superpowers/plans/<YYYY-MM-DD-slug>/
 ### Label lifecycle
 
 Phases queued to a runner (`fr apply --to <runner>`) carry exactly one
-protocol-owned lifecycle label, projected from GitHub state on every tick:
+protocol-owned lifecycle label, projected from the tracked Issue's state on
+every tick:
 
 ```
 fr:ready ──→ fr:in-progress ──→ fr:pr-ready ──→ (closed)
@@ -294,7 +299,7 @@ no longer reads.
 
 | Package | What it is |
 |---------|------------|
-| `fr` | The CLI: plan-as-folder engine, GitHub tracking (render → observe → diff → apply), isolation |
+| `fr` | The CLI: plan-as-folder engine, git-host tracking (GitHub/GitLab/Gitea — render → observe → diff → apply), isolation |
 | `fr-dispatch` | Runner protocol + tick framework (library, runner-agnostic) |
 | `fr-vk` | VibeKanban adapter: MCP client, card/workspace dispatch, bridge daemon |
 
@@ -302,7 +307,10 @@ no longer reads.
 
 - [superpowers](https://github.com/obra/superpowers) plugin (super-fr wraps its
   brainstorming, TDD, and review skills)
-- GitHub CLI (`gh`) authenticated
+- Your repo's forge CLI, authenticated: [GitHub CLI](https://cli.github.com/)
+  (`gh`, the default), [GitLab CLI](https://gitlab.com/gitlab-org/cli) (`glab`),
+  or [Gitea's `tea`](https://gitea.com/gitea/tea) — whichever the repo's
+  `.devcontainer/fr-profiles.yaml` `backend:` key (or its git remote) resolves to
 - Docker (devcontainers for isolation)
 - [uv](https://docs.astral.sh/uv/) (for the `fr` CLI)
 - [VibeKanban](https://github.com/BloopAI/vibe-kanban) MCP server — only for

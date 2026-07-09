@@ -458,6 +458,20 @@ rows:
       working CI workflow in the right location and schema for that backend
     origin:
     - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
-    levels: {}
-    status: not-implemented
-    notes: What an operator sees the first time they scaffold a non-GitHub repo.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_scaffold.py
+      - super-fr:tests/unit/test_acceptance_init.py
+      - super-fr:tests/unit/test_acceptance_cmd.py
+    status: ci
+    notes: 'scaffold_profile() picks HOST_CLI_FEATURE/HOST_CLI_POST_CREATE (versioned
+      + checksummed glab/tea installs, verified against real release artifacts) by
+      backend; fr acceptance init picks WORKFLOW_TEMPLATE_GITEA (.gitea/workflows/,
+      same YAML shape as GitHub Actions) / WORKFLOW_TEMPLATE_GITLAB (.gitlab-ci.yml,
+      genuinely different schema) via fr._hosts.detect_backend. Also fixed a real
+      blocker this surfaced: resolve_identity()''s remote-parsing regex was
+      GitHub-only, which would have hard-failed fr acceptance init on a fresh
+      GitLab/Gitea repo. Residual documented gap: fr acceptance report --link-mode
+      has no gitea/gitlab mode yet (source links in the generated report still point
+      at github.com). Not yet proven against a live GitLab/Gitea instance -- owed
+      to Phase 9''s manual verification.'

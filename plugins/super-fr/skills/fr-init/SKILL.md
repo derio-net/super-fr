@@ -26,7 +26,13 @@ Before asking anything, learn what the repo already says:
 - Languages and toolchains: manifests (pyproject/package.json/go.mod/...),
   lockfiles, `.tool-versions`, CI workflows (what does CI install?).
 - Existing `.devcontainer/` (profiles already present? then this is an
-  edit, not a green-field init).
+  edit, not a green-field init). Check `.devcontainer/fr-profiles.yaml`
+  for an existing top-level `backend:`/`host:` key too.
+- Which forge: `git remote get-url origin`'s hostname (`github.com` /
+  `gitlab.com` self-identify; anything else, including a literal
+  `gitea.com`, is self-hosted and needs the operator to confirm the
+  backend explicitly — no hostname alone distinguishes GitLab
+  Self-Managed / Gitea / GitHub Enterprise).
 - Credential surface: `.env*` patterns in .gitignore, CI secret names,
   cloud/k8s configs — candidates for the profile's expected secrets.
 - Working patterns: Makefile/justfile/scripts (what do humans run here?).
@@ -37,20 +43,25 @@ The interview confirms and fills gaps; it never asks what the scan answers.
 
 Cover, with scan-informed recommended options:
 
-1. **Profiles wanted** — one `dev` default, or split (e.g. `readonly` for
+1. **Backend** — github (default), gitlab, or gitea? Skip asking if the
+   scan already resolved it unambiguously (github.com/gitlab.com remote, or
+   an explicit `backend:` key already in fr-profiles.yaml). Confirm the
+   hostname too (`--host`) if self-hosted — drives which CLI
+   (`gh`/`glab`/`tea`) gets installed and which CI template
+   `fr acceptance init` picks.
+2. **Profiles wanted** — one `dev` default, or split (e.g. `readonly` for
    review/exploration vs `admin` with deploy credentials)? Profiles differ
    by CREDENTIALS first, tools second — same binaries, different env-files
    is the normal shape.
-2. **Tools** — confirm the scan's toolchain list; surface what CI installs
+3. **Tools** — confirm the scan's toolchain list; surface what CI installs
    that local work also needs (kubectl, terraform, docker-in-docker...).
-3. **Credentials per profile** — which env KEYS each profile expects
-   (names only, never values). **Do NOT ask for a GitHub token by
-   default:** push, PR creation, and every `fr`-driven gh call run on the
-   authenticated HOST (fr-isolation's credential boundary) — the container
-   needs no GH_TOKEN for the standard pipeline. Offer it only for an
-   explicit in-container-gh-writes profile (e.g. `admin`), never the
-   default.
-4. **Working patterns** — test/build/run commands worth recording in the
+4. **Credentials per profile** — which env KEYS each profile expects
+   (names only, never values). **Do NOT ask for a host-forge token by
+   default:** push, PR/MR creation, and every `fr`-driven `gh`/`glab`/`tea`
+   call run on the authenticated HOST (fr-isolation's credential boundary)
+   — the container needs none for the standard pipeline. Offer it only
+   for an explicit in-container-writes profile (e.g. `admin`).
+5. **Working patterns** — test/build/run commands worth recording in the
    profile's purpose/notes so future runs know the repo's verbs.
 
 ## 3. Scaffold per profile
@@ -62,13 +73,21 @@ fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
     --secret GH_TOKEN --secret KUBECONFIG_B64
 ```
 
+For a non-GitHub repo, pass `--backend`/`--host` on EVERY profile call for
+that repo (repo-level, but scaffold reads it fresh per call):
+`fr init scaffold ... --backend gitlab --host gitlab.mycorp.com`.
+
 Each call writes:
 
 - `.devcontainer/<profile>/devcontainer.json` — committed by scaffold; base
-  image + git/gh features + mapped tool features + vk installed in postCreate +
-  `--env-file` pointing at the host secrets path.
+  image + the backend's CLI (github-cli feature for GitHub; a versioned,
+  checksummed `glab`/`tea` binary install for GitLab/Gitea — no official
+  devcontainer feature exists for either) + mapped tool features + vk
+  installed in postCreate + `--env-file` pointing at the host secrets path.
 - `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile,
-  purpose, expected secret keys, notes for tools without a feature mapping.
+  purpose, expected secret keys, notes for tools without a feature mapping,
+  and the repo-level `backend`/`host` keys (github is the implicit default
+  and not written explicitly).
 - `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.
@@ -81,7 +100,9 @@ Unknown tools land in the profile's notes — wire them into
 - Tell the operator which placeholders to fill
   (`~/.config/fr/secrets/<repo>/<profile>.env`) before the first
   `fr isolation up` — an empty env-file is normal for a default profile
-  (GitHub work needs only the host's `gh auth status` to be green).
+  (the standard pipeline needs only the host's own CLI auth to be green:
+  `gh auth status` for GitHub, `glab auth status` for GitLab, `tea login`
+  for Gitea).
 - `fr init scaffold` already **committed** the `.devcontainer/` files (scoped
   commit on the current branch — `main` during bootstrap), so the profile is in
   the committed tree that `fr isolation up` checks out. No separate commit step
