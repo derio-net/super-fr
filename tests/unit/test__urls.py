@@ -34,9 +34,10 @@ class TestParseIssueUrl:
     def test_gitlab_nested_group_shape(self) -> None:
         """GitLab subgroups nest arbitrarily (group/subgroup/proj) — the
         repo-capturing group must not be greedy-limited to exactly one slash."""
-        assert parse_issue_url(
-            "https://gitlab.com/group/subgroup/proj/-/issues/9"
-        ) == ("group/subgroup/proj", 9)
+        assert parse_issue_url("https://gitlab.com/group/subgroup/proj/-/issues/9") == (
+            "group/subgroup/proj",
+            9,
+        )
 
     def test_not_an_issue_url_raises(self) -> None:
         with pytest.raises(ValueError, match="not a tracking issue url"):

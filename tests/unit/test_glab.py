@@ -73,9 +73,7 @@ class TestViewIssue:
     def test_parses_json_output(self) -> None:
         import json
 
-        response = json.dumps(
-            {"title": "T", "description": "B", "labels": [], "state": "opened"}
-        )
+        response = json.dumps({"title": "T", "description": "B", "labels": [], "state": "opened"})
         with patch("fr.glab._run_glab", return_value=response) as mock:
             result = view_issue("group/proj", 42)
             assert result["title"] == "T"
@@ -148,9 +146,7 @@ class TestEnsureLabel:
 
     def test_includes_description_when_given(self) -> None:
         with patch("fr.glab._run_glab") as mock:
-            ensure_label(
-                repo="group/proj", name="fr:ready", color="0E8AE6", description="Ready"
-            )
+            ensure_label(repo="group/proj", name="fr:ready", color="0E8AE6", description="Ready")
             args = mock.call_args[0][0]
             assert "--description" in args
             assert "Ready" in args

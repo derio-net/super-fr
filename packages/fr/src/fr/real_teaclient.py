@@ -49,13 +49,10 @@ class RealTeaClient:
         raw = cast("dict[str, Any]", _tea.view_issue(repo, number))
         labels_raw = raw.get("labels", []) or []
         labels = [
-            lbl["name"] if isinstance(lbl, dict) and "name" in lbl else lbl
-            for lbl in labels_raw
+            lbl["name"] if isinstance(lbl, dict) and "name" in lbl else lbl for lbl in labels_raw
         ]
         assignees_raw = raw.get("assignees", []) or []
-        assignees = [
-            a["login"] for a in assignees_raw if isinstance(a, dict) and "login" in a
-        ]
+        assignees = [a["login"] for a in assignees_raw if isinstance(a, dict) and "login" in a]
         return {
             "state": "CLOSED" if raw.get("state") == "closed" else "OPEN",
             "labels": labels,

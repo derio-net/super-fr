@@ -114,9 +114,7 @@ class TestListLinkedPrs:
         response = json.dumps(
             [{"web_url": "https://gitlab.com/g/p/-/merge_requests/3", "state": "opened"}]
         )
-        monkeypatch.setattr(
-            _glab, "_run_glab", _fake_run_glab_factory({("api",): response})
-        )
+        monkeypatch.setattr(_glab, "_run_glab", _fake_run_glab_factory({("api",): response}))
         prs = RealGlabClient().list_linked_prs("group/proj", 42)
         assert prs[0]["ci"] == "NONE"
         assert prs[0]["draft"] is False
@@ -199,9 +197,7 @@ class TestThinPassThroughs:
     just delegate to fr.glab's functions — cheap regression guards."""
 
     def test_create_issue_delegates(self, monkeypatch):
-        monkeypatch.setattr(
-            _glab, "create_issue", lambda **kw: "https://gitlab.com/g/p/-/issues/9"
-        )
+        monkeypatch.setattr(_glab, "create_issue", lambda **kw: "https://gitlab.com/g/p/-/issues/9")
         url = RealGlabClient().create_issue(
             "group/proj", title="T", body="B", labels=frozenset({"fr:ready"})
         )
@@ -209,9 +205,7 @@ class TestThinPassThroughs:
 
     def test_edit_issue_labels_delegates_to_swap(self, monkeypatch):
         captured: list[dict] = []
-        monkeypatch.setattr(
-            _glab, "swap_issue_labels", lambda **kw: captured.append(kw)
-        )
+        monkeypatch.setattr(_glab, "swap_issue_labels", lambda **kw: captured.append(kw))
         RealGlabClient().edit_issue_labels(
             "group/proj", 42, add=frozenset({"pr-ready"}), remove=frozenset({"fr:ready"})
         )
@@ -292,9 +286,7 @@ class TestPrStatusByUrl:
             "https://gitlab.com/group/proj/-/merge_requests/7"
         )
         assert result == {"state": "OPEN", "draft": False}
-        assert captured == [
-            ["mr", "view", "7", "--repo", "group/proj", "--output", "json"]
-        ]
+        assert captured == [["mr", "view", "7", "--repo", "group/proj", "--output", "json"]]
 
     def test_nested_group_url(self, monkeypatch):
         captured: list[list[str]] = []
@@ -333,9 +325,7 @@ class TestPrStatusByUrl:
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert (
-            RealGlabClient().pr_status_by_url(
-                "https://gitlab.com/group/proj/-/merge_requests/999"
-            )
+            RealGlabClient().pr_status_by_url("https://gitlab.com/group/proj/-/merge_requests/999")
             is None
         )
 

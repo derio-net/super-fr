@@ -836,7 +836,9 @@ def test_pr_from_gitlab_backend(tmp_path: Path) -> None:
         "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
     )
     runner = FakeRunner(
-        stdout={"glab": '{"state": "merged", "web_url": "https://gitlab.com/g/p/-/merge_requests/1"}'}
+        stdout={
+            "glab": '{"state": "merged", "web_url": "https://gitlab.com/g/p/-/merge_requests/1"}'
+        }
     )
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     result = target._pr_from(repo, "feat/x")

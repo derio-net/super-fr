@@ -85,9 +85,7 @@ class TestListLinkedPrs:
                 },
             ]
         )
-        monkeypatch.setattr(
-            _tea, "_run_tea", _fake_run_tea_factory({("api",): timeline})
-        )
+        monkeypatch.setattr(_tea, "_run_tea", _fake_run_tea_factory({("api",): timeline}))
         prs = RealTeaClient().list_linked_prs("owner/repo", 3)
         assert len(prs) == 1
         assert prs[0]["url"] == "https://gitea.example.com/o/r/pulls/7"
@@ -259,9 +257,7 @@ class TestPrStatusByUrl:
             return json.dumps({"state": "open", "merged": False, "draft": False})
 
         monkeypatch.setattr(_tea, "_run_tea", fake)
-        result = RealTeaClient().pr_status_by_url(
-            "https://gitea.example.com/owner/repo/pulls/7"
-        )
+        result = RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/7")
         assert result == {"state": "OPEN", "draft": False}
         assert captured == [["pulls", "7", "--repo", "owner/repo", "--output", "json"]]
 
@@ -271,9 +267,7 @@ class TestPrStatusByUrl:
             "_run_tea",
             lambda args: json.dumps({"state": "closed", "merged": True, "draft": False}),
         )
-        result = RealTeaClient().pr_status_by_url(
-            "https://gitea.example.com/owner/repo/pulls/7"
-        )
+        result = RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/7")
         assert result == {"state": "MERGED", "draft": False}
 
     def test_closed_unmerged_state(self, monkeypatch):
@@ -282,9 +276,7 @@ class TestPrStatusByUrl:
             "_run_tea",
             lambda args: json.dumps({"state": "closed", "merged": False, "draft": False}),
         )
-        result = RealTeaClient().pr_status_by_url(
-            "https://gitea.example.com/owner/repo/pulls/7"
-        )
+        result = RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/7")
         assert result == {"state": "CLOSED", "draft": False}
 
     def test_returns_none_on_error(self, monkeypatch):

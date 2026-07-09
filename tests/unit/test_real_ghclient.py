@@ -167,9 +167,7 @@ class TestPrStatusByUrl:
         monkeypatch.setattr(
             _gh,
             "_run_gh",
-            _fake_run_gh_factory(
-                {("pr", "view"): json.dumps({"state": "OPEN", "isDraft": False})}
-            ),
+            _fake_run_gh_factory({("pr", "view"): json.dumps({"state": "OPEN", "isDraft": False})}),
         )
         result = RealGhClient().pr_status_by_url("https://github.com/o/r/pull/1")
         assert result == {"state": "OPEN", "draft": False}
