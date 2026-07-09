@@ -78,9 +78,9 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
 - Local report: `fr acceptance report` → `docs/acceptance/report.html`
   (gitignored), links relative to sibling checkouts (`--sibling-root`,
   default `..`).
-- CI: `.github/workflows/acceptance-report.yml` gates PRs touching specs /
-  matrix / workflows, runs weekly, uploads the GitHub-linked report artifact
-  and upserts the "Acceptance debt" issue.
+- CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
+  writes a Markdown summary to each Actions run (branch, PR, main), uploads the
+  GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.
 """
 
 WORKFLOW_TEMPLATE = """\
@@ -90,29 +90,18 @@ name: acceptance-report
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
 # - `skipped` / `not-implemented` rows surface as warning annotations; the
 #   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - A Markdown summary is written to each Actions run (branch, PR, main).
 # - The built report (GitHub-linked at this ref) is uploaded as an artifact.
 # - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
 # check` warns and verifies them on local runs, where siblings exist.
-# PR-time path filters must include every own-repo path the matrix
-# references — `fr acceptance check` warns when one falls outside them.
+# If PR-time path filters are added later, they must include every own-repo
+# path the matrix references — `fr acceptance check` warns when one falls outside them.
 
 on:
-  pull_request:
-    paths:
-      - docs/acceptance/**
-      - docs/superpowers/specs/**
-      - docs/superpowers/implemented/specs/**
-      - .github/workflows/**
-      - tests/**
+  pull_request: {}
   push:
-    branches: [main]
-    paths:
-      - docs/acceptance/**
-      - docs/superpowers/specs/**
-      - docs/superpowers/implemented/specs/**
-      - .github/workflows/**
-      - tests/**
+    branches: ["**"]
   schedule:
     - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
   workflow_dispatch:
@@ -132,6 +121,9 @@ jobs:
         run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
+      - name: Write Actions summary (branch / PR / main)
+        if: always()
+        run: fr acceptance summary >> "$GITHUB_STEP_SUMMARY"
       - name: Build report (GitHub links at this ref)
         env:
           REF: ${{ github.event.pull_request.head.sha || github.sha }}

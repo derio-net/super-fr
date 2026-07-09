@@ -200,6 +200,49 @@ def status_cmd(
         typer.echo(f"  … +{len(opens) - len(shown)} more (fr acceptance status)")
 
 
+@acceptance_app.command("summary")
+def summary_cmd() -> None:
+    """GitHub Actions-friendly Markdown summary: compact counts + collapsible debt."""
+    from collections import Counter
+    from html import escape
+
+    from fr.acceptance.check import open_rows
+
+    root = resolve_repo_root()
+    matrix = _load(root)
+    counts = Counter(r.status for r in matrix.rows)
+    lines = [
+        "## Acceptance matrix",
+        "",
+        "| status | count |",
+        "|---|---:|",
+        f"| ci | {counts.get('ci', 0)} |",
+        f"| scheduled | {counts.get('scheduled', 0)} |",
+        f"| skipped | {counts.get('skipped', 0)} |",
+        f"| not-implemented | {counts.get('not-implemented', 0)} |",
+        f"| failing | {counts.get('failing', 0)} |",
+        "",
+    ]
+    opens = open_rows(matrix)
+    if not opens:
+        lines.append("No open acceptance debt.")
+    else:
+        lines += [f"### Open acceptance debt ({len(opens)})", ""]
+        for r in opens:
+            lines += [
+                f"<details><summary><code>{escape(r.id)}</code> [{escape(r.status)}]</summary>",
+                "",
+                escape(r.acceptance),
+                "",
+                f"**Notes:** {escape(r.notes)}",
+                "",
+                "</details>",
+                "",
+            ]
+    lines += ["", "Full HTML report remains attached as the `acceptance-report` artifact."]
+    typer.echo("\n".join(lines))
+
+
 @acceptance_app.command("add")
 def add_cmd(
     row_id: str = typer.Option(..., "--id", help="Stable kebab-case row id."),

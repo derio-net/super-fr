@@ -1,4 +1,4 @@
-"""Phase 4 — fr acceptance status / add / check --added-since / digest."""
+"""Phase 4 — fr acceptance status / add / check --added-since / digest / summary."""
 
 from __future__ import annotations
 
@@ -56,6 +56,27 @@ def test_status_zero_debt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     result = _invoke(root, monkeypatch, "status")
     assert result.exit_code == 0
     assert "no acceptance debt" in result.output
+
+
+def test_summary_is_actions_friendly_markdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, MIXED)
+    result = _invoke(root, monkeypatch, "summary")
+    assert result.exit_code == 0
+    assert "## Acceptance matrix" in result.output
+    assert "| skipped | 1 |" in result.output
+    assert "<details><summary><code>old-debt</code> [skipped]</summary>" in result.output
+    assert "<!-- fr-acceptance-digest -->" not in result.output
+    assert "Full HTML report remains attached" in result.output
+
+
+def test_summary_zero_debt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row(id="green"))
+    result = _invoke(root, monkeypatch, "summary")
+    assert result.exit_code == 0
+    assert "No open acceptance debt." in result.output
+    assert "<details>" not in result.output
 
 
 # ── T2: add ────────────────────────────────────────────────────────────────

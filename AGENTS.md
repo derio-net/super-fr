@@ -102,12 +102,10 @@ alone. Mixed PRs bump.
 
 The workspace-root `pyproject.toml`'s `[project].version` is canonical. Use
 `scripts/bump-version.py {patch,minor,major,X.Y.Z,--check}` — never hand-edit
-the three version-bearing surfaces (member `pyproject.toml`s, per-plugin
-`plugin.json`, root `marketplace.json`). It also runs `uv sync` and verifies
+the version-bearing surfaces (member `pyproject.toml`s, per-plugin
+`plugin.json`, root `marketplace.json`, or
+`packages/fr-opencode-plugin/package.json`). It also runs `uv sync` and verifies
 `uv run fr --version`; commit the changed manifests + `uv.lock` together.
-**Gap:** `packages/fr-opencode-plugin/package.json` has its own `version`
-field that `bump-version.py` does **not** touch or check — keep it in sync by
-hand if you bump while touching that package.
 
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible
 workflow additions (new subcommand/skill/mandatory behavior) — e.g. the
@@ -160,9 +158,8 @@ exists and how it's checked, not a restatement:
   question; specs in particular tend to record the *rationale* a diff alone
   won't show.
 
-## Known gaps (don't assume these are handled)
+## Known gaps
 
-- No CI guard fails a PR that touches `skills/`/`packages/*/src/`/`rules/`
-  without a version bump — the version-*sync* check (drift between the
-  version-bearing files) exists; the version-*bump-forgotten* check doesn't.
-- `packages/fr-opencode-plugin`'s `bun test` suite isn't in any CI workflow.
+No repo-maintainer known gaps are currently tracked here. Add new gaps when a
+constraint is real but not yet enforceable, and remove them as soon as CI or
+tooling closes the loop.
