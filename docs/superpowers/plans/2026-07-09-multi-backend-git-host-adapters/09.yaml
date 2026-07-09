@@ -1,0 +1,76 @@
+schema_version: 2
+phase:
+  number: 9
+  title: '[manual] Real-CLI verification against live GitLab and Gitea instances'
+  tag: manual
+  depends_on:
+  - 2
+  - 3
+  - 4
+  - 5
+  - 7
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Verify the GitLab adapter against a real GitLab.com project
+  steps:
+  - id: P9.T1.S1
+    text: |-
+      MANUAL: run `glab auth login` against a real (or scratch) GitLab.com
+      project the operator controls. Point a scratch checkout's
+      `.devcontainer/fr-profiles.yaml` at `backend: gitlab`. Walk: create an
+      Issue via RealGlabClient's path (`fr apply --yes` on a tiny throwaway
+      plan, or a one-off script calling client_for(...).create_issue(...));
+      add and remove a label (confirm the `#`-prefixed color round-trips
+      correctly in the GitLab UI); open a throwaway MR referencing the
+      Issue and confirm list_linked_prs surfaces it via the
+      related_merge_requests endpoint; read a file via file_exists/read_file
+      against the project's default branch; close the Issue via
+      edit_issue_state. Record any field-name or flag mismatch against
+      what Phases 2/4's tests assumed, fix forward with a follow-up commit
+      (tests first) if anything's wrong, and note the outcome directly in
+      this plan file via `fr plan edit --tick P9.T1.S1 --note "<summary>"`.
+- number: 2
+  title: Verify the Gitea adapter against a real Gitea instance
+  steps:
+  - id: P9.T2.S1
+    text: |-
+      MANUAL: same walk as Task 1 against a real Gitea instance (gitea.com
+      or self-hosted) using `tea login add`. Pay particular attention to
+      list_linked_prs' timeline-cross-reference heuristic (Phase 3) — this
+      is the weakest-guarantee operation in the whole design per the spec's
+      capability matrix, confirm it actually surfaces a linking PR/issue
+      pair correctly on a real instance, not just against a hand-built
+      fixture. Note the outcome via `fr plan edit --tick P9.T2.S1 --note
+      "<summary>"`.
+- number: 3
+  title: Verify isolation lifecycle and scaffold end-to-end on both backends
+  steps:
+  - id: P9.T3.S1
+    text: |-
+      MANUAL: scaffold a fresh devcontainer profile (`fr init scaffold`)
+      against a GitLab-backed and a Gitea-backed scratch repo each; confirm
+      the devcontainer's postCreateCommand actually installs a working
+      `glab`/`tea` binary (not just that the string looks right); run `fr
+      isolation up/status/down` against each and confirm the default-branch
+      resolution and PR/MR-merge check (Phase 7) work against the real
+      instance, including Gitea's list-and-filter fallback for _pr_from.
+      Note the outcome via `fr plan edit --tick P9.T3.S1 --note "<summary>"`.
+state:
+  steps:
+    P9.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P9.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P9.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

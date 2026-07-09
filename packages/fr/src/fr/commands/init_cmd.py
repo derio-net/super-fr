@@ -33,10 +33,27 @@ def scaffold(
     no_commit: bool = typer.Option(
         False, "--no-commit", help="Write the files only; do not commit the profile."
     ),
+    backend: str = typer.Option(
+        "github",
+        "--backend",
+        help="Which forge this repo lives on: github (default), gitlab, or gitea. "
+        "Picks the devcontainer CLI-install step (github-cli feature vs a "
+        "versioned glab/tea binary install) and is recorded in fr-profiles.yaml "
+        "for fr._hosts.detect_backend.",
+    ),
+    host: str | None = typer.Option(
+        None,
+        "--host",
+        help="Self-hosted instance hostname (e.g. gitlab.mycorp.com). Omit for "
+        "gitlab.com/gitea.com or GitHub.",
+    ),
 ) -> None:
     """Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus
     host secrets placeholders. The commit is what lets `fr isolation up` see the
     profile; pass --no-commit to write only."""
+    if backend not in ("github", "gitlab", "gitea"):
+        typer.echo(f"error: --backend must be one of github, gitlab, gitea; got {backend!r}")
+        raise typer.Exit(2)
     try:
         path = scaffold_profile(
             repo.resolve(),
@@ -47,6 +64,8 @@ def scaffold(
             default=default,
             force=force,
             commit=not no_commit,
+            backend=backend,  # type: ignore[arg-type]
+            host=host,
         )
     except IsolationError as err:
         typer.echo(f"error: {err}")

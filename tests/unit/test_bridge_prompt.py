@@ -227,3 +227,73 @@ def test_prompt_with_no_tracking_issue_raises():
     plan, phase = _plan_with_phase(tracking_issue=None)
     with pytest.raises(ValueError):
         build_prompt(plan, phase)
+
+
+def test_prompt_backend_wording_github_default():
+    """Regression guard: an unchanged github.com tracking_issue keeps
+    saying "GitHub Issue gh#N" and the gh-flavored verify command."""
+    from fr_dispatch.prompt import build_prompt
+
+    plan, phase = _plan_with_phase(
+        tracking_issue="https://github.com/owner/repo/issues/42",
+    )
+    text = build_prompt(plan, phase)
+    assert "working on GitHub Issue gh#42" in text
+
+
+def test_prompt_backend_wording_gitlab():
+    """A GitLab-shape tracking_issue URL renders GitLab-flavored wording:
+    "GitLab Issue gl#N" and the glab verify-command in the deps preamble."""
+    from fr import parse
+    from fr_dispatch.prompt import build_prompt
+
+    plan = parse(FIXTURE)
+    blocker = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={
+                    "number": 1,
+                    "tracking_issue": "https://gitlab.com/group/proj/-/issues/100",
+                }
+            )
+        }
+    )
+    dependent = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={
+                    "number": 2,
+                    "depends_on": (1,),
+                    "tracking_issue": "https://gitlab.com/group/proj/-/issues/200",
+                }
+            )
+        }
+    )
+    plan = dc_replace(
+        plan,
+        phases=(blocker, dependent),
+        meta=plan.meta.model_copy(update={"target_repo": "group/proj"}),
+    )
+
+    text = build_prompt(plan, dependent)
+    assert "working on GitLab Issue gl#200" in text
+    assert "glab issue view <n> -R <owner/repo> --output json" in text
+    assert "gh issue view" not in text
+
+
+def test_prompt_backend_wording_gitea_hostname_alone_is_not_enough():
+    """Known, honest limitation: Gitea has no free hostname default (see
+    fr._hosts's design — self-hosting is the norm, so even a literal
+    gitea.com URL needs explicit `.devcontainer/fr-profiles.yaml` config
+    to resolve as "gitea"). `build_prompt` only has the tracking_issue
+    URL, no repo_root to read that config from, so a Gitea-hosted phase's
+    prompt falls back to "GitHub Issue" wording today — not a bug, the
+    same documented boundary as `_hosts.backend_for_hostname`'s own tests."""
+    from fr_dispatch.prompt import build_prompt
+
+    plan, phase = _plan_with_phase(
+        tracking_issue="https://gitea.example.com/owner/repo/issues/7",
+        target_repo="owner/repo",
+    )
+    text = build_prompt(plan, phase)
+    assert "working on GitHub Issue gh#7" in text

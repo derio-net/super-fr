@@ -29,8 +29,8 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import IO, Any, cast
 
+from fr import hostclient
 from fr.gh import GhError, _classify_error
-from fr.real_ghclient import RealGhClient
 from fr_dispatch import discover_plans
 from fr_dispatch import tick as _tick
 from fr_dispatch.metrics import MetricsPusher
@@ -366,7 +366,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        gh = RealGhClient()
         mcp = _construct_mcp_client()
 
         try:
@@ -431,6 +430,14 @@ def main(argv: list[str] | None = None) -> int:
                 prev_repos_dir = os.environ.get("FR_REPOS_DIR")
                 os.environ["FR_REPOS_DIR"] = str(bridge_path.parent)
                 try:
+                    # Resolved per-repo (not once for the whole tick, before
+                    # this loop existed): the bridge can watch repos on
+                    # different backends, and `bridge_path` is this repo's
+                    # own local checkout — exactly what `client_for` needs
+                    # to read `.devcontainer/fr-profiles.yaml`/the git
+                    # remote from. See docs/superpowers/specs/
+                    # 2026-07-09-multi-backend-git-host-adapters-design.md §6.
+                    gh = hostclient.client_for(bridge_path)
 
                     def _fetch_plans(r: str = resolved_owner) -> Any:
                         return discover_plans(r, gh)

@@ -131,7 +131,7 @@ def test_tick_syncs_bridge_owned_checkout_before_discover(
         def list_linked_prs(self, repo: str, issue_number: int) -> list[Any]:
             return []
 
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: _StubGh())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: _StubGh())
 
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
@@ -218,7 +218,7 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
             pass
 
     monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: object())
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
     monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda mcp, state: None)
@@ -265,7 +265,7 @@ def test_tick_warns_when_owner_name_unresolvable(
             pass
 
     monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: object())
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
     monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda mcp, state: None)
@@ -298,7 +298,7 @@ def _stub_bridge_io(bridge_cli: Any, monkeypatch: pytest.MonkeyPatch) -> None:
             pass
 
     monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: object())
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
     # Production calls these with a `project_id=` kwarg — match the real
@@ -389,7 +389,7 @@ def test_tick_feeds_real_pr_observations_to_pr_state(
             pass
 
     monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: object())
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli, "reap_orphans", lambda mcp, *, project_id=None: None)
 
@@ -428,7 +428,7 @@ def test_tick_reconciles_done_issues_and_persists_seen(
             pass
 
     monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: object())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: object())
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli, "observe_pr_status", lambda mcp, *, project_id=None: {})
     monkeypatch.setattr(bridge_cli, "_pr_state_tick", lambda *a, **k: None)

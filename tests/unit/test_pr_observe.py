@@ -108,62 +108,95 @@ def test_observe_survives_list_issues_failure():
 
 
 # --- default gh PR-status fetcher ---------------------------------------
+#
+# The default fetch no longer shells out to `gh` directly (that was the
+# fr-vk-bypasses-GhClient sharp edge the multi-backend design fixed —
+# see docs/superpowers/specs/
+# 2026-07-09-multi-backend-git-host-adapters-design.md §6). Its
+# subprocess-level behavior per backend is covered by
+# test_real_ghclient.py / test_real_glabclient.py / test_real_teaclient.py's
+# TestPrStatusByUrl classes; this module's own tests (below) cover only
+# the routing — resolve a client for the URL's host, call
+# pr_status_by_url, map state+draft to "open"/"merged"/None.
 
 
-def _patch_gh(monkeypatch, *, stdout: str, rc: int = 0, raises: Exception | None = None) -> None:
+# --- backend-aware default fetch (multi-backend, #2026-07-09) -----------
+
+
+class _FakeClient:
+    def __init__(self, result: dict | None) -> None:
+        self._result = result
+        self.urls_seen: list[str] = []
+
+    def pr_status_by_url(self, url: str) -> dict | None:
+        self.urls_seen.append(url)
+        return self._result
+
+
+def test_default_pr_status_fetch_routes_through_client_for_backend(monkeypatch):
+    """The default fetch resolves a client via
+    fr.hostclient.client_for_backend(fr._hosts.backend_for_hostname(...))
+    and calls pr_status_by_url — not a raw gh subprocess directly."""
     import fr_vk.pr_observe as po
 
-    class _Res:
-        returncode = rc
-        stderr = ""
+    fake = _FakeClient({"state": "MERGED", "draft": False})
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
 
-    def fake_run(cmd: Any, **kw: Any) -> Any:
-        if raises is not None:
-            raise raises
-        r = _Res()
-        r.stdout = stdout  # type: ignore[attr-defined]
-        return r
-
-    monkeypatch.setattr(po.subprocess, "run", fake_run)
+    assert po._default_pr_status_fetch("https://gitlab.com/g/p/-/merge_requests/1") == "merged"
+    assert fake.urls_seen == ["https://gitlab.com/g/p/-/merge_requests/1"]
 
 
-def test_default_pr_status_merged(monkeypatch):
-    from fr_vk.pr_observe import _default_pr_status_fetch
+def test_default_pr_status_fetch_open_non_draft(monkeypatch):
+    import fr_vk.pr_observe as po
 
-    _patch_gh(monkeypatch, stdout='{"state": "MERGED", "isDraft": false}')
-    assert _default_pr_status_fetch("https://github.com/o/r/pull/1") == "merged"
-
-
-def test_default_pr_status_open(monkeypatch):
-    from fr_vk.pr_observe import _default_pr_status_fetch
-
-    _patch_gh(monkeypatch, stdout='{"state": "OPEN", "isDraft": false}')
-    assert _default_pr_status_fetch("https://github.com/o/r/pull/1") == "open"
+    fake = _FakeClient({"state": "OPEN", "draft": False})
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
+    assert po._default_pr_status_fetch("https://github.com/o/r/pull/1") == "open"
 
 
-def test_default_pr_status_draft_is_none(monkeypatch):
-    from fr_vk.pr_observe import _default_pr_status_fetch
+def test_default_pr_status_fetch_draft_is_none(monkeypatch):
+    import fr_vk.pr_observe as po
 
-    _patch_gh(monkeypatch, stdout='{"state": "OPEN", "isDraft": true}')
-    assert _default_pr_status_fetch("https://github.com/o/r/pull/1") is None
-
-
-def test_default_pr_status_closed_unmerged_is_none(monkeypatch):
-    from fr_vk.pr_observe import _default_pr_status_fetch
-
-    _patch_gh(monkeypatch, stdout='{"state": "CLOSED", "isDraft": false}')
-    assert _default_pr_status_fetch("https://github.com/o/r/pull/1") is None
+    fake = _FakeClient({"state": "OPEN", "draft": True})
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
+    assert po._default_pr_status_fetch("https://github.com/o/r/pull/1") is None
 
 
-def test_default_pr_status_subprocess_failure_is_none(monkeypatch):
-    from fr_vk.pr_observe import _default_pr_status_fetch
+def test_default_pr_status_fetch_none_result_is_none(monkeypatch):
+    import fr_vk.pr_observe as po
 
-    _patch_gh(monkeypatch, stdout="", rc=1)
-    assert _default_pr_status_fetch("https://github.com/o/r/pull/1") is None
+    fake = _FakeClient(None)
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
+    assert po._default_pr_status_fetch("https://github.com/o/r/pull/1") is None
 
 
-def test_default_pr_status_raises_is_none(monkeypatch):
-    from fr_vk.pr_observe import _default_pr_status_fetch
+def test_default_pr_status_fetch_client_raises_is_none(monkeypatch):
+    """A client-side exception (network blip, CLI missing) must not
+    propagate — matches the old subprocess-based default's fail-soft
+    posture."""
+    import fr_vk.pr_observe as po
 
-    _patch_gh(monkeypatch, stdout="", raises=FileNotFoundError("no gh"))
-    assert _default_pr_status_fetch("https://github.com/o/r/pull/1") is None
+    class _RaisingClient:
+        def pr_status_by_url(self, url: str) -> dict | None:
+            raise RuntimeError("glab not found")
+
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: _RaisingClient())
+    assert po._default_pr_status_fetch("https://gitlab.com/g/p/-/merge_requests/1") is None
+
+
+def test_default_pr_status_fetch_resolves_backend_from_url_hostname(monkeypatch):
+    """Different cards on one VK board can point at repos on different
+    backends — the fetch must resolve per-URL, not from any ambient
+    single-repo context."""
+    import fr_vk.pr_observe as po
+
+    seen_backends: list[str] = []
+
+    def fake_client_for_backend(backend: str):
+        seen_backends.append(backend)
+        return _FakeClient({"state": "OPEN", "draft": False})
+
+    monkeypatch.setattr(po.hostclient, "client_for_backend", fake_client_for_backend)
+    po._default_pr_status_fetch("https://github.com/o/r/pull/1")
+    po._default_pr_status_fetch("https://gitlab.com/g/p/-/merge_requests/1")
+    assert seen_backends == ["github", "gitlab"]

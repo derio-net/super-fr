@@ -91,6 +91,58 @@ def test_tick_syncs_fr_ready_phase_and_flips_fr_synced():
     assert add_calls[0][1]["number"] == n
 
 
+def test_tick_fr_synced_stamp_works_with_any_ghclient_shaped_object_and_gitlab_url():
+    """Correction, locked in as a test (docs/superpowers/specs/
+    2026-07-09-multi-backend-git-host-adapters-design.md §7): tick()'s
+    'stamp fr:synced' step (`gh.ensure_labels`/`gh.edit_issue_labels`)
+    already runs through whatever GhClient-shaped object is PASSED IN —
+    it needed ZERO code changes for multi-backend support. Only its
+    `from fr._urls import parse_issue_url` import benefited, from Phase
+    1's generalization (the GitLab-shape `/-/issues/N` URL below would
+    have failed to parse before that fix).
+
+    Uses a client class deliberately NOT named `FakeGhClient` (a thin
+    alias) so the point is structural, not name-based — `tick()` never
+    checks `isinstance(gh, FakeGhClient)` or similar.
+    """
+    from fr.observe import observe
+    from fr.render import render
+    from fr_dispatch import TickResult, tick
+
+    GenericTrackerFake = FakeGhClient  # noqa: N806 — deliberately renamed, see docstring
+
+    plan, repo, n = _dispatched_plan()
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://gitlab.com/{repo}/-/issues/{n}"}
+            )
+        }
+    )
+    plan = dc_replace(
+        plan, phases=(phase,), meta=plan.meta.model_copy(update={"target_repo": repo})
+    )
+
+    gh = GenericTrackerFake()
+    gh.add_issue(repo, n, state="OPEN", labels={"fr:ready", "phase:1"})
+    rendered = render(plan, observe(plan, gh))
+    gh.issues[(repo, n)].body = rendered.issue_per_phase[1].body
+
+    mcp = FakeMcpClient()
+
+    result = tick(plan, gh, VkRunner(mcp))
+
+    assert isinstance(result, TickResult)
+    assert result.synced == 1
+    assert result.errors == 0
+
+    label_calls = [c for c in gh.calls if c[0] == "edit_issue_labels"]
+    add_calls = [c for c in label_calls if "fr:synced" in c[1]["add"]]
+    assert len(add_calls) == 1
+    assert add_calls[0][1]["repo"] == repo
+    assert add_calls[0][1]["number"] == n
+
+
 def test_tick_mcp_failure_does_not_mark_fr_synced_so_next_tick_retries():
     """If dispatch_phase raises, the bridge MUST NOT add `vk-synced` —
     otherwise the failure would silently strand the phase on the next tick.

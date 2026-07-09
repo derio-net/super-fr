@@ -2,8 +2,13 @@
 
 Builds the `{card_id: "open"|"merged"}` map that `pr_state.tick` consumes.
 For each active VK card (`In progress` / `In review`), resolves the card's
-`latest_pr_url` to its merge state via `gh pr view` (injectable for tests,
-mirroring `pr_state.tick`'s `close_gh_issue` seam).
+`latest_pr_url` to its merge state via the backend-appropriate `GhClient`
+adapter (injectable for tests, mirroring `pr_state.tick`'s `close_gh_issue`
+seam) — resolved per-URL via its own hostname, since one VK board can hold
+cards from repos on different backends. Previously shelled out to a raw
+`gh pr view` subprocess directly, bypassing `GhClient` entirely; fixed as
+part of the multi-backend design (see docs/superpowers/specs/
+2026-07-09-multi-backend-git-host-adapters-design.md §6).
 
 This is the wiring the v2-bridge-rebuild deferred ("observations are wired in
 Phase 6") and never landed — leaving `pr_state.tick` fed an empty map and the
@@ -12,11 +17,12 @@ Issue auto-close path dead. See #290.
 
 from __future__ import annotations
 
-import json
 import logging
-import subprocess
 from collections.abc import Callable
 from typing import Any, Protocol
+from urllib.parse import urlparse
+
+from fr import _hosts, hostclient
 
 from fr_vk.pr_state import _normalize_issues
 
@@ -30,41 +36,33 @@ class _CardLister(Protocol):
 
 
 def _default_pr_status_fetch(pr_url: str) -> str | None:
-    """Resolve a PR URL to `"open"`/`"merged"` via `gh pr view`, else None.
+    """Resolve a PR URL to `"open"`/`"merged"` via the backend-appropriate
+    `GhClient` adapter, else None.
 
     `"merged"` for a merged PR, `"open"` for an open non-draft PR; drafts,
-    closed-unmerged PRs, and any failure (gh missing, rate-limited, malformed
-    JSON) map to None so the observer simply omits that card. Non-fatal.
+    closed-unmerged PRs, and any failure (client missing/erroring,
+    unresolvable URL) map to None so the observer simply omits that card.
+    Non-fatal. The backend is resolved from `pr_url`'s own hostname
+    (`fr._hosts.backend_for_hostname`) — NOT from any ambient single-repo
+    context — since one VK board can hold cards from repos on different
+    backends.
     """
+    hostname = urlparse(pr_url).hostname
+    backend = _hosts.backend_for_hostname(hostname)
+    client = hostclient.client_for_backend(backend)
     try:
-        result = subprocess.run(
-            ["gh", "pr", "view", pr_url, "--json", "state,isDraft"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logger.warning("pr_observe: gh pr view %s failed: %s", pr_url, e)
+        result = client.pr_status_by_url(pr_url)
+    except Exception as e:  # noqa: BLE001 — non-fatal, mirrors the old subprocess posture
+        logger.warning("pr_observe: pr_status_by_url(%s) failed: %s", pr_url, e)
         return None
-    if result.returncode != 0:
-        logger.warning(
-            "pr_observe: gh pr view %s failed (rc=%s): %s",
-            pr_url,
-            result.returncode,
-            (result.stderr or "").strip()[:512],
-        )
+    if result is None:
         return None
-    try:
-        data = json.loads(result.stdout)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    state = data.get("state")
+    state = result.get("state")
     if state == "MERGED":
         return "merged"
-    if state == "OPEN" and not bool(data.get("isDraft")):
+    if state == "OPEN" and not bool(result.get("draft")):
         return "open"
-    # A draft (OPEN+isDraft) or a closed-unmerged PR maps to None — an
+    # A draft (OPEN+draft) or a closed-unmerged PR maps to None — an
     # intentional "hold this card" (the consumer acts only on open/merged),
     # NOT an error. Do not "fix" drafts to "open".
     return None

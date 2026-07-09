@@ -1,0 +1,120 @@
+schema_version: 2
+phase:
+  number: 8
+  title: Scaffold backend-awareness (devcontainer + acceptance CI) and docs
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - multibackend-scaffold
+tasks:
+- number: 1
+  title: RED — devcontainer scaffold backend-conditional CLI install
+  steps:
+  - id: P8.T1.S1
+    text: |-
+      RED: in isolation/scaffold.py's test suite, add cases: scaffolding a
+      profile with backend="github" still gets the unconditional
+      `github-cli` feature (no behavior change, regression guard); backend=
+      "gitlab" gets NO github-cli feature and DOES get a glab-install
+      postCreateCommand snippet appended; backend="gitea" same for tea. Run
+      pytest, confirm the gitlab/gitea cases fail.
+- number: 2
+  title: GREEN — implement HOST_CLI_FEATURE / HOST_CLI_POST_CREATE
+  steps:
+  - id: P8.T2.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/isolation/scaffold.py, add
+      `HOST_CLI_FEATURE: dict[HostBackend, str | None]` (github ->
+      GH_FEATURE, gitlab/gitea -> None) and `HOST_CLI_POST_CREATE: dict[
+      HostBackend, str]` (versioned curl-install snippets for glab/tea
+      release binaries — pin to a specific released version + checksum,
+      not "latest", so scaffolded devcontainers are reproducible, matching
+      BASE_IMAGE's own pinning rationale). `scaffold_profile()` gains a
+      `backend: HostBackend = "github"` param threaded into the `features`/
+      `POST_CREATE` construction. Run the Task 1 tests, confirm green.
+- number: 3
+  title: RED — acceptance-scaffold backend-conditional CI template
+  steps:
+  - id: P8.T3.S1
+    text: |-
+      RED: in acceptance/scaffold.py's test suite, add cases: init(...,
+      backend="github") writes `.github/workflows/acceptance-report.yml`
+      unchanged (regression guard); backend="gitea" writes
+      `.gitea/workflows/acceptance-report.yml` (NOT .github/) with `tea`
+      calls instead of `gh`; backend="gitlab" writes `.gitlab-ci.yml` at
+      the repo root with `glab` calls in a stages/script schema, not the
+      on/jobs/steps GitHub-Actions shape. Run pytest, confirm the gitea/
+      gitlab cases fail.
+- number: 4
+  title: GREEN — implement WORKFLOW_TEMPLATE_GITEA / WORKFLOW_TEMPLATE_GITLAB
+  steps:
+  - id: P8.T4.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/acceptance/scaffold.py, add
+      WORKFLOW_TEMPLATE_GITEA (same trigger/job/step shape as
+      WORKFLOW_TEMPLATE, gh-issue calls swapped for tea equivalents, plus a
+      comment noting Gitea Actions must be enabled per-repo and needs a
+      self-hosted act_runner registered) and WORKFLOW_TEMPLATE_GITLAB
+      (.gitlab-ci.yml shape). `init()` gains a `backend: HostBackend =
+      "github"` param picking template + destination path. Run the Task 3
+      tests, confirm green.
+- number: 5
+  title: GREEN — fr-init interview question + sync
+  steps:
+  - id: P8.T5.S1
+    text: |-
+      GREEN: edit plugins/super-fr/skills/fr-init/SKILL.md (canonical
+      source per AGENTS.md) to add one interview question: which forge does
+      this repo live on (github/gitlab/gitea), and is it self-hosted (if so,
+      what hostname) — feeding scaffold_profile()'s new backend/host params.
+      Run `uv run scripts/sync-opencode.py` (regenerates
+      .opencode/skills/fr-init/SKILL.md) and `uv run scripts/sync-opencode.py
+      --check` to confirm clean. Run the opencode-skills-sync tripwire test,
+      confirm green.
+- number: 6
+  title: GREEN — README updates
+  steps:
+  - id: P8.T6.S1
+    text: |-
+      GREEN: update README.md's Requirements section (GitHub CLI requirement
+      becomes conditional on the repo's backend; add glab/tea as the
+      GitLab/Gitea equivalents), the components table's "GitHub tracking"
+      phrasing (-> "git-host tracking (GitHub/GitLab/Gitea)"), and the
+      "One phase = one GitHub Issue = one PR" invariant line (-> "one
+      tracking Issue"). Add a one-line footnote under the mermaid sequence
+      diagram noting GitHub is the diagram's illustrative default and
+      GitLab/Gitea are equally supported (don't redraw the diagram itself —
+      out of proportion for a footnote-sized clarification). `git add
+      README.md`.
+state:
+  steps:
+    P8.T1.S1:
+      state: x
+      ticked_at: '2026-07-09T09:04:07+00:00'
+      note: null
+    P8.T2.S1:
+      state: x
+      ticked_at: '2026-07-09T09:08:19+00:00'
+      note: null
+    P8.T3.S1:
+      state: x
+      ticked_at: '2026-07-09T09:12:39+00:00'
+      note: null
+    P8.T4.S1:
+      state: x
+      ticked_at: '2026-07-09T09:20:32+00:00'
+      note: null
+    P8.T5.S1:
+      state: x
+      ticked_at: '2026-07-09T09:25:07+00:00'
+      note: null
+    P8.T6.S1:
+      state: x
+      ticked_at: '2026-07-09T09:28:22+00:00'
+      note: null
+  completion:
+    at: '2026-07-09T09:28:59+00:00'
+    note: null
+    observed_prs: []

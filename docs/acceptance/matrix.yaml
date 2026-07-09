@@ -394,3 +394,102 @@ rows:
     status: ci
     notes: Loopback stub server pins the cncd wire contract, entry-point registration,
       preflight failure, and fr_dispatch.tick end-to-end path in CI.
+  - id: multibackend-gitlab-tracking
+    capability: Multi-backend git hosting
+    acceptance: An operator can run fr apply against a GitLab-backed repo and see phases
+      rendered/observed/diffed/applied as GitLab Issues with correctly-shaped GitLab
+      labels (color, length)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_glab.py
+      - super-fr:tests/unit/test_real_glabclient.py
+      - super-fr:tests/unit/test_hostclient.py
+    status: ci
+    notes: RealGlabClient satisfies the GhClient Protocol (mypy-verified) and is reachable
+      from every fr apply CLI command via hostclient.client_for, gated on fr._hosts.detect_backend.
+      Unit-verified against GitLab's own REST/glab-CLI shapes (Phase 2/4, 2026-07-09).
+      Not yet proven against a live GitLab instance -- owed to the plan's back-loaded
+      manual verification phase (Phase 9).
+  - id: multibackend-gitea-tracking
+    capability: Multi-backend git hosting
+    acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
+      rendered/observed/diffed/applied as Gitea Issues with correctly-shaped labels
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tea.py
+      - super-fr:tests/unit/test_real_teaclient.py
+      - super-fr:tests/unit/test_hostclient.py
+    status: ci
+    notes: RealTeaClient satisfies the GhClient Protocol (mypy-verified) and is reachable
+      from every fr apply CLI command via hostclient.client_for, gated on fr._hosts.detect_backend.
+      Unit-verified against Gitea's own live swagger-spec-confirmed shapes (Phase 3/4,
+      2026-07-09). Not yet proven against a live Gitea instance -- owed to the plan's
+      back-loaded manual verification phase (Phase 9).
+  - id: multibackend-isolation-lifecycle
+    capability: Multi-backend git hosting
+    acceptance: fr isolation up/status/down/gc resolves the default branch and checks
+      PR/MR-merge state correctly against a GitLab- or Gitea-backed repo, with zero
+      gh-specific calls
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: '_resolve_default_branch and _pr_from both branch on fr._hosts.detect_backend
+      (glab/tea equivalents of the gh calls, kept as a lightweight parallel branch
+      on the isolation lifecycle''s own Runner seam rather than merged into GhClient
+      -- see the design doc''s reasoning). Gitea''s _pr_from has no single-shot
+      branch->PR query (verified during research) and falls back to a list-and-filter
+      scan -- a real, bounded, documented degradation. Not yet proven against a
+      live GitLab/Gitea instance -- owed to Phase 9''s manual verification.'
+  - id: multibackend-vk-dispatch
+    capability: Multi-backend git hosting
+    acceptance: The VK dispatch bridge polls PR/MR status and auto-closes tracking Issues
+      correctly for a GitLab- or Gitea-backed phase
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pr_observe.py
+      - super-fr:tests/unit/test_bridge_pr_state.py
+      - super-fr:tests/unit/test_done_reconcile.py
+      - super-fr:tests/unit/test_cardref.py
+      - super-fr:tests/integration/test_bridge_cli.py
+    status: ci
+    notes: 'Fixed the two fr-vk gh-bypass call sites (pr_observe.py/pr_state.py shelled
+      out to literal gh subprocesses, bypassing GhClient) and bridge_cli.py''s
+      hardcoded RealGhClient() (now resolved per-repo via hostclient.client_for,
+      since the bridge can watch repos on different backends). Consolidated 5
+      duplicate card-title regexes into fr_vk._cardref, backward-compatible with
+      existing gh#-tagged production cards (2026-07-09). Not yet proven against
+      a live GitLab/Gitea VK dispatch end-to-end -- owed to Phase 9''s manual
+      verification.'
+  - id: multibackend-scaffold
+    capability: Multi-backend git hosting
+    acceptance: fr init scaffold on a GitLab- or Gitea-backed repo installs the right
+      CLI into the devcontainer (not github-cli), and fr acceptance init generates a
+      working CI workflow in the right location and schema for that backend
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_scaffold.py
+      - super-fr:tests/unit/test_acceptance_init.py
+      - super-fr:tests/unit/test_acceptance_cmd.py
+    status: ci
+    notes: 'scaffold_profile() picks HOST_CLI_FEATURE/HOST_CLI_POST_CREATE (versioned
+      + checksummed glab/tea installs, verified against real release artifacts) by
+      backend; fr acceptance init picks WORKFLOW_TEMPLATE_GITEA (.gitea/workflows/,
+      same YAML shape as GitHub Actions) / WORKFLOW_TEMPLATE_GITLAB (.gitlab-ci.yml,
+      genuinely different schema) via fr._hosts.detect_backend. Also fixed a real
+      blocker this surfaced: resolve_identity()''s remote-parsing regex was
+      GitHub-only, which would have hard-failed fr acceptance init on a fresh
+      GitLab/Gitea repo. Residual documented gap: fr acceptance report --link-mode
+      has no gitea/gitlab mode yet (source links in the generated report still point
+      at github.com). Not yet proven against a live GitLab/Gitea instance -- owed
+      to Phase 9''s manual verification.'

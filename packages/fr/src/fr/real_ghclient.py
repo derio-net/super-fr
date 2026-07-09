@@ -124,6 +124,17 @@ class RealGhClient:
             )
         return result
 
+    def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
+        """`gh pr view <url>` accepts a bare PR URL directly (unlike
+        glab's `mr view` / tea's `pulls`, which require a repo + numeric
+        id — see the sibling adapters). Fails soft: None on any error."""
+        try:
+            out = _gh._run_gh(["pr", "view", url, "--json", "state,isDraft"])
+        except _gh.GhError:
+            return None
+        raw: dict[str, Any] = json.loads(out)
+        return {"state": raw.get("state", "OPEN"), "draft": bool(raw.get("isDraft", False))}
+
     def edit_issue_labels(
         self,
         repo: str,

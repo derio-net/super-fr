@@ -7,7 +7,6 @@ we leverage gh's existing auth.
 
 from __future__ import annotations
 
-import re
 import subprocess
 import time
 from collections.abc import Callable
@@ -40,15 +39,6 @@ def _run_gh(args: list[str]) -> str:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
         raise GhError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
     return result.stdout.strip()
-
-
-def extract_issue_number(url: str) -> int:
-    """Extract the issue number from a GitHub Issue URL."""
-    m = re.search(r"/issues/(\d+)", url)
-    if not m:
-        msg = f"Cannot extract issue number from URL: {url}"
-        raise GhError(msg)
-    return int(m.group(1))
 
 
 def create_issue(

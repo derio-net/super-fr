@@ -31,10 +31,12 @@ def test_closes_done_card_issue_from_title():
     # No latest_pr_url — proves the close uses the TITLE, not a PR url.
     _prime(mcp, "c1", status="Done", title="gh#5: [derio-net/runs-fr]", url=None)
 
-    closed: list[tuple[str, str]] = []
-    out = reconcile_done_issues(mcp, seen=set(), close_gh_issue=lambda r, n: closed.append((r, n)))
+    closed: list[tuple[str, str, str]] = []
+    out = reconcile_done_issues(
+        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b))
+    )
 
-    assert closed == [("derio-net/runs-fr", "5")]
+    assert closed == [("derio-net/runs-fr", "5", "github")]
     assert out == {"derio-net/runs-fr#5"}
 
 
@@ -44,9 +46,9 @@ def test_seen_set_bounds_reclose():
     mcp = FakeMcpClient()
     _prime(mcp, "c1", status="Done", title="gh#5: [derio-net/runs-fr]")
 
-    closed: list[tuple[str, str]] = []
+    closed: list[tuple[str, str, str]] = []
     out = reconcile_done_issues(
-        mcp, seen={"derio-net/runs-fr#5"}, close_gh_issue=lambda r, n: closed.append((r, n))
+        mcp, seen={"derio-net/runs-fr#5"}, close_gh_issue=lambda r, n, b: closed.append((r, n, b))
     )
 
     assert closed == []  # already handled — no gh call
@@ -59,8 +61,10 @@ def test_title_without_repo_is_skipped():
     mcp = FakeMcpClient()
     _prime(mcp, "c1", status="Done", title="gh#5: no repo here")
 
-    closed: list[tuple[str, str]] = []
-    out = reconcile_done_issues(mcp, seen=set(), close_gh_issue=lambda r, n: closed.append((r, n)))
+    closed: list[tuple[str, str, str]] = []
+    out = reconcile_done_issues(
+        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b))
+    )
 
     assert closed == []
     assert out == set()
@@ -72,8 +76,8 @@ def test_non_done_card_is_ignored():
     mcp = FakeMcpClient()
     _prime(mcp, "c1", status="In review", title="gh#5: [derio-net/runs-fr]")
 
-    closed: list[tuple[str, str]] = []
-    reconcile_done_issues(mcp, seen=set(), close_gh_issue=lambda r, n: closed.append((r, n)))
+    closed: list[tuple[str, str, str]] = []
+    reconcile_done_issues(mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b)))
 
     assert closed == []
 
@@ -86,7 +90,7 @@ def test_list_issues_failure_returns_seen_unchanged():
             raise RuntimeError("mcp down")
 
     seen = {"a/b#1"}
-    out = reconcile_done_issues(_BoomMcp(), seen=seen, close_gh_issue=lambda r, n: None)
+    out = reconcile_done_issues(_BoomMcp(), seen=seen, close_gh_issue=lambda r, n, b: None)
     assert out == {"a/b#1"}  # unchanged, no raise
 
 
@@ -99,9 +103,9 @@ def test_caps_closes_per_tick():
     for i in range(5):
         _prime(mcp, f"c{i}", status="Done", title=f"gh#{i}: [o/r]")
 
-    closed: list[tuple[str, str]] = []
+    closed: list[tuple[str, str, str]] = []
     out = reconcile_done_issues(
-        mcp, seen=set(), close_gh_issue=lambda r, n: closed.append((r, n)), max_closes=2
+        mcp, seen=set(), close_gh_issue=lambda r, n, b: closed.append((r, n, b)), max_closes=2
     )
 
     assert len(closed) == 2  # capped
@@ -119,7 +123,7 @@ def test_threads_project_id_to_list_issues():
             return []
 
     reconcile_done_issues(
-        _RecMcp(), project_id="proj-x", seen=set(), close_gh_issue=lambda r, n: None
+        _RecMcp(), project_id="proj-x", seen=set(), close_gh_issue=lambda r, n, b: None
     )
     assert seen_kwargs and seen_kwargs[0].get("status") == "Done"
     assert seen_kwargs[0].get("project_id") == "proj-x"
@@ -132,7 +136,7 @@ def test_preexisting_seen_keys_survive():
     mcp = FakeMcpClient()
     _prime(mcp, "c1", status="Done", title="gh#9: [o/r]")
 
-    out = reconcile_done_issues(mcp, seen={"o/r#1", "o/r#2"}, close_gh_issue=lambda r, n: None)
+    out = reconcile_done_issues(mcp, seen={"o/r#1", "o/r#2"}, close_gh_issue=lambda r, n, b: None)
     assert out == {"o/r#1", "o/r#2", "o/r#9"}
 
 
@@ -151,12 +155,12 @@ def test_e2e_idempotent_across_two_ticks():
         url="https://github.com/derio-net/runs-fr/pull/14",
     )
 
-    closed: list[tuple[str, str]] = []
-    closer = lambda r, n: closed.append((r, n))  # noqa: E731
+    closed: list[tuple[str, str, str]] = []
+    closer = lambda r, n, b: closed.append((r, n, b))  # noqa: E731
 
     seen = reconcile_done_issues(mcp, seen=set(), close_gh_issue=closer)
-    assert closed == [("derio-net/runs-fr", "7")]
+    assert closed == [("derio-net/runs-fr", "7", "github")]
 
     # Second tick — seen carries over → no re-close.
     reconcile_done_issues(mcp, seen=seen, close_gh_issue=closer)
-    assert closed == [("derio-net/runs-fr", "7")]  # still just the one
+    assert closed == [("derio-net/runs-fr", "7", "github")]  # still just the one

@@ -1,0 +1,113 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Foundation — backend detection, config schema, cross-backend URL parsing
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — tests for fr._hosts.detect_backend
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test__hosts.py. Cover detect_backend(repo_root):
+      (a) an explicit `backend: gitlab` key in a fixture
+      `.devcontainer/fr-profiles.yaml` wins regardless of the git remote;
+      (b) no explicit backend + `git remote get-url origin` resolving to a
+      github.com URL -> "github"; (c) same but gitlab.com -> "gitlab"; (d) no
+      explicit backend + an unrecognized/self-hosted hostname (e.g.
+      git.mycorp.internal) -> falls back to "github" (today's only behavior,
+      preserved, never silently guesses "gitlab"/"gitea" from an unknown host);
+      (e) `host:` key is read alongside `backend:` and both are exposed on
+      whatever return shape detect_backend uses (a small dataclass or a
+      (backend, host) tuple — decide the shape in this test file, it's the
+      contract). Use tmp_path fixtures for repo_root + monkeypatch subprocess
+      for the git-remote lookup (mirror the injection style
+      packages/fr/src/fr/isolation/local.py's own tests already use for `run`).
+      Run pytest, confirm it fails (fr._hosts doesn't exist yet).
+- number: 2
+  title: GREEN — implement fr/_hosts.py
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/_hosts.py. `HostBackend = Literal["github",
+      "gitlab", "gitea"]`. `DEFAULT_HOST_BACKENDS: dict[str, HostBackend] =
+      {"github.com": "github", "gitlab.com": "gitlab"}` (no gitea.com entry —
+      self-hosting is the norm for Gitea specifically per the spec's research;
+      an operator on gitea.com still sets `backend: gitea` explicitly).
+      `detect_backend(repo_root: Path) -> HostBackend` reads
+      `.devcontainer/fr-profiles.yaml`'s top-level `backend:` key first
+      (yaml.safe_load, tolerate a missing file); else runs `git remote
+      get-url origin` in repo_root and matches the parsed hostname against
+      DEFAULT_HOST_BACKENDS; else returns "github". Also expose `host_for(repo_root)
+      -> str | None` reading the optional `host:` key (None when absent — callers
+      fall back to each backend's own SaaS default, gitlab.com/gitea.com/n-a).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: run the Task 1 tests, confirm green. `git add
+      packages/fr/src/fr/_hosts.py tests/unit/test__hosts.py`.
+- number: 3
+  title: RED — cross-backend issue-URL parsing tests
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: find the existing test file covering fr._urls (grep tests/ for
+      "parse_issue_url" to locate it). Add cases: a GitLab-shape URL
+      (`https://gitlab.example.com/group/proj/-/issues/42`) parses to
+      `("group/proj", 42)` via parse_issue_url; a Gitea-shape URL
+      (`https://gitea.example.com/owner/repo/issues/7`, same shape as
+      GitHub's) parses to `("owner/repo", 7)`; issue_number() extracts the
+      trailing number from both new shapes too. Run pytest, confirm the
+      GitLab-shape case fails (today's regex has no `-/` handling).
+- number: 4
+  title: GREEN — generalize _urls.py; retire fr.gh.extract_issue_number
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/_urls.py, change ISSUE_URL_RE to
+      `re.compile(r"^https://([^/]+)/([^/]+/[^/]+)/(?:-/)?issues/(\d+)$")` and
+      _ISSUE_NUM_RE to allow an optional `-/` before `issues/` the same way.
+      parse_issue_url's return shape is unchanged ((repo, number) — the host
+      group is captured but discarded, no consumer needs it). Run the full
+      existing _urls/observe/diff/render test suites, confirm no regression
+      (github-shape URLs must parse identically to before).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: grep the whole repo for `extract_issue_number` (fr/gh.py's
+      independent duplicate). If any production code path calls it, redirect
+      to `fr._urls.issue_number`; if it's dead in production (per the original
+      research pass, it looked unused outside gh.py's own tests), delete the
+      function from fr/gh.py and its test in tests/unit/test_gh.py, keeping
+      git history as the record rather than a stub. Run `uv run pytest -q --no-cov`
+      for the whole fr package, confirm green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-09T07:04:42+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-07-09T07:05:10+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-07-09T07:05:10+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-07-09T07:08:05+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-07-09T07:08:06+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-07-09T07:11:17+00:00'
+      note: null
+  completion:
+    at: '2026-07-09T07:11:18+00:00'
+    note: null
+    observed_prs: []

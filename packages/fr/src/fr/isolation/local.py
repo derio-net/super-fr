@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
 
+from fr._hosts import detect_backend
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -757,7 +758,18 @@ class LocalWorktreeDevcontainerTarget:
         return True
 
     def _resolve_default_branch(self) -> str:
-        """symbolic-ref refs/remotes/origin/HEAD → gh defaultBranchRef → main."""
+        """symbolic-ref refs/remotes/origin/HEAD → backend-specific CLI → main.
+
+        The backend-specific step branches on `fr._hosts.detect_backend`
+        (see docs/superpowers/specs/
+        2026-07-09-multi-backend-git-host-adapters-design.md §8) — `gh`
+        for GitHub (today's only behavior, unchanged), `glab repo view`
+        for GitLab, `tea repos` for Gitea. Deliberately a SEPARATE branch
+        here rather than routed through `hostclient.client_for` — this is
+        a two-field lookup on the isolation lifecycle's own `Runner`
+        seam (independent from `GhClient` by design), not worth the cost
+        of constructing a full adapter for.
+        """
         sym = self.run(
             ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd=self.repo_root
         )
@@ -765,13 +777,47 @@ class LocalWorktreeDevcontainerTarget:
         if sym.returncode == 0 and name:
             # --short yields "origin/main"; strip to the bare branch name.
             return name.removeprefix("origin/")
-        gh = self.run(
-            ["gh", "repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
-            cwd=self.repo_root,
-        )
-        gh_name = (gh.stdout or "").strip()
-        if gh.returncode == 0 and gh_name:
-            return gh_name  # gh returns a bare branch name — no origin/ prefix to strip
+
+        backend = detect_backend(self.repo_root)
+        if backend == "gitlab":
+            result = self.run(
+                ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"],
+                cwd=self.repo_root,
+            )
+        elif backend == "gitea":
+            result = self.run(
+                ["tea", "repos", "--fields", "default_branch", "--output", "json"],
+                cwd=self.repo_root,
+            )
+        else:
+            result = self.run(
+                [
+                    "gh",
+                    "repo",
+                    "view",
+                    "--json",
+                    "defaultBranchRef",
+                    "--jq",
+                    ".defaultBranchRef.name",
+                ],
+                cwd=self.repo_root,
+            )
+        out = (result.stdout or "").strip()
+        if result.returncode == 0 and out:
+            if backend == "gitea":
+                # tea's `--output json` on a single-repo view returns a
+                # JSON object (unlike glab's --jq, which already extracts
+                # the bare string) — parse it here. Field name confirmed
+                # against Gitea's live swagger spec (Repository.default_branch);
+                # the CLI's own JSON shape is reconfirmed against a live
+                # tea in Phase 9's manual verification.
+                try:
+                    parsed = json.loads(out)
+                except json.JSONDecodeError:
+                    return "main"
+                branch = parsed.get("default_branch") if isinstance(parsed, dict) else None
+                return branch if isinstance(branch, str) and branch else "main"
+            return out  # gh/glab both yield a bare branch name — no prefix to strip
         return "main"
 
     def _ref_exists(self, ref: str) -> bool:
@@ -854,8 +900,36 @@ class LocalWorktreeDevcontainerTarget:
         return self._pr_from(self.repo_root, state.branch)
 
     def _pr_from(self, cwd: Path, branch: str) -> dict[str, Any] | None:
-        """`gh pr view` from an arbitrary repo cwd — gc reconciles workspaces
-        across repos, so it can't assume `self.repo_root`. gh uses host auth."""
+        """PR/MR-for-branch lookup from an arbitrary repo cwd — gc reconciles
+        workspaces across repos, so it can't assume `self.repo_root`. Uses
+        host auth (gh/glab) or the CLI's own login (tea).
+
+        Backend-branched the same way as `_resolve_default_branch` (see
+        docs/superpowers/specs/
+        2026-07-09-multi-backend-git-host-adapters-design.md §8):
+        - GitHub: `gh pr view <branch> --json state,url` (today's only
+          behavior, unchanged).
+        - GitLab: `glab mr view <branch> --output json` — a single-shot
+          query like gh's (`glab mr view` accepts a bare branch name
+          directly, per its own `--help`, unlike the URL case in
+          `real_glabclient.py`'s `pr_status_by_url`).
+        - Gitea: no single-shot branch→PR query exists (verified during
+          research — `tea pulls` only takes a numeric index). Falls back
+          to listing ALL PRs (`--state all`, so a merged/closed PR for a
+          torn-down branch is still found) and matching `head.label`
+          client-side — a real, bounded degradation vs. gh/glab's
+          single-shot query, not a bug.
+
+        Every path returns the SAME shape callers already depend on:
+        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str}` — each
+        backend's native state vocabulary is coerced here so callers never
+        see gh/glab/tea-specific casing or a separate merged boolean.
+        """
+        backend = detect_backend(cwd)
+        if backend == "gitlab":
+            return self._pr_from_gitlab(cwd, branch)
+        if backend == "gitea":
+            return self._pr_from_gitea(cwd, branch)
         result = self.run(
             ["gh", "pr", "view", branch, "--json", "state,url"],
             cwd=cwd,
@@ -867,3 +941,56 @@ class LocalWorktreeDevcontainerTarget:
         except json.JSONDecodeError:
             return None
         return data if isinstance(data, dict) else None
+
+    def _pr_from_gitlab(self, cwd: Path, branch: str) -> dict[str, Any] | None:
+        result = self.run(["glab", "mr", "view", branch, "--output", "json"], cwd=cwd)
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            return None
+        try:
+            raw = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(raw, dict):
+            return None
+        raw_state = raw.get("state", "opened")
+        if raw_state == "merged":
+            state = "MERGED"
+        elif raw_state in ("closed", "locked"):
+            state = "CLOSED"
+        else:
+            state = "OPEN"
+        return {"state": state, "url": raw.get("web_url", "")}
+
+    def _pr_from_gitea(self, cwd: Path, branch: str) -> dict[str, Any] | None:
+        result = self.run(
+            [
+                "tea",
+                "pulls",
+                "list",
+                "--state",
+                "all",
+                "--fields",
+                "state,merged,url,head",
+                "--output",
+                "json",
+            ],
+            cwd=cwd,
+        )
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            return None
+        try:
+            entries = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(entries, list):
+            return None
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            head = entry.get("head") or {}
+            if not isinstance(head, dict) or head.get("label") != branch:
+                continue
+            merged = bool(entry.get("merged", False))
+            state = "MERGED" if merged else ("CLOSED" if entry.get("state") == "closed" else "OPEN")
+            return {"state": state, "url": entry.get("url", "")}
+        return None

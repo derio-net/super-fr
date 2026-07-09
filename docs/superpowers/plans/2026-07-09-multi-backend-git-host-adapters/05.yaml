@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 5
+  title: fr-vk bypass fixes and card-title tag consolidation
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - multibackend-vk-dispatch
+tasks:
+- number: 1
+  title: RED — pr_observe.py routed through a client instead of raw gh subprocess
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: in tests/unit/test_pr_observe.py (or wherever pr_observe's tests
+      live), add a case where `observe_pr_status` is given a fake client
+      (or a fake `client_for`) instead of relying on the default
+      `_default_pr_status_fetch`'s raw subprocess call; assert it calls
+      `client.pr_status_by_url(url)` and maps the result to "open"/"merged"
+      the same way the old subprocess-based default did (state OPEN+not-draft
+      -> "open", MERGED -> "merged", draft/closed-unmerged -> omitted). Run
+      pytest, confirm it fails (no such seam exists yet).
+- number: 2
+  title: GREEN — implement the client-based fetch in pr_observe.py
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      GREEN: in packages/fr-vk/src/fr_vk/pr_observe.py, replace
+      `_default_pr_status_fetch`'s subprocess.run(["gh","pr","view",...])
+      with a call through `fr.hostclient.client_for` resolved from the PR
+      URL's own host (parse the URL's hostname, match against
+      fr._hosts.DEFAULT_HOST_BACKENDS the same way detect_backend does, so a
+      board holding cards from repos on different backends resolves each
+      correctly) then `.pr_status_by_url(url)`. Keep the existing
+      `pr_status_fetch` injectable-callable parameter for the unit-test seam
+      unchanged. Run the Task 1 tests plus the full existing pr_observe
+      suite, confirm green.
+- number: 3
+  title: RED — pr_state.py's issue-close routed through edit_issue_state
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      RED: in pr_state's test file, add a case asserting `_close_linked_gh_issue`
+      (or its replacement) calls `client.edit_issue_state(repo, number,
+      state="CLOSED")` instead of shelling out to `gh issue close`. Run
+      pytest, confirm it fails.
+- number: 4
+  title: GREEN — implement the client-based close in pr_state.py
+  steps:
+  - id: P5.T4.S1
+    text: |-
+      GREEN: in packages/fr-vk/src/fr_vk/pr_state.py, replace
+      `_default_close_gh_issue`'s subprocess.run(["gh","issue","close",...])
+      with `fr.hostclient.client_for(repo, ...).edit_issue_state(repo,
+      int(issue_number), state="CLOSED")`. Keep the existing `close_gh_issue`
+      injectable-callable parameter unchanged for the unit-test seam. Run the
+      Task 3 tests plus the full existing pr_state suite, confirm green.
+- number: 5
+  title: RED — consolidated card-title tag parser/builder
+  steps:
+  - id: P5.T5.S1
+    text: |-
+      RED: create tests/unit/test_cardref.py covering a new
+      fr_vk/_cardref.py: `parse_card_title(title) -> tuple[str, str, int] |
+      None` (backend_tag, repo, number) and `build_card_title(backend:
+      HostBackend, repo: str, number: int) -> str`. Assert: existing GitHub
+      cards (`"gh#42: [owner/repo]"`) parse unchanged (tag="gh") — backward
+      compatibility for cards already on production VK boards is load-bearing,
+      not optional; a GitLab card built via build_card_title("gitlab", ...)
+      renders `"gl#42: [group/proj]"` and round-trips through parse_card_title;
+      same for Gitea's "gt" tag. Run pytest, confirm fails (module doesn't
+      exist).
+- number: 6
+  title: GREEN — implement _cardref.py and replace the 5 duplicate regex sites
+  steps:
+  - id: P5.T6.S1
+    text: |-
+      GREEN: implement fr_vk/_cardref.py per Task 5. Replace pr_state.py's
+      four regexes (_GH_REPO_FROM_URL_RE, _GH_ISSUE_NUM_FROM_TITLE_RE,
+      _GH_REPO_FROM_TITLE_RE, _DONE_TITLE_RE) and workspaces.py's inline
+      `re.search(r"gh#(\d+):...")` in recover_orphan_card with calls into
+      parse_card_title. dispatch.py's build_card_title becomes a thin
+      re-export of (or delegates to) _cardref.build_card_title, defaulting
+      to the "gh" tag when called without an explicit backend (preserves
+      every existing call site's behavior with zero call-site changes where
+      the caller doesn't yet know its backend). Run the FULL existing
+      fr_vk test suite (pr_state, workspaces, dispatch — all of it, not just
+      the new file), confirm zero regressions — this is the highest-risk
+      step in the phase since it touches 3 production files' core parsing.
+  - id: P5.T6.S2
+    text: |-
+      GREEN: `git add packages/fr-vk/src/fr_vk/_cardref.py
+      packages/fr-vk/src/fr_vk/pr_state.py packages/fr-vk/src/fr_vk/workspaces.py
+      packages/fr-vk/src/fr_vk/dispatch.py tests/unit/test_cardref.py`.
+- number: 7
+  title: GREEN — drop bridge_cli.py's raw-gh-subprocess defaults
+  steps:
+  - id: P5.T7.S1
+    text: |-
+      GREEN: in packages/fr-vk/src/fr_vk/bridge_cli.py, confirm it no longer
+      needs to construct or pass any raw `gh`-subprocess default callables now
+      that pr_observe.py/pr_state.py resolve their own clients internally
+      (Task 2/4). Remove any now-dead wiring. Run `uv run pytest -q --no-cov`
+      for the whole fr-vk package, confirm green.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-07-09T08:26:34+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-07-09T08:27:20+00:00'
+      note: null
+    P5.T3.S1:
+      state: x
+      ticked_at: '2026-07-09T08:34:14+00:00'
+      note: null
+    P5.T4.S1:
+      state: x
+      ticked_at: '2026-07-09T08:38:27+00:00'
+      note: null
+    P5.T5.S1:
+      state: x
+      ticked_at: '2026-07-09T08:29:01+00:00'
+      note: null
+    P5.T6.S1:
+      state: x
+      ticked_at: '2026-07-09T08:38:28+00:00'
+      note: null
+    P5.T6.S2:
+      state: x
+      ticked_at: '2026-07-09T08:39:34+00:00'
+      note: null
+    P5.T7.S1:
+      state: x
+      ticked_at: '2026-07-09T08:44:29+00:00'
+      note: null
+  completion:
+    at: '2026-07-09T08:44:55+00:00'
+    note: null
+    observed_prs: []

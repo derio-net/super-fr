@@ -7,8 +7,6 @@ so the unit tests stub the observation source. Phase 5's
 
 from __future__ import annotations
 
-import re
-
 from tests.unit.fakes import FakeMcpClient
 
 
@@ -120,7 +118,7 @@ def test_in_progress_merged_skips_to_done():  # #290 backlog heal
     running the full cascade (archive + close linked Issue)."""
     from fr_vk.pr_state import tick
 
-    closed: list[tuple[str, str]] = []
+    closed: list[tuple[str, str, str]] = []
 
     mcp = FakeMcpClient()
     _prime_card(
@@ -141,7 +139,7 @@ def test_in_progress_merged_skips_to_done():  # #290 backlog heal
     count = tick(
         mcp,
         pr_observations={"card-1": "merged"},
-        close_gh_issue=lambda repo, n: closed.append((repo, n)),
+        close_gh_issue=lambda repo, n, backend: closed.append((repo, n)),
     )
 
     assert count == 1
@@ -172,14 +170,17 @@ def test_tick_invokes_gh_issue_closer_when_pr_merged(monkeypatch):
     """The cascade also closes the linked GH Issue (belt-and-braces).
 
     The caller injects a `close_gh_issue` callable so unit tests can
-    observe without shelling out to gh.
+    observe without shelling out to gh. The callable's 3rd arg is the
+    HostBackend resolved from the PR url's own hostname (see
+    docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    §6) — "github" here since the fixture PR url is on github.com.
     """
     from fr_vk.pr_state import tick
 
-    closed: list[tuple[str, str]] = []
+    closed: list[tuple[str, str, str]] = []
 
-    def fake_close(repo: str, issue_number: str) -> None:
-        closed.append((repo, issue_number))
+    def fake_close(repo: str, issue_number: str, backend: str) -> None:
+        closed.append((repo, issue_number, backend))
 
     mcp = FakeMcpClient()
     _prime_card(
@@ -198,7 +199,35 @@ def test_tick_invokes_gh_issue_closer_when_pr_merged(monkeypatch):
     )
 
     assert count == 1
-    assert closed == [("derio-net/superpowers-for-vk", "100")]
+    assert closed == [("derio-net/superpowers-for-vk", "100", "github")]
+
+
+def test_tick_resolves_gitlab_backend_from_pr_url(monkeypatch):
+    """A card whose PR lives on GitLab resolves backend="gitlab", even
+    though the card title still carries the "gh#" tag (nothing threads
+    the real backend into the title yet — see the design doc's
+    non-goals) — the PR URL's hostname is the authoritative signal."""
+    from fr_vk.pr_state import tick
+
+    closed: list[tuple[str, str, str]] = []
+
+    mcp = FakeMcpClient()
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        status="In review",
+        title="gh#100: [group/proj]",
+        latest_pr_url="https://gitlab.com/group/proj/-/merge_requests/7",
+    )
+
+    tick(
+        mcp,
+        pr_observations={"card-1": "merged"},
+        close_gh_issue=lambda r, n, b: closed.append((r, n, b)),
+    )
+
+    assert closed == [("group/proj", "100", "gitlab")]
 
 
 def test_done_cascade_failure_does_not_abort_the_sweep():
@@ -227,7 +256,7 @@ def test_done_cascade_failure_does_not_abort_the_sweep():
 
     seen: list[str] = []
 
-    def boom_then_ok(repo: str, n: str) -> None:
+    def boom_then_ok(repo: str, n: str, backend: str) -> None:
         seen.append(n)
         if n == "100":
             raise RuntimeError("gh exploded")
@@ -250,7 +279,7 @@ def test_close_skipped_when_title_repo_disagrees_with_pr_url_repo():
     closing the wrong repo's issue)."""
     from fr_vk.pr_state import tick
 
-    closed: list[tuple[str, str]] = []
+    closed: list[tuple[str, str, str]] = []
 
     mcp = FakeMcpClient()
     _prime_card(
@@ -265,7 +294,7 @@ def test_close_skipped_when_title_repo_disagrees_with_pr_url_repo():
     count = tick(
         mcp,
         pr_observations={"card-1": "merged"},
-        close_gh_issue=lambda repo, n: closed.append((repo, n)),
+        close_gh_issue=lambda repo, n, backend: closed.append((repo, n, backend)),
     )
 
     assert count == 1  # card still transitions to Done
@@ -306,23 +335,21 @@ def test_tick_threads_project_id_to_list_issues():
         assert kw.get("project_id") == "proj-derio-ops"
 
 
-def test_default_close_gh_issue_is_invoked_via_subprocess(monkeypatch):
-    """Default close_gh_issue uses subprocess.run; we patch it out."""
+def test_default_close_gh_issue_routes_through_edit_issue_state(monkeypatch):
+    """Default close_gh_issue resolves a client for the given backend and
+    calls edit_issue_state — replaced the old raw-subprocess default as
+    part of the multi-backend design (see docs/superpowers/specs/
+    2026-07-09-multi-backend-git-host-adapters-design.md §6)."""
     import fr_vk.pr_state as ps
     from fr_vk.pr_state import tick
 
-    seen: list[list[str]] = []
+    calls: list[tuple[str, int, str]] = []
 
-    class _Done:
-        returncode = 0
-        stderr = ""
-        stdout = ""
+    class _FakeClient:
+        def edit_issue_state(self, repo: str, number: int, *, state: str) -> None:
+            calls.append((repo, number, state))
 
-    def fake_run(cmd, **kw):
-        seen.append(list(cmd))
-        return _Done()
-
-    monkeypatch.setattr(ps.subprocess, "run", fake_run)
+    monkeypatch.setattr(ps.hostclient, "client_for_backend", lambda backend: _FakeClient())
 
     mcp = FakeMcpClient()
     _prime_card(
@@ -336,8 +363,4 @@ def test_default_close_gh_issue_is_invoked_via_subprocess(monkeypatch):
 
     tick(mcp, pr_observations={"card-1": "merged"})
 
-    matching = [c for c in seen if "issue" in c and "close" in c]
-    assert matching, f"expected gh issue close call, saw {seen}"
-    joined = " ".join(matching[0])
-    assert re.search(r"\b100\b", joined)
-    assert "derio-net/superpowers-for-vk" in joined
+    assert calls == [("derio-net/superpowers-for-vk", 100, "CLOSED")]

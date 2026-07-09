@@ -1,0 +1,81 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Gitea adapter — fr/tea.py + RealTeaClient
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — low-level tea CLI wrapper tests
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: create tests/unit/test_tea.py, mirroring tests/unit/test_gh.py.
+      Cover: `_run_tea` (success/TeaError); `create_issue` (`tea issues create
+      --repo ... --title ... --labels a,b`); `view_issue` (`tea issues <n>
+      --repo ... -o json`); label add/remove (`tea labels`/`tea issues edit`
+      — confirm exact flag names against a live `tea --help` rather than
+      assume gh's `--add-label`/`--remove-label` spelling carries over); close/
+      reopen (`tea issues close`/`tea issues reopen`); `_classify_error`/
+      `is_transient`/`with_retry` tuned to tea's own stderr text (tea-specific
+      fixtures, not copied from gh/glab). Run pytest, confirm fails.
+- number: 2
+  title: GREEN — implement fr/tea.py
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/tea.py implementing every function
+      covered by Task 1's tests, structured like fr/gh.py. Run the Task 1
+      tests, confirm green. `git add packages/fr/src/fr/tea.py
+      tests/unit/test_tea.py`.
+- number: 3
+  title: RED — RealTeaClient Protocol-conformance tests
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: create tests/unit/test_real_teaclient.py, mirroring
+      tests/unit/test_real_ghclient.py but with Gitea's own raw JSON shapes.
+      Cover the same 9 base methods as GitLab's equivalent task, PLUS:
+      list_linked_prs implemented via a `tea api
+      '/repos/{o}/{r}/issues/{n}/timeline'` fixture response, filtering
+      cross_reference-type events and shaping the referencing PRs into fr's
+      PrObservation contract — assert the docstring/comment explicitly notes
+      this is a heuristic (Gitea has no dedicated "related PRs" field, unlike
+      GitHub/GitLab, per the spec's capability matrix) so a future maintainer
+      doesn't assume stronger guarantees than the endpoint provides;
+      file_exists/list_dir/read_file via `tea api /repos/{o}/{r}/contents/{path}`
+      fixtures (mirrors GitHub's Contents API shape closely, per the spec).
+      Run pytest, confirm fails.
+- number: 4
+  title: GREEN — implement fr/real_teaclient.py
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/real_teaclient.py implementing
+      `RealTeaClient`, satisfying `GhClient`. Run the Task 3 tests, confirm
+      green. Run `uv run mypy packages/fr/src`, confirm no errors. `git add
+      packages/fr/src/fr/real_teaclient.py tests/unit/test_real_teaclient.py`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-09T08:09:42+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-09T08:10:19+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-07-09T08:10:47+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-07-09T08:13:42+00:00'
+      note: null
+  completion:
+    at: '2026-07-09T08:13:43+00:00'
+    note: null
+    observed_prs: []

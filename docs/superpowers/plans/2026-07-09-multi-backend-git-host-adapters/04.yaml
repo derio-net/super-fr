@@ -1,0 +1,103 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Host-client factory, pr_status_by_url, and fr apply CLI wiring
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - multibackend-gitlab-tracking
+  - multibackend-gitea-tracking
+tasks:
+- number: 1
+  title: RED — client_for() factory tests
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: create tests/unit/test_hostclient.py. Cover client_for(repo,
+      repo_root) returning a RealGhClient/RealGlabClient/RealTeaClient
+      instance matching whatever `fr._hosts.detect_backend(repo_root)`
+      reports (monkeypatch detect_backend to force each of the 3 outcomes;
+      assert isinstance() on the returned client for each). Run pytest,
+      confirm fails (fr.hostclient doesn't exist).
+- number: 2
+  title: GREEN — implement fr/hostclient.py
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/hostclient.py with `client_for(repo:
+      str, repo_root: Path) -> GhClient`, calling `_hosts.detect_backend` and
+      dispatching to the three Real*Client constructors. Run the Task 1
+      tests, confirm green.
+- number: 3
+  title: RED — pr_status_by_url across all three real clients
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: add `pr_status_by_url(self, url: str) -> dict[str, Any] | None`
+      to the `fr.ghclient.GhClient` Protocol (docstring: returns
+      `{"state": "OPEN"|"CLOSED"|"MERGED", "draft": bool}` or None on any
+      not-found/error — this is the seam fr-vk's PR-merge poller will use in
+      Phase 5, replacing its raw `gh pr view` subprocess call). Add tests to
+      test_real_ghclient.py (`gh pr view <url> --json state,isDraft` —
+      confirmed gh accepts a bare PR URL directly), test_real_glabclient.py
+      (glab's `mr view` does NOT take a bare URL per its own `--help` — the
+      adapter must first parse the MR url into (repo, iid) using the same
+      `(?:-/)?` shape as issue URLs but for `/merge_requests/N`, then call
+      `glab mr view <iid> -R <repo> --output json`), and
+      test_real_teaclient.py (`tea api` against the PR-by-index endpoint,
+      same reasoning — tea pulls doesn't take a bare URL either). Run pytest,
+      confirm all three fail (method doesn't exist yet).
+- number: 4
+  title: GREEN — implement pr_status_by_url in all three clients
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      GREEN: implement `pr_status_by_url` in RealGhClient, RealGlabClient,
+      RealTeaClient per Task 3's spec. Add the MR-url parsing helper next to
+      (or inside) fr/real_glabclient.py — do not put GitLab-specific URL
+      parsing in the shared fr/_urls.py, it's a GitLab-only shape. Run all
+      three test files, confirm green.
+- number: 5
+  title: GREEN — wire client_for() into fr apply's CLI command construction
+  steps:
+  - id: P4.T5.S1
+    text: |-
+      GREEN: grep packages/fr/src/fr/commands/ and cli.py for every
+      `RealGhClient()` instantiation. Replace each with
+      `hostclient.client_for(repo, repo_root)` (resolving `repo`/`repo_root`
+      from whatever context that command already has — plan.meta.target_repo
+      and the cwd, typically). Run the full existing CLI test suite (`uv run
+      pytest tests/ -k "cli or apply_cmd" -q --no-cov`), confirm no
+      regression — these tests inject FakeGhClient directly and should be
+      unaffected by the factory swap. Run `uv run pytest -q --no-cov`
+      (whole suite) to confirm nothing else broke.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-07-09T08:14:22+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-07-09T08:14:44+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-07-09T08:16:26+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-07-09T08:18:04+00:00'
+      note: null
+    P4.T5.S1:
+      state: x
+      ticked_at: '2026-07-09T08:22:41+00:00'
+      note: null
+  completion:
+    at: '2026-07-09T08:23:26+00:00'
+    note: null
+    observed_prs: []

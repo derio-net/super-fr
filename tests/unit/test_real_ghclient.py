@@ -156,3 +156,36 @@ class TestViewIssue:
         assert info["labels"] == []
         assert info["assignees"] == []
         assert info["body"] == ""
+
+
+class TestPrStatusByUrl:
+    """gh accepts a bare PR URL directly (`gh pr view <url>`) — confirmed
+    against real gh usage; the other two backends' adapters cannot do the
+    same (see test_real_glabclient.py / test_real_teaclient.py)."""
+
+    def test_open_non_draft(self, monkeypatch):
+        monkeypatch.setattr(
+            _gh,
+            "_run_gh",
+            _fake_run_gh_factory({("pr", "view"): json.dumps({"state": "OPEN", "isDraft": False})}),
+        )
+        result = RealGhClient().pr_status_by_url("https://github.com/o/r/pull/1")
+        assert result == {"state": "OPEN", "draft": False}
+
+    def test_merged(self, monkeypatch):
+        monkeypatch.setattr(
+            _gh,
+            "_run_gh",
+            _fake_run_gh_factory(
+                {("pr", "view"): json.dumps({"state": "MERGED", "isDraft": False})}
+            ),
+        )
+        result = RealGhClient().pr_status_by_url("https://github.com/o/r/pull/1")
+        assert result == {"state": "MERGED", "draft": False}
+
+    def test_returns_none_on_error(self, monkeypatch):
+        def _raise(args):
+            raise _gh.GhError("not found")
+
+        monkeypatch.setattr(_gh, "_run_gh", _raise)
+        assert RealGhClient().pr_status_by_url("https://github.com/o/r/pull/999") is None
