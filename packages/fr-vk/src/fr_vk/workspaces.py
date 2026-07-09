@@ -27,6 +27,7 @@ import logging
 import re
 from typing import Any, Protocol
 
+from fr_vk import _cardref
 from fr_vk.config import bridge_env
 
 __all__ = ["archive_for_card", "reap_orphans", "recover_orphan_card"]
@@ -297,16 +298,15 @@ def recover_orphan_card(
         card = card["issue"]
 
     title = card.get("title") or ""
-    m = re.search(r"gh#(\d+):\s*\[([\w./-]+)\]", title)
-    if not m:
+    parsed = _cardref.parse_card_title(title)
+    if not parsed:
         logger.warning(
             "workspaces: recover can't parse card title %r for sid %s; bailing",
             title,
             simple_id,
         )
         return None
-    issue_num = m.group(1)
-    repo = m.group(2)
+    _tag, repo, issue_num = parsed
 
     # VK indexes repos by SHORT name (no `owner/`); resolve here so the
     # start_workspace call carries the canonical repo_id Uuid. If VK

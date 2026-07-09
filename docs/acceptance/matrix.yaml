@@ -428,10 +428,22 @@ rows:
       correctly for a GitLab- or Gitea-backed phase
     origin:
     - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'The full-pipeline scope decision (Q2): tracking alone is not enough without
-      this.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pr_observe.py
+      - super-fr:tests/unit/test_bridge_pr_state.py
+      - super-fr:tests/unit/test_done_reconcile.py
+      - super-fr:tests/unit/test_cardref.py
+      - super-fr:tests/integration/test_bridge_cli.py
+    status: ci
+    notes: 'Fixed the two fr-vk gh-bypass call sites (pr_observe.py/pr_state.py shelled
+      out to literal gh subprocesses, bypassing GhClient) and bridge_cli.py''s
+      hardcoded RealGhClient() (now resolved per-repo via hostclient.client_for,
+      since the bridge can watch repos on different backends). Consolidated 5
+      duplicate card-title regexes into fr_vk._cardref, backward-compatible with
+      existing gh#-tagged production cards (2026-07-09). Not yet proven against
+      a live GitLab/Gitea VK dispatch end-to-end -- owed to Phase 9''s manual
+      verification.'
   - id: multibackend-scaffold
     capability: Multi-backend git hosting
     acceptance: fr init scaffold on a GitLab- or Gitea-backed repo installs the right

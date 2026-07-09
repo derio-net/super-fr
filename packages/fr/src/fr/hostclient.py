@@ -18,6 +18,20 @@ from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 
 
+def client_for_backend(backend: _hosts.HostBackend) -> GhClient:
+    """Return the `GhClient`-shaped adapter for an already-resolved
+    backend. The shared dispatch table `client_for()` and any caller with
+    its own backend-resolution path (e.g. `fr_vk.pr_observe`, which
+    resolves from a bare PR URL's hostname via
+    `fr._hosts.backend_for_hostname` rather than a local checkout) both
+    go through this."""
+    if backend == "gitlab":
+        return RealGlabClient()
+    if backend == "gitea":
+        return RealTeaClient()
+    return RealGhClient()
+
+
 def client_for(repo_root: Path) -> GhClient:
     """Return the `GhClient`-shaped adapter for the repo checked out at
     `repo_root`, resolved via `fr._hosts.detect_backend`.
@@ -32,9 +46,4 @@ def client_for(repo_root: Path) -> GhClient:
     `Path.cwd()`, matching the existing single-repo assumption `fr apply`
     already made before this factory existed.
     """
-    backend = _hosts.detect_backend(repo_root)
-    if backend == "gitlab":
-        return RealGlabClient()
-    if backend == "gitea":
-        return RealTeaClient()
-    return RealGhClient()
+    return client_for_backend(_hosts.detect_backend(repo_root))

@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from fr._hosts import DEFAULT_HOST_BACKENDS, detect_backend, host_for
+from fr._hosts import DEFAULT_HOST_BACKENDS, backend_for_hostname, detect_backend, host_for
 
 
 def make_repo(tmp_path: Path, *, remote: str | None = None) -> Path:
@@ -101,6 +101,23 @@ def test_default_host_backends_table() -> None:
     """Exactly the two SaaS hosts with a fixed domain — Gitea deliberately
     has no entry here (see test_gitea_requires_explicit_config)."""
     assert DEFAULT_HOST_BACKENDS == {"github.com": "github", "gitlab.com": "gitlab"}
+
+
+class TestBackendForHostname:
+    """The plain heuristic tier alone, for callers with no repo_root to
+    read explicit config from (see fr_vk.pr_observe)."""
+
+    def test_github_com(self) -> None:
+        assert backend_for_hostname("github.com") == "github"
+
+    def test_gitlab_com(self) -> None:
+        assert backend_for_hostname("gitlab.com") == "gitlab"
+
+    def test_unknown_hostname_falls_back_to_github(self) -> None:
+        assert backend_for_hostname("gitea.example.com") == "github"
+
+    def test_none_falls_back_to_github(self) -> None:
+        assert backend_for_hostname(None) == "github"
 
 
 @pytest.mark.parametrize("bad_remote_url", ["not-a-url-at-all", ""])

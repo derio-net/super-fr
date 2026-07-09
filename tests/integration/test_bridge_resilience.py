@@ -337,7 +337,7 @@ def test_plan_deletion_between_ticks_does_not_purge_cards(
     class _StubGh:
         pass
 
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: _StubGh())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: _StubGh())
     monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
     monkeypatch.setattr(bridge_cli._metrics, "push_failure_total", lambda *, reason: None)
 
@@ -408,7 +408,7 @@ def test_per_plan_exception_does_not_kill_daemon(
     class _StubGh:
         pass
 
-    monkeypatch.setattr(bridge_cli, "RealGhClient", lambda: _StubGh())
+    monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: _StubGh())
 
     pushed: list[str] = []
 

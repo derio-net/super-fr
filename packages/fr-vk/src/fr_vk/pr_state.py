@@ -21,10 +21,13 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
 from collections.abc import Callable
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
+from fr import _hosts, hostclient
+
+from fr_vk import _cardref
 from fr_vk.workspaces import MCPArchiver, archive_for_card
 
 __all__ = ["reconcile_done_issues", "tick"]
@@ -45,14 +48,16 @@ class MCPCardClient(MCPArchiver, Protocol):
     def update_issue(self, card_id: str, **changes: Any) -> Any: ...
 
 
-_GH_REPO_FROM_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/(?:pull|issues)/\d+")
-_GH_ISSUE_NUM_FROM_TITLE_RE = re.compile(r"gh#(\d+)")
-# The dispatch title is `gh#N: [owner/repo]` — the Issue's own coordinates.
-_GH_REPO_FROM_TITLE_RE = re.compile(r"\[([\w.-]+/[\w.-]+)\]")
-# Anchored full-title parse for the terminal-Done sweep (#294): num AND repo
-# from the known `gh#N: [owner/repo]` prefix, so a free-text suffix (or a
-# second bracketed token an operator typed) can't inject a mis-target.
-_DONE_TITLE_RE = re.compile(r"^gh#(\d+):\s*\[([\w.-]+/[\w.-]+)\]")
+# Repo (+ optional host) from a PR/issue/MR url — used ONLY as a
+# cross-check against the card title's own `[owner/repo]` (a recycled /
+# mis-linked card guard), independent of `_cardref`'s title parsing.
+# Generalized beyond the original github.com-only pattern to cover all
+# three backends' PR-url shapes (gh `/pull/N`, gitea `/pulls/N`, gitlab
+# `/-/merge_requests/N`) — see docs/superpowers/specs/
+# 2026-07-09-multi-backend-git-host-adapters-design.md §6.
+_REPO_FROM_URL_RE = re.compile(
+    r"https?://[^/]+/(.+?)(?:/-)?/(?:pull|pulls|issues|merge_requests)/\d+"
+)
 # Bound the per-tick gh-close burst so a large first-deploy backlog (empty
 # seen-set) is amortized across ticks instead of spawning N `gh issue close`
 # under one flock — avoids secondary-rate-limit throttle loops.
@@ -69,38 +74,28 @@ def _normalize_issues(resp: Any) -> list[dict[str, Any]]:
     return [c for c in items if isinstance(c, dict)]
 
 
-def _default_close_gh_issue(repo: str, issue_number: str) -> None:
-    """Run `gh issue close <num> --repo <repo>`. Non-fatal on failure.
+def _default_close_gh_issue(repo: str, issue_number: str, backend: str) -> None:
+    """Resolve a `GhClient`-shaped adapter for `backend` and call
+    `edit_issue_state(..., state="CLOSED")`. Non-fatal on failure.
 
-    Already-closed issues are a no-op (gh reports the state and exits
-    non-zero with 'already closed' in stderr).
+    Previously shelled out to a raw `gh issue close` subprocess directly,
+    bypassing `GhClient` entirely — fixed as part of the multi-backend
+    design (see docs/superpowers/specs/
+    2026-07-09-multi-backend-git-host-adapters-design.md §6). Each
+    adapter's own already-closed-is-a-no-op behavior (or lack thereof)
+    is that adapter's concern, not this caller's.
+
+    `backend` is typed `str`, not `fr._hosts.HostBackend`, to match the
+    public `closer: Callable[[str, str, str], None]` signature every
+    caller (including test doubles) satisfies structurally; it's always
+    one of the three literal values in practice (both call sites derive
+    it via `fr._hosts.backend_for_hostname`/`fr_vk._cardref.BACKEND_FOR_TAG`).
     """
+    client = hostclient.client_for_backend(backend)  # type: ignore[arg-type]
     try:
-        result = subprocess.run(
-            ["gh", "issue", "close", issue_number, "--repo", repo],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        client.edit_issue_state(repo, int(issue_number), state="CLOSED")
+    except Exception as e:  # noqa: BLE001 — non-fatal, mirrors the old subprocess posture
         logger.warning("pr_state: close %s#%s failed: %s", repo, issue_number, e)
-        return
-    if result.returncode != 0:
-        stderr = (result.stderr or "").strip()
-        if "already closed" in stderr.lower():
-            return
-        # Truncate at 512 (was 160) so auth / rate-limit errors with
-        # longer stderr survive the WARNING line. Full text always
-        # available at DEBUG.
-        logger.debug("pr_state: close %s#%s full stderr: %s", repo, issue_number, stderr)
-        logger.warning(
-            "pr_state: close %s#%s failed (rc=%s): %s",
-            repo,
-            issue_number,
-            result.returncode,
-            stderr[:512],
-        )
         return
     logger.info("pr_state: closed %s#%s", repo, issue_number)
 
@@ -108,39 +103,44 @@ def _default_close_gh_issue(repo: str, issue_number: str) -> None:
 def _close_linked_gh_issue(
     title: str,
     pr_url: str | None,
-    closer: Callable[[str, str], None],
+    closer: Callable[[str, str, str], None],
 ) -> None:
-    """Resolve owner/repo from `pr_url` and Issue number from `title`, then close.
+    """Resolve owner/repo from `pr_url`, Issue number from `title`, and
+    backend from `pr_url`'s own hostname, then close.
 
     Guards against a split-source mismatch: if the card title carries an
     `[owner/repo]` that disagrees with the PR url's repo (a recycled / mis-
     linked card), skip the close rather than risk closing the wrong repo's
-    issue N.
+    issue N. Backend is resolved from the PR url's hostname (not the
+    title's tag) since that's the authoritative signal for where the PR
+    actually lives — the title's tag may not reflect the real backend yet
+    (see `fr_vk.dispatch.build_card_title`'s docstring).
     """
     if not pr_url or not title:
         return
-    m_repo = _GH_REPO_FROM_URL_RE.match(pr_url)
-    m_num = _GH_ISSUE_NUM_FROM_TITLE_RE.search(title)
-    if not m_repo or not m_num:
+    parsed_title = _cardref.parse_card_title(title)
+    m_repo = _REPO_FROM_URL_RE.match(pr_url)
+    if not parsed_title or not m_repo:
         return
-    repo = m_repo.group(1)
-    m_title_repo = _GH_REPO_FROM_TITLE_RE.search(title)
-    if m_title_repo and m_title_repo.group(1) != repo:
+    _tag, title_repo, issue_num = parsed_title
+    url_repo = m_repo.group(1)
+    if url_repo != title_repo:
         logger.warning(
             "pr_state: skip close — title repo %s != PR url repo %s (issue #%s)",
-            m_title_repo.group(1),
-            repo,
-            m_num.group(1),
+            title_repo,
+            url_repo,
+            issue_num,
         )
         return
-    closer(repo, m_num.group(1))
+    backend = _hosts.backend_for_hostname(urlparse(pr_url).hostname)
+    closer(title_repo, str(issue_num), backend)
 
 
 def tick(
     mcp: MCPCardClient,
     pr_observations: dict[str, str],
     *,
-    close_gh_issue: Callable[[str, str], None] | None = None,
+    close_gh_issue: Callable[[str, str, str], None] | None = None,
     project_id: str | None = None,
 ) -> int:
     """Transition cards based on their linked PR's observed status.
@@ -252,7 +252,7 @@ def reconcile_done_issues(
     *,
     project_id: str | None = None,
     seen: set[str] | None = None,
-    close_gh_issue: Callable[[str, str], None] | None = None,
+    close_gh_issue: Callable[[str, str, str], None] | None = None,
     max_closes: int = _MAX_DONE_CLOSES_PER_TICK,
 ) -> set[str]:
     """Close the linked GH Issue of every terminal-Done card (#294).
@@ -275,6 +275,14 @@ def reconcile_done_issues(
     The `seen` set grows for the daemon's lifetime (never pruned); keys are
     short strings and the idempotent closer makes a lost/stale file harmless,
     so unbounded growth is an accepted trade-off.
+
+    Backend is resolved from the card title's tag (`_cardref.BACKEND_FOR_TAG`)
+    — there's no PR url here to derive it from (a manually-Done card may
+    have none), so the title's tag is the only signal available. In
+    practice this is "github" for every card today (nothing threads a
+    real backend into dispatched titles yet — see
+    `fr_vk.dispatch.build_card_title`'s docstring), but the parse is
+    already multi-backend-capable.
     """
     closer = close_gh_issue if close_gh_issue is not None else _default_close_gh_issue
     seen = set(seen or ())
@@ -294,10 +302,10 @@ def reconcile_done_issues(
         # in-memory fake returns all cards regardless of the status kwarg).
         if str(card.get("status", "")) != "Done":
             continue
-        m = _DONE_TITLE_RE.match(str(card.get("title") or ""))
-        if not m:
+        parsed = _cardref.parse_card_title(str(card.get("title") or ""))
+        if not parsed:
             continue
-        num, repo = m.group(1), m.group(2)
+        tag, repo, num = parsed
         key = f"{repo}#{num}"
         # A key in `seen` is skipped before any gh call. This also means a
         # human who REOPENS an Issue we closed is intentionally honoured — the
@@ -312,8 +320,9 @@ def reconcile_done_issues(
             )
             break
         closes += 1
+        backend = _cardref.BACKEND_FOR_TAG.get(tag, "github")
         try:
-            closer(repo, num)
+            closer(repo, str(num), backend)
         except Exception as e:  # noqa: BLE001 — one bad close mustn't drop the rest
             logger.warning("pr_state: reconcile close %s failed: %s", key, e)
             continue

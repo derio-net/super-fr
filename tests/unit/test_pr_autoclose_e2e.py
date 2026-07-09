@@ -34,14 +34,16 @@ def test_merged_pr_without_closes_keyword_still_closes_issue():
 
     # Fake only the gh boundary: PR #14 is merged.
     pr_status = {"https://github.com/derio-net/runs-fr/pull/14": "merged"}
-    closed: list[tuple[str, str]] = []
+    closed: list[tuple[str, str, str]] = []
 
     # 1. observe → real observer builds the {card: status} map.
     observations = observe_pr_status(mcp, pr_status_fetch=lambda url: pr_status.get(url))
     assert observations == {"card-1": "merged"}
 
     # 2. tick → real sweep transitions the card AND closes the Issue.
-    count = tick(mcp, observations, close_gh_issue=lambda repo, n: closed.append((repo, n)))
+    count = tick(
+        mcp, observations, close_gh_issue=lambda repo, n, backend: closed.append((repo, n))
+    )
 
     assert count == 1
     update_issues = [c for c in mcp.calls if c[0] == "update_issue"]

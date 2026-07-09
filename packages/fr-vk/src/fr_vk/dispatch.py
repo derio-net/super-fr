@@ -50,6 +50,7 @@ from fr.render import enrichment_block, spec_url
 from fr.types import PhaseDoc
 from fr_dispatch.lifecycle import invoke_lifecycle_hook
 
+from fr_vk import _cardref
 from fr_vk import config as _config
 from fr_vk._mcp_client import VkMcpError
 
@@ -64,8 +65,18 @@ def build_card_title(repo: str, issue_n: int) -> str:
     Shared with `fr_dispatch.tick` so the pre-dispatch dedup check and the
     post-dispatch create_issue payload cannot drift. Format pinned by
     test D2 — `"gh#{n}: [{owner/repo}]"`.
+
+    Delegates to `fr_vk._cardref.build_card_title`, defaulting to the
+    `"github"` tag — preserves every existing call site's behavior with
+    zero call-site changes. Nothing in the dispatch bridge threads a
+    phase's actual backend through to here yet (that would mean plumbing
+    it through `fr_dispatch.tick`/`dispatch_phase`'s signatures, out of
+    scope for this pass — see docs/superpowers/specs/
+    2026-07-09-multi-backend-git-host-adapters-design.md's non-goals);
+    the card-title FORMAT is multi-backend-capable (parses gl#/gt#-tagged
+    titles correctly) even though nothing produces them yet.
     """
-    return f"gh#{issue_n}: [{repo}]"
+    return _cardref.build_card_title("github", repo, issue_n)
 
 
 class MCPDispatch(Protocol):

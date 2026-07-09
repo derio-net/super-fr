@@ -63,6 +63,20 @@ def _origin_hostname(repo_root: Path) -> str | None:
     return m.group(1) if m else None
 
 
+def backend_for_hostname(hostname: str | None) -> HostBackend:
+    """Resolve a backend from a bare hostname alone — the plain heuristic
+    tier of `detect_backend`, for contexts that only have a URL, not a
+    `repo_root` to read explicit config from (e.g. fr-vk's PR-status
+    poller, which may be watching cards across repos on different
+    backends from one bridge process — see `fr_vk.pr_observe`). Falls
+    back to "github" the same way `detect_backend` does when nothing
+    else resolves.
+    """
+    if hostname and hostname in DEFAULT_HOST_BACKENDS:
+        return DEFAULT_HOST_BACKENDS[hostname]
+    return "github"
+
+
 def detect_backend(repo_root: Path) -> HostBackend:
     """Resolve which git-forge backend `repo_root` talks to. See module
     docstring for the 3-tier resolution order. Never raises — a malformed
@@ -80,11 +94,7 @@ def detect_backend(repo_root: Path) -> HostBackend:
     if explicit == "gitea":
         return "gitea"
 
-    hostname = _origin_hostname(repo_root)
-    if hostname and hostname in DEFAULT_HOST_BACKENDS:
-        return DEFAULT_HOST_BACKENDS[hostname]
-
-    return "github"
+    return backend_for_hostname(_origin_hostname(repo_root))
 
 
 def host_for(repo_root: Path) -> str | None:
