@@ -54,7 +54,7 @@ README.
 | Generic API escape hatch | `gh api` (REST) + `gh api graphql` | `glab api` (REST + GraphQL) | `tea api` (REST only — confirmed on the real 0.14.2 binary; **absent from the rendered gitea.com README**, which reflects an older tagged version — verify against the installed binary, not the website, if this drifts again) |
 | Auth | `gh auth login`; ambient `gh auth status` session | `glab auth login`; `GITLAB_TOKEN` env var; auto CI-job-token in GitLab CI | `tea login add` (stores per-host login profiles in `$XDG_CONFIG_HOME/tea`) |
 | Tracking-issue URL shape | `https://github.com/{repo}/issues/{n}` | `https://gitlab.example.com/{repo}/-/issues/{n}` (**note the `-/` infix**) | `https://gitea.example.com/{repo}/issues/{n}` (matches GitHub's shape) |
-| Label color format | 6-hex, no `#` (`gh label create --color ededed`) | 6-hex **with** leading `#` (`glab label create --color "#FF0000"`, default `#428BCA`) | 6-hex, no `#` (Gitea's label API mirrors GitHub's shape) |
+| Label color format | 6-hex, no `#` (`gh label create --color ededed`) | 6-hex **with** leading `#` (`glab label create --color "#FF0000"`, default `#428BCA`) | **Correction (verified against Gitea's live swagger spec, not assumed):** also 6-hex **with** leading `#` on write (`CreateLabelOption.color` example `"#00aabb"`) — but the *read* shape (`Label.color` on an already-created label) comes back bare (`"00aabb"`, no `#`). Gitea does **not** mirror GitHub's write-shape here; it mirrors GitLab's. |
 | Label name length | 50 chars (422 above — `MAX_LABEL_NAME_LEN`) | 255 chars | not GitHub-tight; the shared 50-char floor stays authoritative across all three |
 | "Which PR/MR closes this issue" | GraphQL `closedByPullRequestsReferences` — one clean field | REST `GET /projects/:id/issues/:iid/related_merge_requests` — a dedicated endpoint exists (exact "will-close" signal per item to be confirmed against a live project in the manual verification phase, §Testing) | **No dedicated endpoint.** Must parse the issue's timeline (`tea api '/repos/{o}/{r}/issues/{n}/timeline'`, `cross_reference`-type events) or heuristically scan open PR descriptions for `[Cc]lose[sd]? #N` — approximate, not authoritative the way GitHub's field is |
 | Contents API (file_exists/list_dir/read_file) | `gh api repos/{repo}/contents/{path}` | `glab api projects/{id}/repository/files/{path}` (base64 body by default — different shape, not a straight swap) | `tea api /repos/{o}/{r}/contents/{path}` (mirrors GitHub's Contents API closely) |
@@ -207,11 +207,20 @@ matching adapter.
   structured output.
 - `fr/real_teaclient.py` — `RealTeaClient`. `list_linked_prs`: no dedicated
   endpoint (§capability matrix) — implemented via `tea api
-  '/repos/{o}/{r}/issues/{n}/timeline'` and filtering `cross_reference`-type
-  events; documented in the module docstring as a heuristic, weaker guarantee
-  than GitHub's/GitLab's field-based lookups, with a comment pointing back to
-  this spec's capability matrix so a future maintainer doesn't "fix" it into
-  something that assumes an endpoint Gitea doesn't have.
+  '/repos/{o}/{r}/issues/{n}/timeline'`, filtering events whose `ref_issue`
+  field is populated AND `ref_issue.pull_request` is non-null (verified
+  directly against Gitea's live swagger spec: `TimelineComment.ref_issue` is
+  a full `Issue` object, and `Issue.pull_request` — a `PullRequestMeta` with
+  `draft`/`merged`/`merged_at`/`html_url` fields — is only present when the
+  referenced Issue is actually a PR). This is firmer than a plain text-
+  scanning heuristic (state/draft/merged come from real structured fields,
+  not regex-matched PR descriptions), but still weaker than GitHub's/
+  GitLab's dedicated single-field lookups: a PR can generate more than one
+  timeline event referencing the same issue, so results are deduplicated by
+  PR URL, and Gitea's own CI/Actions run status is NOT attempted here (every
+  linked PR reports `ci: "NONE"` — a deliberate, documented scope limit, not
+  a silent gap; Actions status would need a second, commit-SHA-correlated
+  endpoint out of proportion for this pass).
   `file_exists`/`list_dir`/`read_file` via `tea api
   /repos/{o}/{r}/contents/{path}` (closely mirrors GitHub's Contents API
   shape, per the capability matrix).
