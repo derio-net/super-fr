@@ -288,6 +288,7 @@ def add_cmd(
 @acceptance_app.command("init")
 def init_cmd() -> None:
     """Scaffold matrix + CI workflow + backfill rule + gitignore (idempotent)."""
+    from fr._hosts import detect_backend
     from fr.acceptance.check import resolve_identity
     from fr.acceptance.scaffold import init
 
@@ -297,7 +298,8 @@ def init_cmd() -> None:
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(1) from e
-    outcome = init(root, org, repo)
+    backend = detect_backend(root)
+    outcome = init(root, org, repo, backend=backend)
     for rel in outcome.created:
         typer.echo(f"created {rel}")
     for rel in outcome.skipped:

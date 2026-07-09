@@ -83,6 +83,26 @@ def test_resolve_identity_no_remote_no_keys(tmp_path: Path) -> None:
         resolve_identity(load_matrix(root / "m.yaml"), root)
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://gitlab.com/derio-net/super-fr.git",
+        "git@gitlab.com:derio-net/super-fr.git",
+        "https://gitea.example.com/derio-net/super-fr.git",
+    ],
+)
+def test_resolve_identity_from_non_github_remote(tmp_path: Path, url: str) -> None:
+    """resolve_identity's remote-parsing fallback is not GitHub-only —
+    without this, `fr acceptance init` would hard-fail on a fresh
+    GitLab/Gitea repo before it could even write the matrix that would
+    make org/repo explicit going forward (docs/superpowers/specs/
+    2026-07-09-multi-backend-git-host-adapters-design.md §10)."""
+    root = _git_repo_with_remote(tmp_path, url)
+    (root / "m.yaml").write_text("rows: []\n")
+    matrix = load_matrix(root / "m.yaml")
+    assert resolve_identity(matrix, root) == ("derio-net", "super-fr")
+
+
 # ── T2: ref resolution ─────────────────────────────────────────────────────
 
 

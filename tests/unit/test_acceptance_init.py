@@ -260,3 +260,67 @@ def test_backfill_clean_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     result = _invoke(root, monkeypatch, "backfill")
     assert result.exit_code == 0
     assert "every Test Plan spec is cited" in result.output
+
+
+# ── multi-backend: CI template becomes backend-conditional ─────────────────
+# (docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md §10)
+
+
+def _repo_with_backend(tmp_path: Path, backend: str) -> Path:
+    root = _repo(tmp_path)
+    (root / ".devcontainer").mkdir()
+    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+        f"backend: {backend}\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    return root
+
+
+def test_init_github_backend_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression guard: backend="github" (the default) still writes
+    .github/workflows/acceptance-report.yml, unchanged."""
+    root = _repo(tmp_path)
+    result = _invoke(root, monkeypatch, "init")
+    assert result.exit_code == 0, result.output
+    assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
+    assert not (root / ".gitea").exists()
+    assert not (root / ".gitlab-ci.yml").exists()
+
+
+def test_init_gitea_backend_writes_gitea_workflows_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Gitea-backed repo writes .gitea/workflows/acceptance-report.yml —
+    NOT .github/ — with tea calls instead of gh (Gitea Actions is
+    YAML-schema-compatible with GitHub Actions, but uses its own
+    directory, confirmed against Gitea's own docs)."""
+    root = _repo_with_backend(tmp_path, "gitea")
+    result = _invoke(root, monkeypatch, "init")
+    assert result.exit_code == 0, result.output
+    assert not (root / ".github" / "workflows" / "acceptance-report.yml").exists()
+    wf = root / ".gitea" / "workflows" / "acceptance-report.yml"
+    assert wf.exists()
+    text = wf.read_text()
+    assert "tea " in text or "tea\n" in text
+    assert "gh issue" not in text
+    # Same trigger/job/step YAML shape as GitHub Actions.
+    doc = yaml.safe_load(text)
+    assert "jobs" in doc
+
+
+def test_init_gitlab_backend_writes_gitlab_ci_at_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A GitLab-backed repo writes .gitlab-ci.yml at the repo root — a
+    genuinely different schema (stages/script), not the GitHub-Actions
+    on/jobs/steps shape."""
+    root = _repo_with_backend(tmp_path, "gitlab")
+    result = _invoke(root, monkeypatch, "init")
+    assert result.exit_code == 0, result.output
+    assert not (root / ".github" / "workflows" / "acceptance-report.yml").exists()
+    ci_file = root / ".gitlab-ci.yml"
+    assert ci_file.exists()
+    text = ci_file.read_text()
+    assert "glab " in text
+    assert "gh issue" not in text
+    doc = yaml.safe_load(text)
+    assert "stages" in doc

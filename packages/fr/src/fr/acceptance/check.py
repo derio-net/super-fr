@@ -24,7 +24,18 @@ from fr.acceptance.model import (
 SPEC_DIRS = ("docs/superpowers/specs", "docs/superpowers/implemented/specs")
 TEST_PLAN_MARKER = "## Test Plan"
 
-_REMOTE_RE = re.compile(r"github\.com[:/]([^/]+)/([^/\s]+?)(?:\.git)?/?$")
+# Generalized beyond the original github.com-only pattern (multi-backend
+# design, docs/superpowers/specs/
+# 2026-07-09-multi-backend-git-host-adapters-design.md §10) — without
+# this, `fr acceptance init` hard-fails on a fresh GitLab/Gitea repo
+# before it could even write the matrix that would make org/repo
+# explicit going forward. Captures the trailing `owner/repo` from ANY
+# host's remote URL (https or ssh), matching only the last two path
+# segments — a deeply-nested GitLab subgroup (group/subgroup/proj) loses
+# the outer group here, a known, narrow limitation of this two-field
+# org/repo model (not introduced by this generalization; the same
+# two-segment assumption existed for github.com before).
+_REMOTE_RE = re.compile(r"[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
 
 
 def resolve_identity(matrix: Matrix, root: Path) -> tuple[str, str]:
