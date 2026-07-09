@@ -862,7 +862,7 @@ def test_pr_from_gitea_backend_list_and_filter_fallback(tmp_path: Path) -> None:
     """Gitea's CLI has no single-shot branch→PR query (unlike gh/glab) —
     verified during the multi-backend design's research (`tea pulls`
     only takes an index, not a branch). The adapter falls back to
-    listing open PRs and matching `head.label` client-side. This is a
+    listing ALL PRs and matching `head.label` client-side. This is a
     real, bounded degradation vs. gh/glab's single-shot query, not a
     bug — documented in the design doc §8."""
     repo = make_repo(tmp_path)

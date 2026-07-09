@@ -915,9 +915,10 @@ class LocalWorktreeDevcontainerTarget:
           `real_glabclient.py`'s `pr_status_by_url`).
         - Gitea: no single-shot branch→PR query exists (verified during
           research — `tea pulls` only takes a numeric index). Falls back
-          to listing open PRs and matching `head.label` client-side — a
-          real, bounded degradation vs. gh/glab's single-shot query, not
-          a bug.
+          to listing ALL PRs (`--state all`, so a merged/closed PR for a
+          torn-down branch is still found) and matching `head.label`
+          client-side — a real, bounded degradation vs. gh/glab's
+          single-shot query, not a bug.
 
         Every path returns the SAME shape callers already depend on:
         `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str}` — each
