@@ -498,7 +498,7 @@ rows:
     acceptance: Plan repos cannot enter isolated autonomous work unless the tracked
       plan-validator wrapper exists, and fr init scaffolding installs that wrapper automatically.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-validator-wrapper-lifecycle-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-validator-wrapper-lifecycle-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_init_scaffold.py
