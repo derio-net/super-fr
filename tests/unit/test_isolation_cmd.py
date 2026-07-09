@@ -91,6 +91,272 @@ def test_up_no_devcontainer_points_at_fr_init(repo: Path, fake_run: list) -> Non
     assert "fr-init" in res.output
 
 
+def test_up_plan_repo_without_validator_wrapper_exits_2(repo: Path, fake_run: list) -> None:
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "plans",
+        ],
+        check=True,
+    )
+
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
+
+    assert res.exit_code == 2
+    assert "scripts/validate-plans.sh" in res.output
+    assert "install-validator-wrapper.sh" in res.output
+    assert not fake_run
+
+
+def test_up_uses_base_ref_validator_even_when_base_checkout_lacks_wrapper(
+    repo: Path, fake_run: list
+) -> None:
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    wrapper.write_text("#!/usr/bin/env bash\nexit 0\n")
+    wrapper.chmod(0o755)
+    subprocess.run(["git", "-C", str(repo), "add", "docs", "scripts/validate-plans.sh"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "plans and validator",
+        ],
+        check=True,
+    )
+    base_with_wrapper = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["git", "-C", str(repo), "rm", "-q", "scripts/validate-plans.sh"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "remove validator from current checkout",
+        ],
+        check=True,
+    )
+
+    res = runner.invoke(
+        app,
+        ["isolation", "up", "--repo", str(repo), "--branch", "b", "--base", base_with_wrapper],
+    )
+
+    assert res.exit_code == 0, res.output
+    assert any(c[:2] == ["devcontainer", "up"] for c in fake_run)
+
+
+def test_up_plan_repo_with_executable_validator_wrapper_continues(
+    repo: Path, fake_run: list
+) -> None:
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "plans",
+        ],
+        check=True,
+    )
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    wrapper.write_text("#!/usr/bin/env bash\nexit 0\n")
+    wrapper.chmod(0o755)
+    subprocess.run(["git", "-C", str(repo), "add", "docs", "scripts/validate-plans.sh"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "validator",
+        ],
+        check=True,
+    )
+
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
+
+    assert res.exit_code == 0, res.output
+    assert any(c[:2] == ["devcontainer", "up"] for c in fake_run)
+
+
+def test_up_plan_repo_with_uncommitted_validator_wrapper_exits_2(
+    repo: Path, fake_run: list
+) -> None:
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "plans",
+        ],
+        check=True,
+    )
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    wrapper.write_text("#!/usr/bin/env bash\nexit 0\n")
+    wrapper.chmod(0o755)
+
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
+
+    assert res.exit_code == 2
+    assert "not in HEAD" in res.output
+    assert not fake_run
+
+
+def test_up_plan_repo_base_ref_without_validator_wrapper_exits_2(
+    repo: Path, fake_run: list
+) -> None:
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / ".gitkeep").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "plans",
+        ],
+        check=True,
+    )
+    base_without_wrapper = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    wrapper.write_text("#!/usr/bin/env bash\nexit 0\n")
+    wrapper.chmod(0o755)
+    subprocess.run(["git", "-C", str(repo), "add", "scripts/validate-plans.sh"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "validator",
+        ],
+        check=True,
+    )
+
+    res = runner.invoke(
+        app,
+        [
+            "isolation",
+            "up",
+            "--repo",
+            str(repo),
+            "--branch",
+            "b",
+            "--base",
+            base_without_wrapper,
+        ],
+    )
+
+    assert res.exit_code == 2
+    assert base_without_wrapper in res.output
+    assert not fake_run
+
+
+def test_up_existing_worktree_without_validator_wrapper_exits_2(
+    repo: Path, fake_run: list, tmp_path: Path
+) -> None:
+    worktree = tmp_path / "existing-worktree"
+    (worktree / ".devcontainer" / "dev").mkdir(parents=True)
+    (worktree / ".devcontainer" / "dev" / "devcontainer.json").write_text('{"image": "x"}')
+    (worktree / "docs" / "superpowers" / "plans").mkdir(parents=True)
+
+    res = runner.invoke(
+        app,
+        [
+            "isolation",
+            "up",
+            "--repo",
+            str(repo),
+            "--branch",
+            "b",
+            "--path",
+            str(worktree),
+        ],
+    )
+
+    assert res.exit_code == 2
+    assert "existing isolation worktree" in res.output
+    assert "scripts/validate-plans.sh" in res.output
+    assert not fake_run
+
+
 def test_exec_without_up_exits_2(repo: Path, fake_run: list) -> None:
     res = runner.invoke(
         app, ["isolation", "exec", "--repo", str(repo), "--branch", "ghost", "--", "ls"]

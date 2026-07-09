@@ -493,3 +493,18 @@ rows:
       has no gitea/gitlab mode yet (source links in the generated report still point
       at github.com). Not yet proven against a live GitLab/Gitea instance -- owed
       to Phase 9''s manual verification.'
+  - id: plan-validator-wrapper-lifecycle
+    capability: Isolation
+    acceptance: Plan repos cannot enter isolated autonomous work unless the tracked
+      plan-validator wrapper exists, and fr init scaffolding installs that wrapper automatically.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-09-validator-wrapper-lifecycle-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_scaffold.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/integration/test_install_sh.py
+      - super-fr:tests/integration/test_install_validator_wrapper.py
+    status: ci
+    notes: Scaffold install/refusal, isolation fail-closed behavior, and installer-output
+      cleanup are pinned per-PR.

@@ -13,9 +13,9 @@ TARGET="$REPO_ROOT/scripts/validate-plans.sh"
 
 mkdir -p "$REPO_ROOT/scripts"
 
-# Recognize wrappers by either marker: pre-sweep deployments say
-# "superpowers-for-vk", post-sweep ones say "super-fr".
-if [ -e "$TARGET" ] && ! grep -qE "superpowers-for-vk|super-fr" "$TARGET" 2>/dev/null; then
+# Recognize wrappers by the canonical delegate path plus either marker:
+# pre-sweep deployments say "superpowers-for-vk", post-sweep ones say "super-fr".
+if [ -e "$TARGET" ] && ! (grep -q "\.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh" "$TARGET" 2>/dev/null && grep -qE "superpowers-for-vk|super-fr" "$TARGET" 2>/dev/null); then
   echo "ERROR: $TARGET already exists and is not a super-fr wrapper." >&2
   echo "  Refusing to overwrite. Remove or rename it first." >&2
   exit 1
