@@ -7,21 +7,23 @@ fix applied to the VK card-title convention. See docs/superpowers/specs/
 2026-07-09-multi-backend-git-host-adapters-design.md §2.
 
 The wire format stays `"{tag}#{n}: [{repo}]"` — `tag` resolves per backend
-via `TAG_FOR_BACKEND` rather than a wider rename, so an operator scanning
-the VK board can tell which host a card belongs to, and existing GitHub
-cards (`gh#N: [owner/repo]`) keep parsing unchanged (backward
-compatibility for cards already on production VK boards is load-bearing,
-not optional).
+via `fr._hosts.TAG_FOR_BACKEND` (shared with `fr_dispatch.prompt`, which
+needs the same tag for its dispatched-agent prompt wording — the map
+lives in `fr._hosts`, not here, since `fr_dispatch` depends only on `fr`,
+never on this runner-specific package) rather than a wider rename, so an
+operator scanning the VK board can tell which host a card belongs to, and
+existing GitHub cards (`gh#N: [owner/repo]`) keep parsing unchanged
+(backward compatibility for cards already on production VK boards is
+load-bearing, not optional).
 """
 
 from __future__ import annotations
 
 import re
 
-from fr._hosts import HostBackend
+from fr._hosts import BACKEND_FOR_TAG, TAG_FOR_BACKEND, HostBackend
 
-TAG_FOR_BACKEND: dict[HostBackend, str] = {"github": "gh", "gitlab": "gl", "gitea": "gt"}
-BACKEND_FOR_TAG: dict[str, HostBackend] = {v: k for k, v in TAG_FOR_BACKEND.items()}
+__all__ = ["BACKEND_FOR_TAG", "TAG_FOR_BACKEND", "build_card_title", "parse_card_title"]
 
 # Anchored at the start only — a free-text suffix (or a second bracketed
 # token an operator typed) must not break the parse, matching the original

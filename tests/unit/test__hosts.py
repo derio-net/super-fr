@@ -15,7 +15,14 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from fr._hosts import DEFAULT_HOST_BACKENDS, backend_for_hostname, detect_backend, host_for
+from fr._hosts import (
+    BACKEND_FOR_TAG,
+    DEFAULT_HOST_BACKENDS,
+    TAG_FOR_BACKEND,
+    backend_for_hostname,
+    detect_backend,
+    host_for,
+)
 
 
 def make_repo(tmp_path: Path, *, remote: str | None = None) -> Path:
@@ -118,6 +125,14 @@ class TestBackendForHostname:
 
     def test_none_falls_back_to_github(self) -> None:
         assert backend_for_hostname(None) == "github"
+
+
+def test_tag_for_backend_and_inverse() -> None:
+    """Shared with fr_vk._cardref (card-title tag) and fr_dispatch.prompt
+    (dispatched-agent wording) — lives in fr._hosts since fr_dispatch
+    depends only on fr, never on fr_vk."""
+    assert TAG_FOR_BACKEND == {"github": "gh", "gitlab": "gl", "gitea": "gt"}
+    assert BACKEND_FOR_TAG == {v: k for k, v in TAG_FOR_BACKEND.items()}
 
 
 @pytest.mark.parametrize("bad_remote_url", ["not-a-url-at-all", ""])

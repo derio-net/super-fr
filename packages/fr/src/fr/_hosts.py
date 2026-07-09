@@ -39,6 +39,15 @@ DEFAULT_HOST_BACKENDS: dict[str, HostBackend] = {
     "gitlab.com": "gitlab",
 }
 
+# Shared with fr_vk._cardref (VK card-title tag) and fr_dispatch.prompt
+# (dispatched-agent prompt wording) — lives here, not in fr_vk, since
+# fr_dispatch depends only on `fr`, never on the fr_vk runner adapter
+# (fr_dispatch is meant to be runner-agnostic; a future non-VK runner
+# needs this map too). See docs/superpowers/specs/
+# 2026-07-09-multi-backend-git-host-adapters-design.md §2/§7.
+TAG_FOR_BACKEND: dict[HostBackend, str] = {"github": "gh", "gitlab": "gl", "gitea": "gt"}
+BACKEND_FOR_TAG: dict[str, HostBackend] = {v: k for k, v in TAG_FOR_BACKEND.items()}
+
 _REMOTE_HOST_RE = re.compile(r"^(?:[\w+.-]+://)?(?:[^@/]+@)?([^/:]+)")
 
 
