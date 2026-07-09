@@ -41,8 +41,14 @@ re-running updates it:
 curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
 ```
 
-Prefer to read it first? `curl … -o bootstrap.sh`, inspect, then `bash
-bootstrap.sh`. Just want the CLI? `uv tool install
+Prefer to read it first?
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh -o bootstrap.sh
+bash bootstrap.sh
+```
+
+Just want the CLI? `uv tool install
 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr'`.
 
 ### 2. Run your first goal
@@ -297,6 +303,8 @@ no longer reads.
 | `fr` | The CLI: plan-as-folder engine, GitHub tracking (render → observe → diff → apply), isolation |
 | `fr-dispatch` | Runner protocol + tick framework (library, runner-agnostic) |
 | `fr-vk` | VibeKanban adapter: MCP client, card/workspace dispatch, bridge daemon |
+| `fr-cncd` | CNC daemon runner adapter |
+| `fr-opencode-plugin` | OpenCode `tool.execute.before` port of the isolation edit guard |
 
 ## Requirements
 

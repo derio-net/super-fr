@@ -33,6 +33,6 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
 - Local report: `fr acceptance report` → `docs/acceptance/report.html`
   (gitignored), links relative to sibling checkouts (`--sibling-root`,
   default `..`).
-- CI: `.github/workflows/acceptance-report.yml` gates PRs touching specs /
-  matrix / workflows, runs weekly, uploads the GitHub-linked report artifact
-  and upserts the "Acceptance debt" issue.
+- CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
+  writes a Markdown summary to each Actions run (branch, PR, main), uploads the
+  GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.

@@ -96,9 +96,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py
       - super-fr:tests/unit/test_plan_acceptance_links.py
+      - super-fr:tests/unit/test_acceptance_init.py
     status: skipped
-    notes: Hook + digest formatter ci-pinned; live weekly upsert/close unverified until
-      the first scheduled run.
+    notes: Hook, digest formatter, and branch/PR/main Actions summary scaffold are
+      ci-pinned; live weekly upsert/close remains unverified until the first scheduled
+      run.
   - id: isolation-suite-lifecycle
     capability: Isolation
     acceptance: 'Operator can init a devcontainer profile and run isolated work: up
@@ -184,7 +186,8 @@ rows:
   - id: invariants-tripwires
     capability: Conventions
     acceptance: 'Org conventions are code-enforced: no claude -p batch in packages,
-      the isolation marker is never tracked, shipped rules install'
+      the isolation marker is never tracked, shipped rules install, shipped behavior
+      changes bump the version'
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-06-21-enforce-invariants-over-prose-design.md
     levels:
@@ -192,8 +195,10 @@ rows:
       - super-fr:tests/unit/test_tripwire_claude_p.py
       - super-fr:tests/unit/test_tripwire_isolation_marker.py
       - super-fr:tests/unit/test_install_copies_rules.py
+      - super-fr:tests/unit/test_version_bump_guard.py
     status: ci
-    notes: Tripwires ARE the acceptance (#328).
+    notes: Tripwires ARE the acceptance (#328); CI now also fails PRs that change shipped
+      source/skills/rules/install surfaces without a version bump.
   - id: auto-archive-merged-plans
     capability: Lifecycle
     acceptance: Merged-but-unarchived plans are detected by the fr status sweep and
@@ -327,7 +332,7 @@ rows:
     status: skipped
     notes: >-
       12 bun unit tests cover the hook + marker logic, including a real
-      `git worktree add` scenario (CI). Live-verified twice with a real
+      `git worktree add` scenario, and now run in CI. Live-verified twice with a real
       `opencode run` session against a free public model
       (opencode/north-mini-code-free) targeting a scratch fr-enabled repo
       with the plugin wired into `.opencode/plugins/`: first during
@@ -335,9 +340,9 @@ rows:
       step 3 (2026-07-09, fresh isolation devcontainer, merged main) — both
       times the model's `edit` tool call (`args.filePath`) was denied with
       the exact hook message, confirming the assumed OpenCode tool
-      name/arg shape is correct against the real plugin API. Not automated
-      in CI (requires a live model call) — backfill owed if that becomes
-      scriptable/offline-mockable.
+      name/arg shape is correct against the real plugin API. The remaining skipped
+      leg is the live model/API call, which is not automated in CI; backfill owed if
+      that becomes scriptable/offline-mockable.
   - id: opencode-commands-in-repo
     capability: OpenCode adaptation
     acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)
