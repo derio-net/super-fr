@@ -9,7 +9,14 @@ from pathlib import Path
 import pytest
 import yaml
 from fr.cli import app
-from fr.isolation.scaffold import BASE_IMAGE, KNOWN_TOOL_FEATURES
+from fr.isolation.scaffold import (
+    BASE_IMAGE,
+    GH_FEATURE,
+    HOST_CLI_FEATURE,
+    HOST_CLI_POST_CREATE,
+    KNOWN_TOOL_FEATURES,
+    scaffold_profile,
+)
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -253,3 +260,101 @@ def test_scaffold_purpose_non_ascii_written_literally(repo: Path) -> None:
     text = (repo / ".devcontainer" / "dev" / "devcontainer.json").read_text()
     assert "day-to-day — checks: pytest" in text
     assert "\\u2014" not in text
+
+
+# --- multi-backend: devcontainer CLI-install becomes backend-conditional ----
+# (docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md §9)
+
+
+def test_scaffold_profile_github_default_unchanged(repo: Path) -> None:
+    """Regression guard: backend="github" (the default) still gets the
+    unconditional github-cli feature, no postCreate addition."""
+    _initial_commit(repo)
+    config_path = scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[])
+    config = json.loads(config_path.read_text())
+    assert GH_FEATURE in config["features"]
+    assert config["postCreateCommand"].count("curl") == 0
+
+
+def test_scaffold_profile_gitlab_no_github_cli_feature(repo: Path) -> None:
+    """backend="gitlab" gets NO github-cli feature and DOES get a
+    glab-install postCreateCommand snippet appended."""
+    _initial_commit(repo)
+    config_path = scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[], backend="gitlab")
+    config = json.loads(config_path.read_text())
+    assert GH_FEATURE not in config["features"]
+    assert "glab" in config["postCreateCommand"]
+
+
+def test_scaffold_profile_gitea_no_github_cli_feature(repo: Path) -> None:
+    """backend="gitea" gets NO github-cli feature and DOES get a
+    tea-install postCreateCommand snippet appended."""
+    _initial_commit(repo)
+    config_path = scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[], backend="gitea")
+    config = json.loads(config_path.read_text())
+    assert GH_FEATURE not in config["features"]
+    assert "tea" in config["postCreateCommand"]
+
+
+def test_scaffold_profile_still_installs_fr_for_every_backend(repo: Path) -> None:
+    """The baseline fr install must survive regardless of backend — the
+    CLI-install snippet is ADDED, not a replacement."""
+    _initial_commit(repo)
+    config_path = scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[], backend="gitlab")
+    config = json.loads(config_path.read_text())
+    assert "super-fr" in config["postCreateCommand"]
+
+
+def test_scaffold_profile_writes_backend_and_host_to_profiles_yaml(repo: Path) -> None:
+    """A non-default backend (and optional self-hosted host) is recorded
+    as a top-level (repo-level, not per-profile) key in
+    .devcontainer/fr-profiles.yaml — what fr._hosts.detect_backend reads."""
+    _initial_commit(repo)
+    scaffold_profile(
+        repo, "dev", "purpose", tools=[], secrets=[], backend="gitlab", host="gitlab.mycorp.com"
+    )
+    data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    assert data["backend"] == "gitlab"
+    assert data["host"] == "gitlab.mycorp.com"
+
+
+def test_scaffold_profile_github_default_omits_backend_key(repo: Path) -> None:
+    """The default backend ("github") is NOT written explicitly — matches
+    fr._hosts.detect_backend's own fallback, so an unmodified
+    fr-profiles.yaml (as scaffolded before this feature existed) behaves
+    identically."""
+    _initial_commit(repo)
+    scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[])
+    data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    assert "backend" not in data
+    assert "host" not in data
+
+
+def test_host_cli_feature_table_shape() -> None:
+    assert HOST_CLI_FEATURE["github"] == GH_FEATURE
+    assert HOST_CLI_FEATURE["gitlab"] is None
+    assert HOST_CLI_FEATURE["gitea"] is None
+
+
+def test_host_cli_post_create_table_has_gitlab_and_gitea_only() -> None:
+    assert set(HOST_CLI_POST_CREATE) == {"gitlab", "gitea"}
+
+
+def test_cli_backend_flag_reaches_scaffold_profile(repo: Path) -> None:
+    """`fr init scaffold --backend gitlab --host ...` reaches scaffold_profile
+    and is recorded in fr-profiles.yaml."""
+    _initial_commit(repo)
+    res = scaffold(repo, "--backend", "gitlab", "--host", "gitlab.mycorp.com")
+    assert res.exit_code == 0, res.output
+    data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    assert data["backend"] == "gitlab"
+    assert data["host"] == "gitlab.mycorp.com"
+    config = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
+    assert "glab" in config["postCreateCommand"]
+
+
+def test_cli_backend_flag_rejects_unknown_value(repo: Path) -> None:
+    _initial_commit(repo)
+    res = scaffold(repo, "--backend", "bitbucket")
+    assert res.exit_code == 2
+    assert "must be one of github, gitlab, gitea" in res.output

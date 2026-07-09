@@ -91,12 +91,12 @@ tasks:
 state:
   steps:
     P8.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-09T09:04:07+00:00'
       note: null
     P8.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-09T09:08:19+00:00'
       note: null
     P8.T3.S1:
       state: ' '
