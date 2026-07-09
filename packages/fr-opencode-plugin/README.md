@@ -57,10 +57,8 @@ tested directly in `test/marker.test.ts`); `src/index.ts` wires it into
 OpenCode's `tool.execute.before` hook (tested end-to-end, including a real
 `git worktree add` scenario, in `test/index.test.ts`).
 
-## Known gaps
+## Verification
 
 The edit-class tool names (`edit`, `write`, `patch`, `multiedit`) and the
-`args.filePath` / `args.path` argument shape are based on OpenCode's
-published plugin docs and may need adjustment once verified against a
-live `opencode` session — see the Test Plan in
-`docs/superpowers/specs/2026-07-08-opencode-adaptation-design.md`.
+`args.filePath` argument shape have been verified against live `opencode run`
+sessions; the marker and hook behavior are covered by `bun test` and run in CI.

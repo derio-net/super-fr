@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Install super-fr extras that the plugin system can't handle.
-# Skills are delivered by the plugin system (enabledPlugins in settings.json).
-# This script handles: marketplace + plugin registration, stale cache cleanup,
-# rules, MCP config, vk CLI, stale skill cleanup, and PostToolUse hook hint.
+# Canonical super-fr installer, normally invoked by scripts/bootstrap.sh.
+# Handles Claude Code marketplace/plugin registration, OpenCode skill/command
+# delivery, rules, MCP config, the fr CLI, stale cache cleanup, and the
+# PostToolUse hook hint.
 set -euo pipefail
 
 # Clean up any .tmp sidecar files on failure so a rerun starts clean.
@@ -445,7 +445,7 @@ HOOK
   fi
 fi
 
-# 10. vk CLI
+# 10. fr CLI
 if command -v uv &>/dev/null; then
   echo ""
   echo "Installing fr CLI globally (workspace member fr + the VK adapter)..."
@@ -499,8 +499,8 @@ if command -v uv &>/dev/null; then
   fi
 else
   echo ""
-  echo "  WARNING: uv not found — install vk CLI manually:"
-  echo "    uv tool install $PLUGIN_ROOT"
+  echo "  WARNING: uv not found — install fr CLI manually:"
+  echo "    uv tool install $PLUGIN_ROOT/packages/fr"
 fi
 
 # 11. devcontainer CLI (fr-isolation dependency)

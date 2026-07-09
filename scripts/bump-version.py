@@ -4,9 +4,9 @@
 The workspace-root `pyproject.toml` `[project].version` is the canonical
 source. Every member pyproject under `packages/*/pyproject.toml` and
 every plugin version in `.claude-plugin/{plugin.json,marketplace.json}`
-must match it byte-for-byte. Python code reads its version dynamically
-via `importlib.metadata`, so it follows the member pyprojects
-automatically — no other surfaces need updating.
+and the standalone OpenCode plugin package version must match it byte-for-byte.
+Python code reads its version dynamically via `importlib.metadata`, so it
+follows the member pyprojects automatically — no other surfaces need updating.
 
 Usage:
     scripts/bump-version.py patch        # 2.1.7 -> 2.1.8
@@ -28,6 +28,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 PYPROJECT = REPO / "pyproject.toml"
 PLUGIN_DIR = REPO / ".claude-plugin"
 MARKETPLACE_JSON = PLUGIN_DIR / "marketplace.json"
+OPENCODE_PLUGIN_PACKAGE_JSON = REPO / "packages" / "fr-opencode-plugin" / "package.json"
 
 VERSION_RE = re.compile(r'^(version\s*=\s*")([^"]+)(")', re.M)
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -40,7 +41,10 @@ def member_pyprojects() -> list[pathlib.Path]:
 def plugin_jsons() -> list[pathlib.Path]:
     """Every plugin manifest — per-plugin dirs since the split."""
     return sorted(
-        [*PLUGIN_DIR.glob("**/plugin.json"), *(REPO / "plugins").glob("*/.claude-plugin/plugin.json")]
+        [
+            *PLUGIN_DIR.glob("**/plugin.json"),
+            *(REPO / "plugins").glob("*/.claude-plugin/plugin.json"),
+        ]
     )
 
 
@@ -57,6 +61,9 @@ def check() -> int:
         versions[str(member.relative_to(REPO))] = read_version(member)
     for pj in plugin_jsons():
         versions[str(pj.relative_to(REPO))] = json.loads(pj.read_text())["version"]
+    versions[str(OPENCODE_PLUGIN_PACKAGE_JSON.relative_to(REPO))] = json.loads(
+        OPENCODE_PLUGIN_PACKAGE_JSON.read_text()
+    )["version"]
     for i, plugin in enumerate(json.loads(MARKETPLACE_JSON.read_text())["plugins"]):
         versions[f"marketplace.json[{i}]"] = plugin["version"]
     width = max(len(k) for k in versions)
@@ -100,11 +107,14 @@ def bump(arg: str) -> int:
         data = json.loads(pj.read_text())
         data["version"] = new
         pj.write_text(json.dumps(data, indent=4) + "\n")
+    data = json.loads(OPENCODE_PLUGIN_PACKAGE_JSON.read_text())
+    data["version"] = new
+    OPENCODE_PLUGIN_PACKAGE_JSON.write_text(json.dumps(data, indent=2) + "\n")
     data = json.loads(MARKETPLACE_JSON.read_text())
     for plugin in data["plugins"]:
         plugin["version"] = new
     MARKETPLACE_JSON.write_text(json.dumps(data, indent=4) + "\n")
-    n_files = len(tomls) + len(plugin_jsons()) + 1
+    n_files = len(tomls) + len(plugin_jsons()) + 2
     print(f"bumped {old} -> {new} in {n_files} files")
 
     # uv sync refreshes uv.lock with the new member entries.

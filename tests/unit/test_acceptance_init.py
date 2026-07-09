@@ -125,21 +125,20 @@ def test_workflow_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     root = _repo(tmp_path)
     assert _invoke(root, monkeypatch, "init").exit_code == 0
     wf = _workflow(root)
-    for trigger in ("pull_request", "push"):
-        paths = wf["on"][trigger]["paths"]
-        assert "docs/acceptance/**" in paths
-        assert "docs/superpowers/specs/**" in paths
-        assert "docs/superpowers/implemented/specs/**" in paths
-        assert ".github/workflows/**" in paths
+    assert wf["on"]["pull_request"] == {}
     assert "schedule" in wf["on"]
     assert "workflow_dispatch" in wf["on"]
+    assert wf["on"]["push"]["branches"] == ["**"]
+    assert "paths" not in wf["on"]["push"]
 
     steps = wf["jobs"]["matrix"]["steps"]
     scripted = "\n".join(s.get("run", "") for s in steps)
     assert "fr acceptance check" in scripted
+    assert "GITHUB_STEP_SUMMARY" in scripted
+    assert "fr acceptance summary" in scripted
     assert "fr acceptance report --link-mode github" in scripted
     assert "fr acceptance digest" in scripted
-    digest_steps = [s for s in steps if "digest" in s.get("run", "")]
+    digest_steps = [s for s in steps if "gh issue" in s.get("run", "")]
     assert all("schedule" in s.get("if", "") for s in digest_steps)
     uploads = [s for s in steps if "upload-artifact" in s.get("uses", "")]
     assert uploads and uploads[0]["with"]["path"] == "docs/acceptance/report.html"
