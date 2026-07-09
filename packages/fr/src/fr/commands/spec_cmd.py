@@ -22,9 +22,9 @@ spec_app = typer.Typer(help="v2 spec status commands.", no_args_is_help=True)
 
 def _make_gh_client() -> GhClient:
     """Factory hook — tests monkeypatch this (same seam as archive_cmd)."""
-    from fr.real_ghclient import RealGhClient
+    from fr.hostclient import client_for
 
-    return RealGhClient()
+    return client_for(Path.cwd())
 
 
 @spec_app.command("status")

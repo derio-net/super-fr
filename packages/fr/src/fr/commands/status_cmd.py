@@ -43,9 +43,9 @@ _LIFECYCLE = ("fr:ready", "fr:blocked", "fr:in-progress", "fr:pr-ready", "manual
 
 def _make_gh_client() -> GhClient:
     """Factory hook — tests monkeypatch this (same seam as apply_cmd)."""
-    from fr.real_ghclient import RealGhClient
+    from fr.hostclient import client_for
 
-    return RealGhClient()
+    return client_for(Path.cwd())
 
 
 def _phase_line(report: PlanReport, phase_n: int) -> str:

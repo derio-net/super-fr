@@ -25,6 +25,23 @@ class GhClient(Protocol):
         """
         ...
 
+    def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
+        """Resolve a single PR/MR's merge/draft state from its own URL.
+
+        Returns `{"state": "OPEN"|"CLOSED"|"MERGED", "draft": bool}`, or
+        `None` on any not-found/error condition (fail soft — the caller,
+        fr-vk's PR-merge poller, treats an unresolvable PR as "hold this
+        card", not an error). Distinct from `list_linked_prs`: this method
+        takes a PR URL directly rather than deriving PRs from an Issue, and
+        its `state` vocabulary includes `MERGED` as a third value (not
+        collapsed into `CLOSED`) since the caller branches on it
+        separately. See docs/superpowers/specs/
+        2026-07-09-multi-backend-git-host-adapters-design.md §6 — added
+        specifically to let fr-vk's `pr_observe.py` stop shelling out to a
+        literal `gh pr view` subprocess.
+        """
+        ...
+
     def edit_issue_labels(
         self,
         repo: str,

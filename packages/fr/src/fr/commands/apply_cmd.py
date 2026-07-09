@@ -51,12 +51,14 @@ err_console = Console(stderr=True)
 def _make_gh_client() -> GhClient:
     """Factory hook for the GhClient. Tests monkeypatch this to inject FakeGhClient.
 
-    Defaults to `RealGhClient` (subprocess wrapper around `gh`). Tests
-    override by `monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: FakeGhClient())`.
+    Defaults to `hostclient.client_for(Path.cwd())`, which resolves to
+    `RealGhClient`/`RealGlabClient`/`RealTeaClient` per the repo's
+    configured/detected backend (see fr._hosts). Tests override by
+    `monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: FakeGhClient())`.
     """
-    from fr.real_ghclient import RealGhClient
+    from fr.hostclient import client_for
 
-    return RealGhClient()
+    return client_for(Path.cwd())
 
 
 def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Path]:

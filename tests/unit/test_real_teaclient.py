@@ -244,3 +244,58 @@ class TestContentsApi:
 
         monkeypatch.setattr(_tea, "_run_tea", _raise)
         assert RealTeaClient().list_dir("owner/repo", "docs/missing") == []
+
+
+class TestPrStatusByUrl:
+    """tea's `pulls` command doesn't take a bare URL either (same
+    reasoning as GitLab's `mr view`) — parse (repo, index) from the URL,
+    then query by index."""
+
+    def test_parses_url_and_calls_pulls_by_index(self, monkeypatch):
+        captured: list[list[str]] = []
+
+        def fake(args: list[str]) -> str:
+            captured.append(args)
+            return json.dumps({"state": "open", "merged": False, "draft": False})
+
+        monkeypatch.setattr(_tea, "_run_tea", fake)
+        result = RealTeaClient().pr_status_by_url(
+            "https://gitea.example.com/owner/repo/pulls/7"
+        )
+        assert result == {"state": "OPEN", "draft": False}
+        assert captured == [["pulls", "7", "--repo", "owner/repo", "--output", "json"]]
+
+    def test_merged_state(self, monkeypatch):
+        monkeypatch.setattr(
+            _tea,
+            "_run_tea",
+            lambda args: json.dumps({"state": "closed", "merged": True, "draft": False}),
+        )
+        result = RealTeaClient().pr_status_by_url(
+            "https://gitea.example.com/owner/repo/pulls/7"
+        )
+        assert result == {"state": "MERGED", "draft": False}
+
+    def test_closed_unmerged_state(self, monkeypatch):
+        monkeypatch.setattr(
+            _tea,
+            "_run_tea",
+            lambda args: json.dumps({"state": "closed", "merged": False, "draft": False}),
+        )
+        result = RealTeaClient().pr_status_by_url(
+            "https://gitea.example.com/owner/repo/pulls/7"
+        )
+        assert result == {"state": "CLOSED", "draft": False}
+
+    def test_returns_none_on_error(self, monkeypatch):
+        def _raise(args):
+            raise _tea.TeaError("not found")
+
+        monkeypatch.setattr(_tea, "_run_tea", _raise)
+        assert (
+            RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/999")
+            is None
+        )
+
+    def test_returns_none_on_unparseable_url(self):
+        assert RealTeaClient().pr_status_by_url("https://example.com/not/a/pr") is None

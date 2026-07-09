@@ -27,11 +27,21 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Any, cast
 from urllib.parse import quote
 
 from fr import glab as _glab
 from fr.labels import LabelDef
+
+# GitLab-specific MR URL shape — deliberately NOT in the shared fr._urls
+# (that module is issue-URL-only, and this pattern is GitLab-only: neither
+# GitHub nor Gitea PR URLs need this class of parsing since `gh pr view`
+# accepts a bare URL directly and Gitea's adapter builds its own simpler
+# parse — see real_teaclient.py). Mirrors _urls.py's lazy-quantifier +
+# optional `-/`-infix technique for the same reason (GitLab subgroups
+# nest arbitrarily, and the dash infix is optional across GitLab versions).
+_MR_URL_RE = re.compile(r"^https://[^/]+/(.+?)(?:/-)?/merge_requests/(\d+)/?$")
 
 
 class RealGlabClient:
@@ -87,6 +97,29 @@ class RealGlabClient:
                 }
             )
         return result
+
+    def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
+        """`glab mr view` does NOT accept a bare URL (its usage is
+        `{<id> | <branch>}` — verified directly against the installed
+        binary's `--help`), so the MR url is parsed into (repo, iid)
+        first. Fails soft: None on any error or unparseable URL."""
+        m = _MR_URL_RE.match(url)
+        if not m:
+            return None
+        repo, iid = m.group(1), m.group(2)
+        try:
+            out = _glab._run_glab(["mr", "view", iid, "--repo", repo, "--output", "json"])
+        except _glab.GlabError:
+            return None
+        raw = json.loads(out)
+        raw_state = raw.get("state", "opened")
+        if raw_state == "merged":
+            state = "MERGED"
+        elif raw_state in ("closed", "locked"):
+            state = "CLOSED"
+        else:
+            state = "OPEN"
+        return {"state": state, "draft": bool(raw.get("draft", False))}
 
     def edit_issue_labels(
         self,

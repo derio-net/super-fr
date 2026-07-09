@@ -272,3 +272,72 @@ class TestContentsApi:
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert RealGlabClient().list_dir("group/proj", "docs/missing") == []
+
+
+class TestPrStatusByUrl:
+    """`glab mr view` does NOT take a bare URL (its usage is `{<id> |
+    <branch>}` per its own `--help`, verified directly against the
+    installed binary) — the adapter must parse the MR url into (repo, iid)
+    itself first, then call `glab mr view <iid> -R <repo>`."""
+
+    def test_parses_url_and_calls_mr_view_by_iid(self, monkeypatch):
+        captured: list[list[str]] = []
+
+        def fake(args: list[str]) -> str:
+            captured.append(args)
+            return json.dumps({"state": "opened", "draft": False})
+
+        monkeypatch.setattr(_glab, "_run_glab", fake)
+        result = RealGlabClient().pr_status_by_url(
+            "https://gitlab.com/group/proj/-/merge_requests/7"
+        )
+        assert result == {"state": "OPEN", "draft": False}
+        assert captured == [
+            ["mr", "view", "7", "--repo", "group/proj", "--output", "json"]
+        ]
+
+    def test_nested_group_url(self, monkeypatch):
+        captured: list[list[str]] = []
+
+        def fake(args: list[str]) -> str:
+            captured.append(args)
+            return json.dumps({"state": "opened", "draft": False})
+
+        monkeypatch.setattr(_glab, "_run_glab", fake)
+        RealGlabClient().pr_status_by_url(
+            "https://gitlab.com/group/subgroup/proj/-/merge_requests/3"
+        )
+        assert captured[0][:5] == ["mr", "view", "3", "--repo", "group/subgroup/proj"]
+
+    def test_merged_state(self, monkeypatch):
+        monkeypatch.setattr(
+            _glab, "_run_glab", lambda args: json.dumps({"state": "merged", "draft": False})
+        )
+        result = RealGlabClient().pr_status_by_url(
+            "https://gitlab.com/group/proj/-/merge_requests/7"
+        )
+        assert result == {"state": "MERGED", "draft": False}
+
+    def test_closed_unmerged_state(self, monkeypatch):
+        monkeypatch.setattr(
+            _glab, "_run_glab", lambda args: json.dumps({"state": "closed", "draft": False})
+        )
+        result = RealGlabClient().pr_status_by_url(
+            "https://gitlab.com/group/proj/-/merge_requests/7"
+        )
+        assert result == {"state": "CLOSED", "draft": False}
+
+    def test_returns_none_on_error(self, monkeypatch):
+        def _raise(args):
+            raise _glab.GlabError("not found")
+
+        monkeypatch.setattr(_glab, "_run_glab", _raise)
+        assert (
+            RealGlabClient().pr_status_by_url(
+                "https://gitlab.com/group/proj/-/merge_requests/999"
+            )
+            is None
+        )
+
+    def test_returns_none_on_unparseable_url(self):
+        assert RealGlabClient().pr_status_by_url("https://example.com/not/an/mr") is None

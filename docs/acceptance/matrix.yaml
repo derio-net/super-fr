@@ -383,18 +383,34 @@ rows:
       labels (color, length)
     origin:
     - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
-    levels: {}
-    status: not-implemented
-    notes: Core GitLab-support claim; lands with the RealGlabClient adapter phase.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_glab.py
+      - super-fr:tests/unit/test_real_glabclient.py
+      - super-fr:tests/unit/test_hostclient.py
+    status: ci
+    notes: RealGlabClient satisfies the GhClient Protocol (mypy-verified) and is reachable
+      from every fr apply CLI command via hostclient.client_for, gated on fr._hosts.detect_backend.
+      Unit-verified against GitLab's own REST/glab-CLI shapes (Phase 2/4, 2026-07-09).
+      Not yet proven against a live GitLab instance -- owed to the plan's back-loaded
+      manual verification phase (Phase 9).
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
       rendered/observed/diffed/applied as Gitea Issues with correctly-shaped labels
     origin:
     - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
-    levels: {}
-    status: not-implemented
-    notes: Core Gitea-support claim; lands with the RealTeaClient adapter phase.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tea.py
+      - super-fr:tests/unit/test_real_teaclient.py
+      - super-fr:tests/unit/test_hostclient.py
+    status: ci
+    notes: RealTeaClient satisfies the GhClient Protocol (mypy-verified) and is reachable
+      from every fr apply CLI command via hostclient.client_for, gated on fr._hosts.detect_backend.
+      Unit-verified against Gitea's own live swagger-spec-confirmed shapes (Phase 3/4,
+      2026-07-09). Not yet proven against a live Gitea instance -- owed to the plan's
+      back-loaded manual verification phase (Phase 9).
   - id: multibackend-isolation-lifecycle
     capability: Multi-backend git hosting
     acceptance: fr isolation up/status/down/gc resolves the default branch and checks

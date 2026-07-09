@@ -28,10 +28,18 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Any, cast
 
 from fr import tea as _tea
 from fr.labels import LabelDef
+
+# Gitea-specific PR URL shape (https://{host}/{owner}/{repo}/pulls/{n}).
+# Gitea has no GitLab-style arbitrary subgroup nesting, so a plain
+# two-segment repo capture is sufficient — deliberately not shared with
+# fr._urls (issue-URL-only) or fr.real_glabclient's MR-URL pattern (which
+# needs the lazy-quantifier trick GitLab's nesting requires).
+_PR_URL_RE = re.compile(r"^https://[^/]+/([^/]+/[^/]+)/pulls/(\d+)/?$")
 
 
 class RealTeaClient:
@@ -90,6 +98,24 @@ class RealTeaClient:
                 }
             )
         return result
+
+    def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
+        """tea's `pulls` command doesn't accept a bare URL either (same
+        reasoning as GitLab's `mr view`) — parse (repo, index) from the
+        URL, then query by index. Fails soft: None on any error or
+        unparseable URL."""
+        m = _PR_URL_RE.match(url)
+        if not m:
+            return None
+        repo, index = m.group(1), m.group(2)
+        try:
+            out = _tea._run_tea(["pulls", index, "--repo", repo, "--output", "json"])
+        except _tea.TeaError:
+            return None
+        raw = json.loads(out)
+        merged = bool(raw.get("merged", False))
+        state = "MERGED" if merged else ("CLOSED" if raw.get("state") == "closed" else "OPEN")
+        return {"state": state, "draft": bool(raw.get("draft", False))}
 
     def edit_issue_labels(
         self,

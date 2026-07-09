@@ -32,9 +32,9 @@ err_console = Console(stderr=True)
 
 def _make_gh_client() -> GhClient:
     """Factory hook — tests monkeypatch this (same seam as apply_cmd)."""
-    from fr.real_ghclient import RealGhClient
+    from fr.hostclient import client_for
 
-    return RealGhClient()
+    return client_for(Path.cwd())
 
 
 def archive_command(
