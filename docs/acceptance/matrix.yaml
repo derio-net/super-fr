@@ -418,10 +418,17 @@ rows:
       gh-specific calls
     origin:
     - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
-    levels: {}
-    status: not-implemented
-    notes: Distinguishes isolation actually working on non-GitHub repos from silently
-      shelling out to gh.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: '_resolve_default_branch and _pr_from both branch on fr._hosts.detect_backend
+      (glab/tea equivalents of the gh calls, kept as a lightweight parallel branch
+      on the isolation lifecycle''s own Runner seam rather than merged into GhClient
+      -- see the design doc''s reasoning). Gitea''s _pr_from has no single-shot
+      branch->PR query (verified during research) and falls back to a list-and-filter
+      scan -- a real, bounded, documented degradation. Not yet proven against a
+      live GitLab/Gitea instance -- owed to Phase 9''s manual verification.'
   - id: multibackend-vk-dispatch
     capability: Multi-backend git hosting
     acceptance: The VK dispatch bridge polls PR/MR status and auto-closes tracking Issues

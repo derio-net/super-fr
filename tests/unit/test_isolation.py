@@ -779,6 +779,142 @@ def test_resolve_default_branch_main_fallback(tmp_path: Path) -> None:
     assert target._resolve_default_branch() == "main"
 
 
+def test_resolve_default_branch_gitlab_backend(tmp_path: Path) -> None:
+    """Backend-aware fallback (docs/superpowers/specs/
+    2026-07-09-multi-backend-git-host-adapters-design.md §8): a
+    GitLab-backed repo (no symbolic-ref, no `gh`) resolves via
+    `glab repo view -F json --jq .default_branch`."""
+    repo = make_repo(tmp_path)  # no origin → symbolic-ref fails
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    runner = FakeRunner(stdout={"glab": "develop\n"})
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    assert target._resolve_default_branch() == "develop"
+    glab_calls = runner.argv_for("glab")
+    assert glab_calls and glab_calls[0][:2] == ["glab", "repo"]
+
+
+def test_resolve_default_branch_gitea_backend(tmp_path: Path) -> None:
+    """A Gitea-backed repo resolves via `tea repos ... --output json`
+    (field name `default_branch` — confirmed against Gitea's live
+    swagger spec, Repository.default_branch — but the CLI's own JSON
+    shape is reconfirmed against a live tea in Phase 9's manual
+    verification)."""
+    repo = make_repo(tmp_path)
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    runner = FakeRunner(stdout={"tea": '{"default_branch": "develop"}'})
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    assert target._resolve_default_branch() == "develop"
+    tea_calls = runner.argv_for("tea")
+    assert tea_calls and tea_calls[0][:1] == ["tea"]
+
+
+def test_resolve_default_branch_gitlab_backend_falls_back_on_failure(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    runner = FakeRunner()  # glab yields empty stdout → falls through to "main"
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    assert target._resolve_default_branch() == "main"
+
+
+def test_pr_from_gitlab_backend(tmp_path: Path) -> None:
+    """A GitLab-backed repo's `_pr_from` uses `glab mr view <branch>
+    --output json` (a single-shot query, like gh's) — verified against
+    glab's own `--help` (`glab mr view {<id> | <branch>}` accepts a bare
+    branch name directly, unlike its `mr view <url>` case)."""
+    repo = make_repo(tmp_path)
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    runner = FakeRunner(
+        stdout={"glab": '{"state": "merged", "web_url": "https://gitlab.com/g/p/-/merge_requests/1"}'}
+    )
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    result = target._pr_from(repo, "feat/x")
+    assert result is not None
+    assert result["state"] == "MERGED"
+    assert result["url"] == "https://gitlab.com/g/p/-/merge_requests/1"
+
+
+def test_pr_from_gitlab_backend_no_mr_returns_none(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    runner = FakeRunner()  # empty stdout, rc=0 by default — no MR
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    assert target._pr_from(repo, "feat/x") is None
+
+
+def test_pr_from_gitea_backend_list_and_filter_fallback(tmp_path: Path) -> None:
+    """Gitea's CLI has no single-shot branch→PR query (unlike gh/glab) —
+    verified during the multi-backend design's research (`tea pulls`
+    only takes an index, not a branch). The adapter falls back to
+    listing open PRs and matching `head.label` client-side. This is a
+    real, bounded degradation vs. gh/glab's single-shot query, not a
+    bug — documented in the design doc §8."""
+    repo = make_repo(tmp_path)
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    listing = (
+        '[{"state": "open", "merged": false, "url": "https://gitea.example.com/o/r/pulls/1", '
+        '"head": {"label": "other-branch"}}, '
+        '{"state": "open", "merged": false, "url": "https://gitea.example.com/o/r/pulls/2", '
+        '"head": {"label": "feat/x"}}]'
+    )
+    runner = FakeRunner(stdout={"tea": listing})
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    result = target._pr_from(repo, "feat/x")
+    assert result is not None
+    assert result["url"] == "https://gitea.example.com/o/r/pulls/2"
+    assert result["state"] == "OPEN"
+
+
+def test_pr_from_gitea_backend_merged_state(tmp_path: Path) -> None:
+    """A merged Gitea PR coerces to the shared "MERGED" vocabulary
+    (Gitea's `state` field alone would say "closed" — the separate
+    `merged: true` boolean is what distinguishes it, per Gitea's own
+    PullRequest schema, verified against its live swagger spec)."""
+    repo = make_repo(tmp_path)
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    listing = (
+        '[{"state": "closed", "merged": true, "url": "https://gitea.example.com/o/r/pulls/2", '
+        '"head": {"label": "feat/x"}}]'
+    )
+    runner = FakeRunner(stdout={"tea": listing})
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    result = target._pr_from(repo, "feat/x")
+    assert result is not None
+    assert result["state"] == "MERGED"
+
+
+def test_pr_from_gitea_backend_no_matching_branch_returns_none(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo / ".devcontainer").mkdir()
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
+    )
+    listing = '[{"state": "open", "merged": false, "url": "u", "head": {"label": "other-branch"}}]'
+    runner = FakeRunner(stdout={"tea": listing})
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+    assert target._pr_from(repo, "feat/x") is None
+
+
 def test_up_reuse_existing_worktree_never_fetches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
