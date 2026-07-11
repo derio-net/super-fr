@@ -181,6 +181,28 @@ def secrets_env_file(repo_name: str, profile: str) -> Path:
     return _home() / ".config" / "fr" / "secrets" / repo_name / f"{profile}.env"
 
 
+def harden_secret_file(env_file: Path) -> None:
+    """Make a host secrets env-file private: 0600 on the file, 0700 on its dir
+    chain up to (and including) the ``~/.config/<store>`` secrets root.
+
+    Called after every scaffold / ensure so the store is never world-readable —
+    a 0644 store under 0755 dirs once exposed a live cluster-admin kube token —
+    and so pre-existing loose perms self-heal on the next isolation run. Errors
+    (e.g. a not-yet-created file) are swallowed: hardening is best-effort.
+    """
+    if env_file.is_file():
+        env_file.chmod(0o600)
+    d = env_file.parent
+    for _ in range(4):  # <repo>/, secrets/, <store>/ — bounded; never past .config
+        try:
+            d.chmod(0o700)
+        except OSError:
+            pass
+        if d.parent.name == ".config" or d.parent == d:
+            break
+        d = d.parent
+
+
 def resolve_profile(repo_root: Path, name: str | None) -> str:
     """Resolve the requested (or default) profile, or explain how to get one.
 

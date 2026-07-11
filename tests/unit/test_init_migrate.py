@@ -108,8 +108,11 @@ def test_yes_applies_all_surfaces(legacy_repo: Path) -> None:
     assert not (legacy_repo / ".git" / "vk" / "isolation").exists()
     assert (legacy_repo / ".git" / "fr" / "isolation" / "feat__x.json").is_file()
 
-    # host secrets block printed, not executed
+    # host secrets block printed, not executed — and it establishes a private
+    # store (0700 dirs via -m 700, 0600 files via `chmod -R go=`).
     assert "cp -an" in res.output and ".config/fr/secrets" in res.output
+    assert "mkdir -p -m 700" in res.output
+    assert "chmod -R go= ~/.config/fr/secrets" in res.output
     assert not (Path(legacy_repo).parent / "home" / ".config" / "fr").exists()
 
 

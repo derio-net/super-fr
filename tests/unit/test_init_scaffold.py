@@ -354,6 +354,35 @@ def test_envfile_never_overwritten(repo: Path, tmp_path: Path) -> None:
     assert "# B_KEY=" in text  # new placeholder appended
 
 
+def test_scaffold_envfile_is_private(repo: Path, tmp_path: Path) -> None:
+    """Host secrets env-file is created private: 0600 file, 0700 dir chain.
+
+    A world-readable secrets store (0644 files under 0755 dirs) once exposed a
+    live cluster-admin kube token — the generator must birth these private.
+    """
+    res = scaffold(repo, "--secret", "GH_TOKEN")
+    assert res.exit_code == 0, res.output
+    fr_root = tmp_path / "home" / ".config" / "fr"
+    secrets_root = fr_root / "secrets"
+    env = secrets_root / "myrepo" / "dev.env"
+    assert env.is_file()
+    assert env.stat().st_mode & 0o777 == 0o600, oct(env.stat().st_mode)
+    for d in (env.parent, secrets_root, fr_root):
+        assert d.stat().st_mode & 0o777 == 0o700, f"{d}: {oct(d.stat().st_mode)}"
+
+
+def test_scaffold_tightens_preexisting_loose_envfile(repo: Path, tmp_path: Path) -> None:
+    """Re-scaffolding self-heals a legacy world-readable file + dir (the store
+    that leaked was already on disk when the fix landed)."""
+    scaffold(repo, "--secret", "A_KEY")
+    env = tmp_path / "home" / ".config" / "fr" / "secrets" / "myrepo" / "dev.env"
+    env.chmod(0o644)
+    env.parent.chmod(0o755)
+    scaffold(repo, "--force", "--secret", "A_KEY")
+    assert env.stat().st_mode & 0o777 == 0o600, oct(env.stat().st_mode)
+    assert env.parent.stat().st_mode & 0o777 == 0o700, oct(env.parent.stat().st_mode)
+
+
 def test_scaffold_purpose_non_ascii_written_literally(repo: Path) -> None:
     """Scaffold output keeps UTF-8 literal (same ensure_ascii bug class)."""
     res = runner.invoke(

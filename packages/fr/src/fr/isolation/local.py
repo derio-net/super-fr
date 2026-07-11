@@ -27,6 +27,7 @@ from fr.isolation.types import (
     _git_common_dir,
     _warn_legacy,
     delete_state,
+    harden_secret_file,
     list_states,
     resolve_profile,
     save_state,
@@ -897,6 +898,7 @@ class LocalWorktreeDevcontainerTarget:
             if not env_file.is_file():
                 env_file.parent.mkdir(parents=True, exist_ok=True)
                 env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")
+            harden_secret_file(env_file)  # 0600 file / 0700 dirs — self-heals loose perms
 
     def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:
         return self.run(

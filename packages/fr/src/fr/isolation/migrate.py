@@ -18,9 +18,11 @@ from fr.isolation.types import IsolationError, _git_common_dir
 
 SECRETS_BLOCK = """\
 # host secrets move (run yourself, per machine; copy-no-clobber — the vk dir
-# stays until the fallback-removal release):
-mkdir -p ~/.config/fr/secrets
+# stays until the fallback-removal release). The store is private: 0700 dirs,
+# 0600 files — a world-readable store once exposed a live cluster-admin token.
+mkdir -p -m 700 ~/.config/fr ~/.config/fr/secrets
 [ -d ~/.config/vk/secrets ] && cp -an ~/.config/vk/secrets/. ~/.config/fr/secrets/
+chmod -R go= ~/.config/fr/secrets
 """
 
 
