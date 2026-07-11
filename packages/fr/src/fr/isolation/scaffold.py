@@ -18,7 +18,7 @@ from pathlib import Path
 import yaml
 
 from fr._hosts import HostBackend
-from fr.isolation.types import IsolationError, secrets_env_file
+from fr.isolation.types import IsolationError, harden_secret_file, secrets_env_file
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
     ensure_validator_wrapper,
@@ -280,3 +280,4 @@ def _ensure_env_placeholders(env_file: Path, repo: str, profile: str, secrets: l
         env_file.write_text(
             existing + ("\n" if existing and lines else "") + "\n".join(lines) + "\n"
         )
+    harden_secret_file(env_file)  # 0600 file / 0700 dirs — never a world-readable store
