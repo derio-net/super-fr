@@ -4,8 +4,8 @@ description: >
   Plan / spec progress reporting, and the repo-state preflight for any repo
   with docs/superpowers/ or fr config. Use when: "what's in progress",
   "status board", "audit drift", "spec rollup", "is this plan up to date",
-  is this repo fr-managed, working in a repo for the first time, legacy v1
-  plans, before archiving or moving files under docs/superpowers/.
+  "is this repo fr-managed", "legacy v1 plans", "before archiving or moving
+  files under docs/superpowers/".
 ---
 
 # fr-progress
@@ -40,8 +40,8 @@ fr archive --all                # only now, for plans the sweep marked archivabl
 ```
 
 `.md.v1-archive` files (from `fr migrate v1-to-v2`) are pre-migration
-originals kept for git-history — leave them; they travel with their
-migrated folder through `fr archive`, not artifacts to clean up by hand.
+originals kept for git-history — leave them; `fr archive` only moves
+the plan folder, not the `.v1-archive` sibling (a known gap).
 
 ## How it works (no separate state store)
 
@@ -75,7 +75,7 @@ Missing / Unreachable), step + phase counts, and an aggregate. Cross-repo
 plans resolve via the gh contents API (same capability `fr archive` uses);
 pass `--no-gh` (or run offline) and cross-repo rows degrade to
 `Unreachable`. `.github/workflows/fr-spec-status.yml` posts this as a PR
-comment on PRs touching `docs/superpowers/{plans,implemented/plans}/`.
+comment when a PR touching `docs/superpowers/{plans,implemented/plans}/` merges.
 
 For a single plan, `fr status <plan-dir>` is the read-only deep report:
 header, per-phase table, completion-guard refusals, drift warnings, and the
