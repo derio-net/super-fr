@@ -220,11 +220,19 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-07-05-isolation-teardown-354-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_isolation.py
-    status: skipped
+      - super-fr:tests/unit/test_isolation.py#test_down_raises_when_container_survives_stop_rm
+      - super-fr:tests/unit/test_isolation.py#test_down_raises_when_worktree_remove_fails
+      - super-fr:tests/unit/test_isolation.py#test_down_raises_when_docker_query_fails
+      - super-fr:tests/unit/test_isolation.py#test_down_completes_when_worktree_already_gone
+      - super-fr:tests/unit/test_isolation.py#test_down_force_still_verifies_container
+      - super-fr:tests/unit/test_isolation.py#test_down_reclaims_image
+      - super-fr:tests/unit/test_isolation.py#test_down_rmi_failure_is_non_fatal
+      - super-fr:tests/unit/test_isolation.py#test_down_removes_isolation_marker
+    status: ci
     notes: '#354 Task A. Verification + image reclamation unit-pinned over the Runner
-      seam (stateful docker fake: surviving container/worktree → raise + state kept);
-      the real-docker transient-failure leg is Test-Plan item 1, post-merge.'
+      seam (stateful docker fake: surviving container/worktree → raise + state kept,
+      daemon-unreachable guard, rmi failure non-fatal). Real-docker transient-failure
+      leg is Test-Plan item 1, post-merge — not in CI.'
   - id: isolation-gc-reconciles-merged
     capability: Isolation teardown
     acceptance: A merged-PR isolation workspace is torn down (container, worktree, state,
@@ -234,13 +242,25 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-07-05-isolation-teardown-354-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_isolation.py
-      - super-fr:tests/unit/test_isolation_cmd.py
-    status: skipped
+      - super-fr:tests/unit/test_isolation.py#test_gc_classifies_and_reaps
+      - super-fr:tests/unit/test_isolation.py#test_gc_discovers_label_and_worktree_union
+      - super-fr:tests/unit/test_isolation.py#test_gc_one_failure_does_not_abort_sweep
+      - super-fr:tests/unit/test_isolation.py#test_gc_merged_reap_unexpected_error_does_not_abort_sweep
+      - super-fr:tests/unit/test_isolation.py#test_gc_corrupt_state_does_not_abort_discovery
+      - super-fr:tests/unit/test_isolation.py#test_gc_sweeps_dangling_vsc_images
+      - super-fr:tests/unit/test_isolation.py#test_gc_image_rmi_failure_is_non_fatal
+      - super-fr:tests/unit/test_isolation.py#test_up_spawns_background_gc
+      - super-fr:tests/unit/test_isolation.py#test_down_spawns_background_gc
+      - super-fr:tests/unit/test_isolation.py#test_gc_second_concurrent_sweep_noops
+      - super-fr:tests/unit/test_isolation.py#test_gc_dry_run_mutates_nothing
+      - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_reports
+      - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_json
+      - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_empty
+    status: ci
     notes: '#354 Task B. Classification (merged/open/no-pr/orphan/no-state), discovery,
-      per-workspace error isolation, image sweep, opportunistic spawn seam, and flock
-      no-op all unit-pinned over the Runner seam; the real-docker reap + live
-      opportunistic trigger are Test-Plan items 3-4, post-merge.'
+      per-workspace error isolation, image sweep, opportunistic spawn seam, flock no-op,
+      dry-run safety, and CLI output all unit-pinned over the Runner seam. Real-docker
+      reap + live opportunistic trigger are Test-Plan items 3-4, post-merge — not in CI.'
   - id: spec-sweep-pending-slice-hold
     capability: Archive spec-sweep
     acceptance: A spec with a decided-but-unbuilt slice (a pending-placeholder plan
