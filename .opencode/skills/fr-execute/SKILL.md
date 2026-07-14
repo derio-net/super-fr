@@ -32,21 +32,21 @@ The `fr pickup` output below provides the canonical PR title template.
 
 ## Label lifecycle (no manual transition verbs in v2)
 
-The Issue moves: `vk-ready → in-progress → pr-ready → closed`. v2 has no
+The Issue moves: `fr:ready → fr:in-progress → fr:pr-ready → closed`. v2 has no
 manual transition verbs — every label flip is derived from what the
 renderer can observe on the Issue plus its linked PRs:
 
-- **`vk-ready`:** the phase has a `tracking_issue` but no assignee, no draft
+- **`fr:ready`:** the phase has a `tracking_issue` but no assignee, no draft
   PR, and no open non-draft PR.
-- **`in-progress`:** the Issue has an assignee OR a draft linked PR.
-- **`pr-ready`:** an open non-draft, non-merged linked PR exists.
+- **`fr:in-progress`:** the Issue has an assignee OR a draft linked PR.
+- **`fr:pr-ready`:** an open non-draft, non-merged linked PR exists.
 - **closed:** `state.completion.at` is set on the phase AND a merged PR is
   observed AND no open linked PR remains (per `_phase_complete` in
   `render.py`).
 
 The `fr apply` step at the end of the phase pushes whichever transitions the
-renderer projects from current GitHub state. To trigger `in-progress`,
-assign yourself to the Issue (or open a draft PR); to trigger `pr-ready`,
+renderer projects from current GitHub state. To trigger `fr:in-progress`,
+assign yourself to the Issue (or open a draft PR); to trigger `fr:pr-ready`,
 take the PR out of draft.
 
 ## Procedure
@@ -83,12 +83,11 @@ take the PR out of draft.
 
 5. **Open the PR.** Delegate to `superpowers:finishing-a-development-branch`.
    Use the PR title from `fr pickup` and the body shape above.
-
    **Caveat — under fr-goal LOCAL mode, do NOT open a per-phase PR.** Push the
    branch only; the single PR is fr-goal's step 8, opened (as a draft) by the
-   orchestrator *after* its review pass. Opening a PR here reorders deliver
-   ahead of review and reintroduces the #320 merge-race. Per-phase PRs remain
-   the behaviour for the standalone **dispatched** (Issue/VK) flow only.
+   orchestrator *after* its review pass — opening here reorders deliver ahead
+   of review and reintroduces the #320 merge-race. Per-phase PRs remain the
+   behaviour for the standalone **dispatched** (Issue/VK) flow only.
 
 6. **Reconcile GitHub state:**
    ```bash
@@ -102,7 +101,8 @@ take the PR out of draft.
 
 ## Constraints
 
-- One phase = one PR. Don't touch other phases.
+- Don't touch other phases. One phase = one PR, except fr-goal LOCAL mode
+  (step 5's caveat) — never open a per-phase PR there.
 - Stop if blocked — report what's missing.
 - Step IDs: `P<n>.T<n>.S<n>`.
 
