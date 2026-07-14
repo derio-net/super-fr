@@ -329,6 +329,64 @@ class LocalWorktreeDevcontainerTarget:
             "pr": self._pr(state),
         }
 
+    # Backend CLI name for push_check's guidance line — shares the
+    # gh/glab/tea vocabulary `fr._hosts.TAG_FOR_BACKEND` already uses
+    # elsewhere, kept local (not imported) since that map's values are the
+    # short vk-card tags ("gh"/"gl"/"gt"), not the CLI binary names.
+    _CLI_FOR_BACKEND: dict[str, str] = {"github": "gh", "gitlab": "glab", "gitea": "tea"}
+
+    def push_check(self, state: IsolationState) -> dict[str, Any]:
+        """Read-only preflight diagnostic for #377: worktree remotes,
+        whether an SSH agent socket is visible IN-CONTAINER (informational
+        only — expected to be ABSENT, that is not a failure), and a
+        backend-aware pointer at the correct host-side push workflow. Never
+        prints key material, tokens, or ssh-agent socket contents/paths —
+        presence/absence only (see `_ssh_agent_probe`)."""
+        remote = self.run(["git", "-C", str(state.worktree), "remote", "-v"])
+        remotes = [ln for ln in (remote.stdout or "").splitlines() if ln.strip()]
+        backend = detect_backend(self.repo_root)
+        cli = self._CLI_FOR_BACKEND.get(backend, "gh")
+        guidance = (
+            f"push and {cli} PR/MR creation must run on the HOST from the worktree "
+            f"(cd {state.worktree} && git push ...) — the container has no SSH agent "
+            "or git-host credentials by design; see fr-isolation SKILL.md's "
+            "Exec-bridge discipline."
+        )
+        return {
+            "branch": state.branch,
+            "remotes": remotes,
+            "backend": backend,
+            "ssh_agent_in_container": self._ssh_agent_probe(state),
+            "guidance": guidance,
+        }
+
+    def _ssh_agent_probe(self, state: IsolationState) -> dict[str, Any]:
+        """In-container SSH_AUTH_SOCK presence check ONLY — reports whether
+        the env var is set and, if set, whether the socket path exists, never
+        the path itself or any key material (no `ssh-add -l`, no reading the
+        socket)."""
+        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
+        probe_script = (
+            'if [ -n "$SSH_AUTH_SOCK" ]; then '
+            'if [ -S "$SSH_AUTH_SOCK" ]; then echo set:socket-exists; '
+            "else echo set:socket-missing; fi; "
+            "else echo unset; fi"
+        )
+        result = self.run(
+            [
+                "devcontainer",
+                "exec",
+                f"--workspace-folder={state.worktree}",
+                f"--config={config}",
+                "sh",
+                "-c",
+                probe_script,
+            ],
+            cwd=state.worktree,
+        )
+        detail = (result.stdout or "").strip() or "unknown"
+        return {"present": detail.startswith("set:"), "detail": detail}
+
     def verify_merge(
         self,
         state: IsolationState,

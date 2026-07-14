@@ -196,6 +196,14 @@ def status(
         help="Include container resource use (docker stats --no-stream) — opt-in "
         "to keep the default status fast; helps spot a thrashing container (#341).",
     ),
+    push_check: bool = typer.Option(
+        False,
+        "--push-check",
+        help="Read-only preflight for #377: worktree remotes, in-container SSH-agent "
+        "presence (informational — expected absent), and a backend-aware pointer at "
+        "the correct host-side push workflow. Never prints key material or "
+        "token/socket contents.",
+    ),
 ) -> None:
     """Show worktree, container, and PR state for isolation workspaces."""
     root = repo.resolve()
@@ -210,6 +218,9 @@ def status(
     if stats:
         for row, s in zip(rows, states):
             row["stats"] = target.stats(s)
+    if push_check:
+        for row, s in zip(rows, states):
+            row["push_check"] = target.push_check(s)
     if format == "json":
         typer.echo(json.dumps(rows, indent=2))
         return
@@ -229,6 +240,15 @@ def status(
                 f" stats=cpu={st['cpu']} mem={st['mem']} ({st['mem_perc']})" if st else " stats=n/a"
             )
         typer.echo(line)
+        if push_check:
+            pc = r.get("push_check")
+            if pc:
+                remotes_text = ", ".join(pc["remotes"]) if pc["remotes"] else "(none)"
+                typer.echo(f"  remotes: {remotes_text}")
+                ssh = pc["ssh_agent_in_container"]
+                ssh_text = "present" if ssh["present"] else "absent (expected — informational only)"
+                typer.echo(f"  ssh-agent-in-container: {ssh_text}")
+                typer.echo(f"  {pc['guidance']}")
 
 
 @isolation_app.command()
