@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, ClassVar
 
 from fr._hosts import detect_backend
 from fr.isolation.types import (
@@ -329,11 +329,20 @@ class LocalWorktreeDevcontainerTarget:
             "pr": self._pr(state),
         }
 
-    # Backend CLI name for push_check's guidance line — shares the
-    # gh/glab/tea vocabulary `fr._hosts.TAG_FOR_BACKEND` already uses
-    # elsewhere, kept local (not imported) since that map's values are the
-    # short vk-card tags ("gh"/"gl"/"gt"), not the CLI binary names.
-    _CLI_FOR_BACKEND: dict[str, str] = {"github": "gh", "gitlab": "glab", "gitea": "tea"}
+    # Backend CLI name + PR/MR label for push_check's guidance line —
+    # shares the gh/glab/tea vocabulary `fr._hosts.TAG_FOR_BACKEND` already
+    # uses elsewhere, kept local (not imported) since that map's values are
+    # the short vk-card tags ("gh"/"gl"/"gt"), not the CLI binary names.
+    _CLI_FOR_BACKEND: ClassVar[dict[str, str]] = {
+        "github": "gh",
+        "gitlab": "glab",
+        "gitea": "tea",
+    }
+    _PR_LABEL: ClassVar[dict[str, str]] = {
+        "github": "PR",
+        "gitlab": "MR",
+        "gitea": "PR",
+    }
 
     def push_check(self, state: IsolationState) -> dict[str, Any]:
         """Read-only preflight diagnostic for #377: worktree remotes,
@@ -346,8 +355,9 @@ class LocalWorktreeDevcontainerTarget:
         remotes = [ln for ln in (remote.stdout or "").splitlines() if ln.strip()]
         backend = detect_backend(self.repo_root)
         cli = self._CLI_FOR_BACKEND.get(backend, "gh")
+        pr_label = self._PR_LABEL.get(backend, "PR")
         guidance = (
-            f"push and {cli} PR/MR creation must run on the HOST from the worktree "
+            f"push and {cli} {pr_label} creation must run on the HOST from the worktree "
             f"(cd {state.worktree} && git push ...) — the container has no SSH agent "
             "or git-host credentials by design; see fr-isolation SKILL.md's "
             "Exec-bridge discipline."

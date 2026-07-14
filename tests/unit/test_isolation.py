@@ -1854,6 +1854,7 @@ class TestPushCheck:
         assert any("origin" in line and "gitlab.example.com" in line for line in result["remotes"])
         assert result["backend"] == "gitlab"
         assert "glab" in result["guidance"]
+        assert "MR" in result["guidance"]
         assert "git push" in result["guidance"]
 
     def test_default_backend_is_github_with_gh_guidance(self, tmp_path: Path) -> None:
@@ -1862,6 +1863,19 @@ class TestPushCheck:
         result = target.push_check(st)
         assert result["backend"] == "github"
         assert "gh" in result["guidance"]
+        assert "PR" in result["guidance"]
+
+    def test_backend_gitea_uses_tea_and_pr_label(self, tmp_path: Path) -> None:
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+            "default: dev\nbackend: gitea\nprofiles:\n  dev:\n    purpose: test\n"
+        )
+        runner = FakeRunner(stdout={"devcontainer": "unset"})
+        target, st = self._target_state(tmp_path, runner, repo=repo)
+        result = target.push_check(st)
+        assert result["backend"] == "gitea"
+        assert "tea" in result["guidance"]
+        assert "PR" in result["guidance"]
 
     def test_ssh_agent_unset(self, tmp_path: Path) -> None:
         runner = FakeRunner(stdout={"devcontainer": "unset"})
