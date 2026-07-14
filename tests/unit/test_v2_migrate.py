@@ -202,9 +202,7 @@ def test_resolve_spec_file_none_for_cross_repo_notation(tmp_path):
     from fr.migrate import _resolve_spec_file
 
     repo = _make_repo(tmp_path)
-    assert (
-        _resolve_spec_file("derio-net/other-repo:docs/superpowers/specs/x.md", repo) is None
-    )
+    assert _resolve_spec_file("derio-net/other-repo:docs/superpowers/specs/x.md", repo) is None
 
 
 def test_ensure_spec_plan_row_creates_section_when_absent(tmp_path):
@@ -1383,7 +1381,9 @@ def test_migrate_archive_move_is_staged_in_git_repo(tmp_path):
 
     result = subprocess.run(
         ["git", "-C", str(repo), "status", "--porcelain"],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     assert "R  " in result.stdout, f"expected staged rename, got:\n{result.stdout}"
 
@@ -1409,7 +1409,9 @@ def test_migrate_stages_new_plan_files_in_git_repo(tmp_path):
 
     result = subprocess.run(
         ["git", "-C", str(repo), "status", "--porcelain"],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     # Plan files should be staged adds (A  prefix)
     assert "A  " in result.stdout, f"expected staged adds, got:\n{result.stdout}"
