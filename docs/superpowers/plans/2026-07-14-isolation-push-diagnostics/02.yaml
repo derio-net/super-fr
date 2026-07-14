@@ -1,0 +1,191 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Read-only push preflight diagnostic (fr isolation status --push-check)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — tests for LocalWorktreeDevcontainerTarget.push_check
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_isolation.py, add a `TestPushCheck` class
+      (near `TestStats`, following its `_target_state` helper pattern).
+      Cover `push_check(state)` on a `LocalWorktreeDevcontainerTarget` built
+      against a real throwaway repo (`make_repo`) with an `origin` remote
+      added via real git (`git -C repo remote add origin
+      git@gitlab.example.com:group/proj.git`): (a) `remotes` in the
+      returned dict contains lines matching `git remote -v` output for that
+      repo (fetch + push lines); (b) `backend` reflects
+      `fr._hosts.detect_backend` for that repo (use a `.devcontainer/fr-
+      profiles.yaml` with an explicit `backend: gitlab` key via `make_repo`,
+      or monkeypatch `detect_backend`, to get a deterministic non-github
+      value); (c) `guidance` text contains the backend's CLI name (`glab`
+      for the gitlab case) and the literal substring "git push" — never the
+      SKILL.md path is required in the string but the text must point at
+      host-side pushing. Use a fake `Runner` (mirror `FakeRunner` /
+      `_DockerRunner`'s style already in this file) that responds to a
+      `devcontainer exec ... sh -c ...` call with stdout `unset` for the
+      ssh-agent probe. Run pytest, confirm it fails (`push_check` doesn't
+      exist yet — AttributeError).
+  - id: P2.T1.S2
+    text: |-
+      RED: add three more cases to `TestPushCheck` for the ssh-agent probe
+      specifically, using a fake `Runner` whose `devcontainer exec` stdout
+      is stubbed to each of `unset`, `set:socket-exists`, and
+      `set:socket-missing`: assert `push_check(state)["ssh_agent_in_container"]`
+      is `{"present": False, "detail": "unset"}`,
+      `{"present": True, "detail": "set:socket-exists"}`, and
+      `{"present": True, "detail": "set:socket-missing"}` respectively.
+      Also assert none of the three ever include a raw socket path or any
+      substring resembling a private-key/token pattern (this is the "never
+      print key material" contract — assert equality against the exact
+      expected dict, not just a substring check, so an accidental extra key
+      would fail the test). Confirm all new cases fail (AttributeError,
+      same as P2.T1.S1).
+- number: 2
+  title: GREEN — implement push_check + the ssh-agent probe
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/isolation/local.py, add
+      `_ssh_agent_probe(self, state: IsolationState) -> dict[str, Any]`
+      that runs `devcontainer exec --workspace-folder=<state.worktree>
+      --config=<state.worktree/.devcontainer/state.profile/devcontainer.json>
+      sh -c '<probe script>'` via `self.run(..., cwd=state.worktree)` where
+      the probe script is: `if [ -n "$SSH_AUTH_SOCK" ]; then if [ -S
+      "$SSH_AUTH_SOCK" ]; then echo set:socket-exists; else echo
+      set:socket-missing; fi; else echo unset; fi`. Parse
+      `(result.stdout or "").strip()`; return
+      `{"present": out.startswith("set:"), "detail": out or "unknown"}`.
+      Never read or log `$SSH_AUTH_SOCK`'s value itself — only the probe
+      script's fixed-vocabulary echo output.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add `push_check(self, state: IsolationState) -> dict[str,
+      Any]` to the same class (near `status()`). It runs `self.run(["git",
+      "-C", str(state.worktree), "remote", "-v"])` and splits stdout into
+      non-empty lines for `remotes`; calls `detect_backend(self.repo_root)`
+      (already imported from `fr._hosts` at the top of this file) for
+      `backend`; calls `self._ssh_agent_probe(state)` for
+      `ssh_agent_in_container`; and builds `guidance` from a
+      `{"github": "gh", "gitlab": "glab", "gitea": "tea"}` lookup, e.g.
+      f"push and {cli} PR/MR creation must run on the HOST from the
+      worktree (cd {state.worktree} && git push ...) — the container has no
+      SSH agent or git-host credentials by design; see fr-isolation
+      SKILL.md's Exec-bridge discipline." Return
+      `{"branch": state.branch, "remotes": remotes, "backend": backend,
+      "ssh_agent_in_container": probe, "guidance": guidance}`.
+  - id: P2.T2.S3
+    text: |-
+      GREEN: run `fr isolation exec -- uv run pytest
+      tests/unit/test_isolation.py::TestPushCheck -q --no-cov`, confirm all
+      cases from P2.T1.S1/S2 pass. `git add
+      packages/fr/src/fr/isolation/local.py tests/unit/test_isolation.py`.
+- number: 3
+  title: RED — CLI --push-check flag tests
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in tests/unit/test_isolation_cmd.py, add
+      `test_status_push_check_flag_shows_diagnostic` mirroring
+      `test_status_stats_flag_shows_resource_row` (same fixture/monkeypatch
+      style) — invoke `app, ["isolation", "status", "--repo", str(repo),
+      "--push-check", "--format", "json"]`, monkeypatching
+      `LocalWorktreeDevcontainerTarget.push_check` (or the underlying
+      `Runner`, matching whichever seam `test_status_stats_flag_...`
+      patches) to return a fixed dict, and assert the JSON output's row
+      contains `"push_check"` with that dict. Also add
+      `test_status_default_makes_no_push_check_call` mirroring
+      `test_status_default_makes_no_stats_call` — status without
+      `--push-check` must not call `push_check` at all (monkeypatch it to
+      raise, assert no exception). Run pytest, confirm both fail
+      (`--push-check` isn't a recognized option yet).
+- number: 4
+  title: GREEN — wire --push-check into the status command
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/isolation_cmd.py's `status`
+      command, add a `push_check: bool = typer.Option(False,
+      "--push-check", help="Read-only preflight for #377: worktree
+      remotes, in-container SSH-agent presence (informational — expected
+      absent), and a backend-aware pointer at the correct host-side push
+      workflow. Never prints key material or token/socket contents.")`
+      parameter, following the exact `stats` parameter's shape immediately
+      above/below it. In the body, mirror the `if stats:` block: `if
+      push_check: for row, s in zip(rows, states): row["push_check"] =
+      target.push_check(s)`.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: in the same command's text-format rendering loop (after the
+      existing `line += ...stats...` block and `typer.echo(line)`), add: if
+      `push_check` is set, echo up to three extra indented lines per row —
+      remotes (`"  remotes: " + ", ".join(pc["remotes"]) if pc["remotes"]
+      else "  remotes: (none)"`), the ssh-agent line (`"  ssh-agent-in-
+      container: " + ("present" if pc["ssh_agent_in_container"]["present"]
+      else "absent (expected — informational only)")`), and the guidance
+      line (`"  " + pc["guidance"]`) — reading `pc = r.get("push_check")`,
+      skipping the block entirely when `pc` is falsy (so `--format json`
+      and the no-flag case are both unaffected; JSON already gets the raw
+      dict for free via the existing `json.dumps(rows, ...)` call, no
+      separate JSON branch needed).
+  - id: P2.T4.S3
+    text: |-
+      GREEN: run `fr isolation exec -- uv run pytest
+      tests/unit/test_isolation_cmd.py -q --no-cov` and `fr isolation exec
+      -- uv run pytest tests/unit/test_isolation.py -q --no-cov`, confirm
+      all green including the two new CLI tests. Then run the HOST-side `fr
+      isolation status --push-check` against this plan's own live
+      workspace (a fast local read, not a build/test/lint step, so it runs
+      directly per the exec-bridge's "host handles git/gh-adjacent reads"
+      convention) and confirm the remotes/ssh-agent/guidance lines render
+      sensibly for this worktree's own `origin` remote — an end-to-end spot
+      check on top of the automated tests, not a replacement for them.
+      `git add packages/fr/src/fr/commands/isolation_cmd.py
+      tests/unit/test_isolation_cmd.py`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T10:45:27+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T10:45:28+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-14T10:46:25+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-14T10:46:25+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-07-14T10:46:26+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-07-14T10:47:08+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-07-14T10:48:07+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-07-14T10:48:07+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-07-14T10:48:08+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T10:48:09+00:00'
+    note: null
+    observed_prs: []

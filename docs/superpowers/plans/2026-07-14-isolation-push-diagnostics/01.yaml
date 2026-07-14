@@ -1,0 +1,68 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Docs — generalize exec-bridge discipline to name all three backends and SSH
+    push
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Rewrite the Exec-bridge discipline section in fr-isolation SKILL.md
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-isolation/SKILL.md's "Exec-bridge
+      discipline" section (starts at the "## Exec-bridge discipline"
+      heading). Replace the "Credential boundary" bullet and the "ALL
+      GitHub interaction..." bullet with backend-neutral wording that: (a)
+      names all three CLIs explicitly (gh/GitHub, glab/GitLab, tea/Gitea)
+      instead of saying "GitHub interaction"; (b) states plainly that `git
+      push` (and `git fetch` against an authenticated remote) over ANY
+      transport — HTTPS or SSH — must run on the HOST, not via `fr
+      isolation exec`, because the container has no SSH identity and no
+      host-token-derived credential helper; (c) references the new `fr
+      isolation status --push-check` diagnostic (added in Phase 2) as the
+      first thing to run when a push from inside exec fails, instead of
+      reading a raw SSH error cold. Keep the existing "Pre-push guard" and
+      "harness resets cwd" bullets unchanged — only the two
+      credential-boundary bullets are rewritten. Base the wording on
+      docs/superpowers/specs/2026-07-14-isolation-push-diagnostics-design.md's
+      §Design/1.
+  - id: P1.T1.S2
+    text: |-
+      Run `fr isolation exec -- uv run python scripts/sync-opencode.py` to
+      regenerate the generated mirror
+      `.opencode/skills/fr-isolation/SKILL.md` from the canonical file just
+      edited (AGENTS.md: "Skills/rules: canonical source vs. generated
+      mirrors" — never hand-edit the mirror). Then run `fr isolation exec
+      -- uv run python scripts/sync-opencode.py --check` to confirm no
+      drift remains (exit 0). `git diff --stat` inside the worktree to
+      confirm both the canonical SKILL.md and its
+      .opencode/skills/fr-isolation/SKILL.md mirror changed together.
+  - id: P1.T1.S3
+    text: |-
+      Run `fr isolation exec -- uv run pytest
+      tests/unit/test_tripwire_opencode_skills_sync.py -q --no-cov` to
+      confirm the sync tripwire passes with the regenerated mirror. Also
+      grep the edited section for the literal string "GitHub interaction"
+      and confirm zero matches remain in the canonical SKILL.md (the
+      generalization is complete, not partial).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T10:43:59+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T10:44:00+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-14T10:44:01+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T10:44:01+00:00'
+    note: null
+    observed_prs: []

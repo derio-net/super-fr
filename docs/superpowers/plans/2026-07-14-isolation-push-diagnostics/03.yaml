@@ -1,0 +1,65 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Version bump + full verification
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Bump version and run the full verification suite
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Run `fr isolation exec -- uv run --no-project python
+      scripts/bump-version.py patch` (this PR touches
+      plugins/super-fr/skills/fr-isolation/SKILL.md and
+      packages/fr/src/fr/{isolation/local.py,commands/isolation_cmd.py} —
+      user-observable plugin behavior per AGENTS.md's "Release / version
+      bumping" — patch is the default bump size for a CLI addition + skill
+      text change). Confirm it runs `uv sync` and `uv run fr --version`
+      successfully. `git add` every manifest it changed (member
+      pyproject.tomls, plugin.json files, marketplace.json,
+      fr-opencode-plugin/package.json, uv.lock) plus the root
+      pyproject.toml.
+  - id: P3.T1.S2
+    text: |-
+      Run the full verification pass inside the container: `fr isolation
+      exec -- uv run ruff check packages/ tests/`, `fr isolation exec --
+      uv run ruff format packages/ tests/` (re-stage anything it
+      reformats), `fr isolation exec -- uv run mypy packages/fr/src
+      packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      and `fr isolation exec -- uv run pytest -q --no-cov` (fast pass) then
+      `fr isolation exec -- uv run pytest` (full, cov-gated). Confirm every
+      command exits 0 with no new warnings/errors before proceeding —
+      per superpowers:verification-before-completion, evidence before any
+      "done" claim.
+  - id: P3.T1.S3
+    text: |-
+      Run `fr isolation exec -- uv run --no-project python
+      scripts/bump-version.py --check` as a final lockstep sanity check
+      (exit 0). Then, from the HOST (not exec — this is a git/gh-adjacent
+      step per the exec-bridge discipline), review `git status` and `git
+      diff --stat` in the worktree to confirm the diff is exactly: the new
+      spec, the new plan folder, the SKILL.md + its opencode mirror, the
+      two isolation source files, the two isolation test files, and the
+      version-bump manifests — nothing stray.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T10:55:21+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T10:55:22+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-07-14T10:55:22+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T10:55:23+00:00'
+    note: null
+    observed_prs: []
