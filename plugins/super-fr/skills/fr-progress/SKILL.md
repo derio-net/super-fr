@@ -33,7 +33,7 @@ fr --help                       # confirm fr is installed / repo is fr-managed
 fr status                       # repo-wide sweep: archivable + in-progress plans
 fr acceptance check             # matrix gate; exit 2 on failing rows
 fr repair                       # preview stale-ref rewrites
-ls docs/superpowers/plans/*.md 2>/dev/null   # hits = legacy v1 plans (v2 is folders)
+ls docs/superpowers/plans/*.md 2>/dev/null || true   # hits = legacy v1 plans (v2 is folders)
 fr migrate v1-to-v2             # if the ls above found hits
 fr spec status --all            # per-spec rollup before deciding what's "done"
 fr archive --all                # only now, for plans the sweep marked archivable
