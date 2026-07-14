@@ -1,0 +1,151 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'fr migrate v1-to-v2: git-stage created/removed files (Bug 3)'
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - migrate-stages-git-changes
+tasks:
+- number: 1
+  title: _git_mv_best_effort helper (git mv, fallback to plain move)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add
+      test_git_mv_best_effort_falls_back_without_git: in a plain tmp_path (no
+      git init), create a file `src = tmp_path / "a.txt"` with some content;
+      call `fr.migrate._git_mv_best_effort(tmp_path, src, tmp_path /
+      "b.txt")`; assert the destination exists with the same content and the
+      source no longer exists. Add
+      test_git_mv_best_effort_stages_rename_in_git_repo: `subprocess.run(["git",
+      "init", "-q"], cwd=tmp_path, check=True)`; write + `git add` + `git -c
+      user.email=t@t -c user.name=t commit -q -m init` a file `a.txt`; call
+      `_git_mv_best_effort(tmp_path, tmp_path / "a.txt", tmp_path / "b.txt")`;
+      run `git -C tmp_path status --porcelain` and assert the output contains
+      an `R  ` (staged rename) line for a.txt -> b.txt, not a bare `D`/`??`
+      pair. Run `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k
+      git_mv_best_effort` -> fails (function doesn't exist).
+  - id: P4.T1.S2
+    text: |-
+      GREEN. Add `import subprocess` to migrate.py's top-level imports
+      (alongside `import re` / `import shutil`); this promotes it from the
+      existing local `import subprocess` inside `migrate_dirs` - leave that
+      local import in place for now (removed in the refactor step below to
+      keep this step's diff purely additive). Add:
+      `def _git_mv_best_effort(repo_root: Path, src: Path, dst: Path) -> None:`
+      with the docstring from the spec (git mv when src is tracked inside a
+      real git working tree; plain shutil.move fallback otherwise - fixtures
+      without git init, no .git at all, or git missing from PATH). Body: `try:
+      subprocess.run(["git", "-C", str(repo_root), "mv", str(src), str(dst)],
+      check=True, capture_output=True, text=True); return; except
+      (subprocess.CalledProcessError, FileNotFoundError, OSError): pass`; then
+      `shutil.move(str(src), str(dst))`. Re-run the -k filter from S1 -> both
+      pass.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR. In `migrate_dirs`, delete its local `import subprocess` line
+      (now redundant given the top-level import added in S2) and its `git mv`
+      block stays as-is (still its own hard-fail `subprocess.run(...,
+      check=True)` + `except subprocess.CalledProcessError` -> `MigrationError`
+      - that function's stricter contract is unchanged, only the import moves).
+      Run `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py` -> all
+      green (behavior-preserving).
+- number: 2
+  title: Archive move (and --force reverse move) use _git_mv_best_effort
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add
+      test_migrate_archive_move_is_staged_in_git_repo: build a repo via
+      _make_repo, write a v1 plan, then `subprocess.run(["git", "init", "-q"],
+      cwd=repo, check=True)`, `subprocess.run(["git", "add", "-A"], cwd=repo,
+      check=True)`, `subprocess.run(["git", "-c", "user.email=t@t", "-c",
+      "user.name=t", "commit", "-q", "-m", "init"], cwd=repo, check=True)`.
+      Call `migrate_repo(repo, dry_run=False, target_repo="derio-net/test")`.
+      Run `git -C repo status --porcelain` (capture_output, text) and assert an
+      `R  ` rename line appears for the `.md` -> `.md.v1-archive` move (not a
+      bare `D` + `??` pair). Run `uv run pytest -q --no-cov
+      tests/unit/test_v2_migrate.py -k archive_move_is_staged` -> fails (the
+      move is still plain `shutil.move`, so `git status --porcelain` shows a
+      deleted-untracked pair, no `R`).
+  - id: P4.T2.S2
+    text: |-
+      GREEN. In `_migrate_one`, replace `shutil.move(str(md_path),
+      str(archive))` (the archive move after successful migration) with
+      `_git_mv_best_effort(repo_root, md_path, archive)`. Also replace the
+      `--force` reverse-move `shutil.move(str(archive), str(md_path))` (near
+      the top of the function, the re-migration teardown path) with
+      `_git_mv_best_effort(repo_root, archive, md_path)` - same helper, same
+      graceful fallback, symmetric with the forward move per the spec's
+      explicit note. Re-run the -k filter -> passes. Then run the WHOLE file:
+      `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py` -> all green,
+      including every pre-existing non-git-init fixture (falls back to plain
+      move exactly as before - confirm by spot-checking
+      test_migrate_apply_creates_v2_folder_and_archives_md still passes
+      unmodified).
+- number: 3
+  title: Stage newly created plan files (and a freshly-created spec table)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add
+      test_migrate_stages_new_plan_files_in_git_repo: same git-init + commit
+      setup as P4.T2.S1's test, but this time also create the referenced spec
+      file with NO Implementation Plans section beforehand (so Bug 1's
+      table-creation path fires too). Call migrate_repo(dry_run=False,
+      target_repo=...). Run `git -C repo status --porcelain`; assert
+      `_meta.yaml`, `_prose.md`, and `01.yaml` for the new plan folder each
+      appear as staged adds (`A  ` prefix, not `??`), AND the spec file appears
+      as a staged modification (`M  ` prefix, not a bare unstaged ` M`) since
+      `_ensure_spec_plan_row` created its section via `plan_ops._stage`. Run
+      `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k
+      stages_new_plan_files` -> fails (new plan files are untracked `??`; the
+      spec modification is unstaged ` M`).
+  - id: P4.T3.S2
+    text: |-
+      GREEN. In `_migrate_one`, right after `_parse_v2(new_folder)` succeeds
+      (post-validation, before the archive move), add: `plan_ops._stage(
+      repo_root, [new_folder / "_meta.yaml", new_folder / "_prose.md", *(
+      new_folder / f"{phase.number:02d}.yaml" for phase in phases_to_emit)])`.
+      (`_ensure_spec_plan_row`'s own `plan_ops._stage(repo_root, [spec_path])`
+      call from Phase 3 already covers the spec-file half of this assertion -
+      no new code needed there.) Re-run the -k filter -> passes. Then run the
+      WHOLE file: `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py` ->
+      all green.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

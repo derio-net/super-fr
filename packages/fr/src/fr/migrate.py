@@ -21,12 +21,14 @@ from __future__ import annotations
 
 import re
 import shutil
+import subprocess
 import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fr import refs
+from fr import plan_ops, refs
+from fr._urls import is_cross_repo_spec
 from fr._yaml import LiteralStr, dump_plan_yaml
 from fr.parser import PlanSchemaError
 from fr.parser import parse as _parse_v2
@@ -178,7 +180,7 @@ def _migrate_one(
                 reason="re-migrated (dry run, --force)",
             )
         shutil.rmtree(new_folder)
-        shutil.move(str(archive), str(md_path))
+        _git_mv_best_effort(repo_root, archive, md_path)
 
     if new_folder.exists():
         return MigrationOutcome(
@@ -206,7 +208,10 @@ def _migrate_one(
         return MigrationOutcome(
             plan_path=md_path,
             new_folder=None,
-            reason=f"skipped (in-progress; status={v1plan.status!r})",
+            reason=(
+                f"skipped (in-progress; status={v1plan.status!r}; "
+                f"use --include-in-progress to convert anyway)"
+            ),
         )
 
     # Resolve the target repo. Precedence:
@@ -335,9 +340,31 @@ def _migrate_one(
         shutil.rmtree(new_folder)
         raise MigrationError(f"{md_path.name}: migrated folder fails v2 validation: {e}") from e
 
+    # Stage newly created plan files (#379 Bug 3)
+    plan_files = [new_folder / "_meta.yaml", new_folder / "_prose.md"] + [
+        new_folder / f"{phase.number:02d}.yaml" for phase in phases_to_emit
+    ]
+    plan_ops._stage(repo_root, plan_files)
+
     # Move original .md to .v1-archive sibling
     archive = md_path.with_suffix(".md.v1-archive")
-    shutil.move(str(md_path), str(archive))
+    _git_mv_best_effort(repo_root, md_path, archive)
+
+    # Ensure the spec's Implementation Plans table exists (#379 Bug 1). Scoped
+    # to the "section entirely absent" case only — see _ensure_spec_plan_row's
+    # docstring for why an existing table is never touched here.
+    spec_file = _resolve_spec_file(v1plan.spec, repo_root)
+    if spec_file is not None:
+        row_warning = _ensure_spec_plan_row(
+            spec_file, slug=slug, target_repo=resolved_target, repo_root=repo_root
+        )
+        if row_warning:
+            warnings.append(row_warning)
+    elif v1plan.spec:
+        warnings.append(
+            f"spec {v1plan.spec!r} not found under docs/superpowers/ — couldn't "
+            f"ensure its Implementation Plans row for {slug!r}."
+        )
 
     return MigrationOutcome(
         plan_path=md_path,
@@ -662,6 +689,90 @@ def _build_phase_doc_from_v1(
     }
 
 
+def _git_mv_best_effort(repo_root: Path, src: Path, dst: Path) -> None:
+    """Move src -> dst via `git mv` (staged rename, history preserved) when
+    src is a tracked file inside a real git working tree; falls back to a
+    plain filesystem move otherwise (untracked fixture, no `.git` at all,
+    git not on PATH). The fallback preserves pre-existing `migrate_repo`
+    behavior for every caller that isn't a committed git checkout — in
+    practice this package's own test fixtures; real operators always run
+    migration inside a real repo, where `git mv` succeeds and the rename is
+    staged for them (#379 Bug 3).
+    """
+    try:
+        subprocess.run(
+            ["git", "-C", str(repo_root), "mv", str(src), str(dst)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        pass
+    shutil.move(str(src), str(dst))
+
+
+def _resolve_spec_file(spec_ref: str | None, repo_root: Path) -> Path | None:
+    """Resolve a v1 plan's raw `**Spec:**` value to a spec file on disk.
+
+    v1's value is whatever was written between backticks — usually a
+    repo-relative path (`docs/superpowers/specs/<slug>.md`), occasionally a
+    bare slug once a repo is already partway migrated. Cross-repo notation
+    (`owner/repo:path`) can't be resolved locally — the file lives in
+    another repo's checkout. Returns None when unresolvable so the caller
+    can report *why* it couldn't ensure the row, not silently skip.
+    """
+    if not spec_ref:
+        return None
+    if is_cross_repo_spec(spec_ref):
+        return None
+    candidate = repo_root / spec_ref
+    if candidate.is_file():
+        return candidate
+    res = refs.resolve_spec_ref(spec_ref, repo_root)
+    return res.path
+
+
+def _ensure_spec_plan_row(
+    spec_path: Path, *, slug: str, target_repo: str, repo_root: Path
+) -> str | None:
+    """If spec_path has no `## Implementation Plans` section, create the
+    canonical 4-column header and append a row for `slug` (#379 Bug 1).
+
+    A no-op (returns None) whenever the section already exists — any column
+    count. Those specs' rows are either hand-authored (pre-v1) or normalized
+    in place by `_rewrite_spec_table`; backfilling a row for a plan that
+    isn't yet in an existing table is deliberately out of scope (risk of
+    mis-detecting "already has a row" across mixed legacy column counts
+    outweighs the benefit — see the design spec).
+
+    Returns a warning string on failure (defensive — the header we just
+    wrote is always canonical, so `_append_spec_row` shouldn't reject it),
+    else None.
+    """
+    text = spec_path.read_text()
+    if plan_ops._SPEC_TABLE_HEADER_RE.search(text):
+        return None
+
+    sep = "" if text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+    text += (
+        f"{sep}## Implementation Plans\n\n"
+        f"| Plan | Repo | File | Depends on |\n"
+        f"|------|------|------|------------|\n"
+    )
+    spec_path.write_text(text)
+
+    try:
+        plan_ops._append_spec_row(
+            spec_path, plan_name=slug, repo=target_repo, file=slug, depends_on="—"
+        )
+    except plan_ops.PlanEditError as e:  # pragma: no cover - defensive
+        return f"{spec_path}: failed to append Implementation Plans row for {slug!r}: {e}"
+
+    plan_ops._stage(repo_root, [spec_path])
+    return None
+
+
 def _rewrite_spec_table(spec_path: Path, *, repo_root: Path) -> None:
     """Drop Status column + rewrite `<path>.md` File cells to `<path>/`.
 
@@ -887,8 +998,6 @@ def plan_dirs_migration(repo_root: Path) -> tuple[list[DirsMove], list[str]]:
 def migrate_dirs(repo_root: Path, *, dry_run: bool = True) -> tuple[list[DirsMove], list[str]]:
     """Execute (or preview) the dirs migration. Moves are `git mv` so the
     rename history survives; the commit is the operator's."""
-    import subprocess
-
     moves, notes = plan_dirs_migration(repo_root)
     if dry_run or not moves:
         return moves, notes

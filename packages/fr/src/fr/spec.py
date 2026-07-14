@@ -49,6 +49,11 @@ class SpecMeta:
     path: Path
     title: str
     plans: tuple[PlanRef, ...]
+    # Non-fatal parse diagnostics (#379 Bug 2) — e.g. a table row whose column
+    # count isn't 4. The row's data is never guessed at; it's just named here
+    # and dropped from `plans`. Threaded into SpecStatus.warnings by
+    # compute_status so it surfaces in `fr spec status` output.
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,16 +108,31 @@ def parse_spec(spec_path: Path) -> SpecMeta:
 
     after = text[section_m.end() :]
     rows: list[PlanRef] = []
+    warnings: list[str] = []
     saw_pipe = False
     for line in after.splitlines():
         stripped = line.strip()
         if stripped.startswith("|"):
             saw_pipe = True
             cells = [_strip_cell(c) for c in stripped.strip("|").split("|")]
-            if len(cells) != 4:
+            # Skip header row + separator row — checked BEFORE the column-count
+            # check below so a not-yet-migrated 5-column header/separator is
+            # never itself flagged as a malformed data row (#379 Bug 2).
+            first = cells[0] if cells else ""
+            if first.lower() == "plan" or (first and set(first) <= {"-", " "}):
                 continue
-            # Skip header row + separator row
-            if cells[0].lower() == "plan" or set(cells[0]) <= {"-", " "}:
+            if len(cells) != 4:
+                # Fail loud, don't guess: the row's data is never parsed —
+                # just named and skipped. Points at the fixer this repo
+                # already has for a wrong column count (`fr migrate v1-to-v2`)
+                # rather than `fr repair`, which only normalizes a
+                # differently-labeled 4-column header.
+                warnings.append(
+                    f"{spec_path.name}: row {stripped!r} has {len(cells)} columns, "
+                    f"expected 4 (Plan | Repo | File | Depends on) — skipped. If "
+                    f"this spec predates the v2 migration, run "
+                    f"`fr migrate v1-to-v2`."
+                )
                 continue
             rows.append(
                 PlanRef(
@@ -124,7 +144,7 @@ def parse_spec(spec_path: Path) -> SpecMeta:
             )
         elif saw_pipe and stripped == "":
             break
-    return SpecMeta(path=spec_path, title=title, plans=tuple(rows))
+    return SpecMeta(path=spec_path, title=title, plans=tuple(rows), warnings=tuple(warnings))
 
 
 def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
@@ -247,7 +267,9 @@ def compute_status(spec: SpecMeta, repo_root: Path, gh: GhClient | None = None) 
     call, keyed on `(repo, slug)`.
     """
     plan_statuses: list[PlanStatus] = []
-    warnings: list[str] = []
+    # Seed with the spec's own parse-time diagnostics (#379 Bug 2) so a
+    # malformed table row surfaces here too, not just from parse_spec.
+    warnings: list[str] = list(spec.warnings)
     plans_complete = 0
     total_steps_ticked = 0
     total_steps_total = 0

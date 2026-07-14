@@ -121,6 +121,66 @@ def test_vk_v2_spec_status_all_walks_specs_dir(tmp_path, monkeypatch):
     assert "Test plan A" in result.output
 
 
+def test_parse_spec_warns_on_malformed_row(tmp_path):
+    """#379 Bug 2: a wrong-column-count row is never silently dropped —
+    parse_spec surfaces it in `warnings` instead, and never guesses its data."""
+    from fr.spec import parse_spec
+
+    specs = tmp_path / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True)
+    spec_path = specs / "2026-05-10-malformed.md"
+    spec_path.write_text(
+        "# Malformed spec\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+        "| Good plan | `derio-net/x` | `good-plan` | — |\n"
+        "| Bad plan | `derio-net/y` | `bad-plan` |\n"
+    )
+
+    meta = parse_spec(spec_path)
+    assert len(meta.plans) == 1
+    assert meta.plans[0].name == "Good plan"
+    assert any("Bad plan" in w or "3 columns" in w for w in meta.warnings)
+
+
+def test_parse_spec_5col_legacy_header_no_false_warning(tmp_path):
+    """A pre-migrate 5-column table's header/separator lines must never
+    themselves be flagged as malformed data rows — only genuine 5-col data
+    rows warn. Regression guard for the P2.T1.S2 reorder (#379 Bug 2)."""
+    from fr.spec import parse_spec
+
+    specs = tmp_path / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True)
+    spec_path = specs / "2026-05-10-legacy.md"
+    spec_path.write_text(
+        "# Legacy spec\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Status | Depends on |\n"
+        "|------|------|------|--------|------------|\n"
+        "| Some plan | `derio-net/x` | `docs/superpowers/plans/x/` | Complete | — |\n"
+    )
+
+    meta = parse_spec(spec_path)
+    assert meta.plans == ()
+    assert len(meta.warnings) == 1
+    assert "Some plan" in meta.warnings[0] or "5 columns" in meta.warnings[0]
+
+
+def test_compute_status_includes_spec_warnings(tmp_path):
+    """#379 Bug 2: compute_status threads SpecMeta.warnings into
+    SpecStatus.warnings so a malformed row surfaces in `fr spec status`."""
+    from fr.spec import compute_status, parse_spec
+
+    repo = _make_repo_with_spec(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md"
+    text = spec_path.read_text()
+    spec_path.write_text(text + "| Bad plan | `derio-net/y` | `bad-plan` |\n")
+
+    st = compute_status(parse_spec(spec_path), repo)
+    assert any("3 columns" in w for w in st.warnings)
+
+
 def test_resolve_local_plan_dir_falls_back_to_implemented_then_archived(tmp_path):
     """Spec tables are never rewritten on archive: a row recorded as
     docs/superpowers/plans/X must resolve to implemented/plans/X (canonical)
