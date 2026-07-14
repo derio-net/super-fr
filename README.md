@@ -65,8 +65,9 @@ when you need it.
 
 ## Skills
 
-The two plugins ship ten skills. Most of the time you only type `/fr-goal` and
-the rest are invoked for you; this is the map of what each is and when it fires.
+The two plugins ship eleven skills. Most of the time you only type `/fr-goal`
+and the rest are invoked for you; this is the map of what each is and when it
+fires.
 
 ### super-fr
 
@@ -80,6 +81,7 @@ the rest are invoked for you; this is the map of what each is and when it fires.
 | `fr-isolation` | Worktree + devcontainer lifecycle | `/fr-isolation` or auto | Running anything that must not touch your base checkout; post-merge cleanup |
 | `fr-init` | Scan repo, interview, scaffold devcontainer profiles | `/fr-init` or auto (first isolated run) | First fr use in a repo with no devcontainer profile |
 | `fr-progress` | Status board, drift audit, spec rollup | `/fr-progress` | "What's in progress?", auditing plan/spec drift |
+| `fr-acceptance` | Backfill/maintain `docs/acceptance/matrix.yaml`, flip row statuses as evidence lands | `/fr-acceptance` or auto (session-start debt nag, `fr acceptance check` failure) | Backfilling a repo's business-level acceptance tests; keeping the acceptance CI gate honest |
 
 ### super-fr-dispatch
 
@@ -224,6 +226,7 @@ Everyday:
 |---------|---------|
 | `fr apply` | Render + observe + diff + apply a plan to the repo's git host (dry-run by default; `--to <runner>` queues phases) |
 | `fr status` | Read-only plan report (allowlist-safe; never mutates) |
+| `fr acceptance` | Acceptance-matrix registry: `init`, `backfill`, `add`, `check`, `status`, `report` — see [Acceptance matrix](#acceptance-matrix) |
 | `fr isolation` | Isolated workspaces: `up`, `exec`, `status`, `down` |
 | `fr plan` | Plan editing: `create`, `edit` (tick steps, complete phases), `self-review`, `rework` |
 | `fr archive` | Move finished plans (and specs) to `implemented/` |
@@ -244,7 +247,10 @@ Maintenance:
 ### Plan model
 
 - **One plan = one repo's worth of work.** Plans live in the repo they modify.
-- **One phase = one tracking Issue = one PR.** Phases are scoped for reviewability.
+- **PRs differ by flow.** Local (`/fr-goal`, Flow 1 above): every phase lands
+  as commits on one branch, and the whole plan is delivered as a single PR.
+  Dispatched (`fr apply --to <runner>`, Flow 2 above): each phase gets its own
+  tracking Issue and its own PR, scoped for independent reviewability.
 - **Cross-repo features use multiple plans**, coordinated through the shared
   spec's "Implementation Plans" section (maintained by `fr-plan`).
 
@@ -298,6 +304,35 @@ warning, not a failure) or a manifest at `~/.config/fr/repos.yaml`; positional
 args are appended to that manifest unless `--no-save`. `fr repair` and
 `fr migrate` also normalize this file, stripping any legacy keys the toolchain
 no longer reads.
+
+### Acceptance matrix
+
+Business-level acceptance tests are tracked in `docs/acceptance/matrix.yaml` —
+one row per acceptance ("operator can X"), cross-referenced against
+unit/api/int/ui verification levels and an honesty-scale status: `ci` /
+`scheduled` (automated, can't drift) → `skipped` (verified, but not in CI) →
+`not-implemented` (nothing yet) → `failing` (known red, fails CI by design).
+
+Rows are born at brainstorm time (presented with defenses in the batched
+Q&A), linked to plan phases via an `acceptance: [row-ids]` field (`fr plan
+self-review` errors on a Test-Plan spec with zero linked rows), and flipped
+up the ladder as `fr plan edit --complete-phase` lands evidence — the CLI
+warns on phases that complete without flipping their rows. Mid-flight
+additions are expected (a missed edge, a review-found failure mode) and are
+diffable against a base ref (`fr acceptance check --added-since <ref>`) and
+defended in the PR body, never silent scope drift.
+
+```bash
+fr acceptance init        # scaffold matrix + CI workflow + backfill rule (idempotent)
+fr acceptance backfill    # emit inventory + backfill protocol for an existing repo
+fr acceptance add ...     # append a row (never hand-edit the YAML)
+fr acceptance check       # validate refs/staleness/statuses; exit 2 on any `failing` row
+fr acceptance status      # brief debt summary — surfaced at session start via a hook
+```
+
+Driven by the `fr-acceptance` skill; gated per-PR by
+`.github/workflows/acceptance-report.yml`, which also upserts a weekly
+"Acceptance debt" digest Issue.
 
 ### Components
 
