@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from fr.cli import app
 from fr.commands import isolation_cmd
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -656,6 +657,41 @@ def test_status_default_makes_no_stats_call(repo: Path, monkeypatch: pytest.Monk
     res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
     assert res.exit_code == 0, res.output
     assert not any(c[:2] == ["docker", "stats"] for c in calls), "default status skips docker stats"
+
+
+def test_status_push_check_flag_shows_diagnostic(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(isolation_cmd, "_runner", _stats_run())
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    fixed = {
+        "branch": "feat/a",
+        "remotes": ["origin\tgit@gitlab.example.com:g/p.git (fetch)"],
+        "backend": "gitlab",
+        "ssh_agent_in_container": {"present": False, "detail": "unset"},
+        "guidance": "push and glab PR/MR creation must run on the HOST from the worktree...",
+    }
+    monkeypatch.setattr(LocalWorktreeDevcontainerTarget, "push_check", lambda self, state: fixed)
+    res = runner.invoke(
+        app, ["isolation", "status", "--repo", str(repo), "--push-check", "--format", "json"]
+    )
+    assert res.exit_code == 0, res.output
+    assert '"push_check"' in res.output
+    assert "gitlab" in res.output
+
+
+def test_status_default_makes_no_push_check_call(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(isolation_cmd, "_runner", _stats_run())
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+
+    def _boom(self: LocalWorktreeDevcontainerTarget, state: object) -> None:
+        raise AssertionError("push_check must not run without --push-check")
+
+    monkeypatch.setattr(LocalWorktreeDevcontainerTarget, "push_check", _boom)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
 
 
 # ---------- gc CLI (#354 Task B) ----------

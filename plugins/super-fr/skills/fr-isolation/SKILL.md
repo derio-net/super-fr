@@ -33,7 +33,7 @@ identically; nothing here assumes a specific agent.
 ```bash
 fr isolation up --branch <feature-branch> [--profile <name>]   # worktree + container
 fr isolation exec --branch <feature-branch> -- CMD ...          # every build/test/run
-fr isolation status [--branch ...] [--format json] [--stats]    # state; --stats: docker resource use
+fr isolation status [--branch ...] [--format json] [--stats] [--push-check]  # state; --stats: docker resource use; --push-check: remotes + host-push guidance
 fr isolation restart [--branch ...] [--force]                   # bounce a wedged container, worktree kept
 fr isolation down --branch <feature-branch> [--force]           # immediate teardown (verifies + reaps image)
 fr isolation down --all [--force]                               # tear down ALL + clear pipeline sentinel(s)
@@ -44,9 +44,8 @@ fr isolation gc [--dry-run] [--format json]                     # host-wide: rea
   `.devcontainer/fr-profiles.yaml` → sole profile), creates the worktree,
   ensures the host secrets env-file exists, and starts the container with
   the base repo's `.git` mounted at the same absolute path (linked-worktree
-  git needs it).
-- One profile per run. Pick it once at `up`; changing profile means
-  `down --force` and a fresh `up`.
+  git needs it). One profile per run — changing profile means `down --force`
+  and a fresh `up`.
 
 ### Cold-start base (#322)
 
@@ -57,9 +56,9 @@ untouched: it keeps that branch's own tip, never rebased.
 
 - default: `git fetch origin`, base on `origin/<default>`. `--base <ref>` bases
   on `<ref>` verbatim, no fetch (`--base HEAD` = fork from current checkout,
-  stacking). `--no-fetch` bases on the LOCAL `origin/<default>` ref.
-- No remote / fetch fails / ref missing → fallback to local HEAD with a
-  `WARNING` naming the base; the run never aborts.
+  stacking). `--no-fetch` bases on the LOCAL `origin/<default>` ref. No remote
+  / fetch fails / ref missing → fallback to local HEAD with a `WARNING`
+  naming the base; the run never aborts.
 
 ## Exec-bridge discipline
 
@@ -67,21 +66,23 @@ untouched: it keeps that branch's own tip, never rebased.
   `fr isolation exec -- ...`. File edits happen in the worktree directly
   (it's host-visible); execution happens in the container.
 - Credential boundary: the container sees only the profile's env-file
-  (`~/.config/fr/secrets/<repo>/<profile>.env`). `gh` in-container is
-  unauthenticated unless that file provides a token. Push and PR creation
-  default to the HOST (run them outside `exec`, from the worktree) — the
-  operator's credentials never enter the container implicitly.
+  (`~/.config/fr/secrets/<repo>/<profile>.env`) and has NO SSH identity at all
+  (deliberately — #377). ALL git-host interaction — `git push`/`fetch` (HTTPS
+  **or** SSH), PR/MR creation, `status`/`down`/`gc`'s `gh pr view`/`glab mr
+  view`/`tea pulls list` — defaults to the HOST for every backend (`gh`,
+  `glab`, `tea`), outside `exec`. A push via `exec` fails with a host-key/
+  `Permission denied` (SSH) or auth error (HTTPS) — working as designed;
+  re-run from the HOST. `fr isolation status --push-check`: a read-only
+  preflight (remotes, in-container SSH-agent visibility — expected absent,
+  and the right host-side command).
 - Pre-push guard: pushing to a branch whose PR is `MERGED`/`CLOSED` orphans the
   commit from `main` (#320). The `fr-merged-pr-push-guard.sh` PreToolUse hook
   denies it during a pipeline — cherry-pick onto `main` (or a fresh PR) instead.
-- ALL GitHub interaction uses the AUTHENTICATED HOST — pushes, PR creation, and
-  `status`/`down`/`gc`'s `gh pr view` checks. The container needs NO GitHub token
-  for the standard pipeline (in-container gh writes are an opt-in profile).
 - The harness resets cwd to the base repo between calls, so host-side git/gh is a
   compound `cd <worktree> && …`; the guard allows a leading `cd` under
   `~/.cache/fr/worktrees` / a temp dir (#279). `up`'s `/add-dir` tip (#281) makes
-  a bare `cd` persist. The deny message names every escape.
-- Never run project commands against the base repo while isolation is live.
+  a bare `cd` persist. The deny message names every escape. Never run project
+  commands against the base repo while isolation is live.
 - `up` writes a gitignored `.fr-isolation` marker the `fr-isolation-required`
   PreToolUse hook reads to ALLOW edits; editing tracked files in an fr-enabled
   base clone is blocked (escape: `FR_BASE_OK=1` or `.fr-isolation-allow`).
@@ -99,15 +100,14 @@ to the PR branch — back-loaded manual phases land this way).
 - **`down` is the immediate lever** — it verifies the container + worktree are
   actually gone before dropping state (a transient docker failure leaves the
   workspace VISIBLE, never silently leaked) and refuses an open PR unless
-  `--force`. An fr-goal close-out MAY run it, but no longer must.
+  `--force`. fr-goal close-out MAY run it, but no longer must.
 
 ## Recovery (#341)
 
 - **Wedged container:** `fr isolation restart [--force]` bounces the
   devcontainer (`docker restart`; `--force` = immediate SIGKILL) WITHOUT
   dropping the worktree / node_modules / in-container installs — prefer it to
-  down+up. `fr isolation status --stats` surfaces `docker stats` to spot the
-  thrash first.
+  down+up. `fr isolation status --stats` surfaces `docker stats` to spot the thrash first.
 - **Orphaned pipeline sentinel** (every base-repo command denied, no worktree
   to `cd` into): the guard self-heals — with zero live worktrees it fails open
   and clears the sentinel. Explicit lever: `fr isolation down --all` tears down

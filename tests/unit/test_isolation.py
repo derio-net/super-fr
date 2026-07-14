@@ -1807,3 +1807,102 @@ class TestStats:
         r = _DockerRunner(ps="cid running", stats="", stats_rc=1)
         target, st = self._target_state(tmp_path, r)
         assert target.stats(st) is None
+
+
+class TestPushCheck:
+    """#377: a read-only preflight — remotes, in-container SSH-agent
+    presence/absence, and backend-aware host-push guidance. Never a live
+    SSH/GitLab server: git hits a real throwaway repo (FakeRunner delegates
+    git argv to the real binary), the ssh-agent probe is faked via
+    FakeRunner's devcontainer stdout."""
+
+    def _target_state(self, tmp_path: Path, runner, repo: Path | None = None) -> tuple:
+        repo = repo or make_repo(tmp_path, ["dev"], default="dev")
+        target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+        st = IsolationState(
+            repo_root=repo,
+            branch="feat/x",
+            # push_check's only git call is `git -C <worktree> remote -v` —
+            # reusing the real repo dir as the "worktree" is enough to
+            # exercise it without a real `git worktree add`.
+            worktree=repo,
+            profile="dev",
+            created_at="2026-07-14T00:00:00Z",
+        )
+        return target, st
+
+    def test_remotes_backend_and_guidance_for_gitlab(self, tmp_path: Path) -> None:
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "remote",
+                "add",
+                "origin",
+                "git@gitlab.example.com:group/proj.git",
+            ],
+            check=True,
+        )
+        (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+            "default: dev\nbackend: gitlab\nprofiles:\n  dev:\n    purpose: test\n"
+        )
+        runner = FakeRunner(stdout={"devcontainer": "unset"})
+        target, st = self._target_state(tmp_path, runner, repo=repo)
+        result = target.push_check(st)
+        assert any("origin" in line and "gitlab.example.com" in line for line in result["remotes"])
+        assert result["backend"] == "gitlab"
+        assert "glab" in result["guidance"]
+        assert "MR" in result["guidance"]
+        assert "git push" in result["guidance"]
+
+    def test_default_backend_is_github_with_gh_guidance(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"devcontainer": "unset"})
+        target, st = self._target_state(tmp_path, runner)
+        result = target.push_check(st)
+        assert result["backend"] == "github"
+        assert "gh" in result["guidance"]
+        assert "PR" in result["guidance"]
+
+    def test_backend_gitea_uses_tea_and_pr_label(self, tmp_path: Path) -> None:
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+            "default: dev\nbackend: gitea\nprofiles:\n  dev:\n    purpose: test\n"
+        )
+        runner = FakeRunner(stdout={"devcontainer": "unset"})
+        target, st = self._target_state(tmp_path, runner, repo=repo)
+        result = target.push_check(st)
+        assert result["backend"] == "gitea"
+        assert "tea" in result["guidance"]
+        assert "PR" in result["guidance"]
+
+    def test_ssh_agent_unset(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"devcontainer": "unset"})
+        target, st = self._target_state(tmp_path, runner)
+        result = target.push_check(st)
+        assert result["ssh_agent_in_container"] == {"present": False, "detail": "unset"}
+
+    def test_ssh_agent_set_socket_exists(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"devcontainer": "set:socket-exists"})
+        target, st = self._target_state(tmp_path, runner)
+        result = target.push_check(st)
+        assert result["ssh_agent_in_container"] == {
+            "present": True,
+            "detail": "set:socket-exists",
+        }
+
+    def test_ssh_agent_set_socket_missing(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"devcontainer": "set:socket-missing"})
+        target, st = self._target_state(tmp_path, runner)
+        result = target.push_check(st)
+        assert result["ssh_agent_in_container"] == {
+            "present": True,
+            "detail": "set:socket-missing",
+        }
+        # Never a raw socket path — exact-dict-equality above already pins
+        # the two allowed keys ("present", "detail"); this is a
+        # belt-and-suspenders check that no path leaked into JUST that
+        # sub-payload (the worktree path legitimately appears elsewhere, in
+        # `guidance`'s `cd <worktree>` — that's not the socket).
+        assert "/tmp" not in str(result["ssh_agent_in_container"])
