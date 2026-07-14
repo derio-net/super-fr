@@ -1,0 +1,51 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Version bump + full gate
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Patch bump, lint, typecheck, full suite, acceptance nag
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Patch bump (bugfix, no schema/CLI-shape break). Run `uv run python
+      scripts/bump-version.py patch`; verify with `uv run python
+      scripts/bump-version.py --check` and `uv run fr --version`. Do NOT
+      hand-edit any version-bearing file - the script also runs `uv sync` and
+      updates uv.lock; commit the changed manifests + uv.lock together with the
+      code changes.
+  - id: P5.T1.S2
+    text: |-
+      Full gate, all green: `uv run ruff format packages/ tests/`, `uv run
+      ruff format --check packages/ tests/`, `uv run ruff check packages/
+      tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src
+      packages/fr-vk/src packages/fr-cncd/src`, `uv run pytest -q --no-cov`
+      (fast pass), then the full `uv run pytest` (gates cov-fail-under=75).
+      Capture the pytest summary line for verification-before-completion. Also
+      run `fr acceptance status --brief` per this repo's standing convention
+      (no matrix row changes are expected - this PR ships bugfixes to existing,
+      already-covered surfaces, not a new spec Test Plan row; confirm nothing
+      in docs/acceptance/matrix.yaml references migrate.py/spec.py Test Plan
+      rows that this PR's Test Plan section would newly satisfy before
+      concluding no matrix update is owed).
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T22:00:00+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T22:00:00+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T22:00:00+00:00'
+    note: null
+    observed_prs: []

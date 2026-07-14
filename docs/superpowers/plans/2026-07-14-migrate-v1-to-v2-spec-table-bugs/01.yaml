@@ -1,0 +1,47 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skip-message UX hint (--include-in-progress)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: In-progress skip reason names the escape hatch
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add
+      test_migrate_skip_message_mentions_include_in_progress: build a repo via
+      _make_repo, write a v1 plan with status="In Progress" via _write_v1_plan,
+      call migrate_repo(repo, dry_run=False, target_repo="derio-net/test"), and
+      assert "--include-in-progress" in outcomes[0].reason. Run
+      `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k
+      skip_message_mentions_include_in_progress` -> fails (the current reason
+      string is "skipped (in-progress; status='In Progress')", no flag hint).
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/migrate.py, change the skip reason at
+      (currently) line 209 from
+      `reason=f"skipped (in-progress; status={v1plan.status!r})"` to
+      `reason=(f"skipped (in-progress; status={v1plan.status!r}; "
+      f"use --include-in-progress to convert anyway)")`. Confirmed exact flag
+      spelling against packages/fr/src/fr/commands/migrate_cmd.py
+      (`--include-in-progress`). Re-run the same -k filter -> passes. Then run
+      the full file: `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py`
+      -> all green (the existing test_migrate_skips_in_progress_by_default only
+      checks `.startswith("skipped (in-progress")`, so it still passes).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T10:52:32+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T10:52:32+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T10:52:33+00:00'
+    note: null
+    observed_prs: []

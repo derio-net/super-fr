@@ -1,0 +1,132 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'fr spec status: loud non-fatal warning on malformed table rows (Bug 2)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - spec-status-warns-malformed-row
+tasks:
+- number: 1
+  title: SpecMeta.warnings + parse_spec flags wrong-column-count rows
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. In tests/unit/test_v2_spec.py add
+      test_parse_spec_warns_on_malformed_row: write a spec with
+      "## Implementation Plans" containing the canonical 4-col header/separator,
+      one valid 4-col row ("Good plan" / `derio-net/x` / `good-plan` / "—"), and
+      one malformed 3-col row ("| Bad plan | `derio-net/y` | `bad-plan` |\n").
+      Call parse_spec(spec_path); assert len(meta.plans) == 1 (only the valid
+      row parsed) and meta.plans[0].name == "Good plan"; assert
+      any("Bad plan" in w or "3 columns" in w for w in meta.warnings) is True.
+      Run `uv run pytest -q --no-cov tests/unit/test_v2_spec.py -k
+      warns_on_malformed_row` -> fails with AttributeError (SpecMeta has no
+      `warnings` field yet).
+  - id: P2.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/spec.py: (1) add `warnings: tuple[str, ...]
+      = ()` to the `SpecMeta` frozen dataclass (after `plans`). (2) In
+      parse_spec, restructure the per-line loop: build `rows: list[PlanRef] =
+      []` and `warnings: list[str] = []`; when `stripped.startswith("|")`, split
+      into `cells = [_strip_cell(c) for c in stripped.strip("|").split("|")]`,
+      compute `first = cells[0] if cells else ""`, and if
+      `first.lower() == "plan" or (first and set(first) <= {"-", " "})` treat
+      as header/separator and `continue` (moved BEFORE the column-count check,
+      any column count). Otherwise if `len(cells) != 4`, append
+      `f"{spec_path.name}: row {stripped!r} has {len(cells)} columns, expected "
+      f"4 (Plan | Repo | File | Depends on) - skipped. If this spec predates "
+      f"the v2 migration, run \`fr migrate v1-to-v2\`."` to warnings and
+      `continue`; else append the PlanRef as today. (3) Return
+      `SpecMeta(path=spec_path, title=title, plans=tuple(rows),
+      warnings=tuple(warnings))` on both return paths (including the
+      no-section-found early return, with `warnings=()`). Re-run the -k filter
+      -> passes.
+- number: 2
+  title: Legacy 5-column header is never itself flagged as a malformed row
+  steps:
+  - id: P2.T1.S3
+    text: |-
+      RED. In tests/unit/test_v2_spec.py add
+      test_parse_spec_5col_legacy_header_no_false_warning: write a spec whose
+      "## Implementation Plans" table is still the pre-migrate 5-column shape
+      (header `| Plan | Repo | File | Status | Depends on |`, a matching
+      separator row, and one 5-col data row). Call parse_spec(spec_path);
+      assert meta.plans == () (nothing parsed - shape isn't 4-col yet) and
+      assert exactly one warning is produced (for the one 5-col DATA row, not
+      the header/separator). Run `uv run pytest -q --no-cov
+      tests/unit/test_v2_spec.py -k 5col_legacy_header_no_false_warning` ->
+      fails (pre-Task-1-refactor ordering would warn 3 times - header,
+      separator AND data row - since the header/separator skip in the OLD code
+      happened after the discarded `len(cells) != 4: continue`, so nothing
+      warned at all before this phase; after Task 1's GREEN alone it would
+      currently warn on all three 5-col lines since the header-detection
+      `first.lower() == "plan"` still fires correctly for the header - verify
+      by running first to confirm actual failure mode, then fix if the
+      separator row's `first` isn't dash-only in this fixture's spacing).
+  - id: P2.T1.S4
+    text: |-
+      GREEN. If the RED run in S3 already passes as written (Task 1's ordering
+      already skips header/separator regardless of column count), record that
+      finding in the test's docstring/comment ("regression guard - already
+      fixed by the P2.T1.S2 reorder") and keep the test. If it doesn't pass,
+      adjust the separator-detection predicate in parse_spec so a 5-col
+      all-dash separator (`|-----|-----|-----|-----|-----|`) is recognized
+      (`set(first) <= {"-", " "}` already matches a dash-only first cell
+      regardless of the row's total column count - confirm cells[0] for the
+      separator is dash-only, not the literal string "---" with surrounding
+      content). Re-run -> passes.
+- number: 3
+  title: compute_status surfaces spec.warnings in SpecStatus.warnings
+  steps:
+  - id: P2.T1.S5
+    text: |-
+      RED. In tests/unit/test_v2_spec.py add
+      test_compute_status_includes_spec_warnings: reuse
+      _make_repo_with_spec-style setup but write a spec with one malformed
+      3-col row alongside the valid rows; call
+      `st = compute_status(parse_spec(spec_path), repo)`; assert
+      any("3 columns" in w for w in st.warnings). Run `uv run pytest -q --no-cov
+      tests/unit/test_v2_spec.py -k includes_spec_warnings` -> fails (compute_status
+      starts its local `warnings` list empty, never reads `spec.warnings`).
+  - id: P2.T1.S6
+    text: |-
+      GREEN. In packages/fr/src/fr/spec.py::compute_status, change
+      `warnings: list[str] = []` to `warnings: list[str] = list(spec.warnings)`
+      (first local variable in the function body). Re-run the -k filter ->
+      passes. Then run the whole file: `uv run pytest -q --no-cov
+      tests/unit/test_v2_spec.py` -> all green (render_status_md already prints
+      `status.warnings`, no further change needed there - confirm
+      test_render_status_md_contains_table_and_aggregate still passes
+      unchanged).
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T10:53:57+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T10:53:57+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-07-14T10:53:57+00:00'
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: '2026-07-14T10:53:57+00:00'
+      note: null
+    P2.T1.S5:
+      state: x
+      ticked_at: '2026-07-14T10:53:58+00:00'
+      note: null
+    P2.T1.S6:
+      state: x
+      ticked_at: '2026-07-14T10:53:58+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T10:53:58+00:00'
+    note: null
+    observed_prs: []

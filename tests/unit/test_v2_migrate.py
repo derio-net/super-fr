@@ -90,6 +90,17 @@ def test_migrate_skips_in_progress_by_default(tmp_path):
     assert by_name["2026-05-10-in-progress"].startswith("skipped (in-progress")
 
 
+def test_migrate_skip_message_mentions_include_in_progress(tmp_path):
+    """#379 UX Gap 1: the skip reason must hint at the escape hatch."""
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-in-progress", status="In Progress")
+
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    assert "--include-in-progress" in outcomes[0].reason
+
+
 def test_migrate_include_in_progress_flag(tmp_path):
     from fr.migrate import migrate_repo
 
@@ -168,6 +179,151 @@ def test_migrate_leaves_file_cells_when_folder_does_not_exist(tmp_path):
     # Status column is dropped; File cell is unchanged because folder doesn't exist
     assert "never-here.md" in new_text
     assert "Status" not in new_text.splitlines()[2]
+
+
+def test_resolve_spec_file_same_repo_path(tmp_path):
+    from fr.migrate import _resolve_spec_file
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-x.md"
+    spec_path.write_text("# x\n")
+
+    assert _resolve_spec_file("docs/superpowers/specs/2026-05-10-x.md", repo) == spec_path
+
+
+def test_resolve_spec_file_none_when_no_spec_ref(tmp_path):
+    from fr.migrate import _resolve_spec_file
+
+    repo = _make_repo(tmp_path)
+    assert _resolve_spec_file(None, repo) is None
+
+
+def test_resolve_spec_file_none_for_cross_repo_notation(tmp_path):
+    from fr.migrate import _resolve_spec_file
+
+    repo = _make_repo(tmp_path)
+    assert _resolve_spec_file("derio-net/other-repo:docs/superpowers/specs/x.md", repo) is None
+
+
+def test_ensure_spec_plan_row_creates_section_when_absent(tmp_path):
+    from fr.migrate import _ensure_spec_plan_row
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-x.md"
+    spec_path.write_text("# Title\n\nSome prose.\n")
+
+    result = _ensure_spec_plan_row(
+        spec_path, slug="2026-05-10-x", target_repo="derio-net/test", repo_root=repo
+    )
+    assert result is None
+    text = spec_path.read_text()
+    assert "## Implementation Plans" in text
+    assert "| Plan | Repo | File | Depends on |" in text
+    assert "`2026-05-10-x`" in text
+    assert "`derio-net/test`" in text
+
+
+def test_ensure_spec_plan_row_noop_when_section_exists(tmp_path):
+    from fr.migrate import _ensure_spec_plan_row
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-x.md"
+    spec_path.write_text(
+        "# test\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Status | Depends on |\n"
+        "|------|------|------|--------|------------|\n"
+        "| Some plan | `derio-net/x` | `docs/superpowers/plans/x/` | Complete | — |\n"
+    )
+    before = spec_path.read_text()
+
+    result = _ensure_spec_plan_row(
+        spec_path, slug="2026-05-10-different", target_repo="derio-net/test", repo_root=repo
+    )
+    assert result is None
+    assert spec_path.read_text() == before
+
+
+def test_migrate_creates_missing_spec_table(tmp_path):
+    """#379 Bug 1: a v1 spec with no Implementation Plans section at all
+    (true of every v1 spec) gets the section created + a row for the
+    migrated plan — not left as a permanent no-op."""
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-tablefix")
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
+    spec_path.write_text("# test\n\nSome prose, no table yet.\n")
+
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    assert outcomes[0].reason == "migrated"
+    new_text = spec_path.read_text()
+    assert "## Implementation Plans" in new_text
+    assert "2026-05-10-tablefix" in new_text
+
+
+def test_migrate_does_not_duplicate_row_when_spec_table_exists(tmp_path):
+    """A spec that already has an Implementation Plans table (Bug 1's scope
+    cut) is left to _rewrite_spec_table's column-drop only — no new row is
+    appended for a migrated plan even if that plan isn't in the table."""
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-cells-fixture")
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
+    spec_path.write_text(
+        "# test\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Status | Depends on |\n"
+        "|------|------|------|--------|------------|\n"
+        "| The plan | `derio-net/x` "
+        "| `docs/superpowers/plans/2026-05-10-cells-fixture.md` | Complete | — |\n"
+    )
+
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    new_text = spec_path.read_text()
+    # Only one row references this plan's slug — no duplicate append.
+    assert new_text.count("2026-05-10-cells-fixture") == 1
+
+
+def test_git_mv_best_effort_falls_back_without_git(tmp_path):
+    """#379 Bug 3: outside a git working tree, the move still happens
+    (plain filesystem move) — no exception, no dependency on git."""
+    from fr.migrate import _git_mv_best_effort
+
+    src = tmp_path / "a.txt"
+    src.write_text("hello")
+    dst = tmp_path / "b.txt"
+
+    _git_mv_best_effort(tmp_path, src, dst)
+    assert not src.exists()
+    assert dst.read_text() == "hello"
+
+
+def test_git_mv_best_effort_stages_rename_in_git_repo(tmp_path):
+    """Inside a real git repo, the move is a staged `git mv` — git status
+    reports a rename, not a delete+untracked pair."""
+    from fr.migrate import _git_mv_best_effort
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    src = tmp_path / "a.txt"
+    src.write_text("hello")
+    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+    )
+    dst = tmp_path / "b.txt"
+
+    _git_mv_best_effort(tmp_path, src, dst)
+    result = subprocess.run(
+        ["git", "-C", str(tmp_path), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "R  a.txt -> b.txt" in result.stdout
 
 
 def test_migrate_rejects_non_iso_date_slug(tmp_path):
@@ -1202,3 +1358,62 @@ def test_migrate_dirs_holds_pending_spec(tmp_path, monkeypatch):
     sp = tmp_path / "docs" / "superpowers"
     assert (sp / "specs" / "2026-07-01-sliced.md").is_file()
     assert not (sp / "implemented" / "specs" / "2026-07-01-sliced.md").exists()
+
+
+def test_migrate_archive_move_is_staged_in_git_repo(tmp_path):
+    """#379 Bug 3: inside a real git repo, the .md -> .md.v1-archive move
+    is a staged git mv (R in status --porcelain), not a bare D + ?? pair."""
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-archive-staging")
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
+    spec_path.write_text("# test\n")
+    for cmd in (
+        ["git", "init", "-q"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+    ):
+        subprocess.run(cmd, cwd=repo, check=True)
+
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    assert outcomes[0].reason == "migrated"
+
+    result = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "R  " in result.stdout, f"expected staged rename, got:\n{result.stdout}"
+
+
+def test_migrate_stages_new_plan_files_in_git_repo(tmp_path):
+    """#379 Bug 3: new plan files (_meta.yaml, _prose.md, NN.yaml) and the
+    modified spec file all appear as staged changes after migration."""
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    _write_v1_plan(repo, slug="2026-05-10-stage-plan-files")
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test.md"
+    spec_path.write_text("# test\n\nSome prose, no table yet.\n")
+    for cmd in (
+        ["git", "init", "-q"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+    ):
+        subprocess.run(cmd, cwd=repo, check=True)
+
+    outcomes = migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+    assert outcomes[0].reason == "migrated"
+
+    result = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    # Plan files should be staged adds (A  prefix)
+    assert "A  " in result.stdout, f"expected staged adds, got:\n{result.stdout}"
+    # Spec file should be staged modification (M  prefix)
+    assert "M  " in result.stdout, f"expected staged spec mod, got:\n{result.stdout}"

@@ -1,0 +1,164 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'fr migrate v1-to-v2: create the spec''s Implementation Plans table when
+    absent (Bug 1)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - migrate-creates-missing-spec-table
+tasks:
+- number: 1
+  title: _resolve_spec_file resolves a v1 plan's raw Spec value to a file
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add
+      test_resolve_spec_file_same_repo_path,
+      test_resolve_spec_file_none_when_no_spec_ref, and
+      test_resolve_spec_file_none_for_cross_repo_notation. First: write a spec
+      file at docs/superpowers/specs/2026-05-10-x.md under a tmp repo, call
+      `fr.migrate._resolve_spec_file("docs/superpowers/specs/2026-05-10-x.md",
+      repo)`, assert it equals the spec's Path. Second: call
+      `_resolve_spec_file(None, repo)` -> assert None. Third: call
+      `_resolve_spec_file("derio-net/other-repo:docs/superpowers/specs/x.md",
+      repo)` -> assert None (cross-repo, not locally resolvable). Run
+      `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k
+      resolve_spec_file` -> fails (ImportError/AttributeError, function doesn't
+      exist).
+  - id: P3.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/migrate.py, add near the top-level imports:
+      `from fr._urls import is_cross_repo_spec` and `from fr import plan_ops`
+      (plan_ops does not import migrate.py - confirmed no cycle). Add:
+      `def _resolve_spec_file(spec_ref: str | None, repo_root: Path) -> Path |
+      None:` with docstring explaining v1's raw backticked `**Spec:**` value
+      (repo-relative path, occasionally a bare slug, or cross-repo
+      `owner/repo:path` notation which can't resolve locally). Body: `if not
+      spec_ref: return None`; `if is_cross_repo_spec(spec_ref): return None`;
+      `candidate = repo_root / spec_ref`; `if candidate.is_file(): return
+      candidate`; `res = refs.resolve_spec_ref(spec_ref, repo_root)`; `return
+      res.path`. Re-run the -k filter -> passes.
+- number: 2
+  title: _ensure_spec_plan_row creates the section+header+row, no-ops when present
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add
+      test_ensure_spec_plan_row_creates_section_when_absent: write a spec file
+      with just "# Title\n\nSome prose.\n" (no Implementation Plans section);
+      call `fr.migrate._ensure_spec_plan_row(spec_path, slug="2026-05-10-x",
+      target_repo="derio-net/test", repo_root=repo)`; assert the return value is
+      None; re-read the spec text and assert it now contains
+      "## Implementation Plans" and a row referencing "2026-05-10-x" (e.g.
+      "`2026-05-10-x`" and "`derio-net/test`" both present) and the canonical
+      header "| Plan | Repo | File | Depends on |". Add a second test
+      test_ensure_spec_plan_row_noop_when_section_exists: write a spec that
+      already has an "## Implementation Plans" section (any shape, e.g. the
+      5-col legacy header with one row); capture the original text; call
+      `_ensure_spec_plan_row` with a DIFFERENT slug; assert the return value is
+      None AND the spec text is byte-identical to before the call (no section
+      creation, no row append - out of scope per the spec's Bug 1 scope note).
+      Run `uv run pytest -q --no-cov tests/unit/test_v2_migrate.py -k
+      ensure_spec_plan_row` -> fails (function doesn't exist).
+  - id: P3.T2.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/migrate.py add:
+      `def _ensure_spec_plan_row(spec_path: Path, *, slug: str, target_repo:
+      str, repo_root: Path) -> str | None:` with a docstring stating it is a
+      no-op (returns None) whenever an "## Implementation Plans" section
+      already exists (any column count) - only the "section entirely absent"
+      case is this function's job (#379 Bug 1 scope). Body: `text =
+      spec_path.read_text()`; `if plan_ops._SPEC_TABLE_HEADER_RE.search(text):
+      return None`; else build the new EOF block - normalize trailing
+      newlines (`sep = "" if text.endswith("\n\n") else ("\n" if
+      text.endswith("\n") else "\n\n")`), then `text += (f"{sep}## Implementation
+      Plans\n\n| Plan | Repo | File | Depends on |\n"
+      f"|------|------|------|------------|\n")`; `spec_path.write_text(text)`;
+      then `try: plan_ops._append_spec_row(spec_path, plan_name=slug,
+      repo=target_repo, file=slug, depends_on="—")` (em dash, matches the
+      "—" placeholder used elsewhere in this file e.g. line ~198's
+      depends_on="—" in plan_ops.create) `except plan_ops.PlanEditError as
+      e: return (f"{spec_path}: failed to append Implementation Plans row for "
+      f"{slug!r}: {e}")`; on success `plan_ops._stage(repo_root,
+      [spec_path])`; `return None`. Re-run the -k filter -> passes.
+- number: 3
+  title: Wire both helpers into _migrate_one; end-to-end coverage
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED. In tests/unit/test_v2_migrate.py add
+      test_migrate_creates_missing_spec_table: build a repo via _make_repo,
+      write a v1 plan via _write_v1_plan(repo, slug="2026-05-10-tablefix")
+      (its **Spec:** line points at
+      docs/superpowers/specs/2026-05-10-test.md), then actually create that
+      spec file with content "# test\n\nSome prose, no table yet.\n" (no
+      Implementation Plans section - this is the exact scenario the issue
+      describes: "true of every v1 spec"). Call
+      migrate_repo(repo, dry_run=False, target_repo="derio-net/test"); assert
+      outcomes[0].reason == "migrated"; re-read the spec file and assert it now
+      contains "## Implementation Plans" and a row referencing
+      "2026-05-10-tablefix". Add
+      test_migrate_does_not_duplicate_row_when_spec_table_exists: reuse the
+      existing test_migrate_rewrites_spec_table_drops_status_column fixture
+      shape (spec already has a 5-col table with a hand-authored row) but this
+      time also migrate an actual v1 plan whose slug matches nothing in that
+      table; after migrate_repo, assert the table gained no NEW row for the
+      migrated plan (since Bug 1's fix only creates a table when one is
+      entirely absent - the pre-existing table is left to
+      _rewrite_spec_table's column-drop only). Run `uv run pytest -q --no-cov
+      tests/unit/test_v2_migrate.py -k
+      "creates_missing_spec_table or does_not_duplicate_row"` -> the first
+      fails (spec still has no table after migration - current no-op bug); the
+      second currently passes already (documents existing correct behavior;
+      keep it as a regression guard for this phase's change).
+  - id: P3.T3.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/migrate.py::_migrate_one, right before the
+      final `return MigrationOutcome(plan_path=md_path, new_folder=new_folder,
+      reason="migrated", warnings=tuple(warnings))` (end of the function, after
+      the archive move), add: `spec_file = _resolve_spec_file(v1plan.spec,
+      repo_root)`; `if spec_file is not None:` call `_ensure_spec_plan_row(
+      spec_file, slug=slug, target_repo=resolved_target, repo_root=repo_root)`
+      and append any non-None return value to `warnings`; `elif v1plan.spec:`
+      (spec was declared but didn't resolve to a file) append
+      `f"spec {v1plan.spec!r} not found under docs/superpowers/ - couldn't "
+      f"ensure its Implementation Plans row for {slug!r}."` to `warnings`. Rerun
+      the -k filter from S1 -> both pass. Then run the WHOLE file: `uv run
+      pytest -q --no-cov tests/unit/test_v2_migrate.py` -> all green (in
+      particular the pre-existing tests whose _write_v1_plan spec target never
+      gets created on disk - e.g. test_migrate_apply_creates_v2_folder_and_archives_md
+      - now pick up a new harmless outcome[0].warnings entry via the `elif
+      v1plan.spec:` branch; confirm no existing assertion checks
+      `warnings == ()` - grep confirmed none do).
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T10:56:34+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T10:56:34+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-14T10:56:34+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-14T10:56:35+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-07-14T10:56:35+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-07-14T10:56:35+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T10:56:35+00:00'
+    note: null
+    observed_prs: []

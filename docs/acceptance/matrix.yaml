@@ -508,3 +508,48 @@ rows:
     status: ci
     notes: Scaffold install/refusal, isolation fail-closed behavior, and installer-output
       cleanup are pinned per-PR.
+  - id: migrate-creates-missing-spec-table
+    capability: Migrate v1-to-v2
+    acceptance: fr migrate v1-to-v2 creates the spec-s Implementation Plans table (canonical
+      4-column header + a row for the migrated plan) when the spec has no such section
+      yet; a spec that already has the section is left untouched.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-14-migrate-v1-to-v2-spec-table-bugs-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_migrate.py
+    status: ci
+    notes: 'issue #379 Bug 1; born at fr-goal spec review 2026-07-14. Implemented in
+      Phase 3. Pinned by test_migrate_creates_missing_spec_table,
+      test_migrate_does_not_duplicate_row_when_spec_table_exists,
+      test_ensure_spec_plan_row_creates_section_when_absent, and
+      test_ensure_spec_plan_row_noop_when_section_exists.'
+  - id: spec-status-warns-malformed-row
+    capability: Spec status
+    acceptance: fr spec status (parse_spec) never silently drops a malformed Implementation
+      Plans table row; a row whose column count is not 4 produces a named warning naming
+      the spec file and the offending row instead of vanishing without a trace.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-14-migrate-v1-to-v2-spec-table-bugs-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_spec.py
+    status: ci
+    notes: 'issue #379 Bug 2; operator-corrected fix (fail loud, never guess row data).
+      Implemented in Phase 2. Pinned by test_parse_spec_warns_on_malformed_row,
+      test_parse_spec_5col_legacy_header_no_false_warning, and
+      test_compute_status_includes_spec_warnings.'
+  - id: migrate-stages-git-changes
+    capability: Migrate v1-to-v2
+    acceptance: 'Inside a git working tree, fr migrate v1-to-v2 leaves git status clean
+      of untracked/unstaged migration artifacts: the archived .md is a staged rename
+      (not a delete+untracked pair) and the new plan folder-s _meta.yaml/_prose.md/NN.yaml
+      are staged adds.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-14-migrate-v1-to-v2-spec-table-bugs-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_migrate.py
+    status: ci
+    notes: 'issue #379 Bug 3; falls back to a plain move/no-op add outside a git repo
+      (e.g. untracked test fixtures). Implemented in Phase 4.'
