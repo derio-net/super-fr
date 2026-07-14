@@ -1,0 +1,55 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Document the repo-state lifecycle preflight in fr-progress
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Add the Repo-state preflight section and retune triggering
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Add a "Repo-state preflight" section to plugins/super-fr/skills/fr-progress/SKILL.md documenting, in order: `fr --help` (first contact), `fr status` (bare repo-wide sweep), `fr acceptance check`, `fr repair` (dry-run preview), a check for legacy v1 `.md` plans directly under docs/superpowers/plans/ (vs v2 plan folders) and `fr migrate v1-to-v2` (dry-run) when found, `fr spec status --all`, and only then `fr archive --all`. State plainly that manual file moves under docs/superpowers/ are prohibited when `fr` is installed. Explain `.md.v1-archive` files (pre-migration original kept for git history; travels with the migrated plan folder through `fr archive`, not a separate artifact). Verify every command/flag against packages/fr/src/fr/commands/{status_cmd,repair_cmd,migrate_cmd,archive_cmd,acceptance_cmd}.py and packages/fr/src/fr/migrate.py before writing a claim.
+  - id: P1.T1.S2
+    text: |
+      Extend the skill's frontmatter `description:` with trigger phrases an agent would produce when about to touch docs/superpowers/ in an unfamiliar repo ("is this repo fr-managed", "legacy v1 plans", "before I archive/move files"), alongside the existing progress-reporting phrases.
+  - id: P1.T1.S3
+    text: |
+      Keep the file at or under the 120-line ceiling enforced by tests/unit/test_skill_validation.py::test_under_120_lines — trim redundant prose elsewhere in the file (e.g. the existing repair/archive paragraphs that now overlap the new preflight section) rather than dropping any required content.
+- number: 2
+  title: Regenerate the OpenCode mirror and bump the version
+  steps:
+  - id: P1.T2.S1
+    text: |
+      Run `scripts/sync-opencode.py --check` to confirm drift, then `scripts/sync-opencode.py` (no flag) to regenerate .opencode/skills/fr-progress/SKILL.md and .opencode/commands/fr-progress.md, then `--check` again to confirm the mirror is clean.
+  - id: P1.T2.S2
+    text: |
+      Run `scripts/bump-version.py patch` (this PR touches plugins/*/skills/**) and confirm `scripts/bump-version.py --check` passes afterward.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-14T10:47:17+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-14T10:47:17+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-14T10:47:18+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-07-14T10:47:18+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-07-14T10:47:18+00:00'
+      note: null
+  completion:
+    at: '2026-07-14T10:47:18+00:00'
+    note: null
+    observed_prs: []
