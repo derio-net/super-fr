@@ -111,7 +111,7 @@ class GcAction:
 
     worktree: str
     branch: str | None
-    verdict: str  # merged | open | no-pr | orphan | no-state
+    verdict: str  # merged | merged-by-ancestry | open | no-pr | orphan | no-state
     action: str  # reaped | skipped | warned | reap-failed | would-reap
     detail: str = ""
 
@@ -598,9 +598,63 @@ class LocalWorktreeDevcontainerTarget:
                 return GcAction(wt, state.branch, "merged", "reap-failed", str(e))
         if pr_state == "OPEN":
             return GcAction(wt, state.branch, "open", "skipped")
+        # No MERGED/OPEN PR. Before warning forever, check whether the branch's
+        # commits already landed on origin/<default> — a PR-less merge (work
+        # rebased / re-authored under another PR) is invisible to gc's PR-only
+        # view, so the workspace would warn forever. Reap only when provably
+        # safe (see _merged_by_ancestry): fully merged, main advanced past it,
+        # clean worktree.
+        if self._merged_by_ancestry(state):
+            if dry_run:
+                return GcAction(wt, state.branch, "merged-by-ancestry", "would-reap")
+            try:
+                type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
+                    state, force=False
+                )
+                return GcAction(wt, state.branch, "merged-by-ancestry", "reaped")
+            except Exception as e:  # per-workspace; never abort the host-wide sweep
+                return GcAction(wt, state.branch, "merged-by-ancestry", "reap-failed", str(e))
         return GcAction(
             wt, state.branch, "no-pr", "warned", "no PR — `fr isolation down` when done"
         )
+
+    def _merged_by_ancestry(self, state: IsolationState) -> bool:
+        """True when a PR-less workspace's branch is provably a completed merge
+        that gc's PR-only classifier can't see — safe to reap. ALL must hold:
+
+        - `origin/<default>` resolves and exists (else we can't judge → False);
+        - the branch is an ANCESTOR of `origin/<default>` (no unmerged commits);
+        - the branch is STRICTLY BEHIND `origin/<default>` (main advanced past
+          it). `up` bases a new branch on `origin/<default>`, so a pristine
+          just-created workspace sits AT the tip (0 behind) and must NOT reap —
+          only a branch main has moved past is a real merge;
+        - the worktree is CLEAN (no uncommitted work to lose).
+
+        Conservative on every unknown: any git failure or ambiguity ⇒ False ⇒
+        the workspace is warned, never reaped. A stale local `origin/<default>`
+        ref only DEFERS a reap to a later sweep — it can never cause a wrong one
+        (an ancestor of a stale-behind ref is an ancestor of the fresh ref too).
+        """
+        try:
+            wt = state.worktree
+            sibling = type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn)
+            base = f"origin/{sibling._resolve_default_branch()}"
+            if self.run(["git", "rev-parse", "--verify", "--quiet", base], cwd=wt).returncode != 0:
+                return False
+            if (
+                self.run(
+                    ["git", "merge-base", "--is-ancestor", state.branch, base], cwd=wt
+                ).returncode
+                != 0
+            ):
+                return False
+            behind = self.run(["git", "rev-list", "--count", f"{state.branch}..{base}"], cwd=wt)
+            if behind.returncode != 0 or (behind.stdout or "").strip() in ("", "0"):
+                return False
+            status = self.run(["git", "status", "--porcelain"], cwd=wt)
+            return status.returncode == 0 and not (status.stdout or "").strip()
+        except Exception:
+            return False
 
     def _discover_workspaces(self) -> list[GcWorkspace]:
         """Union docker-label containers with on-disk worktree dirs, then
@@ -676,13 +730,18 @@ class LocalWorktreeDevcontainerTarget:
         raised."""
         referenced = self._referenced_images()
         out: list[GcAction] = []
-        for image_id, repo in self._vsc_images():
-            if image_id in referenced or repo in referenced:
+        for image_id, repo, tag in self._vsc_images():
+            ref = f"{repo}:{tag}"
+            if image_id in referenced or repo in referenced or ref in referenced:
                 continue
             if dry_run:
                 out.append(GcAction(repo, None, "dangling-image", "would-reap", image_id))
                 continue
-            r = self.run(["docker", "rmi", image_id])
+            # Reap by the TAGGED ref, not the image id: a dangling image carrying
+            # more than one tag makes `docker rmi <id>` fail ("referenced in
+            # multiple repositories"). Removing each `repo:tag` untags cleanly and
+            # frees the layers on the last tag — no --force, no multi-tag conflict.
+            r = self.run(["docker", "rmi", ref])
             out.append(
                 GcAction(
                     repo,
@@ -694,13 +753,13 @@ class LocalWorktreeDevcontainerTarget:
             )
         return out
 
-    def _vsc_images(self) -> list[tuple[str, str]]:
-        result = self.run(["docker", "images", "--format", "{{.ID}}\t{{.Repository}}"])
-        out: list[tuple[str, str]] = []
+    def _vsc_images(self) -> list[tuple[str, str, str]]:
+        result = self.run(["docker", "images", "--format", "{{.ID}}\t{{.Repository}}\t{{.Tag}}"])
+        out: list[tuple[str, str, str]] = []
         for line in (result.stdout or "").splitlines():
             parts = line.split("\t")
-            if len(parts) == 2 and parts[1].startswith("vsc-"):
-                out.append((parts[0], parts[1]))
+            if len(parts) == 3 and parts[1].startswith("vsc-"):
+                out.append((parts[0], parts[1], parts[2]))
         return out
 
     def _referenced_images(self) -> set[str]:
