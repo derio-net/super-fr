@@ -51,28 +51,32 @@ Error response from daemon: conflict: unable to delete d2034d4d1669
 
 ## Root cause
 
-1. **gc is blind to PR-less merges.** A workspace whose branch is fully contained
-   in `origin/<default>` but has no discoverable PR hits the `no-pr` catch-all and
-   warns *forever*, because classification is PR-state-only and never consults
-   commit ancestry. The `#354` "≤1 stale" invariant only ever bounded the
-   *merged-PR* class; the no-PR bucket is unbounded.
+1. **gc is blind to PR-less merges.** A workspace whose branch's changes have all
+   reached `origin/<default>` but has no discoverable PR hits the `no-pr`
+   catch-all and warns *forever*, because classification is PR-state-only and
+   never consults whether the work already landed. The `#354` "≤1 stale"
+   invariant only ever bounded the *merged-PR* class; the no-PR bucket is
+   unbounded.
 2. **Image reap keys off the image id, not the tag.** `docker rmi <id>` fails on
    any image carrying more than one repo tag.
 
 ## Fix
 
-1. Before the `no-pr` return, reap as **`merged-by-ancestry`** iff *all* hold
+1. Before the `no-pr` return, reap as **`merged-by-content`** iff *all* hold
    (conservative — any git failure ⇒ False ⇒ warn, never reap):
-   - `HEAD` is an ancestor of `origin/<default>` (no unmerged commits), AND
-   - the branch is **strictly behind** `origin/<default>` (main advanced past it
-     — this is what distinguishes a completed merge from a pristine just-created
-     workspace sitting *at* the tip, which `up` produces), AND
+   - `origin/<default>` resolves and exists, AND
+   - the branch **changed files** since its merge-base (a pristine or idle branch
+     that merely fell behind main changed nothing → not a merge → never reaped;
+     this protects the fresh workspace `up` creates at/behind the tip), AND
+   - every changed file's **final content is already on** `origin/<default>`
+     (`branch_changes_present`, local.py:119 — content comparison, **squash /
+     rebase / merge-commit safe**), AND
    - the worktree is **clean** (`git status --porcelain` empty — no uncommitted
      work to lose).
    Teardown reuses the same sibling-`down()` path as the merged-PR case.
-   Limitation (documented, safe): a squash-merge that does **not** leave the
-   branch an ancestor still warns; a stale local `origin/<default>` ref only
-   *defers* a reap to a later sweep — staleness can never cause a wrong reap.
+   Documented residual (clean-worktree-guarded): genuinely convergent content —
+   the identical change landing independently on main — reads as merged. A stale
+   local `origin/<default>` ref only *defers* a reap, never causes a wrong one.
 2. Reap dangling images by the tagged ref `repo:tag`, not the image id, so each
    tag is untagged and the last one frees the layers — no `--force`, no multi-tag
    conflict.
@@ -81,6 +85,16 @@ Error response from daemon: conflict: unable to delete d2034d4d1669
 
 - H1 (deleted remote branch hides a merged PR) — refuted empirically; `gh pr
   view <branch>` still returns `MERGED`.
+- **`git merge-base --is-ancestor` for the merge check** — rejected after review
+  feedback: the org **squash-merges** as its enduring pattern, and a squash lands
+  a *new* commit on main, leaving the branch **not** an ancestor. An is-ancestor
+  check would false-negative on exactly the dominant case, and worse, would reap a
+  pristine-but-behind idle workspace (ancestor + strictly-behind + clean, yet no
+  merge ever happened). Switched to **content comparison**
+  (`branch_changes_present`), which the codebase already provides precisely
+  because "an ancestry/patch-id check would false-negative on squash." The
+  "branch changed files" guard distinguishes a real merge from a branch that only
+  fell behind.
 - "Reap any ancestor" — rejected: `up` bases new branches on `origin/<default>`,
   so a fresh workspace is trivially an ancestor; reaping on ancestry alone would
-  nuke pristine new workspaces. Hence the strictly-behind + clean-worktree guards.
+  nuke pristine new workspaces.

@@ -111,7 +111,7 @@ class GcAction:
 
     worktree: str
     branch: str | None
-    verdict: str  # merged | merged-by-ancestry | open | no-pr | orphan | no-state
+    verdict: str  # merged | merged-by-content | open | no-pr | orphan | no-state
     action: str  # reaped | skipped | warned | reap-failed | would-reap
     detail: str = ""
 
@@ -599,41 +599,49 @@ class LocalWorktreeDevcontainerTarget:
         if pr_state == "OPEN":
             return GcAction(wt, state.branch, "open", "skipped")
         # No MERGED/OPEN PR. Before warning forever, check whether the branch's
-        # commits already landed on origin/<default> — a PR-less merge (work
-        # rebased / re-authored under another PR) is invisible to gc's PR-only
-        # view, so the workspace would warn forever. Reap only when provably
-        # safe (see _merged_by_ancestry): fully merged, main advanced past it,
-        # clean worktree.
-        if self._merged_by_ancestry(state):
+        # CHANGES already landed on origin/<default> — a PR-less merge (work
+        # squash-merged, rebased, or re-authored under another PR) is invisible
+        # to gc's PR-only view, so the workspace would warn forever. Reap only
+        # when provably safe (see _merged_by_content).
+        if self._merged_by_content(state):
             if dry_run:
-                return GcAction(wt, state.branch, "merged-by-ancestry", "would-reap")
+                return GcAction(wt, state.branch, "merged-by-content", "would-reap")
             try:
                 type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
                     state, force=False
                 )
-                return GcAction(wt, state.branch, "merged-by-ancestry", "reaped")
+                return GcAction(wt, state.branch, "merged-by-content", "reaped")
             except Exception as e:  # per-workspace; never abort the host-wide sweep
-                return GcAction(wt, state.branch, "merged-by-ancestry", "reap-failed", str(e))
+                return GcAction(wt, state.branch, "merged-by-content", "reap-failed", str(e))
         return GcAction(
             wt, state.branch, "no-pr", "warned", "no PR — `fr isolation down` when done"
         )
 
-    def _merged_by_ancestry(self, state: IsolationState) -> bool:
-        """True when a PR-less workspace's branch is provably a completed merge
-        that gc's PR-only classifier can't see — safe to reap. ALL must hold:
+    def _merged_by_content(self, state: IsolationState) -> bool:
+        """True when a PR-less workspace's changes are ALL already present on
+        origin/<default> — a merge gc's PR-only classifier can't see — and
+        reaping is provably safe.
 
-        - `origin/<default>` resolves and exists (else we can't judge → False);
-        - the branch is an ANCESTOR of `origin/<default>` (no unmerged commits);
-        - the branch is STRICTLY BEHIND `origin/<default>` (main advanced past
-          it). `up` bases a new branch on `origin/<default>`, so a pristine
-          just-created workspace sits AT the tip (0 behind) and must NOT reap —
-          only a branch main has moved past is a real merge;
+        CONTENT-based, not ancestry-based, so it recognizes SQUASH merges — the
+        dominant org pattern. A squash lands the branch's net content as a new
+        commit, leaving the branch NOT an ancestor of the default branch; an
+        `is-ancestor` check would false-negative exactly there. Comparing final
+        file content (`branch_changes_present` — squash/rebase/merge-commit safe)
+        still sees the work as landed.
+
+        ALL must hold (conservative on every unknown ⇒ False ⇒ warn, never reap):
+        - `origin/<default>` resolves and exists;
+        - the branch actually CHANGED files since its merge-base — a pristine or
+          idle branch that merely fell behind main changed nothing, so it is not
+          a merge and is never reaped (this protects the fresh workspace `up`
+          creates at, or just behind, the tip);
+        - every changed file's final content is already on `origin/<default>`;
         - the worktree is CLEAN (no uncommitted work to lose).
 
-        Conservative on every unknown: any git failure or ambiguity ⇒ False ⇒
-        the workspace is warned, never reaped. A stale local `origin/<default>`
-        ref only DEFERS a reap to a later sweep — it can never cause a wrong one
-        (an ancestor of a stale-behind ref is an ancestor of the fresh ref too).
+        A stale local `origin/<default>` ref only DEFERS a reap to a later sweep,
+        never causes a wrong one. Documented residual (clean-worktree-guarded):
+        genuinely convergent content — the identical change landing independently
+        on main — reads as merged.
         """
         try:
             wt = state.worktree
@@ -641,18 +649,11 @@ class LocalWorktreeDevcontainerTarget:
             base = f"origin/{sibling._resolve_default_branch()}"
             if self.run(["git", "rev-parse", "--verify", "--quiet", base], cwd=wt).returncode != 0:
                 return False
-            if (
-                self.run(
-                    ["git", "merge-base", "--is-ancestor", state.branch, base], cwd=wt
-                ).returncode
-                != 0
-            ):
-                return False
-            behind = self.run(["git", "rev-list", "--count", f"{state.branch}..{base}"], cwd=wt)
-            if behind.returncode != 0 or (behind.stdout or "").strip() in ("", "0"):
-                return False
             status = self.run(["git", "status", "--porcelain"], cwd=wt)
-            return status.returncode == 0 and not (status.stdout or "").strip()
+            if status.returncode != 0 or (status.stdout or "").strip():
+                return False
+            result = branch_changes_present(self.run, wt, state.branch, base)
+            return bool(result.changed) and result.changes_present
         except Exception:
             return False
 

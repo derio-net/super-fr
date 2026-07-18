@@ -1212,13 +1212,13 @@ def test_gc_classifies_and_reaps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert by_wt[str(nostate)].verdict == "no-state" and by_wt[str(nostate)].action == "warned"
 
 
-# ---------- gc: merged-by-ancestry (no PR, commits already on origin/<default>) ----------
+# ---------- gc: merged-by-content (no PR, changes already on origin/<default>) ----------
 
 
 def _gc_env_origin(tmp_path, monkeypatch, **runner_kw):  # noqa: ANN001, ANN201
     """gc env whose repo has a real bare origin + origin/HEAD, so the
-    merged-by-ancestry check (is-ancestor vs origin/<default>) resolves a real
-    remote ref. Returns (repo, origin, runner, target, up)."""
+    merged-by-content check (branch_changes_present vs origin/<default>) resolves
+    a real remote ref. Returns (repo, origin, runner, target, up)."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo, origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
     subprocess.run(
@@ -1241,10 +1241,22 @@ def _gc_env_origin(tmp_path, monkeypatch, **runner_kw):  # noqa: ANN001, ANN201
     return repo, origin, runner, target, up
 
 
-def _advance_origin_main(repo: Path) -> None:
-    """One new commit on main → push, so a branch left at the old tip becomes a
-    strictly-behind ancestor of origin/main (a completed-merge signature)."""
-    (repo / "advance.txt").write_text("moved on\n")
+def _commit_in_worktree(wt: Path, name: str, content: str = "payload\n") -> None:
+    (wt / name).write_text(content)
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(wt), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", name],
+        check=True,
+    )
+
+
+def _land_on_origin_main(repo: Path, name: str, content: str) -> None:
+    """Land `content` at path `name` on origin/main as ONE new commit — models a
+    SQUASH merge: the branch's net content reaches main under a fresh commit, so
+    the branch itself is NOT an ancestor of main, yet its file content is
+    present. `name`/`content` matching a branch's commit makes it merged-by-
+    content; a different `name` just advances main (unrelated work)."""
+    (repo / name).write_text(content)
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(
         [
@@ -1257,45 +1269,54 @@ def _advance_origin_main(repo: Path) -> None:
             "user.name=t",
             "commit",
             "-qm",
-            "advance main",
+            f"squash {name}",
         ],
         check=True,
     )
     subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "main"], check=True)
 
 
-def _commit_in_worktree(wt: Path, name: str) -> None:
-    (wt / name).write_text("payload\n")
-    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True)
-    subprocess.run(
-        ["git", "-C", str(wt), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", name],
-        check=True,
-    )
-
-
-def test_gc_reaps_no_pr_branch_already_on_origin_default(
+def test_gc_reaps_no_pr_branch_squash_merged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # No PR, commits all already on origin/main (main advanced past it), clean
-    # worktree = a PR-less merge gc's PR-only view can't see. Reap, don't warn.
+    # The org's dominant pattern: a branch's PR is SQUASH-merged, so the branch is
+    # NOT an ancestor of main, but its net content IS on main. With no discoverable
+    # PR it would warn forever — content comparison must see it as merged → reap.
     repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
-    wt = up("feat/landed")
-    _advance_origin_main(repo)  # feat/landed is now a strictly-behind ancestor
+    wt = up("feat/work")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")  # branch's work
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")  # squash-equivalent
 
-    (action,) = [a for a in target.gc() if a.branch == "feat/landed"]
-    assert action.verdict == "merged-by-ancestry" and action.action == "reaped"
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "reaped"
     assert not wt.exists()
-    assert load_state(repo, "feat/landed") is None
+    assert load_state(repo, "feat/work") is None
+
+
+def test_gc_does_not_reap_idle_branch_that_fell_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A workspace that did NO work of its own, while main advanced past it, is an
+    # ancestor of main and clean — but it changed nothing, so it is NOT a merge.
+    # (An is-ancestor check would wrongly reap this pristine-but-behind workspace;
+    # content comparison correctly leaves it warned.)
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/idle")
+    _land_on_origin_main(repo, "unrelated.txt", "other work\n")  # main moves; branch idle
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/idle"]
+    assert action.verdict == "no-pr" and action.action == "warned"
+    assert wt.is_dir()
 
 
 def test_gc_warns_no_pr_branch_with_unmerged_commits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A no-PR branch carrying a commit NOT on origin/main (real in-progress work)
-    # is not an ancestor → stays warned, never reaped.
+    # A no-PR branch whose changed file is NOT present on origin/main (real
+    # in-progress work) stays warned, never reaped.
     repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
     wt = up("feat/wip")
-    _commit_in_worktree(wt, "wip.txt")
+    _commit_in_worktree(wt, "wip.txt", "not on main yet\n")
 
     (action,) = [a for a in target.gc() if a.branch == "feat/wip"]
     assert action.verdict == "no-pr" and action.action == "warned"
@@ -1305,41 +1326,43 @@ def test_gc_warns_no_pr_branch_with_unmerged_commits(
 def test_gc_does_not_reap_fresh_branch_at_default_tip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A pristine just-created workspace sits AT origin/main's tip (ancestor, but
-    # 0 behind). Reaping it would nuke a brand-new workspace — must warn.
+    # A pristine just-created workspace sits AT origin/main's tip having changed
+    # nothing — not a merge → must warn, never reap a brand-new workspace.
     repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
-    wt = up("feat/fresh")  # no advance → feat/fresh == origin/main tip
+    wt = up("feat/fresh")  # no work, no advance
 
     (action,) = [a for a in target.gc() if a.branch == "feat/fresh"]
     assert action.verdict == "no-pr" and action.action == "warned"
     assert wt.is_dir()
 
 
-def test_gc_does_not_reap_ancestor_branch_with_dirty_worktree(
+def test_gc_does_not_reap_merged_content_with_dirty_worktree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Even a strictly-behind ancestor must NOT be reaped with uncommitted changes
-    # present — that work would be lost.
+    # Even when the branch's committed work is all on main, uncommitted changes in
+    # the worktree must block the reap — that work would be lost.
     repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
-    wt = up("feat/landed-dirty")
-    _advance_origin_main(repo)
+    wt = up("feat/work-dirty")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
     (wt / "uncommitted.txt").write_text("unsaved\n")  # dirty worktree
 
-    (action,) = [a for a in target.gc() if a.branch == "feat/landed-dirty"]
+    (action,) = [a for a in target.gc() if a.branch == "feat/work-dirty"]
     assert action.verdict == "no-pr" and action.action == "warned"
     assert wt.is_dir()
 
 
-def test_gc_ancestry_reap_dry_run_mutates_nothing(
+def test_gc_content_reap_dry_run_mutates_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
-    wt = up("feat/landed")
-    _advance_origin_main(repo)
+    wt = up("feat/work")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
 
-    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/landed"]
-    assert action.verdict == "merged-by-ancestry" and action.action == "would-reap"
-    assert wt.is_dir() and load_state(repo, "feat/landed") is not None
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "would-reap"
+    assert wt.is_dir() and load_state(repo, "feat/work") is not None
 
 
 def test_gc_one_failure_does_not_abort_sweep(
