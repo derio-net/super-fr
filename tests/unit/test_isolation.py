@@ -196,7 +196,7 @@ class FakeRunner:
         # gc classification: per-branch `gh pr view` JSON. A branch absent from
         # the map ⇒ gh returns nothing (no PR).
         self.pr_by_branch = pr_by_branch
-        # gc image sweep: `docker images` listing (id, repo) and the set of
+        # gc image sweep: `docker images` listing (id, repo, tag) and the set of
         # images referenced by a live container (`docker ps -a --format {{.Image}}`).
         self.docker_images = docker_images or []
         self.referenced_images = referenced_images or []
@@ -224,7 +224,7 @@ class FakeRunner:
             else:
                 out = self._ps_out()
         elif argv[0:2] == ["docker", "images"]:
-            out = "".join(f"{i}\t{r}\n" for i, r in self.docker_images)
+            out = "".join(f"{i}\t{r}\t{t}\n" for i, r, t in self.docker_images)
         elif argv[0:2] == ["docker", "inspect"]:
             out = self.stdout.get("docker_image", "")
         elif argv[0:3] == ["gh", "pr", "view"] and self.pr_by_branch is not None:
@@ -1212,6 +1212,159 @@ def test_gc_classifies_and_reaps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert by_wt[str(nostate)].verdict == "no-state" and by_wt[str(nostate)].action == "warned"
 
 
+# ---------- gc: merged-by-content (no PR, changes already on origin/<default>) ----------
+
+
+def _gc_env_origin(tmp_path, monkeypatch, **runner_kw):  # noqa: ANN001, ANN201
+    """gc env whose repo has a real bare origin + origin/HEAD, so the
+    merged-by-content check (branch_changes_present vs origin/<default>) resolves
+    a real remote ref. Returns (repo, origin, runner, target, up)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+        check=True,
+    )
+    runner = FakeRunner(**runner_kw)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    def up(branch: str) -> Path:
+        return target.up(None, branch).worktree
+
+    return repo, origin, runner, target, up
+
+
+def _commit_in_worktree(wt: Path, name: str, content: str = "payload\n") -> None:
+    (wt / name).write_text(content)
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(wt), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", name],
+        check=True,
+    )
+
+
+def _land_on_origin_main(repo: Path, name: str, content: str) -> None:
+    """Land `content` at path `name` on origin/main as ONE new commit — models a
+    SQUASH merge: the branch's net content reaches main under a fresh commit, so
+    the branch itself is NOT an ancestor of main, yet its file content is
+    present. `name`/`content` matching a branch's commit makes it merged-by-
+    content; a different `name` just advances main (unrelated work)."""
+    (repo / name).write_text(content)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            f"squash {name}",
+        ],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "main"], check=True)
+
+
+def test_gc_reaps_no_pr_branch_squash_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The org's dominant pattern: a branch's PR is SQUASH-merged, so the branch is
+    # NOT an ancestor of main, but its net content IS on main. With no discoverable
+    # PR it would warn forever — content comparison must see it as merged → reap.
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/work")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")  # branch's work
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")  # squash-equivalent
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "reaped"
+    assert not wt.exists()
+    assert load_state(repo, "feat/work") is None
+
+
+def test_gc_does_not_reap_idle_branch_that_fell_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A workspace that did NO work of its own, while main advanced past it, is an
+    # ancestor of main and clean — but it changed nothing, so it is NOT a merge.
+    # (An is-ancestor check would wrongly reap this pristine-but-behind workspace;
+    # content comparison correctly leaves it warned.)
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/idle")
+    _land_on_origin_main(repo, "unrelated.txt", "other work\n")  # main moves; branch idle
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/idle"]
+    assert action.verdict == "no-pr" and action.action == "warned"
+    assert wt.is_dir()
+
+
+def test_gc_warns_no_pr_branch_with_unmerged_commits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A no-PR branch whose changed file is NOT present on origin/main (real
+    # in-progress work) stays warned, never reaped.
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/wip")
+    _commit_in_worktree(wt, "wip.txt", "not on main yet\n")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/wip"]
+    assert action.verdict == "no-pr" and action.action == "warned"
+    assert wt.is_dir()
+
+
+def test_gc_does_not_reap_fresh_branch_at_default_tip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A pristine just-created workspace sits AT origin/main's tip having changed
+    # nothing — not a merge → must warn, never reap a brand-new workspace.
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/fresh")  # no work, no advance
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/fresh"]
+    assert action.verdict == "no-pr" and action.action == "warned"
+    assert wt.is_dir()
+
+
+def test_gc_does_not_reap_merged_content_with_dirty_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Even when the branch's committed work is all on main, uncommitted changes in
+    # the worktree must block the reap — that work would be lost.
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/work-dirty")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+    (wt / "uncommitted.txt").write_text("unsaved\n")  # dirty worktree
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work-dirty"]
+    assert action.verdict == "no-pr" and action.action == "warned"
+    assert wt.is_dir()
+
+
+def test_gc_content_reap_dry_run_mutates_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/work")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "would-reap"
+    assert wt.is_dir() and load_state(repo, "feat/work") is not None
+
+
 def test_gc_one_failure_does_not_abort_sweep(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1288,18 +1441,40 @@ def test_gc_corrupt_state_does_not_abort_discovery(
 
 def test_gc_sweeps_dangling_vsc_images(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # vsc-a is referenced by a live container (keep); vsc-b is dangling (rmi);
-    # ubuntu is not a devcontainer image (ignore).
+    # ubuntu is not a devcontainer image (ignore). Reap targets the repo:tag ref.
     repo, runner, target, up = _gc_env(
         tmp_path,
         monkeypatch,
-        docker_images=[("img-a", "vsc-a"), ("img-b", "vsc-b"), ("img-u", "ubuntu")],
+        docker_images=[
+            ("img-a", "vsc-a", "latest"),
+            ("img-b", "vsc-b", "latest"),
+            ("img-u", "ubuntu", "latest"),
+        ],
         referenced_images=["img-a"],
     )
     images = [a for a in target.gc() if a.verdict == "dangling-image"]
     assert [a.detail for a in images] == ["img-b"]
-    assert ["docker", "rmi", "img-b"] in runner.argv_for("docker")
-    assert not any(c == ["docker", "rmi", "img-a"] for c in runner.argv_for("docker"))
-    assert not any(c == ["docker", "rmi", "img-u"] for c in runner.argv_for("docker"))
+    assert ["docker", "rmi", "vsc-b:latest"] in runner.argv_for("docker")
+    assert not any(c == ["docker", "rmi", "vsc-a:latest"] for c in runner.argv_for("docker"))
+    assert not any(c == ["docker", "rmi", "ubuntu:latest"] for c in runner.argv_for("docker"))
+
+
+def test_gc_reaps_multitagged_dangling_image(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One image id carrying TWO vsc tags — the real failure: `docker rmi <id>`
+    # errors "referenced in multiple repositories". Reaping each repo:tag untags
+    # both without force; both reaped, neither reap-failed, never a bare-id rmi.
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        docker_images=[("shared", "vsc-cwd", "latest"), ("shared", "vsc-pwd", "latest")],
+    )
+    images = [a for a in target.gc() if a.verdict == "dangling-image"]
+    assert len(images) == 2 and {a.action for a in images} == {"reaped"}
+    assert ["docker", "rmi", "vsc-cwd:latest"] in runner.argv_for("docker")
+    assert ["docker", "rmi", "vsc-pwd:latest"] in runner.argv_for("docker")
+    assert not any(c == ["docker", "rmi", "shared"] for c in runner.argv_for("docker"))
 
 
 def test_gc_image_rmi_failure_is_non_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1307,7 +1482,7 @@ def test_gc_image_rmi_failure_is_non_fatal(tmp_path: Path, monkeypatch: pytest.M
         tmp_path,
         monkeypatch,
         fail_on="rmi",
-        docker_images=[("img-b", "vsc-b")],
+        docker_images=[("img-b", "vsc-b", "latest")],
     )
     (img,) = [a for a in target.gc() if a.verdict == "dangling-image"]  # no raise
     assert img.action == "reap-failed"

@@ -235,9 +235,11 @@ rows:
       leg is Test-Plan item 1, post-merge — not in CI.'
   - id: isolation-gc-reconciles-merged
     capability: Isolation teardown
-    acceptance: A merged-PR isolation workspace is torn down (container, worktree, state,
+    acceptance: A merged isolation workspace is torn down (container, worktree, state,
       image) without the originating session — host-wide, fired opportunistically on
-      every up/down, bounded to <=1 stale workspace with no daemon.
+      every up/down, bounded to <=1 stale workspace with no daemon. "Merged" covers a
+      MERGED PR and a PR-less merge whose changes already reached origin/<default>
+      (merged-by-content, squash-safe); multi-tagged dangling images are reaped by tag.
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-07-05-isolation-teardown-354-design.md
     levels:
@@ -248,7 +250,14 @@ rows:
       - super-fr:tests/unit/test_isolation.py#test_gc_merged_reap_unexpected_error_does_not_abort_sweep
       - super-fr:tests/unit/test_isolation.py#test_gc_corrupt_state_does_not_abort_discovery
       - super-fr:tests/unit/test_isolation.py#test_gc_sweeps_dangling_vsc_images
+      - super-fr:tests/unit/test_isolation.py#test_gc_reaps_multitagged_dangling_image
       - super-fr:tests/unit/test_isolation.py#test_gc_image_rmi_failure_is_non_fatal
+      - super-fr:tests/unit/test_isolation.py#test_gc_reaps_no_pr_branch_squash_merged
+      - super-fr:tests/unit/test_isolation.py#test_gc_does_not_reap_idle_branch_that_fell_behind
+      - super-fr:tests/unit/test_isolation.py#test_gc_warns_no_pr_branch_with_unmerged_commits
+      - super-fr:tests/unit/test_isolation.py#test_gc_does_not_reap_fresh_branch_at_default_tip
+      - super-fr:tests/unit/test_isolation.py#test_gc_does_not_reap_merged_content_with_dirty_worktree
+      - super-fr:tests/unit/test_isolation.py#test_gc_content_reap_dry_run_mutates_nothing
       - super-fr:tests/unit/test_isolation.py#test_up_spawns_background_gc
       - super-fr:tests/unit/test_isolation.py#test_down_spawns_background_gc
       - super-fr:tests/unit/test_isolation.py#test_gc_second_concurrent_sweep_noops
@@ -257,10 +266,14 @@ rows:
       - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_json
       - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_empty
     status: ci
-    notes: '#354 Task B. Classification (merged/open/no-pr/orphan/no-state), discovery,
-      per-workspace error isolation, image sweep, opportunistic spawn seam, flock no-op,
-      dry-run safety, and CLI output all unit-pinned over the Runner seam. Real-docker
-      reap + live opportunistic trigger are Test-Plan items 3-4, post-merge — not in CI.'
+    notes: '#354 Task B + merged-by-content/multi-tag reap. Classification
+      (merged/merged-by-content/open/no-pr/orphan/no-state), discovery, per-workspace
+      error isolation, image sweep (tag-keyed, multi-tag safe), opportunistic spawn seam,
+      flock no-op, dry-run safety, and CLI output all unit-pinned over the Runner seam.
+      merged-by-content is squash-safe (content comparison, not is-ancestor) and reaps
+      only when the branch changed files, all present on origin/<default>, with a clean
+      worktree — a fresh/idle/dirty workspace is warned, never reaped. Real-docker reap +
+      live opportunistic trigger are Test-Plan items 3-4, post-merge — not in CI.'
   - id: spec-sweep-pending-slice-hold
     capability: Archive spec-sweep
     acceptance: A spec with a decided-but-unbuilt slice (a pending-placeholder plan
