@@ -260,6 +260,15 @@ strong{font-weight:600;color:#f2ecdd}
   font-family:var(--display);font-weight:300;font-style:italic;font-size:clamp(1.3rem,2.4vw,1.9rem);
   line-height:1.32;color:#efe8d9;max-width:26ch}
 
+.reads{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:8px}
+.read{display:flex;flex-direction:column;gap:.5em;padding:clamp(22px,3vw,30px);background:var(--ink-2);
+  border:1px solid var(--line);border-radius:5px;text-decoration:none;color:inherit;position:relative;
+  transition:border-color .25s,transform .25s,background .25s}
+.read:hover{border-color:color-mix(in srgb,var(--teal) 45%,transparent);transform:translateY(-3px);background:var(--panel)}
+.read .rk{font-family:var(--mono);font-size:.64rem;letter-spacing:.2em;text-transform:uppercase;color:var(--teal-soft)}
+.read h3{font-family:var(--display);font-weight:500;font-size:1.24rem;line-height:1.15;letter-spacing:-.01em;margin:.1em 0 0;color:#f2ecdd}
+.read p{margin:.2em 0 0;color:var(--muted);font-size:.94rem;line-height:1.5}
+.read .go{margin-top:auto;padding-top:.5em;font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;color:var(--brass)}
 /* ---------- closing / cta ---------- */
 .close{border-top:1px solid var(--line);text-align:left}
 .cmd{font-family:var(--mono);font-size:clamp(.95rem,1.6vw,1.15rem);background:var(--ink-2);
@@ -533,6 +542,28 @@ strong{font-weight:600;color:#f2ecdd}
 </section>
 
 <!-- ============ CLOSE ============ -->
+<!-- ============ GO DEEPER ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head rv"><span class="eyebrow teal"><span class="tick"></span>Go deeper</span>
+      <h2>Two subsystems, up close.</h2></div>
+    <div class="reads rv">
+      <a class="read" href="./01-fr-goal.html">
+        <span class="rk">the pipeline</span>
+        <h3>fr-goal &mdash; one conversation, then a reviewed PR</h3>
+        <p>The full local flow, step by step: brainstorm, one batched Q&amp;A, spec, plan, test-first build, review, merge, and the post-merge Test Plan.</p>
+        <span class="go">Read the deep-dive &rarr;</span>
+      </a>
+      <a class="read" href="./fr-isolation.html">
+        <span class="rk">the boundary</span>
+        <h3>fr-isolation &mdash; the sandbox an agent can't walk out of</h3>
+        <p>How &ldquo;never touches your checkout&rdquo; is made literally true &mdash; worktree, container, and a marker no copy can fake.</p>
+        <span class="go">Read the deep-dive &rarr;</span>
+      </a>
+    </div>
+  </div>
+</section>
+
 <section class="close">
   <div class="wrap col prose">
     <div class="sec-head rv">
