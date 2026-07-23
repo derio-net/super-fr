@@ -1,0 +1,87 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Phase tier field + fr models config resolver
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - fr-goal-phase-tiering
+tasks:
+- number: 1
+  title: tier field on PhaseHeader
+  steps:
+  - id: P4.T1.S1
+    text: |
+      RED. In tests/unit/test_types.py (or test_parser) assert
+      PhaseHeader accepts tier in {mechanical, standard, hard}, defaults
+      None, rejects "huge"; and an NN.yaml carrying `tier: hard`
+      round-trips through parse→serialize. Run → fails.
+  - id: P4.T1.S2
+    text: |
+      GREEN. Add `tier: Literal["mechanical","standard","hard"] | None =
+      None` to PhaseHeader in fr/types.py (document it like the
+      `acceptance` field: optional, omitted when None for byte-stability).
+      Re-run → passes. Note in the field comment that adding it is a
+      deliberate extra=forbid schema bump.
+- number: 2
+  title: fr models loader + tier→model resolver
+  steps:
+  - id: P4.T2.S1
+    text: |
+      RED. Create tests/unit/test_models_config.py: `load_models(path)`
+      parses harness→tier→model from a models.yaml; `resolve(harness,
+      tier, repo_cfg, user_cfg)` returns the model with order repo > user;
+      missing binding → None (signals runtime prompt); a missing file →
+      empty mapping. Run → fails.
+  - id: P4.T2.S2
+    text: |
+      GREEN. Create packages/fr/src/fr/models.py mirroring repos.py
+      (DEFAULT_MODELS = ~/.config/fr/models.yaml; ModelsError; load_models;
+      resolve). Re-run → passes.
+- number: 3
+  title: fr models CLI (get/set/resolve + persistence)
+  steps:
+  - id: P4.T3.S1
+    text: |
+      RED. Create tests/unit/test_models_cmd.py: `fr models set
+      --harness claude-code --tier hard --model claude-opus-4-8` writes a
+      valid ~/.config/fr/models.yaml (use a tmp HOME/env override);
+      `fr models resolve --harness claude-code --tier hard` prints the
+      model; unknown binding prints nothing and exits 0. Run → fails.
+  - id: P4.T3.S2
+    text: |
+      GREEN. Create packages/fr/src/fr/commands/models_cmd.py
+      (models_app: set / get / resolve) and register
+      app.add_typer(models_app, name="models") in fr/cli.py. Re-run →
+      passes.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
