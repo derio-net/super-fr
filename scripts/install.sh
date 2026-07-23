@@ -494,9 +494,15 @@ echo "  Installed $RULES_DIR/no-claude-p-batch.md (#328 batch-LLM convention)"
 # fr-goal dispatches each plan phase to this narrow, serial, already-isolated
 # subagent (2026-07-22 fr-goal-subagent-execution spec §B.1). Idempotent; a
 # no-op when the org hook is absent (fr-goal then falls back to inline).
-bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
-  "$CLAUDE_DIR/hooks/agent-worktree-required.sh" || \
-  echo "  (agent-worktree hook not managed here — fr-goal falls back to inline)"
+# The script already exits 0 when the hook is simply absent, so a non-zero exit
+# here is a REAL failure (anchor drift / unwritable hook) — surface it as a
+# warning instead of the misleading "not managed here", which used to mask it
+# and leave every fr-goal run mysteriously degraded to inline execution.
+if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
+     "$CLAUDE_DIR/hooks/agent-worktree-required.sh"; then
+  echo "  WARNING: could not allowlist fr-phase-executor in the agent-worktree hook" >&2
+  echo "  (see the error above) — fr-goal will fall back to INLINE phase execution." >&2
+fi
 
 # 7b. OpenCode skill + command delivery — opt-in only (OpenCode has no
 # plugin/marketplace concept; it discovers plain SKILL.md files and
