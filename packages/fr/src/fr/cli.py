@@ -22,6 +22,7 @@ from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
 from fr.commands.init_cmd import init_app
 from fr.commands.isolation_cmd import isolation_app
+from fr.commands.journal_cmd import journal_app
 from fr.commands.migrate_cmd import migrate_app
 from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
@@ -60,6 +61,7 @@ app.add_typer(migrate_app, name="migrate")
 app.add_typer(isolation_app, name="isolation")
 app.add_typer(init_app, name="init")
 app.add_typer(repos_app, name="repos")
+app.add_typer(journal_app, name="journal")
 app.command(name="skills")(skills_command)
 
 
