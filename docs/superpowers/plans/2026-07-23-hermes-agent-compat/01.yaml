@@ -44,26 +44,28 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-23T19:01:09+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-23T19:01:10+00:00'
       note: null
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-23T19:01:11+00:00'
       note: null
     P1.T1.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-23T19:01:13+00:00'
       note: null
     P1.T1.S5:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-07-23T19:01:14+00:00'
+      note: 'Skipped: skills logic mirrors sync-opencode.py but not verbatim (distinct
+        dirs/category/breadcrumb); the two scripts stay standalone for path-import
+        tripwires — extracting a shared helper would couple them for marginal gain.'
   completion:
-    at: null
+    at: '2026-07-23T19:01:15+00:00'
     note: null
     observed_prs: []
