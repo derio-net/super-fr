@@ -695,8 +695,11 @@ rows:
       as /fr-* slash commands.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_hermes_skills_sync.py
+      - super-fr:tests/unit/test_install_copies_hermes_skills.py
+    status: ci
     notes: Verified by sync tripwire + install-copies unit tests; post-merge manual
       Test Plan item 1 (real Hermes install).
   - id: hermes-rules-soul-block
@@ -705,8 +708,11 @@ rows:
       ~/.hermes/SOUL.md block.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py
+      - super-fr:tests/unit/test_hermes_install_cmd.py
+    status: ci
     notes: Rules-sync tripwire + install/uninstall block assertions; strip-on-uninstall
       leaves user SOUL.md intact.
   - id: hermes-isolation-gate-edits
@@ -715,8 +721,11 @@ rows:
       fr-isolation worktree, honoring FR_BASE_OK and .fr-isolation-allow.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_decision_core.py
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py
+    status: ci
     notes: Decision-core + Hermes entrypoint unit tests; post-merge manual Test Plan
       item 3.
   - id: hermes-isolation-gate-bash
@@ -725,8 +734,11 @@ rows:
       outside isolation, closing the bash gap OpenCode leaves open.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hermes_bash_guard.py
+      - super-fr:tests/unit/test_hermes_merged_pr_push_guard.py
+    status: ci
     notes: Bash-guard unit tests; post-merge manual Test Plan item 4.
   - id: hermes-fr-goal-delegation
     capability: Hermes Agent compatibility
@@ -734,6 +746,9 @@ rows:
       delegate_task with a journal-fed brief and resolving models via --harness hermes.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_goal_hermes_dispatch.py
+      - super-fr:tests/unit/test_models_hermes_defaults.py
+    status: skipped
     notes: Post-merge manual Test Plan item 6 (toy feature end-to-end in real Hermes).

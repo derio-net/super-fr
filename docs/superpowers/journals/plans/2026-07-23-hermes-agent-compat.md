@@ -24,3 +24,8 @@ Documented limitation (module docstring): mutating cli-config.yaml via PyYAML st
 ### p7-fr-execute-neutral · discovery · fr-execute needs no Hermes edit; the delegated child loads it as-is
 
 fr-goal step 6 now branches on harness: Claude Code dispatches fr-phase-executor Agent; Hermes calls delegate_task(goal, context). The delegated Hermes child loads the fr-execute skill, which is harness-neutral (agent-facing execution protocol) — no Hermes-specific edit required. SKILL.md held at exactly 120 lines by compressing the executor paragraph; TDD skill ref kept inline.
+
+<!-- fr:journal kind=review scope=plan id=r-milestone-review created=2026-07-23T21:46:54 -->
+### r-milestone-review · review · Milestone review (spec+plan+code): no defects; flipped acceptance rows
+
+Full suite 1670 passed / 80 skipped; ruff + mypy clean; journal check + plan self-review pass. Inline adversarial review of the riskiest logic (enforcement lib refactor byte-identical via 13 Claude tests; guard mutation-regex + cd-transition; install idempotence/reversibility roundtrip; install.sh fr-before-fr-hermes ordering; .hermes tracked / .fr-isolation still ignored) found no correctness defects — all risk areas test-covered. Flipped 4 hermes rows not-implemented -> ci (unit-tested) and hermes-fr-goal-delegation -> skipped (wiring unit-tested; end-to-end is post-merge Test Plan 6). fr acceptance check: 47 rows OK.
