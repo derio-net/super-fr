@@ -133,6 +133,41 @@ On merge to `main`, `.github/workflows/auto-tag.yml` tags `vX.Y.Z` and
 publishes a release automatically from the `pyproject.toml` change — no
 human action needed.
 
+## Marketplace names are `<org>--<repo>`; the bare org name is retired
+
+A Claude Code marketplace name is a **1:1 namespace over one source repo**:
+its manifest at `~/.claude/plugins/marketplaces/<name>/.claude-plugin/marketplace.json`
+is a single file listing every plugin of that marketplace, and `install.sh`
+populates it with `rsync -a --delete <repo root>/` — replace, never merge.
+Two repos claiming one name is therefore mutual eviction, not a conflict.
+
+super-fr installs as **`derio-net--super-fr`**; blog-craft as
+`derio-net--blog-craft`. The bare org name `derio-net` is **retired** — super-fr
+and blog-craft both claimed it and evicted each other — and both installers
+purge it on sight (registry keys, directory, cache, and every `*@derio-net`
+id, all dangling once no repo owns the name). Retiring beat awarding it to a
+winner: no repo owns an org-level namespace, so the same trap is closed for
+`optionality-fr` and any future derio-net plugin, and `<org>--<repo>` makes
+the 1:1 rule self-documenting. Root cause in
+`docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md`.
+
+Invariants for any installer touching `~/.claude/plugins`, pinned by
+`tests/integration/test_install_marketplace_namespace.py`:
+
+- **Name yourself `<org>--<repo>`**, matching your own manifest's `name`.
+- **Write the keys you own unconditionally.** `if ! jq -e '."<key>"'` reads as
+  idempotence but means first-writer-wins, so another repo's wrong
+  `source.repo` survives every reinstall. Converge on your value instead.
+- **Only delete keys you own** — or keys nobody owns, like the retired bare
+  name. `--uninstall` removing a *live* shared key deregisters every plugin in
+  it, not just yours.
+
+Renaming a marketplace moves a path that consumer repos have **committed**:
+`scripts/validate-plans.sh` delegates to `marketplaces/<name>/scripts/`. Write
+the new path, but keep recognizing the old one, or `ensure_validator_wrapper`
+classifies every deployed wrapper as foreign and refuses to upgrade it
+(`tests/unit/test_plan_validator_wrapper_rename.py`).
+
 ## Bridge audit rule
 
 Any brainstorm, spec, or plan touching dispatch / sync / cron / VK card /
