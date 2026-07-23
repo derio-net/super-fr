@@ -37,6 +37,16 @@ SKILLS_CANONICAL_DIR = REPO_ROOT / "plugins" / "super-fr" / "skills"
 # the user's own or agent-generated skills.
 SKILLS_MIRROR_DIR = REPO_ROOT / ".hermes" / "skills" / "fr"
 
+RULES_CANONICAL_DIR = REPO_ROOT / "plugins" / "super-fr" / "rules"
+# ONLY the installer-shipped plugin rules reach a consumer's global SOUL.md —
+# exactly the set install.sh copies to ~/.claude/rules/ for Claude Code. The
+# repo-local acceptance-matrix rule (no plugin equivalent) is maintainer-only
+# and must never ship into a consumer's SOUL.md.
+SHIPPED_RULE_NAMES = ("fr-isolation-required", "fr-plan-override", "no-claude-p-batch")
+SOUL_D_MIRROR = REPO_ROOT / ".hermes" / "SOUL.d" / "super-fr-rules.md"
+SOUL_BLOCK_START = "<!-- super-fr:rules START -->"
+SOUL_BLOCK_END = "<!-- super-fr:rules END -->"
+
 
 # ---------------------------------------------------------------------------
 # skills
@@ -99,6 +109,50 @@ def sync_skills() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# rules -> managed SOUL.md block
+
+
+def canonical_rules() -> dict[str, Path]:
+    """Map of shipped rule name -> canonical rule markdown path.
+
+    Restricted to SHIPPED_RULE_NAMES so a new maintainer-only rule dropped into
+    plugins/super-fr/rules/ never silently leaks into a consumer's SOUL.md.
+    """
+    result: dict[str, Path] = {}
+    for name in SHIPPED_RULE_NAMES:
+        path = RULES_CANONICAL_DIR / f"{name}.md"
+        if path.is_file():
+            result[name] = path
+    return result
+
+
+def render_rules_block() -> str:
+    """The delimited managed block super-fr owns inside ~/.hermes/SOUL.md."""
+    parts = [SOUL_BLOCK_START, ""]
+    for _name, path in canonical_rules().items():
+        parts.append(path.read_text().rstrip())
+        parts.append("")
+    parts.append(SOUL_BLOCK_END)
+    return "\n".join(parts) + "\n"
+
+
+def find_rules_drift() -> list[str]:
+    """Human-readable rules-block drift descriptions; empty means in sync."""
+    expected = render_rules_block()
+    if not SOUL_D_MIRROR.is_file():
+        return [f"{SOUL_D_MIRROR.relative_to(REPO_ROOT)}: missing"]
+    if SOUL_D_MIRROR.read_text() != expected:
+        return [f"{SOUL_D_MIRROR.relative_to(REPO_ROOT)}: content differs from canonical rules"]
+    return []
+
+
+def sync_rules() -> None:
+    """Write/overwrite the SOUL.d managed-block mirror to match canonical."""
+    SOUL_D_MIRROR.parent.mkdir(parents=True, exist_ok=True)
+    SOUL_D_MIRROR.write_text(render_rules_block())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -109,7 +163,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.check:
-        drift = find_skills_drift()
+        drift = find_skills_drift() + find_rules_drift()
         if drift:
             print("scripts/sync-hermes.py --check: drift detected:", file=sys.stderr)
             for line in drift:
@@ -120,9 +174,12 @@ def main() -> int:
         return 0
 
     sync_skills()
+    sync_rules()
     print(
         f"Synced {len(canonical_skills())} skill(s) into "
-        f"{SKILLS_MIRROR_DIR.relative_to(REPO_ROOT)}/"
+        f"{SKILLS_MIRROR_DIR.relative_to(REPO_ROOT)}/ and "
+        f"{len(canonical_rules())} rule(s) into "
+        f"{SOUL_D_MIRROR.relative_to(REPO_ROOT)}"
     )
     return 0
 
