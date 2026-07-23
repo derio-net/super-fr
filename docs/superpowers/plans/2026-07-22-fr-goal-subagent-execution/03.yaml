@@ -1,0 +1,83 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Lifecycle wiring — plan-create init + archive moves
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - fr-goal-run-journal
+tasks:
+- number: 1
+  title: fr plan create initializes the plan journal
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED. In tests/unit/test_plan_ops.py (or a new test_plan_journal.py)
+      assert `fr plan create ... --slug X` also writes
+      docs/superpowers/journals/X.md (an empty/stub journal) and stages it;
+      and that parsing a plan folder whose journal is ABSENT still
+      succeeds (back-compat). Run → fails.
+  - id: P3.T1.S2
+    text: |
+      GREEN. In fr/plan_ops.py create() write site (near
+      plan_ops.py:183-187) also create journals/<slug>.md via the Phase-1
+      path helper and add it to `written` for staging. Re-run → passes.
+- number: 2
+  title: fr archive moves the plan journal
+  steps:
+  - id: P3.T2.S1
+    text: |
+      RED. In tests/unit/test_archive.py assert archive_plan_dir also
+      git-mv's docs/superpowers/journals/<plan-slug>.md →
+      docs/superpowers/implemented/journals/<plan-slug>.md; an absent
+      journal is a clean no-op (no error). Run → fails.
+  - id: P3.T2.S2
+    text: |
+      GREEN. In fr/archive.py archive_plan_dir add the journal move
+      (guarded by existence; reuse _git_mv). Create
+      implemented/journals/ on demand. Re-run → passes.
+- number: 3
+  title: Spec journal follows a fully-implemented spec
+  steps:
+  - id: P3.T3.S1
+    text: |
+      RED. Assert spec_archive_sweep moves
+      journals/<spec-slug>.md → implemented/journals/ when the spec is
+      archived; absent spec journal → no-op. Run → fails.
+  - id: P3.T3.S2
+    text: |
+      GREEN. In fr/archive.py spec_archive_sweep, on each spec move also
+      move its sibling journals/<spec-slug>.md when present. Re-run →
+      passes; uv run pytest tests/unit/test_archive.py -q --no-cov green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-23T12:48:50+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-23T12:48:52+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-23T12:48:53+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-23T12:48:55+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-07-23T12:48:56+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-07-23T12:48:58+00:00'
+      note: null
+  completion:
+    at: '2026-07-23T12:48:59+00:00'
+    note: null
+    observed_prs: []

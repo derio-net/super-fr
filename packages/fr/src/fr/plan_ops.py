@@ -27,6 +27,7 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
+from fr.journal.model import journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
 
@@ -186,6 +187,18 @@ def create(
             (folder / name).write_text(text)
         written.extend([folder / "_meta.yaml", folder / "_prose.md"])
         written.extend(folder / name for name in phase_files)
+
+        # Initialize the plan journal (2026-07-22 fr-goal-subagent-execution
+        # spec §A). A plan-scoped journal is a sibling of the plan folder under
+        # docs/superpowers/journals/; it holds per-phase discoveries and review
+        # findings written during execution. Only created here (not repaired),
+        # so a hand-deleted journal on an existing folder stays absent —
+        # parsing a plan never depends on its journal (back-compat).
+        journal_p = journal_path(repo_root, "plan", slug)
+        if not journal_p.exists():
+            journal_p.parent.mkdir(parents=True, exist_ok=True)
+            journal_p.write_text(f"# Journal: {slug}\n")
+            written.append(journal_p)
 
     if spec_path is not None:
         _append_spec_row(

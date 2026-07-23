@@ -1,0 +1,91 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr journal CLI — add / render / check
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - fr-goal-run-journal
+  - fr-goal-pr-body-derived
+tasks:
+- number: 1
+  title: fr journal add (idempotent append)
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED. Create tests/unit/test_journal_cmd.py driving the typer app.
+      `fr journal add --scope plan --slug S --kind discovery --title T
+      --body B` creates journals/S.md with one entry; a second add with a
+      new --id appends (2 entries); re-running an add with the SAME --id
+      is idempotent (still 1 of that id). Run → fails (no subcommand).
+  - id: P2.T1.S2
+    text: |
+      GREEN. Create packages/fr/src/fr/commands/journal_cmd.py with a
+      `journal_app = typer.Typer(no_args_is_help=True)` and an `add`
+      command (resolve repo root via commands.common.resolve_repo_root;
+      append via the Phase-1 model, honoring --id idempotency; auto-stamp
+      created; --id defaults to a content hash when omitted). Register with
+      `app.add_typer(journal_app, name="journal")` in fr/cli.py. Re-run →
+      passes.
+- number: 2
+  title: fr journal render (PR-body sections)
+  steps:
+  - id: P2.T2.S1
+    text: |
+      RED. Add tests: `fr journal render --scope plan --slug S
+      --section findings` prints only finding entries with their state;
+      `--section decisions` only decisions; `--section all` (default)
+      prints everything grouped; an absent/empty journal prints nothing
+      and exits 0 (fail-open). Run → fails.
+  - id: P2.T2.S2
+    text: |
+      GREEN. Add `render` to journal_cmd.py (reads + groups by kind;
+      section filter; never raises on a missing file — prints empty).
+      Re-run → passes.
+- number: 3
+  title: fr journal check (freshness heuristic)
+  steps:
+  - id: P2.T3.S1
+    text: |
+      RED. Add tests: `fr journal check --scope plan --slug S` exits 0 on
+      a journal whose findings are all fixed/refuted; exits non-zero when
+      any finding is `open`; a MALFORMED journal makes `check` exit
+      non-zero (fail-closed) while `render` still exits 0 (fail-open).
+      Run → fails.
+  - id: P2.T3.S2
+    text: |
+      GREEN. Add `check` to journal_cmd.py (parse; non-zero on open
+      findings or parse error). Re-run → passes; then
+      uv run pytest tests/unit/test_journal_cmd.py -q --no-cov all green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-23T12:44:13+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-23T12:44:15+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-23T12:44:16+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-23T12:44:18+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-07-23T12:44:19+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-07-23T12:44:21+00:00'
+      note: null
+  completion:
+    at: '2026-07-23T12:44:23+00:00'
+    note: null
+    observed_prs: []

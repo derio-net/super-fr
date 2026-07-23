@@ -1,0 +1,127 @@
+schema_version: 2
+phase:
+  number: 5
+  title: fr-goal subagent execution — agent, allowlist, skill rewrite, cap
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  tracking_issue: null
+  acceptance:
+  - fr-goal-subagent-per-phase
+  - fr-goal-journal-handoff-complete
+  - fr-goal-pr-body-derived
+  - fr-goal-phase-tiering
+tasks:
+- number: 1
+  title: Ship the fr-phase-executor agent definition
+  steps:
+  - id: P5.T1.S1
+    text: |
+      RED. Add tests/unit/test_phase_executor_agent.py: assert
+      plugins/super-fr/agents/fr-phase-executor.md exists, has YAML
+      frontmatter with name=fr-phase-executor and a tools grant including
+      Edit and Write, and is listed in
+      plugins/super-fr/.claude-plugin/plugin.json. Run → fails.
+  - id: P5.T1.S2
+    text: |
+      GREEN. Create plugins/super-fr/agents/fr-phase-executor.md — a
+      narrow agent whose brief is "implement ONE plan phase serially
+      inside the already-active fr-isolation workspace via fr-execute;
+      write discoveries/findings to the plan journal; return a structured
+      result". Wire the agents dir into plugin.json. Re-run → passes.
+- number: 2
+  title: install.sh idempotently allowlists fr-phase-executor
+  steps:
+  - id: P5.T2.S1
+    text: |
+      RED. Add tests/unit/test_install_allowlists_phase_executor.py:
+      given a fixture agent-worktree-required.sh with the stock case
+      block, the install helper inserts `fr-phase-executor` into the
+      allowlist case; re-running is idempotent (no dup); an ABSENT hook
+      file is a safe no-op (exit 0, nothing created). Run → fails.
+  - id: P5.T2.S2
+    text: |
+      GREEN. Add an idempotent shell function to scripts/install.sh that,
+      when ~/.claude/hooks/agent-worktree-required.sh exists and lacks
+      fr-phase-executor in its allowlist case, inserts it (sed, guarded by
+      a grep check); no-op otherwise. Re-run test → passes.
+  - id: P5.T2.S3
+    text: |
+      Update the repo rule mirror .claude/rules/ and the shipped
+      plugins/super-fr/rules note (and ~/.claude/rules/agent-worktree-default.md
+      text if super-fr ships it) to record fr-phase-executor in the
+      allowlist with its "serial, already-isolated" rationale.
+- number: 3
+  title: Rewrite fr-goal SKILL.md — dispatch, journal write-points, derived PR, tiering
+  steps:
+  - id: P5.T3.S1
+    text: |
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md. Step 6: replace
+      "implement inline, not via subagents" with serial per-phase dispatch
+      to an fr-phase-executor subagent (brief = fr pickup + spec + fr
+      journal render; structured result back; INLINE fallback if the
+      dispatch is blocked). Add journal write-points: step 1 decisions +
+      step 2 review (scope spec), step 6 discoveries + step 7 findings
+      (scope plan), all via `fr journal add`. Step 8: findings/decisions
+      PR-body sections via `fr journal render`. Tiering: resolve tier→model
+      via `fr models`, with the runtime model question folded into the
+      step-1 batched Q&A and persisted.
+  - id: P5.T3.S2
+    text: |
+      Add a content assertion to test_skill_validation (or
+      test_fr_goal_journal.py): fr-goal/SKILL.md mentions
+      `fr journal render`, `fr-phase-executor`, and `fr models`. Run
+      uv run pytest tests/unit/test_skill_validation.py -q --no-cov.
+- number: 4
+  title: Compress fr-goal to the 120-line cap
+  steps:
+  - id: P5.T4.S1
+    text: |
+      wc -l plugins/super-fr/skills/fr-goal/SKILL.md. If >120, compress
+      existing prose (tighten the What-stays-interactive table, fold
+      redundant clauses) WITHOUT dropping any step's meaning; if it still
+      won't fit, move mechanics into the spec (which the skill already
+      references) rather than exceed the cap. Verify:
+      uv run pytest tests/unit/test_skill_validation.py -q --no-cov green
+      (test_under_120_lines passes).
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-07-23T13:09:20+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-07-23T13:09:22+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-07-23T13:09:24+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-07-23T13:09:25+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-07-23T13:09:32+00:00'
+      note: documented in agent def + AGENTS.md (Phase 7); org rule doc is willikins-owned,
+        not shipped by super-fr
+    P5.T3.S1:
+      state: x
+      ticked_at: '2026-07-23T13:09:27+00:00'
+      note: null
+    P5.T3.S2:
+      state: x
+      ticked_at: '2026-07-23T13:09:28+00:00'
+      note: null
+    P5.T4.S1:
+      state: x
+      ticked_at: '2026-07-23T13:09:30+00:00'
+      note: null
+  completion:
+    at: '2026-07-23T13:09:33+00:00'
+    note: null
+    observed_prs: []

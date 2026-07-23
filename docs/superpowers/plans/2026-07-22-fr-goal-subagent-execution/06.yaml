@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 6
+  title: fr-debugging adopts the journal (debug scope)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - fr-debugging-journal
+tasks:
+- number: 1
+  title: Step 3 records to the debug-scope journal as it proceeds
+  steps:
+  - id: P6.T1.S1
+    text: |
+      Edit plugins/super-fr/skills/fr-debugging/SKILL.md step 3: replace
+      "write the investigation to docs/superpowers/debugging/<slug>.md"
+      with `fr journal add --scope debug --slug <debug-slug>` appended as
+      the investigation proceeds — repro on reproduce; each hypothesis and
+      its verdict (kind hypothesis / ruled-out) as tested; root-cause on
+      confirmation; fix + verification at the end. State that new debug
+      journals live in journals/ and existing debugging/*.md prose stays
+      put (no migration).
+  - id: P6.T1.S2
+    text: |
+      Content assertion test (test_fr_debugging_journal.py): fr-debugging/
+      SKILL.md references `fr journal add --scope debug` and no longer
+      instructs a hand-written debugging/<slug>.md as the write target.
+      Run the test → passes.
+- number: 2
+  title: Step 4 derives the PR body from the debug journal
+  steps:
+  - id: P6.T2.S1
+    text: |
+      Edit step 4: the PR body is produced by
+      `fr journal render --scope debug --slug <debug-slug>` (root cause +
+      fix + failing-test narrative), not hand-summarized. Verify
+      uv run pytest tests/unit/test_skill_validation.py -q --no-cov green
+      (fr-debugging stays ≤120 lines).
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-07-23T13:11:16+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-07-23T13:11:18+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-07-23T13:11:19+00:00'
+      note: null
+  completion:
+    at: '2026-07-23T13:11:21+00:00'
+    note: null
+    observed_prs: []

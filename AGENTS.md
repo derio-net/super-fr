@@ -15,6 +15,22 @@ uv workspace monorepo, version lockstepped across every manifest (see
 - `fr` — the CLI/engine: plan-as-folder model, GitHub tracking (render →
   observe → diff → apply, single mutation path in `apply.py`, dry-run by
   default), isolation lifecycle. Entrypoint `fr = "fr.cli:app"`.
+  - **`fr journal`** (`fr/journal/`, `commands/journal_cmd.py`) — scope-keyed
+    (`spec|plan|debug`) durable run-state under
+    `docs/superpowers/journals/{specs,plans,debug}/` (one subdir per scope so
+    the tree is glanceable; archived to `implemented/journals/<scope>/`).
+    `add` (idempotent
+    on `--id`) / `render` (raw, feeds PR bodies) / `check` (fail-closed on open
+    findings). `fr plan create` seeds a plan journal; parsing never depends on
+    one (back-compat). fr-goal & fr-debugging write it as they run.
+  - **`fr models`** (`fr/models.py`, `commands/models_cmd.py`) — `tier → model`
+    bindings (`~/.config/fr/models.yaml`, repo override > user) for fr-goal
+    subagent dispatch; `PhaseHeader.tier` is the harness-neutral hint.
+  - **fr-goal subagent execution** (2026-07-22 spec): fr-goal dispatches each
+    phase to the `plugins/super-fr/agents/fr-phase-executor` agent (serial,
+    shared workspace); `scripts/ensure-phase-executor-allowlist.sh` (called by
+    install.sh) allowlists it in the org agent-worktree hook, else fr-goal
+    falls back to inline.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
 - `fr-vk`, `fr-cncd` — runner adapters (`vk`, `cncd`) implementing that
