@@ -20,6 +20,7 @@ from fr import __version__
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
+from fr.commands.hermes_cmd import hermes_app
 from fr.commands.init_cmd import init_app
 from fr.commands.isolation_cmd import isolation_app
 from fr.commands.journal_cmd import journal_app
@@ -64,6 +65,7 @@ app.add_typer(init_app, name="init")
 app.add_typer(repos_app, name="repos")
 app.add_typer(journal_app, name="journal")
 app.add_typer(models_app, name="models")
+app.add_typer(hermes_app, name="hermes")
 app.command(name="skills")(skills_command)
 
 

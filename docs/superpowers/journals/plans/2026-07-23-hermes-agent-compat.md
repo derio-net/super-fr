@@ -14,3 +14,8 @@ The marker/allowlist/fr-enabled logic now lives in one sourced bash lib (fr_isol
 ### p4-guard-marker-based · finding [fixed] · Hermes bash guard is marker-based, not sentinel-based — implemented + tested (phase 4)
 
 Claude fr-isolation-guard.sh gates ALL base-repo commands while a pipeline SENTINEL is active (written by fr-pipeline-sentinel.sh, a Skill-PostToolUse hook). Hermes has no Skill-PostToolUse, so no sentinel writer. Decision: the Hermes guard is MARKER-based (session-independent, like the P3 edit hook) — it blocks git/gh MUTATIONS whose effective cwd (payload cwd, or a leading 'cd <target>') is an fr-enabled base clone lacking a valid isolation worktree. Escapes: fr isolation …, cd <worktree>, FR_BASE_OK=1. Read-only/unknown commands pass (discipline backstop, not a security boundary). Implemented via a new fr_isolation_decide_cwd in the shared lib.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-yaml-comment-loss created=2026-07-23T21:28:17 -->
+### p5-yaml-comment-loss · discovery · fr hermes uses PyYAML; comments in cli-config.yaml are not round-tripped
+
+Documented limitation (module docstring): mutating cli-config.yaml via PyYAML strips comments. The managed edits are confined to the hooks: key and are idempotent+reversible, but surrounding user comments aren't preserved. Acceptable for v1; ruamel would preserve them at the cost of a new dep.

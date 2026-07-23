@@ -1,0 +1,20 @@
+# super-fr's Hermes Agent hook registrations (source of truth).
+#
+# `fr hermes install` merges this `hooks:` block into ~/.hermes/cli-config.yaml
+# (idempotent, keyed by event+command), rewriting each `command` to an absolute
+# path under the installed hooks dir. `command` values here are relative to
+# plugins/super-fr/hooks/ (the shipped tree, copied to the install dir whole).
+#
+# Never hand-edit the deployed cli-config.yaml block — re-run `fr hermes
+# install`. The tripwire test_tripwire_hermes_hooks_sync.py fails if any command
+# here stops naming a real shipped script.
+hooks:
+  pre_tool_call:
+    - matcher: "write_file|patch"
+      command: "hermes/fr-isolation-required.sh"
+    - matcher: "terminal|execute_code"
+      command: "hermes/fr-isolation-guard.sh"
+    - matcher: "terminal|execute_code"
+      command: "hermes/fr-merged-pr-push-guard.sh"
+  on_session_start:
+    - command: "fr-acceptance-nag.sh"
