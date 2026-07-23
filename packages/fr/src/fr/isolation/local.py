@@ -791,7 +791,7 @@ class LocalWorktreeDevcontainerTarget:
         if result.returncode != 0 or not line:
             raise IsolationError(
                 "plan repo has scripts/validate-plans.sh in the working tree but not in "
-                f"{ref}; run `bash ~/.claude/plugins/marketplaces/derio-net/scripts/"
+                f"{ref}; run `bash ~/.claude/plugins/marketplaces/derio-net--super-fr/scripts/"
                 "install-validator-wrapper.sh` if needed, commit it to the isolation start "
                 "ref, then retry `fr isolation up`."
             )

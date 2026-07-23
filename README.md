@@ -40,7 +40,7 @@ bash bootstrap.sh
 ```
 
 Claude Code: the installer registers the `derio-net` marketplace and enables
-`super-fr@derio-net` plus `super-fr-dispatch@derio-net` for you.
+`super-fr@derio-net--super-fr` plus `super-fr-dispatch@derio-net--super-fr` for you.
 
 OpenCode: the installer copies skills and slash commands when
 `~/.config/opencode` already exists. On a fresh OpenCode setup, force that step

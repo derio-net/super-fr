@@ -171,7 +171,8 @@ def test_scaffold_plan_repo_commits_existing_untracked_wrapper(repo: Path) -> No
         "#!/usr/bin/env bash\n"
         "# Thin wrapper — delegates to the canonical validator from the\n"
         "# super-fr plugin installed at the user level.\n"
-        'exec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh" "$@"\n'
+        'exec "$HOME/.claude/plugins/marketplaces/derio-net--super-fr'
+        '/scripts/validate-plans.sh" "$@"\n'
     )
     wrapper.chmod(0o755)
     _git(repo, "add", "docs/superpowers/plans/.gitkeep")
@@ -196,7 +197,8 @@ def test_scaffold_plan_repo_commits_existing_wrapper_mode_fix(repo: Path) -> Non
         "#!/usr/bin/env bash\n"
         "# Thin wrapper — delegates to the canonical validator from the\n"
         "# super-fr plugin installed at the user level.\n"
-        'exec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh" "$@"\n'
+        'exec "$HOME/.claude/plugins/marketplaces/derio-net--super-fr'
+        '/scripts/validate-plans.sh" "$@"\n'
     )
     wrapper.chmod(0o644)
     _git(repo, "add", "docs/superpowers/plans/.gitkeep", "scripts/validate-plans.sh")

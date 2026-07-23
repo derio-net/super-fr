@@ -41,7 +41,8 @@ def test_install_validator_wrapper_refreshes_current_wrapper(tmp_path: Path) -> 
         "#!/usr/bin/env bash\n"
         "# Thin wrapper — delegates to the canonical validator from the\n"
         "# super-fr plugin installed at the user level.\n"
-        'exec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh" "$@"\n'
+        'exec "$HOME/.claude/plugins/marketplaces/derio-net--super-fr'
+        '/scripts/validate-plans.sh" "$@"\n'
     )
 
     result = subprocess.run(
@@ -65,7 +66,8 @@ def test_install_validator_wrapper_refreshes_legacy_wrapper(tmp_path: Path) -> N
     target.write_text(
         "#!/usr/bin/env bash\n"
         "# superpowers-for-vk wrapper\n"
-        'exec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh" "$@"\n'
+        'exec "$HOME/.claude/plugins/marketplaces/derio-net--super-fr'
+        '/scripts/validate-plans.sh" "$@"\n'
     )
 
     result = subprocess.run(

@@ -465,15 +465,15 @@ class TestPluginCacheSymlink:
         return fake_home
 
     def _cache_dir(self, home: Path, plugin: str = "super-fr") -> Path:
-        return home / ".claude" / "plugins" / "cache" / "derio-net" / plugin
+        return home / ".claude" / "plugins" / "cache" / "derio-net--super-fr" / plugin
 
     def _installed(self, home: Path) -> dict:
         return json.loads((home / ".claude" / "plugins" / "installed_plugins.json").read_text())
 
     def test_installpath_is_current_symlink(self, home_with_plugins: Path) -> None:
         _run_install(home_with_plugins)
-        entry = self._installed(home_with_plugins)["plugins"]["super-fr@derio-net"][0]
-        assert entry["installPath"].endswith("/cache/derio-net/super-fr/current"), (
+        entry = self._installed(home_with_plugins)["plugins"]["super-fr@derio-net--super-fr"][0]
+        assert entry["installPath"].endswith("/cache/derio-net--super-fr/super-fr/current"), (
             f"installPath should be the stable symlink, got {entry['installPath']}"
         )
         # The recorded version still tracks the real plugin version.
@@ -540,5 +540,7 @@ class TestPluginCacheSymlink:
         link = self._cache_dir(home_with_plugins, "super-fr-dispatch") / "current"
         assert link.is_symlink(), "super-fr-dispatch/current must also be a symlink"
         assert os.readlink(link) == _plugin_version("super-fr-dispatch")
-        entry = self._installed(home_with_plugins)["plugins"]["super-fr-dispatch@derio-net"][0]
-        assert entry["installPath"].endswith("/cache/derio-net/super-fr-dispatch/current")
+        entry = self._installed(home_with_plugins)["plugins"][
+            "super-fr-dispatch@derio-net--super-fr"
+        ][0]
+        assert entry["installPath"].endswith("/cache/derio-net--super-fr/super-fr-dispatch/current")

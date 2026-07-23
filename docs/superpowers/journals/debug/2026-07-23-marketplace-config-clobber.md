@@ -99,3 +99,40 @@ gains three guards in `scripts/install.sh`:
 Failing test written first: `tests/integration/test_install_marketplace_namespace.py`
 (11 tests; 4 red before the fix, all green after). Full suite 1599 passed / 80
 skipped. Version 3.12.0 -> 3.12.1 (install.sh is user-observable).
+
+<!-- fr:journal kind=finding scope=debug id=fix-rename created=2026-07-23T18:53:32 state=fixed -->
+### fix-rename · finding [fixed] · Operator decision: retire the bare org name entirely; both repos become <org>--<repo>
+
+Supersedes fix-super-fr (which kept `derio-net` for super-fr and moved only
+blog-craft off it). The operator chose the stronger invariant: **no repo owns an
+org-level namespace.**
+
+  super-fr    -> derio-net--super-fr
+  blog-craft  -> derio-net--blog-craft
+  derio-net   -> RETIRED; both installers purge it on sight
+
+Why this beats awarding the name to super-fr:
+- It closes the same trap for optionality-fr and every future derio-net plugin,
+  rather than closing it once for blog-craft.
+- `<org>--<repo>` makes the 1:1 name<->repo rule self-documenting, so the next
+  installer author cannot make the same mistake by copying.
+- The purge is safe **by construction**: once no repo owns `derio-net`, every
+  `*@derio-net` id is dangling by definition — so removing the whole key is not
+  one repo reaching into another's install state. That was the objection that
+  forced the earlier asymmetric design, and retiring the name dissolves it.
+
+Cost accepted: breaking plugin-id change (`super-fr@derio-net` ->
+`super-fr@derio-net--super-fr`), so every machine needs both installers re-run
+plus a Claude Code restart. Version bumped minor (3.13.0), not patch.
+
+Renaming hazard found while implementing: `scripts/validate-plans.sh` is a thin
+wrapper that every fr-enabled repo **commits**, and it hardcodes the marketplace
+directory. `ensure_validator_wrapper` refuses to overwrite files it does not
+recognize as ours — so a recognizer that only knew the new path would classify
+every deployed wrapper as foreign and refuse to upgrade exactly the repos that
+needed upgrading. Writer and recognizer are now versioned separately: write the
+new path only, recognize both. Pinned by
+tests/unit/test_plan_validator_wrapper_rename.py.
+
+Suite: 1616 passed / 80 skipped, ruff clean, opencode mirrors in sync,
+acceptance 42 rows OK.
