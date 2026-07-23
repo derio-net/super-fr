@@ -19,3 +19,8 @@ Refuted: the parser pops exactly ONE heading line (the auto-heading), so a body 
 ### p7-agent-delivery · discovery · fr-phase-executor ships via the plugin cache rsync, no separate install copy (phase 7)
 
 install.sh section 4 rsyncs the whole plugin dir to the cache, so agents/ rides along automatically (unlike rules, which copy to ~/.claude/rules). P7.T2's planned test_install_copies_agents would be redundant; agent presence is already guarded by test_phase_executor_agent.py.
+
+<!-- fr:journal kind=finding scope=plan id=ci-f4-xdg-test-isolation created=2026-07-23T16:11:59 phase=4 state=fixed -->
+### ci-f4-xdg-test-isolation · finding [fixed] · test_models_cmd isolated only HOME, not XDG_CONFIG_HOME — green locally, red on CI (phase 4)
+
+default_models_path honors XDG_CONFIG_HOME before HOME. Tests set only HOME; local XDG was unset (fell back to HOME=tmp) but the CI runner sets XDG_CONFIG_HOME, so both tests hit the runner's real config → wrong path + cross-test pollution (test 2 read test 1's write). Fixed: autouse fixture sets BOTH HOME and XDG_CONFIG_HOME to the per-test tmp. Reproduced locally with XDG_CONFIG_HOME=/tmp/... before fixing.

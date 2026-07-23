@@ -8,19 +8,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.cli import app
 from typer.testing import CliRunner
 
 runner = CliRunner()
 
 
-def _env(home: Path) -> dict[str, str]:
-    return {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config")}
+@pytest.fixture(autouse=True)
+def _isolate_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the user config dir at a per-test sandbox.
+
+    `default_models_path()` honors ``$XDG_CONFIG_HOME`` FIRST, then ``$HOME``.
+    A CI runner sets XDG_CONFIG_HOME, so isolating only HOME (as an earlier
+    draft did) leaked into the runner's real config and cross-polluted tests —
+    the #390 CI failure. Set BOTH so the path resolves into tmp_path.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    return tmp_path
 
 
 class TestModelsCmd:
-    def test_set_persists_to_models_yaml(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setenv("HOME", str(tmp_path))
+    def test_set_persists_to_models_yaml(self, tmp_path: Path) -> None:
         res = runner.invoke(
             app,
             [
@@ -42,8 +52,7 @@ class TestModelsCmd:
         data = yaml.safe_load(cfg.read_text())
         assert data["claude-code"]["hard"] == "claude-opus-4-8"
 
-    def test_set_then_resolve(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setenv("HOME", str(tmp_path))
+    def test_set_then_resolve(self, tmp_path: Path) -> None:
         runner.invoke(
             app,
             [
@@ -63,8 +72,7 @@ class TestModelsCmd:
         assert res.exit_code == 0
         assert res.output.strip() == "claude-sonnet-5"
 
-    def test_resolve_unknown_prints_nothing_exit_zero(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setenv("HOME", str(tmp_path))
+    def test_resolve_unknown_prints_nothing_exit_zero(self, tmp_path: Path) -> None:
         res = runner.invoke(
             app, ["models", "resolve", "--harness", "claude-code", "--tier", "hard"]
         )
