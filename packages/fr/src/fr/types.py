@@ -96,6 +96,13 @@ class PhaseHeader(BaseModel):
     # stay byte-stable; `fr plan self-review` validates the ids against
     # docs/acceptance/matrix.yaml.
     acceptance: tuple[str, ...] = ()
+    # Harness-neutral complexity hint used by fr-goal to pick a subagent model
+    # at dispatch (2026-07-22 fr-goal-subagent-execution spec §B.2). The plan
+    # never names a concrete model — the tier→model binding is resolved per
+    # harness via `fr models`. Optional + None default keeps pre-tier plans
+    # byte-stable; adding it is a deliberate extra=forbid schema bump (see the
+    # module docstring's "must update your fr_version" note).
+    tier: Literal["mechanical", "standard", "hard"] | None = None
 
 
 class StepState(BaseModel):
