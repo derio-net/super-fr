@@ -749,6 +749,8 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_fr_goal_hermes_dispatch.py
-      - super-fr:tests/unit/test_models_hermes_defaults.py
+      - super-fr:tests/unit/test_models_hermes_first_run.py
     status: skipped
-    notes: Post-merge manual Test Plan item 6 (toy feature end-to-end in real Hermes).
+    notes: Wiring unit-tested (fr-goal names delegate_task; no guessed hermes model
+      bindings ship, so fr-goal asks the operator per tier on first run). End-to-end
+      run is post-merge manual Test Plan item 6 (toy feature in real Hermes).

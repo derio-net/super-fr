@@ -214,11 +214,10 @@ per-harness I/O adapter instead of a new language port.
   writes `fr journal add --scope plan` entries (durable handoff), ticks steps /
   completes the phase, and returns a structured summary — which Hermes surfaces
   to the orchestrator as the phase result.
-- **Model resolution:** ship a `hermes:` block of `fr models` defaults
-  (`mechanical`/`standard`/`hard` → sensible Hermes model ids) so
-  `fr models resolve --harness hermes --tier <t>` resolves during Hermes runs.
-  Bindings live in the repo `models.yaml` override and are documented for the
-  user override.
+- **Model resolution: ask, never guess.** super-fr ships NO `hermes:` bindings —
+  `fr models resolve --harness hermes --tier <t>` stays unbound, which is
+  precisely fr-goal's trigger to ask the operator for a model per tier on the
+  first Hermes run and persist it via `fr models set`. See §G.
 - Keep the change **additive and guarded** — a `## Harness: phase execution`
   subsection in `fr-goal` SKILL.md with a Claude branch and a Hermes branch, so
   neither harness regresses. (SKILL.md is at its 120-line cap — see Risks.)
@@ -229,8 +228,7 @@ per-harness I/O adapter instead of a new language port.
   `HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"`.
 - **Install:** copy `.hermes/skills/fr/*` → `~/.hermes/skills/fr/`; apply the
   SOUL.md managed block; copy the hook scripts to a stable location and merge
-  the `hooks:` entries + allowlist; write the `hermes:` models defaults if the
-  user has no binding.
+  the `hooks:` entries + allowlist. Install writes **no** model bindings (§G).
 - **Uninstall (`--uninstall`):** remove **only** super-fr's files — iterate
   canonical skill names to `rm -rf ~/.hermes/skills/fr/<name>`; strip the
   SOUL.md managed block; remove super-fr's `hooks:` entries + allowlist lines.
@@ -284,11 +282,25 @@ per-harness I/O adapter instead of a new language port.
   and `cli-config.yaml` natively; the repo-local `.hermes/` mirror is for
   dogfooding + tests only.
 
-### G. `fr models` Hermes defaults
-- Add a `hermes:` section to the repo `models.yaml` (and document the user
-  override) with `mechanical`/`standard`/`hard` → Hermes model ids, so fr-goal
-  step-6 model resolution works under Hermes. No code change to `models.py`
-  (the harness axis already exists) — data + docs only.
+### G. `fr models` under Hermes — ask on first run, ship NOTHING
+
+**Revised after operator review (see journal `r2-no-guessed-models`).** An
+earlier revision shipped a repo `models.yaml` with invented
+`NousResearch/Hermes-4-*` ids. That is wrong on two counts: the ids were
+fabricated (super-fr cannot know which model names a given Nous endpoint
+serves), and — worse — *any* shipped binding resolves successfully, which
+**suppresses fr-goal's first-run model question** and silently locks the
+operator to a wrong model.
+
+- **Ship no `hermes:` bindings.** `fr models resolve --harness hermes --tier <t>`
+  stays unbound, which is exactly the trigger fr-goal already documents:
+  "if `fr models resolve` is unbound, add a model-per-tier question" (SKILL.md
+  step 1) and "Model = phase `tier` via `fr models resolve --harness <h>`
+  (unbound → set step 1)" (step 6). The operator answers once; `fr models set`
+  persists it to `~/.config/fr/models.yaml`.
+- No code change to `models.py` (the harness axis already exists).
+- Guarded by `tests/unit/test_models_hermes_first_run.py`, which fails if any
+  `hermes:` binding is ever re-introduced into the repo override.
 
 ## 5. Risks & mitigations
 

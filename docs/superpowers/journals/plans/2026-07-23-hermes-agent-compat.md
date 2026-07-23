@@ -29,3 +29,8 @@ fr-goal step 6 now branches on harness: Claude Code dispatches fr-phase-executor
 ### r-milestone-review · review · Milestone review (spec+plan+code): no defects; flipped acceptance rows
 
 Full suite 1670 passed / 80 skipped; ruff + mypy clean; journal check + plan self-review pass. Inline adversarial review of the riskiest logic (enforcement lib refactor byte-identical via 13 Claude tests; guard mutation-regex + cd-transition; install idempotence/reversibility roundtrip; install.sh fr-before-fr-hermes ordering; .hermes tracked / .fr-isolation still ignored) found no correctness defects — all risk areas test-covered. Flipped 4 hermes rows not-implemented -> ci (unit-tested) and hermes-fr-goal-delegation -> skipped (wiring unit-tested; end-to-end is post-merge Test Plan 6). fr acceptance check: 47 rows OK.
+
+<!-- fr:journal kind=finding scope=plan id=r2-no-guessed-models created=2026-07-23T22:22:46 phase=6 state=fixed -->
+### r2-no-guessed-models · finding [fixed] · Shipped hermes model ids were fabricated AND suppressed fr-goal's first-run question (phase 6)
+
+Operator review: the NousResearch/Hermes-4-{14B,70B,405B} ids in docs/superpowers/models.yaml were invented — super-fr cannot know which models a given Nous endpoint serves. Worse, ANY shipped binding resolves successfully, which suppresses fr-goal's documented 'unbound -> ask the operator per tier' question (SKILL.md steps 1 and 6) and silently locks the operator to a wrong model. FIXED: deleted docs/superpowers/models.yaml entirely; hermes now resolves unbound so the question fires. Replaced test_models_hermes_defaults.py with test_models_hermes_first_run.py, which FAILS if any hermes binding is ever re-introduced. Spec sections D/E/G amended.
