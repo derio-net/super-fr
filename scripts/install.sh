@@ -369,6 +369,14 @@ echo "  Installed $RULES_DIR/fr-isolation-required.md (#328 isolation Edit/Write
 cp "$PLUGIN_ROOT/plugins/super-fr/rules/no-claude-p-batch.md" "$RULES_DIR/no-claude-p-batch.md"
 echo "  Installed $RULES_DIR/no-claude-p-batch.md (#328 batch-LLM convention)"
 
+# 7a. Allowlist the fr-phase-executor subagent in the org agent-worktree hook.
+# fr-goal dispatches each plan phase to this narrow, serial, already-isolated
+# subagent (2026-07-22 fr-goal-subagent-execution spec §B.1). Idempotent; a
+# no-op when the org hook is absent (fr-goal then falls back to inline).
+bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
+  "$CLAUDE_DIR/hooks/agent-worktree-required.sh" || \
+  echo "  (agent-worktree hook not managed here — fr-goal falls back to inline)"
+
 # 7b. OpenCode skill + command delivery — opt-in only (OpenCode has no
 # plugin/marketplace concept; it discovers plain SKILL.md files and
 # commands/<name>.md files from its own global dirs).
