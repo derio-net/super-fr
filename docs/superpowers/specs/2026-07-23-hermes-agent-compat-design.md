@@ -341,7 +341,10 @@ Requires a real Hermes Agent install (operator has one). Post-merge:
    `on_session_start` prints `fr acceptance status --brief`.
 6. **Autonomous run:** invoke `/fr-goal` for a toy feature inside Hermes → it
    delegates each phase via `delegate_task`, the child writes journal entries,
-   and the run reaches a PR. Confirm `fr models resolve --harness hermes` binds.
+   and the run reaches a PR. **Confirm fr-goal ASKS for a model per tier on the
+   first run** (because `hermes` ships unbound — §G), that `fr models set`
+   persists the answer to `~/.config/fr/models.yaml`, and that a second run
+   resolves without re-asking.
 7. **Uninstall:** `scripts/install.sh --uninstall` removes `~/.hermes/skills/fr`,
    strips the SOUL.md block, removes the `hooks:` entries — and leaves the
    user's own SOUL.md/skills/hooks intact.
