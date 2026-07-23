@@ -127,7 +127,9 @@ def render(
         entries = [e for e in entries if e.kind in keep]
     if not entries:
         return
-    console.print("\n".join(serialize_entry(e) for e in entries), soft_wrap=True)
+    # Emit RAW — this feeds a PR body. A Rich console would treat `[...]` in a
+    # finding title/body (Markdown links, `[PR #12]`) as markup and drop it.
+    typer.echo("\n".join(serialize_entry(e) for e in entries))
 
 
 @journal_app.command("check")

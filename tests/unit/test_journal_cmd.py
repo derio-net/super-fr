@@ -233,6 +233,36 @@ class TestRender:
         assert res.exit_code == 0
         assert res.output.strip() == ""
 
+    def test_render_emits_brackets_verbatim(self, tmp_path: Path, monkeypatch) -> None:
+        """F1: render output feeds a PR body — bracketed text must survive raw
+        (a Rich console would treat `[x]` as markup and drop it)."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        runner.invoke(
+            app,
+            [
+                "journal",
+                "add",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--kind",
+                "finding",
+                "--title",
+                "see [details](url)",
+                "--body",
+                "fixed by [PR #12]",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+        res = runner.invoke(app, ["journal", "render", "--scope", "plan", "--slug", "S"])
+        assert "[details](url)" in res.output
+        assert "[PR #12]" in res.output
+
 
 class TestCheck:
     def test_check_clean_exits_zero(self, tmp_path: Path, monkeypatch) -> None:

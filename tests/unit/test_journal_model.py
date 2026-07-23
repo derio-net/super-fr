@@ -244,3 +244,28 @@ class TestRoundTrip:
         bad = "<!-- fr:journal kind finding scope=plan id=x -->\n### x\n\nbody\n"
         with pytest.raises(JournalParseError):
             parse_journal(bad)
+
+    def test_body_starting_with_heading_round_trips(self) -> None:
+        """F2: a body whose first line is a `### ...` markdown heading survives."""
+        from fr.journal.model import parse_journal, serialize_entry
+
+        e = _entry(id="e1", body="### Not the auto-heading\nmore body")
+        parsed = parse_journal(serialize_entry(e))
+        assert parsed[0].body == "### Not the auto-heading\nmore body"
+
+
+class TestIdInvariant:
+    def test_id_rejects_whitespace(self) -> None:
+        """F3: the space-delimited header can't survive a space in the id."""
+        from fr.journal.model import JournalEntry
+
+        with pytest.raises(ValidationError):
+            JournalEntry(
+                kind="decision",
+                scope="spec",
+                id="has space",
+                created="2026-07-22T10:00:00",
+                phase=None,
+                title="t",
+                body="b",
+            )

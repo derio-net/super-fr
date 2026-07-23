@@ -62,6 +62,12 @@ class JournalEntry(BaseModel):
             raise ValueError("a `finding` entry requires a `state` (fixed|refuted|open)")
         if self.kind != "finding" and self.state is not None:
             raise ValueError(f"`state` is only valid on `finding` entries, not `{self.kind}`")
+        # The delimiter header is space-delimited `key=value` tokens, so an id
+        # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
+        if not self.id or any(c.isspace() for c in self.id):
+            raise ValueError(
+                f"journal id must be a non-empty whitespace-free token, got {self.id!r}"
+            )
         return self
 
 
