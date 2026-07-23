@@ -1,0 +1,71 @@
+schema_version: 2
+phase:
+  number: 1
+  title: sync-hermes.py — skills mirror to .hermes/skills/fr/ (TDD)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - hermes-skills-delivery
+tasks:
+- number: 1
+  title: Drive the skills-sync generator from a failing tripwire
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Write tests/unit/test_tripwire_hermes_skills_sync.py mirroring
+      tests/unit/test_tripwire_opencode_skills_sync.py: import scripts/sync-hermes.py
+      (importlib from path, module not yet existing), assert canonical_skills()
+      returns a non-empty dict keyed by skill name, and find_skills_drift() == []
+      against the on-disk .hermes/skills/fr/ mirror.
+  - id: P1.T1.S2
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_tripwire_hermes_skills_sync.py -q --no-cov`.
+      EXPECT RED — ModuleNotFoundError / FileNotFoundError: scripts/sync-hermes.py absent.
+  - id: P1.T1.S3
+    text: |
+      Write scripts/sync-hermes.py modeled on scripts/sync-opencode.py. Provide:
+      canonical_skills() -> {name: SKILL.md Path} over plugins/super-fr/skills/*/SKILL.md;
+      mirror_skills_dir() -> repo_root/.hermes/skills/fr; find_skills_drift() comparing
+      canonical SKILL.md bytes to .hermes/skills/fr/<name>/SKILL.md; sync_skills() writing
+      each SKILL.md byte-for-byte plus a sibling .source breadcrumb, deleting stale mirror
+      dirs. Add a --check flag (exit 1 on drift, no write) and a main() that runs all syncs.
+  - id: P1.T1.S4
+    text: |
+      Run `cd <worktree> && uv run python scripts/sync-hermes.py` to materialise
+      .hermes/skills/fr/<name>/SKILL.md for every skill, then
+      `uv run pytest tests/unit/test_tripwire_hermes_skills_sync.py -q --no-cov`.
+      EXPECT GREEN — canonical non-empty, zero drift.
+  - id: P1.T1.S5
+    text: |
+      Optional refactor: extract the shared byte-copy+breadcrumb+prune helper if
+      sync-hermes.py duplicates sync-opencode.py logic verbatim; stay green. Skip if clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-23T19:01:09+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-23T19:01:10+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-23T19:01:11+00:00'
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: '2026-07-23T19:01:13+00:00'
+      note: null
+    P1.T1.S5:
+      state: '-'
+      ticked_at: '2026-07-23T19:01:14+00:00'
+      note: 'Skipped: skills logic mirrors sync-opencode.py but not verbatim (distinct
+        dirs/category/breadcrumb); the two scripts stay standalone for path-import
+        tripwires — extracting a shared helper would couple them for marginal gain.'
+  completion:
+    at: '2026-07-23T19:01:15+00:00'
+    note: null
+    observed_prs: []

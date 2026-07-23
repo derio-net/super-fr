@@ -45,6 +45,7 @@ LEGACY_MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/$LEGACY_MARKETPLACE_NAM
 LEGACY_CACHE_BASE="$CLAUDE_DIR/plugins/cache/$LEGACY_MARKETPLACE_NAME"
 OPENCODE_SKILLS_DIR="$HOME/.config/opencode/skills"
 OPENCODE_COMMANDS_DIR="$HOME/.config/opencode/commands"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
 INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
@@ -121,6 +122,17 @@ if [[ "${1:-}" == "--uninstall" ]]; then
         echo "  Removed $OPENCODE_COMMANDS_DIR/$skill.md"
       fi
     done
+  fi
+  # Hermes: reverse fr hermes install (hooks/allowlist/SOUL block, hook tree),
+  # then remove the skill copies. Only touches super-fr's own files.
+  if command -v fr &>/dev/null; then
+    if fr hermes uninstall --source "$PLUGIN_ROOT" --home "$HERMES_HOME" 2>/dev/null; then
+      echo "  Removed Hermes hooks/rules ($HERMES_HOME)"
+    fi
+  fi
+  if [ -d "$HERMES_HOME/skills/fr" ]; then
+    rm -rf "$HERMES_HOME/skills/fr"
+    echo "  Removed $HERMES_HOME/skills/fr"
   fi
   echo "Done. Note: Plugin and PostToolUse hook in settings.json were NOT removed (manual cleanup)."
   exit 0
@@ -624,6 +636,38 @@ else
   echo ""
   echo "  WARNING: uv not found — install fr CLI manually:"
   echo "    uv tool install $PLUGIN_ROOT/packages/fr"
+fi
+
+# 10b. Hermes Agent delivery — opt-in only (Hermes discovers skills from
+# ~/.hermes/skills/ and loads its own cli-config.yaml + SOUL.md). Gated like
+# OpenCode. The invasive, reversible mutations (cli-config.yaml hooks merge,
+# shell-hooks allowlist, SOUL.md managed block, hook-tree copy) are delegated to
+# the tested `fr hermes install` subcommand, so install.sh stays bash+jq only.
+# Runs AFTER the fr CLI install above so `fr` is on PATH.
+if [ "${HERMES_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HERMES_HOME" ]; then
+  echo ""
+  echo "Installing skills for Hermes Agent ($HERMES_HOME/skills/fr)..."
+  mkdir -p "$HERMES_HOME/skills/fr"
+  for skill_dir in "$PLUGIN_ROOT"/.hermes/skills/fr/*/; do
+    skill="$(basename "$skill_dir")"
+    mkdir -p "$HERMES_HOME/skills/fr/$skill"
+    cp "$skill_dir/SKILL.md" "$HERMES_HOME/skills/fr/$skill/SKILL.md"
+    echo "  Installed $HERMES_HOME/skills/fr/$skill/SKILL.md"
+  done
+  if command -v fr &>/dev/null; then
+    echo "Wiring Hermes hooks + rules (fr hermes install)..."
+    if fr hermes install --source "$PLUGIN_ROOT" --home "$HERMES_HOME"; then
+      echo "  Wired Hermes hooks + SOUL.md rules block"
+    else
+      echo "  WARNING: fr hermes install failed — hooks/rules not wired" >&2
+    fi
+  else
+    echo "  WARNING: fr not on PATH — skipping fr hermes install (hooks/rules not wired)" >&2
+  fi
+else
+  echo ""
+  echo "Skipping Hermes Agent delivery (no ~/.hermes found; set"
+  echo "HERMES_SKILLS_INSTALL=1 to force)."
 fi
 
 # 11. devcontainer CLI (fr-isolation dependency)

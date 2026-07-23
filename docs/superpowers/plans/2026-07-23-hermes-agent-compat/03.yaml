@@ -1,0 +1,102 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Isolation enforcement — shared decision core + Hermes edit hook (TDD)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: hard
+  acceptance:
+  - hermes-isolation-gate-edits
+tasks:
+- number: 1
+  title: Extract the pure decision core without changing Claude behavior
+  steps:
+  - id: P3.T1.S1
+    text: |
+      Write tests/unit/test_isolation_decision_core.py driving the shell via subprocess:
+      source plugins/super-fr/hooks/lib/fr-isolation-decision.sh (not yet existing) and call
+      its decide_edit <toplevel> <path> function in a temp git repo, asserting exit/stdout
+      for: deny outside worktree, allow with FR_BASE_OK=1, allow via .fr-isolation-allow glob,
+      allow inside a real linked worktree with a valid .fr-isolation marker.
+  - id: P3.T1.S2
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_isolation_decision_core.py -q --no-cov`.
+      EXPECT RED — lib/fr-isolation-decision.sh absent.
+  - id: P3.T1.S3
+    text: |
+      Extract the marker/allowlist/fr-enabled decision logic from
+      plugins/super-fr/hooks/fr-isolation-required.sh into
+      plugins/super-fr/hooks/lib/fr-isolation-decision.sh as pure functions
+      (decide_edit emitting an allow|deny+reason on stdout, no I/O parsing). Re-point
+      fr-isolation-required.sh to source the lib and keep emitting the Claude
+      hookSpecificOutput.permissionDecision JSON — behavior identical.
+  - id: P3.T1.S4
+    text: |
+      Run the existing Claude-hook regression tests plus the new core test:
+      `cd <worktree> && uv run pytest tests/unit/test_isolation_decision_core.py -q --no-cov`
+      and any existing fr-isolation-required hook tests. EXPECT GREEN — core passes, Claude
+      hook unchanged.
+- number: 2
+  title: Add the Hermes pre_tool_call edit entrypoint
+  steps:
+  - id: P3.T2.S1
+    text: |
+      Write tests/unit/test_hermes_isolation_hook_edits.py: pipe recorded Hermes
+      pre_tool_call stdin JSON ({"hook_event_name":"pre_tool_call","tool_name":"write_file",
+      "tool_input":{"path":...},"cwd":...}) into plugins/super-fr/hooks/hermes/fr-isolation-required.sh
+      (not yet existing) and assert it emits {"decision":"block","reason":...} outside a
+      worktree, empty/no-block inside a valid worktree, honors FR_BASE_OK, maps both
+      write_file and patch, and extracts path from tool_input.path or file_path.
+  - id: P3.T2.S2
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_hermes_isolation_hook_edits.py -q --no-cov`.
+      EXPECT RED — hermes/fr-isolation-required.sh absent.
+  - id: P3.T2.S3
+    text: |
+      Write plugins/super-fr/hooks/hermes/fr-isolation-required.sh: parse Hermes stdin
+      (jq), normalise tool_name (write_file|patch -> edit) and extract the path, source
+      lib/fr-isolation-decision.sh, and emit the Hermes deny shape
+      {"decision":"block","reason":...} (silent no-op JSON on allow).
+  - id: P3.T2.S4
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_hermes_isolation_hook_edits.py -q --no-cov`.
+      EXPECT GREEN.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-23T19:10:03+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-23T19:10:04+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-07-23T19:10:06+00:00'
+      note: null
+    P3.T1.S4:
+      state: x
+      ticked_at: '2026-07-23T19:10:07+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-23T19:10:08+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-23T19:10:10+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-07-23T19:10:11+00:00'
+      note: null
+    P3.T2.S4:
+      state: x
+      ticked_at: '2026-07-23T19:10:13+00:00'
+      note: null
+  completion:
+    at: '2026-07-23T19:10:14+00:00'
+    note: null
+    observed_prs: []

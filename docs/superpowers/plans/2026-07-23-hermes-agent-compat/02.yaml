@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 2
+  title: sync-hermes.py — rules into a managed SOUL.d block (TDD)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - hermes-rules-soul-block
+tasks:
+- number: 1
+  title: Assemble the 3 shipped rules into a delimited block, tripwire-guarded
+  steps:
+  - id: P2.T1.S1
+    text: |
+      Write tests/unit/test_tripwire_hermes_rules_sync.py: import sync-hermes.py, assert
+      canonical_rules() == exactly the 3 shipped plugin rules (fr-isolation-required,
+      fr-plan-override, no-claude-p-batch) and NOT acceptance-matrix; assert
+      find_rules_drift() == [] against .hermes/SOUL.d/super-fr-rules.md; assert the file
+      begins with '<!-- super-fr:rules START -->' and ends with '<!-- super-fr:rules END -->'.
+  - id: P2.T1.S2
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_tripwire_hermes_rules_sync.py -q --no-cov`.
+      EXPECT RED — canonical_rules/find_rules_drift not defined, SOUL.d file absent.
+  - id: P2.T1.S3
+    text: |
+      Extend scripts/sync-hermes.py: canonical_rules() over plugins/super-fr/rules/*.md
+      (the 3 shipped rules only); sync_rules() concatenating their bodies between the
+      START/END markers into .hermes/SOUL.d/super-fr-rules.md; find_rules_drift(); wire
+      into main() and --check. Do NOT include .claude/rules/acceptance-matrix.md.
+  - id: P2.T1.S4
+    text: |
+      Run `cd <worktree> && uv run python scripts/sync-hermes.py` then
+      `uv run pytest tests/unit/test_tripwire_hermes_rules_sync.py -q --no-cov`.
+      EXPECT GREEN — 3-rule block materialised, zero drift.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-23T19:03:26+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-23T19:03:27+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-07-23T19:03:28+00:00'
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: '2026-07-23T19:03:30+00:00'
+      note: null
+  completion:
+    at: '2026-07-23T19:03:31+00:00'
+    note: null
+    observed_prs: []

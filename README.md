@@ -23,10 +23,10 @@ anywhere Claude Code runs.
 ### 1. Install
 
 Recommended: run the full setup script. It installs the `fr` CLI, registers and
-enables the Claude Code plugins, installs the rules/MCP config, and, when
-OpenCode is present, installs the matching OpenCode skills and slash commands.
-No manual checkout needed; it manages a hidden source clone under
-`~/.cache/fr/src` and re-running updates it.
+enables the Claude Code plugins, installs the rules/MCP config, and — when
+OpenCode or Hermes Agent is present — installs the matching skills and slash
+commands for those too. No manual checkout needed; it manages a hidden source
+clone under `~/.cache/fr/src` and re-running updates it.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
@@ -45,6 +45,11 @@ Claude Code: the installer registers the `derio-net` marketplace and enables
 OpenCode: the installer copies skills and slash commands when
 `~/.config/opencode` already exists. On a fresh OpenCode setup, force that step
 with `OPENCODE_SKILLS_INSTALL=1`.
+
+Hermes Agent: the installer copies skills and wires the hooks/rules when
+`~/.hermes` already exists. On a fresh Hermes setup, force that step with
+`HERMES_SKILLS_INSTALL=1`. See [Hermes Agent](#hermes-agent) for what lands
+where.
 
 Just want the CLI? `uv tool install
 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr'`.
@@ -334,15 +339,67 @@ Driven by the `fr-acceptance` skill; gated per-PR by
 `.github/workflows/acceptance-report.yml`, which also upserts a weekly
 "Acceptance debt" digest Issue.
 
+### Hermes Agent
+
+super-fr runs as a third agent harness alongside Claude Code and OpenCode:
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) by Nous Research.
+
+**Install** (opt-in — runs automatically if `~/.hermes` exists):
+
+```bash
+HERMES_SKILLS_INSTALL=1 bash scripts/install.sh
+```
+
+**What lands where:**
+
+| Artifact | Path | Notes |
+|---|---|---|
+| Skills | `~/.hermes/skills/fr/<name>/SKILL.md` | invoke as `/fr-goal`, `/fr-plan`, … |
+| Rules | `~/.hermes/SOUL.md` | a delimited `<!-- super-fr:rules START/END -->` block; content outside it is never touched |
+| Hooks | `~/.hermes/super-fr-hooks/` | copied tree; `cli-config.yaml` `hooks:` entries point at it |
+| Approvals | `~/.hermes/shell-hooks-allowlist.json` | pre-recorded so non-TTY runs register without a prompt |
+
+The invasive, reversible parts (the `cli-config.yaml` `hooks:` merge, the
+allowlist, the SOUL.md block) are done by a tested subcommand rather than by
+shell, and are fully undone by its inverse:
+
+```bash
+fr hermes install   --source <super-fr checkout> [--home ~/.hermes]
+fr hermes uninstall --source <super-fr checkout> [--home ~/.hermes]
+```
+
+`scripts/install.sh --uninstall` calls the latter and removes
+`~/.hermes/skills/fr`. Only super-fr's own files are touched.
+
+**Enforcement.** Hermes's shell-hooks bridge speaks the same block protocol as
+the Claude Code hook, so the isolation guards are the *same scripts*, gating
+`pre_tool_call` for both edits (`write_file`/`patch`) **and** bash
+(`terminal`/`execute_code` — git/gh mutations outside isolation, and pushes to a
+merged PR's branch). `on_session_start` surfaces open acceptance debt. Escapes
+are unchanged: `fr isolation up`, `.fr-isolation-allow`, `FR_BASE_OK=1`.
+
+**Models.** super-fr ships **no** Hermes model bindings on purpose —
+`fr models resolve --harness hermes --tier <t>` stays unbound so `fr-goal` asks
+you for a model per tier on the first run and persists it with `fr models set`.
+
+**Phase execution.** Under Hermes, `fr-goal` dispatches each plan phase with
+`delegate_task(goal, context)`. Hermes subagents start with a fresh
+conversation, so the whole journal-fed brief travels in `context` — which is
+exactly how fr-goal's handoff already works.
+
+Working *on* this repo with Hermes? [`HERMES.md`](HERMES.md) is the project
+context file (it outranks `AGENTS.md`, so read both).
+
 ### Components
 
 | Package | What it is |
 |---------|------------|
-| `fr` | The CLI: plan-as-folder engine, git-host tracking (GitHub/GitLab/Gitea — render → observe → diff → apply), isolation |
+| `fr` | The CLI: plan-as-folder engine, git-host tracking (GitHub/GitLab/Gitea — render → observe → diff → apply), isolation, `fr hermes` install |
 | `fr-dispatch` | Runner protocol + tick framework (library, runner-agnostic) |
 | `fr-vk` | VibeKanban adapter: MCP client, card/workspace dispatch, bridge daemon |
 | `fr-cncd` | CNC daemon runner adapter |
 | `fr-opencode-plugin` | OpenCode `tool.execute.before` port of the isolation edit guard |
+| `plugins/super-fr/hooks/hermes/` | Hermes `pre_tool_call` ports of the isolation edit + bash/push guards |
 
 ## Requirements
 
