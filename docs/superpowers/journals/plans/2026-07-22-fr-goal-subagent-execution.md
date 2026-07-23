@@ -24,3 +24,8 @@ install.sh section 4 rsyncs the whole plugin dir to the cache, so agents/ rides 
 ### ci-f4-xdg-test-isolation · finding [fixed] · test_models_cmd isolated only HOME, not XDG_CONFIG_HOME — green locally, red on CI (phase 4)
 
 default_models_path honors XDG_CONFIG_HOME before HOME. Tests set only HOME; local XDG was unset (fell back to HOME=tmp) but the CI runner sets XDG_CONFIG_HOME, so both tests hit the runner's real config → wrong path + cross-test pollution (test 2 read test 1's write). Fixed: autouse fixture sets BOTH HOME and XDG_CONFIG_HOME to the per-test tmp. Reproduced locally with XDG_CONFIG_HOME=/tmp/... before fixing.
+
+<!-- fr:journal kind=discovery scope=plan id=scope-subdirs created=2026-07-23T17:23:10 phase=3 -->
+### scope-subdirs · discovery · journals/ split into per-scope subdirs (specs/plans/debug) for glanceability (phase 3)
+
+Operator review: a flat journals/ tree could not be discerned in one look (debug-slug vs plan-slug look identical). Moved to journals/{specs,plans,debug}/ with implemented/journals/<scope>/ mirror. journal_path is the single source of truth; archive.py delegates to it.

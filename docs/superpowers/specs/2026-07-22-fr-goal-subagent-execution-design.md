@@ -77,9 +77,13 @@ defined here so nothing is fr-goal-shaped, wired by C):
 
 | File | Scope | Repo | Holds | Born |
 |---|---|---|---|---|
-| `journals/<spec-slug>.md` | whole feature | spec-owning repo | Q&A **decisions**, spec-**review** outcomes, cross-repo location decisions | at spec write (step 2) — no pre-plan window |
-| `journals/<plan-slug>.md` | one plan | each plan's repo | per-phase **discoveries** / dead ends, review **findings**/fixes/refutations | at `fr plan create` |
-| `journals/<debug-slug>.md` | one investigation | the fix branch's repo | **repro**, **hypothesis**, **ruled-out**, **root-cause**, fix + verification | at fr-debugging start (component C) |
+| `journals/specs/<spec-slug>.md` | whole feature | spec-owning repo | Q&A **decisions**, spec-**review** outcomes, cross-repo location decisions | at spec write (step 2) — no pre-plan window |
+| `journals/plans/<plan-slug>.md` | one plan | each plan's repo | per-phase **discoveries** / dead ends, review **findings**/fixes/refutations | at `fr plan create` |
+| `journals/debug/<debug-slug>.md` | one investigation | the fix branch's repo | **repro**, **hypothesis**, **ruled-out**, **root-cause**, fix + verification | at fr-debugging start (component C) |
+
+Each scope is its own subdirectory (`specs/`/`plans/`/`debug/`) so a bare
+`ls journals/` is self-describing — a debug-slug can otherwise look identical to
+a plan-slug. The archive mirror is `implemented/journals/<scope-dir>/`.
 
 Multi-repo: repo-B's agent writes findings that ship in repo-B's PR, so
 findings must live in a *plan*-scoped journal in repo B — a single spec-level
@@ -213,13 +217,13 @@ re-exploring ruled-out paths. Appending each hypothesis→verdict *as tested*
 (`fr journal add --scope debug --kind hypothesis|ruled-out`) makes it
 crash-safe.
 
-- **SKILL.md changes:** step 3 records to `journals/<debug-slug>.md` via
+- **SKILL.md changes:** step 3 records to `journals/debug/<debug-slug>.md` via
   `fr journal add --scope debug` **as the investigation proceeds** (repro on
   reproduce; each hypothesis + its verdict as tested; root-cause on
   confirmation; fix + verification at the end) — replacing the write-it-all-at-
   step-3 prose. Step 4's PR body uses `fr journal render --scope debug`.
-- **Directory:** new debug journals live in `journals/<debug-slug>.md`
-  (uniform with spec/plan; archives to `implemented/journals/`). **Existing
+- **Directory:** new debug journals live in `journals/debug/<debug-slug>.md`
+  (uniform with spec/plan; archives to `implemented/journals/debug/`). **Existing
   `docs/superpowers/debugging/*.md` prose logs stay in place** as the
   historical archive of pre-journal investigations — no migration, no churn.
   `debugging/` is simply no longer the write target for new runs.
@@ -229,7 +233,7 @@ crash-safe.
   compaction-safety hooks were unnecessary applies here too.
 - **Workspace reuse:** when fr-debugging reuses an active fr-goal workspace (a
   bug found mid-implementation, SKILL.md §0), the debug entries append to a
-  `journals/<debug-slug>.md` in that same worktree and ride the feature's PR —
+  `journals/debug/<debug-slug>.md` in that same worktree and ride the feature's PR —
   consistent with "the fix joins that branch/PR, no second PR".
 
 ## Non-goals
@@ -252,8 +256,9 @@ crash-safe.
 - **Unit (`fr plan create`):** initializes the plan journal; a plan without one
   still parses (back-compat). `fr-plan` writes a `tier` per phase; parser
   accepts/defaults it.
-- **Unit (archive):** `fr archive` moves `journals/<plan-slug>.md` →
-  `implemented/journals/`; spec journal follows a fully-implemented spec.
+- **Unit (archive):** `fr archive` moves `journals/plans/<plan-slug>.md` →
+  `implemented/journals/plans/`; spec journal follows a fully-implemented spec
+  into `implemented/journals/specs/`.
 - **Integration (journal completeness bar):** a subagent-shaped harness given
   only `fr journal render` + spec + phase yaml has every input it needs
   (assert the render contains each decision + open finding); a dropped finding

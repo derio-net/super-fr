@@ -79,11 +79,11 @@ milestone review — runs autonomously.
 ## 3. Record — durable debug journal, flushed as you go
 
 Record the investigation to the `debug`-scope journal
-(`journals/<YYYY-MM-DD-slug>.md`) via `fr journal add --scope debug`, appended
+(`journals/debug/<YYYY-MM-DD-slug>.md`) via `fr journal add --scope debug`, appended
 **as you go** — not written up at the end. Continuous flush is the point: the
 rejected-hypotheses trail is the most compaction-vulnerable artifact here, so
 persist each verdict the moment you reach it. New debug journals live under
-`journals/`; pre-existing `debugging/*.md` prose stays put (no migration). A bug
+`journals/debug/`; pre-existing `debugging/*.md` prose stays put (no migration). A bug
 fix does NOT enter the spec → plan pipeline, but the journal is durable and
 searchable:
 

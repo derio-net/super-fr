@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.journal.model import archived_journal_path, journal_path
 from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
 
 if TYPE_CHECKING:
@@ -129,25 +130,26 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"(e.g. `git rm -r {src_rel}`)."
         )
     _git_mv(repo_root, src_rel, dst_rel)
-    _archive_journal(repo_root, plan_dir.name)
+    _archive_journal(repo_root, "plan", plan_dir.name)
     return repo_root / dst_rel
 
 
-def _archive_journal(repo_root: Path, slug: str) -> None:
-    """Move a plan/spec journal (`journals/<slug>.md`) to implemented/journals/.
+def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:
+    """Move a scoped journal to implemented/journals/<scope-dir>/.
 
     A no-op when no journal exists (back-compat with pre-journal plans/specs)
-    or when the destination already holds one (a re-run). Mirrors the plan/spec
-    archival move (2026-07-22 fr-goal-subagent-execution spec §A).
+    or when the destination already holds one (a re-run). Path resolution is
+    delegated to `fr.journal.model` so the layout has one source of truth
+    (2026-07-22 fr-goal-subagent-execution spec §A).
     """
-    src = Path("docs/superpowers/journals") / f"{slug}.md"
-    if not (repo_root / src).exists():
+    src = journal_path(repo_root, scope, slug)  # type: ignore[arg-type]
+    if not src.exists():
         return
-    dst = Path("docs/superpowers/implemented/journals") / f"{slug}.md"
-    if (repo_root / dst).exists():
+    dst = archived_journal_path(repo_root, scope, slug)  # type: ignore[arg-type]
+    if dst.exists():
         return
-    (repo_root / dst).parent.mkdir(parents=True, exist_ok=True)
-    _git_mv(repo_root, src, dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
 
 
 def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
@@ -179,8 +181,8 @@ def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
                 notes.append(str(e))
                 continue
             # A spec journal is keyed by the spec's filename stem; follow the
-            # spec into implemented/journals/ (2026-07-22 spec §A).
-            _archive_journal(repo_root, spec_path.stem)
+            # spec into implemented/journals/specs/ (2026-07-22 spec §A).
+            _archive_journal(repo_root, "spec", spec_path.stem)
             moves.append(DirsMove(src=src_rel, dst=dst_rel, kind="spec"))
         elif note and "no Implementation Plans rows" not in note:
             notes.append(f"{spec_path.name}: {note}")

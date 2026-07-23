@@ -60,7 +60,7 @@ class TestPlanCreateInitializesJournal:
         repo = _make_repo(tmp_path)
         spec = _make_spec(repo)
         _create_plan(repo, "2026-07-22-lc", spec)
-        jpath = repo / "docs/superpowers/journals/2026-07-22-lc.md"
+        jpath = repo / "docs/superpowers/journals/plans/2026-07-22-lc.md"
         assert jpath.exists(), "plan create must initialize the plan journal"
 
     def test_created_journal_parses_empty(self, tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ class TestPlanCreateInitializesJournal:
         repo = _make_repo(tmp_path)
         spec = _make_spec(repo)
         _create_plan(repo, "2026-07-22-lc", spec)
-        jpath = repo / "docs/superpowers/journals/2026-07-22-lc.md"
+        jpath = repo / "docs/superpowers/journals/plans/2026-07-22-lc.md"
         assert parse_journal(jpath.read_text()) == []
 
     def test_plan_without_journal_still_parses(self, tmp_path: Path) -> None:
@@ -80,7 +80,7 @@ class TestPlanCreateInitializesJournal:
         spec = _make_spec(repo)
         plan_dir = repo / "docs/superpowers/plans/2026-07-22-lc"
         _create_plan(repo, "2026-07-22-lc", spec)
-        (repo / "docs/superpowers/journals/2026-07-22-lc.md").unlink()
+        (repo / "docs/superpowers/journals/plans/2026-07-22-lc.md").unlink()
         assert parse(plan_dir) is not None
 
 
@@ -96,8 +96,8 @@ class TestArchiveMovesPlanJournal:
         subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed"], check=True)
 
         archive_plan_dir(repo, plan_dir)
-        assert not (repo / "docs/superpowers/journals/2026-07-22-lc.md").exists()
-        assert (repo / "docs/superpowers/implemented/journals/2026-07-22-lc.md").exists()
+        assert not (repo / "docs/superpowers/journals/plans/2026-07-22-lc.md").exists()
+        assert (repo / "docs/superpowers/implemented/journals/plans/2026-07-22-lc.md").exists()
 
     def test_archive_no_journal_is_noop(self, tmp_path: Path) -> None:
         from fr.archive import archive_plan_dir
@@ -106,7 +106,7 @@ class TestArchiveMovesPlanJournal:
         spec = _make_spec(repo)
         _create_plan(repo, "2026-07-22-lc", spec)
         plan_dir = repo / "docs/superpowers/plans/2026-07-22-lc"
-        (repo / "docs/superpowers/journals/2026-07-22-lc.md").unlink()
+        (repo / "docs/superpowers/journals/plans/2026-07-22-lc.md").unlink()
         subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
         subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed"], check=True)
         # No journal to move — must not raise.
@@ -129,7 +129,7 @@ class TestSpecJournalFollowsSpec:
             "|------|------|------|------------|\n"
             "| Manual step | `derio-net/test` | — | — |\n"
         )
-        sjournal = repo / "docs/superpowers/journals/2026-05-10-solo.md"
+        sjournal = repo / "docs/superpowers/journals/specs/2026-05-10-solo.md"
         sjournal.parent.mkdir(parents=True, exist_ok=True)
         sjournal.write_text("# Journal: 2026-05-10-solo\n")
         subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
@@ -139,5 +139,5 @@ class TestSpecJournalFollowsSpec:
         moved_specs = [m for m in result.moves if m.kind == "spec"]
         assert moved_specs, "spec with no open plan rows should archive"
         assert not sjournal.exists()
-        assert (repo / "docs/superpowers/implemented/journals/2026-05-10-solo.md").exists()
+        assert (repo / "docs/superpowers/implemented/journals/specs/2026-05-10-solo.md").exists()
         assert spec  # spec fixture used

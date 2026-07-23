@@ -162,20 +162,23 @@ class TestJournalEntry:
 
 
 class TestJournalPath:
-    def test_active_path_every_scope(self) -> None:
+    def test_active_path_per_scope_subdir(self) -> None:
         from fr.journal.model import journal_path
 
         root = Path("/repo")
-        for scope in ("spec", "plan", "debug"):
+        expected = {"spec": "specs", "plan": "plans", "debug": "debug"}
+        for scope, sub in expected.items():
             p = journal_path(root, scope, "2026-07-22-foo")  # type: ignore[arg-type]
-            assert p == root / "docs/superpowers/journals/2026-07-22-foo.md"
+            assert p == root / f"docs/superpowers/journals/{sub}/2026-07-22-foo.md"
 
-    def test_archived_path(self) -> None:
+    def test_archived_path_per_scope_subdir(self) -> None:
         from fr.journal.model import archived_journal_path
 
         root = Path("/repo")
         p = archived_journal_path(root, "plan", "2026-07-22-foo")
-        assert p == root / "docs/superpowers/implemented/journals/2026-07-22-foo.md"
+        assert p == root / "docs/superpowers/implemented/journals/plans/2026-07-22-foo.md"
+        d = archived_journal_path(root, "debug", "2026-07-24-bug")
+        assert d == root / "docs/superpowers/implemented/journals/debug/2026-07-24-bug.md"
 
 
 def _entry(**kw: object):

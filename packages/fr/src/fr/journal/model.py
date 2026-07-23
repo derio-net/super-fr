@@ -38,6 +38,11 @@ FindingState = Literal["fixed", "refuted", "open"]
 JOURNALS_REL = Path("docs/superpowers/journals")
 IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
 
+# Each scope gets its own subdirectory so a bare `ls journals/` tells you which
+# journal is which at a glance (a debug-slug and a plan-slug can otherwise look
+# identical). Mirrors the `specs/` + `plans/` split of the parent tree.
+_SCOPE_DIR: dict[str, str] = {"spec": "specs", "plan": "plans", "debug": "debug"}
+
 
 class JournalParseError(Exception):
     """Raised when a journal file cannot be parsed into entries."""
@@ -72,17 +77,17 @@ class JournalEntry(BaseModel):
 
 
 def journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
-    """Active journal path for ``slug`` under any scope.
+    """Active journal path: ``docs/superpowers/journals/<scope-dir>/<slug>.md``.
 
-    All scopes share one flat tree; the scope is recorded per entry, not per
-    directory, so a debug journal and a plan journal are siblings.
+    The scope names a subdirectory (``specs`` / ``plans`` / ``debug``) so the
+    tree is glanceable and a debug-slug can never be mistaken for a plan-slug.
     """
-    return repo_root / JOURNALS_REL / f"{slug}.md"
+    return repo_root / JOURNALS_REL / _SCOPE_DIR[scope] / f"{slug}.md"
 
 
 def archived_journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     """Archived journal path (mirrors ``implemented/plans`` / ``implemented/specs``)."""
-    return repo_root / IMPLEMENTED_JOURNALS_REL / f"{slug}.md"
+    return repo_root / IMPLEMENTED_JOURNALS_REL / _SCOPE_DIR[scope] / f"{slug}.md"
 
 
 # --- serialization -------------------------------------------------------

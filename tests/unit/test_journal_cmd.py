@@ -28,7 +28,8 @@ def _add(root: Path, *args: str):
 
 
 def _journal_file(root: Path, slug: str) -> Path:
-    return root / "docs/superpowers/journals" / f"{slug}.md"
+    # These CLI tests all use --scope plan → journals/plans/<slug>.md.
+    return root / "docs/superpowers/journals/plans" / f"{slug}.md"
 
 
 class TestAdd:

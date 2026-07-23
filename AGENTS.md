@@ -16,8 +16,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
   observe → diff → apply, single mutation path in `apply.py`, dry-run by
   default), isolation lifecycle. Entrypoint `fr = "fr.cli:app"`.
   - **`fr journal`** (`fr/journal/`, `commands/journal_cmd.py`) — scope-keyed
-    (`spec|plan|debug`) durable run-state under `docs/superpowers/journals/`
-    (archived to `implemented/journals/` with its plan/spec). `add` (idempotent
+    (`spec|plan|debug`) durable run-state under
+    `docs/superpowers/journals/{specs,plans,debug}/` (one subdir per scope so
+    the tree is glanceable; archived to `implemented/journals/<scope>/`).
+    `add` (idempotent
     on `--id`) / `render` (raw, feeds PR bodies) / `check` (fail-closed on open
     findings). `fr plan create` seeds a plan journal; parsing never depends on
     one (back-compat). fr-goal & fr-debugging write it as they run.
