@@ -36,8 +36,7 @@ def test_gates_hermes_delivery_on_opt_in() -> None:
 def test_copies_fr_category_skills() -> None:
     install = _install()
     assert ".hermes/skills/fr" in install, (
-        "install.sh must copy the fr-category skills mirror into "
-        "$HERMES_HOME/skills/fr"
+        "install.sh must copy the fr-category skills mirror into $HERMES_HOME/skills/fr"
     )
 
 

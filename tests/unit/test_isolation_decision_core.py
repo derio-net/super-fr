@@ -56,7 +56,7 @@ def linked_worktree(repo: Path, branch: str = "feat/x") -> Path:
 
 def write_marker(root: Path, toplevel: Path, mode: str = "worktree") -> None:
     (root / ".fr-isolation").write_text(
-        '{"toplevel": "%s", "branch": "feat/x", "mode": "%s"}' % (toplevel.resolve(), mode)
+        f'{{"toplevel": "{toplevel.resolve()}", "branch": "feat/x", "mode": "{mode}"}}'
     )
 
 

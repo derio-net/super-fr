@@ -53,7 +53,7 @@ def linked_worktree(repo: Path, branch: str = "feat/x") -> Path:
     wt = repo.parent / f"{repo.name}-wt"
     _git(repo, "worktree", "add", "-q", str(wt), "-b", branch)
     (wt / ".fr-isolation").write_text(
-        '{"toplevel": "%s", "branch": "%s", "mode": "worktree"}' % (wt.resolve(), branch)
+        f'{{"toplevel": "{wt.resolve()}", "branch": "{branch}", "mode": "worktree"}}'
     )
     return wt
 

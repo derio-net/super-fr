@@ -10,10 +10,9 @@ import json
 from pathlib import Path
 
 import yaml
-from typer.testing import CliRunner
-
 from fr import hermes
 from fr.cli import app
+from typer.testing import CliRunner
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

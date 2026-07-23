@@ -125,9 +125,7 @@ def unmerge_hooks(config_path: Path, entries: list[dict[str, Any]]) -> None:
         lst = hooks[event]
         if not isinstance(lst, list):
             continue
-        hooks[event] = [
-            x for x in lst if not (isinstance(x, dict) and x.get("command") in ours)
-        ]
+        hooks[event] = [x for x in lst if not (isinstance(x, dict) and x.get("command") in ours)]
         if not hooks[event]:
             del hooks[event]
     if not hooks:
@@ -156,9 +154,7 @@ def add_allowlist(path: Path, pairs: list[tuple[str, str]]) -> None:
     approvals = data.setdefault("approvals", [])
     for event, command in pairs:
         if not any(
-            isinstance(a, dict)
-            and a.get("event") == event
-            and a.get("command") == command
+            isinstance(a, dict) and a.get("event") == event and a.get("command") == command
             for a in approvals
         ):
             approvals.append({"event": event, "command": command})
