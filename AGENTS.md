@@ -133,6 +133,30 @@ On merge to `main`, `.github/workflows/auto-tag.yml` tags `vX.Y.Z` and
 publishes a release automatically from the `pyproject.toml` change — no
 human action needed.
 
+## super-fr owns the `derio-net` marketplace name
+
+A Claude Code marketplace name is a **1:1 namespace over one source repo**:
+its manifest at `~/.claude/plugins/marketplaces/<name>/.claude-plugin/marketplace.json`
+is a single file listing every plugin of that marketplace, and `install.sh`
+populates it with `rsync -a --delete <repo root>/` — replace, never merge.
+Two repos claiming one name is therefore mutual eviction, not a conflict.
+
+super-fr claims `derio-net` and its own `.claude-plugin/marketplace.json`
+declares that same name. **A sibling derio-net repo shipping its own plugin
+must use its own marketplace name** (matching *its* manifest's `name`), its
+own `marketplaces/<name>/` dir and `cache/<name>/` base — never `derio-net`.
+The sibling `blog-craft` repo did squat it; root cause and repair in
+`docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md`.
+
+Two invariants for any installer touching `~/.claude/plugins`, pinned by
+`tests/integration/test_install_marketplace_namespace.py`:
+
+- **Write the keys you own unconditionally.** `if ! jq -e '."<key>"'` reads as
+  idempotence but means first-writer-wins, so another repo's wrong
+  `source.repo` survives every reinstall. Converge on your value instead.
+- **Only delete keys you own.** `--uninstall` removing the shared marketplace
+  key deregisters every plugin in it, not just yours.
+
 ## Bridge audit rule
 
 Any brainstorm, spec, or plan touching dispatch / sync / cron / VK card /

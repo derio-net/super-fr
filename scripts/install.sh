@@ -211,29 +211,46 @@ fi
 echo ""
 echo "Installing super-fr..."
 
-# 2. Register derio-net marketplace so the plugin system knows where to find it
+# 2. Register derio-net marketplace so the plugin system knows where to find it.
+#
+# `derio-net` is a marketplace NAME, and a Claude Code marketplace name is a 1:1
+# namespace over one source repo: its manifest
+# (plugins/marketplaces/derio-net/.claude-plugin/marketplace.json) is a single
+# file listing every plugin of that marketplace. super-fr owns this name — our
+# own marketplace.json declares `"name": "derio-net"`.
+#
+# These writes are UNCONDITIONAL, not skip-if-present. The old
+# `if ! jq -e '."derio-net"'` guard read as idempotence but meant first-writer-
+# wins: a sibling repo that registered `derio-net` pointing at ITS repo kept
+# that pointer forever, and a later `/plugin marketplace update derio-net`
+# re-fetched that repo and evicted super-fr with no installer run at all.
+# Idempotence for a key we own means converging on our value, not deferring to
+# whatever is already there. See
+# docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md.
 echo ""
 echo "Registering marketplace..."
 if command -v jq &>/dev/null; then
   # Add to extraKnownMarketplaces in settings.json
   if [ -f "$SETTINGS" ]; then
-    if ! jq -e '.extraKnownMarketplaces["derio-net"]' "$SETTINGS" &>/dev/null; then
-      jq '.extraKnownMarketplaces["derio-net"] = {"source":{"source":"github","repo":"derio-net/super-fr"}}' \
-        "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
-      echo "  Added derio-net to extraKnownMarketplaces"
+    prev_source="$(jq -r '.extraKnownMarketplaces["derio-net"].source.repo // empty' "$SETTINGS" 2>/dev/null || true)"
+    jq '.extraKnownMarketplaces["derio-net"] = {"source":{"source":"github","repo":"derio-net/super-fr"}}' \
+      "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+    if [ -n "$prev_source" ] && [ "$prev_source" != "derio-net/super-fr" ]; then
+      echo "  Reclaimed derio-net in extraKnownMarketplaces (was '$prev_source')" >&2
     else
-      echo "  derio-net already in extraKnownMarketplaces"
+      echo "  Registered derio-net in extraKnownMarketplaces"
     fi
   fi
 
   # Add to known_marketplaces.json
   if [ -f "$KNOWN_MARKETPLACES" ]; then
-    if ! jq -e '.["derio-net"]' "$KNOWN_MARKETPLACES" &>/dev/null; then
-      jq '."derio-net" = {"source":{"source":"github","repo":"derio-net/super-fr"},"installLocation":"'"$MARKETPLACE_DIR"'"}' \
-        "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
-      echo "  Added derio-net to known_marketplaces.json"
+    prev_source="$(jq -r '."derio-net".source.repo // empty' "$KNOWN_MARKETPLACES" 2>/dev/null || true)"
+    jq '."derio-net" = {"source":{"source":"github","repo":"derio-net/super-fr"},"installLocation":"'"$MARKETPLACE_DIR"'"}' \
+      "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
+    if [ -n "$prev_source" ] && [ "$prev_source" != "derio-net/super-fr" ]; then
+      echo "  Reclaimed derio-net in known_marketplaces.json (was '$prev_source')" >&2
     else
-      echo "  derio-net already in known_marketplaces.json"
+      echo "  Registered derio-net in known_marketplaces.json"
     fi
   fi
 
@@ -264,6 +281,23 @@ fi
 # runs, so we wipe any stale .git from older installs and clobber the rest.
 echo ""
 echo "Setting up marketplace directory..."
+# The rsync below is `--delete`: it replaces the whole tree, it does not merge
+# manifests. If a DIFFERENT repo has populated this directory (a sibling whose
+# installer claimed the same marketplace name), that repo's plugins silently
+# stop resolving the moment we sync. We still reclaim — super-fr owns the name,
+# and refusing would let a squat permanently break super-fr installs — but the
+# operator must be told, by name, whose plugins just went dark.
+OCCUPANT_MANIFEST="$MARKETPLACE_DIR/.claude-plugin/marketplace.json"
+if [ -f "$OCCUPANT_MANIFEST" ] && command -v jq &>/dev/null; then
+  occupant_name="$(jq -r '.name // empty' "$OCCUPANT_MANIFEST" 2>/dev/null || true)"
+  if [ -n "$occupant_name" ] && [ "$occupant_name" != "derio-net" ]; then
+    echo "  WARNING: foreign marketplace '$occupant_name' occupies $MARKETPLACE_DIR." >&2
+    echo "  super-fr owns the 'derio-net' marketplace name and is reclaiming this" >&2
+    echo "  directory; '$occupant_name' plugins installed from here will stop resolving." >&2
+    echo "  Fix on that repo's side: give it its own marketplace name (matching its" >&2
+    echo "  own .claude-plugin/marketplace.json 'name'), not 'derio-net'." >&2
+  fi
+fi
 mkdir -p "$MARKETPLACE_DIR"
 # Remove stale symlinks from older installs
 if [ -L "$MARKETPLACE_DIR" ]; then
@@ -344,6 +378,43 @@ if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
       "$INSTALLED_PLUGINS" > "${INSTALLED_PLUGINS}.tmp" && mv "${INSTALLED_PLUGINS}.tmp" "$INSTALLED_PLUGINS"
     rm -rf "$CACHE_BASE/superpowers-for-vk"
     echo "  Retired superpowers-for-vk@derio-net (entry + cache removed)"
+  fi
+
+  # Report — never delete — `X@derio-net` registrations our manifest doesn't
+  # list. After we reclaim the marketplace those can never resolve, but they
+  # belong to another repo's install state; pruning them here would be super-fr
+  # reaching across a repo boundary to "fix" something it doesn't own. Name them
+  # and hand the operator the two real remedies.
+  OWNED_IDS=""
+  for plugin_name in "${PLUGIN_NAMES[@]}"; do
+    OWNED_IDS="$OWNED_IDS $plugin_name@derio-net"
+  done
+  orphans=""
+  for source_file in "$INSTALLED_PLUGINS" "$SETTINGS"; do
+    [ -f "$source_file" ] || continue
+    if [ "$source_file" = "$INSTALLED_PLUGINS" ]; then
+      jq_path='.plugins // {}'
+    else
+      jq_path='.enabledPlugins // {}'
+    fi
+    while IFS= read -r plugin_id; do
+      [ -n "$plugin_id" ] || continue
+      case " $OWNED_IDS " in *" $plugin_id "*) continue ;; esac
+      case " $orphans " in *" $plugin_id "*) continue ;; esac
+      orphans="$orphans $plugin_id"
+    done < <(jq -r "$jq_path | keys[] | select(endswith(\"@derio-net\"))" "$source_file" 2>/dev/null || true)
+  done
+  if [ -n "$orphans" ]; then
+    echo "" >&2
+    echo "  WARNING: orphaned plugin registration(s) in the derio-net marketplace:" >&2
+    for plugin_id in $orphans; do
+      echo "    - $plugin_id  (not listed in super-fr's marketplace.json)" >&2
+    done
+    echo "  These stay enabled but can no longer resolve. Left in place — they are" >&2
+    echo "  another repo's install state, not ours. Fix by reinstalling that plugin" >&2
+    echo "  from its own repo under its own marketplace name, or remove the entries:" >&2
+    echo "    jq 'del(.plugins[\"<id>\"])' ~/.claude/plugins/installed_plugins.json" >&2
+    echo "    jq 'del(.enabledPlugins[\"<id>\"])' ~/.claude/settings.json" >&2
   fi
 else
   echo "  WARNING: cannot register plugins — jq or installed_plugins.json missing" >&2

@@ -1,6 +1,6 @@
 [project]
 name = "fr-dispatch"
-version = "3.12.0"
+version = "3.12.1"
 description = "super-fr dispatch: queue protocol + runner framework (discover/tick, Runner protocol, prompt/lifecycle/metrics)"
 requires-python = ">=3.11"
 dependencies = ["fr"]
