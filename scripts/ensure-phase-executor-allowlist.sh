@@ -42,14 +42,14 @@ fi
 # Anchor on the known-stock `Explore|Plan` prefix and prepend our types to the
 # list. Using Explore as the anchor keeps the edit robust to trailing members.
 #
-# Both names are inserted: the qualified id is what Claude Code actually sends;
-# the bare one is harmless insurance for any context that references the agent
-# unqualified. The first expression first strips a stale bare-only entry left by
-# the pre-fix script so repair doesn't duplicate it.
+# ONLY the qualified id is inserted — that is what Claude Code sends, and the
+# allowlist must stay fail-closed for anything else. The first expression strips
+# a stale bare-only entry left by the pre-fix script, so an already-broken hook
+# is repaired rather than ending up with both spellings.
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 sed -e 's/^\([[:space:]]*\)fr-phase-executor|Explore|Plan|/\1Explore|Plan|/' \
-    -e "s/^\([[:space:]]*\)Explore|Plan|/\1$QUALIFIED|fr-phase-executor|Explore|Plan|/" \
+    -e "s/^\([[:space:]]*\)Explore|Plan|/\1$QUALIFIED|Explore|Plan|/" \
     "$hook" >"$tmp"
 
 if ! grep -q "$QUALIFIED" "$tmp"; then
