@@ -74,16 +74,16 @@ fr-goal adds placement policy (a mid-plan manual phase stalls the run):
 
 ### 6. Implement — one subagent per phase, journal-fed, TDD
 
-The step-1 workspace is the working copy (every command via `fr isolation
-exec`); spec/plan aren't on main, so NOT dispatched (`fr apply --yes` refuses).
-For each phase in dependency order, dispatch ONE `fr-phase-executor` subagent —
-brief = `fr pickup` + spec + `fr journal render --scope plan`. It implements TDD
-(`superpowers:test-driven-development`), writes discoveries/findings via
-`fr journal add --scope plan`, ticks steps / completes the phase, and returns a
-structured result — the only thing re-entering context. The journal IS the
-handoff (the subagent inherits no history). Model = phase `tier` via `fr models
-resolve` (unbound → set from step 1). Blocked dispatch → run that phase inline.
-Never a manual phase.
+The step-1 workspace is the working copy (commands via `fr isolation exec`);
+spec/plan aren't on main, so NOT dispatched (`fr apply --yes` refuses). Per phase
+in dependency order, dispatch ONE phase-executor, brief = `fr pickup` + spec +
+`fr journal render --scope plan`: TDD (`superpowers:test-driven-development`), journals discoveries/findings
+(`fr journal add`), ticks steps / completes the phase, returns a structured
+result — the journal IS the handoff (subagent inherits no history). Model =
+phase `tier` via `fr models resolve --harness <h>` (unbound → set step 1); blocked
+→ run inline; never a manual phase. **Harness — dispatch:** Claude Code uses the
+`fr-phase-executor` Agent; Hermes Agent calls `delegate_task(goal, context)` with
+the brief in `context` (subagents know nothing — pass all), serial; child loads `fr-execute`.
 
 **The implementing layer pushes the branch ONLY — never opens the PR**: that
 reorders deliver (8) ahead of review (7), orphaning fixes onto a merged branch

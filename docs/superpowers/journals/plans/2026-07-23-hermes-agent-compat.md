@@ -19,3 +19,8 @@ Claude fr-isolation-guard.sh gates ALL base-repo commands while a pipeline SENTI
 ### p5-yaml-comment-loss · discovery · fr hermes uses PyYAML; comments in cli-config.yaml are not round-tripped
 
 Documented limitation (module docstring): mutating cli-config.yaml via PyYAML strips comments. The managed edits are confined to the hooks: key and are idempotent+reversible, but surrounding user comments aren't preserved. Acceptable for v1; ruamel would preserve them at the cost of a new dep.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-fr-execute-neutral created=2026-07-23T21:36:27 -->
+### p7-fr-execute-neutral · discovery · fr-execute needs no Hermes edit; the delegated child loads it as-is
+
+fr-goal step 6 now branches on harness: Claude Code dispatches fr-phase-executor Agent; Hermes calls delegate_task(goal, context). The delegated Hermes child loads the fr-execute skill, which is harness-neutral (agent-facing execution protocol) — no Hermes-specific edit required. SKILL.md held at exactly 120 lines by compressing the executor paragraph; TDD skill ref kept inline.
