@@ -9,3 +9,8 @@ Tripwires import each sync-*.py by path; sharing a helper module would add a cro
 ### p3-shared-decision-core · discovery · Extracted lib/fr-isolation-decision.sh; Claude hook behavior byte-identical
 
 The marker/allowlist/fr-enabled logic now lives in one sourced bash lib (fr_isolation_decide_edit, returns 0 allow / 1 block). Claude entrypoint sources it and keeps its exact deny JSON — 13/13 existing hook tests still green. Hermes entrypoint reuses the lib, adds write_file|patch tool gate + tool_input.path extraction + {"decision":"block"} shape. Callers MUST invoke the fn inside an 'if' so a deny return doesn't trip set -e.
+
+<!-- fr:journal kind=finding scope=plan id=p4-guard-marker-based created=2026-07-23T21:12:49 phase=4 state=open -->
+### p4-guard-marker-based · finding [open] · Hermes bash guard is marker-based, not sentinel-based (Claude's mechanism doesn't port) (phase 4)
+
+Claude fr-isolation-guard.sh gates ALL base-repo commands while a pipeline SENTINEL is active (written by fr-pipeline-sentinel.sh, a Skill-PostToolUse hook). Hermes has no Skill-PostToolUse, so no sentinel writer. Decision: the Hermes guard is MARKER-based (session-independent, like the P3 edit hook) — it blocks git/gh MUTATIONS whose effective cwd (payload cwd, or a leading 'cd <target>') is an fr-enabled base clone lacking a valid isolation worktree. Escapes: fr isolation …, cd <worktree>, FR_BASE_OK=1. Read-only/unknown commands pass (discipline backstop, not a security boundary). Implemented via a new fr_isolation_decide_cwd in the shared lib.

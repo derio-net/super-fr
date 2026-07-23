@@ -19,12 +19,69 @@
 # jq is load-bearing (marker parsing). Callers run under `set -eu`; call this
 # function from inside an `if` so a deny (`return 1`) does not trip `set -e`.
 
+# --- internal helpers (shared by decide_edit and decide_cwd) ---------------
+
+# Echo the resolved git toplevel for a directory, or return non-zero.
+_fr_toplevel_of() {
+  _fr_t=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 1
+  [ -n "$_fr_t" ] || return 1
+  (cd "$_fr_t" 2>/dev/null && pwd -P) || return 1
+}
+
+# Return 0 if the given resolved toplevel is fr-enabled (devcontainer profile or
+# an fr plans dir), else 1.
+_fr_is_enabled() {
+  for _fr_cfg in "$1"/.devcontainer/*/devcontainer.json; do
+    [ -f "$_fr_cfg" ] && return 0
+  done
+  [ -d "$1/docs/superpowers/plans" ] && return 0
+  return 1
+}
+
+# Return 0 if the toplevel carries a VALID isolation marker: present AND
+# recorded toplevel == current AND mode == "worktree" AND the toplevel is a
+# LINKED worktree (git-common-dir != git-dir). The linked-worktree check defeats
+# a stale marker copied into the primary tree. Unknown modes fail CLOSED.
+_fr_marker_valid() {
+  _fr_rtop=$1
+  _fr_marker="$_fr_rtop/.fr-isolation"
+  [ -f "$_fr_marker" ] || return 1
+  _fr_recorded=$(jq -r '.toplevel // empty' "$_fr_marker" 2>/dev/null || true)
+  _fr_mode=$(jq -r '.mode // "worktree"' "$_fr_marker" 2>/dev/null || echo worktree)
+  _fr_rrecorded=""
+  [ -n "$_fr_recorded" ] && _fr_rrecorded=$(cd "$_fr_recorded" 2>/dev/null && pwd -P || echo "$_fr_recorded")
+  [ "$_fr_rrecorded" = "$_fr_rtop" ] || return 1
+  [ "$_fr_mode" = "worktree" ] || return 1
+  _fr_common=$(git -C "$_fr_rtop" rev-parse --git-common-dir 2>/dev/null || true)
+  _fr_gitdir=$(git -C "$_fr_rtop" rev-parse --git-dir 2>/dev/null || true)
+  _fr_rcommon=$(cd "$_fr_rtop" && cd "$_fr_common" 2>/dev/null && pwd -P) || _fr_rcommon="$_fr_common"
+  _fr_rgitdir=$(cd "$_fr_rtop" && cd "$_fr_gitdir" 2>/dev/null && pwd -P) || _fr_rgitdir="$_fr_gitdir"
+  [ "$_fr_rcommon" != "$_fr_rgitdir" ]
+}
+
+# --- public decisions ------------------------------------------------------
+
+# fr_isolation_decide_cwd <dir>
+#   0 -> ALLOWED context (dir is a worktree, a non-fr repo, or outside any repo)
+#   1 -> BLOCKED context (dir is an fr-enabled base clone with no valid marker)
+# Honors FR_BASE_OK=1. Used by both the edit gate and the bash guard.
+fr_isolation_decide_cwd() {
+  [ "${FR_BASE_OK:-}" = "1" ] && return 0
+  [ -d "$1" ] || return 0
+  _fr_rtop=$(_fr_toplevel_of "$1") || return 0
+  _fr_is_enabled "$_fr_rtop" || return 0
+  _fr_marker_valid "$_fr_rtop" && return 0
+  return 1
+}
+
+# fr_isolation_decide_edit <file>
+#   0 -> ALLOW the edit; 1 -> BLOCK it.
+# An fr-enabled base-clone edit is blocked unless `.fr-isolation-allow` exempts
+# the specific repo-relative path.
 fr_isolation_decide_edit() {
   _fr_file=$1
 
-  # Deliberate base-clone edit — the documented escape hatch.
   [ "${FR_BASE_OK:-}" = "1" ] && return 0
-
   [ -n "$_fr_file" ] || return 0   # no parseable target — not a decision
   # An absolute path is required; a relative one would resolve the toplevel
   # against the wrong (session-cwd) repo.
@@ -37,42 +94,13 @@ fr_isolation_decide_edit() {
   done
   [ -d "$_fr_dir" ] || return 0
 
-  _fr_toplevel=$(git -C "$_fr_dir" rev-parse --show-toplevel 2>/dev/null) || return 0
-  [ -n "$_fr_toplevel" ] || return 0
-  _fr_rtop=$(cd "$_fr_toplevel" 2>/dev/null && pwd -P) || return 0
-
-  # fr-enabled? A devcontainer profile (every isolation-capable repo has one) or
-  # an fr plans dir. Neither → not our concern, allow.
-  _fr_enabled=0
-  for _fr_cfg in "$_fr_rtop"/.devcontainer/*/devcontainer.json; do
-    [ -f "$_fr_cfg" ] && _fr_enabled=1 && break
-  done
-  [ -d "$_fr_rtop/docs/superpowers/plans" ] && _fr_enabled=1
-  [ "$_fr_enabled" = 1 ] || return 0
-
-  # Valid isolation marker → allow. Valid = present AND recorded toplevel ==
-  # current toplevel AND mode == "worktree" AND the toplevel is a LINKED
-  # worktree (git-common-dir != git-dir). The linked-worktree check is what
-  # defeats a stale marker copied into the primary working tree. Only
-  # mode=worktree is honored; unknown modes fail CLOSED (fall through to deny).
-  _fr_marker="$_fr_rtop/.fr-isolation"
-  if [ -f "$_fr_marker" ]; then
-    _fr_recorded=$(jq -r '.toplevel // empty' "$_fr_marker" 2>/dev/null || true)
-    _fr_mode=$(jq -r '.mode // "worktree"' "$_fr_marker" 2>/dev/null || echo worktree)
-    _fr_rrecorded=""
-    [ -n "$_fr_recorded" ] && _fr_rrecorded=$(cd "$_fr_recorded" 2>/dev/null && pwd -P || echo "$_fr_recorded")
-    if [ "$_fr_rrecorded" = "$_fr_rtop" ] && [ "$_fr_mode" = "worktree" ]; then
-      _fr_common=$(git -C "$_fr_rtop" rev-parse --git-common-dir 2>/dev/null || true)
-      _fr_gitdir=$(git -C "$_fr_rtop" rev-parse --git-dir 2>/dev/null || true)
-      _fr_rcommon=$(cd "$_fr_rtop" && cd "$_fr_common" 2>/dev/null && pwd -P) || _fr_rcommon="$_fr_common"
-      _fr_rgitdir=$(cd "$_fr_rtop" && cd "$_fr_gitdir" 2>/dev/null && pwd -P) || _fr_rgitdir="$_fr_gitdir"
-      [ "$_fr_rcommon" != "$_fr_rgitdir" ] && return 0   # a linked worktree → valid
-    fi
+  # Allowed context (worktree / non-fr / FR_BASE_OK) → allow the edit.
+  if fr_isolation_decide_cwd "$_fr_dir"; then
+    return 0
   fi
 
-  # Operator-managed exemptions: a `.fr-isolation-allow` globlist at the repo
-  # root, matched against the file's repo-relative path (bash pattern match —
-  # `*` spans `/`, so `projects/**` matches nested paths).
+  # Blocked context — but `.fr-isolation-allow` can exempt specific paths.
+  _fr_rtop=$(_fr_toplevel_of "$_fr_dir") || return 1
   _fr_allow="$_fr_rtop/.fr-isolation-allow"
   if [ -f "$_fr_allow" ]; then
     _fr_rdir=$(cd "$_fr_dir" 2>/dev/null && pwd -P) || _fr_rdir="$_fr_dir"
