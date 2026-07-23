@@ -1,0 +1,102 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Hermes config snippet + `fr hermes install/uninstall` subcommand (TDD)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  tracking_issue: null
+  tier: hard
+  acceptance:
+  - hermes-rules-soul-block
+  - hermes-isolation-gate-edits
+  - hermes-isolation-gate-bash
+tasks:
+- number: 1
+  title: Author the cli-config.snippet.yaml and a hooks-sync tripwire
+  steps:
+  - id: P5.T1.S1
+    text: |
+      Write tests/unit/test_tripwire_hermes_hooks_sync.py: assert every (event, matcher,
+      command) triple in .hermes/cli-config.snippet.yaml references a real shipped hook
+      script under plugins/super-fr/hooks/hermes/ (or the acceptance-nag), and that the four
+      expected entries exist: pre_tool_call+write_file|patch, pre_tool_call+terminal|execute_code
+      (guard), pre_tool_call+terminal|execute_code (merged-pr-push), on_session_start (nag).
+  - id: P5.T1.S2
+    text: |
+      Run the new test. EXPECT RED — snippet absent.
+  - id: P5.T1.S3
+    text: |
+      Write .hermes/cli-config.snippet.yaml with the hooks: block listing those four
+      entries (event, matcher regex, command path placeholder, timeout). Add an
+      on_session_start entry for the acceptance nag (reuse fr-acceptance-nag.sh logic;
+      Hermes on_session_start payload). Run the test. EXPECT GREEN.
+- number: 2
+  title: Implement `fr hermes install/uninstall` doing all invasive mutations (tested)
+  steps:
+  - id: P5.T2.S1
+    text: |
+      Write tests/unit/test_hermes_install_cmd.py against a temp HERMES_HOME: fr hermes
+      install merges the snippet hooks into a cli-config.yaml (idempotent re-run adds
+      nothing; unrelated keys preserved), adds shell-hooks-allowlist.json entries, and
+      applies the SOUL.md managed block; fr hermes uninstall strips hooks+allowlist+block
+      leaving user content intact; malformed/absent cli-config.yaml is handled fail-safe.
+  - id: P5.T2.S2
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_hermes_install_cmd.py -q --no-cov`.
+      EXPECT RED — command absent.
+  - id: P5.T2.S3
+    text: |
+      Add packages/fr/src/fr/commands/hermes_cmd.py with a `hermes` Typer subgroup
+      (install/uninstall), registered in cli.py. Use the vendored yaml dep for the
+      idempotent hooks merge; a small helper for the delimited SOUL.md block (apply/strip);
+      JSON edit for the allowlist. Resolve HERMES_HOME from env or ~/.hermes. Copy the
+      hook scripts into HERMES_HOME and point the snippet commands at them.
+  - id: P5.T2.S4
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_hermes_install_cmd.py -q --no-cov`.
+      EXPECT GREEN.
+  - id: P5.T2.S5
+    text: |
+      Optional refactor: extract the managed-block apply/strip helper if it will be reused
+      by the SOUL and allowlist paths; stay green. Skip if clean.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

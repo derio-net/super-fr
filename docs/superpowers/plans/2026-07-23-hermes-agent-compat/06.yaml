@@ -1,0 +1,86 @@
+schema_version: 2
+phase:
+  number: 6
+  title: install.sh Hermes path + `hermes:` model defaults + guards (TDD)
+  tag: agentic
+  depends_on:
+  - 1
+  - 5
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - hermes-skills-delivery
+  - hermes-fr-goal-delegation
+tasks:
+- number: 1
+  title: Wire the opt-in Hermes install/uninstall block into install.sh
+  steps:
+  - id: P6.T1.S1
+    text: |
+      Write tests/unit/test_install_copies_hermes_skills.py (static assertions on
+      scripts/install.sh text): defines HERMES_HOME rooted at ~/.hermes; a Hermes block
+      gated on HERMES_SKILLS_INSTALL=1 OR ~/.hermes existing; copies .hermes/skills/fr/*
+      into $HERMES_HOME/skills/fr/; invokes `fr hermes install`; the --uninstall block
+      calls `fr hermes uninstall` and removes $HERMES_HOME/skills/fr.
+  - id: P6.T1.S2
+    text: |
+      Run the new test. EXPECT RED.
+  - id: P6.T1.S3
+    text: |
+      Add the Hermes section to scripts/install.sh (opt-in gate, HERMES_HOME var, byte-copy
+      skills from the repo's .hermes/skills/fr mirror, then `fr hermes install`) and the
+      symmetric --uninstall block (`fr hermes uninstall` + rm skills). Keep it bash+jq only.
+  - id: P6.T1.S4
+    text: |
+      Run `cd <worktree> && uv run pytest tests/unit/test_install_copies_hermes_skills.py
+      tests/unit/test_install_copies_rules.py -q --no-cov`. EXPECT GREEN.
+- number: 2
+  title: 'Ship hermes: fr-models tier defaults with a resolve test'
+  steps:
+  - id: P6.T2.S1
+    text: |
+      Write/extend a unit test asserting `fr models resolve --harness hermes --tier standard`
+      (with the repo models.yaml override on the config search path) returns the bound Hermes
+      model id, and mechanical/hard resolve too.
+  - id: P6.T2.S2
+    text: |
+      Run the test. EXPECT RED — no hermes binding.
+  - id: P6.T2.S3
+    text: |
+      Add a hermes: {mechanical, standard, hard} block to the repo models.yaml override
+      (the path fr models reads as repo override) with sensible Hermes model ids; document
+      the user override location. Run the test. EXPECT GREEN.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

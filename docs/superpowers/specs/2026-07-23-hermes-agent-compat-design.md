@@ -334,6 +334,11 @@ Requires a real Hermes Agent install (operator has one). Post-merge:
    strips the SOUL.md block, removes the `hooks:` entries — and leaves the
    user's own SOUL.md/skills/hooks intact.
 
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+
 ## 7. Acceptance rows (born here; presented at spec review)
 
 Proposed matrix rows (`fr acceptance add --origin
