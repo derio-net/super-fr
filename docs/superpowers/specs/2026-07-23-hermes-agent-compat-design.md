@@ -302,6 +302,32 @@ operator to a wrong model.
 - Guarded by `tests/unit/test_models_hermes_first_run.py`, which fails if any
   `hermes:` binding is ever re-introduced into the repo override.
 
+### H. Documentation
+
+- **`README.md` → a `### Hermes Agent` section** (peer of the OpenCode notes):
+  opt-in install (`HERMES_SKILLS_INSTALL=1`), a table of exactly what lands
+  where (skills / SOUL block / hook tree / allowlist), the
+  `fr hermes install|uninstall` pair and how `--uninstall` reverses it, the
+  enforcement surface (edits **and** bash/push), the ask-don't-guess model
+  policy (§G), and the `delegate_task` phase-execution note. Plus a Quickstart
+  line mirroring the OpenCode one.
+- **`HERMES.md` at the repo root** — this repo's Hermes project-context file, for
+  agents working *on* super-fr.
+  - **Shadowing is the hazard, not a detail.** Hermes loads exactly ONE project
+    context file (`.hermes.md`/`HERMES.md` → `AGENTS.md` → `CLAUDE.md`, first
+    match wins) and has **no include mechanism**. So HERMES.md *replaces*
+    `AGENTS.md` for Hermes sessions — a naive stub would silently delete every
+    maintainer instruction rather than add to them.
+  - Mitigation: HERMES.md **inlines the invariants that are unsafe to discover
+    late** (isolation-required, never commit to `main`, the version-bump rule,
+    regenerate-don't-hand-edit mirrors, no `claude -p` batching, the CI gate)
+    and **points at `AGENTS.md`** for the full map, rather than duplicating it
+    (which would drift).
+- Guarded by `tests/unit/test_hermes_docs.py`: HERMES.md exists, names
+  `AGENTS.md` **and that file still exists** (no dangling pointer), inlines the
+  non-negotiables, documents the first-run model question; README documents the
+  opt-in env var, the artifact paths, and `fr hermes`.
+
 ## 5. Risks & mitigations
 
 - **`fr-goal` SKILL.md is at the 120-line hard cap** (test-enforced; see repo
