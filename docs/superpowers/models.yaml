@@ -1,0 +1,11 @@
+# fr models repo override (harness -> tier -> model), read before user config.
+#
+# Hermes Agent tier defaults so fr-goal's phase dispatch resolves a model when
+# running inside Hermes (`fr models resolve --harness hermes --tier <t>`). These
+# are best-effort defaults over Nous Research's Hermes-4 family — override per
+# machine with `fr models set --harness hermes --tier <t> --model <id>`
+# (persists to ~/.config/fr/models.yaml, which wins for that user).
+hermes:
+  mechanical: NousResearch/Hermes-4-14B
+  standard: NousResearch/Hermes-4-70B
+  hard: NousResearch/Hermes-4-405B
