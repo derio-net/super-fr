@@ -76,26 +76,31 @@ Everything else — reading errors, reproduction, evidence instrumentation,
 pattern analysis, single-hypothesis testing, the failing-test-then-fix, the
 milestone review — runs autonomously.
 
-## 3. Record — durable debugging log
+## 3. Record — durable debug journal, flushed as you go
 
-Write the investigation to `docs/superpowers/debugging/<YYYY-MM-DD-slug>.md`
-in the worktree, committed alongside the fix. Lighter than a spec — a bug fix
-does NOT enter the spec → plan pipeline — but durable and searchable:
+Record the investigation to the `debug`-scope journal
+(`journals/<YYYY-MM-DD-slug>.md`) via `fr journal add --scope debug`, appended
+**as you go** — not written up at the end. Continuous flush is the point: the
+rejected-hypotheses trail is the most compaction-vulnerable artifact here, so
+persist each verdict the moment you reach it. New debug journals live under
+`journals/`; pre-existing `debugging/*.md` prose stays put (no migration). A bug
+fix does NOT enter the spec → plan pipeline, but the journal is durable and
+searchable:
 
-- **Symptom & reproduction** — the failing behavior and exact repro steps.
-- **Evidence** — error messages, the data-flow trace, the component-boundary
-  instrumentation that localized the failure.
-- **Root cause** — the single confirmed cause, stated as "X because Y".
-- **Fix** — the one change at the source, and the failing test that pins it.
-- **Rejected hypotheses** — what was tested and ruled out.
+- `--kind repro` — the failing behavior + exact repro steps, on reproduce.
+- `--kind hypothesis` / `ruled-out` — each hypothesis and its verdict as tested
+  (the trail future debuggers would otherwise re-walk).
+- `--kind root-cause` — the single confirmed cause ("X because Y").
+- `--kind finding --state fixed` — the source change + the failing test pinning
+  it.
 
 ## 4. Deliver
 
 Verify first (`superpowers:verification-before-completion`: failing test now
 passes, no others broken). Open ONE PR via
-`superpowers:finishing-a-development-branch`; the body summarizes and links the
-debugging log (root cause + fix + the failing-test-first narrative). Stop —
-the operator merges. Cleanup: `fr isolation down` for immediate teardown when
+`superpowers:finishing-a-development-branch`; the body is derived from
+`fr journal render --scope debug` (root cause + fix + the failing-test-first
+narrative). Stop — the operator merges. Cleanup: `fr isolation down` for immediate teardown when
 this skill brought the workspace up cold — otherwise `fr isolation gc` reaps the
 merged workspace automatically (fired on any up/down), so a missed `down` no
 longer leaks it.
