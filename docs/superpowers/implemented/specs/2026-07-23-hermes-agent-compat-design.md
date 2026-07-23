@@ -379,6 +379,7 @@ Requires a real Hermes Agent install (operator has one). Post-merge:
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-07-23-hermes-agent-compat | `derio-net/super-fr` | `2026-07-23-hermes-agent-compat` | — |
 
 ## 7. Acceptance rows (born here; presented at spec review)
 

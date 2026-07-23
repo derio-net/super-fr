@@ -694,7 +694,7 @@ rows:
     acceptance: Installing super-fr under Hermes Agent makes the fr-* skills available
       as /fr-* slash commands.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-23-hermes-agent-compat-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_hermes_skills_sync.py
@@ -707,7 +707,7 @@ rows:
     acceptance: super-fr's three shipped rules reach a Hermes user via a managed, reversible
       ~/.hermes/SOUL.md block.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-23-hermes-agent-compat-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py
@@ -720,7 +720,7 @@ rows:
     acceptance: Hermes blocks tracked-file edits (write_file/patch) made outside a valid
       fr-isolation worktree, honoring FR_BASE_OK and .fr-isolation-allow.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-23-hermes-agent-compat-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_decision_core.py
@@ -733,7 +733,7 @@ rows:
     acceptance: Hermes blocks git/gh mutations and merged-PR pushes made via terminal/execute_code
       outside isolation, closing the bash gap OpenCode leaves open.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-23-hermes-agent-compat-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_hermes_bash_guard.py
@@ -745,7 +745,7 @@ rows:
     acceptance: A full fr-goal run executes inside Hermes, delegating each phase via
       delegate_task with a journal-fed brief and resolving models via --harness hermes.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-23-hermes-agent-compat-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_fr_goal_hermes_dispatch.py
