@@ -689,3 +689,51 @@ rows:
     status: ci
     notes: Scope enum (spec|plan|debug) + 8-kind enum + add/render/check serve both
       pipelines with no fr-goal-specific schema; unit-pinned per-PR.
+  - id: hermes-skills-delivery
+    capability: Hermes Agent compatibility
+    acceptance: Installing super-fr under Hermes Agent makes the fr-* skills available
+      as /fr-* slash commands.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    levels: {}
+    status: not-implemented
+    notes: Verified by sync tripwire + install-copies unit tests; post-merge manual
+      Test Plan item 1 (real Hermes install).
+  - id: hermes-rules-soul-block
+    capability: Hermes Agent compatibility
+    acceptance: super-fr's three shipped rules reach a Hermes user via a managed, reversible
+      ~/.hermes/SOUL.md block.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    levels: {}
+    status: not-implemented
+    notes: Rules-sync tripwire + install/uninstall block assertions; strip-on-uninstall
+      leaves user SOUL.md intact.
+  - id: hermes-isolation-gate-edits
+    capability: Hermes Agent compatibility
+    acceptance: Hermes blocks tracked-file edits (write_file/patch) made outside a valid
+      fr-isolation worktree, honoring FR_BASE_OK and .fr-isolation-allow.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    levels: {}
+    status: not-implemented
+    notes: Decision-core + Hermes entrypoint unit tests; post-merge manual Test Plan
+      item 3.
+  - id: hermes-isolation-gate-bash
+    capability: Hermes Agent compatibility
+    acceptance: Hermes blocks git/gh mutations and merged-PR pushes made via terminal/execute_code
+      outside isolation, closing the bash gap OpenCode leaves open.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    levels: {}
+    status: not-implemented
+    notes: Bash-guard unit tests; post-merge manual Test Plan item 4.
+  - id: hermes-fr-goal-delegation
+    capability: Hermes Agent compatibility
+    acceptance: A full fr-goal run executes inside Hermes, delegating each phase via
+      delegate_task with a journal-fed brief and resolving models via --harness hermes.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
+    levels: {}
+    status: not-implemented
+    notes: Post-merge manual Test Plan item 6 (toy feature end-to-end in real Hermes).
