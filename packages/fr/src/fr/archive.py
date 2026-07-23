@@ -129,7 +129,25 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"(e.g. `git rm -r {src_rel}`)."
         )
     _git_mv(repo_root, src_rel, dst_rel)
+    _archive_journal(repo_root, plan_dir.name)
     return repo_root / dst_rel
+
+
+def _archive_journal(repo_root: Path, slug: str) -> None:
+    """Move a plan/spec journal (`journals/<slug>.md`) to implemented/journals/.
+
+    A no-op when no journal exists (back-compat with pre-journal plans/specs)
+    or when the destination already holds one (a re-run). Mirrors the plan/spec
+    archival move (2026-07-22 fr-goal-subagent-execution spec §A).
+    """
+    src = Path("docs/superpowers/journals") / f"{slug}.md"
+    if not (repo_root / src).exists():
+        return
+    dst = Path("docs/superpowers/implemented/journals") / f"{slug}.md"
+    if (repo_root / dst).exists():
+        return
+    (repo_root / dst).parent.mkdir(parents=True, exist_ok=True)
+    _git_mv(repo_root, src, dst)
 
 
 def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
@@ -160,6 +178,9 @@ def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
             except ArchiveError as e:
                 notes.append(str(e))
                 continue
+            # A spec journal is keyed by the spec's filename stem; follow the
+            # spec into implemented/journals/ (2026-07-22 spec §A).
+            _archive_journal(repo_root, spec_path.stem)
             moves.append(DirsMove(src=src_rel, dst=dst_rel, kind="spec"))
         elif note and "no Implementation Plans rows" not in note:
             notes.append(f"{spec_path.name}: {note}")
