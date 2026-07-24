@@ -819,3 +819,19 @@ rows:
       toplevel+evidence and forged-marker cases unit-pinned. OpenCode plugin mirror
       pinned by bun test (15/15), outside CI; forged/base-clone-copy block also = spec
       Test Plan step 3.
+  - id: vk-legacy-fallbacks-removed
+    capability: vk→fr spelling migration
+    acceptance: The vk-spelling dual-read fallbacks (vk-profiles.yaml, .git/vk/isolation
+      state dir, ~/.config/vk/secrets devcontainer mounts, VK_BRIDGE_* env) no longer
+      resolve; an unmigrated repo fails loudly pointing at 'fr init migrate' instead
+      of warning, and the kept VibeKanban-product names (VK_DERIO_OPS_PROJECT_ID, willikins_vk_bridge_*
+      metrics) are unaffected
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-remove-vk-legacy-fallbacks-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_bridge_cli.py
+    status: not-implemented
+    notes: Born at brainstorm (#276); flips to ci when the fallback-gone unit tests
+      land in this PR.
