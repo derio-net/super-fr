@@ -142,11 +142,9 @@ def discover_profiles(repo_root: Path) -> list[str]:
 
 
 def profiles_config(repo_root: Path) -> dict[str, Any]:
-    base = repo_root / ".devcontainer"
-    for name in ("fr-profiles.yaml",):
-        cfg = base / name
-        if cfg.is_file():
-            return yaml.safe_load(cfg.read_text()) or {}
+    cfg = repo_root / ".devcontainer" / "fr-profiles.yaml"
+    if cfg.is_file():
+        return yaml.safe_load(cfg.read_text()) or {}
     return {}
 
 
