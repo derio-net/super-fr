@@ -33,18 +33,21 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:38:44+00:00'
       note: null
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:38:44+00:00'
       note: null
     P2.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:38:33+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-24T19:38:48+00:00'
+    note: bridge_env reads FR_BRIDGE_* only; VK_BRIDGE_* fallback+warning removed;
+      bridge_cli legacy docstring notes dropped. Also migrated 12 integration/unit
+      test fixtures (VK_BRIDGE_REPOS/LOCK_PATH/RECOVER_ORPHAN_CARDS) to FR_BRIDGE_*
+      — plan gap, fixtures fed the removed fallback.
     observed_prs: []

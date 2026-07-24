@@ -64,14 +64,13 @@ def test_bridge_env_fr_first(monkeypatch, capsys):
     assert "legacy" not in capsys.readouterr().err
 
 
-def test_bridge_env_vk_fallback_warns(monkeypatch, capsys):
+def test_bridge_env_vk_ignored(monkeypatch, capsys):
     from fr_vk.config import bridge_env
 
     monkeypatch.delenv("FR_BRIDGE_REPOS", raising=False)
     monkeypatch.setenv("VK_BRIDGE_REPOS", "/x")
-    assert bridge_env("REPOS") == "/x"
-    err = capsys.readouterr().err
-    assert "legacy" in err and "VK_BRIDGE_REPOS" in err and "FR_BRIDGE_REPOS" in err
+    assert bridge_env("REPOS") is None
+    assert "legacy" not in capsys.readouterr().err
 
 
 def test_bridge_env_absent_is_none(monkeypatch, capsys):

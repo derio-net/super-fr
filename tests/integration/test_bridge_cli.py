@@ -82,8 +82,8 @@ def test_tick_syncs_bridge_owned_checkout_before_discover(
     clone = _init_bare_with_clone(tmp_path)  # configured (VK-shared) checkout
     bridge_base = tmp_path / "bridge-co"
 
-    monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
+    monkeypatch.setenv("FR_BRIDGE_REPOS", str(clone))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
     monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(bridge_base))
 
     from fr_vk import bridge_cli
@@ -174,8 +174,8 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
     clone = _init_bare_with_clone(tmp_path)
     repos_dir = clone.parent
 
-    monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
+    monkeypatch.setenv("FR_BRIDGE_REPOS", str(clone))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
     monkeypatch.setenv("FR_REPOS_DIR", str(repos_dir))
 
     from fr_dispatch import TickResult
@@ -245,8 +245,8 @@ def test_tick_warns_when_owner_name_unresolvable(
     a warning instead of silently skipping. Pre-fix this was a per-repo
     `continue` with zero output."""
     clone = _init_bare_with_clone(tmp_path)
-    monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
+    monkeypatch.setenv("FR_BRIDGE_REPOS", str(clone))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
 
     from fr_vk import bridge_cli
 
@@ -323,8 +323,8 @@ def test_tick_pushes_desync_metric_on_dirty_bridge_checkout(
     (bridge_co / "README.md").unlink()
     assert _git(bridge_co, "status", "--porcelain").stdout.strip()  # genuinely dirty
 
-    monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
+    monkeypatch.setenv("FR_BRIDGE_REPOS", str(clone))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
     monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(bridge_base))
 
     from fr_vk import bridge_cli
@@ -354,8 +354,8 @@ def test_tick_clean_bridge_checkout_does_not_push_desync_metric(
     bridge_co = bridge_base / "foo"
     subprocess.run(["git", "clone", str(bare), str(bridge_co)], check=True, capture_output=True)
 
-    monkeypatch.setenv("VK_BRIDGE_REPOS", str(clone))
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
+    monkeypatch.setenv("FR_BRIDGE_REPOS", str(clone))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "vk-bridge.lock"))
     monkeypatch.setenv("FR_BRIDGE_CHECKOUT_DIR", str(bridge_base))
 
     from fr_vk import bridge_cli
@@ -377,7 +377,7 @@ def test_tick_feeds_real_pr_observations_to_pr_state(
 ) -> None:  # #290
     """The bridge must build a real {card: status} map via observe_pr_status
     and pass it to _pr_state_tick — not the dead `{}` stub."""
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
 
     from fr_vk import bridge_cli
 
@@ -415,7 +415,7 @@ def test_tick_reconciles_done_issues_and_persists_seen(
     and persist the returned set."""
     import json as _json
 
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
 
     from fr_vk import bridge_cli
 

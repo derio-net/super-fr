@@ -82,7 +82,7 @@ def _emit_banner() -> None:
 def _configured_repos() -> list[Path]:
     """Resolve managed repo checkouts from env / convention.
 
-    `FR_BRIDGE_REPOS` (legacy: `VK_BRIDGE_REPOS`) is a comma-separated
+    `FR_BRIDGE_REPOS` is a comma-separated
     list of absolute paths. When
     unset, the default is the live bridge convention — every directory
     under `~/repos/<name>/` that contains a `.git` entry.
@@ -124,7 +124,7 @@ def _repo_owner_name(repo_path: Path) -> str | None:
 def _bridge_checkout_base() -> Path:
     """Base dir for bridge-owned checkouts (#286).
 
-    `FR_BRIDGE_CHECKOUT_DIR` (legacy `VK_BRIDGE_CHECKOUT_DIR`) overrides;
+    `FR_BRIDGE_CHECKOUT_DIR` overrides;
     unset → `~/.cache/fr/bridge-checkouts`.
     """
     raw = (bridge_env("CHECKOUT_DIR") or "").strip()

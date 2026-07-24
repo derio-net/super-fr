@@ -279,7 +279,7 @@ def test_second_concurrent_tick_aborts_early(
     from fr_vk import bridge_cli
 
     lock_path = tmp_path / "vk-bridge.lock"
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(lock_path))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(lock_path))
 
     # Acquire the lock externally first.
     held = bridge_cli._acquire_lock(str(lock_path))
@@ -319,7 +319,7 @@ def test_plan_deletion_between_ticks_does_not_purge_cards(
     seen_file = tmp_path / "seen.json"
     seen_file.write_text('["plan-a", "plan-b"]')
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", seen_file)
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
     monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [])
 
     class _StubMcp:
@@ -363,7 +363,7 @@ def test_per_plan_exception_does_not_kill_daemon(
 
     from fr_vk import bridge_cli
 
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
 
     # Three plans pretend to be discoverable.
