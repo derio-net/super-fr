@@ -819,3 +819,36 @@ rows:
       toplevel+evidence and forged-marker cases unit-pinned. OpenCode plugin mirror
       pinned by bun test (15/15), outside CI; forged/base-clone-copy block also = spec
       Test Plan step 3.
+  - id: vk-mcp-timeout-survives-slow-ops
+    capability: fr→VK dispatch
+    acceptance: A VK MCP op taking up to 180s (start_workspace under load, init handshake)
+      completes without the client abandoning the in-flight request, so bridge dispatch
+      leaks no VK concurrency permits
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Issue #404: 30s _recv default abandoned slow ops; abandoned spawns leak
+      VK_MAX_CONCURRENT_EXECUTIONS permits cumulatively until the pool wedges.'
+  - id: vk-mcp-post-timeout-correctness
+    capability: fr→VK dispatch
+    acceptance: After one MCP call times out, later calls on the same client still receive
+      their own responses — card/workspace state transitions stay correct (no stale-response
+      misattribution)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
+    levels: {}
+    status: not-implemented
+    notes: Requires JSON-RPC response-id correlation; without it every post-timeout
+      response is off by one.
+  - id: vk-bridge-init-timeout-graceful
+    capability: bridge tick resilience
+    acceptance: A bridge tick whose MCP client init times out exits gracefully with
+      a failure metric (mcp_init_error) instead of an unhandled traceback; the next
+      tick runs normally
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
+    levels: {}
+    status: not-implemented
+    notes: v3.14.0 died with a raw traceback during _construct_mcp_client(); no metric
+      was pushed.
