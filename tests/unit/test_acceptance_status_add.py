@@ -115,16 +115,18 @@ def test_add_appends_and_preserves_header(tmp_path: Path, monkeypatch: pytest.Mo
     assert check.exit_code == 0, check.output
 
 
-def test_add_regenerates_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`fr acceptance add` creates/updates report.html in the same tree, and a
+def test_add_regenerates_both_reports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fr acceptance add` creates/updates BOTH reports in the same tree, and a
     follow-up `report --check` passes (the CLI mutation path stays in sync)."""
     root = make_repo(tmp_path, row())
-    report = root / "docs" / "acceptance" / "report.html"
-    assert not report.exists()
+    local = root / "docs" / "acceptance" / "report.html"
+    github = root / "docs" / "acceptance" / "report.github.html"
+    assert not local.exists() and not github.exists()
     result = _invoke(root, monkeypatch, *ADD_ARGS)
     assert result.exit_code == 0, result.output
-    assert report.exists(), "add must generate the report"
-    assert "new-row" in report.read_text()
+    assert local.exists() and github.exists(), "add must generate both reports"
+    assert "new-row" in local.read_text()
+    assert "blob/main/" in github.read_text()
     check = _invoke(root, monkeypatch, "report", "--check")
     assert check.exit_code == 0, check.output
 

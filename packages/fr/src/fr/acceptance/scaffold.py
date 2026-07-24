@@ -75,13 +75,15 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   runs `fr acceptance status --brief` at session start** (Claude Code does it
   automatically via the super-fr SessionStart hook; other harnesses honor
   this line).
-- Report: `docs/acceptance/report.html` is a **committed, tracked** rendering
-  of `matrix.yaml`, kept in sync — `fr acceptance add` regenerates it, and drift
-  (incl. hand-edited status flips) is gated by `fr acceptance report --check`
-  plus the report-sync tripwire. Regenerate by hand with `fr acceptance report
-  --deterministic` and commit it. Ad-hoc `fr acceptance report` (no flag) gives a
-  git-stamped throwaway local render; links resolve relative to sibling checkouts
-  (`--sibling-root`, default `..`).
+- Reports: TWO **committed, tracked** renderings of `matrix.yaml`, kept in
+  sync — `docs/acceptance/report.html` (local links, viewable from a checkout)
+  and `docs/acceptance/report.github.html` (github.com blob links). `fr
+  acceptance add` regenerates **both**; drift (incl. hand-edited status flips) is
+  gated by `fr acceptance check` itself — it fails when either committed report
+  is missing or stale. Regenerate by hand with `fr acceptance report
+  --deterministic` (writes both) and commit them. Ad-hoc `fr acceptance report`
+  (no flag) gives a git-stamped throwaway local render; links resolve relative to
+  sibling checkouts (`--sibling-root`, default `..`).
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
   writes a Markdown summary to each Actions run (branch, PR, main), uploads the
   GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.
@@ -371,30 +373,32 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
     else:
         write_if_missing(".github/workflows/acceptance-report.yml", WORKFLOW_TEMPLATE)
 
-    # The HTML report is a TRACKED artifact kept in lockstep with the matrix
-    # (enforced by the sync tripwire) — no longer gitignored. Generate an
-    # initial deterministic render so a freshly scaffolded repo carries the
-    # committed matrix→report correspondence from row zero.
-    report_rel = "docs/acceptance/report.html"
-    report_path = root / report_rel
-    if report_path.exists():
-        skipped.append(report_rel)
-    else:
-        from fr.acceptance.model import load_matrix
-        from fr.acceptance.report import render_deterministic
+    # The HTML reports are TRACKED artifacts kept in lockstep with the matrix
+    # (enforced by `fr acceptance check`) — no longer gitignored. Generate the
+    # whole SET (report.html local + report.github.html github) so a freshly
+    # scaffolded repo carries the committed matrix→report correspondence from
+    # row zero.
+    from fr.acceptance.model import load_matrix
+    from fr.acceptance.report import REPORT_SET, render_committed_set
 
-        # Degrade, don't crash: an unresolvable identity (hand-rolled matrix
-        # with no org/repo keys AND no git remote) must not abort the whole
-        # scaffold after the other files are written — mirrors add_cmd's
-        # warn-don't-roll-back policy. The scaffolded matrix always carries the
-        # keys, so this only guards a pre-existing partial state; re-running
-        # init (write-if-missing) recovers.
-        try:
-            matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-            report_path.write_text(
-                render_deterministic(matrix, root, report_path.parent, "..", "local")
-            )
+    # Degrade, don't crash: an unresolvable identity (hand-rolled matrix with no
+    # org/repo keys AND no git remote) must not abort the whole scaffold after
+    # the other files are written — mirrors add_cmd's warn-don't-roll-back
+    # policy. The scaffolded matrix always carries the keys, so this only guards
+    # a pre-existing partial state; re-running init (write-if-missing) recovers.
+    try:
+        rendered = render_committed_set(
+            load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root
+        )
+    except Exception:  # noqa: BLE001 — a render hiccup never fails init
+        rendered = None
+    for report_rel in REPORT_SET:
+        report_path = root / report_rel
+        if report_path.exists():
+            skipped.append(report_rel)
+        elif rendered is not None:
+            report_path.write_text(rendered[report_rel])
             created.append(report_rel)
-        except Exception:  # noqa: BLE001 — a render hiccup never fails init
+        else:
             skipped.append(report_rel)
     return InitOutcome(created=created, skipped=skipped)

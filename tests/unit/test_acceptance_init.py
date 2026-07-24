@@ -49,13 +49,17 @@ def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.Monkey
     assert "SAME PR" in rule
     assert "not-implemented" in rule and "skipped" in rule  # the status ladder
 
-    # The report is a TRACKED artifact now: init generates it and does NOT
-    # gitignore it.
-    report = root / "docs" / "acceptance" / "report.html"
-    assert report.exists(), "init must generate the committed report"
-    assert "links: local" in report.read_text()
+    # Both reports are TRACKED artifacts now: init generates the SET and does
+    # NOT gitignore them.
+    local = root / "docs" / "acceptance" / "report.html"
+    github = root / "docs" / "acceptance" / "report.github.html"
+    assert local.exists() and github.exists(), "init must generate both committed reports"
+    assert "links: local" in local.read_text()
+    assert "links: github" in github.read_text()  # skeleton has 0 rows → no blob links yet
     if (root / ".gitignore").exists():
-        assert "docs/acceptance/report.html" not in (root / ".gitignore").read_text()
+        gi = (root / ".gitignore").read_text()
+        assert "docs/acceptance/report.html" not in gi
+        assert "docs/acceptance/report.github.html" not in gi
 
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 
@@ -76,6 +80,7 @@ def test_init_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
             "docs/acceptance/matrix.yaml",
             ".claude/rules/acceptance-matrix.md",
             "docs/acceptance/report.html",
+            "docs/acceptance/report.github.html",
             ".github/workflows/acceptance-report.yml",
         )
     }
@@ -128,7 +133,9 @@ def test_init_degrades_when_report_identity_unresolvable(tmp_path: Path) -> None
     outcome = init(root, "acme", "widget", backend="github")
 
     assert "docs/acceptance/report.html" in outcome.skipped
+    assert "docs/acceptance/report.github.html" in outcome.skipped
     assert not (root / "docs" / "acceptance" / "report.html").exists()
+    assert not (root / "docs" / "acceptance" / "report.github.html").exists()
     # The rest of the scaffold still landed.
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 

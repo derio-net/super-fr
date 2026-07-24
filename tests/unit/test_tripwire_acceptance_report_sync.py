@@ -17,25 +17,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.acceptance.model import load_matrix
-from fr.acceptance.report import render_deterministic
+from fr.acceptance.report import REPORT_SET, render_committed_set
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MATRIX = REPO_ROOT / "docs" / "acceptance" / "matrix.yaml"
-REPORT = REPO_ROOT / "docs" / "acceptance" / "report.html"
 
 
-def test_report_is_committed_and_tracked() -> None:
-    assert REPORT.exists(), (
-        "docs/acceptance/report.html must be committed (it is a tracked artifact now, "
-        "not gitignored) — run `fr acceptance report --deterministic` and commit it."
+@pytest.mark.parametrize("rel", list(REPORT_SET))
+def test_report_is_committed_and_tracked(rel: str) -> None:
+    assert (REPO_ROOT / rel).exists(), (
+        f"{rel} must be committed (the report SET is tracked now, not gitignored) — "
+        "run `fr acceptance report --deterministic` and commit both reports."
     )
 
 
-def test_committed_report_matches_matrix() -> None:
-    matrix = load_matrix(MATRIX)
-    expected = render_deterministic(matrix, REPO_ROOT, REPORT.parent, "..", "local")
-    assert REPORT.read_text() == expected, (
-        "docs/acceptance/report.html is stale (drifted from docs/acceptance/matrix.yaml).\n"
-        "Run `fr acceptance report --deterministic` and commit the result."
-    )
+def test_committed_report_set_matches_matrix() -> None:
+    expected = render_committed_set(load_matrix(MATRIX), REPO_ROOT)
+    for rel, want in expected.items():
+        assert (REPO_ROOT / rel).read_text() == want, (
+            f"{rel} is stale (drifted from docs/acceptance/matrix.yaml).\n"
+            "Run `fr acceptance report --deterministic` and commit both reports."
+        )

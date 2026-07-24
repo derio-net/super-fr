@@ -759,7 +759,7 @@ rows:
     acceptance: The acceptance HTML report is a tracked, version-controlled artifact
       committed alongside matrix.yaml (not gitignored).
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-report-autogen-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-acceptance-report-autogen-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_acceptance_report_sync.py
@@ -771,7 +771,7 @@ rows:
     acceptance: Mutating the matrix via 'fr acceptance add' regenerates docs/acceptance/report.html
       in the same working tree.
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-report-autogen-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-acceptance-report-autogen-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_status_add.py
@@ -782,7 +782,7 @@ rows:
     acceptance: 'Report drift from the matrix is caught: ''fr acceptance report --check''
       and the CI tripwire fail when report.html is stale.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-report-autogen-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-acceptance-report-autogen-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_report.py
@@ -894,3 +894,29 @@ rows:
     notes: v3.14.0 died with a raw traceback during _construct_mcp_client(); no metric
       was pushed. v3.15.1 guards init with (TimeoutError, OSError) → mcp_init_error
       + exit 1; SystemExit(2) for missing binaries still propagates (I1).
+  - id: acceptance-report-dual
+    capability: Acceptance report
+    acceptance: 'Two committed HTML reports are generated together: report.html (local
+      links) and report.github.html (github.com blob links).'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-dual-reports-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_report.py
+    status: ci
+    notes: render_committed_set + report --deterministic write both; add/init generate
+      both. Unit-pinned per-PR.
+  - id: acceptance-report-dual-gate
+    capability: Acceptance report
+    acceptance: 'Every fr-acceptance repo is gated on both reports: fr acceptance check
+      fails when the committed report set is stale or incomplete (enforcement via the
+      universal gate, no per-repo workflow change).'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-dual-reports-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_cmd.py
+      - super-fr:tests/unit/test_tripwire_acceptance_report_sync.py
+    status: ci
+    notes: Existence-gated report-sync folded into check() (P2); reaches existing consumer
+      repos on fr upgrade.
