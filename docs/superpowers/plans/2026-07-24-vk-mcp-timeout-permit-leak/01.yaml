@@ -1,0 +1,158 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'VkMcpClient: uniform 180s timeouts + JSON-RPC response-id correlation (TDD)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - vk-mcp-timeout-survives-slow-ops
+  - vk-mcp-post-timeout-correctness
+tasks:
+- number: 1
+  title: Uniform 180s default for _recv / call_tool
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Rewrite tests/unit/test_mcp_client_timeout.py for the #404 policy
+      (uniform 180s, operator decision qa-timeout-policy). Update the module
+      docstring (the old "cheap calls fail fast at 30s" rationale is retired:
+      under load a 30s deadline abandons in-flight VK spawns, and each
+      abandoned start_workspace leaks a VK_MAX_CONCURRENT_EXECUTIONS permit
+      server-side). Replace the two tests with:
+      - test_default_timeout_is_180s: every wrapper (get_issue, update_issue,
+        list_issues, list_workspaces, list_repos, link_workspace_issue)
+        records _recv timeout 180.0.
+      - test_start_workspace_uses_180s_timeout: still 180.0 (explicit).
+      - test_explicit_call_tool_timeout_wins: call_tool("custom", {},
+        timeout=5.0) records 5.0.
+      Keep the _RecordingMcpClient double; its _recv override signature must
+      keep default parity with the real one (timeout: float = 180.0).
+  - id: P1.T1.S2
+    text: |
+      Run `uv run pytest tests/unit/test_mcp_client_timeout.py -q --no-cov`.
+      EXPECT RED: recorded timeouts are 30.0, not 180.0.
+  - id: P1.T1.S3
+    text: |
+      In packages/fr-vk/src/fr_vk/_mcp_client.py change `_recv(self, timeout:
+      float = 30.0)` (line 79) to 180.0 and `call_tool(..., timeout: float =
+      30.0)` (line 114) to 180.0. Rewrite call_tool's timeout docstring
+      paragraph: 180s default for every call (issue #404 — a timed-out call
+      abandons the server-side request; an abandoned spawn leaks a VK
+      concurrency permit, cumulatively wedging the executor pool);
+      start_workspace keeps its explicit 180.0 as documentation of the
+      known-slow call. _initialize inherits the new default via its bare
+      _recv() call.
+  - id: P1.T1.S4
+    text: |
+      Run `uv run pytest tests/unit/test_mcp_client_timeout.py tests/unit/test_mcp_client.py -q --no-cov`.
+      EXPECT GREEN.
+- number: 2
+  title: Response-id correlation in call_tool / _initialize
+  steps:
+  - id: P1.T2.S1
+    text: |
+      Add a new test class/section to tests/unit/test_mcp_client.py (follow
+      its existing fake-subprocess/queue seam) covering (operator decision
+      qa-id-correlation):
+      - test_stale_response_discarded: seed the recv queue with a response
+        carrying the PREVIOUS msg id (simulating a timed-out call's late
+        reply) followed by the matching-id response; call_tool returns the
+        matching one and logs a warning for the stale one.
+      - test_notification_skipped: a queued message with no "id" key
+        (server notification) is skipped, the following matching response
+        is returned.
+      - test_deadline_exhausted_draining_mismatches: queue holds only
+        mismatched-id messages; call_tool raises TimeoutError once the
+        overall deadline budget is exhausted (use a tiny timeout like 0.05).
+      - test_initialize_matches_handshake_id: _initialize tolerates a
+        notification queued before the initialize response.
+  - id: P1.T2.S2
+    text: |
+      Run `uv run pytest tests/unit/test_mcp_client.py -q --no-cov`.
+      EXPECT RED: current _recv pops the next message regardless of id, so
+      the stale/notification messages are returned as the call's response.
+  - id: P1.T2.S3
+    text: |
+      Implement in _mcp_client.py a private helper used by both call_tool
+      and _initialize:
+
+      def _recv_matching(self, msg_id: int, timeout: float) -> dict[str, Any]:
+          deadline = time.monotonic() + timeout
+          while True:
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  raise TimeoutError(
+                      f"No response with id={msg_id} from MCP server within {timeout}s"
+                  )
+              msg = self._recv(timeout=remaining)
+              if msg.get("id") == msg_id:
+                  return msg
+              logger.warning("vk-mcp: discarding stale/foreign message id=%r "
+                             "(awaiting id=%s)", msg.get("id"), msg_id)
+
+      Add `import time` + module logger (logging.getLogger(__name__)).
+      call_tool: `response = self._recv_matching(msg_id, timeout)`.
+      _initialize: capture its msg id and use _recv_matching(msg_id, 180.0).
+      Ids are allocated monotonically from self._msg_id, so a mismatch is
+      always stale/foreign, never not-yet-sent.
+  - id: P1.T2.S4
+    text: |
+      Run `uv run pytest tests/unit/test_mcp_client.py tests/unit/test_mcp_client_timeout.py -q --no-cov`.
+      EXPECT GREEN. If test_mcp_client_timeout.py's _RecordingMcpClient broke
+      because call_tool now routes through _recv_matching, keep the double
+      recording at the _recv seam (it still receives the per-attempt
+      remaining budget; assert on the FIRST recorded value per call, which
+      equals the requested timeout).
+  - id: P1.T2.S5
+    text: |
+      Optional refactor: if call_tool/_initialize share duplicated
+      send+match scaffolding, extract a _request(method, params, timeout)
+      helper; stay green (`uv run pytest tests/unit/test_mcp_client.py
+      tests/unit/test_mcp_client_timeout.py -q --no-cov`). Skip if clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T18:42:41+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T18:42:43+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-24T18:43:12+00:00'
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: '2026-07-24T18:43:14+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-07-24T18:43:56+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-07-24T18:43:58+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-07-24T18:44:49+00:00'
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: '2026-07-24T18:44:50+00:00'
+      note: null
+    P1.T2.S5:
+      state: '-'
+      ticked_at: '2026-07-24T18:50:51+00:00'
+      note: 'Skipped as clean: call_tool and _initialize share only 3 lines of scaffolding
+        (id increment, _send, _recv_matching) but differ in payload shape and _initialize''s
+        trailing notifications/initialized send. A _request() helper would hide the
+        handshake''s distinct shape for no dedup win.'
+  completion:
+    at: '2026-07-24T18:52:11+00:00'
+    note: null
+    observed_prs: []

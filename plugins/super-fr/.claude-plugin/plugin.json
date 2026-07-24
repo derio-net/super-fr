@@ -1,7 +1,7 @@
 {
     "name": "super-fr",
     "description": "super-fr base: superpowers-wrapped planning, isolation, and goal-to-PR pipeline with GitHub tracking",
-    "version": "3.15.0",
+    "version": "3.15.1",
     "author": {
         "name": "Ioannis Dermitzakis"
     },
