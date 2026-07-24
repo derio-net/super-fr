@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 from fr.cli import app
 from fr.commands import isolation_cmd
+from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.types import IsolationError
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -81,6 +83,33 @@ def test_up_without_profile_outside_repo_exits_2(tmp_path: Path, fake_run: list)
     res = runner.invoke(app, ["isolation", "up", "--repo", str(tmp_path), "--branch", "b"])
     assert res.exit_code == 2
     assert "git repo" in res.output
+
+
+def test_target_default_is_local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    # exact type, NOT isinstance — HostWorktreeTarget subclasses the local one.
+    assert type(isolation_cmd._target(tmp_path)) is LocalWorktreeDevcontainerTarget
+
+
+def test_target_devcontainer_explicit_is_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "devcontainer")
+    assert type(isolation_cmd._target(tmp_path)) is LocalWorktreeDevcontainerTarget
+
+
+def test_target_worktree_is_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    assert type(isolation_cmd._target(tmp_path)) is HostWorktreeTarget
+
+
+def test_target_unknown_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
+    with pytest.raises(IsolationError) as ei:
+        isolation_cmd._target(tmp_path)
+    msg = str(ei.value)
+    assert "bogus" in msg
+    assert "devcontainer | worktree" in msg
 
 
 def test_up_no_devcontainer_points_at_fr_init(repo: Path, fake_run: list) -> None:

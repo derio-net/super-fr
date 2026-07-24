@@ -13,6 +13,7 @@ from pathlib import Path
 
 import typer
 
+from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
     _detached_gc_spawn,
@@ -41,7 +42,18 @@ DEFAULT_BRANCH = "vk-iso/work"
 
 
 def _target(repo: Path) -> LocalWorktreeDevcontainerTarget:
-    return LocalWorktreeDevcontainerTarget(repo.resolve(), runner=_runner, gc_spawner=_gc_spawner)
+    """Select the isolation backend from `FR_ISOLATION_TARGET` (a HOST-level
+    declaration, never a per-call flag — spec §B). Unset or "devcontainer" →
+    the local worktree+devcontainer target (unchanged default); "worktree" →
+    HostWorktreeTarget (fr worktree, host env, no docker); anything else fails
+    closed so a broken docker can't be silently routed around."""
+    root = repo.resolve()
+    mode = os.environ.get("FR_ISOLATION_TARGET")
+    if mode in (None, "", "devcontainer"):
+        return LocalWorktreeDevcontainerTarget(root, runner=_runner, gc_spawner=_gc_spawner)
+    if mode == "worktree":
+        return HostWorktreeTarget(root, runner=_runner, gc_spawner=_gc_spawner)
+    raise IsolationError(f"unknown FR_ISOLATION_TARGET {mode!r} — valid: devcontainer | worktree")
 
 
 def _fail(err: IsolationError) -> None:

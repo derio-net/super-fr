@@ -450,12 +450,42 @@ class LocalWorktreeDevcontainerTarget:
         bypasses the open-PR guard ONLY; it never skips this verification (that
         would re-introduce the invisible-leak bug).
         """
+        self._down_worktree_tail(state, force)
+        self._spawn_gc()
+
+    def _down_worktree_tail(self, state: IsolationState, force: bool) -> None:
+        """PR guard → environment teardown → verified worktree removal → marker +
+        state retirement. Shared with `HostWorktreeTarget` (#... isolation host
+        modes): the ONLY per-mode difference is `_teardown_container`, which the
+        host-worktree mode overrides to a no-op (no docker), so the guard, the
+        post-condition verification, and the marker/state cleanup stay identical
+        across modes."""
         pr = self._pr(state)
         if pr and pr.get("state") == "OPEN" and not force:
             raise IsolationError(
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
+        self._teardown_container(state)
+        wt = self.run(
+            ["git", "worktree", "remove", "--force", str(state.worktree)],
+            cwd=self.repo_root,
+        )
+        if wt.returncode != 0 and state.worktree.exists():
+            raise IsolationError(
+                f"git worktree remove failed for {state.worktree}: "
+                f"{wt.stderr or wt.stdout} — state left intact; retry `fr isolation down`."
+            )
+        # Marker removal is LAST: a raise above leaves the marker inside the
+        # still-present worktree, so the workspace stays a valid isolation
+        # workspace. When the worktree is gone the marker went with it — the
+        # unlink is then an idempotent no-op.
+        self._remove_isolation_marker(state.worktree)
+        delete_state(state.repo_root, state.branch)
+
+    def _teardown_container(self, state: IsolationState) -> None:
+        """Stop + rm the devcontainer and reclaim its image, verifying the
+        post-condition. Overridden to a no-op by docker-less modes."""
         # A FAILED `docker ps` (daemon unreachable) must NOT be read as "no
         # container" — that path would `delete_state()` while a container may
         # still be running once the daemon recovers, the exact #354 leak. So the
@@ -484,22 +514,6 @@ class LocalWorktreeDevcontainerTarget:
                     "status`); retry `fr isolation down` once docker recovers."
                 )
             self._reclaim_image(image)
-        wt = self.run(
-            ["git", "worktree", "remove", "--force", str(state.worktree)],
-            cwd=self.repo_root,
-        )
-        if wt.returncode != 0 and state.worktree.exists():
-            raise IsolationError(
-                f"git worktree remove failed for {state.worktree}: "
-                f"{wt.stderr or wt.stdout} — state left intact; retry `fr isolation down`."
-            )
-        # Marker removal is LAST: a raise above leaves the marker inside the
-        # still-present worktree, so the workspace stays a valid isolation
-        # workspace. When the worktree is gone the marker went with it — the
-        # unlink is then an idempotent no-op.
-        self._remove_isolation_marker(state.worktree)
-        delete_state(state.repo_root, state.branch)
-        self._spawn_gc()
 
     def _spawn_gc(self) -> None:
         """Fire the opportunistic background sweep — best-effort, never raises
