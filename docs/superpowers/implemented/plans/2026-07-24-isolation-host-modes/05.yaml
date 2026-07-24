@@ -1,0 +1,99 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Skills, rules, mirrors, acceptance flips, version bump
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  - 4
+  tracking_issue: null
+  acceptance:
+  - isolation-host-worktree-e2e
+  - isolation-no-silent-degradation
+  - isolation-external-adopt
+  - isolation-external-marker-enforcement
+tasks:
+- number: 1
+  title: Skill + rule text, mode-aware (120-line cap)
+  steps:
+  - id: P5.T1.S1
+    text: |
+      Edit plugins/super-fr/skills/fr-isolation/SKILL.md: the
+      devcontainer-profile hard requirement becomes mode-aware — full
+      (devcontainer) mode keeps it verbatim; FR_ISOLATION_TARGET=worktree
+      hosts and valid external markers proceed without a profile; exec-
+      bridge discipline unchanged in all modes. Edit
+      plugins/super-fr/skills/fr-brainstorming/SKILL.md step 0: HARD
+      STOP applies only when the resolved mode is devcontainer. BOTH
+      files must stay ≤120 lines (test_skill_validation.py) — compress
+      to add. Run: uv run pytest tests/unit/test_skill_validation.py -q
+      --no-cov → passes.
+  - id: P5.T1.S2
+    text: |
+      Edit plugins/super-fr/rules/fr-isolation-required.md: document the
+      three modes, the external-marker preparer contract, and the
+      container-evidence requirement. Hand-update the condensed mirror
+      .claude/rules/fr-isolation-required.md (AGENTS.md: manual, no
+      script covers it). Update AGENTS.md's fr-isolation dogfood section
+      with one sentence on the two new modes. Run
+      scripts/sync-opencode.py (no flag = writes) and commit the
+      regenerated .opencode/ mirrors. Run: uv run pytest
+      tests/unit/test_tripwire_opencode_skills_sync.py
+      tests/unit/test_tripwire_opencode_instructions_sync.py
+      tests/unit/test_install_copies_rules.py -q --no-cov → pass.
+- number: 2
+  title: Acceptance rows — levels + status flips
+  steps:
+  - id: P5.T2.S1
+    text: |
+      Update docs/acceptance/matrix.yaml (via fr acceptance CLI or
+      direct edit per its comment header): for each of the four
+      isolation-* rows add the level refs now real (unit:
+      test_isolation_hostworktree.py / test_isolation_external.py /
+      test_isolation_decision_core.py / test_isolation_cmd.py; int:
+      test_hostworktree_lifecycle.py) and move status
+      not-implemented → ci, with notes recording what stays owed
+      post-merge (live pod walk = spec Test Plan steps 2-3; OpenCode
+      bun suite outside CI for the enforcement row). Run: uv run
+      pytest -q --no-cov tests/unit/test_acceptance*.py && fr
+      acceptance check → matrix OK, no staleness warnings for the new
+      spec.
+- number: 3
+  title: Version bump + full gate
+  steps:
+  - id: P5.T3.S1
+    text: |
+      Bump MINOR (new user-visible workflow capability — two isolation
+      modes): uv run python scripts/bump-version.py minor (never
+      hand-edit version surfaces; commits pyproject.tomls, plugin.json,
+      marketplace.json, package.json, uv.lock together per AGENTS.md).
+      Then the full gate: uv run ruff format packages/ tests/ && uv run
+      ruff check packages/ tests/ && uv run mypy packages/fr/src
+      packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+      && uv run pytest -q (WITH coverage — CI gates cov-fail-under=75)
+      && uv run --no-project python scripts/bump-version.py --check →
+      all green. Fix anything red before completing the phase.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T12:41:59+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T12:43:41+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-07-24T12:47:04+00:00'
+      note: null
+    P5.T3.S1:
+      state: x
+      ticked_at: '2026-07-24T12:51:35+00:00'
+      note: null
+  completion:
+    at: '2026-07-24T12:52:57+00:00'
+    note: null
+    observed_prs: []

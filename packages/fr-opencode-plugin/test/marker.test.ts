@@ -13,8 +13,14 @@ function sh(cmd: string, args: string[], cwd: string): void {
 }
 
 let repo: string;
+let savedK8s: string | undefined;
 
 beforeEach(() => {
+  // The `external` branch keys off live container evidence; on the host test
+  // runner /.dockerenv and /run/.containerenv are absent, so
+  // KUBERNETES_SERVICE_HOST is the controllable evidence. Isolate it per test.
+  savedK8s = process.env.KUBERNETES_SERVICE_HOST;
+  delete process.env.KUBERNETES_SERVICE_HOST;
   repo = mkdtempSync(join(tmpdir(), "fr-opencode-marker-test-"));
   sh("git", ["init", "--quiet"], repo);
   sh("git", ["config", "user.email", "test@example.com"], repo);
@@ -25,6 +31,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (savedK8s === undefined) delete process.env.KUBERNETES_SERVICE_HOST;
+  else process.env.KUBERNETES_SERVICE_HOST = savedK8s;
   rmSync(repo, { recursive: true, force: true });
 });
 
@@ -76,6 +84,42 @@ describe("resolveMarker", () => {
       join(repo, ".fr-isolation"),
       JSON.stringify({ toplevel: repo, mode: "worktree" })
     );
+    const result = resolveMarker(join(repo, "README.md"));
+    expect(result.hasValidMarker).toBe(false);
+  });
+
+  test("an external marker with container evidence (KUBERNETES_SERVICE_HOST) is valid", () => {
+    mkdirSync(join(repo, "docs", "superpowers", "plans"), { recursive: true });
+    // external mode needs no linked-worktree; the primary clone is fine so long
+    // as the toplevel matches AND live container evidence is present.
+    writeFileSync(
+      join(repo, ".fr-isolation"),
+      JSON.stringify({ toplevel: repo, mode: "external" })
+    );
+    process.env.KUBERNETES_SERVICE_HOST = "10.0.0.1";
+    const result = resolveMarker(join(repo, "README.md"));
+    expect(result.hasValidMarker).toBe(true);
+  });
+
+  test("an external marker with no container evidence is never valid", () => {
+    mkdirSync(join(repo, "docs", "superpowers", "plans"), { recursive: true });
+    // No KUBERNETES_SERVICE_HOST, and /.dockerenv and /run/.containerenv are
+    // absent on the host runner — a marker forged on a bare host fails closed.
+    writeFileSync(
+      join(repo, ".fr-isolation"),
+      JSON.stringify({ toplevel: repo, mode: "external" })
+    );
+    const result = resolveMarker(join(repo, "README.md"));
+    expect(result.hasValidMarker).toBe(false);
+  });
+
+  test("an external marker recorded for a different toplevel is never valid even with evidence", () => {
+    mkdirSync(join(repo, "docs", "superpowers", "plans"), { recursive: true });
+    writeFileSync(
+      join(repo, ".fr-isolation"),
+      JSON.stringify({ toplevel: "/some/other/path", mode: "external" })
+    );
+    process.env.KUBERNETES_SERVICE_HOST = "10.0.0.1";
     const result = resolveMarker(join(repo, "README.md"));
     expect(result.hasValidMarker).toBe(false);
   });

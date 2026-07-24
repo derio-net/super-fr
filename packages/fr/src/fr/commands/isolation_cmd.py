@@ -10,9 +10,12 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 import typer
 
+from fr.isolation.external import ExternalTarget
+from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
     _detached_gc_spawn,
@@ -20,6 +23,7 @@ from fr.isolation.local import (
 )
 from fr.isolation.types import (
     IsolationError,
+    Target,
     clear_repo_sentinels,
     list_states,
     load_state,
@@ -40,13 +44,104 @@ _gc_spawner = _detached_gc_spawn
 DEFAULT_BRANCH = "vk-iso/work"
 
 
-def _target(repo: Path) -> LocalWorktreeDevcontainerTarget:
-    return LocalWorktreeDevcontainerTarget(repo.resolve(), runner=_runner, gc_spawner=_gc_spawner)
+def _target(repo: Path) -> Target:
+    """Select the isolation backend. Precedence (spec §A Selection):
+
+    1. a valid `external` marker at `repo`'s toplevel → `ExternalTarget`,
+       regardless of any other configuration — a prepared container is a
+       recognize-and-adopt, not a second isolation attempt;
+    2. else `FR_ISOLATION_TARGET` (a HOST-level declaration, never a per-call
+       flag — spec §B): unset/"devcontainer" → the local worktree+devcontainer
+       target (unchanged default); "worktree" → HostWorktreeTarget (fr worktree,
+       host env, no docker); anything else fails closed so a broken docker can't
+       be silently routed around."""
+    root = repo.resolve()
+    external = ExternalTarget.detect(root, runner=_runner)
+    if external is not None:
+        return external
+    mode = os.environ.get("FR_ISOLATION_TARGET")
+    if mode in (None, "", "devcontainer"):
+        return LocalWorktreeDevcontainerTarget(root, runner=_runner, gc_spawner=_gc_spawner)
+    if mode == "worktree":
+        return HostWorktreeTarget(root, runner=_runner, gc_spawner=_gc_spawner)
+    raise IsolationError(f"unknown FR_ISOLATION_TARGET {mode!r} — valid: devcontainer | worktree")
+
+
+def _worktree_ops(target: Target) -> LocalWorktreeDevcontainerTarget:
+    """Type-narrow to the worktree+container family for the three subcommands
+    whose operations (push-check, verify-merge, gc) are NOT in the Target
+    protocol. A `cast`, not an isinstance check, on purpose: those commands are
+    driven in tests through duck-typed stubs monkeypatched over `_target`, so a
+    nominal guard would reject the doubles. The non-devcontainer modes are
+    refused up-front by the `_refuse_*` guards below before this cast runs."""
+    return cast("LocalWorktreeDevcontainerTarget", target)
 
 
 def _fail(err: IsolationError) -> None:
     typer.echo(f"error: {err}", err=True)
     raise typer.Exit(2)
+
+
+def _resolve_repo(repo: Path) -> Path:
+    """Resolve the --repo path, degrading a deleted cwd to a clean error (#399).
+
+    The default is ``Path(".")``; resolving it calls ``os.getcwd()``. When a
+    prior ``down`` removed the worktree the operator's shell was sitting in, cwd
+    no longer exists and ``resolve()`` raises ``FileNotFoundError`` — an
+    unhandled traceback. Convert it to a normal IsolationError (exit 2) that
+    tells the operator to cd elsewhere or pass ``--repo``.
+    """
+    try:
+        return repo.resolve()
+    except FileNotFoundError:
+        _fail(
+            IsolationError(
+                "current directory no longer exists (a prior teardown likely "
+                "removed it) — cd to an existing directory or pass --repo."
+            )
+        )
+        raise AssertionError("unreachable")  # _fail always raises typer.Exit
+
+
+def _target_or_exit(repo: Path) -> Target:
+    """`_target` + uniform IsolationError → clean exit 2. `_target` fails closed
+    on a bogus `FR_ISOLATION_TARGET`; every command that selects a target must
+    map that to the same "error: … (exit 2)" UX rather than a traceback (up /
+    restart / down already wrap their whole body; this is the shared wrap for
+    exec / status / verify-merge / gc / down --all)."""
+    try:
+        return _target(repo)
+    except IsolationError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(2) from err
+
+
+def _refuse_external(target: Target, op: str) -> None:
+    """External mode adopts a preparer-managed containment — the worktree-ops
+    subcommands (push-check / verify-merge / gc) do not apply. Refuse cleanly
+    (exit 2) instead of AttributeError-ing through the `_worktree_ops` cast."""
+    if isinstance(target, ExternalTarget):
+        _fail(IsolationError(f"{op} not supported in external mode — externally managed."))
+
+
+def _refuse_no_docker_status_extras(target: Target) -> None:
+    """`status --stats` / `--push-check` need a docker-backed devcontainer
+    (docker stats; in-container ssh-agent probe). Neither host-worktree nor
+    external mode has one — refuse cleanly rather than FileNotFoundError on a
+    docker-less host or AttributeError through the cast."""
+    if isinstance(target, ExternalTarget):
+        _fail(
+            IsolationError(
+                "--stats / --push-check not supported in external mode — externally managed."
+            )
+        )
+    if isinstance(target, HostWorktreeTarget):
+        _fail(
+            IsolationError(
+                "--stats / --push-check require devcontainer mode (docker) — "
+                "not available in host-worktree mode."
+            )
+        )
 
 
 @isolation_app.command()
@@ -101,7 +196,7 @@ def exec(  # noqa: A001 - typer command name
     ),
 ) -> None:
     """Run a command inside the isolation container (exit code passthrough)."""
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     # super-fr#299 part 3: with --branch omitted, resolve to the single active
     # workspace instead of a hardcoded vk-iso/work default — so `exec` after an
     # `up --branch feat/x` targets the workspace the operator actually has,
@@ -133,7 +228,7 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target(repo).exec(state, argv))
+    raise typer.Exit(_target_or_exit(repo).exec(state, argv))
 
 
 @isolation_app.command()
@@ -153,7 +248,7 @@ def restart(
     Unlike `down` + `up`, `restart` cycles only the container process tree — the
     worktree, node_modules, local DB stack, and in-container installs survive.
     """
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     # Mirror exec's no-branch resolution: the single active workspace, or error.
     if branch is None:
         states = list_states(root)
@@ -206,21 +301,23 @@ def status(
     ),
 ) -> None:
     """Show worktree, container, and PR state for isolation workspaces."""
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     states = (
         [s for s in [load_state(root, branch)] if s is not None] if branch else list_states(root)
     )
     if branch and not states:
         _fail(IsolationError(f"no isolation workspace for branch {branch!r}."))
         return
-    target = _target(root)
+    target = _target_or_exit(root)
+    if stats or push_check:
+        _refuse_no_docker_status_extras(target)
     rows = [target.status(s) for s in states]
     if stats:
         for row, s in zip(rows, states):
             row["stats"] = target.stats(s)
     if push_check:
         for row, s in zip(rows, states):
-            row["push_check"] = target.push_check(s)
+            row["push_check"] = _worktree_ops(target).push_check(s)
     if format == "json":
         typer.echo(json.dumps(rows, indent=2))
         return
@@ -254,7 +351,9 @@ def status(
 @isolation_app.command()
 def down(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
-    branch: str = typer.Option(DEFAULT_BRANCH, help="Isolation branch to tear down."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch to tear down (default: the single active workspace)."
+    ),
     force: bool = typer.Option(False, "--force", help="Tear down even with an open PR."),
     all_: bool = typer.Option(
         False,
@@ -265,23 +364,52 @@ def down(
 ) -> None:
     """Stop the container, remove the worktree, drop the state.
 
+    With --branch omitted, resolve to the single active workspace — so bare
+    `down` from inside a worktree tears down the workspace the operator actually
+    has, never a phantom hardcoded default (#399). Mirrors exec/restart/status.
+
     With --all, ignore --branch: tear down all workspaces (keeping any with an
     OPEN PR unless --force) and clear this repo's pipeline sentinel(s).
     """
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     if all_:
         _down_all(root, force=force)
         return
-    state = load_state(root, branch)
+    if branch is None:
+        states = list_states(root)
+        if len(states) > 1:
+            _fail(
+                IsolationError(
+                    "multiple isolation workspaces — specify --branch: "
+                    + ", ".join(s.branch for s in states)
+                )
+            )
+            return
+        state = states[0] if states else None
+    else:
+        state = load_state(root, branch)
     if state is None:
-        _fail(IsolationError(f"no isolation workspace for branch {branch!r}."))
+        _fail(
+            IsolationError(
+                f"no isolation workspace for branch {branch!r}."
+                if branch is not None
+                else "no isolation workspace — run `fr isolation up` first."
+            )
+        )
         return
     try:
         _target(root).down(state, force=force)
     except IsolationError as err:
         _fail(err)
         return
-    typer.echo(f"isolation down: {branch} cleaned up.")
+    # #399: when this was the last workspace, clear the pipeline sentinel(s)
+    # eagerly. The bash guard's own clear can't fire here — it exits early when
+    # `down` runs from the worktree cwd (the prescribed workflow), so the guard
+    # would keep reporting 'fr pipeline active'. Mirrors `down --all`'s eager
+    # clear (clear_repo_sentinels), scoped to "zero workspaces remain".
+    if not list_states(root):
+        clear_repo_sentinels(root)
+    typer.echo(f"isolation down: {state.branch} cleaned up.")
 
 
 def _down_all(root: Path, force: bool) -> None:
@@ -293,7 +421,7 @@ def _down_all(root: Path, force: bool) -> None:
     --all` is the deliberate "end this pipeline" lever, with the guard self-heal
     as the lazy backstop.
     """
-    target = _target(root)
+    target = _target_or_exit(root)
     torn: list[str] = []
     kept: list[str] = []
     for state in list_states(root):
@@ -326,7 +454,7 @@ def verify_merge(
     not commit ancestry (the #320 close-out). Exit 1 if not verified — the fix
     may have orphaned (a commit pushed after the PR merged).
     """
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     if branch is None:
         states = list_states(root)
         if len(states) > 1:
@@ -349,7 +477,9 @@ def verify_merge(
             )
         )
         return
-    res = _target(root).verify_merge(state, default_branch=default_branch)
+    target = _target_or_exit(root)
+    _refuse_external(target, "verify-merge")
+    res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
     if res["verified"]:
         typer.echo(
             f"verify-merge: {res['branch']} ✓ changes present on "
@@ -385,7 +515,16 @@ def gc(
     human running `down` in the originating session. Fired opportunistically on
     every up/down; also runnable standalone or on a schedule.
     """
-    actions = _target(Path.cwd()).gc(dry_run=dry_run)
+    target = _target_or_exit(Path.cwd())
+    _refuse_external(target, "gc")
+    if isinstance(target, HostWorktreeTarget):
+        _fail(
+            IsolationError(
+                "gc requires docker; host-worktree gc is future work — "
+                "tear down individual workspaces with `fr isolation down`."
+            )
+        )
+    actions = _worktree_ops(target).gc(dry_run=dry_run)
     if format == "json":
         typer.echo(json.dumps([asdict(a) for a in actions], indent=2))
         return

@@ -97,8 +97,12 @@ re-export of `packages/fr-opencode-plugin`) block Edit/Write/MultiEdit
 outside a valid `.fr-isolation` workspace — editing this repo's own source is
 not exempt. Escapes, in preference order: enter isolation (`fr isolation up`),
 add an operator-managed path to `.fr-isolation-allow`, or set `FR_BASE_OK=1`
-for one deliberate base-clone edit. Full decision tree in
-`plugins/super-fr/rules/fr-isolation-required.md`. (The OpenCode port only
+for one deliberate base-clone edit. Two docker-less modes now exist alongside
+the default devcontainer mode: **host-worktree** (`FR_ISOLATION_TARGET=worktree`
+— fr worktree in the host env, no profile) and **external** (a preparer-written
+`mode: external` marker fr adopts, validated by container evidence). Full
+decision tree in `plugins/super-fr/rules/fr-isolation-required.md`. (The
+OpenCode port only
 gates the `edit`/`write`/`patch`/`multiedit` tool calls, not `bash` — a known
 gap, not a sanctioned bypass.)
 

@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Bridge init tolerance + gates + patch version bump (TDD)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - vk-bridge-init-timeout-graceful
+tasks:
+- number: 1
+  title: Graceful tick exit when MCP client init fails
+  steps:
+  - id: P2.T1.S1
+    text: |
+      Add to tests/integration/test_bridge_resilience.py (mirror its
+      existing monkeypatch style) tests pinning acceptance row
+      vk-bridge-init-timeout-graceful:
+      - test_tick_survives_mcp_init_timeout: monkeypatch
+        fr_vk.bridge_cli._construct_mcp_client to raise
+        TimeoutError("No response from MCP server within 180.0s");
+        main([]) returns 1 (no exception propagates), and the metrics
+        seam records push_failure_total(reason="mcp_init_error").
+        Use the same lock-path/env isolation the module's other tests use.
+      - test_missing_binaries_still_systemexit2: monkeypatch shutil.which
+        to return None so _construct_mcp_client raises SystemExit(2);
+        assert SystemExit(2) still propagates (I1 loud-exit unchanged).
+  - id: P2.T1.S2
+    text: |
+      Run `uv run pytest tests/integration/test_bridge_resilience.py -q --no-cov`.
+      EXPECT RED: TimeoutError currently propagates out of main() as an
+      unhandled traceback.
+  - id: P2.T1.S3
+    text: |
+      In packages/fr-vk/src/fr_vk/bridge_cli.py wrap the client
+      construction (currently line 369):
+
+      try:
+          mcp = _construct_mcp_client()
+      except (TimeoutError, OSError) as e:
+          logger.error("bridge: MCP client init failed: %s", e)
+          _metrics.push_failure_total(reason="mcp_init_error")
+          return 1
+
+      Keep the wrap INSIDE the lock try/finally so the flock still
+      releases; SystemExit (missing binaries, I1) is untouched by the
+      except clause. reason="mcp_init_error" passes METRICS_REASON_ALIASES
+      through unaliased (only backend_error/preflight are remapped).
+  - id: P2.T1.S4
+    text: |
+      Run `uv run pytest tests/integration/test_bridge_resilience.py tests/integration/test_bridge_cli.py -q --no-cov`.
+      EXPECT GREEN.
+- number: 2
+  title: Full gates + acceptance matrix flip + version bump
+  steps:
+  - id: P2.T2.S1
+    text: |
+      Flip the three matrix rows now that verification exists — edit
+      docs/acceptance/matrix.yaml:
+      - vk-mcp-timeout-survives-slow-ops: status not-implemented -> ci,
+        levels.unit += super-fr:tests/unit/test_mcp_client_timeout.py
+      - vk-mcp-post-timeout-correctness: status not-implemented -> ci,
+        levels.unit += super-fr:tests/unit/test_mcp_client.py
+      - vk-bridge-init-timeout-graceful: status not-implemented -> ci,
+        levels.int += super-fr:tests/integration/test_bridge_resilience.py
+      Then `uv run fr acceptance check` — expect exit 0, rows OK.
+  - id: P2.T2.S2
+    text: |
+      Run the full CI gate locally:
+      `uv run ruff format packages/ tests/ && uv run ruff check packages/ tests/ &&
+      uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src &&
+      uv run pytest -q --no-cov`
+      EXPECT: all green (full suite, no failures).
+  - id: P2.T2.S3
+    text: |
+      Version bump (user-observable engine fix -> patch):
+      `uv run python scripts/bump-version.py patch` (3.15.0 -> 3.15.1;
+      script also runs uv sync + verifies `fr --version`). Commit the
+      changed manifests + uv.lock together with the phase's code.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T18:55:53+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T18:55:55+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-07-24T18:55:56+00:00'
+      note: null
+    P2.T1.S4:
+      state: x
+      ticked_at: '2026-07-24T18:55:57+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-24T18:56:41+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-24T19:03:23+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-07-24T19:03:36+00:00'
+      note: null
+  completion:
+    at: '2026-07-24T19:04:28+00:00'
+    note: null
+    observed_prs: []

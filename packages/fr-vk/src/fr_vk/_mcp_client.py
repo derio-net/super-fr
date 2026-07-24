@@ -13,12 +13,21 @@ convention.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import shutil
 import subprocess
 import threading
+import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Per-call read deadline (seconds), uniform for every call including the
+# init handshake (issue #404). `start_workspace` states it explicitly as
+# documentation of the known-slow call; everything else references this.
+DEFAULT_TIMEOUT = 180.0
 
 
 class VkMcpError(Exception):
@@ -76,20 +85,57 @@ class VkMcpClient:
         self._process.stdin.write(data.encode())
         self._process.stdin.flush()
 
-    def _recv(self, timeout: float = 30.0) -> dict[str, Any]:
+    def _recv(self, timeout: float = DEFAULT_TIMEOUT) -> dict[str, Any]:
         """Receive a JSON-RPC message from the subprocess stdout."""
         try:
             return self._recv_queue.get(timeout=timeout)
         except queue.Empty:
             raise TimeoutError(f"No response from MCP server within {timeout}s")
 
+    def _recv_matching(self, msg_id: int, timeout: float) -> dict[str, Any]:
+        """Receive the message whose `id` matches `msg_id`, within `timeout`.
+
+        Anything else is discarded with a warning: a stale response from a
+        previously timed-out call, or a server-initiated notification (no
+        `id`). Ids are allocated monotonically from `self._msg_id`, so a
+        mismatch is always stale/foreign — never "not yet sent".
+
+        Without this, a late reply left in the queue by a timed-out call is
+        misattributed to the *next* call, corrupting every response that
+        follows (issue #404).
+        """
+        deadline = time.monotonic() + timeout
+        remaining = timeout
+        while remaining > 0:
+            try:
+                msg = self._recv(timeout=remaining)
+            except TimeoutError:
+                # Re-raise below with the awaited id and the OVERALL budget —
+                # _recv's own message would report only the remaining slice.
+                break
+            if msg.get("id") == msg_id:
+                return msg
+            if msg.get("id") is None and "error" in msg:
+                # JSON-RPC 2.0: a server that can't parse/associate the
+                # request answers `id: null` + error. Surface it (call_tool
+                # raises VkMcpError) instead of draining it into a timeout.
+                return msg
+            logger.warning(
+                "vk-mcp: discarding stale/foreign message id=%r (awaiting id=%s)",
+                msg.get("id"),
+                msg_id,
+            )
+            remaining = deadline - time.monotonic()
+        raise TimeoutError(f"No response with id={msg_id} from MCP server within {timeout}s")
+
     def _initialize(self) -> None:
         """Perform MCP handshake: initialize + notifications/initialized."""
         self._msg_id += 1
+        msg_id = self._msg_id
         self._send(
             {
                 "jsonrpc": "2.0",
-                "id": self._msg_id,
+                "id": msg_id,
                 "method": "initialize",
                 "params": {
                     "protocolVersion": "2024-11-05",
@@ -98,7 +144,7 @@ class VkMcpClient:
                 },
             }
         )
-        self._recv()
+        self._recv_matching(msg_id, DEFAULT_TIMEOUT)
         self._send(
             {
                 "jsonrpc": "2.0",
@@ -111,7 +157,7 @@ class VkMcpClient:
         name: str,
         arguments: dict[str, Any],
         *,
-        timeout: float = 30.0,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> Any:
         """Call an MCP tool and return the parsed result.
 
@@ -120,11 +166,16 @@ class VkMcpClient:
 
         Raises VkMcpError if the server returns an error response.
 
-        `timeout` is the per-call read deadline (in seconds). Defaults
-        to 30s — cheap RPC tools (get_issue, list_issues, list_*)
-        should never need more, and a wedged MCP server should fail
-        cheap calls fast. `start_workspace` overrides this to 180s
-        because it's legitimately slow under bridge-fed Longhorn load.
+        `timeout` is the per-call read deadline (in seconds), 180s for
+        every call (issue #404). The old 30s fail-fast default is
+        retired: a client-side timeout only abandons the *client's* half
+        of the request — the server-side future is dropped mid-flight,
+        the spawned child is never reaped, and each abandoned
+        `start_workspace` leaks a `VK_MAX_CONCURRENT_EXECUTIONS` permit.
+        Those leaks are cumulative and terminal, so the fail-fast
+        deadline caused the executor wedge it was meant to surface.
+        `start_workspace` keeps an explicit 180.0 as documentation of
+        the known-slow call; an explicit `timeout=` here still wins.
         """
         self._msg_id += 1
         msg_id = self._msg_id
@@ -136,7 +187,7 @@ class VkMcpClient:
                 "params": {"name": name, "arguments": arguments},
             }
         )
-        response = self._recv(timeout=timeout)
+        response = self._recv_matching(msg_id, timeout)
 
         if "error" in response:
             err = response["error"]

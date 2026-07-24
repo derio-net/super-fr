@@ -111,6 +111,74 @@ def test_bridge_exits_loud_when_mcp_subprocess_fails_to_start(
     assert "npm install -g vibe-kanban" in err
 
 
+def test_tick_survives_mcp_init_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Issue #404: the MCP handshake timing out during client construction
+    must NOT escape `main()` as an unhandled traceback. The tick logs one
+    clear line, pushes `push_failure_total(reason='mcp_init_error')`, and
+    returns 1 — the lock still releases via the existing `finally`."""
+    import logging
+
+    from fr_vk import bridge_cli
+
+    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
+    monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [])
+
+    def boom() -> Any:
+        raise TimeoutError("No response from MCP server within 180.0s")
+
+    monkeypatch.setattr(bridge_cli, "_construct_mcp_client", boom)
+
+    pushed: list[str] = []
+    monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
+    monkeypatch.setattr(
+        bridge_cli._metrics, "push_failure_total", lambda *, reason: pushed.append(reason)
+    )
+
+    caplog.set_level(logging.ERROR, logger="fr_dispatch")
+    rc = bridge_cli.main([])
+
+    assert rc == 1, f"init timeout must exit 1, got {rc!r}"
+    assert pushed == ["mcp_init_error"], f"expected one mcp_init_error metric; got {pushed!r}"
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("MCP client init failed" in r.getMessage() for r in errors), (
+        f"expected a clear init-failure log line; got {[r.getMessage() for r in errors]!r}"
+    )
+    # One clear line, not a traceback dump.
+    assert all(r.exc_info is None for r in errors), "init failure must not log a traceback"
+
+    # The lock released: a second tick can re-acquire it.
+    held = bridge_cli._acquire_lock(str(tmp_path / "lock"))
+    held.close()
+
+
+def test_missing_binaries_still_systemexit2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The I1 loud-exit is untouched by the init-timeout guard: with neither
+    `vibe-kanban-mcp` nor `npx` on PATH, `SystemExit(2)` still propagates out
+    of `main()` (a missing install is an operator error, not a flaky tick)."""
+    from fr_vk import bridge_cli
+
+    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
+    monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [])
+    monkeypatch.setattr(bridge_cli.shutil, "which", lambda name: None)
+
+    pushed: list[str] = []
+    monkeypatch.setattr(bridge_cli._metrics, "push_heartbeat", lambda: None)
+    monkeypatch.setattr(
+        bridge_cli._metrics, "push_failure_total", lambda *, reason: pushed.append(reason)
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        bridge_cli.main([])
+    assert exc_info.value.code == 2
+    assert pushed == [], f"missing binaries is not a tick failure metric; got {pushed!r}"
+
+
 # ── I2: MCP subprocess crash mid-tick → tick aborts cleanly ──────────
 
 

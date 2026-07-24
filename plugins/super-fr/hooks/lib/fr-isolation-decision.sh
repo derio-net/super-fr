@@ -38,10 +38,15 @@ _fr_is_enabled() {
   return 1
 }
 
-# Return 0 if the toplevel carries a VALID isolation marker: present AND
-# recorded toplevel == current AND mode == "worktree" AND the toplevel is a
-# LINKED worktree (git-common-dir != git-dir). The linked-worktree check defeats
-# a stale marker copied into the primary tree. Unknown modes fail CLOSED.
+# Return 0 if the toplevel carries a VALID isolation marker. Both modes require
+# recorded toplevel == current toplevel (defeats a marker copied elsewhere).
+# Then the mode branch:
+#   worktree — the toplevel must be a LINKED worktree (git-common-dir !=
+#     git-dir); this defeats a stale marker copied into the primary tree.
+#   external — a preparer's claim over its own checkout: require live container
+#     evidence (/.dockerenv, /run/.containerenv, or $KUBERNETES_SERVICE_HOST),
+#     so a marker forged on a bare host never validates.
+# Any other mode fails CLOSED.
 _fr_marker_valid() {
   _fr_rtop=$1
   _fr_marker="$_fr_rtop/.fr-isolation"
@@ -51,12 +56,21 @@ _fr_marker_valid() {
   _fr_rrecorded=""
   [ -n "$_fr_recorded" ] && _fr_rrecorded=$(cd "$_fr_recorded" 2>/dev/null && pwd -P || echo "$_fr_recorded")
   [ "$_fr_rrecorded" = "$_fr_rtop" ] || return 1
-  [ "$_fr_mode" = "worktree" ] || return 1
-  _fr_common=$(git -C "$_fr_rtop" rev-parse --git-common-dir 2>/dev/null || true)
-  _fr_gitdir=$(git -C "$_fr_rtop" rev-parse --git-dir 2>/dev/null || true)
-  _fr_rcommon=$(cd "$_fr_rtop" && cd "$_fr_common" 2>/dev/null && pwd -P) || _fr_rcommon="$_fr_common"
-  _fr_rgitdir=$(cd "$_fr_rtop" && cd "$_fr_gitdir" 2>/dev/null && pwd -P) || _fr_rgitdir="$_fr_gitdir"
-  [ "$_fr_rcommon" != "$_fr_rgitdir" ]
+  case "$_fr_mode" in
+    worktree)
+      _fr_common=$(git -C "$_fr_rtop" rev-parse --git-common-dir 2>/dev/null || true)
+      _fr_gitdir=$(git -C "$_fr_rtop" rev-parse --git-dir 2>/dev/null || true)
+      _fr_rcommon=$(cd "$_fr_rtop" && cd "$_fr_common" 2>/dev/null && pwd -P) || _fr_rcommon="$_fr_common"
+      _fr_rgitdir=$(cd "$_fr_rtop" && cd "$_fr_gitdir" 2>/dev/null && pwd -P) || _fr_rgitdir="$_fr_gitdir"
+      [ "$_fr_rcommon" != "$_fr_rgitdir" ]
+      ;;
+    external)
+      [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 # --- public decisions ------------------------------------------------------

@@ -366,7 +366,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        mcp = _construct_mcp_client()
+        # #404: a slow/failed MCP handshake used to escape as a raw traceback
+        # with no metric. Log one line, record the failure, exit 1 — the lock
+        # still releases via this block's `finally`. SystemExit (missing
+        # binaries, I1) deliberately escapes both clauses: that's an operator
+        # error, not a flaky tick.
+        try:
+            mcp = _construct_mcp_client()
+        except (TimeoutError, OSError) as e:
+            logger.error("bridge: MCP client init failed: %s", e)
+            _metrics.push_failure_total(reason="mcp_init_error")
+            return 1
 
         try:
             seen_plans_before = _load_seen_plans()
