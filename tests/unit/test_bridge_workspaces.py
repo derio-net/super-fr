@@ -157,14 +157,14 @@ def test_recover_orphan_card_disabled_by_default(monkeypatch, caplog):  # I5
     """BDD scenario (spec §I5 — flag-off branch):
     GIVEN a VK card exists with the bridge title convention but no
           workspace linked to it
-    AND   VK_BRIDGE_RECOVER_ORPHAN_CARDS is unset
+    AND   FR_BRIDGE_RECOVER_ORPHAN_CARDS is unset
     WHEN  fr_dispatch.workspaces.recover_orphan_card(...) is called
     THEN  no start_workspace call is made
     AND   a warning is logged
     """
     from fr_vk.workspaces import recover_orphan_card
 
-    monkeypatch.delenv("VK_BRIDGE_RECOVER_ORPHAN_CARDS", raising=False)
+    monkeypatch.delenv("FR_BRIDGE_RECOVER_ORPHAN_CARDS", raising=False)
     mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr_vk.workspaces"):
@@ -178,7 +178,7 @@ def test_recover_orphan_card_disabled_by_default(monkeypatch, caplog):  # I5
 def test_recover_orphan_card_recreates_workspace_when_enabled(monkeypatch):  # I5
     """BDD scenario (spec §I5 — flag-on branch):
     GIVEN a VK card 'card-1' exists with simple_id '5' (no workspace)
-    AND   VK_BRIDGE_RECOVER_ORPHAN_CARDS=1
+    AND   FR_BRIDGE_RECOVER_ORPHAN_CARDS=1
     WHEN  recover_orphan_card(client, 'card-1', '5') is called
     THEN  start_workspace is called with name '<sid> -> gh#?' shape
     AND   link_workspace_issue ties the new workspace to card-1
@@ -186,7 +186,7 @@ def test_recover_orphan_card_recreates_workspace_when_enabled(monkeypatch):  # I
     """
     from fr_vk.workspaces import recover_orphan_card
 
-    monkeypatch.setenv("VK_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
+    monkeypatch.setenv("FR_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
     mcp = FakeMcpClient()
     _prime_card(
         mcp,
@@ -213,7 +213,7 @@ def test_recover_orphan_card_returns_none_if_card_unknown(monkeypatch):
     """Defensive: if the card_id can't be resolved, log and bail."""
     from fr_vk.workspaces import recover_orphan_card
 
-    monkeypatch.setenv("VK_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
+    monkeypatch.setenv("FR_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
     mcp = FakeMcpClient()
 
     result = recover_orphan_card(mcp, "card-missing", "5")
@@ -226,7 +226,7 @@ def test_recover_orphan_card_refuses_placeholder_simple_id(monkeypatch):
     """A placeholder sid ("?", "") must not produce a workspace name."""
     from fr_vk.workspaces import recover_orphan_card
 
-    monkeypatch.setenv("VK_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
+    monkeypatch.setenv("FR_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
     mcp = FakeMcpClient()
     _prime_card(mcp, "card-1", simple_id="?", title="gh#100: [derio-net/foo]")
 
@@ -244,7 +244,7 @@ def test_recover_orphan_card_is_idempotent_when_workspace_exists(monkeypatch):
     """
     from fr_vk.workspaces import recover_orphan_card
 
-    monkeypatch.setenv("VK_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
+    monkeypatch.setenv("FR_BRIDGE_RECOVER_ORPHAN_CARDS", "1")
     mcp = FakeMcpClient()
     _prime_workspace(mcp, "ws-existing", name="5 -> gh#100")
     _prime_card(
