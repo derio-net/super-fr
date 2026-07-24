@@ -116,18 +116,76 @@ class GcAction:
     detail: str = ""
 
 
+def _branch_added_lines(
+    run: Runner, repo_root: Path, merge_base: str, branch: str, path: str
+) -> list[str]:
+    """The non-blank lines the branch ADDED to `path` since `merge_base`.
+
+    Parsed from the branch's own diff (`+` lines, minus the `+++` header).
+    Blank / whitespace-only additions are dropped — they carry no identity and
+    would trivially "match" almost any base content, weakening containment.
+    """
+    diff = run(["git", "diff", merge_base, branch, "--", path], cwd=repo_root)
+    added: list[str] = []
+    for ln in diff.stdout.splitlines():
+        if ln.startswith("+") and not ln.startswith("+++"):
+            content = ln[1:]
+            if content.strip():
+                added.append(content)
+    return added
+
+
+def _branch_change_present_in_file(
+    run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str, path: str
+) -> bool:
+    """Is the branch's contribution to `path` reflected on `base_ref`?
+
+    Per-line containment (#387): every non-blank line the branch added to `path`
+    must appear verbatim in `base_ref:path`. This is robust to a CONCURRENT
+    merge that later touches the same file elsewhere — such an edit shifts line
+    numbers and diverges whole-file content, but leaves the branch's own added
+    lines intact, so whole-file equality false-negatives while containment does
+    not.
+
+    Conservative in the missing direction: a file whose branch-side change added
+    no identifiable line (a pure deletion / pure line-removal that did NOT land
+    byte-identically — it only reaches here because whole-file content already
+    differs) reports *not present*, i.e. a safe "STOP and check", never a false
+    "verified".
+    """
+    added = _branch_added_lines(run, repo_root, merge_base, branch, path)
+    if not added:
+        return False
+    show = run(["git", "show", f"{base_ref}:{path}"], cwd=repo_root)
+    if show.returncode != 0:
+        return False  # path absent on base_ref — the branch's additions cannot be present
+    base_lines = set(show.stdout.splitlines())
+    return all(line in base_lines for line in added)
+
+
 def branch_changes_present(
     run: Runner, repo_root: Path, branch: str, base_ref: str
 ) -> MergeVerification:
     """Are the branch's changes present on `base_ref` (e.g. origin/main)?
 
-    Compares FINAL FILE CONTENT, not commit identity / ancestry — so it is
-    correct across squash, merge-commit, and rebase merges alike (an
-    ancestry/patch-id check would false-negative on squash). A commit pushed to
-    the branch AFTER the merge (the #320 orphan) shows up as a changed path that
-    still differs from the base → reported missing. Conservative: if the base
-    later changed the same paths, those read as missing (a safe "STOP and
-    check", never a false "verified").
+    Compares CONTENT, not commit identity / ancestry — so it is correct across
+    squash, merge-commit, and rebase merges alike (an ancestry/patch-id check
+    would false-negative on squash). Two-stage:
+
+    1. Fast path — a file whose `base_ref` content is byte-identical to the
+       branch's is present, full stop (covers the clean squash/rebase/merge
+       cases with no further work).
+    2. For each file that DIFFERS on `base_ref`, fall back to per-line
+       containment (`_branch_change_present_in_file`): the branch's own added
+       lines must all be on `base_ref`. This is what distinguishes a genuinely
+       un-merged change (the #320 orphan — a commit pushed to the branch after
+       the merge shows up as a path whose added lines are absent → missing) from
+       a CONCURRENT merge that later edits the same file elsewhere (#387 — the
+       branch's added lines are still there, so it is NOT missing even though
+       whole-file content diverged).
+
+    Conservative: anything it cannot positively confirm reads as missing (a safe
+    "STOP and check", never a false "verified").
     """
     mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
     if mb.returncode != 0:
@@ -141,7 +199,12 @@ def branch_changes_present(
         ["git", "diff", "--name-only", branch, base_ref, "--", *changed],
         cwd=repo_root,
     )
-    missing = [ln for ln in diff.stdout.splitlines() if ln]
+    differing = [ln for ln in diff.stdout.splitlines() if ln]
+    missing = [
+        path
+        for path in differing
+        if not _branch_change_present_in_file(run, repo_root, merge_base, branch, base_ref, path)
+    ]
     return MergeVerification(changed=changed, missing=missing, changes_present=not missing)
 
 
