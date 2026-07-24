@@ -25,7 +25,6 @@ from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
-    _warn_legacy,
     delete_state,
     harden_secret_file,
     list_states,
@@ -1031,9 +1030,9 @@ class LocalWorktreeDevcontainerTarget:
         """Ensure the env-file the profile's devcontainer.json mounts exists.
 
         Mount-following (#272): the committed config is the source of truth —
-        an unmigrated repo still mounts the legacy vk path, so creating the
-        fr file would not help docker. Warn on the legacy spelling; no
-        --env-file in runArgs → nothing to ensure.
+        the fr file is created so docker can read it. An unmigrated repo that
+        still mounts the legacy vk secrets path hard-errors, pointing at
+        `fr init migrate`; no --env-file in runArgs → nothing to ensure.
         """
         try:
             run_args = json.loads(config.read_text()).get("runArgs", [])
@@ -1044,7 +1043,11 @@ class LocalWorktreeDevcontainerTarget:
                 continue
             env_file = Path(value.replace("${localEnv:HOME}", str(_home())))
             if "/.config/vk/secrets/" in str(env_file):
-                _warn_legacy("secrets env-file mount", env_file)
+                raise IsolationError(
+                    f"{config} still mounts the legacy vk secrets path ({env_file}) — "
+                    "run `fr init migrate` to rewrite the --env-file mount to "
+                    "~/.config/fr/secrets."
+                )
             if not env_file.is_file():
                 env_file.parent.mkdir(parents=True, exist_ok=True)
                 env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")

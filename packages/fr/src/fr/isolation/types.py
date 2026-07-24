@@ -5,17 +5,11 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
 from pydantic import BaseModel
-
-
-def _warn_legacy(what: str, path: Path) -> None:
-    """Loud dual-read fallback warning (#272). Removed one minor after 3.1."""
-    print(f"[fr] WARNING: legacy {what} at {path} — run `fr init migrate`", file=sys.stderr)
 
 
 def _home() -> Path:
@@ -75,10 +69,6 @@ def state_dir(repo_root: Path) -> Path:
     return _git_common_dir(repo_root) / "fr" / "isolation"
 
 
-def _legacy_state_dir(repo_root: Path) -> Path:
-    return _git_common_dir(repo_root) / "vk" / "isolation"
-
-
 def state_path(repo_root: Path, branch: str) -> Path:
     return state_dir(repo_root) / f"{_sanitize(branch)}.json"
 
@@ -91,35 +81,21 @@ def save_state(state: IsolationState) -> Path:
 
 
 def delete_state(repo_root: Path, branch: str) -> None:
-    """Unlink fr and legacy copies — down() must retire both spellings."""
-    name = f"{_sanitize(branch)}.json"
-    (state_dir(repo_root) / name).unlink(missing_ok=True)
-    (_legacy_state_dir(repo_root) / name).unlink(missing_ok=True)
+    (state_dir(repo_root) / f"{_sanitize(branch)}.json").unlink(missing_ok=True)
 
 
 def load_state(repo_root: Path, branch: str) -> IsolationState | None:
     p = state_path(repo_root, branch)
     if not p.is_file():
-        legacy = _legacy_state_dir(repo_root) / p.name
-        if not legacy.is_file():
-            return None
-        _warn_legacy("isolation state", legacy)
-        p = legacy
+        return None
     return IsolationState.model_validate_json(p.read_text())
 
 
 def list_states(repo_root: Path) -> list[IsolationState]:
-    files: dict[str, Path] = {}
-    legacy_dir = _legacy_state_dir(repo_root)
-    if legacy_dir.is_dir():
-        for f in legacy_dir.glob("*.json"):
-            files[f.name] = f
-            _warn_legacy("isolation state", f)
     d = state_dir(repo_root)
-    if d.is_dir():
-        for f in d.glob("*.json"):
-            files[f.name] = f  # fr copy wins for the same branch
-    return [IsolationState.model_validate_json(f.read_text()) for _, f in sorted(files.items())]
+    if not d.is_dir():
+        return []
+    return [IsolationState.model_validate_json(f.read_text()) for f in sorted(d.glob("*.json"))]
 
 
 def sentinel_dir() -> Path:
@@ -167,11 +143,9 @@ def discover_profiles(repo_root: Path) -> list[str]:
 
 def profiles_config(repo_root: Path) -> dict[str, Any]:
     base = repo_root / ".devcontainer"
-    for name in ("fr-profiles.yaml", "vk-profiles.yaml"):
+    for name in ("fr-profiles.yaml",):
         cfg = base / name
         if cfg.is_file():
-            if name.startswith("vk-"):
-                _warn_legacy("vk-profiles.yaml", cfg)
             return yaml.safe_load(cfg.read_text()) or {}
     return {}
 

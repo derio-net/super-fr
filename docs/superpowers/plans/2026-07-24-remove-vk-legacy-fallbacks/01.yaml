@@ -77,34 +77,36 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:30:13+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:30:14+00:00'
       note: null
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:30:58+00:00'
       note: null
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:30:58+00:00'
       note: null
     P1.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:31:30+00:00'
       note: null
     P1.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:31:30+00:00'
       note: null
     P1.T4.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T19:32:29+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-24T19:32:29+00:00'
+    note: Isolation vk dual-read fallbacks removed (profiles/state/mount); mount now
+      hard-errors at fr init migrate; _warn_legacy deleted. 116 isolation tests green,
+      ruff+mypy clean.
     observed_prs: []

@@ -21,6 +21,7 @@ from fr.isolation.types import (
     IsolationError,
     IsolationState,
     delete_state,
+    list_states,
     load_state,
     profiles_config,
     resolve_profile,
@@ -359,14 +360,15 @@ def test_profiles_config_reads_fr_profiles(tmp_path: Path, capsys: pytest.Captur
     assert "legacy" not in capsys.readouterr().err
 
 
-def test_profiles_config_vk_fallback_warns(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_profiles_config_ignores_lone_vk_profiles(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev", profiles_yaml="vk-profiles.yaml")
-    assert profiles_config(repo)["default"] == "dev"
-    err = capsys.readouterr().err
-    assert "legacy" in err and "vk-profiles.yaml" in err and "fr init migrate" in err
+    assert profiles_config(repo) == {}
+    assert "legacy" not in capsys.readouterr().err
 
 
-def test_profiles_config_fr_wins_over_vk(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_profiles_config_reads_only_fr(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev", profiles_yaml="vk-profiles.yaml")
     (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
         "default: dev\nprofiles:\n  dev:\n    purpose: fr-side\n"
@@ -394,7 +396,7 @@ def test_save_state_writes_fr_dir(tmp_path: Path) -> None:
     assert str(state_path(repo, "feat/x")).startswith(str(repo / ".git" / "fr" / "isolation"))
 
 
-def test_load_state_legacy_vk_dir_warns(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_load_state_ignores_legacy_vk_dir(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev")
     legacy = repo / ".git" / "vk" / "isolation"
     legacy.mkdir(parents=True)
@@ -406,8 +408,8 @@ def test_load_state_legacy_vk_dir_warns(tmp_path: Path, capsys: pytest.CaptureFi
         created_at="2026-06-07T00:00:00Z",
     )
     (legacy / "feat__x.json").write_text(st.model_dump_json())
-    assert load_state(repo, "feat/x") == st
-    assert "legacy" in capsys.readouterr().err
+    assert load_state(repo, "feat/x") is None
+    assert "legacy" not in capsys.readouterr().err
 
 
 def test_load_state_fr_wins_over_legacy(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
@@ -425,6 +427,22 @@ def test_load_state_fr_wins_over_legacy(tmp_path: Path, capsys: pytest.CaptureFi
     new = old.model_copy(update={"worktree": tmp_path / "new-wt"})
     save_state(new)
     assert load_state(repo, "feat/x") == new
+    assert "legacy" not in capsys.readouterr().err
+
+
+def test_list_states_ignores_legacy_vk_dir(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    repo = make_repo(tmp_path, ["dev"], default="dev")
+    legacy = repo / ".git" / "vk" / "isolation"
+    legacy.mkdir(parents=True)
+    st = IsolationState(
+        repo_root=repo,
+        branch="feat/x",
+        worktree=tmp_path / "wt",
+        profile="dev",
+        created_at="2026-06-07T00:00:00Z",
+    )
+    (legacy / "feat__x.json").write_text(st.model_dump_json())
+    assert list_states(repo) == []
     assert "legacy" not in capsys.readouterr().err
 
 
@@ -556,11 +574,9 @@ def test_up_mount_resolves_common_git_even_without_normalization(
     assert f"source={main_git},target={main_git}" in " ".join(up)
 
 
-def test_up_follows_legacy_vk_mount_and_warns(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-) -> None:
+def test_up_legacy_vk_mount_hard_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Unmigrated repo: committed devcontainer.json still mounts the vk path —
-    up() ensures THAT file (the one docker will read) and warns."""
+    up() now hard-errors pointing at `fr init migrate` and creates no vk file."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo = make_repo(
         tmp_path,
@@ -569,10 +585,10 @@ def test_up_follows_legacy_vk_mount_and_warns(
         env_file_mount="${localEnv:HOME}/.config/vk/secrets/repo/dev.env",
     )
     target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
-    target.up(profile=None, branch="vk-iso/test")
+    with pytest.raises(IsolationError, match="fr init migrate"):
+        target.up(profile=None, branch="vk-iso/test")
     env = tmp_path / "home" / ".config" / "vk" / "secrets" / "repo" / "dev.env"
-    assert env.is_file()
-    assert "legacy" in capsys.readouterr().err
+    assert not env.exists()
 
 
 def test_up_no_env_file_mount_creates_nothing(
