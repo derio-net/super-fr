@@ -761,7 +761,7 @@ rows:
       requested feature branch in place, and the exec-bridge runs commands in the container's
       own env
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-isolation-host-modes-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_external.py
@@ -777,7 +777,7 @@ rows:
       fr isolation up/exec/down completes a full workspace lifecycle with no devcontainer
       or docker invocation and never writes the base clone
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-isolation-host-modes-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_hostworktree.py
@@ -794,7 +794,7 @@ rows:
       or a valid external marker, isolation still hard-requires a devcontainer profile;
       unknown FR_ISOLATION_TARGET values and unknown marker modes fail closed'
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-isolation-host-modes-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_cmd.py
@@ -810,7 +810,7 @@ rows:
       plus container evidence (/.dockerenv, /run/.containerenv, or KUBERNETES_SERVICE_HOST);
       a marker forged on a bare host does not unlock base-clone edits
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-isolation-host-modes-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_decision_core.py
