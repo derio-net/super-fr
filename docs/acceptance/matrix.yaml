@@ -754,3 +754,68 @@ rows:
     notes: Wiring unit-tested (fr-goal names delegate_task; no guessed hermes model
       bindings ship, so fr-goal asks the operator per tier on first run). End-to-end
       run is post-merge manual Test Plan item 6 (toy feature in real Hermes).
+  - id: isolation-external-adopt
+    capability: Isolation host modes
+    acceptance: Inside a preparer-marked container (mode external), fr isolation up
+      adopts the existing containment instead of isolating a second time, ensures the
+      requested feature branch in place, and the exec-bridge runs commands in the container's
+      own env
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_external.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: 'Type 1: preparer writes the marker; up validates+adopts; down never deletes
+      the preparer''s checkout. ExternalTarget lifecycle + selection-precedence
+      unit-pinned; live external-container walk = spec Test Plan step 3, post-merge
+      operator-driven.'
+  - id: isolation-host-worktree-e2e
+    capability: Isolation host modes
+    acceptance: On a host declaring FR_ISOLATION_TARGET=worktree (docker-less pod),
+      fr isolation up/exec/down completes a full workspace lifecycle with no devcontainer
+      or docker invocation and never writes the base clone
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_hostworktree.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+      int:
+      - super-fr:tests/integration/test_hostworktree_lifecycle.py
+    status: ci
+    notes: 'Type 2: worktree half only; host env is the env — no secrets provisioning.
+      Lifecycle + no-docker/devcontainer-argv (Runner seam) unit+int-pinned; live pod
+      walk = spec Test Plan step 2, which also unblocks hermes-agent-compat Phase 8.'
+  - id: isolation-no-silent-degradation
+    capability: Isolation host modes
+    acceptance: 'Operator machines never silently degrade: absent the host declaration
+      or a valid external marker, isolation still hard-requires a devcontainer profile;
+      unknown FR_ISOLATION_TARGET values and unknown marker modes fail closed'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/unit/test_isolation_decision_core.py
+    status: ci
+    notes: No CLI flag to weaken mode; declaration is host-owned (pod manifest), not
+      agent-reachable mid-session. Unknown FR_ISOLATION_TARGET (cmd) + bogus marker-mode
+      fail-closed (decision lib) unit-pinned; live no-degradation check = spec Test Plan
+      step 1.
+  - id: isolation-external-marker-enforcement
+    capability: Isolation host modes
+    acceptance: The edit-gate hook honors mode-external markers only with toplevel match
+      plus container evidence (/.dockerenv, /run/.containerenv, or KUBERNETES_SERVICE_HOST);
+      a marker forged on a bare host does not unlock base-clone edits
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-isolation-host-modes-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_decision_core.py
+    status: ci
+    notes: One edit in the shared decision lib covers Claude Code + Hermes entrypoints;
+      toplevel+evidence and forged-marker cases unit-pinned. OpenCode plugin mirror
+      pinned by bun test (15/15), outside CI; forged/base-clone-copy block also = spec
+      Test Plan step 3.

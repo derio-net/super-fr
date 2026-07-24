@@ -10,9 +10,12 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 import typer
 
+from fr.isolation.external import ExternalTarget
+from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
     _detached_gc_spawn,
@@ -20,6 +23,7 @@ from fr.isolation.local import (
 )
 from fr.isolation.types import (
     IsolationError,
+    Target,
     clear_repo_sentinels,
     list_states,
     load_state,
@@ -40,13 +44,83 @@ _gc_spawner = _detached_gc_spawn
 DEFAULT_BRANCH = "vk-iso/work"
 
 
-def _target(repo: Path) -> LocalWorktreeDevcontainerTarget:
-    return LocalWorktreeDevcontainerTarget(repo.resolve(), runner=_runner, gc_spawner=_gc_spawner)
+def _target(repo: Path) -> Target:
+    """Select the isolation backend. Precedence (spec §A Selection):
+
+    1. a valid `external` marker at `repo`'s toplevel → `ExternalTarget`,
+       regardless of any other configuration — a prepared container is a
+       recognize-and-adopt, not a second isolation attempt;
+    2. else `FR_ISOLATION_TARGET` (a HOST-level declaration, never a per-call
+       flag — spec §B): unset/"devcontainer" → the local worktree+devcontainer
+       target (unchanged default); "worktree" → HostWorktreeTarget (fr worktree,
+       host env, no docker); anything else fails closed so a broken docker can't
+       be silently routed around."""
+    root = repo.resolve()
+    external = ExternalTarget.detect(root, runner=_runner)
+    if external is not None:
+        return external
+    mode = os.environ.get("FR_ISOLATION_TARGET")
+    if mode in (None, "", "devcontainer"):
+        return LocalWorktreeDevcontainerTarget(root, runner=_runner, gc_spawner=_gc_spawner)
+    if mode == "worktree":
+        return HostWorktreeTarget(root, runner=_runner, gc_spawner=_gc_spawner)
+    raise IsolationError(f"unknown FR_ISOLATION_TARGET {mode!r} — valid: devcontainer | worktree")
+
+
+def _worktree_ops(target: Target) -> LocalWorktreeDevcontainerTarget:
+    """Type-narrow to the worktree+container family for the three subcommands
+    whose operations (push-check, verify-merge, gc) are NOT in the Target
+    protocol. A `cast`, not an isinstance check, on purpose: those commands are
+    driven in tests through duck-typed stubs monkeypatched over `_target`, so a
+    nominal guard would reject the doubles. The non-devcontainer modes are
+    refused up-front by the `_refuse_*` guards below before this cast runs."""
+    return cast("LocalWorktreeDevcontainerTarget", target)
 
 
 def _fail(err: IsolationError) -> None:
     typer.echo(f"error: {err}", err=True)
     raise typer.Exit(2)
+
+
+def _target_or_exit(repo: Path) -> Target:
+    """`_target` + uniform IsolationError → clean exit 2. `_target` fails closed
+    on a bogus `FR_ISOLATION_TARGET`; every command that selects a target must
+    map that to the same "error: … (exit 2)" UX rather than a traceback (up /
+    restart / down already wrap their whole body; this is the shared wrap for
+    exec / status / verify-merge / gc / down --all)."""
+    try:
+        return _target(repo)
+    except IsolationError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(2) from err
+
+
+def _refuse_external(target: Target, op: str) -> None:
+    """External mode adopts a preparer-managed containment — the worktree-ops
+    subcommands (push-check / verify-merge / gc) do not apply. Refuse cleanly
+    (exit 2) instead of AttributeError-ing through the `_worktree_ops` cast."""
+    if isinstance(target, ExternalTarget):
+        _fail(IsolationError(f"{op} not supported in external mode — externally managed."))
+
+
+def _refuse_no_docker_status_extras(target: Target) -> None:
+    """`status --stats` / `--push-check` need a docker-backed devcontainer
+    (docker stats; in-container ssh-agent probe). Neither host-worktree nor
+    external mode has one — refuse cleanly rather than FileNotFoundError on a
+    docker-less host or AttributeError through the cast."""
+    if isinstance(target, ExternalTarget):
+        _fail(
+            IsolationError(
+                "--stats / --push-check not supported in external mode — externally managed."
+            )
+        )
+    if isinstance(target, HostWorktreeTarget):
+        _fail(
+            IsolationError(
+                "--stats / --push-check require devcontainer mode (docker) — "
+                "not available in host-worktree mode."
+            )
+        )
 
 
 @isolation_app.command()
@@ -133,7 +207,7 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target(repo).exec(state, argv))
+    raise typer.Exit(_target_or_exit(repo).exec(state, argv))
 
 
 @isolation_app.command()
@@ -213,14 +287,16 @@ def status(
     if branch and not states:
         _fail(IsolationError(f"no isolation workspace for branch {branch!r}."))
         return
-    target = _target(root)
+    target = _target_or_exit(root)
+    if stats or push_check:
+        _refuse_no_docker_status_extras(target)
     rows = [target.status(s) for s in states]
     if stats:
         for row, s in zip(rows, states):
             row["stats"] = target.stats(s)
     if push_check:
         for row, s in zip(rows, states):
-            row["push_check"] = target.push_check(s)
+            row["push_check"] = _worktree_ops(target).push_check(s)
     if format == "json":
         typer.echo(json.dumps(rows, indent=2))
         return
@@ -293,7 +369,7 @@ def _down_all(root: Path, force: bool) -> None:
     --all` is the deliberate "end this pipeline" lever, with the guard self-heal
     as the lazy backstop.
     """
-    target = _target(root)
+    target = _target_or_exit(root)
     torn: list[str] = []
     kept: list[str] = []
     for state in list_states(root):
@@ -349,7 +425,9 @@ def verify_merge(
             )
         )
         return
-    res = _target(root).verify_merge(state, default_branch=default_branch)
+    target = _target_or_exit(root)
+    _refuse_external(target, "verify-merge")
+    res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
     if res["verified"]:
         typer.echo(
             f"verify-merge: {res['branch']} ✓ changes present on "
@@ -385,7 +463,16 @@ def gc(
     human running `down` in the originating session. Fired opportunistically on
     every up/down; also runnable standalone or on a schedule.
     """
-    actions = _target(Path.cwd()).gc(dry_run=dry_run)
+    target = _target_or_exit(Path.cwd())
+    _refuse_external(target, "gc")
+    if isinstance(target, HostWorktreeTarget):
+        _fail(
+            IsolationError(
+                "gc requires docker; host-worktree gc is future work — "
+                "tear down individual workspaces with `fr isolation down`."
+            )
+        )
+    actions = _worktree_ops(target).gc(dry_run=dry_run)
     if format == "json":
         typer.echo(json.dumps([asdict(a) for a in actions], indent=2))
         return

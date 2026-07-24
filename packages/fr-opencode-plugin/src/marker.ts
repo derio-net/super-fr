@@ -84,6 +84,18 @@ function gitDirsDiffer(toplevel: string): boolean {
   }
 }
 
+function hasContainerEvidence(): boolean {
+  // external mode is a preparer's claim over its own checkout: require live
+  // container evidence so a marker forged on a bare host never validates.
+  // Mirrors the shell hook's `[ -f /.dockerenv ] || [ -f /run/.containerenv ]
+  // || [ -n "$KUBERNETES_SERVICE_HOST" ]`.
+  return (
+    existsSync("/.dockerenv") ||
+    existsSync("/run/.containerenv") ||
+    !!process.env.KUBERNETES_SERVICE_HOST
+  );
+}
+
 function hasValidIsolationMarker(toplevel: string): boolean {
   const markerPath = `${toplevel}/.fr-isolation`;
   if (!existsSync(markerPath)) return false;
@@ -93,10 +105,21 @@ function hasValidIsolationMarker(toplevel: string): boolean {
       mode?: string;
     };
     const mode = marker.mode ?? "worktree";
-    if (mode !== "worktree") return false;
+    // Both modes require the recorded toplevel to match (defeats a marker
+    // copied elsewhere); then the mode branch decides.
     const recorded = marker.toplevel ? realpath(marker.toplevel) : "";
     if (recorded !== toplevel) return false;
-    return gitDirsDiffer(toplevel);
+    switch (mode) {
+      case "worktree":
+        // The toplevel must be a LINKED worktree (defeats a stale marker copied
+        // into the primary tree).
+        return gitDirsDiffer(toplevel);
+      case "external":
+        return hasContainerEvidence();
+      default:
+        // Any other mode fails CLOSED.
+        return false;
+    }
   } catch {
     return false;
   }

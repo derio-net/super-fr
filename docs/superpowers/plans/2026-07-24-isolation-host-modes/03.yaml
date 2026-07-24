@@ -1,0 +1,80 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Hook decision lib — external marker validity (Claude + Hermes)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - isolation-external-marker-enforcement
+tasks:
+- number: 1
+  title: _fr_marker_valid external branch (shared lib)
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED. In tests/unit/test_isolation_decision_core.py (bash-lib
+      harness — reuse its existing sourcing/tmp-repo helpers) add cases
+      against fr_isolation_decide_edit in an fr-enabled PRIMARY checkout
+      carrying a mode-external marker with correct toplevel:
+      (a) KUBERNETES_SERVICE_HOST=1 in env → ALLOW (edit permitted);
+      (b) evidence env unset (and no /.dockerenv on the test host —
+      skip-guard with `[ -f /.dockerenv ] && pytest.skip(...)` for CI
+      containers) → BLOCK;
+      (c) evidence set but marker toplevel mismatched → BLOCK;
+      (d) marker mode "bogus" + evidence → BLOCK (unknown modes stay
+      fail-closed);
+      (e) existing worktree-mode behavior byte-identical: linked
+      worktree + worktree marker still ALLOW with no evidence env.
+      Run: uv run pytest tests/unit/test_isolation_decision_core.py -q
+      --no-cov → new cases fail.
+  - id: P3.T1.S2
+    text: |
+      GREEN. Edit plugins/super-fr/hooks/lib/fr-isolation-decision.sh
+      _fr_marker_valid: after the toplevel-match check, branch on mode:
+      "worktree" → existing linked-worktree check; "external" →
+      container evidence `[ -f /.dockerenv ] || [ -f /run/.containerenv ]
+      || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]`; any other mode →
+      return 1. Keep POSIX-sh compatible (the lib avoids bashisms except
+      the documented glob match). Re-run → passes.
+- number: 2
+  title: Hermes entrypoint coverage + hooks-sync tripwire
+  steps:
+  - id: P3.T2.S1
+    text: |
+      RED. In tests/unit/test_hermes_isolation_hook_edits.py add ONE
+      end-to-end case through the Hermes entrypoint: external marker +
+      KUBERNETES_SERVICE_HOST=1 → edit allowed; same without evidence →
+      denied. Run → fails if the entrypoint pins its own copy of the
+      lib; passes immediately if it sources the shared lib (then this
+      step just documents the guarantee — keep the test either way).
+  - id: P3.T2.S2
+    text: |
+      GREEN (or confirm-green). Ensure the Hermes hook tree copy stays
+      in sync: run uv run pytest
+      tests/unit/test_tripwire_hermes_hooks_sync.py
+      tests/unit/test_hermes_isolation_hook_edits.py
+      tests/unit/test_hooks_isolation_required.py -q --no-cov → all
+      pass (re-sync the hermes/ copy if the tripwire fails).
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T12:29:36+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T12:27:59+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-24T12:29:40+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-24T12:28:40+00:00'
+      note: null
+  completion:
+    at: '2026-07-24T12:29:49+00:00'
+    note: null
+    observed_prs: []
