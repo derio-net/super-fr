@@ -398,6 +398,86 @@ def test_exec_no_branch_zero_workspaces_exits_2(repo: Path, fake_run: list) -> N
     assert "vk-iso/work" not in res.output  # no misleading hardcoded default-branch name
 
 
+def test_down_resolves_single_workspace_when_no_branch(repo: Path, fake_run: list) -> None:
+    # #399: with exactly one isolation workspace, bare `down` (no --branch)
+    # tears IT down instead of the hardcoded vk-iso/work default (which errored
+    # even when a real workspace for the cwd existed). Mirrors exec/restart.
+    from fr.isolation.types import list_states
+
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "feat/only" in res.output
+    assert list_states(repo.resolve()) == []
+
+
+def test_down_no_branch_zero_workspaces_exits_2(repo: Path, fake_run: list) -> None:
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo)])
+    assert res.exit_code == 2
+    assert "isolation up" in res.output
+    assert "vk-iso/work" not in res.output  # no misleading hardcoded default-branch name
+
+
+def test_down_no_branch_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo)])
+    assert res.exit_code == 2
+    assert "--branch" in res.output
+    assert "feat/a" in res.output and "feat/b" in res.output
+
+
+def test_down_clears_sentinel_when_last_workspace_removed(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #399: bare `down` of the LAST workspace clears the pipeline sentinel, so
+    # the Bash gate stops reporting 'fr pipeline active'. The guard's own clear
+    # never fires here — it exits early when `down` runs from the worktree cwd
+    # (the prescribed workflow), so the Python command must clear eagerly.
+    sdir = _sentinel(tmp_path, repo, monkeypatch)
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
+    assert (sdir / "sess.json").exists()
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--branch", "feat/only"])
+    assert res.exit_code == 0, res.output
+    assert not (sdir / "sess.json").exists(), "sentinel cleared when zero workspaces remain"
+
+
+def test_down_keeps_sentinel_when_other_workspaces_remain(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #399: tearing down ONE of several workspaces must NOT clear the sentinel —
+    # the pipeline is still active for the survivors.
+    sdir = _sentinel(tmp_path, repo, monkeypatch)
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--branch", "feat/a"])
+    assert res.exit_code == 0, res.output
+    assert (sdir / "sess.json").exists(), "sentinel kept while another workspace remains"
+
+
+def test_status_from_deleted_cwd_exits_2_not_traceback(
+    repo: Path, fake_run: list, tmp_path: Path
+) -> None:
+    # #399: after `down` removes the worktree the operator's shell sat in, the
+    # default repo=Path('.') resolves via os.getcwd() on a deleted directory.
+    # status must fail cleanly (exit 2), not crash with an unhandled
+    # FileNotFoundError traceback.
+    import os
+
+    victim = tmp_path / "gone"
+    victim.mkdir()
+    prev = Path.cwd()
+    os.chdir(victim)
+    victim.rmdir()
+    try:
+        res = runner.invoke(app, ["isolation", "status"])
+    finally:
+        os.chdir(prev)
+    assert res.exit_code == 2, res.output
+    assert res.exception is None or isinstance(res.exception, SystemExit), res.exception
+    assert "director" in res.output.lower()  # names the gone directory
+
+
 def test_exec_no_branch_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
