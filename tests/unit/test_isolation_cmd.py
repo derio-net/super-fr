@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 from fr.cli import app
 from fr.commands import isolation_cmd
+from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.types import IsolationError
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -81,6 +83,143 @@ def test_up_without_profile_outside_repo_exits_2(tmp_path: Path, fake_run: list)
     res = runner.invoke(app, ["isolation", "up", "--repo", str(tmp_path), "--branch", "b"])
     assert res.exit_code == 2
     assert "git repo" in res.output
+
+
+def test_target_default_is_local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    # exact type, NOT isinstance — HostWorktreeTarget subclasses the local one.
+    assert type(isolation_cmd._target(tmp_path)) is LocalWorktreeDevcontainerTarget
+
+
+def test_target_devcontainer_explicit_is_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "devcontainer")
+    assert type(isolation_cmd._target(tmp_path)) is LocalWorktreeDevcontainerTarget
+
+
+def test_target_worktree_is_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    assert type(isolation_cmd._target(tmp_path)) is HostWorktreeTarget
+
+
+def test_target_unknown_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
+    with pytest.raises(IsolationError) as ei:
+        isolation_cmd._target(tmp_path)
+    msg = str(ei.value)
+    assert "bogus" in msg
+    assert "devcontainer | worktree" in msg
+
+
+def _init_git_repo(path: Path) -> Path:
+    """A real primary checkout (one commit) so `detect`'s `git rev-parse
+    --show-toplevel` resolves — external detection now toplevel-resolves the
+    CWD (finding 3) instead of probing the passed path verbatim."""
+    path.mkdir(exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(path)], check=True)
+    (path / "x").write_text("x")
+    subprocess.run(["git", "-C", str(path), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(path), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "i"],
+        check=True,
+    )
+    return path
+
+
+def _external_marker(repo: Path, *, toplevel: str | None = None) -> None:
+    import json
+
+    (repo / ".fr-isolation").write_text(
+        json.dumps(
+            {
+                "toplevel": toplevel if toplevel is not None else str(repo.resolve()),
+                "branch": "",
+                "mode": "external",
+                "created_at": "2026-07-24T00:00:00+00:00",
+            }
+        )
+        + "\n"
+    )
+
+
+def test_target_valid_external_marker_beats_env_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.isolation.external import ExternalTarget
+
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "1")  # container evidence (finding 6)
+    repo = _init_git_repo(tmp_path / "repo")
+    _external_marker(repo)
+    assert type(isolation_cmd._target(repo)) is ExternalTarget
+
+
+def test_target_valid_external_marker_beats_worktree_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """External marker outranks FR_ISOLATION_TARGET — a prepared container is a
+    recognize-and-adopt, regardless of any host-level worktree declaration."""
+    from fr.isolation.external import ExternalTarget
+
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "1")  # container evidence (finding 6)
+    repo = _init_git_repo(tmp_path / "repo")
+    _external_marker(repo)
+    assert type(isolation_cmd._target(repo)) is ExternalTarget
+
+
+def test_target_external_marker_detected_from_subdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 3: a command issued from a SUBDIRECTORY of the prepared checkout
+    still selects ExternalTarget — detect resolves the git toplevel first,
+    instead of missing the marker and falling through to devcontainer."""
+    from fr.isolation.external import ExternalTarget
+
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "1")
+    repo = _init_git_repo(tmp_path / "repo")
+    _external_marker(repo)  # marker at toplevel only
+    sub = repo / "pkg" / "deep"
+    sub.mkdir(parents=True)
+    assert type(isolation_cmd._target(sub)) is ExternalTarget
+
+
+def test_target_external_marker_without_container_evidence_falls_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 6: a valid external marker on a bare host (no container evidence)
+    is NOT adopted — detect returns None and selection falls through to the
+    default. Skipped where a container-evidence file exists on the test host
+    (the devcontainer's /.dockerenv fires unconditionally); mirrors Phase 3's
+    hook skip-guard."""
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+        pytest.skip("container evidence file present on host — evidence fires unconditionally")
+    from fr.isolation.external import ExternalTarget
+
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "")  # explicitly no evidence
+    repo = _init_git_repo(tmp_path / "repo")
+    _external_marker(repo)  # valid marker, matching toplevel
+    assert type(isolation_cmd._target(repo)) is not ExternalTarget
+    assert type(isolation_cmd._target(repo)) is LocalWorktreeDevcontainerTarget
+
+
+def test_target_invalid_external_marker_falls_through_to_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    _external_marker(tmp_path, toplevel=str(tmp_path / "elsewhere"))  # toplevel mismatch
+    assert type(isolation_cmd._target(tmp_path)) is HostWorktreeTarget
+
+
+def test_target_invalid_external_marker_falls_through_to_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    _external_marker(tmp_path, toplevel=str(tmp_path / "elsewhere"))
+    assert type(isolation_cmd._target(tmp_path)) is LocalWorktreeDevcontainerTarget
 
 
 def test_up_no_devcontainer_points_at_fr_init(repo: Path, fake_run: list) -> None:
@@ -833,3 +972,169 @@ def test_gc_cli_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     res = runner.invoke(app, ["isolation", "gc"])
     assert res.exit_code == 0, res.output
     assert "no isolation workspaces" in res.output
+
+
+# ---------- host-worktree & external mode CLI (isolation host modes review) ----------
+
+
+def _external_up(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: str = "feat/x") -> Path:
+    """A prepared external checkout with fr already adopted (up run): git repo +
+    preparer marker + container evidence, then `fr isolation up`."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "1")  # container evidence
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    repo = _init_git_repo(tmp_path / "repo")
+    _external_marker(repo)
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", branch])
+    assert res.exit_code == 0, res.output
+    return repo
+
+
+def _host_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: str = "feat/x") -> Path:
+    """A host-worktree host: FR_ISOLATION_TARGET=worktree, real git repo, and a
+    runner that RAISES on any `docker` argv (a docker-less pod) — so any code
+    path that shells out to docker fails the test loudly."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    repo = _init_git_repo(tmp_path / "repo")
+
+    def run(argv, cwd=None, check=False, capture=True):
+        if argv and argv[0] == "docker":
+            raise FileNotFoundError("docker: not found (docker-less host)")
+        if argv and argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
+        # gh (PR lookup) → no PR
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
+
+    monkeypatch.setattr(isolation_cmd, "_runner", run)
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", branch])
+    assert res.exit_code == 0, res.output
+    return repo
+
+
+# --- finding 2a: external status renders without a KeyError ---
+
+
+def test_status_external_mode_text_renders(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _external_up(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "feat/x" in res.output
+    assert "external" in res.output
+
+
+def test_status_external_mode_json_has_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json as _json
+
+    repo = _external_up(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo), "--format", "json"])
+    assert res.exit_code == 0, res.output
+    row = _json.loads(res.output)[0]
+    assert row["mode"] == "external"
+    assert row["profile"] == "external"
+    assert row["worktree"] == row["toplevel"]
+    assert row["pr"] is None
+
+
+# --- finding 2b: host-worktree status never probes docker ---
+
+
+def test_status_host_worktree_mode_no_docker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _host_repo(tmp_path, monkeypatch)
+    # The runner raises on docker; exit 0 proves status never shelled out to it.
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "feat/x" in res.output
+    assert "n/a (host)" in res.output
+
+
+def test_status_stats_host_mode_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _host_repo(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo), "--stats"])
+    assert res.exit_code == 2
+    assert "host-worktree" in res.output
+
+
+def test_status_push_check_host_mode_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _host_repo(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo), "--push-check"])
+    assert res.exit_code == 2
+    assert "host-worktree" in res.output
+
+
+# --- finding 4: bogus FR_ISOLATION_TARGET → clean exit 2 in every command ---
+
+
+def test_status_bogus_target_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 2
+    assert "bogus" in res.output
+    assert "devcontainer | worktree" in res.output
+    assert "Traceback" not in res.output
+
+
+def test_gc_bogus_target_exits_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
+    res = runner.invoke(app, ["isolation", "gc"])
+    assert res.exit_code == 2
+    assert "bogus" in res.output
+    assert "Traceback" not in res.output
+
+
+def test_down_all_bogus_target_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all"])
+    assert res.exit_code == 2
+    assert "bogus" in res.output
+
+
+# --- finding 5: external mode refuses worktree-ops subcommands cleanly ---
+
+
+def test_verify_merge_external_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _external_up(tmp_path, monkeypatch)
+    res = runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "feat/x"]
+    )
+    assert res.exit_code == 2
+    assert "external mode" in res.output
+
+
+def test_status_push_check_external_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _external_up(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo), "--push-check"])
+    assert res.exit_code == 2
+    assert "external mode" in res.output
+
+
+def test_gc_external_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.isolation.external import ExternalTarget
+
+    et = ExternalTarget(tmp_path)
+    monkeypatch.setattr(isolation_cmd, "_target", lambda _repo: et)
+    res = runner.invoke(app, ["isolation", "gc"])
+    assert res.exit_code == 2
+    assert "external mode" in res.output
+
+
+# --- finding 10: gc on a docker-less host-worktree host refuses cleanly ---
+
+
+def test_gc_host_mode_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ht = HostWorktreeTarget(tmp_path)
+    monkeypatch.setattr(isolation_cmd, "_target", lambda _repo: ht)
+    res = runner.invoke(app, ["isolation", "gc"])
+    assert res.exit_code == 2
+    assert "future work" in res.output
+    assert "Traceback" not in res.output

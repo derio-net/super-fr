@@ -121,3 +121,18 @@ def test_deny_reason_is_present(tmp_path: Path) -> None:
     out = json.loads(run_hook(payload(repo / "src.py")).stdout)
     assert out["decision"] == "block"
     assert "fr-isolation" in out["reason"]
+
+
+def test_external_marker_with_container_evidence_allows_end_to_end(tmp_path: Path) -> None:
+    # End-to-end through the Hermes entrypoint: because it sources the shared
+    # decision lib, an external marker + container evidence validates here too
+    # (no evidence → blocked). Injects evidence via $KUBERNETES_SERVICE_HOST;
+    # the file probes can't be created on the test host.
+    repo = fr_repo(tmp_path)
+    (repo / ".fr-isolation").write_text(
+        f'{{"toplevel": "{repo.resolve()}", "branch": "feat/x", "mode": "external"}}'
+    )
+    assert allowed(run_hook(payload(repo / "src.py"), env={"KUBERNETES_SERVICE_HOST": "1"}))
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+        pytest.skip("container evidence file present on host — negative case can't hold")
+    assert blocked(run_hook(payload(repo / "src.py"), env={"KUBERNETES_SERVICE_HOST": ""}))

@@ -105,3 +105,50 @@ def test_stale_marker_in_primary_tree_still_blocks(tmp_path: Path) -> None:
     repo = fr_repo(tmp_path)
     write_marker(repo, repo)  # marker copied into the primary tree — not a linked worktree
     assert decide(repo / "src.py") == 1
+
+
+# --- mode "external": toplevel match + container evidence ------------------
+#
+# An external marker is a preparer's claim ("this checkout is contained"). It
+# validates only with a matching recorded toplevel AND live container evidence
+# (/.dockerenv, /run/.containerenv, or $KUBERNETES_SERVICE_HOST). Tests inject
+# evidence via $KUBERNETES_SERVICE_HOST — the two file probes can't be created
+# on the test host. The negative-evidence case is skipped when /.dockerenv
+# actually exists (CI containers), where the file probe would fire regardless.
+
+
+def test_external_marker_with_container_evidence_allows(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    write_marker(repo, repo, mode="external")  # preparer's checkout == primary tree
+    assert decide(repo / "src.py", env={"KUBERNETES_SERVICE_HOST": "1"}) == 0
+
+
+def test_external_marker_without_evidence_blocks(tmp_path: Path) -> None:
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+        pytest.skip("container evidence file present on host — file probe fires unconditionally")
+    repo = fr_repo(tmp_path)
+    write_marker(repo, repo, mode="external")
+    assert decide(repo / "src.py", env={"KUBERNETES_SERVICE_HOST": ""}) == 1
+
+
+def test_external_marker_toplevel_mismatch_blocks(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    bogus = tmp_path / "elsewhere"
+    bogus.mkdir()
+    write_marker(repo, bogus, mode="external")  # recorded toplevel != actual
+    assert decide(repo / "src.py", env={"KUBERNETES_SERVICE_HOST": "1"}) == 1
+
+
+def test_bogus_mode_marker_fails_closed(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    write_marker(repo, repo, mode="bogus")  # unknown mode → never valid
+    assert decide(repo / "src.py", env={"KUBERNETES_SERVICE_HOST": "1"}) == 1
+
+
+def test_worktree_mode_unchanged_by_external_branch(tmp_path: Path) -> None:
+    # Existing worktree-mode behavior stays byte-identical: linked worktree +
+    # worktree marker still ALLOW with no container-evidence env.
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt, mode="worktree")
+    assert decide(wt / "src.py", env={"KUBERNETES_SERVICE_HOST": ""}) == 0

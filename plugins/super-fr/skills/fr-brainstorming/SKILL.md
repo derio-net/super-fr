@@ -7,7 +7,8 @@ description: >
   feature brainstorm in a vk-enabled repo (vk plans or devcontainer profiles
   present), when fr-goal starts its pipeline, or when the operator says
   "brainstorm this feature", "let's design X", or starts creative work that
-  will become a spec. Requires a devcontainer profile — hard stop without one.
+  will become a spec. devcontainer mode hard-stops without a profile; docker-
+  less host/external modes isolate via the worktree instead.
 ---
 
 # fr-brainstorming
@@ -32,10 +33,12 @@ fr isolation up --branch <feature-branch> [--profile <name>]
   eventual PR, and cleanup all key off it. The new `feat/<slug>` is cut from
   freshly-fetched `origin/<default>` (#322) — pass `--base <ref>` only to
   stack on something else.
-- **No devcontainer profile → HARD STOP.** Offer to run the fr-init
-  interview immediately; if the operator declines, the brainstorm does not
-  proceed — there is no unisolated fallback. (Under fr-goal, treat it as a
-  blocker: pause, fr-init, resume.)
+- **No devcontainer profile → HARD STOP — but only in devcontainer mode.**
+  Offer to run the fr-init interview immediately; if the operator declines,
+  the brainstorm does not proceed. (Under fr-goal, treat it as a blocker:
+  pause, fr-init, resume.) On a docker-less host that declares
+  `FR_ISOLATION_TARGET=worktree` (or in a prepared external container), `up`
+  succeeds without a profile — no stop, the worktree is the isolation.
 - From here on, follow the fr-isolation skill's exec-bridge discipline:
   read/edit files in the worktree, run every command through
   `fr isolation exec -- ...`.

@@ -361,10 +361,8 @@ def _append_spec_row(
             f"Add the section (with a 4-column table header) before scaffolding plans."
         )
     _check_table_header(spec_path, text, m)
-    if f"`{file}`" in text or f"| {file} |" in text:
-        return  # already present
 
-    # Find end of the table (last consecutive "|" line after the header)
+    # Find end of the table (last consecutive "|" line after the header).
     after = text[m.end() :]
     lines = after.splitlines(keepends=True)
     abs_offset = m.end()
@@ -380,6 +378,15 @@ def _append_spec_row(
             abs_offset += len(line)
     if not saw_pipe:
         raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
+
+    # Idempotence check is scoped to the TABLE region only. Scanning the whole
+    # spec (the pre-2026-07-24 behavior) let any backticked slug mention in the
+    # prose — e.g. a `**Slug:** `<slug>`` header, exactly what fr-goal writes —
+    # match, so the row was silently never appended while `create` reported
+    # success (and the empty table then broke `fr archive`'s spec-sweep).
+    table_region = text[m.end() : abs_offset]
+    if f"`{file}`" in table_region or f"| {file} |" in table_region:
+        return  # already present
 
     new_row = f"| {plan_name} | `{repo}` | `{file}` | {depends_on} |\n"
     new_text = text[:abs_offset] + new_row + text[abs_offset:]

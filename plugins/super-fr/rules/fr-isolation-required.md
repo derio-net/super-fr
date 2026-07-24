@@ -27,16 +27,41 @@ even when no pipeline skill ran this session.
 1. Not an edit tool, or `FR_BASE_OK=1` set → allow.
 2. Target file not in a git repo, or repo not fr-enabled → allow.
 3. **Valid `.fr-isolation` marker at the repo toplevel → allow.** Valid =
-   present, recorded `toplevel` == the file's actual toplevel, and (mode
-   `worktree`) the toplevel is a real **linked worktree**
-   (`git rev-parse --git-common-dir` ≠ `--git-dir`). The linked-worktree check
-   is what defeats a stale marker copied into the primary working tree.
+   present, recorded `toplevel` == the file's actual toplevel, **and** the
+   marker's `mode` passes its own check:
+   - `worktree` (devcontainer **or** host-worktree mode — an fr linked
+     worktree either way) → the toplevel must be a real **linked worktree**
+     (`git rev-parse --git-common-dir` ≠ `--git-dir`). Defeats a stale marker
+     copied into the primary working tree.
+   - `external` (preparer-adopted container) → the toplevel match **plus
+     container evidence** — any of `/.dockerenv`, `/run/.containerenv`, or
+     `$KUBERNETES_SERVICE_HOST`. A marker forged on a bare host never
+     validates; a marker copied to the Mac base clone fails the toplevel match
+     (the container checkout path can't equal the base-clone path).
+   - any other `mode` → fail closed.
 4. Path matches a glob in `.fr-isolation-allow` (below) → allow.
 5. Otherwise → **deny** with a message naming the three ways forward.
 
 `fr isolation up` writes the marker (and adds it to `info/exclude`); `down`
 removes it. The marker is **never** committed — it is gitignored and a CI
 tripwire fails if it is ever tracked.
+
+## Three isolation modes
+
+The marker's `mode` records who owns the environment; the edit-gate only cares
+that the workspace is a genuine isolation, per the checks above.
+
+- **devcontainer** (default, operator machines): fr linked worktree +
+  devcontainer + secrets env-file. Marker `mode: worktree`.
+- **host-worktree** (`FR_ISOLATION_TARGET=worktree`, docker-less pods/CI): fr
+  linked worktree, the host process env as-is, no profile, no fr-provisioned
+  secrets. Marker `mode: worktree` — same enforcement surface as devcontainer.
+- **external** (`mode: external`): the **preparer** (k8s operator, image build,
+  attach script) writes the marker itself at its checkout toplevel — the
+  hand-off artifact whose meaning is "this container is contained and prepared
+  for fr." `fr isolation up --branch` adopts it (no second isolation). Container
+  evidence in the hook is corroboration only, never a trigger: an unprepared
+  container is never silently treated as isolated.
 
 ## Escapes
 

@@ -89,6 +89,67 @@ def test_create_rejects_existing_folder_with_mismatched_content(tmp_path):
         create(**{**args, "prose": "# totally different\n"})
 
 
+def test_create_appends_row_even_when_spec_body_backticks_the_slug(tmp_path):
+    """Regression: `_append_spec_row`'s idempotence guard used to scan the WHOLE
+    spec, so a spec whose prose mentions its own plan slug in backticks (e.g. a
+    `**Slug:** `<slug>`` header, exactly what fr-goal emits) matched, and the
+    function returned early having written NO row — while `create` still
+    reported success. That empty table then breaks `fr archive`'s spec-sweep.
+    The guard must key off the TABLE region only.
+    """
+    from fr.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    slug = "2026-05-10-backtick-slug"
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-design.md"
+    # The slug appears backticked in the body, BEFORE the (empty) table.
+    spec_path.write_text(
+        f"# Design\n\n**Slug:** `{slug}`\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+
+    create(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        fr_version=">=1.0.0,<4.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+
+    text = spec_path.read_text()
+    table = text.split("## Implementation Plans", 1)[1]
+    assert f"| {slug} |" in table, (
+        "the plan row must be appended to the Implementation Plans table even "
+        "though the slug already appears (backticked) elsewhere in the spec"
+    )
+
+
+def test_append_spec_row_idempotent_within_table(tmp_path):
+    """The scoped guard must still be idempotent: re-appending the same file
+    row is a no-op (exactly one data row), and a same-named row OUTSIDE the
+    table must not suppress the append."""
+    from fr.plan_ops import _append_spec_row
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "s.md"
+    spec_path.write_text(
+        "# S\n\nMentions `plan-x` in prose.\n\n"
+        "## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+    kw = dict(plan_name="plan-x", repo="derio-net/test", file="plan-x", depends_on="—")
+    _append_spec_row(spec_path, **kw)
+    _append_spec_row(spec_path, **kw)  # idempotent
+
+    table = spec_path.read_text().split("## Implementation Plans", 1)[1]
+    assert table.count("| plan-x |") == 1, "second append must be a no-op, not a duplicate"
+
+
 def test_create_preflight_validates_spec_before_creating_folder(tmp_path):
     """#133: a spec missing '## Implementation Plans' must fail BEFORE any
     folder is created, so a re-run isn't blocked by a half-built folder."""
