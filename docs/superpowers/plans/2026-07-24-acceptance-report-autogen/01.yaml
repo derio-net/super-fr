@@ -24,22 +24,22 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T17:35:02+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
       note: null
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
       note: null
     P1.T1.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
       note: null
   completion:
-    at: null
+    at: '2026-07-24T17:35:05+00:00'
     note: null
     observed_prs: []

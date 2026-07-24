@@ -49,8 +49,13 @@ def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.Monkey
     assert "SAME PR" in rule
     assert "not-implemented" in rule and "skipped" in rule  # the status ladder
 
-    gitignore = (root / ".gitignore").read_text()
-    assert "docs/acceptance/report.html" in gitignore
+    # The report is a TRACKED artifact now: init generates it and does NOT
+    # gitignore it.
+    report = root / "docs" / "acceptance" / "report.html"
+    assert report.exists(), "init must generate the committed report"
+    assert "links: local" in report.read_text()
+    if (root / ".gitignore").exists():
+        assert "docs/acceptance/report.html" not in (root / ".gitignore").read_text()
 
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 
@@ -70,7 +75,7 @@ def test_init_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         for p in (
             "docs/acceptance/matrix.yaml",
             ".claude/rules/acceptance-matrix.md",
-            ".gitignore",
+            "docs/acceptance/report.html",
             ".github/workflows/acceptance-report.yml",
         )
     }

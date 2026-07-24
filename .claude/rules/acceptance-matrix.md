@@ -30,9 +30,13 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   runs `fr acceptance status --brief` at session start** (Claude Code does it
   automatically via the super-fr SessionStart hook; other harnesses honor
   this line).
-- Local report: `fr acceptance report` → `docs/acceptance/report.html`
-  (gitignored), links relative to sibling checkouts (`--sibling-root`,
-  default `..`).
+- Report: `docs/acceptance/report.html` is a **committed, tracked** rendering
+  of `matrix.yaml`, kept in sync — `fr acceptance add` regenerates it, and drift
+  (incl. hand-edited status flips) is gated by `fr acceptance report --check`
+  plus the report-sync tripwire. Regenerate by hand with `fr acceptance report
+  --deterministic` and commit it. Ad-hoc `fr acceptance report` (no flag) gives a
+  git-stamped throwaway local render; links resolve relative to sibling checkouts
+  (`--sibling-root`, default `..`).
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
   writes a Markdown summary to each Actions run (branch, PR, main), uploads the
   GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.
