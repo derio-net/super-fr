@@ -1,0 +1,5 @@
+# The committed acceptance report is byte-compared against a fresh render by
+# tests/unit/test_tripwire_acceptance_report_sync.py (and `fr acceptance report
+# --check`). Pin it to LF so a CRLF checkout (core.autocrlf) can never make the
+# tripwire false-fail.
+docs/acceptance/report.html text eol=lf

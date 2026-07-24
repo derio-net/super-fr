@@ -31,7 +31,6 @@ scripts/tmp/
 /package.json
 /package-lock.json
 .claude/worktrees/
-docs/acceptance/report.html
 .DS_STORE
 
 # Node/bun package artifacts (packages/fr-opencode-plugin/ and any future

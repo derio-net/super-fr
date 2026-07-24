@@ -1,0 +1,45 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Deterministic render — pure function of matrix.yaml
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: LinkBuilder probe flag + deterministic report render
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      TDD RED — add tests in tests/unit/test_acceptance_report.py: rendering the same matrix twice yields identical bytes; rendering with probe=False is identical whether or not an archived twin exists on disk; the deterministic stamp carries no git hash/date.
+  - id: P1.T1.S2
+    text: |-
+      Add `probe: bool = True` to LinkBuilder.__init__; when False, _actual_path skips the .exists()/archive_twin filesystem lookups and returns the raw path.
+  - id: P1.T1.S3
+    text: |-
+      Add `--deterministic` to `fr acceptance report` (report_cmd): stamp = f"{N} rows · links: {mode}" (no git log), and LinkBuilder(probe=False). Default path (git stamp + probe=True) unchanged.
+  - id: P1.T1.S4
+    text: |-
+      Run the new tests green; run ruff + mypy on the touched files.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T17:35:02+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
+      note: null
+  completion:
+    at: '2026-07-24T17:35:05+00:00'
+    note: null
+    observed_prs: []
