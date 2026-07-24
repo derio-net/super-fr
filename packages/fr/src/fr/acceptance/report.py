@@ -257,7 +257,15 @@ def render_deterministic(
     """Render as a pure function of `matrix.yaml`: a matrix-derived stamp (no
     git date/hash) and probe=False links (no filesystem twin-probing). This is
     the committed-report and drift-check rendering — reproducible from the
-    matrix alone, so the tripwire only fires on a genuine matrix change."""
+    matrix alone, so the tripwire only fires on a genuine matrix change.
+
+    `root`/`out_dir` are resolved to canonical paths so callers passing
+    unresolved or symlinked paths (`add` via `resolve_repo_root()` vs. the
+    tripwire via `__file__.resolve()`) render byte-identically — otherwise a
+    sibling-repo relative link could differ and `add` would emit a report the
+    tripwire rejects."""
+    root = root.resolve()
+    out_dir = out_dir.resolve()
     org, own_repo = _identity(matrix, root)
     links = LinkBuilder(
         mode=link_mode,

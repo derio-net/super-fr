@@ -116,6 +116,23 @@ def test_add_works_on_fresh_skeleton(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert _invoke(root, monkeypatch, "status").output.count("first") == 1
 
 
+def test_init_degrades_when_report_identity_unresolvable(tmp_path: Path) -> None:
+    """A pre-existing keyless matrix with no git remote must not crash the
+    scaffold on report render — the report is skipped, everything else stands."""
+    from fr.acceptance.scaffold import init
+
+    root = tmp_path / "norepo"
+    (root / "docs" / "acceptance").mkdir(parents=True)
+    (root / "docs" / "acceptance" / "matrix.yaml").write_text("rows:\n")  # no org/repo, no .git
+
+    outcome = init(root, "acme", "widget", backend="github")
+
+    assert "docs/acceptance/report.html" in outcome.skipped
+    assert not (root / "docs" / "acceptance" / "report.html").exists()
+    # The rest of the scaffold still landed.
+    assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
+
+
 # ── T2: workflow content + trap-7 coverage gate ────────────────────────────
 
 

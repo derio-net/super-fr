@@ -383,9 +383,18 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
         from fr.acceptance.model import load_matrix
         from fr.acceptance.report import render_deterministic
 
-        matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-        report_path.write_text(
-            render_deterministic(matrix, root, report_path.parent, "..", "local")
-        )
-        created.append(report_rel)
+        # Degrade, don't crash: an unresolvable identity (hand-rolled matrix
+        # with no org/repo keys AND no git remote) must not abort the whole
+        # scaffold after the other files are written — mirrors add_cmd's
+        # warn-don't-roll-back policy. The scaffolded matrix always carries the
+        # keys, so this only guards a pre-existing partial state; re-running
+        # init (write-if-missing) recovers.
+        try:
+            matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+            report_path.write_text(
+                render_deterministic(matrix, root, report_path.parent, "..", "local")
+            )
+            created.append(report_rel)
+        except Exception:  # noqa: BLE001 — a render hiccup never fails init
+            skipped.append(report_rel)
     return InitOutcome(created=created, skipped=skipped)
