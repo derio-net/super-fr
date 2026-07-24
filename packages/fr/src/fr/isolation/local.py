@@ -179,20 +179,16 @@ class LocalWorktreeDevcontainerTarget:
 
     # ---------- lifecycle ----------
 
-    def up(
-        self,
-        profile: str | None,
-        branch: str,
-        path: Path | None = None,
-        base: str | None = None,
-        no_fetch: bool = False,
-    ) -> IsolationState:
+    def _worktree_up_core(self, branch: str, path: Path | None) -> Path:
+        """Shared worktree prelude for the linked-worktree modes: the git-repo
+        guard + the default worktree-path computation + parent mkdir. Extracted
+        so `HostWorktreeTarget.up` reuses it verbatim instead of duplicating ~15
+        lines (isolation host modes). Callers append their own mode-specific
+        steps (profile/devcontainer for the local target; none for host)."""
         if not (self.repo_root / ".git").exists():
             raise IsolationError(
                 f"{self.repo_root} is not a git repo — fr isolation only runs inside one."
             )
-        name = resolve_profile(self.repo_root, profile)
-
         worktree = path or (
             _home()
             / ".cache"
@@ -202,6 +198,18 @@ class LocalWorktreeDevcontainerTarget:
             / branch.replace("/", "__")
         )
         worktree.parent.mkdir(parents=True, exist_ok=True)
+        return worktree
+
+    def up(
+        self,
+        profile: str | None,
+        branch: str,
+        path: Path | None = None,
+        base: str | None = None,
+        no_fetch: bool = False,
+    ) -> IsolationState:
+        worktree = self._worktree_up_core(branch, path)
+        name = resolve_profile(self.repo_root, profile)
         self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
         config = worktree / ".devcontainer" / name / "devcontainer.json"

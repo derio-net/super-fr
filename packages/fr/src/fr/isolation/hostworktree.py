@@ -16,8 +16,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
-from fr.isolation.local import LocalWorktreeDevcontainerTarget, _home
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from fr.isolation.types import IsolationError, IsolationState, save_state
 
 _EXTERNAL = "environment is externally managed — restart/inspect the host, not fr"
@@ -32,19 +33,7 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         base: str | None = None,
         no_fetch: bool = False,
     ) -> IsolationState:
-        if not (self.repo_root / ".git").exists():
-            raise IsolationError(
-                f"{self.repo_root} is not a git repo — fr isolation only runs inside one."
-            )
-        worktree = path or (
-            _home()
-            / ".cache"
-            / "fr"
-            / "worktrees"
-            / self.repo_root.name
-            / branch.replace("/", "__")
-        )
-        worktree.parent.mkdir(parents=True, exist_ok=True)
+        worktree = self._worktree_up_core(branch, path)
         self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
         state = IsolationState(
@@ -69,6 +58,22 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
 
     def stats(self, state: IsolationState) -> dict[str, str] | None:
         raise IsolationError(_EXTERNAL)
+
+    def status(self, state: IsolationState) -> dict[str, Any]:
+        """Same shape as the local target's status MINUS the docker probe: this
+        mode has no container, so `_container_state` (which shells out to
+        `docker ps`) must never run — on a docker-less pod that raises
+        FileNotFoundError. `container` is the fixed sentinel "n/a (host)"; the
+        worktree/PR fields are unchanged (git + gh work on the host)."""
+        return {
+            "repo": str(state.repo_root),
+            "branch": state.branch,
+            "profile": state.profile,
+            "worktree": str(state.worktree),
+            "worktree_exists": state.worktree.is_dir(),
+            "container": "n/a (host)",
+            "pr": self._pr(state),
+        }
 
     def down(self, state: IsolationState, force: bool = False) -> None:
         """The local target's PR guard + verified worktree removal + marker/state

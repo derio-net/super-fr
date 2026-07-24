@@ -231,3 +231,96 @@ def test_status_reports_mode_toplevel_branch(tmp_path: Path) -> None:
     assert s["mode"] == "external"
     assert s["toplevel"] == str(repo.resolve())
     assert s["branch"] == "feat/x"
+
+
+def test_status_supplies_cli_renderer_keys(tmp_path: Path) -> None:
+    """Finding 2a: status carries the keys the shared CLI text renderer reads
+    (profile / worktree / pr) so `fr isolation status` never KeyErrors on an
+    external workspace."""
+    repo, _, target, st = _upped(tmp_path)
+    s = target.status(st)
+    assert s["profile"] == "external"
+    assert s["worktree"] == str(repo.resolve())
+    assert s["pr"] is None
+
+
+# ---------- finding 3: detect() toplevel-resolves the CWD ----------
+
+
+def test_detect_from_subdirectory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A marker at the checkout toplevel is found even when detect is called
+    from a nested subdirectory (git rev-parse --show-toplevel first)."""
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "1")  # evidence for finding 6
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    sub = repo / "a" / "b"
+    sub.mkdir(parents=True)
+    t = ExternalTarget.detect(sub, runner=subprocess_runner)
+    assert isinstance(t, ExternalTarget)
+    assert t.repo_root == repo.resolve()
+
+
+def test_detect_not_a_repo_returns_none(tmp_path: Path) -> None:
+    """A directory outside any git repo → None (nothing to adopt)."""
+    (tmp_path / ".fr-isolation").write_text("{}")  # marker but no git repo
+    assert ExternalTarget.detect(tmp_path, runner=subprocess_runner) is None
+
+
+# ---------- finding 6: detect() requires container evidence ----------
+
+
+def test_detect_with_container_evidence_returns_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "1")
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    assert isinstance(ExternalTarget.detect(repo, runner=subprocess_runner), ExternalTarget)
+
+
+def test_detect_without_container_evidence_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A forged marker on a bare host is never adopted. Skipped when a
+    container-evidence FILE exists on the test host (devcontainer /.dockerenv
+    fires unconditionally) — mirrors Phase 3's hook skip-guard."""
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+        pytest.skip("container evidence file present on host — evidence fires unconditionally")
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "")  # explicitly no evidence
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    assert ExternalTarget.detect(repo, runner=subprocess_runner) is None
+
+
+# ---------- finding 7: corrupt marker → IsolationError, not raw JSONDecodeError ----------
+
+
+def test_down_with_corrupt_marker_raises_isolationerror(tmp_path: Path) -> None:
+    repo, _, target, st = _upped(tmp_path)
+    (repo / ".fr-isolation").write_text("{ not valid json")
+    with pytest.raises(IsolationError, match="unreadable"):
+        target.down(st)
+
+
+# ---------- finding 8: up() git-excludes the adopted marker ----------
+
+
+def test_up_git_excludes_marker(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    ExternalTarget(repo, runner=subprocess_runner).up(profile=None, branch="feat/x")
+    exclude = repo / ".git" / "info" / "exclude"
+    assert exclude.is_file()
+    assert ".fr-isolation" in exclude.read_text().splitlines()
+
+
+def test_up_git_exclude_idempotent(tmp_path: Path) -> None:
+    """A second up (or a repo that already excludes the marker) does not double
+    the info/exclude line."""
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    t = ExternalTarget(repo, runner=subprocess_runner)
+    t.up(profile=None, branch="feat/x")
+    t.up(profile=None, branch="feat/x")
+    exclude = (repo / ".git" / "info" / "exclude").read_text().splitlines()
+    assert exclude.count(".fr-isolation") == 1

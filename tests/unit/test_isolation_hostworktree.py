@@ -179,3 +179,17 @@ def test_down_force_overrides_open_pr(tmp_path: Path, monkeypatch: pytest.Monkey
     assert not st.worktree.exists()
     assert load_state(repo, "feat/x") is None
     _no_container_calls(runner)
+
+
+def test_status_skips_docker_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Finding 2b: status must never shell out to docker in host-worktree mode
+    (the inherited local status → _container_state → `docker ps` would raise
+    FileNotFoundError on a docker-less pod). container == 'n/a (host)'."""
+    _, runner, target, st = _upped(tmp_path, monkeypatch)
+    monkeypatch.setattr(target, "_pr", lambda state: None)  # no gh
+    s = target.status(st)
+    assert s["container"] == "n/a (host)"
+    assert s["profile"] == "host"
+    assert s["branch"] == "feat/x"
+    assert s["pr"] is None
+    _no_container_calls(runner)

@@ -30,6 +30,7 @@ from fr.isolation.local import Runner, subprocess_runner
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
+    _git_common_dir,
     delete_state,
     save_state,
 )
@@ -61,14 +62,30 @@ class ExternalTarget:
     @classmethod
     def detect(cls, repo: Path, runner: Runner = subprocess_runner) -> ExternalTarget | None:
         """Cheap marker probe for `_target` selection: a valid `external` marker
-        at `repo`'s toplevel → an instance that owns every subcommand; otherwise
-        None (fall through to `FR_ISOLATION_TARGET` / the default). Never raises —
-        an absent or foreign marker is a routing signal, not an error."""
-        target = cls(repo, runner)
+        at the CWD'S git toplevel → an instance that owns every subcommand;
+        otherwise None (fall through to `FR_ISOLATION_TARGET` / the default).
+        Never raises — an absent/foreign marker, a non-repo dir, or a bare host
+        with no container evidence is a routing signal, not an error.
+
+        Resolves `git rev-parse --show-toplevel` first (spec §A Selection), so a
+        command issued from a SUBDIRECTORY of the prepared checkout still finds
+        the marker at the toplevel instead of falling through to devcontainer.
+        And it requires live container evidence (spec §A hardening / §C): a
+        forged marker on a bare host never routes here — the preparer's claim is
+        only adopted when corroborated by /.dockerenv, /run/.containerenv, or
+        $KUBERNETES_SERVICE_HOST (not probe-based auto-detection — the marker is
+        still the trigger; evidence is corroboration)."""
+        top = runner(["git", "rev-parse", "--show-toplevel"], cwd=repo)
+        toplevel = (top.stdout or "").strip()
+        if top.returncode != 0 or not toplevel:
+            return None  # not a git repo — nothing to adopt
+        target = cls(Path(toplevel), runner)
         try:
             target._load_marker()
         except IsolationError:
             return None
+        if not _container_evidence():
+            return None  # forged marker on a bare host — never adopt
         return target
 
     # ---------- marker ----------
@@ -104,13 +121,32 @@ class ExternalTarget:
 
     def _set_marker_branch(self, branch: str) -> None:
         """Rewrite the marker's `branch` claim in place, preserving every other
-        preparer-written field. Never unlinks the file — it is the preparer's."""
+        preparer-written field. Never unlinks the file — it is the preparer's.
+
+        Parses defensively: `down` calls this AFTER `delete_state`, so a marker
+        that turned corrupt must surface a clear IsolationError, not a raw
+        JSONDecodeError traceback (mirrors `_load_marker`'s guarded parse)."""
         p = self._marker_path()
         if not p.is_file():
             return
-        data = json.loads(p.read_text())
+        try:
+            data = json.loads(p.read_text())
+        except (OSError, json.JSONDecodeError) as e:
+            raise IsolationError(f"unreadable {_MARKER} marker at {self.repo_root}: {e}") from e
         data["branch"] = branch
         p.write_text(json.dumps(data, indent=2) + "\n")
+
+    def _exclude_marker(self) -> None:
+        """Git-exclude the adopted marker so an in-container agent can't commit
+        it in a repo that lacks a `.gitignore` entry (mirrors the local target's
+        `_write_isolation_marker` info/exclude append). The marker is the
+        preparer's file — fr never stages it."""
+        exclude = _git_common_dir(self.repo_root) / "info" / "exclude"
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        existing = exclude.read_text().splitlines() if exclude.is_file() else []
+        if _MARKER not in existing:
+            with exclude.open("a") as fh:
+                fh.write(f"{_MARKER}\n")
 
     # ---------- lifecycle ----------
 
@@ -139,6 +175,7 @@ class ExternalTarget:
         )
         save_state(state)
         self._set_marker_branch(branch)
+        self._exclude_marker()
         return state
 
     def _ensure_branch(self, branch: str) -> None:
@@ -171,11 +208,21 @@ class ExternalTarget:
         raise IsolationError(_EXTERNAL)
 
     def status(self, state: IsolationState) -> dict[str, Any]:
+        """Mode/toplevel/branch + the keys the shared CLI text renderer reads
+        (`profile`, `worktree`, `pr`) so `fr isolation status` renders an
+        external workspace without a KeyError. The checkout IS the workspace
+        (worktree == toplevel); `profile` is the sentinel "external"; `pr` is
+        None — a PR is the preparer's/operator's concern, not fr's to probe
+        from inside an adopted containment."""
         return {
             "mode": "external",
+            "repo": str(self.repo_root),
             "toplevel": str(self.repo_root),
+            "worktree": str(self.repo_root),
             "branch": state.branch,
+            "profile": "external",
             "container": _container_evidence(),
+            "pr": None,
         }
 
     def down(self, state: IsolationState, force: bool = False) -> None:

@@ -101,11 +101,17 @@ guessing — an unprepared container is not silently treated as isolated.
   The checkout and container belong to the preparer; fr never deletes them.
   (`down --all` likewise only retires fr state.)
 
-**Selection.** `_target()` (isolation_cmd) checks for a valid `external`
-marker at the cwd's toplevel *first*; if present, every subcommand routes to
-`ExternalTarget` regardless of other configuration. This is what makes
-`fr isolation up` inside a prepared container a recognize-and-continue
-instead of a second isolation attempt.
+**Selection.** `_target()` (isolation_cmd) resolves the cwd's git toplevel and
+checks for a valid `external` marker there *first* (so a command issued from a
+subdirectory still adopts the containment); if present **and corroborated by
+live container evidence** (`/.dockerenv`, `/run/.containerenv`, or
+`$KUBERNETES_SERVICE_HOST` — the same triple the hook requires), every
+subcommand routes to `ExternalTarget` regardless of other configuration. The
+evidence requirement is corroboration of the preparer's claim, not probe-based
+auto-detection (the marker is still the trigger; see Non-goals): a marker
+forged on a bare host never routes here, mirroring the hook's `external`
+validity check. This is what makes `fr isolation up` inside a prepared
+container a recognize-and-continue instead of a second isolation attempt.
 
 ### B. Mode host-worktree — fr worktree, host environment (Type 2)
 
