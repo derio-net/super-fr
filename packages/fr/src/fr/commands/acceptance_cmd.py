@@ -125,8 +125,11 @@ def report_cmd(
     sibling_root: str = typer.Option(
         "..", "--sibling-root", help="Where sister repos live, relative to the repo root."
     ),
-    out: Path = typer.Option(
-        Path("docs/acceptance/report.html"), "--out", help="Output path (repo-relative)."
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        help="Single explicit output/check target (repo-relative). Omit to operate "
+        "on the whole committed set (report.html + report.github.html).",
     ),
     deterministic: bool = typer.Option(
         False,
@@ -153,13 +156,12 @@ def report_cmd(
         raise typer.Exit(2)
     root = resolve_repo_root()
     matrix = _load(root)
-    # `--out` was left at its default → operate on the whole committed set;
-    # an explicit `--out` narrows to that single file.
-    single = out != Path("docs/acceptance/report.html")
+    # No `--out` → operate on the whole committed set; an explicit `--out`
+    # (even one equal to the default path) narrows to that single file.
 
     if check:
         try:
-            if single:
+            if out is not None:
                 expected = {
                     out.as_posix(): render_deterministic(
                         matrix, root, (root / out).resolve().parent, sibling_root, link_mode
@@ -187,7 +189,7 @@ def report_cmd(
         raise typer.Exit(3)
 
     try:
-        if single:
+        if out is not None:
             out_path = (root / out).resolve()
             html = (
                 render_deterministic(matrix, root, out_path.parent, sibling_root, link_mode)
@@ -202,7 +204,7 @@ def report_cmd(
         else:
             # Ad-hoc default render → a single git-stamped report.html honoring
             # --link-mode (back-compat: the CI artifact step still uses this).
-            out_path = (root / out).resolve()
+            out_path = (root / "docs" / "acceptance" / "report.html").resolve()
             files = {
                 str(out_path): render_report(
                     matrix, root, out_path.parent, sibling_root, link_mode, ref

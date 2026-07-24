@@ -247,6 +247,21 @@ def test_report_deterministic_out_is_single_file(
     assert not (root / "docs" / "acceptance" / "report.github.html").exists()
 
 
+def test_report_explicit_out_equal_to_default_is_single_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit --out equal to the default path is still single-file (not the
+    set) — the sentinel-default distinguishes explicit from omitted."""
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    res = runner.invoke(
+        app, ["acceptance", "report", "--deterministic", "--out", "docs/acceptance/report.html"]
+    )
+    assert res.exit_code == 0, res.output
+    assert (root / "docs" / "acceptance" / "report.html").exists()
+    assert not (root / "docs" / "acceptance" / "report.github.html").exists()
+
+
 # ── report --check (drift gate) ─────────────────────────────────────────────
 
 
