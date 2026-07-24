@@ -219,6 +219,32 @@ environment-neutral, and VK's server-side workspace remains opaque to fr
 - Acceptance rows: see matrix additions accompanying this spec (external
   adoption, host-worktree end-to-end, no-degradation guarantee).
 
+## Test Plan
+
+Post-merge — operator-driven. Each step is pinned by an acceptance row (in
+parentheses); flip the row's status as the step is proven.
+
+1. **Mac, no degradation** (`isolation-no-silent-degradation`): after
+   upgrading the plugin/CLI, in the super-fr base clone with no
+   `FR_ISOLATION_TARGET` set, `fr isolation up` still requires a devcontainer
+   profile; `FR_ISOLATION_TARGET=bogus fr isolation up` fails closed naming
+   the valid values.
+2. **Hermes pod, host-worktree live** (`isolation-host-worktree-e2e`): set
+   `FR_ISOLATION_TARGET=worktree` in the Hermes deployment env; in-pod, run
+   `fr isolation up --branch feat/<slug>` → exec a command → `down`; verify
+   no docker/devcontainer invocation was attempted and the pod's base clone
+   is untouched. This is also `hermes-agent-compat` Phase 8's unblocking
+   step — complete that phase in the same walk.
+3. **External containment walk** (`isolation-external-adopt` +
+   `isolation-external-marker-enforcement`): in a container whose prep step
+   wrote a mode-external `.fr-isolation` marker, run
+   `fr isolation up --branch feat/<slug>`: it adopts (no second isolation),
+   ensures the branch, and the edit-gate hook permits edits in the checkout.
+   Then copy that marker into the Mac base clone and confirm the hook still
+   blocks (toplevel mismatch, no container evidence).
+4. **VK workspace spot-check** (optional, same rows as step 2): repeat step 2
+   inside a VK workspace to confirm the declaration works there unchanged.
+
 ## Implementation Plans
 
 | Plan | Repo | File | Depends on |
