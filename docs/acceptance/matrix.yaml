@@ -832,6 +832,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_isolation.py
       - super-fr:tests/unit/test_bridge_cli.py
-    status: not-implemented
-    notes: Born at brainstorm (#276); flips to ci when the fallback-gone unit tests
-      land in this PR.
+    status: ci
+    notes: 'Fallback-gone unit tests landed this PR (#276): test_isolation.py pins
+      profiles_config/state-dir fr-only + the legacy-vk-mount hard error;
+      test_bridge_cli.py pins bridge_env reading only FR_BRIDGE_*. Run in CI.'
