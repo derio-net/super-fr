@@ -82,6 +82,27 @@ def _fail(err: IsolationError) -> None:
     raise typer.Exit(2)
 
 
+def _resolve_repo(repo: Path) -> Path:
+    """Resolve the --repo path, degrading a deleted cwd to a clean error (#399).
+
+    The default is ``Path(".")``; resolving it calls ``os.getcwd()``. When a
+    prior ``down`` removed the worktree the operator's shell was sitting in, cwd
+    no longer exists and ``resolve()`` raises ``FileNotFoundError`` — an
+    unhandled traceback. Convert it to a normal IsolationError (exit 2) that
+    tells the operator to cd elsewhere or pass ``--repo``.
+    """
+    try:
+        return repo.resolve()
+    except FileNotFoundError:
+        _fail(
+            IsolationError(
+                "current directory no longer exists (a prior teardown likely "
+                "removed it) — cd to an existing directory or pass --repo."
+            )
+        )
+        raise AssertionError("unreachable")  # _fail always raises typer.Exit
+
+
 def _target_or_exit(repo: Path) -> Target:
     """`_target` + uniform IsolationError → clean exit 2. `_target` fails closed
     on a bogus `FR_ISOLATION_TARGET`; every command that selects a target must
@@ -175,7 +196,7 @@ def exec(  # noqa: A001 - typer command name
     ),
 ) -> None:
     """Run a command inside the isolation container (exit code passthrough)."""
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     # super-fr#299 part 3: with --branch omitted, resolve to the single active
     # workspace instead of a hardcoded vk-iso/work default — so `exec` after an
     # `up --branch feat/x` targets the workspace the operator actually has,
@@ -227,7 +248,7 @@ def restart(
     Unlike `down` + `up`, `restart` cycles only the container process tree — the
     worktree, node_modules, local DB stack, and in-container installs survive.
     """
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     # Mirror exec's no-branch resolution: the single active workspace, or error.
     if branch is None:
         states = list_states(root)
@@ -280,7 +301,7 @@ def status(
     ),
 ) -> None:
     """Show worktree, container, and PR state for isolation workspaces."""
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     states = (
         [s for s in [load_state(root, branch)] if s is not None] if branch else list_states(root)
     )
@@ -330,7 +351,9 @@ def status(
 @isolation_app.command()
 def down(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
-    branch: str = typer.Option(DEFAULT_BRANCH, help="Isolation branch to tear down."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch to tear down (default: the single active workspace)."
+    ),
     force: bool = typer.Option(False, "--force", help="Tear down even with an open PR."),
     all_: bool = typer.Option(
         False,
@@ -341,23 +364,52 @@ def down(
 ) -> None:
     """Stop the container, remove the worktree, drop the state.
 
+    With --branch omitted, resolve to the single active workspace — so bare
+    `down` from inside a worktree tears down the workspace the operator actually
+    has, never a phantom hardcoded default (#399). Mirrors exec/restart/status.
+
     With --all, ignore --branch: tear down all workspaces (keeping any with an
     OPEN PR unless --force) and clear this repo's pipeline sentinel(s).
     """
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     if all_:
         _down_all(root, force=force)
         return
-    state = load_state(root, branch)
+    if branch is None:
+        states = list_states(root)
+        if len(states) > 1:
+            _fail(
+                IsolationError(
+                    "multiple isolation workspaces — specify --branch: "
+                    + ", ".join(s.branch for s in states)
+                )
+            )
+            return
+        state = states[0] if states else None
+    else:
+        state = load_state(root, branch)
     if state is None:
-        _fail(IsolationError(f"no isolation workspace for branch {branch!r}."))
+        _fail(
+            IsolationError(
+                f"no isolation workspace for branch {branch!r}."
+                if branch is not None
+                else "no isolation workspace — run `fr isolation up` first."
+            )
+        )
         return
     try:
         _target(root).down(state, force=force)
     except IsolationError as err:
         _fail(err)
         return
-    typer.echo(f"isolation down: {branch} cleaned up.")
+    # #399: when this was the last workspace, clear the pipeline sentinel(s)
+    # eagerly. The bash guard's own clear can't fire here — it exits early when
+    # `down` runs from the worktree cwd (the prescribed workflow), so the guard
+    # would keep reporting 'fr pipeline active'. Mirrors `down --all`'s eager
+    # clear (clear_repo_sentinels), scoped to "zero workspaces remain".
+    if not list_states(root):
+        clear_repo_sentinels(root)
+    typer.echo(f"isolation down: {state.branch} cleaned up.")
 
 
 def _down_all(root: Path, force: bool) -> None:
@@ -402,7 +454,7 @@ def verify_merge(
     not commit ancestry (the #320 close-out). Exit 1 if not verified — the fix
     may have orphaned (a commit pushed after the PR merged).
     """
-    root = repo.resolve()
+    root = _resolve_repo(repo)
     if branch is None:
         states = list_states(root)
         if len(states) > 1:
