@@ -10,9 +10,11 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 import typer
 
+from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
@@ -21,6 +23,7 @@ from fr.isolation.local import (
 )
 from fr.isolation.types import (
     IsolationError,
+    Target,
     clear_repo_sentinels,
     list_states,
     load_state,
@@ -41,19 +44,37 @@ _gc_spawner = _detached_gc_spawn
 DEFAULT_BRANCH = "vk-iso/work"
 
 
-def _target(repo: Path) -> LocalWorktreeDevcontainerTarget:
-    """Select the isolation backend from `FR_ISOLATION_TARGET` (a HOST-level
-    declaration, never a per-call flag — spec §B). Unset or "devcontainer" →
-    the local worktree+devcontainer target (unchanged default); "worktree" →
-    HostWorktreeTarget (fr worktree, host env, no docker); anything else fails
-    closed so a broken docker can't be silently routed around."""
+def _target(repo: Path) -> Target:
+    """Select the isolation backend. Precedence (spec §A Selection):
+
+    1. a valid `external` marker at `repo`'s toplevel → `ExternalTarget`,
+       regardless of any other configuration — a prepared container is a
+       recognize-and-adopt, not a second isolation attempt;
+    2. else `FR_ISOLATION_TARGET` (a HOST-level declaration, never a per-call
+       flag — spec §B): unset/"devcontainer" → the local worktree+devcontainer
+       target (unchanged default); "worktree" → HostWorktreeTarget (fr worktree,
+       host env, no docker); anything else fails closed so a broken docker can't
+       be silently routed around."""
     root = repo.resolve()
+    external = ExternalTarget.detect(root, runner=_runner)
+    if external is not None:
+        return external
     mode = os.environ.get("FR_ISOLATION_TARGET")
     if mode in (None, "", "devcontainer"):
         return LocalWorktreeDevcontainerTarget(root, runner=_runner, gc_spawner=_gc_spawner)
     if mode == "worktree":
         return HostWorktreeTarget(root, runner=_runner, gc_spawner=_gc_spawner)
     raise IsolationError(f"unknown FR_ISOLATION_TARGET {mode!r} — valid: devcontainer | worktree")
+
+
+def _worktree_ops(target: Target) -> LocalWorktreeDevcontainerTarget:
+    """Type-narrow to the worktree+container family for the three subcommands
+    whose operations (push-check, verify-merge, gc) are NOT in the Target
+    protocol. A `cast`, not an isinstance check, on purpose: those commands are
+    driven in tests through duck-typed stubs monkeypatched over `_target`, so a
+    nominal guard would reject the doubles. Under a real external marker these
+    commands don't apply — routing them there is out of Phase 2 scope."""
+    return cast("LocalWorktreeDevcontainerTarget", target)
 
 
 def _fail(err: IsolationError) -> None:
@@ -232,7 +253,7 @@ def status(
             row["stats"] = target.stats(s)
     if push_check:
         for row, s in zip(rows, states):
-            row["push_check"] = target.push_check(s)
+            row["push_check"] = _worktree_ops(target).push_check(s)
     if format == "json":
         typer.echo(json.dumps(rows, indent=2))
         return
@@ -361,7 +382,7 @@ def verify_merge(
             )
         )
         return
-    res = _target(root).verify_merge(state, default_branch=default_branch)
+    res = _worktree_ops(_target(root)).verify_merge(state, default_branch=default_branch)
     if res["verified"]:
         typer.echo(
             f"verify-merge: {res['branch']} ✓ changes present on "
@@ -397,7 +418,7 @@ def gc(
     human running `down` in the originating session. Fired opportunistically on
     every up/down; also runnable standalone or on a schedule.
     """
-    actions = _target(Path.cwd()).gc(dry_run=dry_run)
+    actions = _worktree_ops(_target(Path.cwd())).gc(dry_run=dry_run)
     if format == "json":
         typer.echo(json.dumps([asdict(a) for a in actions], indent=2))
         return

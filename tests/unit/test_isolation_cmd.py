@@ -112,6 +112,60 @@ def test_target_unknown_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert "devcontainer | worktree" in msg
 
 
+def _external_marker(repo: Path, *, toplevel: str | None = None) -> None:
+    import json
+
+    (repo / ".fr-isolation").write_text(
+        json.dumps(
+            {
+                "toplevel": toplevel if toplevel is not None else str(repo.resolve()),
+                "branch": "",
+                "mode": "external",
+                "created_at": "2026-07-24T00:00:00+00:00",
+            }
+        )
+        + "\n"
+    )
+
+
+def test_target_valid_external_marker_beats_env_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.isolation.external import ExternalTarget
+
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    _external_marker(tmp_path)
+    assert type(isolation_cmd._target(tmp_path)) is ExternalTarget
+
+
+def test_target_valid_external_marker_beats_worktree_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """External marker outranks FR_ISOLATION_TARGET — a prepared container is a
+    recognize-and-adopt, regardless of any host-level worktree declaration."""
+    from fr.isolation.external import ExternalTarget
+
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    _external_marker(tmp_path)
+    assert type(isolation_cmd._target(tmp_path)) is ExternalTarget
+
+
+def test_target_invalid_external_marker_falls_through_to_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    _external_marker(tmp_path, toplevel=str(tmp_path / "elsewhere"))  # toplevel mismatch
+    assert type(isolation_cmd._target(tmp_path)) is HostWorktreeTarget
+
+
+def test_target_invalid_external_marker_falls_through_to_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    _external_marker(tmp_path, toplevel=str(tmp_path / "elsewhere"))
+    assert type(isolation_cmd._target(tmp_path)) is LocalWorktreeDevcontainerTarget
+
+
 def test_up_no_devcontainer_points_at_fr_init(repo: Path, fake_run: list) -> None:
     import shutil
 
