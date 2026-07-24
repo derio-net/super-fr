@@ -24,6 +24,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Per-call read deadline (seconds), uniform for every call including the
+# init handshake (issue #404). `start_workspace` states it explicitly as
+# documentation of the known-slow call; everything else references this.
+DEFAULT_TIMEOUT = 180.0
+
 
 class VkMcpError(Exception):
     """Raised when the MCP server returns a JSON-RPC error response."""
@@ -80,7 +85,7 @@ class VkMcpClient:
         self._process.stdin.write(data.encode())
         self._process.stdin.flush()
 
-    def _recv(self, timeout: float = 180.0) -> dict[str, Any]:
+    def _recv(self, timeout: float = DEFAULT_TIMEOUT) -> dict[str, Any]:
         """Receive a JSON-RPC message from the subprocess stdout."""
         try:
             return self._recv_queue.get(timeout=timeout)
@@ -102,8 +107,18 @@ class VkMcpClient:
         deadline = time.monotonic() + timeout
         remaining = timeout
         while remaining > 0:
-            msg = self._recv(timeout=remaining)
+            try:
+                msg = self._recv(timeout=remaining)
+            except TimeoutError:
+                # Re-raise below with the awaited id and the OVERALL budget —
+                # _recv's own message would report only the remaining slice.
+                break
             if msg.get("id") == msg_id:
+                return msg
+            if msg.get("id") is None and "error" in msg:
+                # JSON-RPC 2.0: a server that can't parse/associate the
+                # request answers `id: null` + error. Surface it (call_tool
+                # raises VkMcpError) instead of draining it into a timeout.
                 return msg
             logger.warning(
                 "vk-mcp: discarding stale/foreign message id=%r (awaiting id=%s)",
@@ -129,7 +144,7 @@ class VkMcpClient:
                 },
             }
         )
-        self._recv_matching(msg_id, 180.0)
+        self._recv_matching(msg_id, DEFAULT_TIMEOUT)
         self._send(
             {
                 "jsonrpc": "2.0",
@@ -142,7 +157,7 @@ class VkMcpClient:
         name: str,
         arguments: dict[str, Any],
         *,
-        timeout: float = 180.0,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> Any:
         """Call an MCP tool and return the parsed result.
 

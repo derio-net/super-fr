@@ -275,6 +275,33 @@ def test_deadline_exhausted_draining_mismatches():
     assert elapsed < 2.0, "deadline should bound the drain loop"
 
 
+def test_empty_queue_timeout_names_awaited_id_and_full_budget():
+    """The common timeout path (nothing arrives at all) must raise the
+    terminal message naming the awaited id and the OVERALL budget — not
+    `_recv`'s remaining-slice message, which reports a meaningless
+    partial deadline (review finding on #404)."""
+    client = _FakeVkMcpClient()  # nothing queued
+
+    with pytest.raises(TimeoutError, match=r"id=1 from MCP server within 0\.05s"):
+        client.call_tool("get_issue", {}, timeout=0.05)
+
+
+def test_null_id_error_response_surfaced():
+    """Per JSON-RPC 2.0, a server that cannot parse/associate a request
+    replies with `id: null` plus an error object. That must surface as
+    VkMcpError promptly — not be drained as a foreign message and burned
+    into a full-budget TimeoutError (review finding on #404)."""
+    client = _FakeVkMcpClient()
+    client._responses.put(
+        {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}
+    )
+
+    # Small explicit budget: on a regression this drains into TimeoutError
+    # after 0.2s instead of blocking the suite for the full 180s default.
+    with pytest.raises(VkMcpError, match="Parse error"):
+        client.call_tool("get_issue", {}, timeout=0.2)
+
+
 def test_initialize_matches_handshake_id():
     """`_initialize` tolerates a notification queued before the handshake
     response: it keeps reading until the initialize response arrives."""

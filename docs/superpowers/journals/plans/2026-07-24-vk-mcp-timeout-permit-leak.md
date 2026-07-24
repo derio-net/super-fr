@@ -42,3 +42,33 @@ P2.T1.S2's EXPECT RED produced '1 failed, 11 passed': only test_tick_survives_mc
 ### p2-matrix-flip-notes-record-version · decision · Matrix flips carry the shipping version in notes, and the three rows split unit/unit/int (phase 2)
 
 All three rows moved not-implemented -> ci: vk-mcp-timeout-survives-slow-ops (levels.unit = tests/unit/test_mcp_client_timeout.py), vk-mcp-post-timeout-correctness (levels.unit = tests/unit/test_mcp_client.py), vk-bridge-init-timeout-graceful (levels.int = tests/integration/test_bridge_resilience.py — integration, not unit, since it drives main() end-to-end). Each row's notes keeps the original incident sentence and appends what shipped and in which version (v3.15.1), so the row still explains the #404 failure mode after the spec is archived. `fr acceptance check` exit 0: 54 rows OK, 41 ci / 13 skipped, zero not-implemented remaining.
+
+<!-- fr:journal kind=finding scope=plan id=rev-timeout-message created=2026-07-24T21:16:57 state=fixed -->
+### rev-timeout-message · finding [fixed] · Mid-loop _recv timeout raised remaining-slice message
+
+Reviewer (Minor 1): the common timeout path raised _recv's message reporting the remaining slice, not the awaited id + overall budget. Fixed: _recv_matching catches _recv's TimeoutError and re-raises the terminal message. Pinned by test_empty_queue_timeout_names_awaited_id_and_full_budget.
+
+<!-- fr:journal kind=finding scope=plan id=rev-null-id-error created=2026-07-24T21:16:58 state=fixed -->
+### rev-null-id-error · finding [fixed] · id:null JSON-RPC error responses were drained instead of surfaced
+
+Reviewer (Minor 2): per JSON-RPC 2.0 a parse/association failure answers id:null + error; the drain loop discarded it and burned the full budget into TimeoutError. Fixed: fast-path returns null-id error messages so call_tool raises VkMcpError. Pinned by test_null_id_error_response_surfaced.
+
+<!-- fr:journal kind=finding scope=plan id=rev-strict-id-compare created=2026-07-24T21:16:59 state=refuted -->
+### rev-strict-id-compare · finding [refuted] · Strict == id comparison could miss a server echoing string ids
+
+Reviewer (Minor 3), refuted/won't-change: JSON-RPC requires the server to echo the id verbatim; VK's serde echoes numbers as numbers. Loosening to str-compare would mask genuine protocol bugs. Reviewer agreed strictness is spec-correct ('a note, not a request').
+
+<!-- fr:journal kind=finding scope=plan id=rev-stale-spec-sentence created=2026-07-24T21:17:00 state=fixed -->
+### rev-stale-spec-sentence · finding [fixed] · Spec said _initialize inherits bare _recv() default (stale)
+
+Reviewer (Minor 4): _initialize routes through _recv_matching, not a bare _recv(). Fixed the spec Design §3 sentence; DEFAULT_TIMEOUT constant (Minor 6) now single-sources the policy so the _recv default cannot silently diverge.
+
+<!-- fr:journal kind=finding scope=plan id=rev-oserror-redundant created=2026-07-24T21:17:02 state=refuted -->
+### rev-oserror-redundant · finding [refuted] · except (TimeoutError, OSError) tuple is redundant
+
+Reviewer (Minor 5), refuted/kept: TimeoutError has been an OSError subclass since 3.3 so the tuple is expressive-only, but it documents the two intended failure modes at the guard site. Reviewer leaned keep; kept.
+
+<!-- fr:journal kind=finding scope=plan id=rev-magic-180 created=2026-07-24T21:17:03 state=fixed -->
+### rev-magic-180 · finding [fixed] · Magic 180.0 repeated across defaults
+
+Reviewer (Minor 6): fixed via module-level DEFAULT_TIMEOUT = 180.0 used by _recv, call_tool, and _initialize; start_workspace keeps its explicit literal as the documented known-slow call.

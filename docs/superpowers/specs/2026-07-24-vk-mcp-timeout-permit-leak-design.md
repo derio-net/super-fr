@@ -90,8 +90,9 @@ the request it just sent**, within an overall deadline:
   graceful exit instead of an unhandled traceback; the lock still releases
   via the existing `finally`. The loud-exit for *missing binaries* (I1,
   `SystemExit(2)`) is unchanged.
-- The 180 s default from change 1 already gives init the longer deadline the
-  issue asks for (`_initialize`'s bare `_recv()` inherits it).
+- The 180 s policy from change 1 gives init the longer deadline the issue
+  asks for: `_initialize` routes through `_recv_matching(msg_id,
+  DEFAULT_TIMEOUT)` (the module-level 180 s constant), matching change 2.
 - No new per-issue wrapping needed elsewhere: audit confirmed every MCP call
   site in the tick/sweeps is already inside a per-item `except Exception`
   boundary. A regression test pins the init path.
