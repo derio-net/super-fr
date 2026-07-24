@@ -45,10 +45,11 @@ state:
       ticked_at: '2026-07-24T17:32:35+00:00'
       note: null
     P8.T1.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T20:39:37+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-24T20:39:51+00:00'
+    note: 'Completed in live Hermes Agent 0.18.2: delegate_task review, hook enforcement,
+      source-tree uninstall/reinstall round-trip, 3.15.2 install, and PR #407.'
     observed_prs: []
