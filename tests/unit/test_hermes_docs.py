@@ -61,6 +61,10 @@ def test_readme_documents_hermes_install() -> None:
         "README must document the Hermes opt-in env var, mirroring the OpenCode note"
     )
     assert "~/.hermes" in text or ".hermes" in text, "README must name where Hermes artifacts land"
+    assert "`config.yaml` `hooks:`" in text, (
+        "README must name Hermes's actual hook configuration file; "
+        "cli-config.yaml is obsolete and leaves hooks inert"
+    )
 
 
 def test_readme_documents_hermes_uninstall_path() -> None:

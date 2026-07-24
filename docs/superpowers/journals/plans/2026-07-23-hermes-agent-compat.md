@@ -39,3 +39,18 @@ Operator review: the NousResearch/Hermes-4-{14B,70B,405B} ids in docs/superpower
 ### p8-hermes-md-shadows-agents · discovery · HERMES.md shadows AGENTS.md — inline the non-negotiables, point at the rest
 
 Operator asked for a HERMES.md + install docs. Verified against Hermes docs: exactly ONE project context file loads (.hermes.md/HERMES.md > AGENTS.md > CLAUDE.md, first match wins) and there is NO include mechanism (context_references.REFERENCE_PATTERN is for conversational @-refs, not context composition). So a naive HERMES.md would silently REMOVE every maintainer instruction from Hermes sessions. Design: HERMES.md inlines the unsafe-to-discover-late invariants (isolation, no direct-to-main, version bump, regenerate mirrors, no claude -p batch, CI gate) and points at AGENTS.md for the full map instead of duplicating it (drift). tests/unit/test_hermes_docs.py guards the pointer (AGENTS.md must exist), the inlined invariants, and the README install/uninstall docs.
+
+<!-- fr:journal kind=finding scope=plan id=9010450e824d created=2026-07-24T17:30:11 state=fixed -->
+### 9010450e824d · finding [fixed] · Phase 8 live Hermes proof found and fixed inert hook registration
+
+Ran the pending Phase 8 in a real Hermes TUI. Installation and skill discovery succeeded, and delegate_task launched a fresh-context independent phase reviewer. The first fresh Hermes write_file/patch test exposed a real defect: 3.15.0 installed hooks into obsolete cli-config.yaml while this Hermes reads config.yaml. Fixed under TDD as 3.15.1, migrated stale registrations, reinstalled into the live HERMES_HOME, and reran fresh-process acceptance: outside-isolation edit blocked; linked-worktree edit allowed; FR_BASE_OK escape allowed; outside-isolation git mutation blocked; in-isolation git mutation allowed. Targeted Hermes tests: 49 passed. Broad non-image-specific suite: 1696 passed, 81 skipped. PR creation remains before marking the phase complete.
+
+<!-- fr:journal kind=review scope=plan id=p8-hermes-delegated-review created=2026-07-24T20:27:39 phase=8 -->
+### p8-hermes-delegated-review · review · Phase 8 Hermes-delegated final review: clean (phase 8)
+
+Reviewed the complete staged and unstaged Phase 8 continuation against the plan/spec and the installed Hermes Agent v0.18.2 source/behavior. Confirmed Hermes reads config.yaml, accepts the four hook registrations and 30s timeouts, serializes pre_llm_call is_first_turn under extra, and consumes returned JSON context. Reviewed config migration/uninstall ownership boundaries, malformed-file fail-safe behavior, acceptance-nag first-turn gating, docs/plan corrections, and the lockstep 3.15.1 version bump. Exact requested targeted suite: 60 passed in 2.57s. git diff --check: clean. Targeted ruff: clean. Version-sync check: all surfaces 3.15.1. No defects found; P8.T1.S4 remains pending and Phase 8 was not completed.
+
+<!-- fr:journal kind=finding scope=plan id=p8-live-uninstall-stale-fr created=2026-07-24T20:33:54 phase=8 state=fixed -->
+### p8-live-uninstall-stale-fr · finding [fixed] · Live uninstall exposed stale-fr upgrade coupling; fixed fail-fast (phase 8)
+
+The required Phase 8 uninstall proof found that install.sh called the previously installed fr CLI. After the snippet rename, that stale binary failed while stderr was discarded, leaving four hooks active and deleting only skills. Fixed under TDD to execute this checkout's fr via uv and abort before skill deletion on failure. Live uninstall/reinstall round-trip now passes.
