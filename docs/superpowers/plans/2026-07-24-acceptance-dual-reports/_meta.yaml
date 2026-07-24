@@ -1,6 +1,6 @@
 schema_version: 2
 plan: 2026-07-24-acceptance-dual-reports
-spec: docs/superpowers/specs/2026-07-24-acceptance-dual-reports-design.md
+spec: 2026-07-24-acceptance-dual-reports-design.md
 target_repo: derio-net/super-fr
 fr_version: '>=3.16.0,<4.0.0'
 created: '2026-07-24'

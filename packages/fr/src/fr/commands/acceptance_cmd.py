@@ -141,44 +141,81 @@ def report_cmd(
         "nothing, exit non-zero on drift. Implies --deterministic.",
     ),
 ) -> None:
-    """Render the HTML report (or, with --check, verify it is in sync)."""
-    from fr.acceptance.report import render_deterministic, render_report
+    """Render the HTML report set (or, with --check, verify it is in sync).
+
+    Default subject is the committed SET — both `report.html` (local) and
+    `report.github.html` (github). `--out` narrows to a single explicit file
+    (the ad-hoc / back-compat escape hatch)."""
+    from fr.acceptance.report import render_committed_set, render_deterministic, render_report
 
     if link_mode not in ("github", "local"):
         err_console.print(f"--link-mode must be github|local, got {link_mode!r}")
         raise typer.Exit(2)
     root = resolve_repo_root()
     matrix = _load(root)
-    out_path = (root / out).resolve()
+    # `--out` was left at its default → operate on the whole committed set;
+    # an explicit `--out` narrows to that single file.
+    single = out != Path("docs/acceptance/report.html")
 
     if check:
         try:
-            expected = render_deterministic(matrix, root, out_path.parent, sibling_root, link_mode)
+            if single:
+                expected = {
+                    out.as_posix(): render_deterministic(
+                        matrix, root, (root / out).resolve().parent, sibling_root, link_mode
+                    )
+                }
+            else:
+                expected = render_committed_set(matrix, root)
         except AcceptanceError as e:
             err_console.print(f"[red]error:[/red] {e}")
             raise typer.Exit(1) from e
-        actual = out_path.read_text() if out_path.exists() else None
-        if actual == expected:
-            typer.echo(f"{out.as_posix()} in sync with matrix.yaml")
+        stale = []
+        for rel, want in expected.items():
+            path = root / rel
+            got = path.read_text() if path.exists() else None
+            if got != want:
+                stale.append(rel)
+        if not stale:
+            typer.echo(f"{', '.join(expected)} in sync with matrix.yaml")
             return
         typer.echo(
-            f"ERROR: {out.as_posix()} is stale (drifted from docs/acceptance/matrix.yaml) — "
+            f"ERROR: stale (drifted from docs/acceptance/matrix.yaml): {', '.join(stale)} — "
             "run `fr acceptance report --deterministic` and commit the result.",
             err=True,
         )
         raise typer.Exit(3)
 
     try:
-        if deterministic:
-            html = render_deterministic(matrix, root, out_path.parent, sibling_root, link_mode)
+        if single:
+            out_path = (root / out).resolve()
+            html = (
+                render_deterministic(matrix, root, out_path.parent, sibling_root, link_mode)
+                if deterministic
+                else render_report(matrix, root, out_path.parent, sibling_root, link_mode, ref)
+            )
+            files = {str(out_path): html}
+        elif deterministic:
+            files = {
+                str(root / rel): html for rel, html in render_committed_set(matrix, root).items()
+            }
         else:
-            html = render_report(matrix, root, out_path.parent, sibling_root, link_mode, ref)
+            # Ad-hoc default render → a single git-stamped report.html honoring
+            # --link-mode (back-compat: the CI artifact step still uses this).
+            out_path = (root / out).resolve()
+            files = {
+                str(out_path): render_report(
+                    matrix, root, out_path.parent, sibling_root, link_mode, ref
+                )
+            }
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(1) from e
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(html)
-    typer.echo(f"wrote {out_path}")
+    for path_str, html in files.items():
+        p = Path(path_str)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(html)
+    typer.echo(f"wrote {', '.join(files)}")
 
 
 @acceptance_app.command("status")
@@ -343,17 +380,17 @@ def add_cmd(
     # The row is already valid on disk — a render failure NEVER rolls it back
     # (that would discard valid work); it warns, and the CI sync tripwire is
     # the backstop.
-    from fr.acceptance.report import render_deterministic
+    from fr.acceptance.report import render_committed_set
 
-    report_path = root / "docs" / "acceptance" / "report.html"
     try:
-        html = render_deterministic(reloaded, root, report_path.parent, "..", "local")
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(html)
+        for rel, html in render_committed_set(reloaded, root).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(html)
     except Exception as e:  # noqa: BLE001 — never fail an accepted row on a render hiccup
         err_console.print(
-            f"[yellow]warning:[/yellow] row added but report.html not regenerated ({e}); "
-            "run `fr acceptance report --deterministic` and commit it."
+            f"[yellow]warning:[/yellow] row added but the HTML reports were not regenerated ({e}); "
+            "run `fr acceptance report --deterministic` and commit them."
         )
 
 

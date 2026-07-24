@@ -281,6 +281,28 @@ def render_deterministic(
     return render(matrix, links, stamp)
 
 
+# The committed report SET: one file per link mode, both deterministic. This
+# mapping (repo-relative path -> link_mode) is the single source of truth — the
+# CLI (`report --deterministic`/`--check`), `add`, `init`, the `check` gate, and
+# the sync tripwire all iterate it, so the file list lives in exactly one place.
+REPORT_SET: dict[str, str] = {
+    "docs/acceptance/report.html": "local",  # relative links, viewable from a checkout
+    "docs/acceptance/report.github.html": "github",  # github.com blob links @ main
+}
+
+
+def render_committed_set(matrix: Matrix, root: Path) -> dict[str, str]:
+    """`{repo-relative path: html}` for every committed report — one per entry
+    in `REPORT_SET`, each a deterministic render of `matrix.yaml`. All live in
+    `docs/acceptance/`, so a shared `out_dir` keeps their relative links
+    consistent."""
+    out_dir = root / "docs" / "acceptance"
+    return {
+        rel: render_deterministic(matrix, root, out_dir, "..", link_mode)
+        for rel, link_mode in REPORT_SET.items()
+    }
+
+
 def render_report(
     matrix: Matrix,
     root: Path,
