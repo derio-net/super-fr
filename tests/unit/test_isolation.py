@@ -1696,6 +1696,58 @@ def test_branch_changes_present_multi_commit_rebase(tmp_path: Path) -> None:
     assert res.missing == []
 
 
+# ---------- concurrent same-file merge (#387) ----------
+# A branch's changes land, then a SECOND PR touches the SAME file (a different
+# section) right after. The branch's own added lines are all verbatim on main,
+# so verify-merge must still report changes_present — a whole-file content
+# equality check false-negatives here and fr-goal step 9 would STOP-and-recover
+# on it, spawning a duplicate PR that re-lands already-merged lines.
+
+
+def _seed_two_line_file(repo: Path) -> None:
+    _commit(repo, "gotchas.md", "line1\nline2\n", "seed gotchas")
+
+
+@pytest.mark.parametrize(
+    ("label", "base_after_concurrent"),
+    [
+        ("concurrent-line-at-top", "X_CONCURRENT\nline1\nline2\nBRANCH_A\nBRANCH_B\n"),
+        ("concurrent-line-in-middle", "line1\nX_CONCURRENT\nline2\nBRANCH_A\nBRANCH_B\n"),
+        ("concurrent-splits-branch-lines", "line1\nline2\nBRANCH_A\nX_CONCURRENT\nBRANCH_B\n"),
+        ("concurrent-line-at-bottom", "line1\nline2\nBRANCH_A\nBRANCH_B\nX_CONCURRENT\n"),
+    ],
+)
+def test_branch_changes_present_concurrent_same_file(
+    tmp_path: Path, label: str, base_after_concurrent: str
+) -> None:
+    repo = make_repo(tmp_path)
+    _seed_two_line_file(repo)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "gotchas.md", "line1\nline2\nBRANCH_A\nBRANCH_B\n", "branch adds two gotchas")
+    _squash_merge(repo, "feature", "squash gotchas")
+    # a concurrent PR touches the SAME file after the branch's own merge
+    _commit(repo, "gotchas.md", base_after_concurrent, f"concurrent PR ({label})")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present, f"{label}: branch's added lines are all on main"
+    assert res.missing == []
+
+
+def test_branch_changes_present_concurrent_but_branch_line_absent(tmp_path: Path) -> None:
+    # The file exists and diverged on main (a concurrent edit), but one of the
+    # branch's own added lines never landed — this MUST still report missing;
+    # the per-line check may not paper over a genuinely-unmerged contribution.
+    repo = make_repo(tmp_path)
+    _seed_two_line_file(repo)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "gotchas.md", "line1\nline2\nBRANCH_A\nBRANCH_B\n", "branch adds two gotchas")
+    # main NEVER got BRANCH_B; it only has BRANCH_A plus an unrelated concurrent line.
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "gotchas.md", "line1\nline2\nBRANCH_A\nX_CONCURRENT\n", "partial + concurrent")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert "gotchas.md" in res.missing
+
+
 def _with_origin(repo: Path) -> None:
     """Add a bare remote and push main so `git fetch origin main` succeeds —
     verify_merge requires a fresh fetch, so the verdict tests need a real one."""
