@@ -1,0 +1,110 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Isolation reads retired (types.py + local.py)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - vk-legacy-fallbacks-removed
+tasks:
+- number: 1
+  title: profiles_config drops the vk-profiles.yaml fallback
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. In tests/unit/test_isolation.py replace
+      test_profiles_config_vk_fallback_warns with
+      test_profiles_config_ignores_lone_vk_profiles: a repo whose only
+      profiles file is vk-profiles.yaml → profiles_config(repo) == {} and
+      "legacy" not in stderr. Rename test_profiles_config_fr_wins_over_vk
+      to test_profiles_config_reads_only_fr (fr-profiles.yaml is read; a
+      sibling vk-profiles.yaml is ignored, no warning).
+      Run: uv run pytest tests/unit/test_isolation.py -q --no-cov -k profiles_config
+      → red (current code still reads/warns on vk).
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/isolation/types.py::profiles_config,
+      iterate only ("fr-profiles.yaml",); delete the name.startswith("vk-")
+      _warn_legacy branch. Run the same -k profiles_config selection → green.
+- number: 2
+  title: State dir drops the .git/vk/isolation reads
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED. In tests/unit/test_isolation.py: replace
+      test_load_state_legacy_vk_dir_warns with
+      test_load_state_ignores_legacy_vk_dir (only a .git/vk/isolation copy
+      present → load_state(...) is None). Keep test_load_state_fr_wins_over_legacy
+      but drop its dependence on the warning; assert the fr copy resolves and
+      the legacy dir is never consulted (no "legacy" on stderr). Add
+      test_list_states_ignores_legacy_vk_dir (a legacy-only json → list_states == []).
+      Run: uv run pytest tests/unit/test_isolation.py -q --no-cov -k "load_state or list_states" → red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN. In types.py remove _legacy_state_dir and every legacy read:
+      delete_state unlinks only the fr copy; load_state returns None when the
+      fr path is absent (no legacy fallback); list_states globs only state_dir.
+      Run the same -k selection → green.
+- number: 3
+  title: Legacy vk secrets mount becomes a hard error
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED. In tests/unit/test_isolation.py replace
+      test_up_follows_legacy_vk_mount_and_warns with
+      test_up_legacy_vk_mount_hard_errors: a repo whose devcontainer.json
+      still mounts ${localEnv:HOME}/.config/vk/secrets/... → target.up(...)
+      raises IsolationError matching "fr init migrate", and NO vk env file is
+      created under ~/.config/vk/secrets.
+      Run: uv run pytest tests/unit/test_isolation.py -q --no-cov -k "vk_mount or env_file" → red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN. In packages/fr/src/fr/isolation/local.py::_ensure_mounted_env_file,
+      replace the "/.config/vk/secrets/" _warn_legacy call with
+      `raise IsolationError(...)` naming the config file and pointing at
+      `fr init migrate`; update the docstring. Run the same selection → green.
+- number: 4
+  title: Remove the now-dead _warn_legacy
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      REFACTOR. Delete _warn_legacy (and the now-unused `import sys`) from
+      types.py; drop _warn_legacy from the fr.isolation.types import block in
+      local.py. Verify: `grep -rn _warn_legacy packages/` returns nothing.
+      Run: uv run pytest tests/unit/test_isolation.py -q --no-cov &&
+      uv run ruff check packages/fr && uv run mypy packages/fr/src → green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
