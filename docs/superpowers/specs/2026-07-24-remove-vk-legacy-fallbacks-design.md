@@ -61,10 +61,11 @@ resolves.
 - **Version bump: minor (3.15.0 → 3.16.0).** Removing a user-observable
   fallback is a user-visible behavior change; the issue frames it as "one minor
   later". Not a major — no CLI/plan-schema break for a migrated repo.
-- **Host / pod cleanup (back-loaded manual phase).** Deleting
+- **Host / pod cleanup (post-merge operational, not a code phase).** Deleting
   `~/.config/vk/secrets` on each host (the copy-no-clobber source) is a manual,
-  per-machine operator action with no code change; it ships as an unimplemented
-  back-loaded phase noted in the PR, not automated here.
+  per-machine operator action with no code change. It carries no plan phase —
+  it lives in the Test Plan as a post-merge, operator-driven step and is
+  foregrounded in the PR body, not automated here.
 
 ## Non-goals
 
@@ -92,3 +93,9 @@ Unit tests are rewritten from "fallback warns" to "fallback gone":
 **Post-merge (operator-driven):** confirm the pre-flight gate is satisfied
 before merge; after merge, `rm -rf ~/.config/vk/secrets` on each host that ran
 the fleet sweep.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+| ---- | ---- | ---- | ---------- |
+| 2026-07-24-remove-vk-legacy-fallbacks | `derio-net/super-fr` | `2026-07-24-remove-vk-legacy-fallbacks` | — |

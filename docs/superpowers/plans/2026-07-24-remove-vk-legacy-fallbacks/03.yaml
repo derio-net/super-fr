@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'Release: acceptance flip + version bump'
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Flip the acceptance row to ci
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Edit docs/acceptance/matrix.yaml: on row vk-legacy-fallbacks-removed set
+      status: ci and refresh notes (unit tests landed this PR). Run:
+      fr acceptance check → no ERROR (staleness clear, row satisfied).
+- number: 2
+  title: Minor version bump 3.15.0 -> 3.16.0
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Run: uv run --no-project python scripts/bump-version.py minor
+      (removing a user-observable fallback is a user-visible change). It
+      rewrites every manifest + plugin.json + marketplace.json + package.json,
+      runs uv sync, and verifies `uv run fr --version` == 3.16.0. Stage the
+      changed manifests + uv.lock together.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
