@@ -59,3 +59,8 @@ The required Phase 8 uninstall proof found that install.sh called the previously
 ### p8-final-live-roundtrip · review · Final live round-trip and post-rebase gates (phase 8)
 
 Installed the rebased 3.15.2 build into live Hermes: fr --version reports 3.15.2; hermes hooks list reports exactly four allowed hooks with 30s timeouts; fr-goal skill and managed rules are present. Live uninstall/reinstall round-trip removed/restored only managed Hermes artifacts and exposed/fixed the stale-global-fr failure path. Final targeted Hermes+version suite: 38 passed. Ruff, format, mypy, bash syntax, version lockstep, diff check, journal checks, plan self-review, and acceptance check pass. Broad post-rebase suite: 1710 passed, 81 skipped, with one unrelated origin/main baseline failure because PR #405 left its completed vk-mcp-timeout-permit-leak plan unarchived; not folded into this Hermes branch.
+
+<!-- fr:journal kind=review scope=plan id=p8-complete-pr407 created=2026-07-24T20:39:51 phase=8 -->
+### p8-complete-pr407 · review · Phase 8 complete; Hermes run delivered to PR #407 (phase 8)
+
+The Hermes-driven run reached https://github.com/derio-net/super-fr/pull/407 after the independent Hermes delegate review, live hook enforcement proof, corrected uninstall/reinstall round-trip, 3.15.2 bump, and final gates. P8.T1.S4 and Phase 8 are complete. Operator merge remains intentionally manual.
