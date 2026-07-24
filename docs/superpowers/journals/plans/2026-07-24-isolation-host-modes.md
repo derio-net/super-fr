@@ -39,3 +39,23 @@ Both entrypoints (Claude hooks/fr-isolation-required.sh, Hermes hooks/hermes/fr-
 ### p4-bun-test-output · discovery · OpenCode plugin external-mode port GREEN; host bun (devcontainer has no bun) (phase 4)
 
 Ported Phase-3 semantics to packages/fr-opencode-plugin/src/marker.ts hasValidIsolationMarker: shared toplevel-match check hoisted before a mode switch — worktree->gitDirsDiffer (linked-worktree, unchanged), external->hasContainerEvidence (existsSync('/.dockerenv')||existsSync('/run/.containerenv')||!!process.env.KUBERNETES_SERVICE_HOST), default->false (fail closed). Package is OUTSIDE the uv workspace and NOT in CI, so bun test is a manual checklist item. bun (v1.3.11) is absent inside the devcontainer; ran on the HOST at packages/fr-opencode-plugin. Baseline before: 12 pass 0 fail. RED after adding 3 external tests: 14 pass 1 fail (the 'valid with evidence' case — the two invalid cases passed vacuously since pre-edit code rejected all non-worktree modes). GREEN after marker.ts edit: FULL OUTPUT ->\nbun test v1.3.11 (af24e281)\n\n 15 pass\n 0 fail\n 16 expect() calls\nRan 15 tests across 2 files. [4.20s]\n\nTest env note: external evidence on the Mac host is controllable only via KUBERNETES_SERVICE_HOST (the two container files are absent); tests save/restore that env var in beforeEach/afterEach.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-hidden-hermes-mirrors created=2026-07-24T12:51:51 phase=5 -->
+### p5-hidden-hermes-mirrors · discovery · Editing SKILL.md/rules also requires scripts/sync-hermes.py, not just sync-opencode.py (phase 5)
+
+The plan step named only scripts/sync-opencode.py for the .opencode/ mirrors, but plugins/super-fr/skills/*/SKILL.md and plugins/super-fr/rules/*.md are ALSO mirrored into .hermes/skills/fr/ and .hermes/SOUL.d/super-fr-rules.md by scripts/sync-hermes.py. Two tripwires (test_tripwire_hermes_rules_sync.py, test_tripwire_hermes_skills_sync.py) failed in the full gate until I ran sync-hermes.py. Any Phase-5-style skill/rule edit must run BOTH sync scripts and commit both mirror trees.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-skill-120-squeeze created=2026-07-24T12:52:05 phase=5 -->
+### p5-skill-120-squeeze · discovery · fr-isolation SKILL.md was already at the 120-line cap; adding the Modes section forced ~13 lines of compression (phase 5)
+
+fr-isolation/SKILL.md sat exactly at 120 lines pre-edit (the test counts len(text.strip().split(chr(10))), == wc -l with a trailing newline). The new '### Modes (FR_ISOLATION_TARGET)' block (+13) was offset by compressing cold-start, credential-boundary, cwd, gc, recovery, and lifecycle bullets back to exactly 120. fr-brainstorming had headroom (84 lines). test_skill_validation.py green.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acceptance-rows-flipped created=2026-07-24T12:52:21 phase=5 -->
+### p5-acceptance-rows-flipped · discovery · Four isolation-* rows flipped not-implemented -> ci by direct YAML edit (add refuses duplicate ids) (phase 5)
+
+fr acceptance add appends only and errors on a duplicate id (acceptance_cmd.py:292), so the four rows born at brainstorm had to be updated by direct matrix.yaml edit. Level keys are unit|api|int|ui (model.py LEVELS) — integration is 'int'. Mapping: isolation-external-adopt -> unit test_isolation_external.py + test_isolation_cmd.py; isolation-host-worktree-e2e -> unit test_isolation_hostworktree.py + test_isolation_cmd.py, int test_hostworktree_lifecycle.py; isolation-no-silent-degradation -> unit test_isolation_cmd.py (unknown target) + test_isolation_decision_core.py (bogus marker mode fail-closed); isolation-external-marker-enforcement -> unit test_isolation_decision_core.py. Notes record post-merge owed: live pod/external walks = spec Test Plan steps 1-3, OpenCode bun suite (15/15) outside CI. fr acceptance check exit=0, no staleness for the new spec.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-bridge-flake-confirmed created=2026-07-24T12:52:34 phase=5 -->
+### p5-bridge-flake-confirmed · discovery · test_install_bridge flake reproduced and cleared with --with fr-vk reinstall (phase 5)
+
+The full gate's test_install_bridge_flag_writes_wrapper failure was the documented stale-uv-tool flake: install.sh --install-bridge reported 'cannot import fr_vk.bridge — bridge wrapper not installed'. A plain 'uv tool install --force --from packages/fr fr' did NOT fix it (fr installed without fr_vk); the fix is the install.sh-suggested 'uv tool install --force --with packages/fr-vk packages/fr', after which the test passes. Not a regression.

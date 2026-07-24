@@ -4,7 +4,17 @@ In this fr-enabled repo, edits to tracked source/docs belong **inside an
 fr-isolation workspace**, never the base clone. A super-fr PreToolUse hook
 (`fr-isolation-required.sh`) enforces this on Edit / Write / MultiEdit /
 NotebookEdit: it allows the edit only when a valid `.fr-isolation` marker sits
-at the repo toplevel and that toplevel is a real linked worktree.
+at the repo toplevel, checked by the marker's `mode`:
+
+- `worktree` (devcontainer or host-worktree mode) → toplevel must be a real
+  linked worktree.
+- `external` (preparer-adopted container) → toplevel match **plus** container
+  evidence (`/.dockerenv`, `/run/.containerenv`, or `$KUBERNETES_SERVICE_HOST`),
+  so a marker forged on a bare host or copied to the base clone never validates.
+
+`fr isolation up` selects the mode (`FR_ISOLATION_TARGET=worktree` for a
+docker-less host; a preparer-written `external` marker is adopted as-is) and
+writes the marker; devcontainer mode is the default.
 
 To work here:
 
