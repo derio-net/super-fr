@@ -23,7 +23,7 @@ tasks:
   - id: P8.T1.S3
     text: |
       (manual) Verify a git/gh mutation and a merged-PR push via terminal are blocked outside
-      isolation; confirm on_session_start prints `fr acceptance status --brief`.
+      isolation; confirm the first pre_llm_call injects `fr acceptance status --brief` once.
   - id: P8.T1.S4
     text: |
       (manual) Invoke /fr-goal for a toy feature inside Hermes; confirm it delegates each
@@ -33,16 +33,16 @@ tasks:
 state:
   steps:
     P8.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T17:32:35+00:00'
       note: null
     P8.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T17:32:35+00:00'
       note: null
     P8.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-24T17:32:35+00:00'
       note: null
     P8.T1.S4:
       state: ' '

@@ -1,7 +1,7 @@
 """Drift guard: install.sh must deliver super-fr to a Hermes Agent home too.
 
 Hermes discovers skills from ~/.hermes/skills/<category>/<name>/SKILL.md and
-loads its own cli-config.yaml / SOUL.md — so install.sh gates a Hermes block on
+loads its own config.yaml / SOUL.md — so install.sh gates a Hermes block on
 opt-in, byte-copies the fr-category skills, and delegates the invasive,
 reversible mutations (hooks, allowlist, SOUL block) to the tested
 `fr hermes install` subcommand. A shipped skill install.sh never copies there is
@@ -47,11 +47,11 @@ def test_invokes_fr_hermes_install() -> None:
     )
 
 
-def test_uninstall_calls_fr_hermes_uninstall_and_removes_skills() -> None:
+def test_uninstall_uses_source_tree_fr_and_removes_skills() -> None:
     install = _install()
     uninstall_block = install.split('"${1:-}" == "--uninstall"', 1)[1]
-    assert "fr hermes uninstall" in uninstall_block, (
-        "install.sh --uninstall must call `fr hermes uninstall`"
+    assert 'uv run --project "$PLUGIN_ROOT/packages/fr" fr hermes uninstall' in uninstall_block, (
+        "install.sh --uninstall must use this checkout's fr code, not a stale installed binary"
     )
     assert "HERMES_HOME" in uninstall_block, (
         "install.sh --uninstall must remove the Hermes skill copies it created"

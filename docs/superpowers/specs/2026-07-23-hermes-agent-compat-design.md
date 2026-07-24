@@ -81,7 +81,7 @@ Read end-to-end from `NousResearch/hermes-agent@main`:
   `~/.claude/rules/`.
 
 ### 3.3 Shell-hooks bridge — Claude-compatible tool gating (`agent/shell_hooks.py`)
-- Reads a `hooks:` block from **`cli-config.yaml`**; registers shell scripts on
+- Reads a `hooks:` block from **`config.yaml`**; registers shell scripts on
   Hermes's plugin hook manager. Every `invoke_hook()` site dispatches to them.
 - **Events include `pre_tool_call`, `post_tool_call`, `on_session_start`,
   `on_session_end`, `subagent_stop`, `pre_llm_call`.**
@@ -192,14 +192,17 @@ per-harness I/O adapter instead of a new language port.
      (gate git/gh mutations outside isolation; `.tool_input.command`).
   3. **merged-PR push** — matcher `terminal|execute_code` →
      fr-merged-pr-push-guard (block pushing to a merged PR branch).
-- **`on_session_start` hook** → the fr-acceptance nag (Hermes analog of the
-  Claude `SessionStart` hook; prints `fr acceptance status --brief`).
+- **First-turn `pre_llm_call` hook** → the fr-acceptance nag (Hermes analog of
+  the Claude `SessionStart` hook; injects `fr acceptance status --brief` as JSON
+  context when `extra.is_first_turn=true`). Hermes 0.18.x invokes
+  `on_session_start` but discards its return value, so that lifecycle event
+  cannot inject the nag.
 - **Registration** is done by the tested `fr hermes install` subcommand (§E),
-  not raw bash: it merges these entries into the user's `cli-config.yaml`
+  not raw bash: it merges these entries into the user's `config.yaml`
   `hooks:` block idempotently (keyed by `(event, command)`) and pre-records them
   in `~/.hermes/shell-hooks-allowlist.json` so non-TTY runs register without a
   prompt (documented `HERMES_ACCEPT_HOOKS` fallback). Repo-local source mirror
-  of the desired entries: `.hermes/cli-config.snippet.yaml` (tripwired).
+  of the desired entries: `.hermes/config.snippet.yaml` (tripwired).
 
 ### D. Autonomous `fr-goal` inside Hermes → `delegate_task` (decision d4)
 - Make the delivered **`fr-goal` SKILL.md harness-aware** at step 6 (phase
@@ -234,13 +237,13 @@ per-harness I/O adapter instead of a new language port.
   SOUL.md managed block; remove super-fr's `hooks:` entries + allowlist lines.
   Never wipe `~/.hermes` wholesale.
 - **Invasive mutations live in a tested `fr` subcommand, not bash.** install.sh
-  is currently **jq-only (no yq)**, and jq cannot merge into `cli-config.yaml`
+  is currently **jq-only (no yq)**, and jq cannot merge into `config.yaml`
   (YAML) — the single most error-prone install step (a shared, user-owned file).
   Rather than add a `yq` external dependency or hand-roll YAML in bash, add a
   minimal **`fr hermes install` / `fr hermes uninstall`** subcommand
   (`packages/fr`, using the `yaml` dep already vendored) that performs the
   idempotent, reversible mutations: merge/strip the `hooks:` entries in
-  `cli-config.yaml`, add/remove the `~/.hermes/shell-hooks-allowlist.json`
+  `config.yaml`, add/remove the `~/.hermes/shell-hooks-allowlist.json`
   entries, and apply/strip the SOUL.md managed block. install.sh's Hermes path
   copies the skill files (pure bash) and then shells out to `fr hermes install`
   (the `fr` CLI is guaranteed present — install.sh just installed it). This
@@ -255,7 +258,7 @@ per-harness I/O adapter instead of a new language port.
     drift between `plugins/super-fr/skills/` and `.hermes/skills/fr/`.
   - `test_tripwire_hermes_rules_sync.py` — the SOUL.d managed block matches the
     canonical rule sources.
-  - `test_tripwire_hermes_hooks_sync.py` — the `cli-config.snippet.yaml`
+  - `test_tripwire_hermes_hooks_sync.py` — the `config.snippet.yaml`
     entries match the shipped hook scripts (event/matcher/command triples).
 - **Install-copies guards** (static assertions on `install.sh`):
   - `test_install_copies_hermes_skills.py` — defines `HERMES_HOME`, copies from
@@ -264,10 +267,10 @@ per-harness I/O adapter instead of a new language port.
     `fr hermes uninstall`.
   - Extend `test_install_copies_rules.py` for the SOUL.md block.
 - **`fr hermes install/uninstall` subcommand tests** (`tests/unit/`, against a
-  temp `HERMES_HOME`): idempotent `hooks:` merge into a `cli-config.yaml`
+  temp `HERMES_HOME`): idempotent `hooks:` merge into a `config.yaml`
   (re-run adds nothing; preserves unrelated keys), allowlist entries
   added/removed, SOUL.md managed block applied then cleanly stripped leaving
-  user content intact, and a malformed/absent `cli-config.yaml` handled
+  user content intact, and a malformed/absent `config.yaml` handled
   fail-safe. This is where the invasive-mutation risk is pinned as tested code.
 - **Enforcement decision tests** — unit-test `fr-isolation-decision.sh` and both
   harness entrypoints against recorded Claude/Hermes stdin payloads, asserting
@@ -279,7 +282,7 @@ per-harness I/O adapter instead of a new language port.
   (no TS package). Add the enforcement shell tests to the pytest suite (driving
   the scripts as subprocesses) so one gate covers them.
 - **`opencode.json` analog:** none needed — Hermes discovers `~/.hermes/skills/`
-  and `cli-config.yaml` natively; the repo-local `.hermes/` mirror is for
+  and `config.yaml` natively; the repo-local `.hermes/` mirror is for
   dogfooding + tests only.
 
 ### G. `fr models` under Hermes — ask on first run, ship NOTHING
@@ -335,7 +338,7 @@ operator to a wrong model.
   room. Mitigation: fold the Claude/Hermes split into a single terse
   subsection; move any overflow to a referenced file if the skill format allows.
   If it cannot fit, the plan must call it out — do not silently exceed the cap.
-- **Mutating the user's `cli-config.yaml` / `SOUL.md`** is invasive. Mitigation:
+- **Mutating the user's `config.yaml` / `SOUL.md`** is invasive. Mitigation:
   strictly delimited managed blocks + idempotent keyed merges + full uninstall
   strip; never touch content outside the markers.
 - **Non-TTY hook registration** silently skips if not allowlisted. Mitigation:
@@ -364,7 +367,7 @@ Requires a real Hermes Agent install (operator has one). Post-merge:
 4. **Enforcement — bash/push:** ask Hermes to `git commit`/push outside
    isolation via `terminal` → blocked; pushing to a merged PR branch → blocked.
 5. **Session nag:** start a Hermes session in a repo with acceptance debt →
-   `on_session_start` prints `fr acceptance status --brief`.
+   the first `pre_llm_call` injects `fr acceptance status --brief` once.
 6. **Autonomous run:** invoke `/fr-goal` for a toy feature inside Hermes → it
    delegates each phase via `delegate_task`, the child writes journal entries,
    and the run reaches a PR. **Confirm fr-goal ASKS for a model per tier on the
