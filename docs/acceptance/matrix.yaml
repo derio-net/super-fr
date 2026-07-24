@@ -894,3 +894,24 @@ rows:
     notes: v3.14.0 died with a raw traceback during _construct_mcp_client(); no metric
       was pushed. v3.15.1 guards init with (TimeoutError, OSError) → mcp_init_error
       + exit 1; SystemExit(2) for missing binaries still propagates (I1).
+  - id: acceptance-report-dual
+    capability: Acceptance report
+    acceptance: 'Two committed HTML reports are generated together: report.html (local
+      links) and report.github.html (github.com blob links).'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-dual-reports-design.md
+    levels: {}
+    status: not-implemented
+    notes: add/init/report --deterministic all write the set (plan 2026-07-24-acceptance-dual-reports
+      P1/P2).
+  - id: acceptance-report-dual-gate
+    capability: Acceptance report
+    acceptance: 'Every fr-acceptance repo is gated on both reports: fr acceptance check
+      fails when the committed report set is stale or incomplete (enforcement via the
+      universal gate, no per-repo workflow change).'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-dual-reports-design.md
+    levels: {}
+    status: not-implemented
+    notes: Existence-gated report-sync folded into check() (P2); reaches existing consumer
+      repos on fr upgrade.

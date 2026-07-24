@@ -1,0 +1,58 @@
+schema_version: 2
+phase:
+  number: 2
+  title: add + init generate the set; check enforces it
+  tag: agentic
+  depends_on:
+  - 1
+  acceptance:
+  - acceptance-report-dual-gate
+  tracking_issue: null
+tasks:
+- number: 1
+  title: add_cmd + scaffold.init write both reports
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD RED — tests: fr acceptance add updates matrix + BOTH reports; fr acceptance init generates BOTH (report.github.html un-gitignored); render failure warns/degrades, never rolls back / crashes.
+  - id: P2.T1.S2
+    text: |-
+      add_cmd + scaffold.init use render_committed_set to write the whole set (keep #403 warn-don't-roll-back / degrade-don't-crash policies). Update test_acceptance_init assertions for report.github.html.
+- number: 2
+  title: Fold report-sync into fr acceptance check
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      TDD RED — tests in test_acceptance_cmd/model: check on a repo with both reports in sync passes; with report.html present but report.github.html missing (or either stale) fails (exit 1); with NO report files present, check is unaffected (existence-gated).
+  - id: P2.T2.S2
+    text: |-
+      check.py check(): if any REPORT_SET file exists, require all exist and match render_committed_set else append an error; render/identity failure skips gracefully. Keep check read-only.
+  - id: P2.T2.S3
+    text: |-
+      Tests green; ruff + mypy.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
