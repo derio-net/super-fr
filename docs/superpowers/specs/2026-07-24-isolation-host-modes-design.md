@@ -249,6 +249,8 @@ parentheses); flip the row's status as the step is proven.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-07-24-isolation-host-modes | `derio-net/super-fr` | `2026-07-24-isolation-host-modes` | — |
+| 2026-07-24-isolation-host-modes | `derio-net/super-fr` | `2026-07-24-isolation-host-modes` | — |
 
 ## References
 

@@ -1,0 +1,134 @@
+schema_version: 2
+phase:
+  number: 2
+  title: ExternalTarget — adopt preparer containment, marker-first selection
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-external-adopt
+tasks:
+- number: 1
+  title: Marker adoption + validation in up()
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED. Create tests/unit/test_isolation_external.py. Fixture: tmp git
+      repo (primary checkout, NOT a worktree) with a `.fr-isolation`
+      marker {"toplevel": <resolved repo path>, "branch": "",
+      "mode": "external", "created_at": ...}. Cases for
+      `fr.isolation.external.ExternalTarget`: (a) up(profile=None,
+      branch="feat/x") returns IsolationState(worktree=<repo>,
+      profile="external", branch="feat/x") and saves state; (b) marker
+      absent → IsolationError telling the preparer contract; (c) marker
+      toplevel != actual toplevel → IsolationError (stale/copied
+      marker); (d) marker mode != "external" → IsolationError; (e)
+      passing --profile logs a note and is otherwise ignored (no
+      exception). Run → fails (module missing).
+  - id: P2.T1.S2
+    text: |
+      GREEN. Create packages/fr/src/fr/isolation/external.py with
+      ExternalTarget (implements the Target protocol directly — no
+      devcontainer inheritance): __init__(repo_root, runner) resolving
+      repo_root; `_load_marker()` reads/validates .fr-isolation (mode
+      external, resolved toplevel equality); up() = validate → ensure
+      branch (T2, stub for now: assume HEAD is the branch) → save_state
+      → rewrite marker with the branch filled in. Re-run: cases a-e
+      minus branch-switching pass.
+- number: 2
+  title: Ensure requested branch in place
+  steps:
+  - id: P2.T2.S1
+    text: |
+      RED. Add cases: (a) repo HEAD on "main", up(branch="feat/x") runs
+      `git switch -c feat/x` (recorded argv) and marker "branch" becomes
+      "feat/x"; (b) HEAD already on "feat/x" → NO switch argv recorded,
+      up is a no-op adopt (idempotent — call twice); (c) branch exists
+      but not checked out → `git switch feat/x` (no -c). Run → fails.
+  - id: P2.T2.S2
+    text: |
+      GREEN. Implement `_ensure_branch(branch)`: `git rev-parse
+      --abbrev-ref HEAD` == branch → return; `git branch --list
+      <branch>` non-empty → `git switch <branch>`; else `git switch -c
+      <branch>` (from current HEAD — the preparer chose the base, spec
+      §A). Non-zero exit → IsolationError with stderr. Re-run → passes.
+- number: 3
+  title: exec / down / restart / stats / status semantics
+  steps:
+  - id: P2.T3.S1
+    text: |
+      RED. Add cases: (a) exec runs argv at the checkout with
+      capture=False, returncode passthrough; (b) down(state) deletes
+      fr's state file and clears the marker's "branch" claim but leaves
+      the marker file present and the checkout intact (no git worktree
+      remove, no docker argv ever); (c) restart/stats raise
+      IsolationError naming the container owner; (d) status(state)
+      includes {"mode": "external", "toplevel": ..., "branch": ...}.
+      Run → fails.
+  - id: P2.T3.S2
+    text: |
+      GREEN. Implement exec/down/restart/stats/status accordingly (down:
+      delete_state + rewrite marker with branch "" — never unlink the
+      preparer's marker or checkout). Re-run → passes.
+- number: 4
+  title: Marker-first selection precedence in _target()
+  steps:
+  - id: P2.T4.S1
+    text: |
+      RED. In tests/unit/test_isolation_cmd.py add: cwd inside a repo
+      with a valid external marker → _target returns ExternalTarget even
+      with FR_ISOLATION_TARGET=worktree set AND with it unset; invalid
+      marker (toplevel mismatch) → falls through to the env-var path
+      (assert HostWorktreeTarget/local respectively). _target signature:
+      keep repo arg; detection keys off the repo path's toplevel marker.
+      Run → fails.
+  - id: P2.T4.S2
+    text: |
+      GREEN. Extend _target(): before the env-var branch, attempt
+      ExternalTarget's marker validation against `repo` (a cheap
+      classmethod `ExternalTarget.detect(repo, runner)` returning an
+      instance or None keeps _target flat). Order: external marker >
+      FR_ISOLATION_TARGET > default (spec §A Selection). Re-run new +
+      full isolation suites: uv run pytest tests/unit/test_isolation.py
+      tests/unit/test_isolation_cmd.py
+      tests/unit/test_isolation_external.py
+      tests/unit/test_isolation_hostworktree.py -q --no-cov → pass.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

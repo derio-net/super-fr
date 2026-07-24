@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 4
+  title: OpenCode plugin — port external-mode validity
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - isolation-external-marker-enforcement
+tasks:
+- number: 1
+  title: marker.ts external branch + bun tests
+  steps:
+  - id: P4.T1.S1
+    text: |
+      RED. In packages/fr-opencode-plugin, extend the marker tests
+      (existing bun test file next to src/marker.ts): external marker +
+      process.env.KUBERNETES_SERVICE_HOST → valid; no evidence →
+      invalid; toplevel mismatch → invalid; unknown mode → invalid
+      (existing case stays). Mirror Phase 3's semantics exactly,
+      including the /.dockerenv and /run/.containerenv existsSync
+      checks. Run: cd packages/fr-opencode-plugin && bun test → new
+      cases fail.
+  - id: P4.T1.S2
+    text: |
+      GREEN. Edit src/marker.ts: replace `if (mode !== "worktree")
+      return false;` with the mode branch — worktree keeps the
+      linked-worktree check; external requires toplevel match plus
+      evidence (existsSync("/.dockerenv") ||
+      existsSync("/run/.containerenv") ||
+      !!process.env.KUBERNETES_SERVICE_HOST); default false. Run bun
+      test → all pass. This package is OUTSIDE CI (AGENTS.md): paste
+      the full bun test output into the phase journal entry
+      (fr journal add --scope plan --kind discovery).
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

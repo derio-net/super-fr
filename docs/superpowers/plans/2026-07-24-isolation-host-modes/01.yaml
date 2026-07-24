@@ -1,0 +1,160 @@
+schema_version: 2
+phase:
+  number: 1
+  title: HostWorktreeTarget + FR_ISOLATION_TARGET selection (fail-closed)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - isolation-host-worktree-e2e
+  - isolation-no-silent-degradation
+tasks:
+- number: 1
+  title: HostWorktreeTarget.up — worktree + marker + state, zero container calls
+  steps:
+  - id: P1.T1.S1
+    text: |
+      RED. Create tests/unit/test_isolation_hostworktree.py. Fixture: tmp
+      git repo with an initial commit (mirror the repo fixtures in
+      tests/unit/test_isolation.py) and a RECORDING runner that wraps
+      fr.isolation.local.subprocess_runner but appends every argv to a
+      list. Cases for `fr.isolation.hostworktree.HostWorktreeTarget`:
+      (a) `up(profile=None, branch="feat/x")` returns an IsolationState
+      with profile == "host", creates the worktree dir, writes a
+      `.fr-isolation` marker with mode "worktree", saves state
+      (load_state round-trips); (b) NO recorded argv starts with
+      "devcontainer" or "docker"; (c) works when the repo has NO
+      .devcontainer/ directory at all (no IsolationError about
+      profiles); (d) up is idempotent (second call, worktree exists).
+      Run: uv run pytest tests/unit/test_isolation_hostworktree.py -q
+      --no-cov → fails (module missing).
+  - id: P1.T1.S2
+    text: |
+      GREEN. Create packages/fr/src/fr/isolation/hostworktree.py:
+      `class HostWorktreeTarget(LocalWorktreeDevcontainerTarget)` with
+      `up()` that mirrors local.up() minus the devcontainer half: git-repo
+      check, worktree path derivation, `self._git_worktree_add(...)`,
+      then IsolationState(profile="host"), save_state,
+      `self._write_isolation_marker(worktree, branch)`, NO
+      resolve_profile / profile-committed gate / _ensure_mounted_env_file
+      / `devcontainer up` / _spawn_gc (gc is docker-coupled — override
+      `_spawn_gc` to a no-op with a one-line comment). Module docstring:
+      one paragraph, host env is the env (spec §B). Re-run → passes.
+- number: 2
+  title: exec / restart / stats / down semantics
+  steps:
+  - id: P1.T2.S1
+    text: |
+      RED. Add cases: (a) `exec(state, ["echo", "hi"])` runs the argv via
+      the runner with cwd == state.worktree, capture=False, and returns
+      the child's returncode (assert recorded argv is exactly the argv —
+      no devcontainer wrapper); (b) `restart(state)` and `stats(state)`
+      raise IsolationError mentioning the environment is externally
+      owned; (c) `down(state)` removes the worktree, marker, and state
+      WITHOUT any docker argv recorded; (d) down with an open PR still
+      refuses (monkeypatch `_pr` to return {"state": "OPEN", "url": "u"})
+      unless force=True. Run → fails.
+  - id: P1.T2.S2
+    text: |
+      GREEN. Implement in hostworktree.py: `exec` = self.run(argv,
+      cwd=state.worktree, capture=False).returncode; `restart`/`stats`
+      raise IsolationError("externally managed — restart/inspect the
+      host, not fr"); `down` = local.down minus the docker probe/stop/rm/
+      image blocks: PR guard verbatim, `git worktree remove --force` with
+      the same post-condition check, `_remove_isolation_marker`,
+      `delete_state` (no _spawn_gc). Re-run → passes.
+  - id: P1.T2.S3
+    text: |
+      REFACTOR (optional). If down() shares >10 lines with local.down,
+      extract the PR-guard + worktree-remove tail into a protected helper
+      `_down_worktree_tail(state, force)` on the parent class called by
+      both. Stay green: uv run pytest tests/unit/test_isolation.py
+      tests/unit/test_isolation_hostworktree.py -q --no-cov.
+- number: 3
+  title: FR_ISOLATION_TARGET selection in _target(), fail-closed
+  steps:
+  - id: P1.T3.S1
+    text: |
+      RED. In tests/unit/test_isolation_cmd.py add: (a) with
+      FR_ISOLATION_TARGET unset, _target(repo) returns
+      LocalWorktreeDevcontainerTarget (existing behavior — assert exact
+      type, not isinstance, since HostWorktreeTarget subclasses it);
+      (b) FR_ISOLATION_TARGET=worktree → HostWorktreeTarget;
+      (c) FR_ISOLATION_TARGET=devcontainer → local target (explicit
+      default spelling); (d) FR_ISOLATION_TARGET=bogus → IsolationError
+      naming valid values "devcontainer | worktree". Use
+      monkeypatch.setenv/delenv. Run → fails.
+  - id: P1.T3.S2
+    text: |
+      GREEN. In packages/fr/src/fr/commands/isolation_cmd.py, extend
+      _target(): read os.environ.get("FR_ISOLATION_TARGET"); None or
+      "devcontainer" → LocalWorktreeDevcontainerTarget; "worktree" →
+      HostWorktreeTarget (same runner/gc_spawner args); anything else →
+      raise IsolationError('unknown FR_ISOLATION_TARGET <v> — valid:
+      devcontainer | worktree'). Re-run → passes. Then run the full
+      isolation suites: uv run pytest tests/unit/test_isolation.py
+      tests/unit/test_isolation_cmd.py
+      tests/unit/test_isolation_hostworktree.py -q --no-cov → all pass.
+- number: 4
+  title: Integration — full lifecycle on a docker-less "host"
+  steps:
+  - id: P1.T4.S1
+    text: |
+      RED. Create tests/integration/test_hostworktree_lifecycle.py: tmp
+      base repo with a commit and an origin remote (clone or file://
+      push target, mirroring tests/integration fixtures); set
+      FR_ISOLATION_TARGET=worktree (monkeypatch); drive the CLI layer
+      (typer runner or _target directly): up → write a file in the
+      worktree, assert base clone untouched (git -C base status
+      --porcelain empty) → exec ["git","status"] returns 0 → down
+      removes worktree and state. Assert no argv contained "docker" or
+      "devcontainer" across the whole run (recording runner). Run →
+      fails until wired.
+  - id: P1.T4.S2
+    text: |
+      GREEN. Fix whatever the integration test surfaces (typically state
+      keying or cwd assumptions — no new features). Run: uv run pytest
+      tests/integration/test_hostworktree_lifecycle.py -q --no-cov →
+      passes.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
