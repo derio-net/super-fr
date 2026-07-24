@@ -99,10 +99,66 @@ the next harness is mechanical:
 5. Reuse the `fr models` `harness → tier → model` seam (do not rebuild it).
 6. Docs + a version bump (user-observable plugin behavior).
 
-Deliberately **out of scope** for that follow-up (rule-of-three): extracting a
-shared `harness_sync` helper from the two-and-counting sync scripts. At N=2 the
-shared idioms are below the extraction threshold; revisit when a **third**
-harness lands and the triplication is concrete.
+### 5.1 The deferred `harness_sync` helper — what and why
+
+A second, larger residual is worth naming precisely so it is a *decision on
+record*, not a blind spot: the two sync generators
+(`scripts/sync-opencode.py`, `scripts/sync-hermes.py`) share a skeleton that a
+third would triplicate.
+
+**What it would be.** A small shared module (`fr`-internal, or a
+`scripts/_harness_sync.py`) that owns the *transport mechanics* common to every
+harness track — the parts that are identical no matter what the target is:
+
+- **Mirror maps** — build the `skill-name → path` dicts for a
+  `(canonical_dir, mirror_dir)` pair (today: `canonical_skills()` /
+  `mirror_skills()`, near-duplicated across both scripts and thrice within
+  `sync-opencode.py` for skills/commands/instructions).
+- **Drift detection** — the byte-compare that powers every tripwire
+  (`if canonical.read_text() != mirror.read_text(): report`). This is
+  safety-critical scaffolding: a tripwire is only as honest as this compare,
+  and it currently exists in ~5 hand-written copies.
+- **Frontmatter parse** — the `---`-delimited YAML reader (`_skill_frontmatter`)
+  that any harness deriving commands/metadata from a `SKILL.md` needs.
+- **Mirror write** — `mkdir -p` + `write_text` + the "generated, do not
+  hand-edit" source-note header.
+- **`--check`/write driver** — the `main()` shape: iterate surfaces, collect
+  drift, exit non-zero on `--check`.
+
+Each harness script then shrinks to a **declaration** — "here are my surfaces
+and their target paths" — plus the one or two genuinely bespoke *render*
+functions the transport can't know (OpenCode's `render_command` from skill
+frontmatter; Hermes's `render_rules_block`, which concatenates rules into a
+single delimited `SOUL.md` managed block rather than one file per rule). The
+irreducibly per-harness part stays per-harness; only the plumbing is shared.
+
+**Why build it (eventually).**
+
+- **One place to be correct.** Drift detection and the source-note contract are
+  the load-bearing safety mechanism behind every `test_tripwire_*_sync` test.
+  With N hand-copied versions, a fix to one (normalize a trailing newline,
+  handle a missing mirror dir, follow a symlink) silently fails to reach the
+  others. A shared helper collapses that to a single tested surface.
+- **It directly cheapens the going-forward model.** §4 commits to "each new
+  harness = its own compat issue." The helper is exactly what makes that issue
+  small: a new-harness author writes a surface declaration and their one weird
+  render function, not another ~200-line copy of the scaffolding.
+- **Testable once.** Frontmatter edge cases and drift semantics get unit-tested
+  against the helper directly, instead of being re-exercised indirectly through
+  each harness's tripwire.
+
+**Why not now (rule of three).** At N=2 the two scripts *look* similar but their
+surfaces diverge structurally — Hermes has no commands surface at all, and the
+two rules-delivery models differ in kind (per-file mirrors vs. one concatenated
+managed block), not just in path. Extracting today would guess the abstraction
+boundary from two points; the **third** harness is what reveals which seams are
+truly invariant versus coincidentally alike. Premature extraction risks a helper
+the third harness has to fight or re-open anyway.
+
+**Recommended trigger.** Do the extraction *as part of* the third harness's
+compat work, where it pays for itself immediately by making that very harness
+cheaper — not as speculative refactor beforehand. Until then, the two scripts
+staying parallel-by-copy is the correct, lower-risk state.
 
 ## 6. Handoff
 
