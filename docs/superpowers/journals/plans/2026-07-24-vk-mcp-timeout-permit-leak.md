@@ -27,3 +27,18 @@ Full suite re-run after the change: 1750 passed, 80 skipped — no other call si
 ### p1-skip-request-extraction · decision · Skipped P1.T2.S5's optional _request() extraction (marked '-' with note) (phase 1)
 
 call_tool and _initialize share only three lines of scaffolding (increment self._msg_id, _send the envelope, _recv_matching). Their payloads differ (tools/call params vs the protocolVersion/capabilities/clientInfo handshake) and _initialize additionally sends the trailing notifications/initialized. A _request(method, params, timeout) helper would hide the handshake's distinct shape for no meaningful dedup, so the step was ticked with state '-' and that reasoning as its note, per the step's own 'Skip if clean.'
+
+<!-- fr:journal kind=discovery scope=plan id=p2-init-guard-inside-lock-try created=2026-07-24T21:03:51 phase=2 -->
+### p2-init-guard-inside-lock-try · discovery · Init guard sits inside the lock try/finally; SystemExit(2) escapes both clauses by construction (phase 2)
+
+The guard wraps only `mcp = _construct_mcp_client()` and lives INSIDE main()'s outer `try:` whose `finally:` closes the flock handle, so an init timeout still releases the lock (test re-acquires it after main() returns 1 to pin that). `except (TimeoutError, OSError)` deliberately does not catch SystemExit — SystemExit derives from BaseException, not Exception/OSError — so the I1 missing-binaries loud exit propagates out of main() untouched with code 2 and pushes NO failure metric (an operator install error is not a flaky tick). Both properties are now pinned by tests in tests/integration/test_bridge_resilience.py. reason='mcp_init_error' passes METRICS_REASON_ALIASES (packages/fr-vk/src/fr_vk/runner.py:40) unaliased as the plan predicted — only backend_error/preflight are remapped.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-missing-binaries-test-green-at-red-step created=2026-07-24T21:03:56 phase=2 -->
+### p2-missing-binaries-test-green-at-red-step · discovery · test_missing_binaries_still_systemexit2 was GREEN at the red step — it is an invariant guard, not a red test (phase 2)
+
+P2.T1.S2's EXPECT RED produced '1 failed, 11 passed': only test_tick_survives_mcp_init_timeout was red (TimeoutError escaped main() at bridge_cli.py:369). The sibling missing-binaries test passed before the change, as it must — it exists to pin that the new except clause does NOT swallow the pre-existing I1 SystemExit(2), i.e. it would only ever go red on a regression (e.g. someone widening the guard to `except Exception` or `except BaseException`). Anyone re-running the phase's TDD sequence should expect exactly one red, not two.
+
+<!-- fr:journal kind=decision scope=plan id=p2-matrix-flip-notes-record-version created=2026-07-24T21:04:06 phase=2 -->
+### p2-matrix-flip-notes-record-version · decision · Matrix flips carry the shipping version in notes, and the three rows split unit/unit/int (phase 2)
+
+All three rows moved not-implemented -> ci: vk-mcp-timeout-survives-slow-ops (levels.unit = tests/unit/test_mcp_client_timeout.py), vk-mcp-post-timeout-correctness (levels.unit = tests/unit/test_mcp_client.py), vk-bridge-init-timeout-graceful (levels.int = tests/integration/test_bridge_resilience.py — integration, not unit, since it drives main() end-to-end). Each row's notes keeps the original incident sentence and appends what shipped and in which version (v3.15.1), so the row still explains the #404 failure mode after the spec is archived. `fr acceptance check` exit 0: 54 rows OK, 41 ci / 13 skipped, zero not-implemented remaining.

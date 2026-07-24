@@ -826,10 +826,13 @@ rows:
       leaks no VK concurrency permits
     origin:
     - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_mcp_client_timeout.py
+    status: ci
     notes: 'Issue #404: 30s _recv default abandoned slow ops; abandoned spawns leak
-      VK_MAX_CONCURRENT_EXECUTIONS permits cumulatively until the pool wedges.'
+      VK_MAX_CONCURRENT_EXECUTIONS permits cumulatively until the pool wedges. Fixed
+      in v3.15.1 — uniform 180s default for _recv/call_tool, unit-pinned per-PR.'
   - id: vk-mcp-post-timeout-correctness
     capability: fr→VK dispatch
     acceptance: After one MCP call times out, later calls on the same client still receive
@@ -837,10 +840,12 @@ rows:
       misattribution)
     origin:
     - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
-    levels: {}
-    status: not-implemented
-    notes: Requires JSON-RPC response-id correlation; without it every post-timeout
-      response is off by one.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_mcp_client.py
+    status: ci
+    notes: JSON-RPC response-id correlation (_recv_matching) landed in v3.15.1; stale-id
+      discard, notification skip, and deadline exhaustion are unit-pinned per-PR.
   - id: vk-bridge-init-timeout-graceful
     capability: bridge tick resilience
     acceptance: A bridge tick whose MCP client init times out exits gracefully with
@@ -848,7 +853,10 @@ rows:
       tick runs normally
     origin:
     - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      int:
+      - super-fr:tests/integration/test_bridge_resilience.py
+    status: ci
     notes: v3.14.0 died with a raw traceback during _construct_mcp_client(); no metric
-      was pushed.
+      was pushed. v3.15.1 guards init with (TimeoutError, OSError) → mcp_init_error
+      + exit 1; SystemExit(2) for missing binaries still propagates (I1).
