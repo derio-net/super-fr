@@ -128,8 +128,8 @@ def report_cmd(
     out: Path | None = typer.Option(
         None,
         "--out",
-        help="Single explicit output/check target (repo-relative). Omit to operate "
-        "on the whole committed set (report.html + report.github.html).",
+        help="Single explicit output/check target (repo-relative). Omit to operate on the "
+        "whole committed set (report_local.html + report_linked.html + report_linked.md).",
     ),
     deterministic: bool = typer.Option(
         False,

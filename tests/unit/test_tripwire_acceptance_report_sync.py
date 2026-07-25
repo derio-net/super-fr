@@ -32,7 +32,7 @@ MATRIX = REPO_ROOT / "docs" / "acceptance" / "matrix.yaml"
 def test_report_is_committed_and_tracked(rel: str) -> None:
     assert (REPO_ROOT / rel).exists(), (
         f"{rel} must be committed (the report SET is tracked now, not gitignored) — "
-        "run `fr acceptance report --deterministic` and commit both reports."
+        "run `fr acceptance report --deterministic` and commit the report set."
     )
 
 
@@ -41,5 +41,5 @@ def test_committed_report_set_matches_matrix() -> None:
     for rel, want in expected.items():
         assert (REPO_ROOT / rel).read_text() == want, (
             f"{rel} is stale (drifted from docs/acceptance/matrix.yaml).\n"
-            "Run `fr acceptance report --deterministic` and commit both reports."
+            "Run `fr acceptance report --deterministic` and commit the report set."
         )

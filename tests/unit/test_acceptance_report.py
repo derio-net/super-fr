@@ -206,7 +206,7 @@ def test_render_markdown_is_github_flavored(tmp_path: Path) -> None:
     assert "| Acceptance |" in md  # a GFM table header
     assert "| --- |" in md or "|---|" in md  # a delimiter row
     assert "## " in md  # per-capability section
-    assert "[own:s.md](https://github.com/derio-net/own/blob/main/" in md  # linked ref
+    assert "[own:s.md](<https://github.com/derio-net/own/blob/main/" in md  # linked ref
     assert "links: github" in md
 
 

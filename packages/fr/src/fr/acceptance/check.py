@@ -235,7 +235,7 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
             if got != want:
                 result.errors.append(
                     f"report drift: {rel} is missing or stale vs docs/acceptance/matrix.yaml — "
-                    "run `fr acceptance report --deterministic` and commit both reports"
+                    "run `fr acceptance report --deterministic` and commit the report set"
                 )
 
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]

@@ -260,7 +260,9 @@ def render_markdown(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
 
     def ref_link(ref: str) -> str:
         repo, path, _ = split_ref(ref)
-        return f"[{md_cell(repo)}:{md_cell(Path(path).name)}]({links.url(ref)})"
+        # Angle-bracket the destination (CommonMark `<...>` form) so a URL with
+        # a space or unbalanced paren can't break the link.
+        return f"[{md_cell(repo)}:{md_cell(Path(path).name)}](<{links.url(ref)}>)"
 
     out = [
         f"# Acceptance coverage — {md_cell(links.own_repo)}",
@@ -294,7 +296,7 @@ def render_markdown(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
             for lv in LEVELS:
                 refs = r.levels[lv]
                 if refs:
-                    chips.append(f"[{LEVEL_LABEL[lv]}]({links.url(refs[0])})")
+                    chips.append(f"[{LEVEL_LABEL[lv]}](<{links.url(refs[0])}>)")
                 else:
                     chips.append(f"~~{LEVEL_LABEL[lv]}~~")
             origins = " ".join(ref_link(o) for o in r.origin) or "—"
