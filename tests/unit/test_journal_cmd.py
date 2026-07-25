@@ -333,3 +333,50 @@ class TestCheck:
         jf.write_text("<!-- fr:journal broken header -->\n### x\n\nbody\n")
         res = runner.invoke(app, ["journal", "render", "--scope", "plan", "--slug", "S"])
         assert res.exit_code == 0
+
+
+class TestReadsResolveArchivedLocation:
+    """After a spec/plan archives, its journal lives under
+    implemented/journals/<scope>/; render and check must still find it (#417)."""
+
+    def _write_archived(self, root: Path, scope: str, slug: str, text: str) -> Path:
+        from fr.journal.model import archived_journal_path
+
+        path = archived_journal_path(root, scope, slug)  # type: ignore[arg-type]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        return path
+
+    def test_render_finds_archived_journal(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_archived(
+            root,
+            "spec",
+            "2026-07-24-arch",
+            "# Journal\n\n"
+            "<!-- fr:journal kind=decision scope=spec id=d1 created=2026-07-24T10:00:00 -->\n"
+            "### d1 · decision · a call\n\nrationale\n",
+        )
+        res = runner.invoke(
+            app, ["journal", "render", "--scope", "spec", "--slug", "2026-07-24-arch"]
+        )
+        assert res.exit_code == 0, res.output
+        assert "a call" in res.output
+
+    def test_check_reads_archived_journal(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        # An archived journal with an open finding must still fail `check`.
+        self._write_archived(
+            root,
+            "spec",
+            "2026-07-24-arch",
+            "# Journal\n\n"
+            "<!-- fr:journal kind=finding scope=spec id=f1 created=2026-07-24T10:00:00 "
+            "state=open -->\n### f1 · finding [open] · loose end\n\nbody\n",
+        )
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "spec", "--slug", "2026-07-24-arch"]
+        )
+        assert res.exit_code != 0, res.output

@@ -43,6 +43,24 @@ IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
 # identical). Mirrors the `specs/` + `plans/` split of the parent tree.
 _SCOPE_DIR: dict[str, str] = {"spec": "specs", "plan": "plans", "debug": "debug"}
 
+# Specs are written `<YYYY-MM-DD-slug>-design.md`, but the spec-scope journal is
+# keyed by the bare feature slug (`journals/specs/<slug>.md`). Own the suffix in
+# one place so the archive sweep and any journal reader agree (#417).
+_SPEC_FILENAME_SUFFIX = "-design"
+
+
+def spec_journal_slug(spec_stem: str) -> str:
+    """The spec-scope journal slug for a spec file's stem.
+
+    A spec `2026-07-24-x-design.md` (stem `2026-07-24-x-design`) owns the
+    journal `journals/specs/2026-07-24-x.md`, so strip a trailing ``-design``.
+    A stem without the suffix (an older or hand-named spec) maps to itself, so
+    the helper is safe to apply to every spec.
+    """
+    if spec_stem.endswith(_SPEC_FILENAME_SUFFIX):
+        return spec_stem[: -len(_SPEC_FILENAME_SUFFIX)]
+    return spec_stem
+
 
 class JournalParseError(Exception):
     """Raised when a journal file cannot be parsed into entries."""
@@ -88,6 +106,25 @@ def journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
 def archived_journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     """Archived journal path (mirrors ``implemented/plans`` / ``implemented/specs``)."""
     return repo_root / IMPLEMENTED_JOURNALS_REL / _SCOPE_DIR[scope] / f"{slug}.md"
+
+
+def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
+    """Path to read a journal from: the active location if present, else the
+    archived one.
+
+    ``add`` always writes the active path, but a journal outlives its spec/plan:
+    once archived it lives under ``implemented/journals/<scope>/``. Reads
+    (``render`` / ``check``) resolve through here so they still find it. When
+    neither exists the active path is returned (callers treat a missing file as
+    an empty journal), keeping behaviour identical for never-written slugs.
+    """
+    active = journal_path(repo_root, scope, slug)
+    if active.exists():
+        return active
+    archived = archived_journal_path(repo_root, scope, slug)
+    if archived.exists():
+        return archived
+    return active
 
 
 # --- serialization -------------------------------------------------------

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fr.journal.model import archived_journal_path, journal_path
+from fr.journal.model import archived_journal_path, journal_path, spec_journal_slug
 from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
 
 if TYPE_CHECKING:
@@ -180,9 +180,11 @@ def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
             except ArchiveError as e:
                 notes.append(str(e))
                 continue
-            # A spec journal is keyed by the spec's filename stem; follow the
-            # spec into implemented/journals/specs/ (2026-07-22 spec §A).
-            _archive_journal(repo_root, "spec", spec_path.stem)
+            # A spec journal is keyed by the bare feature slug, not the spec's
+            # `<slug>-design` filename stem; strip the suffix so the move
+            # resolves the real file and follows the spec into
+            # implemented/journals/specs/ (2026-07-22 spec §A; #417).
+            _archive_journal(repo_root, "spec", spec_journal_slug(spec_path.stem))
             moves.append(DirsMove(src=src_rel, dst=dst_rel, kind="spec"))
         elif note and "no Implementation Plans rows" not in note:
             notes.append(f"{spec_path.name}: {note}")

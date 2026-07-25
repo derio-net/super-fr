@@ -141,3 +141,50 @@ class TestSpecJournalFollowsSpec:
         assert not sjournal.exists()
         assert (repo / "docs/superpowers/implemented/journals/specs/2026-05-10-solo.md").exists()
         assert spec  # spec fixture used
+
+    def test_spec_journal_moves_for_design_named_spec(self, tmp_path: Path) -> None:
+        """Regression for #417: real specs are named `<slug>-design.md`, but the
+        spec-scope journal is keyed by the bare `<slug>`. The sweep must strip
+        the `-design` suffix — the prior test used a suffix-less fixture name, so
+        the slug mismatch never surfaced and journals were left behind."""
+        from fr.archive import spec_archive_sweep
+
+        repo = _make_repo(tmp_path)
+        spec = repo / "docs/superpowers/specs/2026-05-10-widget-design.md"
+        spec.write_text(
+            "# Widget spec\n\n"
+            "## Implementation Plans\n\n"
+            "| Plan | Repo | File | Depends on |\n"
+            "|------|------|------|------------|\n"
+            "| Manual step | `derio-net/test` | — | — |\n"
+        )
+        # Journal keyed by the bare slug, NOT the `-design` filename stem.
+        sjournal = repo / "docs/superpowers/journals/specs/2026-05-10-widget.md"
+        sjournal.parent.mkdir(parents=True, exist_ok=True)
+        sjournal.write_text("# Journal: 2026-05-10-widget\n")
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed"], check=True)
+
+        result = spec_archive_sweep(repo, gh=None)
+        assert [m for m in result.moves if m.kind == "spec"], "design-named spec should archive"
+        assert not sjournal.exists(), "the bare-slug journal must move with its spec"
+        assert (repo / "docs/superpowers/implemented/journals/specs/2026-05-10-widget.md").exists()
+
+    def test_spec_without_journal_is_noop(self, tmp_path: Path) -> None:
+        """Back-compat: a spec that never had a journal archives cleanly."""
+        from fr.archive import spec_archive_sweep
+
+        repo = _make_repo(tmp_path)
+        spec = repo / "docs/superpowers/specs/2026-05-10-bare-design.md"
+        spec.write_text(
+            "# Bare spec\n\n"
+            "## Implementation Plans\n\n"
+            "| Plan | Repo | File | Depends on |\n"
+            "|------|------|------|------------|\n"
+            "| Manual step | `derio-net/test` | — | — |\n"
+        )
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed"], check=True)
+
+        result = spec_archive_sweep(repo, gh=None)
+        assert [m for m in result.moves if m.kind == "spec"], "spec should still archive"
