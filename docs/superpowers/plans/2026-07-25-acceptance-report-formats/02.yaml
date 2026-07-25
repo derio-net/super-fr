@@ -1,0 +1,39 @@
+schema_version: 2
+phase:
+  number: 2
+  title: report.html ad-hoc + writers write the new set (with stale cleanup)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: report_cmd + add + init
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD RED — tests: `report --deterministic` writes exactly the 3 committed files and NOT report.html; `report` (no flags) writes ad-hoc git-stamped report.html honoring --link-mode; `report --check` verifies the 3; add/init generate the 3 and delete a stale report.github.html; init gitignores report.html.
+  - id: P2.T1.S2
+    text: |-
+      report_cmd: --deterministic/--check operate on the new 3-set; deterministic writers delete a stale docs/acceptance/report.github.html if present. add_cmd + scaffold.init write the set + cleanup; scaffold.init adds the report.html gitignore line (GITIGNORE_LINE restored).
+  - id: P2.T1.S3
+    text: |-
+      Update check.check() report-sync to the new REPORT_SET (existence-gated, unchanged logic). Tests green; ruff + mypy.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

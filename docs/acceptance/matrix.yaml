@@ -920,3 +920,14 @@ rows:
     status: ci
     notes: Existence-gated report-sync folded into check() (P2); reaches existing consumer
       repos on fr upgrade.
+  - id: acceptance-report-formats
+    capability: Acceptance report
+    acceptance: The committed deterministic report set is three files — report_local.html
+      (local HTML), report_linked.html (github HTML), and report_linked.md (github Markdown,
+      rendered inline on github.com); report.html is ad-hoc and uncommitted.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-25-acceptance-report-formats-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Extends the report feature: markdown renderer + 3-format set + report.html
+      reverts to ad-hoc (plan 2026-07-25-acceptance-report-formats).'
