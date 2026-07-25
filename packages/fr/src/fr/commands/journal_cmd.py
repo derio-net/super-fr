@@ -23,6 +23,7 @@ from fr.journal.model import (
     JournalParseError,
     journal_path,
     parse_journal,
+    resolve_journal_read_path,
     serialize_entry,
 )
 
@@ -117,7 +118,8 @@ def render(
 ) -> None:
     """Emit journal entries as Markdown (fail-open: missing/bad file → nothing)."""
     root = resolve_repo_root()
-    path = journal_path(root, scope, slug)  # type: ignore[arg-type]
+    # Read-resolve so a render still works after the spec/plan was archived.
+    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
     try:
         entries = _load(path)
     except JournalParseError:
@@ -139,7 +141,8 @@ def check(
 ) -> None:
     """Freshness gate. Non-zero on a parse error or any `open` finding."""
     root = resolve_repo_root()
-    path = journal_path(root, scope, slug)  # type: ignore[arg-type]
+    # Read-resolve so a check still gates on an archived journal's findings.
+    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
     try:
         entries = _load(path)
     except JournalParseError as e:

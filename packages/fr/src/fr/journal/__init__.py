@@ -20,7 +20,9 @@ from fr.journal.model import (
     archived_journal_path,
     journal_path,
     parse_journal,
+    resolve_journal_read_path,
     serialize_entry,
+    spec_journal_slug,
 )
 
 __all__ = [
@@ -32,5 +34,7 @@ __all__ = [
     "archived_journal_path",
     "journal_path",
     "parse_journal",
+    "resolve_journal_read_path",
     "serialize_entry",
+    "spec_journal_slug",
 ]

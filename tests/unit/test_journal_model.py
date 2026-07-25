@@ -272,3 +272,69 @@ class TestIdInvariant:
                 title="t",
                 body="b",
             )
+
+
+class TestSpecJournalSlug:
+    """A spec file is `<slug>-design.md`; its spec-scope journal is keyed by the
+    bare `<slug>` (2026-07-22 spec §A). The slug helper bridges the two."""
+
+    def test_strips_design_suffix(self) -> None:
+        from fr.journal.model import spec_journal_slug
+
+        assert spec_journal_slug("2026-07-24-isolation-host-modes-design") == (
+            "2026-07-24-isolation-host-modes"
+        )
+
+    def test_passes_through_stem_without_design_suffix(self) -> None:
+        from fr.journal.model import spec_journal_slug
+
+        # An older / hand-named spec with no `-design` suffix maps to itself.
+        assert spec_journal_slug("2026-05-10-solo") == "2026-05-10-solo"
+
+    def test_only_strips_a_trailing_design(self) -> None:
+        from fr.journal.model import spec_journal_slug
+
+        # `-design` mid-slug is not a suffix and must survive.
+        assert spec_journal_slug("2026-01-01-design-system-design") == ("2026-01-01-design-system")
+
+
+class TestResolveJournalReadPath:
+    """Reads (render/check) resolve the active path if present, else the
+    archived one — so a journal stays readable after its spec/plan archives."""
+
+    def _write(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# Journal\n")
+
+    def test_prefers_active_when_present(self, tmp_path: Path) -> None:
+        from fr.journal.model import journal_path, resolve_journal_read_path
+
+        active = journal_path(tmp_path, "spec", "s")
+        self._write(active)
+        assert resolve_journal_read_path(tmp_path, "spec", "s") == active
+
+    def test_falls_back_to_archived(self, tmp_path: Path) -> None:
+        from fr.journal.model import archived_journal_path, resolve_journal_read_path
+
+        archived = archived_journal_path(tmp_path, "spec", "s")
+        self._write(archived)
+        assert resolve_journal_read_path(tmp_path, "spec", "s") == archived
+
+    def test_active_wins_over_archived_when_both_exist(self, tmp_path: Path) -> None:
+        from fr.journal.model import (
+            archived_journal_path,
+            journal_path,
+            resolve_journal_read_path,
+        )
+
+        active = journal_path(tmp_path, "plan", "p")
+        self._write(active)
+        self._write(archived_journal_path(tmp_path, "plan", "p"))
+        assert resolve_journal_read_path(tmp_path, "plan", "p") == active
+
+    def test_returns_active_path_when_neither_exists(self, tmp_path: Path) -> None:
+        from fr.journal.model import journal_path, resolve_journal_read_path
+
+        resolved = resolve_journal_read_path(tmp_path, "spec", "missing")
+        assert resolved == journal_path(tmp_path, "spec", "missing")
+        assert not resolved.exists()
