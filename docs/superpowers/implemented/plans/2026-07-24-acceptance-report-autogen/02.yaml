@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Sync enforcement — report --check + add regenerates
+  tag: agentic
+  depends_on:
+  - 1
+  acceptance:
+  - acceptance-report-cli-regen
+  - acceptance-report-drift-gate
+  tracking_issue: null
+tasks:
+- number: 1
+  title: fr acceptance report --check drift detection
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      TDD RED — tests: `fr acceptance report --check` exits 0 when report.html matches the deterministic render, non-zero (with a fix hint) when matrix.yaml was mutated without regenerating.
+  - id: P2.T1.S2
+    text: |-
+      Implement --check in report_cmd (and a small reusable drift helper the tripwire can import): render deterministically to a string, compare to on-disk report.html, exit non-zero on mismatch. Read-only (writes nothing).
+- number: 2
+  title: add_cmd regenerates report.html
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      TDD RED — test: `fr acceptance add` on a temp repo updates BOTH matrix.yaml and report.html; a follow-up `fr acceptance report --check` exits 0. A render failure warns but does not roll back the appended row.
+  - id: P2.T2.S2
+    text: |-
+      After the successful append + load_matrix invariant, regenerate docs/acceptance/report.html (deterministic, local). On render exception: print a warning to run `fr acceptance report`, do not roll back.
+  - id: P2.T2.S3
+    text: |-
+      Tests green; ruff + mypy.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-24T17:35:03+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-24T17:35:04+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-07-24T17:35:04+00:00'
+      note: null
+  completion:
+    at: '2026-07-24T17:35:05+00:00'
+    note: null
+    observed_prs: []

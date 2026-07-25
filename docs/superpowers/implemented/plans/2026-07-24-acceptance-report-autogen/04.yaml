@@ -1,0 +1,46 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Docs, version bump, acceptance rows, regenerate committed report
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Docs + opencode mirror + acceptance rows + version
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Update 'report.html (gitignored)' claims: .claude/rules/acceptance-matrix.md and scaffold.py RULE_TEMPLATE; run scripts/sync-opencode.py to regenerate .opencode/instructions/acceptance-matrix.md.
+  - id: P4.T1.S2
+    text: |-
+      Add acceptance rows via `fr acceptance add` for the Test Plan claims (status not-implemented→ci where unit-pinned), origin = this spec. This regenerates report.html automatically (dogfood).
+  - id: P4.T1.S3
+    text: |-
+      Ensure docs/acceptance/report.html is committed and `fr acceptance report --check` + `fr acceptance check` pass.
+  - id: P4.T1.S4
+    text: |-
+      Bump plugin version (minor) via scripts/bump-version.py; run full `uv run pytest -q --no-cov`, ruff format, mypy, and `fr plan self-review`.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T17:35:04+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T17:35:05+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-07-24T17:35:05+00:00'
+      note: null
+    P4.T1.S4:
+      state: x
+      ticked_at: '2026-07-24T17:35:05+00:00'
+      note: null
+  completion:
+    at: '2026-07-24T17:35:06+00:00'
+    note: null
+    observed_prs: []

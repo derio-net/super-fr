@@ -19,7 +19,14 @@ from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, row
 runner = CliRunner()
 
 
-def _links(root: Path, mode: str, *, ref: str = "main", sibling_root: str = "..") -> LinkBuilder:
+def _links(
+    root: Path,
+    mode: str,
+    *,
+    ref: str = "main",
+    sibling_root: str = "..",
+    probe: bool = True,
+) -> LinkBuilder:
     return LinkBuilder(
         mode=mode,
         ref=ref,
@@ -28,6 +35,7 @@ def _links(root: Path, mode: str, *, ref: str = "main", sibling_root: str = ".."
         sibling_root=sibling_root,
         org="derio-net",
         own_repo="own",
+        probe=probe,
     )
 
 
@@ -139,6 +147,166 @@ def test_panels_only_when_status_present(tmp_path: Path) -> None:
     assert "FAILING" not in all_ci
     with_fail = _render(root, row(id="a") + row(id="f", status="failing"))
     assert "Failing" in with_fail
+
+
+# ── Deterministic render (a pure function of matrix.yaml) ───────────────────
+
+
+def test_probe_false_skips_archive_twin(tmp_path: Path) -> None:
+    """probe=False → no filesystem lookup, the raw ref path is emitted whether
+    or not an archived twin exists (determinism for a committed report)."""
+    root = make_repo(tmp_path, row())
+    det = _links(root, "github", probe=False)
+    before = det.url("own:docs/superpowers/specs/s.md")
+    # Archive the spec — with probing this would flip the link to the twin.
+    (root / "docs" / "superpowers" / "specs" / "s.md").rename(
+        root / "docs" / "superpowers" / "implemented" / "specs" / "s.md"
+    )
+    after = det.url("own:docs/superpowers/specs/s.md")
+    assert before == after
+    assert "implemented" not in after
+    assert after.endswith("/specs/s.md")
+
+
+def test_deterministic_report_reproducible_no_git_stamp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--deterministic` yields byte-identical output across runs and a
+    matrix-derived stamp with no git date/hash."""
+    root = make_repo(tmp_path, row(id="a") + row(id="b"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    out = root / "docs" / "acceptance" / "report.html"
+
+    r1 = runner.invoke(app, ["acceptance", "report", "--deterministic"])
+    assert r1.exit_code == 0, r1.output
+    first = out.read_text()
+    r2 = runner.invoke(app, ["acceptance", "report", "--deterministic"])
+    assert r2.exit_code == 0, r2.output
+    second = out.read_text()
+
+    assert first == second
+    assert "2 rows · links: local" in first
+    assert "matrix @" not in first
+
+
+# ── the committed report SET (local + github) ───────────────────────────────
+
+
+def test_render_committed_set_two_files(tmp_path: Path) -> None:
+    from fr.acceptance.report import REPORT_SET, render_committed_set
+
+    root = make_repo(tmp_path, row(id="a") + row(id="b"))
+    files = render_committed_set(load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root)
+    assert set(files) == set(REPORT_SET)
+    assert set(files) == {
+        "docs/acceptance/report.html",
+        "docs/acceptance/report.github.html",
+    }
+    local = files["docs/acceptance/report.html"]
+    github = files["docs/acceptance/report.github.html"]
+    # local: relative links; github: github.com blob links pinned to main.
+    assert "links: local" in local
+    assert "blob/main/" not in local
+    assert "links: github" in github
+    assert "https://github.com/derio-net/own/blob/main/" in github
+
+
+def test_render_committed_set_is_deterministic(tmp_path: Path) -> None:
+    from fr.acceptance.report import render_committed_set
+
+    root = make_repo(tmp_path, row(id="a") + row(id="b"))
+    m = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    assert render_committed_set(m, root) == render_committed_set(m, root)
+
+
+def test_report_deterministic_writes_both_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    res = runner.invoke(app, ["acceptance", "report", "--deterministic"])
+    assert res.exit_code == 0, res.output
+    local = root / "docs" / "acceptance" / "report.html"
+    github = root / "docs" / "acceptance" / "report.github.html"
+    assert local.exists() and github.exists()
+    assert "links: local" in local.read_text()
+    assert "blob/main/" in github.read_text()
+
+
+def test_report_deterministic_out_is_single_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--out keeps the single-file escape hatch (back-compat)."""
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    res = runner.invoke(
+        app, ["acceptance", "report", "--deterministic", "--out", "docs/acceptance/only.html"]
+    )
+    assert res.exit_code == 0, res.output
+    assert (root / "docs" / "acceptance" / "only.html").exists()
+    assert not (root / "docs" / "acceptance" / "report.github.html").exists()
+
+
+def test_report_explicit_out_equal_to_default_is_single_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit --out equal to the default path is still single-file (not the
+    set) — the sentinel-default distinguishes explicit from omitted."""
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    res = runner.invoke(
+        app, ["acceptance", "report", "--deterministic", "--out", "docs/acceptance/report.html"]
+    )
+    assert res.exit_code == 0, res.output
+    assert (root / "docs" / "acceptance" / "report.html").exists()
+    assert not (root / "docs" / "acceptance" / "report.github.html").exists()
+
+
+# ── report --check (drift gate) ─────────────────────────────────────────────
+
+
+def test_report_check_detects_missing_github_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
+    (root / "docs" / "acceptance" / "report.github.html").unlink()
+    res = runner.invoke(app, ["acceptance", "report", "--check"])
+    assert res.exit_code == 3, res.output
+    assert "report.github.html" in res.output
+
+
+def test_report_check_passes_when_in_sync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
+    res = runner.invoke(app, ["acceptance", "report", "--check"])
+    assert res.exit_code == 0, res.output
+    assert "in sync" in res.output
+
+
+def test_report_check_detects_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
+    # Mutate the matrix WITHOUT regenerating (simulates a hand-edited status flip).
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix.write_text(matrix.read_text() + row(id="b"))
+    res = runner.invoke(app, ["acceptance", "report", "--check"])
+    assert res.exit_code == 3, res.output
+    assert "stale" in res.output
+    assert "--deterministic" in res.output
+
+
+def test_report_check_missing_report_is_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    res = runner.invoke(app, ["acceptance", "report", "--check"])
+    assert res.exit_code == 3, res.output
+    assert not (root / "docs" / "acceptance" / "report.html").exists()  # --check writes nothing
 
 
 # ── T3: report verb ────────────────────────────────────────────────────────

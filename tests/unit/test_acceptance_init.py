@@ -49,8 +49,17 @@ def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.Monkey
     assert "SAME PR" in rule
     assert "not-implemented" in rule and "skipped" in rule  # the status ladder
 
-    gitignore = (root / ".gitignore").read_text()
-    assert "docs/acceptance/report.html" in gitignore
+    # Both reports are TRACKED artifacts now: init generates the SET and does
+    # NOT gitignore them.
+    local = root / "docs" / "acceptance" / "report.html"
+    github = root / "docs" / "acceptance" / "report.github.html"
+    assert local.exists() and github.exists(), "init must generate both committed reports"
+    assert "links: local" in local.read_text()
+    assert "links: github" in github.read_text()  # skeleton has 0 rows → no blob links yet
+    if (root / ".gitignore").exists():
+        gi = (root / ".gitignore").read_text()
+        assert "docs/acceptance/report.html" not in gi
+        assert "docs/acceptance/report.github.html" not in gi
 
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 
@@ -70,7 +79,8 @@ def test_init_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         for p in (
             "docs/acceptance/matrix.yaml",
             ".claude/rules/acceptance-matrix.md",
-            ".gitignore",
+            "docs/acceptance/report.html",
+            "docs/acceptance/report.github.html",
             ".github/workflows/acceptance-report.yml",
         )
     }
@@ -109,6 +119,25 @@ def test_add_works_on_fresh_skeleton(tmp_path: Path, monkeypatch: pytest.MonkeyP
     )
     assert result.exit_code == 0, result.output
     assert _invoke(root, monkeypatch, "status").output.count("first") == 1
+
+
+def test_init_degrades_when_report_identity_unresolvable(tmp_path: Path) -> None:
+    """A pre-existing keyless matrix with no git remote must not crash the
+    scaffold on report render — the report is skipped, everything else stands."""
+    from fr.acceptance.scaffold import init
+
+    root = tmp_path / "norepo"
+    (root / "docs" / "acceptance").mkdir(parents=True)
+    (root / "docs" / "acceptance" / "matrix.yaml").write_text("rows:\n")  # no org/repo, no .git
+
+    outcome = init(root, "acme", "widget", backend="github")
+
+    assert "docs/acceptance/report.html" in outcome.skipped
+    assert "docs/acceptance/report.github.html" in outcome.skipped
+    assert not (root / "docs" / "acceptance" / "report.html").exists()
+    assert not (root / "docs" / "acceptance" / "report.github.html").exists()
+    # The rest of the scaffold still landed.
+    assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 
 
 # ── T2: workflow content + trap-7 coverage gate ────────────────────────────

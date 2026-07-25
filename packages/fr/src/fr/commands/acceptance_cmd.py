@@ -125,49 +125,99 @@ def report_cmd(
     sibling_root: str = typer.Option(
         "..", "--sibling-root", help="Where sister repos live, relative to the repo root."
     ),
-    out: Path = typer.Option(
-        Path("docs/acceptance/report.html"), "--out", help="Output path (repo-relative)."
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        help="Single explicit output/check target (repo-relative). Omit to operate "
+        "on the whole committed set (report.html + report.github.html).",
+    ),
+    deterministic: bool = typer.Option(
+        False,
+        "--deterministic",
+        help="Render as a pure function of matrix.yaml (matrix-derived stamp, no git "
+        "date/hash, no filesystem twin-probing) — the committed-report / drift-check path.",
+    ),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Verify the on-disk report matches a fresh deterministic render; write "
+        "nothing, exit non-zero on drift. Implies --deterministic.",
     ),
 ) -> None:
-    """Render the HTML report."""
-    import subprocess
+    """Render the HTML report set (or, with --check, verify it is in sync).
 
-    from fr.acceptance.check import resolve_identity
-    from fr.acceptance.report import LinkBuilder, render
+    Default subject is the committed SET — both `report.html` (local) and
+    `report.github.html` (github). `--out` narrows to a single explicit file
+    (the ad-hoc / back-compat escape hatch)."""
+    from fr.acceptance.report import render_committed_set, render_deterministic, render_report
 
     if link_mode not in ("github", "local"):
         err_console.print(f"--link-mode must be github|local, got {link_mode!r}")
         raise typer.Exit(2)
     root = resolve_repo_root()
     matrix = _load(root)
+    # No `--out` → operate on the whole committed set; an explicit `--out`
+    # (even one equal to the default path) narrows to that single file.
+
+    if check:
+        try:
+            if out is not None:
+                expected = {
+                    out.as_posix(): render_deterministic(
+                        matrix, root, (root / out).resolve().parent, sibling_root, link_mode
+                    )
+                }
+            else:
+                expected = render_committed_set(matrix, root)
+        except AcceptanceError as e:
+            err_console.print(f"[red]error:[/red] {e}")
+            raise typer.Exit(1) from e
+        stale = []
+        for rel, want in expected.items():
+            path = root / rel
+            got = path.read_text() if path.exists() else None
+            if got != want:
+                stale.append(rel)
+        if not stale:
+            typer.echo(f"{', '.join(expected)} in sync with matrix.yaml")
+            return
+        typer.echo(
+            f"ERROR: stale (drifted from docs/acceptance/matrix.yaml): {', '.join(stale)} — "
+            "run `fr acceptance report --deterministic` and commit the result.",
+            err=True,
+        )
+        raise typer.Exit(3)
+
     try:
-        org, own_repo = resolve_identity(matrix, root)
+        if out is not None:
+            out_path = (root / out).resolve()
+            html = (
+                render_deterministic(matrix, root, out_path.parent, sibling_root, link_mode)
+                if deterministic
+                else render_report(matrix, root, out_path.parent, sibling_root, link_mode, ref)
+            )
+            files = {str(out_path): html}
+        elif deterministic:
+            files = {
+                str(root / rel): html for rel, html in render_committed_set(matrix, root).items()
+            }
+        else:
+            # Ad-hoc default render → a single git-stamped report.html honoring
+            # --link-mode (back-compat: the CI artifact step still uses this).
+            out_path = (root / "docs" / "acceptance" / "report.html").resolve()
+            files = {
+                str(out_path): render_report(
+                    matrix, root, out_path.parent, sibling_root, link_mode, ref
+                )
+            }
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(1) from e
-    out_path = (root / out).resolve()
-    links = LinkBuilder(
-        mode=link_mode,
-        ref=ref,
-        root=root,
-        out_dir=out_path.parent,
-        sibling_root=sibling_root,
-        org=org,
-        own_repo=own_repo,
-    )
-    ts = subprocess.run(
-        ["git", "log", "-1", "--format=%cs %h"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
-    stamp = f"matrix @ {ts} · links: {link_mode}" + (
-        f" (ref {ref})" if link_mode == "github" else ""
-    )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render(matrix, links, stamp))
-    typer.echo(f"wrote {out_path}")
+    for path_str, html in files.items():
+        p = Path(path_str)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(html)
+    typer.echo(f"wrote {', '.join(files)}")
 
 
 @acceptance_app.command("status")
@@ -320,12 +370,30 @@ def add_cmd(
     )
     matrix_path.write_text(text + indented)
     try:
-        load_matrix(matrix_path)  # post-write invariant
+        reloaded = load_matrix(matrix_path)  # post-write invariant
     except AcceptanceError as e:
         matrix_path.write_text(original)
         err_console.print(f"[red]error:[/red] append produced an invalid matrix, rolled back: {e}")
         raise typer.Exit(2) from e
     typer.echo(f"added row {new_row.id} ({new_row.status})")
+
+    # Keep the committed HTML report in lockstep with the matrix (the CLI
+    # mutation path of "always update the report when matrix.yaml changes").
+    # The row is already valid on disk — a render failure NEVER rolls it back
+    # (that would discard valid work); it warns, and the CI sync tripwire is
+    # the backstop.
+    from fr.acceptance.report import render_committed_set
+
+    try:
+        for rel, html in render_committed_set(reloaded, root).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(html)
+    except Exception as e:  # noqa: BLE001 — never fail an accepted row on a render hiccup
+        err_console.print(
+            f"[yellow]warning:[/yellow] row added but the HTML reports were not regenerated ({e}); "
+            "run `fr acceptance report --deterministic` and commit them."
+        )
 
 
 @acceptance_app.command("init")

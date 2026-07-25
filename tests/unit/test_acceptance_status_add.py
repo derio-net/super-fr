@@ -115,6 +115,38 @@ def test_add_appends_and_preserves_header(tmp_path: Path, monkeypatch: pytest.Mo
     assert check.exit_code == 0, check.output
 
 
+def test_add_regenerates_both_reports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fr acceptance add` creates/updates BOTH reports in the same tree, and a
+    follow-up `report --check` passes (the CLI mutation path stays in sync)."""
+    root = make_repo(tmp_path, row())
+    local = root / "docs" / "acceptance" / "report.html"
+    github = root / "docs" / "acceptance" / "report.github.html"
+    assert not local.exists() and not github.exists()
+    result = _invoke(root, monkeypatch, *ADD_ARGS)
+    assert result.exit_code == 0, result.output
+    assert local.exists() and github.exists(), "add must generate both reports"
+    assert "new-row" in local.read_text()
+    assert "blob/main/" in github.read_text()
+    check = _invoke(root, monkeypatch, "report", "--check")
+    assert check.exit_code == 0, check.output
+
+
+def test_add_render_failure_keeps_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A report-render failure warns but never rolls back the appended row."""
+    import fr.acceptance.report as report_mod
+
+    def boom(*_a: object, **_k: object) -> str:
+        raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(report_mod, "render_deterministic", boom)
+    root = make_repo(tmp_path, row())
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    result = _invoke(root, monkeypatch, *ADD_ARGS)
+    assert result.exit_code == 0, result.output
+    assert "new-row" in matrix_path.read_text()  # row survived
+    assert "report" in result.output.lower()  # warned to run report
+
+
 def test_add_rejects_bad_status_file_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

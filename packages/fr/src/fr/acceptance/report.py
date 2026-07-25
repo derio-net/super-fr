@@ -29,6 +29,11 @@ class LinkBuilder:
     github: own repo pinned to `ref`, sibling repos pinned to main.
     local:  paths relative to the emitted HTML, siblings via sibling_root
             (default `..` — repos as siblings; trap 2).
+
+    `probe` (default True) follows archived-spec twins by touching the
+    filesystem. A committed, drift-checked report must be a pure function of
+    matrix.yaml, so the deterministic path passes probe=False: no filesystem
+    lookup, the raw ref path is emitted (see report_cmd's --deterministic).
     """
 
     def __init__(
@@ -41,10 +46,12 @@ class LinkBuilder:
         sibling_root: str,
         org: str,
         own_repo: str,
+        probe: bool = True,
     ) -> None:
         self.mode, self.ref, self.root, self.out_dir = mode, ref, root, out_dir
         self.sibling = (root / sibling_root).resolve()
         self.org, self.own_repo = org, own_repo
+        self.probe = probe
 
     def _base(self, repo: str) -> Path:
         return self.root if repo == self.own_repo else self.sibling / repo
@@ -52,7 +59,10 @@ class LinkBuilder:
     def _actual_path(self, repo: str, path: str) -> str:
         """Follow an archived spec to its twin when the checkout can tell
         (trap 1). Sibling probing requires a real checkout (trap 4); the own
-        repo root is authoritative."""
+        repo root is authoritative. Skipped entirely when probe=False so the
+        render stays a pure function of matrix.yaml (deterministic path)."""
+        if not self.probe:
+            return path
         base = self._base(repo)
         checkout = repo == self.own_repo or (base / ".git").exists()
         if checkout and not (base / path).exists():
@@ -227,3 +237,103 @@ def render(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
         "failing fails CI.</footer></div>"
     )
     return "\n".join(out)
+
+
+def _identity(matrix: Matrix, root: Path) -> tuple[str, str]:
+    # Local import: check.py and report.py both sit under fr.acceptance; keep
+    # the import lazy so neither module has to import the other at load time.
+    from fr.acceptance.check import resolve_identity
+
+    return resolve_identity(matrix, root)
+
+
+def render_deterministic(
+    matrix: Matrix,
+    root: Path,
+    out_dir: Path,
+    sibling_root: str,
+    link_mode: str = "local",
+) -> str:
+    """Render as a pure function of `matrix.yaml`: a matrix-derived stamp (no
+    git date/hash) and probe=False links (no filesystem twin-probing). This is
+    the committed-report and drift-check rendering — reproducible from the
+    matrix alone, so the tripwire only fires on a genuine matrix change.
+
+    `root`/`out_dir` are resolved to canonical paths so callers passing
+    unresolved or symlinked paths (`add` via `resolve_repo_root()` vs. the
+    tripwire via `__file__.resolve()`) render byte-identically — otherwise a
+    sibling-repo relative link could differ and `add` would emit a report the
+    tripwire rejects."""
+    root = root.resolve()
+    out_dir = out_dir.resolve()
+    org, own_repo = _identity(matrix, root)
+    links = LinkBuilder(
+        mode=link_mode,
+        ref="main",
+        root=root,
+        out_dir=out_dir,
+        sibling_root=sibling_root,
+        org=org,
+        own_repo=own_repo,
+        probe=False,
+    )
+    stamp = f"{len(matrix.rows)} rows · links: {link_mode}"
+    return render(matrix, links, stamp)
+
+
+# The committed report SET: one file per link mode, both deterministic. This
+# mapping (repo-relative path -> link_mode) is the single source of truth — the
+# CLI (`report --deterministic`/`--check`), `add`, `init`, the `check` gate, and
+# the sync tripwire all iterate it, so the file list lives in exactly one place.
+REPORT_SET: dict[str, str] = {
+    "docs/acceptance/report.html": "local",  # relative links, viewable from a checkout
+    "docs/acceptance/report.github.html": "github",  # github.com blob links @ main
+}
+
+
+def render_committed_set(matrix: Matrix, root: Path) -> dict[str, str]:
+    """`{repo-relative path: html}` for every committed report — one per entry
+    in `REPORT_SET`, each a deterministic render of `matrix.yaml`. All live in
+    `docs/acceptance/`, so a shared `out_dir` keeps their relative links
+    consistent."""
+    out_dir = root / "docs" / "acceptance"
+    return {
+        rel: render_deterministic(matrix, root, out_dir, "..", link_mode)
+        for rel, link_mode in REPORT_SET.items()
+    }
+
+
+def render_report(
+    matrix: Matrix,
+    root: Path,
+    out_dir: Path,
+    sibling_root: str,
+    link_mode: str,
+    ref: str,
+) -> str:
+    """Ad-hoc local render: git-stamped (last-commit date/hash) and
+    twin-probing links. Non-deterministic by design — for a throwaway local
+    view, never the committed artifact."""
+    import subprocess
+
+    org, own_repo = _identity(matrix, root)
+    links = LinkBuilder(
+        mode=link_mode,
+        ref=ref,
+        root=root,
+        out_dir=out_dir,
+        sibling_root=sibling_root,
+        org=org,
+        own_repo=own_repo,
+    )
+    ts = subprocess.run(
+        ["git", "log", "-1", "--format=%cs %h"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    stamp = f"matrix @ {ts} · links: {link_mode}" + (
+        f" (ref {ref})" if link_mode == "github" else ""
+    )
+    return render(matrix, links, stamp)

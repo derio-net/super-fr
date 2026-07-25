@@ -216,6 +216,28 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
 
     result.warnings.extend(_workflow_coverage_warnings(matrix, root, own))
 
+    # Report-set sync (the "every fr-acceptance repo, the moment it touches the
+    # matrix" gate): if the repo has committed ANY report from the set, then
+    # ALL must exist AND match a fresh deterministic render. Existence-gated so
+    # report-less matrices / bare fixtures are untouched. Read-only — renders in
+    # memory, compares bytes. An unresolvable identity can't render, so it is
+    # skipped here (the render CLIs surface that separately).
+    from fr.acceptance.report import REPORT_SET, render_committed_set
+
+    if any((root / rel).exists() for rel in REPORT_SET):
+        try:
+            expected_reports = render_committed_set(matrix, root)
+        except AcceptanceError:
+            expected_reports = {}
+        for rel, want in expected_reports.items():
+            report_path = root / rel
+            got = report_path.read_text() if report_path.exists() else None
+            if got != want:
+                result.errors.append(
+                    f"report drift: {rel} is missing or stale vs docs/acceptance/matrix.yaml — "
+                    "run `fr acceptance report --deterministic` and commit both reports"
+                )
+
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]
     result.warning_rows = open_rows(matrix)
     result.summary = (

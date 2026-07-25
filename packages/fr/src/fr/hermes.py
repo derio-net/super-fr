@@ -359,7 +359,7 @@ def install(source_root: Path, home: Path) -> None:
 
     shutil.copytree(src_hooks, hooks_install_dir, dirs_exist_ok=True)
 
-    # super-fr 3.15.0 through 3.15.2 targeted an obsolete filename and registered
+    # super-fr 3.15.0 through 3.17.0 targeted an obsolete filename and registered
     # the nag on an unusable lifecycle event. Converge upgrades by
     # replacing every registration/approval owned by the managed hook tree.
     remove_managed_hooks(legacy_config_path, hooks_install_dir)

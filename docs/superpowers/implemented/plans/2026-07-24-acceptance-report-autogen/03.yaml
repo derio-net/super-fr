@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Track the report — un-gitignore, scaffold, CI tripwire
+  tag: agentic
+  depends_on:
+  - 2
+  acceptance:
+  - acceptance-report-tracked
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Make report.html tracked + scaffold generates it
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Remove `docs/acceptance/report.html` from .gitignore (repo root).
+  - id: P3.T1.S2
+    text: |-
+      scaffold.py: init no longer appends GITIGNORE_LINE for report.html; instead generate an initial deterministic local report.html. Update test_acceptance_init.py: assert report.html is NOT gitignored and IS generated (keep the CI artifact-path assertion).
+  - id: P3.T1.S3
+    text: |-
+      Add tests/unit/test_tripwire_acceptance_report_sync.py mirroring test_tripwire_opencode_skills_sync.py: committed report.html == deterministic render of committed matrix.yaml, importing the same drift helper the --check CLI uses.
+  - id: P3.T1.S4
+    text: |-
+      Tests green; ruff + mypy.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-24T17:35:04+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-24T17:35:04+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-07-24T17:35:04+00:00'
+      note: null
+    P3.T1.S4:
+      state: x
+      ticked_at: '2026-07-24T17:35:04+00:00'
+      note: null
+  completion:
+    at: '2026-07-24T17:35:05+00:00'
+    note: null
+    observed_prs: []

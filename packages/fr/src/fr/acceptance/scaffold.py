@@ -1,4 +1,4 @@
-"""`fr acceptance init` — scaffold the matrix, CI workflow, rule, gitignore.
+"""`fr acceptance init` — scaffold the matrix, CI workflow, rule, HTML report.
 
 Write-if-missing semantics throughout: re-running init never touches a file
 the operator (or a previous run) already owns.
@@ -75,9 +75,15 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   runs `fr acceptance status --brief` at session start** (Claude Code does it
   automatically via the super-fr SessionStart hook; other harnesses honor
   this line).
-- Local report: `fr acceptance report` → `docs/acceptance/report.html`
-  (gitignored), links relative to sibling checkouts (`--sibling-root`,
-  default `..`).
+- Reports: TWO **committed, tracked** renderings of `matrix.yaml`, kept in
+  sync — `docs/acceptance/report.html` (local links, viewable from a checkout)
+  and `docs/acceptance/report.github.html` (github.com blob links). `fr
+  acceptance add` regenerates **both**; drift (incl. hand-edited status flips) is
+  gated by `fr acceptance check` itself — it fails when either committed report
+  is missing or stale. Regenerate by hand with `fr acceptance report
+  --deterministic` (writes both) and commit them. Ad-hoc `fr acceptance report`
+  (no flag) gives a git-stamped throwaway local render; links resolve relative to
+  sibling checkouts (`--sibling-root`, default `..`).
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
   writes a Markdown summary to each Actions run (branch, PR, main), uploads the
   GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.
@@ -155,8 +161,6 @@ jobs:
             gh issue create --title "Acceptance debt" --body-file /tmp/digest.md
           fi
 """
-
-GITIGNORE_LINE = "docs/acceptance/report.html"
 
 # Gitea Actions is deliberately GitHub-Actions-YAML-compatible (per Gitea's
 # own docs — "designed to be compatible with GitHub Actions wherever
@@ -369,12 +373,32 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
     else:
         write_if_missing(".github/workflows/acceptance-report.yml", WORKFLOW_TEMPLATE)
 
-    gitignore = root / ".gitignore"
-    lines = gitignore.read_text().splitlines() if gitignore.exists() else []
-    if GITIGNORE_LINE in lines:
-        skipped.append(".gitignore")
-    else:
-        lines.append(GITIGNORE_LINE)
-        gitignore.write_text("\n".join(lines) + "\n")
-        created.append(".gitignore")
+    # The HTML reports are TRACKED artifacts kept in lockstep with the matrix
+    # (enforced by `fr acceptance check`) — no longer gitignored. Generate the
+    # whole SET (report.html local + report.github.html github) so a freshly
+    # scaffolded repo carries the committed matrix→report correspondence from
+    # row zero.
+    from fr.acceptance.model import load_matrix
+    from fr.acceptance.report import REPORT_SET, render_committed_set
+
+    # Degrade, don't crash: an unresolvable identity (hand-rolled matrix with no
+    # org/repo keys AND no git remote) must not abort the whole scaffold after
+    # the other files are written — mirrors add_cmd's warn-don't-roll-back
+    # policy. The scaffolded matrix always carries the keys, so this only guards
+    # a pre-existing partial state; re-running init (write-if-missing) recovers.
+    try:
+        rendered = render_committed_set(
+            load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root
+        )
+    except Exception:  # noqa: BLE001 — a render hiccup never fails init
+        rendered = None
+    for report_rel in REPORT_SET:
+        report_path = root / report_rel
+        if report_path.exists():
+            skipped.append(report_rel)
+        elif rendered is not None:
+            report_path.write_text(rendered[report_rel])
+            created.append(report_rel)
+        else:
+            skipped.append(report_rel)
     return InitOutcome(created=created, skipped=skipped)
