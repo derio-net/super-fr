@@ -49,17 +49,21 @@ def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.Monkey
     assert "SAME PR" in rule
     assert "not-implemented" in rule and "skipped" in rule  # the status ladder
 
-    # Both reports are TRACKED artifacts now: init generates the SET and does
-    # NOT gitignore them.
-    local = root / "docs" / "acceptance" / "report.html"
-    github = root / "docs" / "acceptance" / "report.github.html"
-    assert local.exists() and github.exists(), "init must generate both committed reports"
-    assert "links: local" in local.read_text()
-    assert "links: github" in github.read_text()  # skeleton has 0 rows → no blob links yet
-    if (root / ".gitignore").exists():
-        gi = (root / ".gitignore").read_text()
-        assert "docs/acceptance/report.html" not in gi
-        assert "docs/acceptance/report.github.html" not in gi
+    # The committed SET (report_local.html + report_linked.html +
+    # report_linked.md) is generated; ad-hoc report.html is gitignored.
+    d = root / "docs" / "acceptance"
+    assert (d / "report_local.html").exists() and "links: local" in (
+        d / "report_local.html"
+    ).read_text()
+    assert (d / "report_linked.html").exists() and "links: github" in (
+        d / "report_linked.html"
+    ).read_text()
+    assert (d / "report_linked.md").exists() and (d / "report_linked.md").read_text().startswith(
+        "# Acceptance coverage"
+    )
+    gi = (root / ".gitignore").read_text()
+    assert "docs/acceptance/report.html" in gi  # ad-hoc report.html is gitignored
+    assert "docs/acceptance/report_linked.md" not in gi  # committed set is NOT gitignored
 
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 
@@ -79,8 +83,10 @@ def test_init_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         for p in (
             "docs/acceptance/matrix.yaml",
             ".claude/rules/acceptance-matrix.md",
-            "docs/acceptance/report.html",
-            "docs/acceptance/report.github.html",
+            "docs/acceptance/report_local.html",
+            "docs/acceptance/report_linked.html",
+            "docs/acceptance/report_linked.md",
+            ".gitignore",
             ".github/workflows/acceptance-report.yml",
         )
     }
@@ -132,10 +138,13 @@ def test_init_degrades_when_report_identity_unresolvable(tmp_path: Path) -> None
 
     outcome = init(root, "acme", "widget", backend="github")
 
-    assert "docs/acceptance/report.html" in outcome.skipped
-    assert "docs/acceptance/report.github.html" in outcome.skipped
-    assert not (root / "docs" / "acceptance" / "report.html").exists()
-    assert not (root / "docs" / "acceptance" / "report.github.html").exists()
+    for rel in (
+        "docs/acceptance/report_local.html",
+        "docs/acceptance/report_linked.html",
+        "docs/acceptance/report_linked.md",
+    ):
+        assert rel in outcome.skipped
+        assert not (root / rel).exists()
     # The rest of the scaffold still landed.
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 

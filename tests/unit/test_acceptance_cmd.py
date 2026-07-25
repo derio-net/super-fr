@@ -59,10 +59,10 @@ def test_check_fails_when_one_report_missing(
     root = make_repo(tmp_path, row(id="a"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    (root / "docs" / "acceptance" / "report.github.html").unlink()
+    (root / "docs" / "acceptance" / "report_linked.md").unlink()
     res = run_check(root, monkeypatch)
     assert res.exit_code == 1, res.output
-    assert "report.github.html" in res.output
+    assert "report_linked.md" in res.output
 
 
 # ── T1: CLI skeleton + identity resolution ─────────────────────────────────

@@ -1,0 +1,47 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Markdown renderer + three-format committed set
+  tag: agentic
+  depends_on: []
+  acceptance:
+  - acceptance-report-formats
+  tracking_issue: null
+tasks:
+- number: 1
+  title: render_markdown + REPORT_SET keyed by (link_mode, format)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      TDD RED — tests in test_acceptance_report.py: render_markdown yields GFM (# title, status-count table, one ## section + table per capability, [repo:name](url) links, sharp-line sections), deterministic; cell text with pipes/newlines is escaped so tables stay valid.
+  - id: P1.T1.S2
+    text: |-
+      Add render_markdown(matrix, links, stamp) to report.py mirroring render()'s information as GitHub-flavored markdown.
+  - id: P1.T1.S3
+    text: |-
+      Redefine REPORT_SET = {report_local.html:(local,html), report_linked.html:(github,html), report_linked.md:(github,md)}; render_committed_set dispatches html→render, md→render_markdown. Keep render_deterministic single-file for the html case (used by --out/--check-single).
+  - id: P1.T1.S4
+    text: |-
+      New tests green; existing report tests updated for the renamed/retyped set; ruff + mypy.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-25T04:52:22+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-25T04:52:22+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-25T04:52:22+00:00'
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: '2026-07-25T04:52:22+00:00'
+      note: null
+  completion:
+    at: '2026-07-25T04:52:23+00:00'
+    note: null
+    observed_prs: []

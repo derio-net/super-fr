@@ -115,18 +115,19 @@ def test_add_appends_and_preserves_header(tmp_path: Path, monkeypatch: pytest.Mo
     assert check.exit_code == 0, check.output
 
 
-def test_add_regenerates_both_reports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`fr acceptance add` creates/updates BOTH reports in the same tree, and a
-    follow-up `report --check` passes (the CLI mutation path stays in sync)."""
+def test_add_regenerates_report_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fr acceptance add` creates/updates the whole committed set in the same
+    tree, and a follow-up `report --check` passes (the CLI mutation path stays
+    in sync)."""
     root = make_repo(tmp_path, row())
-    local = root / "docs" / "acceptance" / "report.html"
-    github = root / "docs" / "acceptance" / "report.github.html"
-    assert not local.exists() and not github.exists()
+    d = root / "docs" / "acceptance"
+    files = [d / "report_local.html", d / "report_linked.html", d / "report_linked.md"]
+    assert not any(f.exists() for f in files)
     result = _invoke(root, monkeypatch, *ADD_ARGS)
     assert result.exit_code == 0, result.output
-    assert local.exists() and github.exists(), "add must generate both reports"
-    assert "new-row" in local.read_text()
-    assert "blob/main/" in github.read_text()
+    assert all(f.exists() for f in files), "add must generate the report set"
+    assert "new-row" in (d / "report_local.html").read_text()
+    assert "blob/main/" in (d / "report_linked.md").read_text()
     check = _invoke(root, monkeypatch, "report", "--check")
     assert check.exit_code == 0, check.output
 
