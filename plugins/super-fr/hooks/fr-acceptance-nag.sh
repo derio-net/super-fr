@@ -27,5 +27,16 @@ case "$out" in
   *"no acceptance debt"*) exit 0 ;;
 esac
 
-printf 'Acceptance debt in this repo (backfill owed — details: fr acceptance status):\n%s\n' "$out"
+message=$(printf 'Acceptance debt in this repo (backfill owed — details: fr acceptance status):\n%s\n' "$out")
+event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty')
+if [ "$event" = "pre_llm_call" ]; then
+  first_turn=$(printf '%s' "$input" | jq -r '.extra.is_first_turn // false')
+  [ "$first_turn" = "true" ] || exit 0
+  jq -n --arg context "$message" '{context: $context}'
+elif [ "$event" = "on_session_start" ]; then
+  # Forward-compatible with a Hermes release that consumes lifecycle context.
+  jq -n --arg context "$message" '{context: $context}'
+else
+  printf '%s\n' "$message"
+fi
 exit 0

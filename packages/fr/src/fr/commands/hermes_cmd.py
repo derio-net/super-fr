@@ -1,7 +1,7 @@
 """`fr hermes ...` CLI — install/uninstall super-fr into a Hermes Agent home.
 
 Thin wrapper over `fr.hermes`; install.sh's opt-in Hermes path calls these so
-every invasive, reversible mutation (cli-config.yaml hooks merge, allowlist,
+every invasive, reversible mutation (config.yaml hooks merge, allowlist,
 SOUL.md managed block, hook-tree copy) is tested Python, not bash.
 """
 

@@ -29,7 +29,7 @@ Hermes's extension model maps cleanly onto what super-fr already ships:
 ## Key design decisions (from the spec journal)
 
 - **Invasive install mutations live in a tested `fr hermes` subcommand** (P5), not
-  bash: install.sh is jq-only and cannot merge YAML into the shared `cli-config.yaml`.
+  bash: install.sh is jq-only and cannot merge YAML into the shared `config.yaml`.
   The subcommand (reusing fr's `yaml` dep) does the idempotent, reversible hooks
   merge, allowlist edit, and SOUL.md block — install.sh just copies skills and calls it.
 - **`fr-goal` runs autonomously inside Hermes** (P7) via `delegate_task`, whose
@@ -47,10 +47,11 @@ Hermes's extension model maps cleanly onto what super-fr already ships:
    behavior unchanged), add the Hermes `pre_tool_call` edit entrypoint.
 4. **Bash/push enforcement** — port `fr-isolation-guard` + `fr-merged-pr-push-guard`
    to Hermes `terminal`/`execute_code` hooks.
-5. **Config + `fr hermes` subcommand** — `cli-config.snippet.yaml` (hooks-sync
+5. **Config + `fr hermes` subcommand** — `config.snippet.yaml` (hooks-sync
    tripwire) and the tested install/uninstall subcommand doing all invasive mutations.
-6. **install.sh + model defaults** — opt-in Hermes install block calling
-   `fr hermes install`; ship `hermes:` fr-models tier defaults with a resolve test.
+6. **install.sh + model resolution** — opt-in Hermes install block calling
+   `fr hermes install`; ship no model defaults, ask on first use when unresolved,
+   persist the operator's choice, and reuse it on later runs.
 7. **fr-goal delegation** — harness-aware phase dispatch (`delegate_task`), staying
    at the SKILL.md line cap, re-synced.
 8. **[manual] post-merge verification** — install into a real Hermes Agent and walk

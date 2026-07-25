@@ -15,34 +15,36 @@ phase:
   - hermes-isolation-gate-bash
 tasks:
 - number: 1
-  title: Author the cli-config.snippet.yaml and a hooks-sync tripwire
+  title: Author the config.snippet.yaml and a hooks-sync tripwire
   steps:
   - id: P5.T1.S1
     text: |
       Write tests/unit/test_tripwire_hermes_hooks_sync.py: assert every (event, matcher,
-      command) triple in .hermes/cli-config.snippet.yaml references a real shipped hook
+      command) triple in .hermes/config.snippet.yaml references a real shipped hook
       script under plugins/super-fr/hooks/hermes/ (or the acceptance-nag), and that the four
       expected entries exist: pre_tool_call+write_file|patch, pre_tool_call+terminal|execute_code
-      (guard), pre_tool_call+terminal|execute_code (merged-pr-push), on_session_start (nag).
+      (guard), pre_tool_call+terminal|execute_code (merged-pr-push), pre_llm_call (nag).
   - id: P5.T1.S2
     text: |
       Run the new test. EXPECT RED — snippet absent.
   - id: P5.T1.S3
     text: |
-      Write .hermes/cli-config.snippet.yaml with the hooks: block listing those four
+      Write .hermes/config.snippet.yaml with the hooks: block listing those four
       entries (event, matcher regex, command path placeholder, timeout). Add an
-      on_session_start entry for the acceptance nag (reuse fr-acceptance-nag.sh logic;
-      Hermes on_session_start payload). Run the test. EXPECT GREEN.
+      first-turn pre_llm_call entry for the acceptance nag (reuse
+      fr-acceptance-nag.sh logic; emit JSON context only when
+      extra.is_first_turn=true because Hermes 0.18.x discards on_session_start
+      return values). Run the test. EXPECT GREEN.
 - number: 2
   title: Implement `fr hermes install/uninstall` doing all invasive mutations (tested)
   steps:
   - id: P5.T2.S1
     text: |
       Write tests/unit/test_hermes_install_cmd.py against a temp HERMES_HOME: fr hermes
-      install merges the snippet hooks into a cli-config.yaml (idempotent re-run adds
+      install merges the snippet hooks into a config.yaml (idempotent re-run adds
       nothing; unrelated keys preserved), adds shell-hooks-allowlist.json entries, and
       applies the SOUL.md managed block; fr hermes uninstall strips hooks+allowlist+block
-      leaving user content intact; malformed/absent cli-config.yaml is handled fail-safe.
+      leaving user content intact; malformed/absent config.yaml is handled fail-safe.
   - id: P5.T2.S2
     text: |
       Run `cd <worktree> && uv run pytest tests/unit/test_hermes_install_cmd.py -q --no-cov`.

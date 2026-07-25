@@ -123,11 +123,20 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       fi
     done
   fi
-  # Hermes: reverse fr hermes install (hooks/allowlist/SOUL block, hook tree),
-  # then remove the skill copies. Only touches super-fr's own files.
-  if command -v fr &>/dev/null; then
-    if fr hermes uninstall --source "$PLUGIN_ROOT" --home "$HERMES_HOME" 2>/dev/null; then
+  # Hermes: run the uninstall from THIS checkout, not whichever `fr` happens
+  # to be installed globally. Upgrade removals may rename shipped inputs; a
+  # stale binary then cannot parse the new tree and used to fail silently,
+  # leaving active hooks behind while deleting only the skills.
+  if [ -d "$HERMES_HOME" ]; then
+    if ! command -v uv &>/dev/null; then
+      echo "  ERROR: uv is required to remove Hermes hooks with this checkout's fr code" >&2
+      exit 1
+    fi
+    if uv run --project "$PLUGIN_ROOT/packages/fr" fr hermes uninstall --source "$PLUGIN_ROOT" --home "$HERMES_HOME"; then
       echo "  Removed Hermes hooks/rules ($HERMES_HOME)"
+    else
+      echo "  ERROR: failed to remove Hermes hooks/rules; Hermes skills left intact" >&2
+      exit 1
     fi
   fi
   if [ -d "$HERMES_HOME/skills/fr" ]; then
@@ -639,8 +648,8 @@ else
 fi
 
 # 10b. Hermes Agent delivery — opt-in only (Hermes discovers skills from
-# ~/.hermes/skills/ and loads its own cli-config.yaml + SOUL.md). Gated like
-# OpenCode. The invasive, reversible mutations (cli-config.yaml hooks merge,
+# ~/.hermes/skills/ and loads its own config.yaml + SOUL.md). Gated like
+# OpenCode. The invasive, reversible mutations (config.yaml hooks merge,
 # shell-hooks allowlist, SOUL.md managed block, hook-tree copy) are delegated to
 # the tested `fr hermes install` subcommand, so install.sh stays bash+jq only.
 # Runs AFTER the fr CLI install above so `fr` is on PATH.

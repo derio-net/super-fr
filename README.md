@@ -356,10 +356,10 @@ HERMES_SKILLS_INSTALL=1 bash scripts/install.sh
 |---|---|---|
 | Skills | `~/.hermes/skills/fr/<name>/SKILL.md` | invoke as `/fr-goal`, `/fr-plan`, … |
 | Rules | `~/.hermes/SOUL.md` | a delimited `<!-- super-fr:rules START/END -->` block; content outside it is never touched |
-| Hooks | `~/.hermes/super-fr-hooks/` | copied tree; `cli-config.yaml` `hooks:` entries point at it |
+| Hooks | `~/.hermes/super-fr-hooks/` | copied tree; `config.yaml` `hooks:` entries point at it |
 | Approvals | `~/.hermes/shell-hooks-allowlist.json` | pre-recorded so non-TTY runs register without a prompt |
 
-The invasive, reversible parts (the `cli-config.yaml` `hooks:` merge, the
+The invasive, reversible parts (the `config.yaml` `hooks:` merge, the
 allowlist, the SOUL.md block) are done by a tested subcommand rather than by
 shell, and are fully undone by its inverse:
 
@@ -375,7 +375,8 @@ fr hermes uninstall --source <super-fr checkout> [--home ~/.hermes]
 the Claude Code hook, so the isolation guards are the *same scripts*, gating
 `pre_tool_call` for both edits (`write_file`/`patch`) **and** bash
 (`terminal`/`execute_code` — git/gh mutations outside isolation, and pushes to a
-merged PR's branch). `on_session_start` surfaces open acceptance debt. Escapes
+merged PR's branch). A first-turn `pre_llm_call` context hook surfaces open
+acceptance debt (Hermes 0.18.x discards `on_session_start` return values). Escapes
 are unchanged: `fr isolation up`, `.fr-isolation-allow`, `FR_BASE_OK=1`.
 
 **Models.** super-fr ships **no** Hermes model bindings on purpose —
