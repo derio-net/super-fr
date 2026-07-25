@@ -144,12 +144,18 @@ def report_cmd(
         "nothing, exit non-zero on drift. Implies --deterministic.",
     ),
 ) -> None:
-    """Render the HTML report set (or, with --check, verify it is in sync).
+    """Render the report set (or, with --check, verify it is in sync).
 
-    Default subject is the committed SET — both `report.html` (local) and
-    `report.github.html` (github). `--out` narrows to a single explicit file
-    (the ad-hoc / back-compat escape hatch)."""
-    from fr.acceptance.report import render_committed_set, render_deterministic, render_report
+    Default subject is the committed SET — report_local.html (local HTML),
+    report_linked.html (github HTML) and report_linked.md (github Markdown).
+    With no flags, renders the ad-hoc, uncommitted `report.html` (git-stamped,
+    honoring --link-mode). `--out` narrows to a single explicit file."""
+    from fr.acceptance.report import (
+        prune_stale_reports,
+        render_committed_set,
+        render_deterministic,
+        render_report,
+    )
 
     if link_mode not in ("github", "local"):
         err_console.print(f"--link-mode must be github|local, got {link_mode!r}")
@@ -201,6 +207,7 @@ def report_cmd(
             files = {
                 str(root / rel): html for rel, html in render_committed_set(matrix, root).items()
             }
+            prune_stale_reports(root)
         else:
             # Ad-hoc default render → a single git-stamped report.html honoring
             # --link-mode (back-compat: the CI artifact step still uses this).
@@ -382,13 +389,14 @@ def add_cmd(
     # The row is already valid on disk — a render failure NEVER rolls it back
     # (that would discard valid work); it warns, and the CI sync tripwire is
     # the backstop.
-    from fr.acceptance.report import render_committed_set
+    from fr.acceptance.report import prune_stale_reports, render_committed_set
 
     try:
         for rel, html in render_committed_set(reloaded, root).items():
             path = root / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(html)
+        prune_stale_reports(root)
     except Exception as e:  # noqa: BLE001 — never fail an accepted row on a render hiccup
         err_console.print(
             f"[yellow]warning:[/yellow] row added but the HTML reports were not regenerated ({e}); "

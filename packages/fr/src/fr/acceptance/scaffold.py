@@ -11,6 +11,10 @@ from pathlib import Path
 
 from fr._hosts import HostBackend
 
+# `report.html` is the ad-hoc / uncommitted render (git-stamped, CI/local);
+# the committed set is report_local.html / report_linked.html / report_linked.md.
+GITIGNORE_LINE = "docs/acceptance/report.html"
+
 MATRIX_TEMPLATE = """\
 # Acceptance matrix — the registry of business-level acceptance tests and
 # where each is verified. Rendered by `fr acceptance report`; gated in CI by
@@ -75,15 +79,19 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   runs `fr acceptance status --brief` at session start** (Claude Code does it
   automatically via the super-fr SessionStart hook; other harnesses honor
   this line).
-- Reports: TWO **committed, tracked** renderings of `matrix.yaml`, kept in
-  sync — `docs/acceptance/report.html` (local links, viewable from a checkout)
-  and `docs/acceptance/report.github.html` (github.com blob links). `fr
-  acceptance add` regenerates **both**; drift (incl. hand-edited status flips) is
-  gated by `fr acceptance check` itself — it fails when either committed report
-  is missing or stale. Regenerate by hand with `fr acceptance report
-  --deterministic` (writes both) and commit them. Ad-hoc `fr acceptance report`
-  (no flag) gives a git-stamped throwaway local render; links resolve relative to
-  sibling checkouts (`--sibling-root`, default `..`).
+- Reports: THREE **committed, tracked** renderings of `matrix.yaml`, kept in
+  sync — `docs/acceptance/report_local.html` (local links, viewable from a
+  checkout), `docs/acceptance/report_linked.html` (github.com blob links), and
+  `docs/acceptance/report_linked.md` (the linked report as **Markdown**, which
+  github.com renders inline — committed `.html` is shown as source, not
+  rendered). `fr acceptance add` regenerates **all three**; drift (incl.
+  hand-edited status flips) is gated by `fr acceptance check` itself — it fails
+  when any committed report is missing or stale. Regenerate by hand with `fr
+  acceptance report --deterministic` (writes all three) and commit them.
+  `docs/acceptance/report.html` is a separate **ad-hoc, gitignored** render: `fr
+  acceptance report` (no flag) writes it git-stamped honoring `--link-mode`
+  (github in CI, local otherwise); links resolve relative to sibling checkouts
+  (`--sibling-root`, default `..`).
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
   writes a Markdown summary to each Actions run (branch, PR, main), uploads the
   GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.
@@ -373,13 +381,14 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
     else:
         write_if_missing(".github/workflows/acceptance-report.yml", WORKFLOW_TEMPLATE)
 
-    # The HTML reports are TRACKED artifacts kept in lockstep with the matrix
-    # (enforced by `fr acceptance check`) — no longer gitignored. Generate the
-    # whole SET (report.html local + report.github.html github) so a freshly
-    # scaffolded repo carries the committed matrix→report correspondence from
-    # row zero.
+    # The committed report SET (report_local.html + report_linked.html +
+    # report_linked.md) are TRACKED artifacts kept in lockstep with the matrix
+    # (enforced by `fr acceptance check`). Generate them so a freshly scaffolded
+    # repo carries the committed matrix→report correspondence from row zero. The
+    # ad-hoc `report.html` stays gitignored (github doesn't render committed
+    # HTML; report.html is a throwaway local/CI render).
     from fr.acceptance.model import load_matrix
-    from fr.acceptance.report import REPORT_SET, render_committed_set
+    from fr.acceptance.report import REPORT_SET, prune_stale_reports, render_committed_set
 
     # Degrade, don't crash: an unresolvable identity (hand-rolled matrix with no
     # org/repo keys AND no git remote) must not abort the whole scaffold after
@@ -401,4 +410,16 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
             created.append(report_rel)
         else:
             skipped.append(report_rel)
+    if rendered is not None:
+        prune_stale_reports(root)
+
+    # `report.html` is the ad-hoc / uncommitted render — gitignore it.
+    gitignore = root / ".gitignore"
+    lines = gitignore.read_text().splitlines() if gitignore.exists() else []
+    if GITIGNORE_LINE in lines:
+        skipped.append(".gitignore")
+    else:
+        lines.append(GITIGNORE_LINE)
+        gitignore.write_text("\n".join(lines) + "\n")
+        created.append(".gitignore")
     return InitOutcome(created=created, skipped=skipped)

@@ -1,16 +1,19 @@
-"""CI tripwire: docs/acceptance/report.html must stay in sync with matrix.yaml.
+"""CI tripwire: the committed report SET must stay in sync with matrix.yaml.
 
-`docs/acceptance/matrix.yaml` is the source; `docs/acceptance/report.html` is
-its committed HTML rendering. Any matrix change — a `fr acceptance add` row or a
-hand-edited status flip — must be accompanied by a regenerated report. This test
-fails loud on drift instead of shipping a stale artifact, the same posture as
+`docs/acceptance/matrix.yaml` is the source; the committed set —
+`report_local.html` (local HTML), `report_linked.html` (github HTML) and
+`report_linked.md` (github Markdown) — is its deterministic rendering. Any matrix
+change (a `fr acceptance add` row or a hand-edited status flip) must be
+accompanied by regenerated reports. This test fails loud on drift instead of
+shipping a stale artifact, the same posture as
 `test_tripwire_opencode_skills_sync.py`.
 
-The comparison uses `render_deterministic` — the exact function the
-`fr acceptance report --check` CLI uses — so the gate and the CLI can never
-disagree about what "in sync" means. `render_deterministic` is a pure function
-of `matrix.yaml` (matrix-derived stamp, no git date/hash, no filesystem
-twin-probing), so this only fires on a genuine matrix change.
+The comparison uses `render_committed_set` — the exact function the
+`fr acceptance report --check` CLI and the `fr acceptance check` gate use — so
+they can never disagree about what "in sync" means. It is a pure function of
+`matrix.yaml` (matrix-derived stamp, no git date/hash, no filesystem
+twin-probing), so this only fires on a genuine matrix change. (`report.html` is
+the ad-hoc, uncommitted render and is deliberately NOT covered here.)
 """
 
 from __future__ import annotations

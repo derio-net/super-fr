@@ -896,16 +896,18 @@ rows:
       + exit 1; SystemExit(2) for missing binaries still propagates (I1).
   - id: acceptance-report-dual
     capability: Acceptance report
-    acceptance: 'Two committed HTML reports are generated together: report.html (local
-      links) and report.github.html (github.com blob links).'
+    acceptance: The committed report set is generated together and regenerated on every
+      matrix mutation (fr acceptance add / report --deterministic / init).
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-07-24-acceptance-dual-reports-design.md
+    - super-fr:docs/superpowers/specs/2026-07-25-acceptance-report-formats-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_report.py
+      - super-fr:tests/unit/test_acceptance_status_add.py
     status: ci
-    notes: render_committed_set + report --deterministic write both; add/init generate
-      both. Unit-pinned per-PR.
+    notes: render_committed_set writes the whole set; add/init regenerate it. File set
+      is report_local.html + report_linked.html + report_linked.md (see acceptance-report-formats).
   - id: acceptance-report-dual-gate
     capability: Acceptance report
     acceptance: 'Every fr-acceptance repo is gated on both reports: fr acceptance check
@@ -927,7 +929,9 @@ rows:
       rendered inline on github.com); report.html is ad-hoc and uncommitted.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-25-acceptance-report-formats-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Extends the report feature: markdown renderer + 3-format set + report.html
-      reverts to ad-hoc (plan 2026-07-25-acceptance-report-formats).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_report.py
+    status: ci
+    notes: 'Markdown renderer + 3-format set (report_local.html, report_linked.html,
+      report_linked.md); report.html reverts to ad-hoc/gitignored. Unit-pinned per-PR.'

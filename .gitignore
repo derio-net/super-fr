@@ -38,3 +38,6 @@ scripts/tmp/
 # for reproducible installs, same spirit as uv.lock.
 node_modules/
 *.tsbuildinfo
+
+# ad-hoc acceptance report (committed set is report_local.html / report_linked.{html,md})
+docs/acceptance/report.html
