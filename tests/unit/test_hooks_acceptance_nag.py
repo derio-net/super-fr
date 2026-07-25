@@ -23,8 +23,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "fr-acceptance-nag.sh"
 
 
-def run_hook(cwd: Path) -> subprocess.CompletedProcess[str]:
-    payload = {"session_id": "sess-1", "cwd": str(cwd), "hook_event_name": "SessionStart"}
+def run_hook(
+    cwd: Path, event: str = "SessionStart", *, is_first_turn: bool | None = None
+) -> subprocess.CompletedProcess[str]:
+    payload: dict[str, object] = {
+        "session_id": "sess-1",
+        "cwd": str(cwd),
+        "hook_event_name": event,
+    }
+    if is_first_turn is not None:
+        payload["extra"] = {"is_first_turn": is_first_turn}
     return subprocess.run(
         ["bash", str(SCRIPT)],
         input=json.dumps(payload),
@@ -49,6 +57,28 @@ def test_nag_emits_capped_debt(tmp_path: Path) -> None:
     assert "debt-2" in result.stdout
     assert "debt-4" not in result.stdout  # capped at 3
     assert "+2 more" in result.stdout
+
+
+def test_nag_emits_hermes_json_context_on_first_llm_call(tmp_path: Path) -> None:
+    root = make_repo(tmp_path, row(id="debt", status="skipped"), git=False)
+    _git(root)
+
+    result = run_hook(root, event="pre_llm_call", is_first_turn=True)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "Acceptance debt" in payload["context"]
+    assert "debt" in payload["context"]
+
+
+def test_nag_is_silent_after_hermes_first_turn(tmp_path: Path) -> None:
+    root = make_repo(tmp_path, row(id="debt", status="skipped"), git=False)
+    _git(root)
+
+    result = run_hook(root, event="pre_llm_call", is_first_turn=False)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ""
 
 
 def test_nag_silent_on_zero_debt(tmp_path: Path) -> None:
