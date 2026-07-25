@@ -859,7 +859,7 @@ rows:
       completes without the client abandoning the in-flight request, so bridge dispatch
       leaks no VK concurrency permits
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_mcp_client_timeout.py
@@ -873,7 +873,7 @@ rows:
       their own responses — card/workspace state transitions stay correct (no stale-response
       misattribution)
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_mcp_client.py
@@ -886,7 +886,7 @@ rows:
       a failure metric (mcp_init_error) instead of an unhandled traceback; the next
       tick runs normally
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-vk-mcp-timeout-permit-leak-design.md
     levels:
       int:
       - super-fr:tests/integration/test_bridge_resilience.py
