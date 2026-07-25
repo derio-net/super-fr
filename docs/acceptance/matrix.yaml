@@ -899,7 +899,7 @@ rows:
     acceptance: 'Two committed HTML reports are generated together: report.html (local
       links) and report.github.html (github.com blob links).'
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-dual-reports-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-acceptance-dual-reports-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_report.py
@@ -912,7 +912,7 @@ rows:
       fails when the committed report set is stale or incomplete (enforcement via the
       universal gate, no per-repo workflow change).'
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-acceptance-dual-reports-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-acceptance-dual-reports-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_cmd.py
