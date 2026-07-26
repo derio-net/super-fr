@@ -39,3 +39,13 @@ test_fr_goal_journal.py::test_journal_render_derives_pr_body asserts the literal
 ### p4-d1 · discovery · Two full-suite failures in this pod are environmental, not regressions (phase 4)
 
 tests/unit/test_isolation_cmd.py (8 failures) needs FR_ISOLATION_TARGET unset to run devcontainer-mode assertions CI-style; this pod exports FR_ISOLATION_TARGET=worktree. tests/integration/test_bridge_project_id.py (2 failures) reads a real VK_DERIO_OPS_PROJECT_ID from the pod env, overriding the fixture's 'test-vk-project-id'. Both reproduce on the pre-change tree and both pass with those variables cleared: 1839 passed, 80 skipped, 90.36% coverage under the CI gate. Neither is caused by this PR, and neither affects GitHub Actions, which has neither variable set.
+
+<!-- fr:journal kind=finding scope=plan id=rev-f1 created=2026-07-26T15:56:16 phase=1 state=fixed -->
+### rev-f1 · finding [fixed] · Review: the hook matched only tool_name 'Agent', inert on hosts spelling it 'Task' (phase 1)
+
+Claude Code's subagent-dispatch tool is 'Agent' today and was 'Task' on older builds. A host on the old spelling would have installed a hook that never fires — silently reproducing the exact failure mode this hook exists to stop, and undetectably so, since an inert PreToolUse hook looks identical to a healthy one. Widened the hooks.json matcher to 'Agent|Task' and the script's tool_name check to accept both. No false-positive risk: the subagent_type check is what narrows. Pinned by test_legacy_task_tool_name_still_denied.
+
+<!-- fr:journal kind=review scope=plan id=rev-r1 created=2026-07-26T15:56:16 phase=3 -->
+### rev-r1 · review · Review: live end-to-end probe of the rewritten guard against real git repos (phase 3)
+
+Ran the hook directly against two real git repos with a live sentinel and a live linked worktree, outside pytest: 'git status' in repo A denied; 'cd B && fr isolation up' allowed; 'cd B && rm -rf /' allowed (target scoping is by repo, not by command); 'cd B && fr isolation down' allowed AND repo A's sentinel survived, with the next 'git status' in A still denied; 'cd A/sub && make' denied; 'echo hi && cd B && ls' denied (non-leading cd). Matches the spec's §D contract on every case. bash -n clean on all three changed scripts; shellcheck unavailable in this pod (noted, not run).

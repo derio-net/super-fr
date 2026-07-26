@@ -18,7 +18,9 @@ class TestPluginHooks:
         assert {m["matcher"] for m in events["PreToolUse"]} == {
             "Bash",
             "Edit|Write|MultiEdit|NotebookEdit",
-            "Agent",  # super-fr#420: refuses the poisoned phase-executor dispatch
+            # super-fr#420: refuses the poisoned phase-executor dispatch. Both
+            # spellings of the subagent tool — `Agent` today, `Task` on older builds.
+            "Agent|Task",
         }
 
     def test_registered_scripts_exist_and_are_executable(self) -> None:

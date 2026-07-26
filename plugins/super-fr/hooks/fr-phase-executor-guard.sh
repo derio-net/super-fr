@@ -36,8 +36,15 @@ set -eu
 
 input=$(cat)
 
+# The subagent-dispatch tool is `Agent` on current Claude Code and was `Task`
+# on older builds. Accept both: a host that still spells it `Task` would
+# otherwise get an inert hook and the silent poisoning this exists to stop.
+# Harmless either way — the subagent_type check below is what actually narrows.
 tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty')
-[ "$tool_name" = "Agent" ] || exit 0
+case "$tool_name" in
+  Agent | Task) ;;
+  *) exit 0 ;;
+esac
 
 # Claude Code dispatches a PLUGIN subagent by its plugin-qualified id, so the
 # hook normally sees `super-fr:fr-phase-executor`. A locally-installed copy of

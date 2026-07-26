@@ -48,11 +48,12 @@ def test_hook_is_registered_for_the_agent_tool() -> None:
     commands = {
         h["command"]
         for entry in data["hooks"]["PreToolUse"]
-        if entry.get("matcher") == "Agent"
+        if "Agent" in (entry.get("matcher") or "").split("|")
         for h in entry["hooks"]
     }
     assert "${CLAUDE_PLUGIN_ROOT}/hooks/fr-phase-executor-guard.sh" in commands, (
-        "the refusal hook must be registered under a PreToolUse `Agent` matcher — "
+        "the refusal hook must be registered under a PreToolUse matcher covering "
+        "the `Agent` subagent tool — "
         "unregistered, it is inert and the poisoned dispatch succeeds silently"
     )
 

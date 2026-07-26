@@ -127,6 +127,11 @@ class TestOutOfScopeDispatchesUntouched:
     def test_non_agent_tool_allowed(self) -> None:
         assert decision(run_hook(dispatch(QUALIFIED, "worktree", tool="Bash"))) is None
 
+    def test_legacy_task_tool_name_still_denied(self) -> None:
+        """The subagent tool is `Agent` today and was `Task` on older builds.
+        A host on the old spelling must not get an inert hook."""
+        assert decision(run_hook(dispatch(QUALIFIED, "worktree", tool="Task"))) == "deny"
+
     def test_missing_subagent_type_allowed(self) -> None:
         payload = dispatch(QUALIFIED, "worktree")
         del payload["tool_input"]["subagent_type"]
