@@ -15,6 +15,14 @@ Three shipped surfaces have to agree, and each has already drifted once:
 - **fr-goal §6** is what the orchestrator follows, and §3 uses the flag
   *correctly*, so without an explicit contrast §3 reads as precedent for §6.
 
+A fourth surface carries the carve-out to the harnesses the hook can't reach:
+`plugins/super-fr/rules/fr-isolation-required.md` is the ONE file that ships to
+all three — `~/.claude/rules/` via install.sh, `.opencode/instructions/` via
+sync-opencode.py, and `~/.hermes/SOUL.md` via sync-hermes.py's managed block.
+It also *names* `agent-worktree-default.md`, the org rule that instructs the
+harmful default, so without the carve-out super-fr's own rule endorses it
+unqualified.
+
 Prose drifts; this fails loud when it does. Style follows
 `test_tripwire_claude_p.py`.
 """
@@ -31,6 +39,10 @@ PLUGIN = REPO_ROOT / "plugins" / "super-fr"
 HOOK = PLUGIN / "hooks" / "fr-phase-executor-guard.sh"
 AGENT = PLUGIN / "agents" / "fr-phase-executor.md"
 FR_GOAL = PLUGIN / "skills" / "fr-goal" / "SKILL.md"
+RULE = PLUGIN / "rules" / "fr-isolation-required.md"
+REPO_RULE_MIRROR = REPO_ROOT / ".claude" / "rules" / "fr-isolation-required.md"
+OPENCODE_RULE = REPO_ROOT / ".opencode" / "instructions" / "fr-isolation-required.md"
+HERMES_RULES = REPO_ROOT / ".hermes" / "SOUL.d" / "super-fr-rules.md"
 
 
 def _front_matter_description(path: Path) -> str:
@@ -92,6 +104,40 @@ def test_fr_goal_section_6_says_without_the_flag() -> None:
     assert 'isolation: "worktree"' in body, "§6 must name the flag it is ruling out"
     assert re.search(r"without\b[^\n]*isolation|isolation[^\n]*\bwithout\b", body, re.IGNORECASE), (
         '§6 must say to dispatch WITHOUT `isolation: "worktree"`'
+    )
+
+
+def test_shipped_rule_carries_the_carve_out() -> None:
+    """The rule is the only surface reaching Claude Code, OpenCode AND Hermes.
+
+    It also names `agent-worktree-default.md` — the org rule that instructs the
+    harmful default — so without the carve-out super-fr's own shipped rule
+    endorses it unqualified on every host.
+    """
+    text = RULE.read_text(encoding="utf-8")
+    assert "agent-worktree-default" in text, "precondition: the rule cites the org convention"
+    assert "fr-phase-executor" in text, (
+        "the shipped rule must name the one agent exempted from the always-pass-the-flag default"
+    )
+    assert 'isolation: "worktree"' in text
+
+
+def test_repo_rule_mirror_carries_the_carve_out() -> None:
+    """`.claude/rules/fr-isolation-required.md` is hand-maintained — no script
+    regenerates it (AGENTS.md flags it as the one exception), so it silently
+    drifts from the plugin rule unless something checks."""
+    assert "fr-phase-executor" in REPO_RULE_MIRROR.read_text(encoding="utf-8")
+
+
+def test_carve_out_reaches_opencode_and_hermes() -> None:
+    """Both generated rule mirrors must carry it. The sync tripwires prove the
+    mirrors match their source; this proves the *content* actually arrives —
+    a rule that never mentioned it would keep both of those green."""
+    assert "fr-phase-executor" in OPENCODE_RULE.read_text(encoding="utf-8"), (
+        "sync-opencode.py must have carried the carve-out into .opencode/instructions/"
+    )
+    assert "fr-phase-executor" in HERMES_RULES.read_text(encoding="utf-8"), (
+        "sync-hermes.py must have carried the carve-out into the SOUL.md managed block"
     )
 
 

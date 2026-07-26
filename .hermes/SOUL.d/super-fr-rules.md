@@ -20,9 +20,10 @@ first, so the base repo is never touched"). Prose gets bypassed under load: a
 session enters isolation for the brainstorm, then *wanders* — follow-up edits in
 another repo, later turns, host-side chores — all landing on the **base clone**
 with no gate forcing re-entry. This hook is the tool-layer backstop, mirroring
-`agent-worktree-default.md` (Agent tool) and `fr-isolation-guard.sh` (Bash
-tool). It is session-independent: it fires on any edit to an fr-enabled repo,
-even when no pipeline skill ran this session.
+`agent-worktree-default.md` (Agent tool — but see the `fr-phase-executor`
+carve-out below) and `fr-isolation-guard.sh` (Bash tool). It is
+session-independent: it fires on any edit to an fr-enabled repo, even when no
+pipeline skill ran this session.
 
 ## How it decides (fail-closed)
 
@@ -83,6 +84,32 @@ that the workspace is a genuine isolation, per the checks above.
   ```
 - **`FR_BASE_OK=1`** — a one-shot env escape for a deliberate base-clone edit
   (e.g. a quick host-side chore you accept is outside isolation).
+
+## Carve-out: `fr-phase-executor` must NOT get its own worktree
+
+The org convention `agent-worktree-default.md` says every code-writing subagent
+is dispatched with `isolation: "worktree"`. **`fr-phase-executor` is the one
+exception, and it is a hard one** (super-fr#420):
+
+- fr-goal §6 dispatches phase executors **serially into the fr-isolation
+  worktree that already exists** — that worktree *is* their isolation. A second
+  one is not extra safety, it is a different repo state.
+- Given the flag, the executor wakes in a fresh worktree cut from `main`: the
+  spec and plan live on the feature branch and are invisible, so `fr pickup` is
+  unsatisfiable; Bash is denied by `fr-isolation-guard.sh`; and Edit/Write is
+  denied by *this* rule's gate, because a fresh checkout has no marker and the
+  gate is fail-closed. **The dispatch still succeeds**, so the run looks healthy
+  while every phase does nothing.
+- The reason is *not* "this agent is read-only" — it writes code. It is that
+  **the two isolation mechanisms are mutually exclusive, not composable.**
+
+fr-goal §3 is the opposite case and keeps the flag: those agents each start a
+**fresh** pipeline in a **different** repo, so they need their own workspace.
+
+Enforcement, not prose: `plugins/super-fr/hooks/fr-phase-executor-guard.sh`
+(PreToolUse, `Agent|Task`) refuses the combination outright. Harnesses without
+an `isolation` argument on their dispatch tool — Hermes' `delegate_task`,
+OpenCode — cannot express the poisoned shape and need no hook.
 
 ## Rollout (two-file pattern)
 

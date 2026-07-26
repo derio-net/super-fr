@@ -24,6 +24,18 @@ To work here:
   them in `.fr-isolation-allow` at the repo root (`*` spans `/`).
 - For a deliberate one-off base edit, set `FR_BASE_OK=1`.
 
+**Carve-out — `fr-phase-executor` must NOT be dispatched with
+`isolation: "worktree"`.** The org `agent-worktree-default` convention says
+every code-writing subagent gets its own worktree; this one agent is the
+exception, because fr-goal §6 runs phase executors serially *inside the
+fr-isolation worktree that already exists* — that worktree IS their isolation,
+and the two mechanisms don't compose. With the flag the executor wakes in a
+fresh worktree cut from `main` where the spec/plan are invisible and every
+Bash/Edit call is denied, yet the dispatch succeeds, so the run looks healthy
+while nothing happens (super-fr#420). `fr-phase-executor-guard.sh` refuses it.
+fr-goal §3 is the opposite case and keeps the flag — those agents each start a
+fresh pipeline in a different repo.
+
 `.fr-isolation` is gitignored and must never be committed (a CI tripwire
 enforces this). Full rationale and the operator-level install live in the
 shipped rule `~/.claude/rules/fr-isolation-required.md` (super-fr). This mirror
