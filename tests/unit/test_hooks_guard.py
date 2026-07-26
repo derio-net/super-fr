@@ -356,3 +356,123 @@ class TestCdTransitionAllowance:
         assert decision(result) == "deny"
         reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
         assert "cd <worktree> &&" in reason
+
+
+class TestCrossRepoReachability:
+    """super-fr#421: a session holding a pipeline in repo A must be able to
+    start work in repo B.
+
+    The harness reports the SESSION cwd as `.cwd` regardless of any inline
+    `cd`, so for a pipeline session the guard always engages and everything
+    hinges on the two escapes — which used to be mutually exclusive. The `cd`
+    allowance admitted only `FR_CD_ALLOW_PREFIXES` (never another repo), and
+    the `fr isolation` allowance was start-anchored, so a command that must
+    LEAD with `cd <repo-B>` could never match it. You could lead with `cd`, or
+    start with `fr isolation`, but not both — and the deny message recommended
+    `fr isolation up`, which was itself denied.
+
+    This blocked fr-goal §3: its per-repo agents inherit the same sentinel and
+    the same base-repo cwd, so the multi-repo story was unreachable from the
+    flow that defines it.
+    """
+
+    def _setup(self, tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str]]:
+        """A live pipeline in repo A, with a live linked worktree.
+
+        The worktree matters: without one, the #341 self-heal fires and every
+        command is allowed, so the tests would pass for the wrong reason.
+        """
+        repo_a = _git_repo(tmp_path / "repo-a")
+        _git(repo_a, "worktree", "add", "-q", str(tmp_path / "wt-a"), "-b", "feat/x")
+        repo_b = _git_repo(tmp_path / "repo-b")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo_a)
+        # Deliberately narrow: repo-b is NOT under any allowed prefix, so an
+        # allow can only come from the new different-repo scoping.
+        env = {"FR_CD_ALLOW_PREFIXES": str(tmp_path / "worktrees-nonexistent")}
+        return repo_a, repo_b, sentinels, env
+
+    def test_precondition_base_repo_still_denied(self, tmp_path: Path) -> None:
+        """Fences the fixture: the pipeline really is live and guarding."""
+        repo_a, _, sentinels, env = self._setup(tmp_path)
+        assert decision(run_hook(payload("git status", repo_a), sentinels, env)) == "deny"
+
+    def test_fr_isolation_status_in_other_repo_allowed(self, tmp_path: Path) -> None:
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        result = run_hook(payload(f"cd {repo_b} && fr isolation status", repo_a), sentinels, env)
+        assert decision(result) is None
+
+    def test_fr_isolation_up_in_other_repo_allowed(self, tmp_path: Path) -> None:
+        """The exact command #421 reports the deny message recommending."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        result = run_hook(
+            payload(f"cd {repo_b} && fr isolation up --branch fix/x", repo_a), sentinels, env
+        )
+        assert decision(result) is None
+
+    def test_arbitrary_command_in_other_repo_allowed(self, tmp_path: Path) -> None:
+        """Scoping is by TARGET, not by command: the pipeline's discipline
+        simply does not extend to a repo that is not the pipeline's repo."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        result = run_hook(payload(f"cd {repo_b} && git push", repo_a), sentinels, env)
+        assert decision(result) is None
+
+    def test_isolation_down_in_other_repo_does_not_clear_this_sentinel(
+        self, tmp_path: Path
+    ) -> None:
+        """`fr isolation down` in ANOTHER repo must not retire repo A's
+        pipeline — the sentinel names repo A and repo A is still live."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        sentinel = sentinels / "sess-1.json"
+        result = run_hook(payload(f"cd {repo_b} && fr isolation down", repo_a), sentinels, env)
+        assert decision(result) is None
+        assert sentinel.exists(), "another repo's `down` must not clear this pipeline"
+        assert decision(run_hook(payload("git status", repo_a), sentinels, env)) == "deny"
+
+    def test_cd_into_non_repo_still_denied(self, tmp_path: Path) -> None:
+        """The allowance is 'a different git repo', not 'anywhere outside'."""
+        repo_a, _, sentinels, env = self._setup(tmp_path)
+        plain = tmp_path / "not-a-repo"
+        plain.mkdir()
+        result = run_hook(payload(f"cd {plain} && ls", repo_a), sentinels, env)
+        assert decision(result) == "deny"
+
+    def test_cd_back_into_base_repo_still_denied(self, tmp_path: Path) -> None:
+        """Repo-root precedence survives: `fr isolation up` inside the
+        pipeline's OWN repo is the old path, and a cd there is not an escape."""
+        repo_a, _, sentinels, env = self._setup(tmp_path)
+        sub = repo_a / "src"
+        sub.mkdir()
+        assert decision(run_hook(payload(f"cd {sub} && make", repo_a), sentinels, env)) == "deny"
+
+    def test_worktree_of_base_repo_still_reached_via_prefix(self, tmp_path: Path) -> None:
+        """A linked worktree of the SAME repo reports a different toplevel, so
+        it is admitted by the new scoping too. Behaviour is unchanged — it was
+        already allowed by the fr-worktrees prefix — but the reason must not
+        become "it is a different repo", which would be wrong."""
+        repo_a, _, sentinels, env = self._setup(tmp_path)
+        result = run_hook(payload(f"cd {tmp_path / 'wt-a'} && git log", repo_a), sentinels, env)
+        assert decision(result) is None
+
+    def test_chained_cd_allowed_by_design(self, tmp_path: Path) -> None:
+        """`cd /tmp && cd <other> && …` satisfies the allowance on its FIRST
+        segment. Recorded as intentional, not overlooked: only the leading `cd`
+        is ever evaluated, per the guard's own axiom — a discipline backstop,
+        not a security boundary — and `test_cd_then_back_into_repo_allowed_by_design`
+        already blesses the same shape in the other direction. #421 asked for
+        this to be closed or blessed deliberately; it is blessed."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        env["FR_CD_ALLOW_PREFIXES"] = str(tmp_path / "tmpd")
+        (tmp_path / "tmpd").mkdir()
+        result = run_hook(
+            payload(f"cd {tmp_path / 'tmpd'} && cd {repo_b} && ls", repo_a), sentinels, env
+        )
+        assert decision(result) is None
+
+    def test_deny_reason_names_the_other_repo_escape(self, tmp_path: Path) -> None:
+        """A message that recommends `fr isolation up` while denying it is the
+        specific trap #421 reports."""
+        repo_a, _, sentinels, env = self._setup(tmp_path)
+        result = run_hook(payload("git status", repo_a), sentinels, env)
+        reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "another repo" in reason.lower() or "different repo" in reason.lower()

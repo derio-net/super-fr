@@ -14,3 +14,18 @@ test_skill_validation.py::test_under_120_lines is a hard cap with no exemption, 
 ### p2-d2 · discovery · The allowlist script needed TWO independent probes, not one (phase 2)
 
 The original script had a single early exit (grep -q QUALIFIED). Adding the message repair under it would have reproduced the exact bug the file already documents: a probe satisfied by one surface reporting 'already done' for another. A hook whose case arm was already fixed would never get its message repaired. Restructured into two independently-probed repairs — case arm (fail-loud on anchor drift) and the Exempt: message (silent no-op when absent, since the message is the org hook's prose, not super-fr's to require). test_message_repaired_even_when_case_already_correct pins it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1 created=2026-07-26T15:46:24 phase=3 state=refuted -->
+### p3-f1 · finding [refuted] · Plan step P3.T1.S2 asked for 'cd <base-repo-subdir> && fr isolation up' to stay DENIED — refuted (phase 3)
+
+Written before the composition rule was worked through. `fr isolation up` from the base-repo cwd is ALREADY allowed today (the fr-isolation allowance is precisely the one permitted surface there), so denying the same command merely because it was preceded by a cd within the same repo would be arbitrary and would contradict the allowance it composes with. The fence that IS correct — and is what the test asserts — is that a cd back into the base repo does not launder a NON-fr command: test_cd_back_into_base_repo_still_denied uses `make`. Step ticked against the corrected behaviour.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-d1 created=2026-07-26T15:46:24 phase=3 -->
+### p3-d1 · discovery · Ordering is load-bearing: different-repo allow must precede the fr-isolation allowance (phase 3)
+
+If the rest-stripped `fr isolation down` match were evaluated before the different-repo exit, `cd <other-repo> && fr isolation down` would retire THIS repo's sentinel — silently ending a live pipeline in repo A from a command aimed at repo B. Putting the different-repo exit first means such a command never reaches the sentinel-clearing branch. Pinned by test_isolation_down_in_other_repo_does_not_clear_this_sentinel, which also re-asserts that repo A stays guarded afterwards.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-d2 created=2026-07-26T15:46:24 phase=3 -->
+### p3-d2 · discovery · Guard tests need a live linked worktree or they pass for the wrong reason (phase 3)
+
+The #341 self-heal fails OPEN and clears the sentinel when a successful `git worktree list` shows zero linked worktrees. A cross-repo fixture built from a bare `git init` therefore allows everything regardless of the change under test. TestCrossRepoReachability._setup adds a real linked worktree to repo A, and test_precondition_base_repo_still_denied fences the fixture by asserting the pipeline is genuinely guarding before any of the allow-assertions run.
