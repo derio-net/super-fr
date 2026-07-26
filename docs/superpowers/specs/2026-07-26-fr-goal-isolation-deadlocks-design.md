@@ -208,43 +208,45 @@ fixed.
 Two changes inside the existing leading-`cd` transition allowance, keeping its
 current structure:
 
-1. **Scope the deny by target, not only by cwd — then honour the target's own
-   discipline.** When the resolved `cd` target lies outside `repo_root` and is
-   inside a *different git repository*, this pipeline's gate does not apply:
-   its stated purpose is "commands whose cwd resolves inside **the pipeline's
-   base repo**". But *"not this pipeline's business"* is **not** *"nobody's
-   business"*. A blanket allow here would conflate two different claims — "repo
-   A's pipeline should stop gating repo B" (what #421 asks for) and "repo B's
-   own isolation should be dropped" (which nothing asks for) — and would let a
-   session `cd` into another fr-enabled repo's **un-isolated base clone** and
-   mutate it. That is precisely what fr-isolation exists to prevent, and it
-   would make this guard *weaker than its own Hermes sibling*, which is
-   marker-based.
+1. **Scope the deny by target, not only by cwd — and key the allowance on
+   *isolation*, not on *repo identity*.** When the `cd` target lies outside
+   `repo_root`, this pipeline's gate does not apply — its stated purpose is
+   "commands whose cwd resolves inside **the pipeline's base repo**". But *"not
+   this pipeline's business"* is **not** *"anything goes"*.
 
-   So the target is handed to **`fr_isolation_decide_cwd`** from
-   `hooks/lib/fr-isolation-decision.sh` — the same check the edit gate and the
-   Hermes bash guard already use. (Its docstring already claims "Used by both
-   the edit gate and the bash guard"; the Claude bash guard was the one that
-   didn't, and now does.)
+   The first cut allowed any *different git repo*. That reads harmless until
+   you notice **`$HOME` is a git repo on any machine with a dotfiles repo** —
+   at which point `~/.ssh` has a git toplevel, is not fr-enabled, and sails
+   straight through. A fix for a deadlock must not widen reach to a private
+   key as a side effect.
 
-   - *Allowed context* — a worktree, a non-fr repo, a valid marker, or
-     `FR_BASE_OK=1` → **allow**. #421 satisfied.
-   - *Blocked context* — fr-enabled base clone, no marker → **repo B's own
-     discipline stands**. Execution falls through to the `fr …` allowances
-     below, so `cd <repo-B> && fr isolation up` still works. That is the entire
-     ask of #421 — *reach* repo B's isolation — and it does not require repo
-     B's base clone to be writable.
+   So the destination must be a **genuine fr isolation workspace** — a valid
+   `.fr-isolation` marker, this repo's worktree or another repo's — via a new
+   `fr_isolation_marker_valid` in `hooks/lib/fr-isolation-decision.sh`. Note
+   this is deliberately *stricter* than the lib's existing
+   `fr_isolation_decide_cwd`, which answers "allowed" for any non-fr repo:
+   correct for the edit gate (no business in a repo that never opted into fr),
+   wrong as a *destination* test for exactly the dotfiles reason above.
+
+   Everything else falls through, where the allowed-prefix loop still admits fr
+   worktrees and temp dirs, and the `fr …` allowances still fire — so
+   `cd <repo-B> && fr isolation up` works. **Reaching repo B's isolation is
+   #421's entire ask**, and it never required repo B's base clone to be usable.
+   The deny is a discipline, not a deadlock. `FR_BASE_OK=1` remains the
+   one-shot escape.
+
+   Two consequences worth stating:
+
+   - A `cd` into another repo suppresses the sentinel retirement, so
+     `cd <other-repo> && fr isolation down` cannot end *this* session's
+     pipeline by action-at-a-distance.
+   - That hop gets its **own** deny reason naming the target repo. Emitting
+     repo A's "pipeline active" text there would point at the wrong worktree —
+     the same misleading-remedy failure #421 was filed about.
 
    Resolution is by real path with a trailing slash, matching the existing
-   prefix logic, so `repo` vs `repo-other` cannot collide. A *worktree of the
-   same base repo* reports a different toplevel but is an allowed context
-   anyway (and was already admitted by the fr-worktrees prefix), so its
-   behaviour is unchanged.
+   prefix logic, so `repo` vs `repo-other` cannot collide.
 
-   The deny for a blocked target carries **its own reason**, naming the target
-   repo and `cd <repo-B> && fr isolation up`. Emitting repo A's "fr pipeline
-   active" text there would misattribute the block and point at the wrong
-   worktree — the same misleading-remedy failure #421 was filed about.
 2. **Make the `fr isolation` allowance composable.** The start-anchored match is
    evaluated against the command **with a leading `cd <dir> &&` stripped**, so
    `cd <other-repo> && fr isolation up --branch x` matches. The same stripping
@@ -327,12 +329,16 @@ host, which no in-repo test can assert.
    allowed. (Before this PR both were denied.)
 6. From that same session, confirm `git status` in repo A is **still denied** —
    the guard's discipline in its own repo is unchanged.
-7. Pick a repo B that is fr-enabled (`.devcontainer/<profile>/` or
-   `docs/superpowers/plans/`) and **not** currently isolated. From the same
-   session run `cd <repo-B> && git commit -am x`. Confirm it is **denied**, and
-   that the reason names *repo B* and `fr isolation up` — not repo A's
-   pipeline. Then run `cd <repo-B> && fr isolation up --branch test/x` and
-   confirm it is allowed, i.e. the deny is a discipline, not a deadlock.
+7. From the same session run `cd <repo-B> && git commit -am x` against a repo
+   B that is **not** isolated. Confirm it is **denied**, and that the reason
+   names *repo B* and `fr isolation up` — not repo A's pipeline. Then run
+   `cd <repo-B> && fr isolation up --branch test/x`, confirm it is allowed, and
+   confirm work in the worktree it creates is allowed: the deny is a
+   discipline, not a deadlock.
+8. **Sensitive-path check.** On a machine where `$HOME` is a git repo (a
+   dotfiles repo — `git -C ~ rev-parse --show-toplevel` succeeds), run
+   `cd ~/.ssh && ls` from a session with a live pipeline elsewhere. Confirm it
+   is **denied**. Repeat with `$HOME` not a git repo; also denied.
 
 ## Implementation Plans
 

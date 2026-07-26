@@ -96,37 +96,41 @@ if [ -n "$cd_target" ]; then
         # destination anyway (it was already allowed by the prefix list), so
         # behaviour is unchanged.
         #
-        # "Not THIS pipeline's business" is NOT "nobody's business". Repo B has
-        # its own isolation discipline, and dropping it would turn this
-        # allowance into "cd anywhere and do anything" — letting a session
-        # mutate another fr-enabled repo's UN-ISOLATED base clone, precisely
-        # what fr-isolation exists to prevent. So the target is handed to the
-        # shared `fr_isolation_decide_cwd`, the same check the edit gate and the
-        # Hermes bash guard already apply (its docstring says "used by both the
-        # edit gate and the bash guard" — this guard was the one that didn't):
+        # "Not THIS pipeline's business" is NOT "anything goes". The allowance
+        # #421 needs is narrow: REACH another repo's isolation. It is not
+        # "cd anywhere and run anything", and the difference is not academic —
+        # `$HOME` is a git repo on any machine with a dotfiles repo, so
+        # "allow any different git repo" puts `~/.ssh` one `cd` away from a
+        # session that could not touch it a moment earlier.
         #
-        #   allowed context  — a worktree, a non-fr repo, or a valid marker, or
-        #                      FR_BASE_OK=1 → allow, #421 satisfied.
-        #   blocked context  — fr-enabled base clone, no marker → repo B's OWN
-        #                      discipline stands. Fall through: the `fr …`
-        #                      allowances below still fire, so `cd <repo-B> &&
-        #                      fr isolation up` works. That is the whole ask of
-        #                      #421 — reach repo B's isolation — and it does not
-        #                      require repo B's base clone to be writable.
+        # So the destination must be a GENUINE fr isolation workspace — a valid
+        # `.fr-isolation` marker, this repo's worktree or another repo's.
+        # Everything else falls through, where:
+        #   - the allowed-prefix loop below still admits fr worktrees / temp dirs;
+        #   - the `fr …` allowances still fire, so `cd <repo-B> && fr isolation
+        #     up` works. Reaching repo B's isolation is the whole ask of #421,
+        #     and it never required repo B's base clone to be usable.
+        # The deny is therefore a discipline, not a deadlock.
+        #
+        # NOTE this is deliberately stricter than `fr_isolation_decide_cwd`,
+        # which answers 0 for any non-fr repo. That is right for the edit gate
+        # (no business in a repo that never opted into fr) and wrong here (see
+        # the dotfiles case above).
         if rtop=$(git -C "$rtarget" rev-parse --show-toplevel 2>/dev/null) &&
            rtop=$(cd "$rtop" 2>/dev/null && pwd -P) && [ -n "$rtop" ]; then
           case "$rtop/" in
             "$rroot"/*) ;;   # same repo after all — keep guarding
             *)
-              if fr_isolation_decide_cwd "$rtarget"; then
-                exit 0       # different repo, and its own discipline is satisfied
+              # Recorded whether or not it is allowed: it suppresses the
+              # sentinel retirement below (a `fr isolation down` aimed at
+              # ANOTHER repo must not end THIS repo's pipeline) and gives the
+              # deny a reason that names the right repo — emitting repo A's
+              # "pipeline active" text here would point at the wrong worktree,
+              # the same misleading-remedy failure #421 was filed about.
+              cd_other_repo=$rtop
+              if [ "${FR_BASE_OK:-}" = "1" ] || fr_isolation_marker_valid "$rtarget"; then
+                exit 0
               fi
-              # Blocked by repo B's OWN discipline, not repo A's pipeline.
-              # Recorded so the deny can say so: reporting repo A's "pipeline
-              # active" message here would misattribute the block and point at
-              # the wrong worktree — the same class of misleading-remedy bug
-              # #421 was filed about.
-              other_repo_blocked=$rtop
               ;;
           esac
         fi
@@ -171,8 +175,12 @@ fi
 
 if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation([[:space:]]|$)'; then
   # The isolation lifecycle itself is the one allowed surface; `down` ends
-  # the pipeline, so retire the sentinel (best-effort).
-  if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation[[:space:]]+down([[:space:]]|$)'; then
+  # the pipeline, so retire the sentinel (best-effort). Only when the command
+  # is aimed at THIS repo: `cd <other-repo> && fr isolation down` retires the
+  # OTHER repo's workspace, and silently ending this session's pipeline off the
+  # back of it would be a nasty action-at-a-distance.
+  if [ -z "${cd_other_repo:-}" ] &&
+     printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation[[:space:]]+down([[:space:]]|$)'; then
     rm -f "$sentinel" || true
   fi
   exit 0
@@ -194,12 +202,13 @@ if wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
   fi
 fi
 
-if [ -n "${other_repo_blocked:-}" ]; then
-  # Blocked by the TARGET repo's own isolation discipline. Naming the right
-  # repo and the right remedy matters: this is not repo A's pipeline talking.
-  reason="fr-isolation: \`$other_repo_blocked\` is an fr-enabled base clone with no valid \`.fr-isolation\` marker, so its own isolation discipline applies — a pipeline in another repo does not exempt it. Enter ITS isolation first (\`cd $other_repo_blocked && fr isolation up --branch <branch>\`, which this guard allows) and run the command from that worktree; or set FR_BASE_OK=1 for one deliberate base-clone command. See plugins/super-fr/rules/fr-isolation-required.md (#421)."
+if [ -n "${cd_other_repo:-}" ]; then
+  # The command hopped to ANOTHER repo that is not an isolation workspace.
+  # Name that repo and its own remedy: repo A's "pipeline active" text would
+  # misattribute the block and point at the wrong worktree.
+  reason="fr-isolation: \`$cd_other_repo\` is not an fr isolation workspace (no valid \`.fr-isolation\` marker), so a live pipeline elsewhere does not open it for general work — reaching another repo is for entering ITS isolation, not for running anything there. Do: \`cd $cd_other_repo && fr isolation up --branch <branch>\` (always allowed), then run the command from the worktree it creates. For one deliberate command outside any isolation, set FR_BASE_OK=1. See plugins/super-fr/rules/fr-isolation-required.md (#421)."
 else
-  reason="fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the isolation worktree. Run via \`fr isolation exec -- …\` (or \`fr isolation up\` first), or lead with \`cd <worktree> && …\` to work from the worktree cwd. Working in a DIFFERENT repo? Lead with \`cd <other-repo> && …\` — this pipeline gates only its own base repo (that repo's own isolation still applies, and \`cd <other-repo> && fr isolation up\` is always allowed). No worktree left? \`fr isolation down --all\` clears the pipeline. See plugins/super-fr/skills/fr-isolation (exec-bridge discipline, #265/#279/#329/#421)."
+  reason="fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the isolation worktree. Run via \`fr isolation exec -- …\` (or \`fr isolation up\` first), or lead with \`cd <worktree> && …\` to work from the worktree cwd. Working in a DIFFERENT repo? \`cd <other-repo> && fr isolation up\` is always allowed — enter that repo's isolation and work from its worktree. No worktree left? \`fr isolation down --all\` clears the pipeline. See plugins/super-fr/skills/fr-isolation (exec-bridge discipline, #265/#279/#329/#421)."
 fi
 
 jq -n --arg reason "$reason" \

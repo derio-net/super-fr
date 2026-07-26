@@ -88,6 +88,24 @@ fr_isolation_decide_cwd() {
   return 1
 }
 
+# fr_isolation_marker_valid <dir>
+#   0 -> dir's git toplevel IS a genuine fr isolation workspace (valid marker)
+#   1 -> it is not (plain repo, base clone, non-repo, stale/forged marker)
+#
+# A stricter question than fr_isolation_decide_cwd, and a different one.
+# decide_cwd asks "is THIS repo's own isolation being violated?" and so answers
+# 0 for a non-fr repo — correct for the edit gate, which has no business in a
+# repo that never opted into fr. But the bash guard's cross-repo hop asks
+# "is this a legitimate DESTINATION while a pipeline is live?", and "any repo
+# that never opted into fr" is far too broad an answer: `$HOME` is a git repo on
+# any machine with a dotfiles repo, which would put `~/.ssh` one `cd` away.
+# Used by the Claude bash guard (super-fr#421).
+fr_isolation_marker_valid() {
+  [ -d "$1" ] || return 1
+  _fr_rtop=$(_fr_toplevel_of "$1") || return 1
+  _fr_marker_valid "$_fr_rtop"
+}
+
 # fr_isolation_decide_edit <file>
 #   0 -> ALLOW the edit; 1 -> BLOCK it.
 # An fr-enabled base-clone edit is blocked unless `.fr-isolation-allow` exempts

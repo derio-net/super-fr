@@ -40,15 +40,23 @@ phase 3's own tests fence the boundary in every direction: a `cd` back into the
 pipeline's own repo is still denied, and only a *leading* `cd` is ever
 stripped, so `test_non_leading_cd_denied` continues to hold.
 
-The subtle one is the target scoping. "Repo A's pipeline should stop gating
-repo B" (what #421 asks) is **not** "repo B's own isolation should be dropped"
-(which nothing asks). A blanket *different repo → allow* conflates them and
-opens a real hole: `cd <other-fr-repo> && git commit` in an **un-isolated base
-clone**, the exact thing fr-isolation exists to prevent — and weaker than this
-guard's own marker-based Hermes sibling. So the target goes through the shared
-`fr_isolation_decide_cwd`; a blocked target still reaches the `fr …`
-allowances, so `cd <repo-B> && fr isolation up` works and the deny is a
-discipline, not a deadlock. `TestOtherRepoStillHonoursItsOwnIsolation` fences it.
+The subtle one is the target scoping, which took two corrections to get right.
+"Repo A's pipeline should stop gating repo B" (what #421 asks) is **not**
+"anything outside repo A is fair game" (which nothing asks). Two successively
+looser predicates were tried and rejected:
+
+- *different git repo → allow* — opens `cd <other-fr-repo> && git commit`
+  against an **un-isolated base clone**, and, worse, `$HOME` is a git repo on
+  any machine with a dotfiles repo, so `~/.ssh` sits one `cd` away.
+- *`fr_isolation_decide_cwd` → allow* — better, but it answers "allowed" for
+  any **non-fr** repo, which is the dotfiles case again.
+
+The predicate that holds is **"is the destination a genuine fr isolation
+workspace?"** (`fr_isolation_marker_valid`). Anything else falls through to the
+prefix loop and the `fr …` allowances, so `cd <repo-B> && fr isolation up`
+still works — reaching repo B's isolation is #421's whole ask, and it never
+required repo B's base clone to be usable. `TestSensitivePathsStayOutOfReach`
+and `TestOtherRepoStillHonoursItsOwnIsolation` fence both directions.
 
 ## Explicitly not in scope
 

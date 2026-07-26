@@ -410,11 +410,24 @@ class TestCrossRepoReachability:
         )
         assert decision(result) is None
 
-    def test_arbitrary_command_in_other_repo_allowed(self, tmp_path: Path) -> None:
-        """Scoping is by TARGET, not by command: the pipeline's discipline
-        simply does not extend to a repo that is not the pipeline's repo."""
+    def test_arbitrary_command_in_other_repo_denied(self, tmp_path: Path) -> None:
+        """Reaching another repo is for entering ITS isolation, not for running
+        anything there. The allowance is scoped to that purpose — see
+        TestSensitivePathsStayOutOfReach for why breadth here is dangerous."""
         repo_a, repo_b, sentinels, env = self._setup(tmp_path)
         result = run_hook(payload(f"cd {repo_b} && git push", repo_a), sentinels, env)
+        assert decision(result) == "deny"
+
+    def test_other_repos_isolation_workspace_allowed(self, tmp_path: Path) -> None:
+        """Once repo B IS isolated, its worktree is a legitimate destination —
+        that is the end state `cd <repo-B> && fr isolation up` produces."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        wt_b = tmp_path / "wt-b"
+        _git(repo_b, "worktree", "add", "-q", str(wt_b), "-b", "fix/y")
+        (wt_b / ".fr-isolation").write_text(
+            json.dumps({"toplevel": str(wt_b.resolve()), "branch": "fix/y", "mode": "worktree"})
+        )
+        result = run_hook(payload(f"cd {wt_b} && git push", repo_a), sentinels, env)
         assert decision(result) is None
 
     def test_isolation_down_in_other_repo_does_not_clear_this_sentinel(
@@ -445,13 +458,16 @@ class TestCrossRepoReachability:
         sub.mkdir()
         assert decision(run_hook(payload(f"cd {sub} && make", repo_a), sentinels, env)) == "deny"
 
-    def test_worktree_of_base_repo_still_reached_via_prefix(self, tmp_path: Path) -> None:
-        """A linked worktree of the SAME repo reports a different toplevel, so
-        it is admitted by the new scoping too. Behaviour is unchanged — it was
-        already allowed by the fr-worktrees prefix — but the reason must not
-        become "it is a different repo", which would be wrong."""
+    def test_own_isolation_worktree_still_reachable(self, tmp_path: Path) -> None:
+        """The pipeline's OWN worktree reports a toplevel outside the base repo,
+        so it goes down the same path — and must stay reachable, since it is
+        where all the work happens."""
         repo_a, _, sentinels, env = self._setup(tmp_path)
-        result = run_hook(payload(f"cd {tmp_path / 'wt-a'} && git log", repo_a), sentinels, env)
+        wt_a = tmp_path / "wt-a"
+        (wt_a / ".fr-isolation").write_text(
+            json.dumps({"toplevel": str(wt_a.resolve()), "branch": "feat/x", "mode": "worktree"})
+        )
+        result = run_hook(payload(f"cd {wt_a} && git log", repo_a), sentinels, env)
         assert decision(result) is None
 
     def test_chained_cd_allowed_by_design(self, tmp_path: Path) -> None:
@@ -467,7 +483,10 @@ class TestCrossRepoReachability:
         result = run_hook(
             payload(f"cd {tmp_path / 'tmpd'} && cd {repo_b} && ls", repo_a), sentinels, env
         )
-        assert decision(result) is None
+        assert decision(result) is None, (
+            "only the leading cd is evaluated, so this lands in the allowed "
+            "prefix and the rest rides along — the documented consequence"
+        )
 
     def test_deny_reason_names_the_other_repo_escape(self, tmp_path: Path) -> None:
         """A message that recommends `fr isolation up` while denying it is the
@@ -476,6 +495,57 @@ class TestCrossRepoReachability:
         result = run_hook(payload("git status", repo_a), sentinels, env)
         reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
         assert "another repo" in reason.lower() or "different repo" in reason.lower()
+
+
+class TestSensitivePathsStayOutOfReach:
+    """`cd ~/.ssh && cat id_ed25519` must not become reachable (#421 review).
+
+    The cross-repo allowance is deliberately keyed on "is the destination a
+    genuine fr isolation workspace", NOT on "is it a different git repo". The
+    looser rule reads harmless until you notice that **`$HOME` is a git repo on
+    any machine with a dotfiles repo** — at which point `~/.ssh` has a git
+    toplevel, is not fr-enabled, and would sail straight through.
+
+    This guard is a discipline backstop, not a credential firewall, and the
+    real boundary is the harness permission layer. But it must not *widen*
+    reach as a side effect of fixing an unrelated deadlock, which is exactly
+    what the first cut of #421 did.
+    """
+
+    def _setup(self, tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str]]:
+        repo_a = _git_repo(tmp_path / "repo-a")
+        _git(repo_a, "worktree", "add", "-q", str(tmp_path / "wt-a"), "-b", "feat/x")
+        home = tmp_path / "home"
+        (home / ".ssh").mkdir(parents=True)
+        (home / ".ssh" / "id_ed25519").write_text("PRIVATE KEY\n")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo_a)
+        env = {"HOME": str(home), "FR_CD_ALLOW_PREFIXES": str(tmp_path / "nonexistent")}
+        return repo_a, home, sentinels, env
+
+    def test_ssh_dir_outside_any_repo_denied(self, tmp_path: Path) -> None:
+        repo_a, home, sentinels, env = self._setup(tmp_path)
+        cmd = f"cd {home / '.ssh'} && cat id_ed25519"
+        assert decision(run_hook(payload(cmd, repo_a), sentinels, env)) == "deny"
+
+    def test_ssh_dir_via_tilde_denied(self, tmp_path: Path) -> None:
+        repo_a, _, sentinels, env = self._setup(tmp_path)
+        cmd = "cd ~/.ssh && cat id_ed25519"
+        assert decision(run_hook(payload(cmd, repo_a), sentinels, env)) == "deny"
+
+    def test_ssh_dir_inside_a_dotfiles_repo_denied(self, tmp_path: Path) -> None:
+        """The case that motivated the tightening: `git init` in $HOME is
+        common, and it gives ~/.ssh a git toplevel. A "different git repo →
+        allow" rule would hand over the private key."""
+        repo_a, home, sentinels, env = self._setup(tmp_path)
+        _git_repo(home)  # $HOME is now a dotfiles repo
+        cmd = f"cd {home / '.ssh'} && cat id_ed25519"
+        assert decision(run_hook(payload(cmd, repo_a), sentinels, env)) == "deny"
+
+    def test_dotfiles_repo_root_itself_denied(self, tmp_path: Path) -> None:
+        repo_a, home, sentinels, env = self._setup(tmp_path)
+        _git_repo(home)
+        assert decision(run_hook(payload(f"cd {home} && ls -la", repo_a), sentinels, env)) == "deny"
 
 
 def _fr_enable(repo: Path) -> Path:
@@ -551,12 +621,14 @@ class TestOtherRepoStillHonoursItsOwnIsolation:
         result = run_hook(payload(f"cd {wt_b} && git commit -am x", repo_a), sentinels, env)
         assert decision(result) is None
 
-    def test_non_fr_repo_still_allowed(self, tmp_path: Path) -> None:
-        """A plain repo has no isolation discipline to honour — unchanged."""
+    def test_plain_non_fr_repo_also_denied(self, tmp_path: Path) -> None:
+        """ "Not fr-enabled" is not a licence either — that is precisely the
+        predicate that would hand over a dotfiles `$HOME`. See
+        TestSensitivePathsStayOutOfReach."""
         repo_a, _, sentinels, env = self._setup(tmp_path)
         plain = _git_repo(tmp_path / "plain")
         result = run_hook(payload(f"cd {plain} && git push", repo_a), sentinels, env)
-        assert decision(result) is None
+        assert decision(result) == "deny"
 
     def test_deny_names_the_target_repo_not_the_pipeline(self, tmp_path: Path) -> None:
         """Reporting repo A's "fr pipeline active" here would misattribute the
