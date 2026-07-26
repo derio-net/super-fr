@@ -208,17 +208,43 @@ fixed.
 Two changes inside the existing leading-`cd` transition allowance, keeping its
 current structure:
 
-1. **Scope the deny by target, not only by cwd.** When the resolved `cd` target
-   lies outside `repo_root` and is inside a *different git repository* — i.e.
-   `git -C "$rtarget" rev-parse --show-toplevel` succeeds and differs from
-   `rroot` — allow it. The guard's stated purpose is "commands whose cwd
-   resolves inside **the pipeline's base repo**"; another repo is simply not
-   that repo, and the pipeline's discipline does not extend to it. Resolution
-   is by real path with a trailing slash, matching the existing prefix logic, so
-   `repo` vs `repo-other` cannot collide, and a *worktree of the same base repo*
-   is not mistaken for a different repo (its `--show-toplevel` differs, but that
-   path is already allowed by the fr-worktrees prefix, so behaviour is
-   unchanged).
+1. **Scope the deny by target, not only by cwd — then honour the target's own
+   discipline.** When the resolved `cd` target lies outside `repo_root` and is
+   inside a *different git repository*, this pipeline's gate does not apply:
+   its stated purpose is "commands whose cwd resolves inside **the pipeline's
+   base repo**". But *"not this pipeline's business"* is **not** *"nobody's
+   business"*. A blanket allow here would conflate two different claims — "repo
+   A's pipeline should stop gating repo B" (what #421 asks for) and "repo B's
+   own isolation should be dropped" (which nothing asks for) — and would let a
+   session `cd` into another fr-enabled repo's **un-isolated base clone** and
+   mutate it. That is precisely what fr-isolation exists to prevent, and it
+   would make this guard *weaker than its own Hermes sibling*, which is
+   marker-based.
+
+   So the target is handed to **`fr_isolation_decide_cwd`** from
+   `hooks/lib/fr-isolation-decision.sh` — the same check the edit gate and the
+   Hermes bash guard already use. (Its docstring already claims "Used by both
+   the edit gate and the bash guard"; the Claude bash guard was the one that
+   didn't, and now does.)
+
+   - *Allowed context* — a worktree, a non-fr repo, a valid marker, or
+     `FR_BASE_OK=1` → **allow**. #421 satisfied.
+   - *Blocked context* — fr-enabled base clone, no marker → **repo B's own
+     discipline stands**. Execution falls through to the `fr …` allowances
+     below, so `cd <repo-B> && fr isolation up` still works. That is the entire
+     ask of #421 — *reach* repo B's isolation — and it does not require repo
+     B's base clone to be writable.
+
+   Resolution is by real path with a trailing slash, matching the existing
+   prefix logic, so `repo` vs `repo-other` cannot collide. A *worktree of the
+   same base repo* reports a different toplevel but is an allowed context
+   anyway (and was already admitted by the fr-worktrees prefix), so its
+   behaviour is unchanged.
+
+   The deny for a blocked target carries **its own reason**, naming the target
+   repo and `cd <repo-B> && fr isolation up`. Emitting repo A's "fr pipeline
+   active" text there would misattribute the block and point at the wrong
+   worktree — the same misleading-remedy failure #421 was filed about.
 2. **Make the `fr isolation` allowance composable.** The start-anchored match is
    evaluated against the command **with a leading `cd <dir> &&` stripped**, so
    `cd <other-repo> && fr isolation up --branch x` matches. The same stripping
@@ -301,6 +327,12 @@ host, which no in-repo test can assert.
    allowed. (Before this PR both were denied.)
 6. From that same session, confirm `git status` in repo A is **still denied** —
    the guard's discipline in its own repo is unchanged.
+7. Pick a repo B that is fr-enabled (`.devcontainer/<profile>/` or
+   `docs/superpowers/plans/`) and **not** currently isolated. From the same
+   session run `cd <repo-B> && git commit -am x`. Confirm it is **denied**, and
+   that the reason names *repo B* and `fr isolation up` — not repo A's
+   pipeline. Then run `cd <repo-B> && fr isolation up --branch test/x` and
+   confirm it is allowed, i.e. the deny is a discipline, not a deadlock.
 
 ## Implementation Plans
 

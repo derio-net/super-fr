@@ -36,10 +36,19 @@ in the very shape it exists to catch. Spec decision 2.
 
 **Phase 3 — the new allowance must not weaken the old guard.** The whole of
 `TestCdTransitionAllowance` and `TestBootstrapAllowance` must stay green, and
-phase 3's own tests fence the boundary in both directions: a `cd` into a
-*different* git repo is allowed, a `cd` back into the pipeline's own repo is
-still denied, and only a *leading* `cd` is ever stripped, so
-`test_non_leading_cd_denied` continues to hold.
+phase 3's own tests fence the boundary in every direction: a `cd` back into the
+pipeline's own repo is still denied, and only a *leading* `cd` is ever
+stripped, so `test_non_leading_cd_denied` continues to hold.
+
+The subtle one is the target scoping. "Repo A's pipeline should stop gating
+repo B" (what #421 asks) is **not** "repo B's own isolation should be dropped"
+(which nothing asks). A blanket *different repo → allow* conflates them and
+opens a real hole: `cd <other-fr-repo> && git commit` in an **un-isolated base
+clone**, the exact thing fr-isolation exists to prevent — and weaker than this
+guard's own marker-based Hermes sibling. So the target goes through the shared
+`fr_isolation_decide_cwd`; a blocked target still reaches the `fr …`
+allowances, so `cd <repo-B> && fr isolation up` works and the deny is a
+discipline, not a deadlock. `TestOtherRepoStillHonoursItsOwnIsolation` fences it.
 
 ## Explicitly not in scope
 

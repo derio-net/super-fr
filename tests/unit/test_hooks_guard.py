@@ -476,3 +476,103 @@ class TestCrossRepoReachability:
         result = run_hook(payload("git status", repo_a), sentinels, env)
         reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
         assert "another repo" in reason.lower() or "different repo" in reason.lower()
+
+
+def _fr_enable(repo: Path) -> Path:
+    """Make a repo fr-enabled the way the shared decision lib detects it."""
+    profile = repo / ".devcontainer" / "dev"
+    profile.mkdir(parents=True, exist_ok=True)
+    (profile / "devcontainer.json").write_text("{}\n")
+    return repo
+
+
+class TestOtherRepoStillHonoursItsOwnIsolation:
+    """The cross-repo allowance must not become "cd anywhere and do anything".
+
+    #421 only needs the pipeline in repo A to stop gating repo B. It does NOT
+    need repo B's *own* isolation discipline dropped. Those are different
+    claims, and a blanket "different repo → allow" conflates them: it would let
+    a session `cd` into another fr-enabled repo's un-isolated BASE CLONE and
+    mutate it, which is exactly what fr-isolation exists to prevent.
+
+    So the target is handed to the same `fr_isolation_decide_cwd` the edit gate
+    and the Hermes bash guard already use (its docstring says "Used by both the
+    edit gate and the bash guard" — the Claude bash guard was the one that
+    didn't). Allowed context → allow. Blocked context → repo B's own discipline
+    applies, and the way out is repo B's own `fr isolation up`.
+    """
+
+    def _setup(self, tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str]]:
+        repo_a = _git_repo(tmp_path / "repo-a")
+        _git(repo_a, "worktree", "add", "-q", str(tmp_path / "wt-a"), "-b", "feat/x")
+        repo_b = _fr_enable(_git_repo(tmp_path / "repo-b"))  # fr-enabled, NO marker
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo_a)
+        env = {"FR_CD_ALLOW_PREFIXES": str(tmp_path / "worktrees-nonexistent")}
+        return repo_a, repo_b, sentinels, env
+
+    def test_mutation_in_other_repos_unisolated_base_clone_denied(self, tmp_path: Path) -> None:
+        """The hole a blanket allow would open."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        result = run_hook(payload(f"cd {repo_b} && git commit -am x", repo_a), sentinels, env)
+        assert decision(result) == "deny"
+
+    def test_arbitrary_command_in_other_repos_base_clone_denied(self, tmp_path: Path) -> None:
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        assert decision(run_hook(payload(f"cd {repo_b} && make", repo_a), sentinels, env)) == "deny"
+
+    def test_fr_isolation_up_in_other_repo_still_allowed(self, tmp_path: Path) -> None:
+        """#421's actual requirement survives the tightening: the way INTO
+        repo B's isolation must stay reachable, or the deny is a deadlock
+        again — the whole point of the issue."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        result = run_hook(
+            payload(f"cd {repo_b} && fr isolation up --branch fix/y", repo_a), sentinels, env
+        )
+        assert decision(result) is None
+
+    def test_fr_init_in_other_repo_still_allowed(self, tmp_path: Path) -> None:
+        """Same bootstrap logic as super-fr#299, one repo over."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        result = run_hook(
+            payload(f"cd {repo_b} && fr init scaffold --profile dev", repo_a), sentinels, env
+        )
+        assert decision(result) is None
+
+    def test_other_repo_with_valid_marker_allowed(self, tmp_path: Path) -> None:
+        """Repo B IS isolated (its own worktree carries a valid marker) → the
+        discipline is satisfied and work there proceeds."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        wt_b = tmp_path / "wt-b"
+        _git(repo_b, "worktree", "add", "-q", str(wt_b), "-b", "fix/y")
+        (wt_b / ".fr-isolation").write_text(
+            json.dumps({"toplevel": str(wt_b.resolve()), "branch": "fix/y", "mode": "worktree"})
+        )
+        result = run_hook(payload(f"cd {wt_b} && git commit -am x", repo_a), sentinels, env)
+        assert decision(result) is None
+
+    def test_non_fr_repo_still_allowed(self, tmp_path: Path) -> None:
+        """A plain repo has no isolation discipline to honour — unchanged."""
+        repo_a, _, sentinels, env = self._setup(tmp_path)
+        plain = _git_repo(tmp_path / "plain")
+        result = run_hook(payload(f"cd {plain} && git push", repo_a), sentinels, env)
+        assert decision(result) is None
+
+    def test_deny_names_the_target_repo_not_the_pipeline(self, tmp_path: Path) -> None:
+        """Reporting repo A's "fr pipeline active" here would misattribute the
+        block and point at the wrong worktree — the same misleading-remedy
+        class of bug #421 was filed about."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        result = run_hook(payload(f"cd {repo_b} && make", repo_a), sentinels, env)
+        reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+        assert str(repo_b) in reason, "the deny must name the repo that actually blocked it"
+        assert "fr isolation up" in reason
+        assert "pipeline active" not in reason, "not repo A's pipeline talking"
+
+    def test_fr_base_ok_escape_honoured(self, tmp_path: Path) -> None:
+        """The documented one-shot escape works here too, as it does for the
+        edit gate — same lib, same env var."""
+        repo_a, repo_b, sentinels, env = self._setup(tmp_path)
+        env["FR_BASE_OK"] = "1"
+        result = run_hook(payload(f"cd {repo_b} && git commit -am x", repo_a), sentinels, env)
+        assert decision(result) is None
