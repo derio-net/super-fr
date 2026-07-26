@@ -10,6 +10,94 @@ Method: for each issue, read the body + comments, then verified the claim
 against current code and the specs/plans archive rather than trusting the
 issue's own framing. Findings and the exact evidence are below.
 
+## Status update — 2026-07-26
+
+The 2026-07-24 triage below is kept verbatim as the original record. This
+section reports what has since happened and triages the issues filed after it.
+`main` has moved **3.14.0 → 3.18.1** in the interim.
+
+### Outcome of the 2026-07-24 triage: 4 of 8 closed
+
+| # | Now | How |
+|---|---|---|
+| 379 | **CLOSED** | Closed at triage time — already resolved by the merged 2026-07-14 migrate spec/code. |
+| 399 | **CLOSED** | **PR #402 merged.** `down` now takes `branch: str \| None = None` and resolves the single active workspace ("multiple isolation workspaces — specify --branch" when ambiguous). Verified on `main`. |
+| 387 | **CLOSED** | **PR #401 merged.** `branch_changes_present` gained per-added-line containment (`_branch_change_present_in_file`), replacing the whole-file compare. Verified on `main`. |
+| 289 | **CLOSED** | **PR #409 merged.** Scoped as recommended: umbrella closed in favour of per-harness compat, spawning #410 (harness playbook) and #411 (shared `harness_sync` helper). |
+
+The four remaining are unchanged and none is hand-closeable:
+
+- **#276** — the fix exists as **PR #408**, deliberately a **draft**: its body
+  carries an operator merge precondition (a week of clean bridge logs). It is
+  also `CONFLICTING`/`DIRTY` and has not been touched since 2026-07-24 while
+  `main` advanced, so it needs a rebase whenever the gate clears. Closes
+  automatically on merge — do not close by hand.
+- **#333** — still infra-blocked (Omni/cluster); PR #314 still draft +
+  conflicting, untouched since 2026-06-21. Phase 5 is operator-owned.
+- **#311** — still `deferred`; the pod-measurement gate is still unmet.
+- **#363** — bot-managed digest; auto-closes at zero debt. Leave alone.
+
+### New issues filed 2026-07-26
+
+Both were filed from one live `/fr-goal` run in `derio-net/blog-craft` against
+super-fr 3.18.1, and both are **real, root-caused, and load-bearing for
+fr-goal's subagent design**. Their central claims were re-verified against
+current code (see evidence below) rather than taken on trust.
+
+| # | Verdict | Action |
+|---|---|---|
+| 420 | fr-phase-executor deadlocks under `isolation: "worktree"` | **Schedule first** — highest severity |
+| 421 | Pipeline guard makes a second repo unreachable (blocks fr-goal §3) | Schedule — sibling of #420 |
+
+**#420 — poisoned dispatch, nothing refuses it.** Dispatching
+`super-fr:fr-phase-executor` *with* `isolation: "worktree"` triple-deadlocks:
+the agent wakes in a separate locked worktree cut from `main` (so the spec/plan
+on the feature branch are invisible and `fr pickup` is unsatisfiable), every
+Bash command is denied by `fr-isolation-guard.sh`, and every Write/Edit is
+denied by `fr-isolation-required.sh` (no `.fr-isolation` marker in a fresh
+checkout, fail-closed). The dispatch *succeeds*, so fr-goal looks healthy —
+this is the exact mirror of the bug `ensure-phase-executor-allowlist.sh`
+already fixed, where the failure was silent degradation to inline execution.
+
+The issue's follow-up comment settles the delivery question and should drive
+the fix: `scripts/install.sh:501` already mutates
+`~/.claude/hooks/agent-worktree-required.sh` on every install, so a **hook
+backstop is universally deliverable**, whereas `agent-worktree-default.md` —
+the doc actively instructing the harmful flag — is operator-owned, unversioned,
+and has **no canonical copy in any repo** (confirmed: it is absent on this pod
+too). Fixing the prose is structurally impossible; the hook is the primary fix,
+and the SKILL/`description:` wording is belt, not braces.
+
+**#421 — the guard's two escapes are mutually exclusive.** Verified in
+`plugins/super-fr/hooks/fr-isolation-guard.sh` on `main`: the `cd` allowance
+(line 58) defaults to `$HOME/.cache/fr/worktrees:/tmp:$TMPDIR` — another repo
+is never an allowed target — and the `fr isolation` allowance (line 84) is
+start-anchored `^[[:space:]]*fr[[:space:]]+isolation`, so a command that must
+lead with `cd <other-repo>` can never match it. Since the harness reports the
+*session* cwd regardless of any inline `cd`, a pipeline session in repo A
+cannot start isolation in repo B — including via `fr isolation up`, the very
+command the deny message recommends. This blocks **fr-goal §3** (cross-repo
+specs), i.e. the multi-repo story is unreachable from the flow that defines it.
+The issue also records a working circumvention (`cd /tmp && cd <other-repo> &&
+…`), which should be deliberately closed or blessed rather than left to be
+rediscovered under pressure.
+
+**Not merge candidates.** #420 and #421 are siblings from one session and both
+gate fr-goal, but they are distinct root causes in different hooks
+(`agent-worktree-required.sh` dispatch-flag ordering vs
+`fr-isolation-guard.sh` cd/anchor scoping). Fix them separately; #420 first,
+since subagent dispatch is central to the current fr-goal design.
+
+### Revised scheduling order
+
+1. **#420** — hook backstop (universally deliverable) + SKILL §6 / `description:` wording + tripwire test.
+2. **#421** — scope the deny by *target* repo, not just cwd; un-anchor or post-`cd` evaluate the `fr isolation` allowance.
+3. **#410 / #411** — follow-ups from the #289 close-out.
+4. **#276** — rebase + merge PR #408 once the bridge-log gate clears.
+5. **#333 / #311 / #363** — external preconditions; nothing to do.
+
+---
+
 ## Verdict table
 
 | # | Title (short) | Label | Verdict | Action |
