@@ -42,11 +42,25 @@ case "$subagent_type" in
     exit 0
     ;;
 esac
+echo "agent-worktree: '$subagent_type' must pass isolation: \\"worktree\\". Exempt: \
+Explore, Plan, claude-code-guide, statusline-setup, hookify:conversation-analyzer" >&2
 exit 2
 """
 
 # The broken state this fix repairs: only the BARE name was ever inserted.
 STALE_BARE_HOOK = STOCK_HOOK.replace("  Explore|Plan|", "  fr-phase-executor|Explore|Plan|")
+
+# A hook whose `case` arm is already correct but whose human-readable message
+# still lists the pre-fix five — the contradiction super-fr#420 reports.
+CASE_FIXED_MESSAGE_STALE_HOOK = STOCK_HOOK.replace(
+    "  Explore|Plan|", f"  {QUALIFIED}|Explore|Plan|"
+)
+
+# Some hosts have no such message at all. The repair must be a silent no-op
+# there — unlike the `case` anchor, the message is not super-fr's to require.
+NO_MESSAGE_HOOK = "\n".join(
+    line for line in STOCK_HOOK.splitlines() if not line.startswith(("echo ", "Explore, Plan,"))
+)
 
 
 def write_hook(tmp_path: Path, body: str) -> Path:
@@ -109,3 +123,54 @@ def test_anchor_drift_fails_loud(tmp_path: Path) -> None:
     result = run_script(hook)
     assert result.returncode != 0, "unknown hook shape must fail loudly, not skip"
     assert "anchor" in result.stderr.lower() or "allowlist" in result.stderr.lower()
+
+
+class TestStaleStderrMessage:
+    """super-fr#420 checklist item 4: after the script edits the `case` arm, the
+    hook's human-readable "Exempt: …" message three lines below still lists the
+    pre-fix five — so the hook contradicts itself. Anyone reading the denial to
+    find out what IS allowed is told the wrong thing.
+    """
+
+    def _message(self, hook: Path) -> str:
+        """The line carrying the human-readable exempt list.
+
+        Keyed on `Explore, Plan,` rather than the line's start: the repair
+        prepends the qualified name, so after it the line no longer begins
+        with `Explore,`.
+        """
+        return next(line for line in hook.read_text().splitlines() if "Explore, Plan," in line)
+
+    def test_message_gains_the_qualified_name(self, tmp_path: Path) -> None:
+        hook = write_hook(tmp_path, STOCK_HOOK)
+        assert QUALIFIED not in self._message(hook)  # precondition
+        assert run_script(hook).returncode == 0
+        assert QUALIFIED in self._message(hook), (
+            "the exempt-list message must name the type the case arm now admits"
+        )
+
+    def test_message_repaired_even_when_case_already_correct(self, tmp_path: Path) -> None:
+        """The two probes are independent: a hook whose `case` already carries
+        the qualified name must NOT short-circuit out of the message repair.
+        This is the same shape as the idempotence bug this file records — a
+        probe satisfied by one surface reporting 'done' for another."""
+        hook = write_hook(tmp_path, CASE_FIXED_MESSAGE_STALE_HOOK)
+        assert QUALIFIED not in self._message(hook)  # the live contradiction
+        assert run_script(hook).returncode == 0
+        assert QUALIFIED in self._message(hook)
+
+    def test_absent_message_is_a_silent_no_op(self, tmp_path: Path) -> None:
+        """Unlike the `case` anchor, the message is not super-fr's to require —
+        a hook without one is repaired silently, not failed loud."""
+        hook = write_hook(tmp_path, NO_MESSAGE_HOOK)
+        result = run_script(hook)
+        assert result.returncode == 0, result.stderr
+        assert QUALIFIED in hook.read_text(), "the case arm is still fixed"
+
+    def test_message_repair_is_idempotent(self, tmp_path: Path) -> None:
+        hook = write_hook(tmp_path, STOCK_HOOK)
+        run_script(hook)
+        once = hook.read_text()
+        assert run_script(hook).returncode == 0
+        assert hook.read_text() == once, "second run must be byte-identical"
+        assert once.count(QUALIFIED) == 2, "exactly one case entry + one message entry"

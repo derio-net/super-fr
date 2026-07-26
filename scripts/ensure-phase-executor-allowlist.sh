@@ -29,35 +29,68 @@ hook="${1:?usage: ensure-phase-executor-allowlist.sh <hook-path>}"
 # dispatch is blocked (fr-goal then degrades to inline execution).
 QUALIFIED='super-fr:fr-phase-executor'
 
-# Idempotence probes the QUALIFIED name specifically. Probing the bare name (as
-# this script originally did) is satisfied by a stale bare-only entry, so every
-# reinstall reported "already done" and the hook never self-healed.
-if grep -q "$QUALIFIED" "$hook"; then
-  exit 0
-fi
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
 
-# The allowlist is a single case arm whose pattern is a `|`-joined list of
-# bypassing subagent types, e.g.:
+# The hook has TWO surfaces naming the allowlist, and they drift apart: the
+# `case` arm that actually decides, and a human-readable "Exempt: …" stderr
+# message a few lines below that tells a blocked caller what IS allowed. Each
+# gets its OWN probe and its own repair.
+#
+# Probing once for both is the exact bug this file already records: a probe
+# satisfied by one surface reports "already done" for the other, forever. (The
+# original probe was `grep -q fr-phase-executor`, which a stale *bare* entry
+# satisfied, so every reinstall skipped the repair.) So: no shared early exit.
+changed=0
+
+# --- 1. The `case` arm (authoritative; drift here fails loud) ----------------
+#
+# The allowlist is a single case arm whose pattern is a `|`-joined list, e.g.:
 #   Explore|Plan|claude-code-guide|statusline-setup|hookify:conversation-analyzer)
-# Anchor on the known-stock `Explore|Plan` prefix and prepend our types to the
-# list. Using Explore as the anchor keeps the edit robust to trailing members.
+# Anchor on the known-stock `Explore|Plan` prefix and prepend our type. Using
+# Explore as the anchor keeps the edit robust to trailing members.
 #
 # ONLY the qualified id is inserted — that is what Claude Code sends, and the
 # allowlist must stay fail-closed for anything else. The first expression strips
 # a stale bare-only entry left by the pre-fix script, so an already-broken hook
-# is repaired rather than ending up with both spellings.
-tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
-sed -e 's/^\([[:space:]]*\)fr-phase-executor|Explore|Plan|/\1Explore|Plan|/' \
-    -e "s/^\([[:space:]]*\)Explore|Plan|/\1$QUALIFIED|Explore|Plan|/" \
-    "$hook" >"$tmp"
+# is repaired rather than ending up with both spellings. Both expressions are
+# start-anchored, which is what keeps the strip from eating the `super-fr:`
+# prefix off an already-correct entry.
+if ! grep -q "$QUALIFIED|Explore|Plan|" "$hook"; then
+  sed -e 's/^\([[:space:]]*\)fr-phase-executor|Explore|Plan|/\1Explore|Plan|/' \
+      -e "s/^\([[:space:]]*\)Explore|Plan|/\1$QUALIFIED|Explore|Plan|/" \
+      "$hook" >"$tmp"
 
-if ! grep -q "$QUALIFIED" "$tmp"; then
-  # Anchor not found (hook shape changed). Fail loud rather than silently skip,
-  # so drift is visible instead of leaving dispatch mysteriously blocked.
-  echo "ensure-phase-executor-allowlist: could not find the 'Explore|Plan|' allowlist anchor in $hook" >&2
-  exit 1
+  if ! grep -q "$QUALIFIED|Explore|Plan|" "$tmp"; then
+    # Anchor not found (hook shape changed). Fail loud rather than silently
+    # skip, so drift is visible instead of leaving dispatch mysteriously
+    # blocked.
+    echo "ensure-phase-executor-allowlist: could not find the 'Explore|Plan|' allowlist anchor in $hook" >&2
+    exit 1
+  fi
+
+  cat "$tmp" >"$hook"
+  changed=1
 fi
 
-cat "$tmp" >"$hook"
+# --- 2. The "Exempt: …" stderr message (advisory; absence is fine) -----------
+#
+# super-fr#420 checklist item 4: left alone, this message keeps listing the
+# pre-fix five and so contradicts the `case` arm three lines above it — anyone
+# reading a denial to learn what is permitted is told the wrong thing.
+#
+# Unlike the `case` anchor this is NOT required to exist: the message is the org
+# hook's own prose, and a host whose hook has none is simply left alone. Absence
+# is a silent no-op, never a failure.
+if grep -q 'Explore, Plan,' "$hook" && ! grep -q "$QUALIFIED, Explore, Plan," "$hook"; then
+  # The qualified name is known absent here, so stripping a stale bare entry
+  # cannot mangle a correct one.
+  sed -e 's/fr-phase-executor, Explore, Plan,/Explore, Plan,/' \
+      -e "s/Explore, Plan,/$QUALIFIED, Explore, Plan,/" \
+      "$hook" >"$tmp"
+  cat "$tmp" >"$hook"
+  changed=1
+fi
+
+[ "$changed" -eq 1 ] || exit 0
 echo "allowlisted $QUALIFIED in $hook"

@@ -40,34 +40,35 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-26T15:43:32+00:00'
       note: null
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-26T15:43:33+00:00'
       note: null
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-26T15:43:33+00:00'
       note: null
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-26T15:43:33+00:00'
       note: null
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-26T15:43:33+00:00'
       note: null
     P2.T2.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-26T15:43:33+00:00'
       note: null
     P2.T2.S5:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-07-26T15:43:33+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-07-26T15:43:34+00:00'
+    note: Agent description:, fr-goal §6 (+§3 contrast), org-hook stderr repair, 5-assertion
+      tripwire; mirrors regenerated.
     observed_prs: []
