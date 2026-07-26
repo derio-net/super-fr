@@ -935,3 +935,64 @@ rows:
     status: ci
     notes: 'Markdown renderer + 3-format set (report_local.html, report_linked.html,
       report_linked.md); report.html reverts to ad-hoc/gitignored. Unit-pinned per-PR.'
+  - id: phase-executor-worktree-refused
+    capability: fr-goal phase dispatch
+    acceptance: 'Dispatching the fr-phase-executor WITH isolation: "worktree" is refused
+      loudly at the tool layer, so a poisoned dispatch can never look healthy'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#A
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_phase_executor_guard.py
+    status: not-implemented
+    notes: super-fr#420. Hook + behavioural tests land in plan phase 1; flip to ci then.
+  - id: phase-executor-correct-dispatch-allowed
+    capability: fr-goal phase dispatch
+    acceptance: The correct dispatch — fr-phase-executor WITHOUT the isolation flag
+      — is still allowed, and the shipped skill/agent prose instructs that shape rather
+      than the poisoned one
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#B
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_phase_executor_worktree.py
+    status: not-implemented
+    notes: super-fr#420. Tripwire over hooks.json, the agent description:, and fr-goal
+      SKILL.md §6; lands in plan phase 2.
+  - id: phase-executor-allowlist-message-repaired
+    capability: fr-goal phase dispatch
+    acceptance: Installing super-fr leaves the org agent-worktree hook's human-readable
+      allowlist message agreeing with its own case arm
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#C
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ensure_phase_executor_allowlist.py
+    status: not-implemented
+    notes: super-fr#420 checklist item 4. Stale message lists the pre-fix five; repair
+      lands in plan phase 2.
+  - id: pipeline-guard-second-repo-reachable
+    capability: fr pipeline guard
+    acceptance: A session holding an fr pipeline in repo A can start isolation in repo
+      B — 'cd <repo-B> && fr isolation up' is allowed, not denied by the guard that
+      recommends it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#D
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: not-implemented
+    notes: super-fr#421; unblocks fr-goal §3 cross-repo dispatch. Lands in plan phase
+      3.
+  - id: pipeline-guard-base-repo-still-denied
+    capability: fr pipeline guard
+    acceptance: 'Making a second repo reachable does not weaken the guard in its own
+      repo: base-repo-cwd commands, and a cd back into the base repo, stay denied'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#D
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: not-implemented
+    notes: super-fr#421 regression fence around the new target-scoped allowance. Lands
+      in plan phase 3.

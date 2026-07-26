@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Stop the shipped prose from instructing the poisoned shape (#420)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - phase-executor-correct-dispatch-allowed
+  - phase-executor-allowlist-message-repaired
+tasks:
+- number: 1
+  title: Tripwire over the shipped surfaces (RED)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write tests/unit/test_tripwire_phase_executor_worktree.py in test_tripwire_claude_p.py's style: hooks.json registers the guard under an Agent matcher; the hook exists and is executable; agents/fr-phase-executor.md's description: carries the constraint; skills/fr-goal/SKILL.md §6 pairs "without" with isolation: "worktree".
+  - id: P2.T1.S2
+    text: |-
+      Run it and confirm the prose assertions FAIL (constraint not yet in description:/§6).
+- number: 2
+  title: Fix the prose and the org-hook stderr message (GREEN)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      plugins/super-fr/agents/fr-phase-executor.md: move the no-private-worktree constraint into description:, keeping the body statement.
+  - id: P2.T2.S2
+    text: |-
+      plugins/super-fr/skills/fr-goal/SKILL.md §6: state dispatch WITHOUT isolation: "worktree", contrasted against §3's correct use.
+  - id: P2.T2.S3
+    text: |-
+      scripts/ensure-phase-executor-allowlist.sh: idempotently repair the org hook's stale stderr allowlist message; no-op (never fail-loud) when the message is absent, probed independently of the case-arm probe.
+  - id: P2.T2.S4
+    text: |-
+      Extend tests/unit/test_ensure_phase_executor_allowlist.py: a hook whose stderr message lists only the pre-fix five gains the qualified name; absent message is a silent no-op; second run is still byte-identical.
+  - id: P2.T2.S5
+    text: |-
+      Regenerate mirrors: uv run python scripts/sync-opencode.py && uv run python scripts/sync-hermes.py; run the sync tripwires.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
