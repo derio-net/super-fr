@@ -75,10 +75,11 @@ def test_agent_description_carries_the_constraint() -> None:
         "fr-phase-executor's `description:` must name the flag verbatim — the "
         "body is read only by the executor, after the choice is already made"
     )
-    sentence = next(s for s in re.split(r"(?<=[.;])\s+", description) if 'isolation: "worktree"' in s)
+    sentence = next(
+        s for s in re.split(r"(?<=[.;])\s+", description) if 'isolation: "worktree"' in s
+    )
     assert re.search(r"\bwithout\b|\bnever\b|\bdo not\b|\bnot\b", sentence, re.IGNORECASE), (
-        "the sentence naming the flag must rule it OUT, not merely mention it: "
-        f"got {sentence!r}"
+        f"the sentence naming the flag must rule it OUT, not merely mention it: got {sentence!r}"
     )
 
 

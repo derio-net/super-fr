@@ -29,3 +29,13 @@ If the rest-stripped `fr isolation down` match were evaluated before the differe
 ### p3-d2 · discovery · Guard tests need a live linked worktree or they pass for the wrong reason (phase 3)
 
 The #341 self-heal fails OPEN and clears the sentinel when a successful `git worktree list` shows zero linked worktrees. A cross-repo fixture built from a bare `git init` therefore allows everything regardless of the change under test. TestCrossRepoReachability._setup adds a real linked worktree to repo A, and test_precondition_base_repo_still_denied fences the fixture by asserting the pipeline is genuinely guarding before any of the allow-assertions run.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f1 created=2026-07-26T15:53:15 phase=4 state=fixed -->
+### p4-f1 · finding [fixed] · The §6 reflow split the token `fr journal add` across a line and broke a guard test (phase 4)
+
+test_fr_goal_journal.py::test_journal_render_derives_pr_body asserts the literal substring 'fr journal add' is present in fr-goal/SKILL.md — a deliberate guard that the SKILL rewrite kept its load-bearing tokens. Rewrapping §6 to the wider column put 'fr journal' and 'add' on either side of a newline, so the substring vanished while the prose read identically. Caught by the full suite, not by the targeted runs. Fixed by rewrapping that clause so the token stays intact. Lesson for any future reflow of this file: the token guards are substring matches and do not tolerate a line break inside a backticked command.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-d1 created=2026-07-26T15:53:15 phase=4 -->
+### p4-d1 · discovery · Two full-suite failures in this pod are environmental, not regressions (phase 4)
+
+tests/unit/test_isolation_cmd.py (8 failures) needs FR_ISOLATION_TARGET unset to run devcontainer-mode assertions CI-style; this pod exports FR_ISOLATION_TARGET=worktree. tests/integration/test_bridge_project_id.py (2 failures) reads a real VK_DERIO_OPS_PROJECT_ID from the pod env, overriding the fixture's 'test-vk-project-id'. Both reproduce on the pre-change tree and both pass with those variables cleared: 1839 passed, 80 skipped, 90.36% coverage under the CI gate. Neither is caused by this PR, and neither affects GitHub Actions, which has neither variable set.
