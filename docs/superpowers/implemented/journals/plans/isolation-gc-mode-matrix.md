@@ -49,3 +49,18 @@ verify-merge is git + host gh only, so it works in host-worktree mode; only --pu
 ### f-host-regression-gaps · finding [fixed] · Host-mode regression matrix was missing dirty-skip and content-equivalent (phase 5)
 
 The issue's regression matrix asks for no-PR/content-equivalent handling and a dirty skip in every mode; the first pass only covered them in devcontainer mode, where the shared code path is exercised. Added both as host-mode tests against a real bare origin, plus a gc step in the docker-less end-to-end walk that asserts the sweep classifies the live workspace instead of reaping the run it was launched from.
+
+<!-- fr:journal kind=discovery scope=plan id=n-testplan-verified created=2026-07-27T11:29:08 -->
+### n-testplan-verified · discovery · All four Test Plan steps verified live post-merge on a docker-less k8s pod
+
+Run against merged main (18c4a2a, fr 3.19.0) on a host with no docker and no devcontainer binary.
+
+Step 1 — `FR_ISOLATION_TARGET=worktree fr isolation gc --dry-run --format json`: exit 0, empty stderr, JSON array of 2 classified workspaces.
+
+Step 2 — three host-worktree workspaces (tmp/gc-check with a MERGED PR, tmp/gc-open with an OPEN PR, tmp/gc-dirty with no PR and an untracked file); PRs targeted a throwaway base branch so main's history stayed clean. Live `gc`: tmp/gc-check merged/reaped (worktree AND state file gone), tmp/gc-open open/skipped, tmp/gc-dirty no-pr/warned with its uncommitted file intact. The operator's two real workspaces were classified open/skipped and no-state/warned — untouched.
+
+Step 3 — a preparer-written mode:external marker in a throwaway repo, adopted via `up`, then `gc --format json`: exit 0, exactly one external/skipped row naming the preparer, checkout and marker byte-identical after.
+
+Step 4 — a plain `git worktree add` outside the fr cache (one of 9 git worktrees on this repo) was neither reported nor removed by a LIVE gc run.
+
+Artifacts cleaned up: test PRs #425 (merged into the temp base) and #426 (closed), all tmp/* branches deleted locally and remotely.
