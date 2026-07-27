@@ -941,22 +941,22 @@ rows:
       merged/content-merged work is reaped, open-PR and dirty workspaces survive, and
       no docker or devcontainer binary is ever invoked'
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-27-isolation-gc-mode-matrix-design.md
     levels: {}
     status: ci
     notes: >-
-      Merged reap, open/no-PR skip, dry-run purity, stale-state reap and the zero-docker/devcontainer assertion are unit-pinned per PR; the live docker-less pod walk is spec Test Plan steps 1-2 (post-merge).
+      Merged reap, open/no-PR skip, dry-run purity, stale-state reap and the zero-docker/devcontainer assertion are unit-pinned per PR. Test Plan steps 1-2 verified live post-merge on a docker-less k8s pod (PR #424): a MERGED-PR workspace was reaped, open-PR and dirty workspaces survived.
 
   - id: isolation-gc-external-verdict
     capability: Isolation lifecycle GC
     acceptance: In external (preparer-adopted) mode gc reports a structured, non-destructive
       verdict naming the preparer as cleanup owner instead of failing, and mutates nothing
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-27-isolation-gc-mode-matrix-design.md
     levels: {}
     status: ci
     notes: >-
-      Verdict shape, dry-run parity and the untouched checkout/marker/state are unit-pinned; the in-container walk is spec Test Plan step 3 (post-merge).
+      Verdict shape, dry-run parity and the untouched checkout/marker/state are unit-pinned. Test Plan step 3 verified live post-merge inside a real container (PR #424): one external/skipped row, checkout and marker byte-identical after.
 
   - id: isolation-gc-ownership-boundary
     capability: Isolation lifecycle GC
@@ -964,11 +964,11 @@ rows:
       worktree cache, devcontainer label) — an unrelated plain git worktree is neither
       reported nor removed, and fr workspaces at custom --path are discovered
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-27-isolation-gc-mode-matrix-design.md
     levels: {}
     status: ci
     notes: >-
-      An unrelated plain git worktree is asserted neither reported nor removed in both worktree modes, and a custom --path workspace is asserted discovered.
+      An unrelated plain git worktree is asserted neither reported nor removed in both worktree modes, and a custom --path workspace is asserted discovered. Test Plan step 4 verified live post-merge against a LIVE (non-dry-run) sweep (PR #424).
 
   - id: isolation-gc-json-contract
     capability: Isolation lifecycle GC
@@ -976,8 +976,8 @@ rows:
       in every supported mode, so unattended automation never has to special-case a
       mode
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-27-isolation-gc-mode-matrix-design.md
     levels: {}
     status: ci
     notes: >-
-      `gc --format json` asserted exit 0 + parseable in devcontainer, host-worktree and external mode; the deleted-cwd case is asserted exit 2, never a traceback.
+      `gc --format json` asserted exit 0 + parseable in devcontainer, host-worktree and external mode; the deleted-cwd case is asserted exit 2, never a traceback. Exit 0 + parseable JSON confirmed live in host-worktree and external mode post-merge (PR #424).
