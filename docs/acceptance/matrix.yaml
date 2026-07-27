@@ -935,3 +935,42 @@ rows:
     status: ci
     notes: 'Markdown renderer + 3-format set (report_local.html, report_linked.html,
       report_linked.md); report.html reverts to ad-hoc/gitignored. Unit-pinned per-PR.'
+  - id: isolation-gc-host-worktree
+    capability: Isolation lifecycle GC
+    acceptance: 'A docker-less host-worktree host reconciles its own fr workspaces:
+      merged/content-merged work is reaped, open-PR and dirty workspaces survive, and
+      no docker or devcontainer binary is ever invoked'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec Test Plan steps 1-2; rows flip to ci when Phase 2's tests land.
+  - id: isolation-gc-external-verdict
+    capability: Isolation lifecycle GC
+    acceptance: In external (preparer-adopted) mode gc reports a structured, non-destructive
+      verdict naming the preparer as cleanup owner instead of failing, and mutates nothing
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec Test Plan step 3; flips to ci with Phase 3.
+  - id: isolation-gc-ownership-boundary
+    capability: Isolation lifecycle GC
+    acceptance: gc acts only on demonstrably fr-owned workspaces (fr state file, fr
+      worktree cache, devcontainer label) — an unrelated plain git worktree is neither
+      reported nor removed, and fr workspaces at custom --path are discovered
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec Test Plan step 4; flips to ci with Phase 1.
+  - id: isolation-gc-json-contract
+    capability: Isolation lifecycle GC
+    acceptance: fr isolation gc --format json exits 0 and emits a parseable action array
+      in every supported mode, so unattended automation never has to special-case a
+      mode
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-27-isolation-gc-mode-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec Test Plan steps 1+3; flips to ci with Phase 4.

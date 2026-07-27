@@ -1,0 +1,39 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Reconcile shipped guidance, acceptance rows, version
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Docs and release
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Update the fr-isolation skill's cleanup contract + mode matrix; regenerate the OpenCode mirror
+  - id: P5.T1.S2
+    text: |-
+      Add acceptance matrix rows for the spec's Test Plan and run fr acceptance check
+  - id: P5.T1.S3
+    text: |-
+      Bump the version (minor) and run the full gate: ruff, mypy, pytest
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
