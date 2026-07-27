@@ -19,3 +19,8 @@ Only discovery and teardown were docker-coupled; the merge/content/cleanliness l
 ### f-ambient-mode-env · finding [fixed] · CLI tests were not hermetic against FR_ISOLATION_TARGET (phase 2)
 
 Eight tests in test_isolation_cmd.py assume devcontainer mode but read the ambient env; on a docker-less pod (which exports FR_ISOLATION_TARGET=worktree) they route to HostWorktreeTarget and fail for environmental reasons. Fixed with an autouse fixture that delenv's the var; mode-specific tests set it explicitly.
+
+<!-- fr:journal kind=decision scope=plan id=d-external-reports created=2026-07-27T11:01:46 phase=3 -->
+### d-external-reports · decision · External mode reports rather than refuses (phase 3)
+
+fr cannot honestly reconcile a checkout it does not own, but exit-2-with-no-output left unattended automation with no answer at all. gc now returns exactly one action (verdict=external, action=skipped) naming the preparer as cleanup owner, keeping the --format json contract identical across modes. down deliberately does not fire the opportunistic sweep here.

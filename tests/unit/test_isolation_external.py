@@ -324,3 +324,50 @@ def test_up_git_exclude_idempotent(tmp_path: Path) -> None:
     t.up(profile=None, branch="feat/x")
     exclude = (repo / ".git" / "info" / "exclude").read_text().splitlines()
     assert exclude.count(".fr-isolation") == 1
+
+
+# ---------- gc: a structured, non-destructive verdict (#423) ----------
+
+
+def test_gc_reports_external_ownership_and_mutates_nothing(tmp_path: Path) -> None:
+    """gc used to refuse with exit 2 here, which left unattended automation with
+    no machine-readable answer in this mode. It now REPORTS: one action naming
+    the preparer as cleanup owner, and nothing is touched."""
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    runner = RecordingRunner()
+    target = ExternalTarget(repo, runner=runner)
+    st = target.up(profile=None, branch="feat/x")
+    runner.calls.clear()
+
+    (action,) = target.gc()
+
+    assert action.verdict == "external"
+    assert action.action == "skipped"
+    assert action.worktree == str(repo.resolve())
+    assert action.branch == "feat/x"
+    assert "preparer" in action.detail
+    # nothing reaped: checkout, marker and fr state all survive
+    assert repo.is_dir() and (repo / "README.md").is_file()
+    assert json.loads((repo / ".fr-isolation").read_text())["mode"] == "external"
+    assert load_state(repo, "feat/x") == st
+    _no_docker_or_worktree(runner)
+
+
+def test_gc_dry_run_matches_live_run(tmp_path: Path) -> None:
+    """`--dry-run` has nothing to suppress — the verdict is already read-only,
+    so both spellings return the same non-destructive report."""
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    target = ExternalTarget(repo, runner=RecordingRunner())
+    target.up(profile=None, branch="feat/x")
+    assert target.gc(dry_run=True) == target.gc(dry_run=False)
+
+
+def test_gc_without_an_adopted_branch_reports_no_branch(tmp_path: Path) -> None:
+    """A prepared container fr has not yet adopted (no `up`) still classifies —
+    the marker exists, the branch claim is empty."""
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    (action,) = ExternalTarget(repo, runner=RecordingRunner()).gc()
+    assert action.verdict == "external" and action.branch is None
