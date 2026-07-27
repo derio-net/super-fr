@@ -49,6 +49,31 @@ pipeline skill ran this session.
 removes it. The marker is **never** committed — it is gitignored and a CI
 tripwire fails if it is ever tracked.
 
+## Scope — what fr-isolation does NOT protect
+
+Read step 2 above literally: **not in a git repo, or not fr-enabled → allow.**
+fr-isolation answers exactly one question — *"is this fr work happening in an
+fr-enabled repo's base clone instead of its workspace?"* — and it is deliberately
+silent on everything else. It is **not** a filesystem sandbox, a credential
+boundary, or a secrets firewall. Concretely, all of these are allowed and are
+meant to be:
+
+- reading or writing `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config`, or any other
+  path outside a git repo — including when `$HOME` is itself a **dotfiles git
+  repo**, since that repo is not fr-enabled;
+- any command at all in a session with no active pipeline sentinel — the bash
+  guard exits immediately when there is none;
+- any work in a repo that never opted into fr.
+
+The `fr-isolation-guard.sh` cross-repo rules (super-fr#421) narrow *where a live
+pipeline may hop*; they are discipline, and must not be read as containment.
+
+**If you want those paths actually protected, that is the harness permission
+layer's job, not fr's** — `permissions.deny` in `~/.claude/settings.json` for
+Claude Code (e.g. `Read(./.ssh/**)`, `Bash(cat ~/.ssh/*)`), or the equivalent in
+your harness. fr ships no such rules and should not: it has no idea what is
+sensitive on your machine.
+
 ## Three isolation modes
 
 The marker's `mode` records who owns the environment; the edit-gate only cares
