@@ -29,3 +29,18 @@ fr cannot honestly reconcile a checkout it does not own, but exit-2-with-no-outp
 ### d-cli-repo-flag · decision · gc gains --repo and dispatches structurally (phase 4)
 
 The two _refuse_* guards are gone: every target implements gc, so the CLI casts to a small _GcCapable protocol rather than to the worktree family. --repo (via _resolve_repo) lets cron/agent runs name the repo, and turns a deleted cwd into exit 2 with guidance instead of a FileNotFoundError traceback; the detached spawn now passes it explicitly.
+
+<!-- fr:journal kind=discovery scope=plan id=n-preexisting-failures created=2026-07-27T11:05:16 phase=4 -->
+### n-preexisting-failures · discovery · Two pre-existing test failures are environmental, not from this branch (phase 4)
+
+tests/integration/test_bridge_project_id.py fails identically on the base commit (a real VK project id reaches the bridge where the fixture expects test-vk-project-id). Verified by stashing this branch's changes and re-running. Unrelated to #423.
+
+<!-- fr:journal kind=discovery scope=plan id=n-live-acceptance created=2026-07-27T11:12:43 phase=5 -->
+### n-live-acceptance · discovery · Acceptance signal verified live on this docker-less pod (phase 5)
+
+`FR_ISOLATION_TARGET=worktree fr isolation gc --dry-run --format json` now exits 0 and classifies real workspaces (one open-PR skip, one no-state warn) with no docker present — the exact command the issue quotes as failing. Reaping is still only exercised by tests; spec Test Plan step 2 remains the post-merge live walk.
+
+<!-- fr:journal kind=finding scope=plan id=f-spec-verify-merge-row created=2026-07-27T11:12:43 phase=5 state=fixed -->
+### f-spec-verify-merge-row · finding [fixed] · Spec mode matrix wrongly grouped verify-merge with push-check (phase 5)
+
+verify-merge is git + host gh only, so it works in host-worktree mode; only --push-check needs the in-container probe. The matrix row was split rather than left overclaiming a refusal.

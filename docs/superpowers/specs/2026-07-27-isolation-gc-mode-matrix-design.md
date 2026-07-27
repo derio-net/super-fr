@@ -80,7 +80,8 @@ smallest-safe-change choice consistent with the issue's "Desired outcome".
 | `restart` / `stats` | supported | refuse (externally managed) | refuse (externally managed) |
 | `down` | container + worktree + state; spawns gc | worktree + state; **spawns gc** (new) | state + marker branch claim only |
 | `gc` | full sweep | **full sweep minus docker** (new) | **structured `external` verdict** (new) |
-| `verify-merge` / `push-check` | supported | refused (`push-check` needs docker) | refused |
+| `verify-merge` | supported | supported (git + host `gh`, no docker) | refused |
+| `status --push-check` | supported | refused (needs an in-container probe) | refused |
 
 ### Discovery and the ownership boundary
 
