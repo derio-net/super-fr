@@ -11,11 +11,10 @@ description: >
 
 # fr-isolation
 
-A workspace contract, not just a worktree: code lives in a git worktree
-OUTSIDE the repo (`~/.cache/fr/worktrees/<repo>/<branch>`), commands run
-inside the profile's devcontainer, and the base repo is never touched while
-the run is live. The surface is plain shell — any agent or a human drives it
-identically; nothing here assumes a specific agent.
+A workspace contract, not just a worktree: code lives in a git worktree OUTSIDE
+the repo (`~/.cache/fr/worktrees/<repo>/<branch>`), commands run inside the
+profile's devcontainer, and the base repo is never touched while the run is
+live. The surface is plain shell — any agent or a human drives it identically.
 
 **Announce at start:** "I'm using fr-isolation to run this work isolated."
 
@@ -29,15 +28,15 @@ identically; nothing here assumes a specific agent.
 
 ### Modes (`FR_ISOLATION_TARGET`) — host env / docker-less
 
-Same worktree + exec-bridge contract in all three; only the environment half
-differs (the profile requirement is a devcontainer-mode rule, not isolation's).
+Same worktree + exec-bridge + cleanup contract in all three; only the
+environment half differs (the profile requirement is devcontainer-mode's).
 
 - **host-worktree** (`=worktree`): fr worktree, the host process env as-is — NO
   profile, no secrets provisioning (pods carry their own creds). A host-level
   declaration (pod/image env), never a per-call flag.
 - **external** (valid preparer-written `.fr-isolation` marker, `mode:external`):
   fr adopts the container's checkout — `up --branch` just ensures the branch in
-  place; restart/stats refuse (the container's owner restarts it).
+  place; restart/stats refuse, gc reports (the container's owner runs both).
 
 Unknown `FR_ISOLATION_TARGET` fails closed naming `devcontainer|worktree`.
 
@@ -50,7 +49,7 @@ fr isolation status [--branch ...] [--format json] [--stats] [--push-check]  # s
 fr isolation restart [--branch ...] [--force]                   # bounce a wedged container, worktree kept
 fr isolation down --branch <feature-branch> [--force]           # immediate teardown (verifies + reaps image)
 fr isolation down --all [--force]                               # tear down ALL + clear pipeline sentinel(s)
-fr isolation gc [--dry-run] [--format json]                     # host-wide: reap merged workspaces + dangling images
+fr isolation gc [--repo <path>] [--dry-run] [--format json]     # reconcile fr-owned workspaces (works in ALL three modes)
 ```
 
 - `up` (devcontainer mode) resolves the profile (flag → repo default from
@@ -58,17 +57,12 @@ fr isolation gc [--dry-run] [--format json]                     # host-wide: rea
   ensures the host secrets env-file exists, and starts the container with the
   base repo's `.git` mounted at the same absolute path (linked-worktree git
   needs it). One profile per run — change means `down --force` + fresh `up`.
-
-### Cold-start base (#322)
-
-A genuinely NEW branch is cut from freshly-fetched `origin/<default>`, not the
-base repo's HEAD — an isolated run never silently inherits the base checkout's
-un-merged commits. Reuse (existing branch/worktree) keeps that branch's own tip.
-
-- default: `git fetch origin`, base on `origin/<default>`. `--base <ref>` bases
-  on `<ref>` verbatim, no fetch (`--base HEAD` = fork from current checkout).
-  `--no-fetch` uses the LOCAL `origin/<default>`. No remote / fetch fails / ref
-  missing → fallback to local HEAD with a `WARNING`; the run never aborts.
+- **Cold-start base (#322):** a genuinely NEW branch is cut from freshly-fetched
+  `origin/<default>`, never the base repo's HEAD, so an isolated run cannot
+  inherit un-merged commits; reuse keeps that branch's own tip. `--base <ref>`
+  bases on `<ref>` verbatim, no fetch (`--base HEAD` = fork from current
+  checkout); `--no-fetch` uses the LOCAL `origin/<default>`. No remote / fetch
+  fails / ref missing → local HEAD with a `WARNING`; the run never aborts.
 
 ## Exec-bridge discipline
 
@@ -93,13 +87,19 @@ un-merged commits. Reuse (existing branch/worktree) keeps that branch's own tip.
 
 ## Cleanup contract
 
-The worktree + container PERSIST after the PR is created (the operator may push
-to the PR branch — back-loaded manual phases land here).
+Worktree + container PERSIST after the PR is created — the operator may push to
+the PR branch (back-loaded manual phases land there).
 
-- **gc auto-reconciles merged work.** `fr isolation gc` fires detached on every
-  `up`/`down` — host-wide, no daemon, ≤1 stale — tearing down MERGED-PR
-  workspaces + reaping orphaned containers/dangling `vsc-*` images; open-PR and
-  no-PR work untouched.
+- **gc auto-reconciles merged work, in every mode.** Fires detached on every
+  `up`/`down` (host-wide, no daemon, ≤1 stale): tears down MERGED-PR and
+  content-merged workspaces, retires state records whose worktree is gone, and
+  — devcontainer only — reaps orphaned containers / dangling `vsc-*` images.
+  Open-PR, dirty and no-PR work is never touched. **host-worktree** runs the
+  same sweep minus the docker steps; **external** reports `external`/`skipped`,
+  reaps nothing, and fires no sweep — the preparer owns that checkout.
+- **Ownership boundary.** gc acts only where fr ownership is provable — an fr
+  state record, the fr worktree cache, a devcontainer label. A plain `git
+  worktree add` by other automation is invisible to it; `git worktree remove` it.
 - **`down` is the immediate lever** — verifies container + worktree are gone
   before dropping state (a transient docker failure leaves the workspace
   VISIBLE, never leaked) and refuses an open PR unless `--force`.
@@ -110,11 +110,11 @@ to the PR branch — back-loaded manual phases land here).
   (`docker restart`; `--force` = SIGKILL) WITHOUT dropping the worktree /
   installs — prefer it to down+up. `status --stats` shows `docker stats` first.
 - **Orphaned pipeline sentinel** (every base-repo command denied, no worktree to
-  `cd` into): the guard self-heals — zero live worktrees → fails open, clears the
-  sentinel. Explicit lever: `fr isolation down --all` tears down all + sentinels.
+  `cd` into): the guard self-heals — zero live worktrees → fails open, clears it.
+  Explicit lever: `fr isolation down --all` tears down all + sentinels.
 
 ## Failure handling
 
-`devcontainer up` failures surface verbatim — missing Docker, broken profile
-config, or an absent secrets file are operator-environment issues: report and
-stop, don't work around isolation (no silent degradation to a weaker mode).
+`devcontainer up` failures surface verbatim — missing Docker, a broken profile,
+or an absent secrets file are operator-environment issues: report and stop,
+never work around isolation (no silent degradation to a weaker mode).

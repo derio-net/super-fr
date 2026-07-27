@@ -1,0 +1,64 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Ownership-proving discovery + stale state-record reconciliation
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - isolation-gc-ownership-boundary
+tasks:
+- number: 1
+  title: Add fr-state-file discovery source
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: test that a workspace created at a custom --path (outside ~/.cache/fr/worktrees) is discovered and classified by gc
+  - id: P1.T1.S2
+    text: |-
+      GREEN: union list_states(self.repo_root) into _discover_workspaces()
+  - id: P1.T1.S3
+    text: |-
+      Test that a plain `git worktree add` outside the fr cache with no fr state is never discovered nor removed
+- number: 2
+  title: Reap stale state records
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: test that a state file whose worktree is gone is reaped (record only) when no container concern exists
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add _stale_state_reapable() (docker health probe locally) and wire the orphan branch
+  - id: P1.T2.S3
+    text: |-
+      Test that a failed docker probe defers the stale-state reap instead of mis-reaping
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-27T10:57:14+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-27T10:57:15+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-27T10:57:15+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-07-27T10:57:15+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-07-27T10:57:15+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-07-27T10:57:15+00:00'
+      note: null
+  completion:
+    at: '2026-07-27T10:57:15+00:00'
+    note: null
+    observed_prs: []

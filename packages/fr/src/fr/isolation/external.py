@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fr.isolation.local import Runner, subprocess_runner
+from fr.isolation.local import GcAction, Runner, subprocess_runner
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -228,6 +228,41 @@ class ExternalTarget:
     def down(self, state: IsolationState, force: bool = False) -> None:
         """Retire fr's state file and the marker's branch claim ONLY. The checkout
         and container belong to the preparer — no worktree removal, no docker, and
-        the marker file itself is never unlinked."""
+        the marker file itself is never unlinked.
+
+        Deliberately does NOT fire the opportunistic gc sweep the worktree modes
+        run (#423): a host-wide reap launched from inside someone else's prepared
+        container is scope creep, and there is nothing here for it to reconcile —
+        `gc` in this mode reports rather than reaps.
+        """
         delete_state(state.repo_root, state.branch)
         self._set_marker_branch("")
+
+    def gc(self, dry_run: bool = False) -> list[GcAction]:
+        """Report the containment; never reap it (#423).
+
+        gc previously refused this mode outright (exit 2, no output), which left
+        unattended automation — the whole point of `--format json` — with no
+        answer at all in a prepared container. fr cannot honestly reconcile a
+        checkout it does not own: the container, its lifecycle, and its teardown
+        belong to the preparer. So the sweep returns exactly ONE action stating
+        that, keeping the output contract identical across modes.
+
+        `dry_run` is accepted for interface parity and ignored — the verdict is
+        already read-only, so both spellings return the same report.
+        """
+        branch = ""
+        try:
+            branch = str(self._load_marker().get("branch") or "")
+        except IsolationError:
+            pass  # unreadable/foreign marker — still report, just without a branch
+        return [
+            GcAction(
+                str(self.repo_root),
+                branch or None,
+                "external",
+                "skipped",
+                "externally managed — the preparer owns cleanup (tear the container "
+                "down through its owner); fr never removes an adopted checkout",
+            )
+        ]

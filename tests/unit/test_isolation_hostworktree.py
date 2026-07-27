@@ -18,7 +18,12 @@ from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import subprocess_runner
 from fr.isolation.types import IsolationError, IsolationState, load_state
 
-from tests.unit.test_isolation import make_repo
+from tests.unit.test_isolation import (
+    _commit_in_worktree,
+    _land_on_origin_main,
+    make_repo,
+    make_repo_with_origin,
+)
 
 
 class RecordingRunner:
@@ -193,3 +198,195 @@ def test_status_skips_docker_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert s["branch"] == "feat/x"
     assert s["pr"] is None
     _no_container_calls(runner)
+
+
+# ---------- gc: the same reconciler, minus every docker step (#423) ----------
+
+
+class GhRecordingRunner(RecordingRunner):
+    """RecordingRunner + a faked `gh pr view` — the sandbox has no PR host, and
+    gc classifies on the PR state. Everything else (git especially) still hits
+    the real binary, so a stray docker/devcontainer call is still caught."""
+
+    def __init__(self, pr_by_branch: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self.pr_by_branch = pr_by_branch or {}
+
+    def __call__(
+        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+    ) -> subprocess.CompletedProcess[str]:
+        if argv[0:3] == ["gh", "pr", "view"]:
+            self.calls.append(list(argv))
+            self.captures.append(capture)
+            body = self.pr_by_branch.get(argv[3], "")
+            return subprocess.CompletedProcess(argv, 0 if body else 1, stdout=body, stderr="")
+        return super().__call__(argv, cwd=cwd, check=check, capture=capture)
+
+
+def _gc_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pr_by_branch: dict[str, str] | None = None
+) -> tuple[Path, GhRecordingRunner, HostWorktreeTarget]:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    runner = GhRecordingRunner(pr_by_branch)
+    return repo, runner, HostWorktreeTarget(repo, runner=runner)
+
+
+def test_gc_reaps_merged_workspace_without_docker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The acceptance signal of #423: a docker-less host reaps its own merged
+    workspace. The whole sweep must not touch docker or devcontainer."""
+    repo, runner, target = _gc_env(
+        tmp_path, monkeypatch, {"feat/merged": '{"state": "MERGED", "url": "u"}'}
+    )
+    st = target.up(profile=None, branch="feat/merged")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/merged"]
+    assert action.verdict == "merged" and action.action == "reaped"
+    assert not st.worktree.exists()
+    assert load_state(repo, "feat/merged") is None
+    _no_container_calls(runner)
+
+
+def test_gc_skips_open_pr_and_no_pr_work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target = _gc_env(
+        tmp_path, monkeypatch, {"feat/open": '{"state": "OPEN", "url": "u"}'}
+    )
+    open_st = target.up(profile=None, branch="feat/open")
+    nopr_st = target.up(profile=None, branch="feat/nopr")
+
+    by_branch = {a.branch: a for a in target.gc()}
+    assert by_branch["feat/open"].verdict == "open"
+    assert by_branch["feat/open"].action == "skipped"
+    assert by_branch["feat/nopr"].verdict == "no-pr"
+    assert by_branch["feat/nopr"].action == "warned"
+    assert open_st.worktree.is_dir() and nopr_st.worktree.is_dir()
+    _no_container_calls(runner)
+
+
+def test_gc_dry_run_mutates_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, runner, target = _gc_env(
+        tmp_path, monkeypatch, {"feat/merged": '{"state": "MERGED", "url": "u"}'}
+    )
+    st = target.up(profile=None, branch="feat/merged")
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/merged"]
+    assert action.action == "would-reap"
+    assert st.worktree.is_dir()
+    assert load_state(repo, "feat/merged") is not None
+
+
+def test_gc_never_reports_dangling_images(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """There are no `vsc-*` images without docker — the image sweep is skipped,
+    not faked, so `docker images` is never even invoked."""
+    _repo, runner, target = _gc_env(tmp_path, monkeypatch)
+    target.up(profile=None, branch="feat/x")
+    assert not [a for a in target.gc() if a.verdict == "dangling-image"]
+    _no_container_calls(runner)
+
+
+def test_gc_reaps_stale_state_record_without_docker_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_stale_state_reapable` is unconditionally True here: with no containers
+    by construction there is no docker view to distrust, so the record is
+    retired instead of deferring forever on a host that has no daemon."""
+    import shutil
+
+    repo, runner, target = _gc_env(tmp_path, monkeypatch)
+    st = target.up(profile=None, branch="feat/gone")
+    shutil.rmtree(st.worktree)
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/gone"]
+    assert action.verdict == "orphan" and action.action == "reaped"
+    assert load_state(repo, "feat/gone") is None
+    _no_container_calls(runner)
+
+
+def _gc_env_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, GhRecordingRunner, HostWorktreeTarget]:
+    """gc env with a real bare origin + `origin/HEAD`, so the merged-by-content
+    check resolves a real remote ref without docker anywhere in sight."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+        check=True,
+    )
+    runner = GhRecordingRunner()
+    return repo, runner, HostWorktreeTarget(repo, runner=runner)
+
+
+def test_gc_reaps_content_merged_workspace_without_docker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A squash-merged branch has no discoverable PR and is not an ancestor of
+    main, but its content IS on main — the classifier that keeps a docker-less
+    host from warning about the same workspace forever."""
+    repo, runner, target = _gc_env_origin(tmp_path, monkeypatch)
+    st = target.up(profile=None, branch="feat/work")
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "reaped"
+    assert not st.worktree.exists()
+    assert load_state(repo, "feat/work") is None
+    _no_container_calls(runner)
+
+
+def test_gc_does_not_reap_content_merged_workspace_with_a_dirty_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same workspace, plus uncommitted work: reaping would destroy it, so the
+    clean-tree guard demotes the verdict to a warning."""
+    repo, runner, target = _gc_env_origin(tmp_path, monkeypatch)
+    st = target.up(profile=None, branch="feat/work")
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+    (st.worktree / "uncommitted.txt").write_text("work in progress\n")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "no-pr" and action.action == "warned"
+    assert (st.worktree / "uncommitted.txt").is_file()
+    _no_container_calls(runner)
+
+
+def test_gc_ignores_unrelated_git_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, _runner, target = _gc_env(tmp_path, monkeypatch)
+    scratch = tmp_path / "scratch"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", str(scratch), "-b", "other/manual"],
+        check=True,
+    )
+    assert not [a for a in target.gc() if a.worktree == str(scratch)]
+    assert scratch.is_dir()
+
+
+# ---------- opportunistic gc triggers (#423) ----------
+
+
+def test_up_and_down_fire_the_gc_spawner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sweep is no longer docker-coupled, so this mode participates in the
+    same opportunistic reconciliation as devcontainer mode — that is what bounds
+    the leak on a pod whose session exits before its PR merges."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    spawns: list[Path] = []
+    target = HostWorktreeTarget(
+        repo, runner=GhRecordingRunner(), gc_spawner=lambda root: spawns.append(root)
+    )
+
+    st = target.up(profile=None, branch="feat/x")
+    assert spawns == [target.repo_root], "up fires exactly one background sweep"
+    target.down(st, force=False)
+    assert len(spawns) == 2, "down fires exactly one background sweep"

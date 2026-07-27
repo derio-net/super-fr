@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
 from fr.isolation.types import IsolationError, IsolationState, save_state
 
 _EXTERNAL = "environment is externally managed — restart/inspect the host, not fr"
@@ -45,6 +45,7 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         )
         save_state(state)
         self._write_isolation_marker(worktree, branch)
+        self._spawn_gc()
         return state
 
     def exec(self, state: IsolationState, argv: list[str]) -> int:
@@ -75,15 +76,37 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
             "pr": self._pr(state),
         }
 
-    def down(self, state: IsolationState, force: bool = False) -> None:
-        """The local target's PR guard + verified worktree removal + marker/state
-        retirement, minus every docker step (`_teardown_container` is a no-op
-        here) and the background gc sweep."""
-        self._down_worktree_tail(state, force)
+    # `down` is NOT overridden: the inherited one is already the shared
+    # `_down_worktree_tail` (PR guard → verified worktree removal → marker/state
+    # retirement) plus the opportunistic sweep, and the only docker step in it —
+    # `_teardown_container` — is the no-op below.
 
     def _teardown_container(self, state: IsolationState) -> None:
         """No container in this mode — the host env is the env (spec §B)."""
 
-    def _spawn_gc(self) -> None:
-        """No-op: the host-wide gc sweep is docker-coupled (reaps containers /
-        vsc-* images), meaningless without a docker socket in this mode."""
+    # ----- gc: the same reconciler, minus every docker step (#423) -----
+    #
+    # The sweep used to be refused outright here ("gc requires docker"), which
+    # left docker-less pods with no reconciler at all — a workspace whose PR
+    # merged after its session exited leaked forever. Only DISCOVERY and
+    # TEARDOWN were ever docker-coupled; the merge / content / cleanliness
+    # classification is substrate-neutral. So the three docker-only steps are
+    # skipped (not faked) and everything else is inherited verbatim, which is
+    # what keeps the two worktree modes from drifting apart.
+
+    def _labelled_containers(self) -> list[tuple[str, Path]]:
+        """No docker → no container discovery. The sweep's other two sources
+        (the fr worktree cache, this repo's fr state records) are enough."""
+        return []
+
+    def _sweep_dangling_images(self, dry_run: bool) -> list[GcAction]:
+        """No docker → no `vsc-*` devcontainer images to reclaim."""
+        return []
+
+    def _stale_state_reapable(self) -> bool:
+        """Unconditionally true: this mode has no containers by construction, so
+        a state record whose worktree is gone cannot be hiding one. (The local
+        target gates this on a healthy `docker ps` — there is no such view to
+        distrust here, and deferring forever on a host with no daemon would
+        recreate the very leak this closes.)"""
+        return True
