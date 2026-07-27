@@ -1577,7 +1577,7 @@ def _spawn_target(tmp_path, monkeypatch, spawner, **runner_kw):
 
 def test_up_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     spawns: list[int] = []
-    _, _, target = _spawn_target(tmp_path, monkeypatch, lambda: spawns.append(1))
+    _, _, target = _spawn_target(tmp_path, monkeypatch, lambda _root: spawns.append(1))
     target.up(None, "feat/a")
     assert spawns == [1], "up() fires exactly one background gc after its work"
 
@@ -1585,7 +1585,7 @@ def test_up_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_down_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     spawns: list[int] = []
     repo, runner, target = _spawn_target(
-        tmp_path, monkeypatch, lambda: spawns.append(1), stdout={"gh": '{"state": "MERGED"}'}
+        tmp_path, monkeypatch, lambda _root: spawns.append(1), stdout={"gh": '{"state": "MERGED"}'}
     )
     st = target.up(None, "feat/a")
     spawns.clear()
@@ -1594,7 +1594,7 @@ def test_down_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_spawn_failure_does_not_break_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def boom() -> None:
+    def boom(_root: Path) -> None:
         raise RuntimeError("no fork today")
 
     _, _, target = _spawn_target(tmp_path, monkeypatch, boom)

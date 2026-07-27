@@ -20,7 +20,19 @@ runner = CliRunner()
 def _no_real_gc_spawn(monkeypatch: pytest.MonkeyPatch):
     """Never fork a real `fr isolation gc` during CLI tests — up/down would
     otherwise reap the developer's live workspaces (#354)."""
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+
+
+@pytest.fixture(autouse=True)
+def _default_mode(monkeypatch: pytest.MonkeyPatch):
+    """Pin target selection to devcontainer mode unless a test says otherwise.
+
+    `FR_ISOLATION_TARGET` is a HOST-level declaration, and the docker-less pods
+    this repo is developed on export `=worktree` — leaving it ambient silently
+    reroutes every unqualified CLI test to `HostWorktreeTarget` and fails eight
+    of them for environmental reasons. Mode tests set the var explicitly.
+    """
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
 
 
 @pytest.fixture()

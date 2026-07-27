@@ -64,7 +64,7 @@ def test_hostworktree_full_lifecycle_no_docker_base_untouched(
 
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
 
     # Selection: the env declaration routes to the host-worktree backend.
     target = isolation_cmd._target(repo)

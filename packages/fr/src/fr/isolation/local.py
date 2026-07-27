@@ -57,19 +57,27 @@ def _home() -> Path:
 # non-raising contract is testable. The library default is a NO-OP — production
 # opts into the real spawn at the CLI boundary, so a Target built directly (every
 # unit test, and gc's own sibling teardown Targets) never spawns.
-GcSpawner = Callable[[], None]
+GcSpawner = Callable[[Path], None]
 
 
-def _detached_gc_spawn() -> None:
+def _detached_gc_spawn(repo_root: Path) -> None:
     """Fire-and-forget `fr isolation gc`: detached (own session), non-blocking,
     output to a rotating-ish log. Any spawn error is swallowed — a caller must
-    never fail because a background reap could not start."""
+    never fail because a background reap could not start.
+
+    Runs in `repo_root`, not the caller's cwd (#423): a `down` fired from inside
+    the worktree it just removed would otherwise hand the child a deleted cwd —
+    `Path.cwd()` then raises and the sweep dies before classifying anything.
+    Rooting it at the repo also keeps the child's state-record discovery source
+    pointed at the repo the caller was actually working in.
+    """
     try:
         log_path = _home() / ".cache" / "fr" / "isolation-gc.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log = open(log_path, "a")  # noqa: SIM115 — handed to the child; not ours to close
         subprocess.Popen(
             [sys.executable, "-m", "fr", "isolation", "gc"],
+            cwd=str(repo_root) if repo_root.is_dir() else None,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=log,
@@ -79,7 +87,7 @@ def _detached_gc_spawn() -> None:
         pass
 
 
-def _noop_gc_spawn() -> None:
+def _noop_gc_spawn(repo_root: Path) -> None:
     """The safe default — no background sweep (see GcSpawner)."""
 
 
@@ -603,7 +611,7 @@ class LocalWorktreeDevcontainerTarget:
         """Fire the opportunistic background sweep — best-effort, never raises
         into up()/down()."""
         try:
-            self._gc_spawner()
+            self._gc_spawner(self.repo_root)
         except Exception:
             pass
 
