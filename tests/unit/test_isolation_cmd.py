@@ -1130,23 +1130,84 @@ def test_status_push_check_external_refuses(
     assert "external mode" in res.output
 
 
-def test_gc_external_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.isolation.external import ExternalTarget
+# --- gc reports in EVERY mode; no mode-specific hard failure (#423) ---
 
-    et = ExternalTarget(tmp_path)
-    monkeypatch.setattr(isolation_cmd, "_target", lambda _repo: et)
+
+def test_gc_external_reports_instead_of_refusing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The old behavior was exit 2 with no output — useless to the unattended
+    automation `--format json` exists for. It now reports who owns cleanup."""
+    import json as _json
+
+    repo = _external_up(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "gc", "--repo", str(repo), "--format", "json"])
+    assert res.exit_code == 0, res.output
+    (row,) = _json.loads(res.output)
+    assert row["verdict"] == "external" and row["action"] == "skipped"
+    assert "preparer" in row["detail"]
+    assert repo.is_dir()  # nothing reaped
+
+
+def test_gc_host_mode_sweeps_without_docker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The acceptance signal of #423, through the CLI: a docker-less host gets a
+    real dry-run report, not `gc requires docker`."""
+    import json as _json
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    repo = _init_git_repo(tmp_path / "repo")
+    assert (
+        runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "f/x"]).exit_code
+        == 0
+    )
+
+    res = runner.invoke(
+        app, ["isolation", "gc", "--repo", str(repo), "--dry-run", "--format", "json"]
+    )
+    assert res.exit_code == 0, res.output
+    assert "Traceback" not in res.output
+    rows = _json.loads(res.output)
+    assert [r for r in rows if r["branch"] == "f/x"], rows
+    assert not [r for r in rows if r["verdict"] == "dangling-image"]
+
+
+def test_gc_repo_option_targets_the_named_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unattended cron/agent runs cannot rely on cwd — `--repo` names the repo
+    whose state records the sweep should reconcile."""
+    seen: list[Path] = []
+
+    class StubTarget:
+        def gc(self, dry_run=False):
+            return []
+
+    def _fake_target(repo: Path):
+        seen.append(repo)
+        return StubTarget()
+
+    monkeypatch.setattr(isolation_cmd, "_target", _fake_target)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    res = runner.invoke(app, ["isolation", "gc", "--repo", str(elsewhere)])
+    assert res.exit_code == 0, res.output
+    assert seen == [elsewhere.resolve()]
+
+
+def test_gc_deleted_cwd_exits_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A `down` fired from inside the worktree it removes leaves the shell in a
+    deleted cwd; the opportunistic sweep must not die on a raw traceback."""
+    import shutil
+
+    doomed = tmp_path / "doomed"
+    doomed.mkdir()
+    monkeypatch.chdir(doomed)
+    shutil.rmtree(doomed)
+
     res = runner.invoke(app, ["isolation", "gc"])
     assert res.exit_code == 2
-    assert "external mode" in res.output
-
-
-# --- finding 10: gc on a docker-less host-worktree host refuses cleanly ---
-
-
-def test_gc_host_mode_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    ht = HostWorktreeTarget(tmp_path)
-    monkeypatch.setattr(isolation_cmd, "_target", lambda _repo: ht)
-    res = runner.invoke(app, ["isolation", "gc"])
-    assert res.exit_code == 2
-    assert "future work" in res.output
+    assert "no longer exist" in res.output
     assert "Traceback" not in res.output

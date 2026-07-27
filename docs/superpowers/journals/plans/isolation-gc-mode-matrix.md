@@ -24,3 +24,8 @@ Eight tests in test_isolation_cmd.py assume devcontainer mode but read the ambie
 ### d-external-reports · decision · External mode reports rather than refuses (phase 3)
 
 fr cannot honestly reconcile a checkout it does not own, but exit-2-with-no-output left unattended automation with no answer at all. gc now returns exactly one action (verdict=external, action=skipped) naming the preparer as cleanup owner, keeping the --format json contract identical across modes. down deliberately does not fire the opportunistic sweep here.
+
+<!-- fr:journal kind=decision scope=plan id=d-cli-repo-flag created=2026-07-27T11:05:11 phase=4 -->
+### d-cli-repo-flag · decision · gc gains --repo and dispatches structurally (phase 4)
+
+The two _refuse_* guards are gone: every target implements gc, so the CLI casts to a small _GcCapable protocol rather than to the worktree family. --repo (via _resolve_repo) lets cron/agent runs name the repo, and turns a deleted cwd into exit 2 with guidance instead of a FileNotFoundError traceback; the detached spawn now passes it explicitly.

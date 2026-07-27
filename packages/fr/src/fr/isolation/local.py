@@ -65,18 +65,18 @@ def _detached_gc_spawn(repo_root: Path) -> None:
     output to a rotating-ish log. Any spawn error is swallowed — a caller must
     never fail because a background reap could not start.
 
-    Runs in `repo_root`, not the caller's cwd (#423): a `down` fired from inside
-    the worktree it just removed would otherwise hand the child a deleted cwd —
-    `Path.cwd()` then raises and the sweep dies before classifying anything.
-    Rooting it at the repo also keeps the child's state-record discovery source
-    pointed at the repo the caller was actually working in.
+    Named with `--repo` and run there rather than inheriting the caller's cwd
+    (#423): a `down` fired from inside the worktree it just removed would
+    otherwise hand the child a deleted cwd — `Path.cwd()` then raises and the
+    sweep dies before classifying anything. It also keeps the child's
+    state-record discovery source pointed at the repo the caller was working in.
     """
     try:
         log_path = _home() / ".cache" / "fr" / "isolation-gc.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log = open(log_path, "a")  # noqa: SIM115 — handed to the child; not ours to close
         subprocess.Popen(
-            [sys.executable, "-m", "fr", "isolation", "gc"],
+            [sys.executable, "-m", "fr", "isolation", "gc", "--repo", str(repo_root)],
             cwd=str(repo_root) if repo_root.is_dir() else None,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
