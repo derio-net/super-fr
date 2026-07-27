@@ -1212,6 +1212,82 @@ def test_gc_classifies_and_reaps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert by_wt[str(nostate)].verdict == "no-state" and by_wt[str(nostate)].action == "warned"
 
 
+# ---------- gc discovery: ownership-proving sources (#423) ----------
+
+
+def test_gc_discovers_workspace_at_custom_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A workspace created with `up --path` lives OUTSIDE ~/.cache/fr/worktrees —
+    the shape runners use. Directory + container discovery both miss it; the fr
+    state record is what proves fr owns it."""
+    repo, _runner, target, _up = _gc_env(tmp_path, monkeypatch)
+    custom = tmp_path / "elsewhere" / "wt"
+    target.up(None, "feat/custom", path=custom)
+
+    recs = {r.worktree: r for r in target._discover_workspaces()}
+    assert custom in recs
+    assert recs[custom].state is not None and recs[custom].state.branch == "feat/custom"
+
+
+def test_gc_ignores_unrelated_git_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ownership boundary (#423): a plain `git worktree add` by other
+    automation has no fr state and is not under the fr cache root — gc must
+    neither report nor touch it. Discovery never calls `git worktree list`."""
+    repo, _runner, target, _up = _gc_env(tmp_path, monkeypatch)
+    scratch = tmp_path / "scratch"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", str(scratch), "-b", "other/manual"],
+        check=True,
+    )
+
+    actions = target.gc()
+    assert not any(a.worktree == str(scratch) for a in actions)
+    assert scratch.is_dir() and (scratch / "README.md").is_file()
+
+
+def test_gc_reaps_stale_state_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A worktree removed out of band (rm -rf / a runner reaping its own
+    workspace) leaves an fr state record that `status` keeps reporting forever.
+    gc retires the RECORD — no branch, no commit, nothing else is touched."""
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch)
+    wt = up("feat/gone")
+    shutil.rmtree(wt)
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/gone"]
+    assert action.verdict == "orphan" and action.action == "reaped"
+    assert "stale state record" in action.detail
+    assert load_state(repo, "feat/gone") is None
+    # the branch itself survives — gc retires bookkeeping, never work
+    assert _git_out(repo, "branch", "--list", "feat/gone")
+
+
+def test_gc_stale_state_dry_run_mutates_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch)
+    wt = up("feat/gone")
+    shutil.rmtree(wt)
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/gone"]
+    assert action.action == "would-reap"
+    assert load_state(repo, "feat/gone") is not None
+
+
+def test_gc_stale_state_deferred_when_docker_unhealthy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#354's invariant survives: a FAILED docker query must never be read as
+    'no container'. With the daemon down the reap DEFERS to a later sweep."""
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, fail_on="ps")
+    wt = up("feat/gone")
+    shutil.rmtree(wt)
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/gone"]
+    assert action.action == "skipped" and "docker" in action.detail
+    assert load_state(repo, "feat/gone") is not None
+
+
 # ---------- gc: merged-by-content (no PR, changes already on origin/<default>) ----------
 
 
