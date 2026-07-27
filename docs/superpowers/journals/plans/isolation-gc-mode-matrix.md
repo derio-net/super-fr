@@ -44,3 +44,8 @@ tests/integration/test_bridge_project_id.py fails identically on the base commit
 ### f-spec-verify-merge-row · finding [fixed] · Spec mode matrix wrongly grouped verify-merge with push-check (phase 5)
 
 verify-merge is git + host gh only, so it works in host-worktree mode; only --push-check needs the in-container probe. The matrix row was split rather than left overclaiming a refusal.
+
+<!-- fr:journal kind=finding scope=plan id=f-host-regression-gaps created=2026-07-27T11:15:39 phase=5 state=fixed -->
+### f-host-regression-gaps · finding [fixed] · Host-mode regression matrix was missing dirty-skip and content-equivalent (phase 5)
+
+The issue's regression matrix asks for no-PR/content-equivalent handling and a dirty skip in every mode; the first pass only covered them in devcontainer mode, where the shared code path is exercised. Added both as host-mode tests against a real bare origin, plus a gc step in the docker-less end-to-end walk that asserts the sweep classifies the live workspace instead of reaping the run it was launched from.

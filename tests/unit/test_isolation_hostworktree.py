@@ -18,7 +18,12 @@ from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import subprocess_runner
 from fr.isolation.types import IsolationError, IsolationState, load_state
 
-from tests.unit.test_isolation import make_repo
+from tests.unit.test_isolation import (
+    _commit_in_worktree,
+    _land_on_origin_main,
+    make_repo,
+    make_repo_with_origin,
+)
 
 
 class RecordingRunner:
@@ -296,6 +301,63 @@ def test_gc_reaps_stale_state_record_without_docker_probe(
     (action,) = [a for a in target.gc() if a.branch == "feat/gone"]
     assert action.verdict == "orphan" and action.action == "reaped"
     assert load_state(repo, "feat/gone") is None
+    _no_container_calls(runner)
+
+
+def _gc_env_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, GhRecordingRunner, HostWorktreeTarget]:
+    """gc env with a real bare origin + `origin/HEAD`, so the merged-by-content
+    check resolves a real remote ref without docker anywhere in sight."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+        check=True,
+    )
+    runner = GhRecordingRunner()
+    return repo, runner, HostWorktreeTarget(repo, runner=runner)
+
+
+def test_gc_reaps_content_merged_workspace_without_docker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A squash-merged branch has no discoverable PR and is not an ancestor of
+    main, but its content IS on main — the classifier that keeps a docker-less
+    host from warning about the same workspace forever."""
+    repo, runner, target = _gc_env_origin(tmp_path, monkeypatch)
+    st = target.up(profile=None, branch="feat/work")
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "reaped"
+    assert not st.worktree.exists()
+    assert load_state(repo, "feat/work") is None
+    _no_container_calls(runner)
+
+
+def test_gc_does_not_reap_content_merged_workspace_with_a_dirty_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same workspace, plus uncommitted work: reaping would destroy it, so the
+    clean-tree guard demotes the verdict to a warning."""
+    repo, runner, target = _gc_env_origin(tmp_path, monkeypatch)
+    st = target.up(profile=None, branch="feat/work")
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+    (st.worktree / "uncommitted.txt").write_text("work in progress\n")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "no-pr" and action.action == "warned"
+    assert (st.worktree / "uncommitted.txt").is_file()
     _no_container_calls(runner)
 
 
