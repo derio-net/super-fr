@@ -64,7 +64,7 @@ def test_hostworktree_full_lifecycle_no_docker_base_untouched(
 
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
 
     # Selection: the env declaration routes to the host-worktree backend.
     target = isolation_cmd._target(repo)
@@ -81,6 +81,15 @@ def test_hostworktree_full_lifecycle_no_docker_base_untouched(
 
     # exec: a real command runs in the worktree and returns 0
     assert target.exec(st, ["git", "status", "--porcelain"]) == 0
+
+    # gc: the sweep runs docker-less (#423) and classifies this live workspace
+    # instead of refusing. It has no PR and a dirty tree, so it is left alone —
+    # a reconciler that reaped the run it was launched from would be worse than
+    # no reconciler at all.
+    actions = target.gc()
+    (mine,) = [a for a in actions if a.branch == "feat/slug"]
+    assert mine.action == "warned" and st.worktree.is_dir()
+    assert not [a for a in actions if a.verdict == "dangling-image"]
 
     # down: worktree + state gone
     target.down(st, force=False)

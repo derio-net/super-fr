@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'CLI contract: --repo, mode-agnostic dispatch, JSON in every mode'
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - isolation-gc-json-contract
+tasks:
+- number: 1
+  title: gc command surface
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: CLI tests for gc --format json exit 0 in all three modes and for --repo targeting
+  - id: P4.T1.S2
+    text: |-
+      GREEN: remove the host/external refusals, add --repo via _resolve_repo, dispatch structurally
+  - id: P4.T1.S3
+    text: |-
+      Test that a deleted cwd yields exit 2 with guidance, not a traceback
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-07-27T11:05:10+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-07-27T11:05:11+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-07-27T11:05:11+00:00'
+      note: null
+  completion:
+    at: '2026-07-27T11:05:11+00:00'
+    note: null
+    observed_prs: []

@@ -8,6 +8,25 @@ flagged with **BREAKING**.
 Internal-only changes (test reorganisations, ruff/format passes, doc
 typos) are not listed; consult the PR history for those.
 
+## 3.19.0 — isolation GC works in every mode (#423)
+
+- **`fr isolation gc` no longer refuses a mode.** host-worktree runs the same
+  reconciler as devcontainer minus the docker-only steps (container discovery,
+  container reap, `vsc-*` image sweep); external returns a structured
+  `external`/`skipped` verdict naming the preparer as cleanup owner. Both used
+  to exit 2 with no output, leaving docker-less pods and prepared containers
+  with no reconciler at all. `--format json` is now useful in all three.
+- **Discovery proves fr ownership.** A third source — the invoking repo's fr
+  state records — finds workspaces created at a custom `--path` (previously
+  invisible to gc in every mode) and state records whose worktree was removed
+  out of band (now retired as `orphan`/`reaped`, so `status` stops reporting a
+  phantom workspace). `git worktree list` is still never consulted: a plain
+  `git worktree add` by other automation remains outside gc's reach.
+- **`up`/`down` fire the opportunistic sweep in host-worktree mode** too;
+  external deliberately does not.
+- **`fr isolation gc --repo <path>`** for cron/agent runs, and a deleted cwd now
+  exits 2 with guidance instead of raising `FileNotFoundError`.
+
 ## 3.7.0 — acceptance matrix: first-class acceptance tests (#352)
 
 - **New `fr acceptance` CLI group.** `check` (the gate: ref resolution with

@@ -10,13 +10,14 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import typer
 
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
+    GcAction,
     LocalWorktreeDevcontainerTarget,
     _detached_gc_spawn,
     subprocess_runner,
@@ -68,13 +69,25 @@ def _target(repo: Path) -> Target:
 
 
 def _worktree_ops(target: Target) -> LocalWorktreeDevcontainerTarget:
-    """Type-narrow to the worktree+container family for the three subcommands
-    whose operations (push-check, verify-merge, gc) are NOT in the Target
-    protocol. A `cast`, not an isinstance check, on purpose: those commands are
-    driven in tests through duck-typed stubs monkeypatched over `_target`, so a
-    nominal guard would reject the doubles. The non-devcontainer modes are
-    refused up-front by the `_refuse_*` guards below before this cast runs."""
+    """Type-narrow to the worktree+container family for the two subcommands
+    whose operations (push-check, verify-merge) are NOT in the Target protocol.
+    A `cast`, not an isinstance check, on purpose: those commands are driven in
+    tests through duck-typed stubs monkeypatched over `_target`, so a nominal
+    guard would reject the doubles. The non-devcontainer modes are refused
+    up-front by the `_refuse_*` guards below before this cast runs."""
     return cast("LocalWorktreeDevcontainerTarget", target)
+
+
+class _GcCapable(Protocol):
+    """Every target reconciles — the shapes differ, the surface does not (#423).
+    Separate from `_worktree_ops` precisely because `gc` is no longer a
+    worktree-family-only operation: `ExternalTarget` implements it too."""
+
+    def gc(self, dry_run: bool = False) -> list[GcAction]: ...
+
+
+def _gc_ops(target: Target) -> _GcCapable:
+    return cast("_GcCapable", target)
 
 
 def _fail(err: IsolationError) -> None:
@@ -503,6 +516,7 @@ def verify_merge(
 
 @isolation_app.command()
 def gc(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Classify + report only; mutate nothing."
     ),
@@ -514,17 +528,22 @@ def gc(
     and reaps orphaned containers — so end-to-end runs no longer depend on a
     human running `down` in the originating session. Fired opportunistically on
     every up/down; also runnable standalone or on a schedule.
+
+    Works in EVERY mode (#423), because unattended automation must not have to
+    special-case one:
+
+    - devcontainer — the full sweep (workspaces, orphaned containers, dangling
+      `vsc-*` images);
+    - host-worktree — the same sweep minus the docker-only steps;
+    - external — a non-destructive `external` verdict; the preparer owns the
+      cleanup of a checkout fr merely adopted.
+
+    `--repo` names the repo whose state records to reconcile (the fr worktree
+    cache and docker labels are host-wide regardless) — cron and agent runs
+    cannot rely on cwd.
     """
-    target = _target_or_exit(Path.cwd())
-    _refuse_external(target, "gc")
-    if isinstance(target, HostWorktreeTarget):
-        _fail(
-            IsolationError(
-                "gc requires docker; host-worktree gc is future work — "
-                "tear down individual workspaces with `fr isolation down`."
-            )
-        )
-    actions = _worktree_ops(target).gc(dry_run=dry_run)
+    target = _target_or_exit(_resolve_repo(repo))
+    actions = _gc_ops(target).gc(dry_run=dry_run)
     if format == "json":
         typer.echo(json.dumps([asdict(a) for a in actions], indent=2))
         return

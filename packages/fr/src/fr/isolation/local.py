@@ -57,19 +57,27 @@ def _home() -> Path:
 # non-raising contract is testable. The library default is a NO-OP — production
 # opts into the real spawn at the CLI boundary, so a Target built directly (every
 # unit test, and gc's own sibling teardown Targets) never spawns.
-GcSpawner = Callable[[], None]
+GcSpawner = Callable[[Path], None]
 
 
-def _detached_gc_spawn() -> None:
+def _detached_gc_spawn(repo_root: Path) -> None:
     """Fire-and-forget `fr isolation gc`: detached (own session), non-blocking,
     output to a rotating-ish log. Any spawn error is swallowed — a caller must
-    never fail because a background reap could not start."""
+    never fail because a background reap could not start.
+
+    Named with `--repo` and run there rather than inheriting the caller's cwd
+    (#423): a `down` fired from inside the worktree it just removed would
+    otherwise hand the child a deleted cwd — `Path.cwd()` then raises and the
+    sweep dies before classifying anything. It also keeps the child's
+    state-record discovery source pointed at the repo the caller was working in.
+    """
     try:
         log_path = _home() / ".cache" / "fr" / "isolation-gc.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log = open(log_path, "a")  # noqa: SIM115 — handed to the child; not ours to close
         subprocess.Popen(
-            [sys.executable, "-m", "fr", "isolation", "gc"],
+            [sys.executable, "-m", "fr", "isolation", "gc", "--repo", str(repo_root)],
+            cwd=str(repo_root) if repo_root.is_dir() else None,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=log,
@@ -79,7 +87,7 @@ def _detached_gc_spawn() -> None:
         pass
 
 
-def _noop_gc_spawn() -> None:
+def _noop_gc_spawn(repo_root: Path) -> None:
     """The safe default — no background sweep (see GcSpawner)."""
 
 
@@ -206,6 +214,19 @@ def branch_changes_present(
         if not _branch_change_present_in_file(run, repo_root, merge_base, branch, base_ref, path)
     ]
     return MergeVerification(changed=changed, missing=missing, changes_present=not missing)
+
+
+def _realpath(p: Path) -> Path:
+    """Symlink-resolved identity for gc's discovery keys. The three sources
+    spell the same workspace differently (a docker label is whatever string was
+    recorded at `up`; the cache scan builds from `$HOME`; a state record carries
+    its own copy), and on macOS `/tmp` is a symlink — so raw path equality would
+    classify one workspace twice. Never raises: a path that cannot be resolved
+    keys as itself."""
+    try:
+        return p.resolve()
+    except OSError:
+        return p
 
 
 def _main_worktree_root(repo_root: Path) -> Path:
@@ -590,7 +611,7 @@ class LocalWorktreeDevcontainerTarget:
         """Fire the opportunistic background sweep — best-effort, never raises
         into up()/down()."""
         try:
-            self._gc_spawner()
+            self._gc_spawner(self.repo_root)
         except Exception:
             pass
 
@@ -649,7 +670,7 @@ class LocalWorktreeDevcontainerTarget:
             # Orphan: worktree gone. If a container lingers (found by label),
             # reap it directly — no PR check needed (worktree gone ⇒ done).
             if not rec.container_id:
-                return GcAction(wt, None, "orphan", "skipped", "no container")
+                return self._gc_stale_state(rec, dry_run)
             if dry_run:
                 return GcAction(wt, None, "orphan", "would-reap")
             try:
@@ -702,6 +723,52 @@ class LocalWorktreeDevcontainerTarget:
             wt, state.branch, "no-pr", "warned", "no PR — `fr isolation down` when done"
         )
 
+    def _gc_stale_state(self, rec: GcWorkspace, dry_run: bool) -> GcAction:
+        """Worktree gone, no container: retire the dangling fr state RECORD.
+
+        A worktree removed out of band (`rm -rf`, a runner reaping its own
+        workspace, a `git worktree remove` outside fr) leaves the state JSON at
+        `<git-common-dir>/fr/isolation/<branch>.json` behind. Nothing discovered
+        it before this (#423) — discovery was directory/container-driven — so
+        `fr isolation status` reported a workspace that no longer exists, forever.
+
+        Only bookkeeping is retired: the branch, its commits, and git's own
+        worktree registration are left exactly as they are. Reaping is gated on
+        `_stale_state_reapable()` so #354's invariant holds — a FAILED docker
+        query must never be read as "no container".
+        """
+        wt = str(rec.worktree)
+        state = rec.state
+        if state is None:
+            return GcAction(wt, None, "orphan", "skipped", "no container")
+        if not self._stale_state_reapable():
+            return GcAction(
+                wt, state.branch, "orphan", "skipped", "docker unavailable — reap deferred"
+            )
+        if dry_run:
+            return GcAction(wt, state.branch, "orphan", "would-reap", "stale state record")
+        try:
+            delete_state(state.repo_root, state.branch)
+            return GcAction(wt, state.branch, "orphan", "reaped", "stale state record")
+        except Exception as e:  # per-workspace; never abort the host-wide sweep
+            return GcAction(wt, state.branch, "orphan", "reap-failed", str(e))
+
+    def _stale_state_reapable(self) -> bool:
+        """May a state record whose worktree is gone be retired right now?
+
+        Only when the container view is TRUSTWORTHY: a healthy `docker ps`
+        (returncode 0) means `_labelled_containers()` genuinely saw every
+        container, so a record with none really is stale. A broken or absent
+        daemon defers the reap to a later sweep rather than dropping the state
+        file that is the only pointer to a container that may still be running
+        (#354). Docker-less modes override this to an unconditional True — they
+        have no containers by construction.
+        """
+        try:
+            return self.run(["docker", "ps", "-q"]).returncode == 0
+        except Exception:
+            return False
+
     def _merged_by_content(self, state: IsolationState) -> bool:
         """True when a PR-less workspace's changes are ALL already present on
         origin/<default> — a merge gc's PR-only classifier can't see — and
@@ -743,14 +810,35 @@ class LocalWorktreeDevcontainerTarget:
             return False
 
     def _discover_workspaces(self) -> list[GcWorkspace]:
-        """Union docker-label containers with on-disk worktree dirs, then
-        git-resolve each existing worktree to its fr state. State is per-repo
-        (no host registry), so the worktree is the discovery root."""
+        """Union THREE ownership-proving sources, then resolve each to its fr
+        state. Every source is evidence that fr owns the workspace; nothing here
+        enumerates `git worktree list`, so a plain `git worktree add` made by
+        other automation is never seen and never reaped (#423 non-goal).
+
+        1. docker-label containers (`devcontainer.local_folder`) — devcontainer
+           mode only; docker-less modes override it to an empty list;
+        2. directories under the fr worktree cache `~/.cache/fr/worktrees`;
+        3. the invoking repo's own fr state records (#423) — the ONLY source
+           that finds a workspace created at a custom `--path` (the shape
+           runners use) or a record whose worktree has since vanished.
+
+        Sources 1–2 are host-wide; source 3 is necessarily per-repo (state is
+        per-repo, there is no host registry), which is why the cache scan stays.
+        """
         by_path: dict[Path, GcWorkspace] = {}
         for cid, path in self._labelled_containers():
             by_path[path] = GcWorkspace(worktree=path, container_id=cid, state=None)
         for path in self._worktree_dirs():
             by_path.setdefault(path, GcWorkspace(worktree=path, container_id=None, state=None))
+        recorded: dict[Path, IsolationState] = {}
+        seen = {_realpath(p) for p in by_path}
+        for st in self._repo_states():
+            recorded[st.worktree] = st
+            key = _realpath(st.worktree)
+            if key in seen:
+                continue  # already discovered by label/cache — don't double-classify
+            seen.add(key)
+            by_path[st.worktree] = GcWorkspace(worktree=st.worktree, container_id=None, state=None)
         for path, rec in by_path.items():
             if path.is_dir():
                 try:
@@ -760,7 +848,22 @@ class LocalWorktreeDevcontainerTarget:
                     # host-wide sweep — treat as no-state (the workspace is then
                     # warned, never blindly reaped).
                     rec.state = None
+            else:
+                # Worktree gone. Carry the state record through so the sweep can
+                # retire the dangling bookkeeping (`_gc_stale_state`) instead of
+                # leaving `fr isolation status` reporting a phantom workspace.
+                rec.state = recorded.get(path)
         return list(by_path.values())
+
+    def _repo_states(self) -> list[IsolationState]:
+        """The invoking repo's fr state records — discovery source 3.
+
+        Best-effort: a missing/corrupt state dir yields nothing rather than
+        aborting the host-wide sweep (the other two sources still report)."""
+        try:
+            return list_states(self.repo_root)
+        except Exception:
+            return []
 
     def _labelled_containers(self) -> list[tuple[str, Path]]:
         result = self.run(

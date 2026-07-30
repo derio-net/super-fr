@@ -1,0 +1,58 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Host-worktree gc without Docker
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-gc-host-worktree
+tasks:
+- number: 1
+  title: Docker-free sweep
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: HostWorktreeTarget.gc classifies merged/open/dirty/no-pr with zero docker or devcontainer calls
+  - id: P2.T1.S2
+    text: |-
+      GREEN: override _labelled_containers, _sweep_dangling_images, _stale_state_reapable on HostWorktreeTarget
+  - id: P2.T1.S3
+    text: |-
+      Test merged-clean reap, open-PR skip, dirty skip, dry-run purity in host mode
+- number: 2
+  title: Opportunistic triggers in host mode
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: host-worktree up and down each fire the gc spawner exactly once
+  - id: P2.T2.S2
+    text: |-
+      GREEN: drop the _spawn_gc no-op override; call it from up and down
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-07-27T11:00:52+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-07-27T11:00:53+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-07-27T11:00:53+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-07-27T11:00:53+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-07-27T11:00:53+00:00'
+      note: null
+  completion:
+    at: '2026-07-27T11:00:58+00:00'
+    note: null
+    observed_prs: []
