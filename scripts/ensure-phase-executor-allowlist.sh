@@ -51,17 +51,25 @@ changed=0
 # Explore as the anchor keeps the edit robust to trailing members.
 #
 # ONLY the qualified id is inserted — that is what Claude Code sends, and the
-# allowlist must stay fail-closed for anything else. The first expression strips
-# a stale bare-only entry left by the pre-fix script, so an already-broken hook
-# is repaired rather than ending up with both spellings. Both expressions are
-# start-anchored, which is what keeps the strip from eating the `super-fr:`
-# prefix off an already-correct entry.
-if ! grep -q "$QUALIFIED|Explore|Plan|" "$hook"; then
-  sed -e 's/^\([[:space:]]*\)fr-phase-executor|Explore|Plan|/\1Explore|Plan|/' \
-      -e "s/^\([[:space:]]*\)Explore|Plan|/\1$QUALIFIED|Explore|Plan|/" \
+# allowlist must stay fail-closed for anything else. The strip expressions
+# remove a stale bare entry left by the pre-fix script, so an already-broken
+# hook is repaired rather than ending up with both spellings — at the head of
+# the arm (where the pre-fix script put it) AND as a `|`-delimited member
+# anywhere else, which the head-anchored form alone silently left behind
+# (rev2-f6).
+#
+# Every expression is scoped to NON-COMMENT lines, and so is the probe: a hook
+# whose header comment documents its own allowlist verbatim otherwise satisfies
+# a file-wide probe, so the real `case` arm is never patched and this script
+# exits 0 reporting success while dispatch stays blocked — re-creating the
+# silent inline-degradation incident it was written to end (rev2-f6).
+if ! grep -v '^[[:space:]]*#' "$hook" | grep -q "$QUALIFIED|Explore|Plan|"; then
+  sed -e '/^[[:space:]]*#/!s/^\([[:space:]]*\)fr-phase-executor|Explore|Plan|/\1Explore|Plan|/' \
+      -e '/^[[:space:]]*#/!s/|fr-phase-executor\([|)]\)/\1/' \
+      -e "/^[[:space:]]*#/!s/^\([[:space:]]*\)Explore|Plan|/\1$QUALIFIED|Explore|Plan|/" \
       "$hook" >"$tmp"
 
-  if ! grep -q "$QUALIFIED|Explore|Plan|" "$tmp"; then
+  if ! grep -v '^[[:space:]]*#' "$tmp" | grep -q "$QUALIFIED|Explore|Plan|"; then
     # Anchor not found (hook shape changed). Fail loud rather than silently
     # skip, so drift is visible instead of leaving dispatch mysteriously
     # blocked.
@@ -82,12 +90,38 @@ fi
 # Unlike the `case` anchor this is NOT required to exist: the message is the org
 # hook's own prose, and a host whose hook has none is simply left alone. Absence
 # is a silent no-op, never a failure.
-if grep -q 'Explore, Plan,' "$hook" && ! grep -q "$QUALIFIED, Explore, Plan," "$hook"; then
-  # The qualified name is known absent here, so stripping a stale bare entry
-  # cannot mangle a correct one.
-  sed -e 's/fr-phase-executor, Explore, Plan,/Explore, Plan,/' \
-      -e "s/Explore, Plan,/$QUALIFIED, Explore, Plan,/" \
-      "$hook" >"$tmp"
+#
+# Decided PER LINE, and never on a line that is not ours to edit (rev2-f5). The
+# live org hook carries the exempt list TWICE — a "Read-only subagent types (…)"
+# rationale comment as well as the real stderr message — so the previous
+# file-wide probe plus unanchored expressions:
+#   * rewrote the comment too, asserting that fr-phase-executor is a READ-ONLY
+#     subagent type, which super-fr's own shipped rule contradicts in as many
+#     words ("The reason is *not* 'this agent is read-only'"); and
+#   * let one already-qualified line satisfy the probe for every other, so once
+#     any line was fixed the real message stayed stale forever — verbatim the
+#     "one surface reports done for another" failure this file's header warns
+#     about.
+#
+# awk rather than sed because the decision has three cases (not ours /
+# already-correct / repairable), and `changed` is decided by comparing content,
+# so the repair is its own probe — no separate predicate is left that the wrong
+# surface can satisfy. The two boundary-qualified strips (`: ` / `, `) replace
+# the stale bare entry in one step, which is what keeps a foreign plugin id like
+# `someplugin:fr-phase-executor` from being eaten mid-token.
+awk -v q="$QUALIFIED" '
+  /^[[:space:]]*#/  { print; next }
+  index($0, q)      { print; next }
+  !/Explore, Plan,/ { print; next }
+  {
+    if (!sub(/: fr-phase-executor, Explore, Plan,/, ": " q ", Explore, Plan,") &&
+        !sub(/, fr-phase-executor, Explore, Plan,/, ", " q ", Explore, Plan,"))
+      sub(/Explore, Plan,/, q ", Explore, Plan,")
+    print
+  }
+' "$hook" >"$tmp"
+
+if ! cmp -s "$hook" "$tmp"; then
   cat "$tmp" >"$hook"
   changed=1
 fi

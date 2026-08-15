@@ -174,3 +174,120 @@ class TestStaleStderrMessage:
         assert run_script(hook).returncode == 0
         assert hook.read_text() == once, "second run must be byte-identical"
         assert once.count(QUALIFIED) == 2, "exactly one case entry + one message entry"
+
+
+# ---------------------------------------------------------------------------
+# Review findings rev2-f5 / rev2-f6 (2026-08-15 fr-goal review run).
+#
+# This script edits a file super-fr does NOT own. The real
+# ~/.claude/hooks/agent-worktree-required.sh on an operator machine carries the
+# exempt list TWICE — once in a header comment explaining the rationale, once in
+# the stderr message — and both repairs were file-wide and unanchored.
+# ---------------------------------------------------------------------------
+
+# The shape that actually ships: a rationale comment naming the read-only types,
+# and further down the real `case` arm plus the stderr message.
+REAL_WORLD_HOOK = (
+    "#!/bin/bash\n"
+    "# Enforce worktree isolation for code-writing subagents.\n"
+    "# Read-only subagent types (Explore, Plan, claude-code-guide, …) bypass — see\n"
+    "# the allowlist below.\n" + STOCK_HOOK.split("\n", 1)[1]
+)
+
+
+def _line_with(hook: Path, needle: str, *, comment: bool) -> str:
+    for line in hook.read_text().splitlines():
+        if needle in line and line.lstrip().startswith("#") == comment:
+            return line
+    raise AssertionError(f"no {'comment' if comment else 'code'} line containing {needle!r}")
+
+
+class TestDoesNotRewriteLinesItDoesNotOwn:
+    def test_rationale_comment_is_left_alone(self, tmp_path: Path) -> None:
+        """The comment says these types are READ-ONLY. fr-phase-executor writes
+        code — super-fr's own rule says so in as many words — so inserting it
+        there asserts something the rule contradicts, in a file we don't own."""
+        hook = write_hook(tmp_path, REAL_WORLD_HOOK)
+        before = _line_with(hook, "Explore, Plan,", comment=True)
+        assert run_script(hook).returncode == 0
+        assert _line_with(hook, "Explore, Plan,", comment=True) == before, (
+            "the read-only rationale comment must not gain a code-writing agent"
+        )
+
+    def test_stderr_message_is_still_repaired(self, tmp_path: Path) -> None:
+        hook = write_hook(tmp_path, REAL_WORLD_HOOK)
+        assert run_script(hook).returncode == 0
+        assert QUALIFIED in _line_with(hook, "Explore, Plan,", comment=False)
+
+    def test_comment_carrying_the_name_does_not_mask_a_stale_message(self, tmp_path: Path) -> None:
+        """The probe was file-wide, so ONE already-qualified line satisfied it
+        for every other — the exact 'one surface reports done for another'
+        failure this script's header says the two-probe design prevents."""
+        hook = write_hook(
+            tmp_path,
+            REAL_WORLD_HOOK.replace(
+                "# Read-only subagent types (Explore, Plan,",
+                f"# Read-only subagent types ({QUALIFIED}, Explore, Plan,",
+            ),
+        )
+        assert run_script(hook).returncode == 0
+        assert QUALIFIED in _line_with(hook, "Explore, Plan,", comment=False), (
+            "a pre-qualified comment must not permanently mask the real message"
+        )
+
+    def test_foreign_plugin_id_is_not_mangled(self, tmp_path: Path) -> None:
+        """`s/fr-phase-executor, Explore, Plan,/…/` matched mid-token, erasing a
+        real entry and inventing `someplugin:super-fr:fr-phase-executor`."""
+        hook = write_hook(
+            tmp_path,
+            STOCK_HOOK.replace(
+                "Explore, Plan, claude-code-guide",
+                "someplugin:fr-phase-executor, Explore, Plan, claude-code-guide",
+            ),
+        )
+        assert run_script(hook).returncode == 0
+        text = hook.read_text()
+        assert "someplugin:super-fr:" not in text, "must not invent a nonexistent id"
+        assert "someplugin:fr-phase-executor" in text, "must not erase a real entry"
+
+    def test_real_world_shape_is_idempotent(self, tmp_path: Path) -> None:
+        hook = write_hook(tmp_path, REAL_WORLD_HOOK)
+        run_script(hook)
+        once = hook.read_text()
+        assert run_script(hook).returncode == 0
+        assert hook.read_text() == once
+
+
+class TestCaseArmProbeIgnoresComments:
+    def test_comment_quoting_the_allowlist_does_not_defeat_the_repair(self, tmp_path: Path) -> None:
+        """A hook documenting its own allowlist verbatim satisfied the file-wide
+        probe, so the real `case` arm was never patched — the script reported
+        success while dispatch stayed blocked, re-creating the silent
+        inline-degradation incident this file exists to end."""
+        hook = write_hook(
+            tmp_path,
+            STOCK_HOOK.replace(
+                "#!/bin/bash\n",
+                f"#!/bin/bash\n#   {QUALIFIED}|Explore|Plan|claude-code-guide)\n",
+            ),
+        )
+        assert run_script(hook).returncode == 0
+        assert hook_allows(hook, QUALIFIED), (
+            "the real case arm must be repaired even when a comment quotes the fixed form"
+        )
+
+    def test_bare_entry_not_at_head_is_still_stripped(self, tmp_path: Path) -> None:
+        """The strip was anchored to the head of the arm, so a stale bare entry
+        elsewhere survived alongside the prepended qualified one — which the
+        comment claims cannot happen."""
+        hook = write_hook(
+            tmp_path,
+            STOCK_HOOK.replace(
+                "Explore|Plan|claude-code-guide|statusline-setup",
+                "Explore|Plan|claude-code-guide|fr-phase-executor|statusline-setup",
+            ),
+        )
+        assert run_script(hook).returncode == 0
+        arm = next(line for line in hook.read_text().splitlines() if "Explore|Plan|" in line)
+        assert "|fr-phase-executor|" not in arm, "the stale bare entry must be removed"
+        assert f"{QUALIFIED}|Explore|Plan|" in arm
