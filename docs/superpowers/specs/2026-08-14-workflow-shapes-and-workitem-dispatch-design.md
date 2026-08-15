@@ -245,6 +245,15 @@ definition: `queued → fr:ready`, `blocked → fr:blocked`,
 changes is that the *decision* of which state an item is in is computed in
 tracker-neutral terms first, and projected second.
 
+**`manual` is not an `ItemState` either** (found in Phase 1, not at design time —
+this mapping originally omitted it). `labels.py:101` defines
+`MANUAL = LabelDef("manual", …, "Human-only; not routable to an agent")`, and in
+the projection it short-circuits *ahead of* the dependency check. It is a
+routing **attribute** — can an agent take this at all — orthogonal to where the
+item sits in its lifecycle; a manual item is still queued, then done. §4.F's
+capability negotiation and §4.G's tracker mapping must therefore carry
+routability as a separate item attribute rather than a sixth state.
+
 `fr:synced` is deliberately **not** an `ItemState`. It is a dispatch bookkeeping
 stamp — "handed to the runner" — that happens to be stored on the Issue because
 there was previously nowhere else durable to put it. It stays a tracker-side
