@@ -1077,7 +1077,11 @@ rows:
       plan identically: one card per ready phase, no duplicates on a second tick.'
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
+    levels:
+      int:
+      - super-fr:tests/integration/test_bridge_dispatch_parity.py
     status: not-implemented
-    notes: Spec 4.D/6. Regression guarantee for the one path in daily production use;
-      walked by the post-merge Test Plan.
+    notes: 'Spec 4.D/6/8 Test Plan step 3. Executable half lands Phase 4 (test_bridge_dispatch_parity.py
+      — one card per ready phase, zero new cards on a second tick). Row stays
+      not-implemented until the operator''s post-merge live-bridge walk confirms
+      the same against the real board.'

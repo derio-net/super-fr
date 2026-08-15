@@ -171,7 +171,15 @@ def test_tick_mcp_failure_does_not_mark_fr_synced_so_next_tick_retries():
     assert result.errors == 1
     assert len(result.failures) == 1
     assert "injected MCP failure" in result.failures[0]
-    assert f"phase {plan.phases[0].phase.number}" in result.failures[0]
+    # Failure strings are prefixed with the item id, not "phase N" (Phase 3
+    # rewrite — see the 2026-08-14 plan journal, p3-tests-rewritten-not-ported):
+    # the loop is unit-agnostic, and the id also names the plan, which a
+    # bare "phase N" never did.
+    from fr_dispatch.work_item import item_id
+
+    phase_n = plan.phases[0].phase.number
+    expected_id = item_id(repo, "fixture-spec-design", plan.meta.plan, phase=phase_n)
+    assert result.failures[0].startswith(f"{expected_id}: ")
 
     add_calls = [c for c in gh.calls if c[0] == "edit_issue_labels" and "fr:synced" in c[1]["add"]]
     assert add_calls == []

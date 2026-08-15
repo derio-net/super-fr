@@ -22,6 +22,13 @@ Dedup is server-side by design: cncd ingest upserts by
 so `existing_dispatches()` is honestly empty — a re-POST after a lost
 GitHub synced-stamp is a no-op, not a duplicate. stdlib `urllib` only;
 a thin client earns no third-party HTTP dependency.
+
+**v2 (2026-08-14 workflow-shapes spec §4.D).** `dispatch`/`can_dispatch`
+take a `WorkItem` instead of `(plan, phase, repo, issue_number)`;
+`dedup_key`/`can_dispatch_repo` are gone. `build_ingest_payload` keeps
+every existing wire key byte-stable and gains the item envelope
+(`id`, `unit`, `parent`) alongside them — cncd's server-side schema is
+additive-only for this cutover.
 """
 
 from __future__ import annotations
@@ -33,8 +40,9 @@ import urllib.request
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from fr.parser import Plan
-    from fr.types import PhaseDoc
+    from collections.abc import Sequence
+
+    from fr_dispatch.work_item import WorkItem
 
 DEFAULT_SLOT_BUDGET = 8
 INGEST_PATH = "/v1/ingest"
@@ -49,9 +57,7 @@ def _env_base_url() -> str | None:
     return os.environ.get("CNCD_URL") or None
 
 
-def build_ingest_payload(
-    plan: Plan, phase: PhaseDoc, repo: str, issue_number: int
-) -> dict[str, Any]:
+def build_ingest_payload(item: WorkItem) -> dict[str, Any]:
     """The `POST /v1/ingest` body: the plan folder verbatim + dispatch context.
 
     Files travel byte-for-byte (keyed by filename) because cncd's
@@ -60,18 +66,31 @@ def build_ingest_payload(
     plan dir (cncd's upsert key alongside the tenant); it degrades to
     the absolute path only when the plan is outside a git checkout,
     which `fr apply --to` already refuses to dispatch.
+
+    `plan`/`phase`/`issue_number` come out of `item.payload` — the same
+    values the pre-cutover `(plan, phase, repo, issue_number)` signature
+    took, just carried on the item now. `repo` is `item.repo` (the
+    Issue's repo — see `fr_dispatch._eligible_items`). Every existing key
+    stays byte-stable; `id`/`unit`/`parent` are new, additive envelope
+    fields for a phase-unit item today.
     """
-    files = {p.name: p.read_text() for p in sorted(plan.dir.iterdir()) if p.is_file()}
+    plan = item.payload["plan"]
+    phase = item.payload["phase"]
+    issue_number = int(item.payload["issue_number"])  # type: ignore[call-overload]
+    files = {p.name: p.read_text() for p in sorted(plan.dir.iterdir()) if p.is_file()}  # type: ignore[attr-defined]
     return {
         "kind": "plan_folder",
         "schema_version": 2,
-        "plan": plan.meta.plan,
-        "target_repo": plan.meta.target_repo,
-        "repo": repo,
+        "plan": plan.meta.plan,  # type: ignore[attr-defined]
+        "target_repo": plan.meta.target_repo,  # type: ignore[attr-defined]
+        "repo": item.repo,
         "issue_number": issue_number,
-        "phase": phase.phase.number,
-        "source_path": plan.repo_relative_dir.as_posix(),
+        "phase": phase.phase.number,  # type: ignore[attr-defined]
+        "source_path": plan.repo_relative_dir.as_posix(),  # type: ignore[attr-defined]
         "files": files,
+        "id": item.id,
+        "unit": item.unit,
+        "parent": item.parent,
     }
 
 
@@ -80,6 +99,8 @@ class CncdRunner:
 
     name = "cncd"
 
+    capabilities = frozenset({"git", "tests", "scm"})
+
     def __init__(
         self, base_url: str | None = None, *, timeout: float = DEFAULT_TIMEOUT_SECONDS
     ) -> None:
@@ -87,7 +108,7 @@ class CncdRunner:
         self.base_url = raw.rstrip("/") if raw else None
         self.timeout = timeout
 
-    def preflight(self) -> str | None:
+    def preflight(self, items: Sequence[WorkItem]) -> str | None:
         if not self.base_url:
             return (
                 "CNCD_URL unset; cannot dispatch to cncd (set the env or pass base_url explicitly)"
@@ -108,18 +129,15 @@ class CncdRunner:
         # no query surface keyed by GitHub Issue to build one from.
         return set()
 
-    def dedup_key(self, repo: str, issue_number: int) -> str:
-        return f"{repo}#{issue_number}"
-
-    def can_dispatch_repo(self, repo: str) -> bool:
+    def can_dispatch(self, item: WorkItem) -> bool:
         # cncd ingests any repo's plan bundle; tenant scoping is
         # server-side, so there is no client-visible known-repo set.
         return True
 
-    def dispatch(self, plan: Plan, phase: PhaseDoc, repo: str, issue_number: int) -> None:
+    def dispatch(self, item: WorkItem) -> None:
         # preflight() guarantees base_url is set before tick dispatches.
         assert self.base_url is not None
-        payload = build_ingest_payload(plan, phase, repo, issue_number)
+        payload = build_ingest_payload(item)
         self._post_json(f"{self.base_url}{INGEST_PATH}", payload)
 
     def _post_json(self, url: str, payload: dict[str, Any]) -> None:
