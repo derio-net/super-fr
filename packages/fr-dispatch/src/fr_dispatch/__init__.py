@@ -34,8 +34,9 @@ from fr.types import PhaseDoc
 
 from fr_dispatch.metrics import MetricsPusher, NullMetrics
 from fr_dispatch.protocols import Runner
+from fr_dispatch.work_item import ArtifactRef, WorkItem
 
-__all__ = ["Runner", "TickResult", "discover_plans", "tick"]
+__all__ = ["ArtifactRef", "Runner", "TickResult", "WorkItem", "discover_plans", "tick"]
 
 logger = logging.getLogger(__name__)
 

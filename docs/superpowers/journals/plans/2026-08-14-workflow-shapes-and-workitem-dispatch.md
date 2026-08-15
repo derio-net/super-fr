@@ -61,3 +61,55 @@ Post-fix gate for Phase 1: pytest full suite green (the 1837+1), ruff check clea
 AGENTS.md requires a version bump for any PR changing packages/*/src/**, and Phase 1 adds packages/fr/src/fr/item_state.py and edits render.py. The bump was NOT performed here: the plan assigns the 3.19.0 -> 4.0.0 major bump to Phase 11, and `_meta.yaml` is authored `fr_version: >=3.19.0,<5.0.0` precisely so phases straddle it. Whoever opens the PR for this branch must make sure Phase 11 (or the PR itself, if it ships before Phase 11) carries the bump — Phase 1 alone on main would violate the bump rule.
 
 Also unchanged by design: docs/acceptance/matrix.yaml. The spec's matrix rows cover §4.A/B/D/E/F/G; there is no row waiting on §4.C's ItemState extraction, and Phase 1 ships no user-observable surface. `fr acceptance check` stays green (74 rows OK).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-identity-grammar created=2026-08-15T17:37:19 phase=2 -->
+### p2-identity-grammar · discovery · item_id grammar pinned: repo/spec[/plan[/phase/n]], segment-count parent_id (phase 2)
+
+Identity grammar (spec §4.D) implemented exactly as three id shapes, distinguished by segment count once split on "/" (repo is always owner/name, i.e. 2 segments, which is what pins the counts):
+
+  spec   <repo>/<spec-slug>                       -> 3 segments
+  run    <repo>/<spec-slug>/<plan-slug>            -> 4 segments
+  phase  <repo>/<spec-slug>/<plan-slug>/phase/<n>  -> 6 segments (second-to-last segment literal "phase")
+
+`item_id(repo, spec_slug, plan_slug=None, phase=None) -> str` is pure string join, no I/O. `phase` without `plan_slug` raises ValueError ("a phase cannot exist outside a plan").
+
+`parent_id(item_id) -> str | None` walks back up the SAME string (no separate lookup table): if the id's second-to-last segment is literally "phase", drop the last two segments (phase -> run level); elif 4 segments, drop the last one (run -> spec level); elif 3 segments, return None (spec is the root). This assumes slugs never contain "/", which is consistent with every slug producer in the repo (kebab-case).
+
+WorkItem.unit ("run"|"phase"|"spec" per spec §4.D/E) is validated against this SAME id-shape classifier in __post_init__ — constructing unit="phase" with a run-level or spec-level id raises ValueError. This means `unit` is redundant with `id`'s shape by construction; Phase 3+ callers should treat `unit` as a convenience/readability field, not an independent source of truth — if they ever diverge, `id` is what identity/dedup keys off.
+
+WorkItem.__hash__ is overridden to `hash(self.id)` rather than the dataclass-default all-fields hash, because `payload: Mapping[str, object]` is commonly a plain dict (unhashable) — hashing on `id` alone is also more correct semantically: two WorkItems are "the same dispatch slot" iff they have the same id, regardless of payload contents at a given tick.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-card-title-still-title-not-key created=2026-08-15T17:37:44 phase=2 -->
+### p2-card-title-still-title-not-key · discovery · build_card_title stays VK's title-string presentation; Phase 4 must map it back to item_id for dedup (phase 2)
+
+Read packages/fr-vk/src/fr_vk/dispatch.py: `build_card_title(repo, issue_n) -> str` returns `"gh#{n}: [{owner/repo}]"` (delegates to `fr_vk._cardref.build_card_title("github", repo, issue_n)`), format pinned by test D2, and is the ONLY thing VK dedup keys off today (`fr_dispatch.tick`'s dedup snapshot is the pre-cutover `Runner.dedup_key(repo, issue_number)`, not present in this phase's scope).
+
+This phase does not touch build_card_title, protocols.py, or tick — confirmed unmodified. But per the spec (§4.D "Adapter migration is mechanical") and the plan's own gotcha ("Card titles stop being identity but stay presentation"), Phase 4 needs a concrete answer for one thing this phase's identity grammar makes newly visible:
+
+A card created BEFORE the cutover has no `item.id` baked into it anywhere — only a title of the form `"gh#{n}: [{owner/repo}]"` plus whatever `(repo, issue_number)` VK's own board stores. Phase 4's `existing_dispatches()` (returning item ids per the v2 Runner protocol: `def existing_dispatches(self) -> set[str]`) must therefore RECONSTRUCT the phase-level item_id for each existing card from `(repo, issue_number)` it can already parse off the title/board state — i.e. `item_id(repo, spec_slug, plan_slug, phase=n)` — not merely relabel the old dedup_key. spec_slug/plan_slug are not encoded in the card title at all today (only repo + issue number are), so Phase 4 needs a lookup path from issue_number back to (spec_slug, plan_slug, phase) — almost certainly via the Issue's own body/labels (tracking_issue is already stored on PhaseDoc, so the plan folder -> phase -> issue_number mapping is available locally; the adapter would need the REVERSE, issue_number -> (plan, phase), which today it gets by having been handed `(plan, phase, repo, issue_number)` directly by `tick` rather than needing to invert anything).
+
+Concretely: **do not derive existing_dispatches() ids from card title parsing alone** — the title has no spec/plan slug in it, only owner/repo/issue_number. Phase 4 either (a) has tick continue to supply `(plan, phase)` context so the adapter can compute item_id itself rather than reconstructing it from board state, or (b) VK must start persisting item_id somewhere it does not today (e.g. a card description/field). Flagging (a) as the much cheaper path since tick already has plan+phase in hand at the call site before it ever reaches the adapter.
+
+<!-- fr:journal kind=finding scope=plan id=p2-run-identity-gap created=2026-08-15T17:44:11 phase=2 state=fixed -->
+### p2-run-identity-gap · finding [fixed] · Original 3-level id grammar could not express a run item — spec §4.D amended, grammar corrected to 4 levels (phase 2)
+
+Found in coordinator review, not by self-review. The original Phase 2 grammar (`<repo>/<spec-slug>[/<plan-slug>[/phase/<n>]]`) classified any 4-segment id as `unit: "run"`. That silently required a run item to carry a plan slug — but per spec §4.E, a `unit: run` item is dispatched BEFORE its spec and plan exist; both are the run's *outputs*, not inputs (this is the entire reason §4.E says the reachability gate does not apply to run-unit dispatch). At creation a run item therefore has neither slug: under the old grammar it would have been built as a bare 3-segment id (`<repo>/??`) and misclassified as `unit: "spec"`, or been impossible to construct at all without inventing a fake plan slug.
+
+Root cause: the grammar conflated "4 segments" with "the run unit" when in fact 4 segments is ALSO the natural shape of the plan level (`<repo>/<spec-slug>/<plan-slug>`), which the original design never named as its own grammar level. The spec itself was ambiguous here (§4.D implied `<repo>/<spec-slug>/…` for every unit) — the coordinator amended §4.D in the same review that caught this.
+
+Fix — grammar is now four levels, three of which are units:
+
+    run    <repo>/run/<run-id>                        unit: run
+    spec   <repo>/<spec-slug>                          unit: spec
+    plan   <repo>/<spec-slug>/<plan-slug>              (parent level only — NOT a unit)
+    phase  <repo>/<spec-slug>/<plan-slug>/phase/<n>    unit: phase
+
+- New `run_item_id(repo, run_id) -> str` (kept separate from `item_id` rather than adding a `run_id` kwarg to it — the run form shares no other parameters with the spec/plan/phase form, so a separate function reads clearer against the four-level grammar than one function with mutually-exclusive optional args).
+- `item_id` now rejects `spec_slug == "run"` — both the run form and the plan form are "<owner>/<repo> plus two segments"; the literal `run/` marker is what disambiguates them, and this guard is what keeps a spec-level id from ever colliding with a run-level one.
+- `_id_level` (internal) now returns one of FOUR values (`run | spec | plan | phase`), not three — it classifies by marker (`segments[-2] == "phase"`, `segments[2] == "run"`) rather than by segment count alone, since segment count alone can't distinguish run-form from plan-form (both 4 segments).
+- `WorkItem.__post_init__`'s unit/id agreement check needed NO logic change: `unit: Literal["run","phase","spec"]` never equals `_id_level`'s `"plan"` result, so a plan-form id is automatically rejected for every unit value, including `"run"` — the bug is closed structurally, not by an extra branch.
+- `parent_id` of a run item: **`None`**. Reasoning: a run item is a root exactly like a spec item — it has no spec yet, and per spec §6 / Phase 8 task 3 (the no-PR-shape mitigation, a fixture manifest emitting only a document) a run may never gain one at all. Treating a run's parent as `None` rather than inventing a placeholder keeps `WorkItem.parent` meaning "the item's actual position in a graph that already exists," which is the same meaning it has for a spec item today.
+
+Tests added (RED confirmed before the fix, all pass after): `test_run_item_id_format`, `test_run_item_id_is_deterministic`, `test_item_id_rejects_run_as_spec_slug`, `test_parent_id_of_run_item_is_none`, `test_parent_id_of_plan_is_still_the_spec_level_not_confused_with_run`, `test_work_item_run_unit_matches_run_form_id`, `test_work_item_rejects_plan_form_id_for_any_unit`. Full suite: 22 passed (tests/unit/test_work_item.py), mypy clean, ruff clean.
+
+Handoff for Phase 8 (owns `fr run start`/the run-id shape and the no-PR-shape fixture): a run item's `id` is `run_item_id(repo, run_id)` where `run_id` is whatever `fr run start` assigns (§4.B shows `run: 2026-08-14-ticket-polling` as an example run id — looks like a date-prefixed slug, same shape as a plan slug, but it is NOT a plan slug and must not be passed through `item_id`). When/if a run later spawns a spec+plan (the common case, not the no-PR-shape case), the resulting spec/plan/phase items' `parent` should point at the run's `run_item_id`, NOT at `None` — only the run item itself has no parent.

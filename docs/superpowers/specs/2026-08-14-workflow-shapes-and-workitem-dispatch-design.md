@@ -288,10 +288,26 @@ configurable units some items have no tracker artifact at creation time, so
 identity must derive from the item's position in the graph:
 
 ```
-<repo>/<spec-slug>[/<plan-slug>[/phase/<n>]]
+run    <repo>/run/<run-id>                        unit: run
+spec   <repo>/<spec-slug>                         unit: spec
+plan   <repo>/<spec-slug>/<plan-slug>             (parent level only — not a unit)
+phase  <repo>/<spec-slug>/<plan-slug>/phase/<n>   unit: phase
 ```
 
 Deterministic, computable before any tracker call, and stable across ticks.
+
+**A run item is keyed on the run id, not on a spec or plan slug** (corrected
+during Phase 2 — the original grammar here implied `<repo>/<spec-slug>/…` for
+every unit, which cannot work). A `unit: run` item is dispatched *before* its
+spec and plan exist: §4.E makes both outputs of the run, not inputs to it. Its
+only stable name at creation is the run id assigned by `fr run start` (§4.B), so
+the form carries a literal `run/` marker. `item_id` must therefore reject a
+spec slug of `"run"`, which would otherwise collide with the plan-level form —
+both are `<owner>/<repo>` plus two segments.
+
+The plan level is a **parent, not a dispatchable unit**: `parent_id` of a phase
+returns it, and nothing ever dispatches at that granularity. `unit` has three
+values; the grammar has four levels.
 
 **Runner protocol v2** — 6 methods, down from 7 (`dedup_key` disappears because
 identity now lives on the item):
