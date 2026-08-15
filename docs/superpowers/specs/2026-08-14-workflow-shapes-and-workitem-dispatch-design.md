@@ -94,10 +94,14 @@ multi-backend spec.
 | SCM | real, working | `hostclient` → gh / glab / tea |
 | Substrate | real, working | `FR_ISOLATION_TARGET`: devcontainer / worktree / external |
 
-The tracker axis is the expensive one and cannot be wholly deferred to (c):
-a1's step definitions must name states, and today the only state vocabulary is
-GitHub labels. §4.C extracts that vocabulary; §4.G defines the protocol that
-consumes it. No adapter beyond the existing GitHub behavior is written.
+The tracker axis is the expensive one and cannot be wholly deferred to (c) —
+but the reason is a2, not a1. Step definitions (§4.A) never name an item state;
+`needs`, `emits`, and `gate` are artifact- and operator-scoped. What forces the
+extraction now is **`WorkItem` and the generalized `tick`** (§4.D): once items
+exist at three granularities and may be tracked by something that is not a
+GitHub Issue, "the state of an item" has to mean something a tracker adapter can
+project. §4.C extracts that vocabulary; §4.D and §4.G consume it. No adapter
+beyond the existing GitHub behavior is written.
 
 ## 4. Design
 
@@ -226,7 +230,7 @@ The journal is unchanged and remains the *content* log (decisions, findings,
 discoveries). Run state is the *control* log (which step, what it emitted). They
 are deliberately separate: one is what happened, the other is where we are.
 
-### C. Abstract transition set — prerequisite for A (a1)
+### C. Abstract transition set — prerequisite for D and G (a2)
 
 Lift the queue vocabulary off GitHub labels into a closed enum:
 
@@ -440,6 +444,11 @@ change to a documented extension point is what major exists for.
 - Plans, specs, journals, and the acceptance matrix are untouched on disk.
 - `docs/superpowers/runs/` is new; its absence is not an error (a plan or spec
   driven without a run is still valid).
+- **A plan's `fr_version` constraint must span the bump.** This spec's own plan
+  performs the 3.19.0 → 4.0.0 bump partway through, so phases after that point
+  execute under 4.0.0. `fr plan create`'s default `>=3.0.0,<4.0.0` would trip
+  the plan's own gate mid-run; the plan is authored `>=3.19.0,<5.0.0`. Any plan
+  in flight across the bump needs the same widening.
 
 ## 6. Risks and mitigations
 

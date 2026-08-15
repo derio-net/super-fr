@@ -1,0 +1,116 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Workflow manifests — schema, resolution, and `fr workflow check`
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - workflow-repo-authored
+  - workflow-manifest-validated
+tasks:
+- number: 1
+  title: RED → GREEN — manifest schema and parser
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: create tests/unit/test_workflow_model.py for a new package module
+      packages/fr/src/fr/workflow/model.py. Mirror fr/types.py conventions
+      (pydantic BaseModel, frozen=True, extra="forbid"). Assert: a manifest parses
+      `workflow`, `schema` (Literal[1]), `description`, `unit`
+      ("run"|"phase"|"spec"), `requires` (list of CAPABILITIES members), and
+      `steps`; each Step has id, kind ("cli"|"agent"), optional run/skill/agent,
+      needs, emits, gate ("operator"|None), tier, for_each; an unknown top-level
+      key fails loud; `schema: 2` is rejected with a message naming the supported
+      version.
+      Run: uv run pytest tests/unit/test_workflow_model.py -q --no-cov
+      Expected: ModuleNotFoundError.
+  - id: P6.T1.S2
+    text: |-
+      GREEN: implement fr/workflow/model.py.
+      Run: uv run pytest tests/unit/test_workflow_model.py -q --no-cov && uv run mypy packages/fr/src
+      Expected: passed, clean.
+- number: 2
+  title: RED → GREEN — resolution order repo > shipped
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      RED: add tests/unit/test_workflow_resolve.py: resolve_workflow(name, repo_root)
+      prefers docs/superpowers/workflows/<name>.yaml over the shipped
+      plugins/super-fr/workflows/<name>.yaml; falls back to shipped when the repo
+      file is absent; raises a clear "unknown workflow shape" error naming the
+      searched paths when neither exists; and override is WHOLESALE (a repo file
+      with fewer steps yields exactly those steps — no merging).
+      Run: uv run pytest tests/unit/test_workflow_resolve.py -q --no-cov
+      Expected: failures.
+  - id: P6.T2.S2
+    text: |-
+      GREEN: implement resolve_workflow in fr/workflow/resolve.py, mirroring
+      fr.models' repo-over-user precedent.
+      Run: uv run pytest tests/unit/test_workflow_resolve.py -q --no-cov
+      Expected: passed.
+- number: 3
+  title: RED → GREEN — `fr workflow check` validator + CI tripwire
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED: add tests/unit/test_workflow_check.py: check_workflow(manifest) reports
+      duplicate step ids; a `needs` naming an artifact no earlier step `emits`;
+      a cycle in needs/emits ordering; an unknown capability in `requires`; an
+      unknown `schema`; and a `for_each: phase` step in a `unit: run` shape being
+      legal while `for_each` on a `unit: phase` shape is an error (the items are
+      already per-phase). Exit code 1 on any error, 0 when clean.
+      Run: uv run pytest tests/unit/test_workflow_check.py -q --no-cov
+      Expected: failures.
+  - id: P6.T3.S2
+    text: |-
+      GREEN: implement the checks plus the `fr workflow check [name|--all]` command
+      in packages/fr/src/fr/commands/workflow_cmd.py and register it in fr/cli.py.
+      Run: uv run pytest tests/unit/test_workflow_check.py -q --no-cov
+      Expected: passed.
+  - id: P6.T3.S3
+    text: |-
+      Add tests/unit/test_tripwire_shipped_workflows.py asserting every
+      plugins/super-fr/workflows/*.yaml passes check_workflow, so a malformed
+      shipped shape fails CI rather than a consumer's run.
+      Run: uv run pytest tests/unit/test_tripwire_shipped_workflows.py -q --no-cov
+      Expected: passed (vacuously until Phase 11 adds fr-goal.yaml — assert the
+      glob is allowed to be empty ONLY if you also assert it is non-empty after
+      Phase 11; prefer writing the test to require at least one manifest and let
+      it go red until Phase 11 lands it. If it goes red here, add the shipped
+      fr-goal.yaml stub in this step and flesh it out in Phase 11.)
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

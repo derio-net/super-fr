@@ -1,0 +1,84 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Run state — the durable cursor and the `fr run` CLI
+  tag: agentic
+  depends_on:
+  - 6
+  tracking_issue: null
+  acceptance:
+  - run-cursor-durable
+tasks:
+- number: 1
+  title: RED → GREEN — the run-state model
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: create tests/unit/test_run_state.py for fr/run/model.py: RunState carries
+      run, workflow (name@schema), branch, started, cursor, and steps
+      (id -> {state: pending|running|done|failed|blocked, at, emitted, exit}).
+      Assert: round-trip through YAML is byte-stable; run_path(repo_root, run_id)
+      resolves docs/superpowers/runs/<run-id>.yaml; archived_run_path resolves
+      implemented/runs/; an unknown step state fails loud (extra="forbid" style).
+      Run: uv run pytest tests/unit/test_run_state.py -q --no-cov
+      Expected: ModuleNotFoundError.
+  - id: P7.T1.S2
+    text: |-
+      GREEN: implement fr/run/model.py.
+      Run: uv run pytest tests/unit/test_run_state.py -q --no-cov
+      Expected: passed.
+- number: 2
+  title: RED → GREEN — start / status / advance / check
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      RED: add tests/unit/test_run_cli.py: `fr run start <workflow> --branch b`
+      writes the run file with cursor at the first step; `fr run advance` executes
+      a `kind: cli` step, captures its exit code and stdout into the step record,
+      and moves the cursor ONLY on success (a non-zero exit sets state failed and
+      leaves the cursor put); advancing onto a `gate: operator` step marks it
+      blocked and stops without executing; `fr run status` prints the cursor and
+      per-step states; `fr run check` exits non-zero when the cursor is on a failed
+      step. Assert an `agent` step is NOT executed by advance — it emits a brief
+      and marks the step running.
+      Run: uv run pytest tests/unit/test_run_cli.py -q --no-cov
+      Expected: failures.
+  - id: P7.T2.S2
+    text: |-
+      GREEN: implement fr/commands/run_cmd.py and register it in fr/cli.py.
+      The agent-step path must NEVER invoke a model — it returns the brief for the
+      harness to dispatch (this is the structural half of no-claude-p-batch).
+      Run: uv run pytest tests/unit/test_run_cli.py -q --no-cov
+      Expected: passed.
+  - id: P7.T2.S3
+    text: |-
+      Extend packages/fr/src/fr/archive.py so a run file archives to
+      implemented/runs/ alongside its plan, and add the case to the archive tests.
+      Run: uv run pytest tests/unit -k archive -q --no-cov
+      Expected: green.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

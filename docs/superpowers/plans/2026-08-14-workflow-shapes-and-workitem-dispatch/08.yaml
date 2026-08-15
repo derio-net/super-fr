@@ -1,0 +1,105 @@
+schema_version: 2
+phase:
+  number: 8
+  title: Decomposition units and reachability derived from step inputs
+  tag: agentic
+  depends_on:
+  - 3
+  - 6
+  tracking_issue: null
+  acceptance:
+  - dispatch-unit-declared-by-shape
+  - reachability-derived-from-inputs
+tasks:
+- number: 1
+  title: RED → GREEN — building the item graph per unit
+  steps:
+  - id: P8.T1.S1
+    text: |-
+      RED: create tests/unit/test_item_graph.py: build_items(workflow, plan_or_spec)
+      yields exactly one item for unit=run; one per phase for unit=phase with
+      depends_on carried onto the items; one per distinct target repo for
+      unit=spec, each with parent set to the spec-level id. Assert ids are the
+      Phase-2 identities and that a spec row whose Repo cell is "—" or a manual
+      action string is SKIPPED, not turned into an item.
+      Run: uv run pytest tests/unit/test_item_graph.py -q --no-cov
+      Expected: failures.
+  - id: P8.T1.S2
+    text: |-
+      GREEN: implement build_items in fr_dispatch/item_graph.py, reusing
+      fr.spec.parse_plan_refs for the spec unit rather than re-parsing the table.
+      Run: uv run pytest tests/unit/test_item_graph.py -q --no-cov
+      Expected: passed.
+- number: 2
+  title: RED → GREEN — reachability from `needs`
+  steps:
+  - id: P8.T2.S1
+    text: |-
+      RED: add tests/unit/test_reachability.py: required_inputs(workflow) collects
+      the repo-tracked artifacts every step `needs` but no step `emits`;
+      check_reachable(items, gh) refuses when such an artifact is absent from
+      origin/HEAD, and ALLOWS a unit=run shape whose spec and plan are emitted
+      rather than needed. Assert the phase-unit refusal message still names the
+      unmerged plan, matching today's gate wording closely enough that operators
+      recognize it.
+      Run: uv run pytest tests/unit/test_reachability.py -q --no-cov
+      Expected: failures.
+  - id: P8.T2.S2
+    text: |-
+      GREEN: implement it and re-point fr/apply.py's existing hardcoded gate at the
+      derived rule, keeping the old behavior for phase-unit dispatch.
+      Run: uv run pytest tests/unit -k "reachab or apply" -q --no-cov
+      Expected: green — the existing reachability-gate tests must still pass
+      unchanged; if one has to change, journal it as a behavior change.
+- number: 3
+  title: RED → GREEN — a shape that emits no PR (spec §6 risk mitigation)
+  steps:
+  - id: P8.T3.S1
+    text: |-
+      RED: add tests/unit/test_no_pr_shape.py with a fixture manifest whose only
+      emitted artifact is a document (`emits: [report]`, no `pr`, no plan, no
+      phases) and unit=run. Assert: it passes check_workflow; build_items yields
+      exactly one item; tick dispatches it through a fake runner without touching
+      any PR-shaped code path; and nothing in the tick result or the item requires
+      a tracking Issue. Assert explicitly that no code path asserts on a `pr`
+      artifact — this is the marketing-research shape in miniature.
+      Run: uv run pytest tests/unit/test_no_pr_shape.py -q --no-cov
+      Expected: failures wherever a PR or plan is still assumed.
+  - id: P8.T3.S2
+    text: |-
+      GREEN: remove whatever assumption the RED step exposed — most likely in
+      build_items (plan-shaped inputs) or in tick's stamping path. Keep the fixture
+      manifest as a permanent regression shape under tests/fixtures/workflows/.
+      Run: uv run pytest tests/unit/test_no_pr_shape.py tests/unit/test_item_graph.py -q --no-cov
+      Expected: passed. Journal a discovery naming every place a PR was assumed —
+      the spec predicts this exists but not where.
+state:
+  steps:
+    P8.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P8.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

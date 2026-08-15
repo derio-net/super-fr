@@ -1,0 +1,101 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Adapter migration — VkRunner, CncdRunner, and the bridge daemon
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - vk-dispatch-unchanged-after-cutover
+tasks:
+- number: 1
+  title: RED → GREEN — VkRunner on the v2 protocol
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: update tests/unit/test_vk_runner.py (and add cases) so VkRunner is
+      exercised through v2: can_dispatch(item) replaces can_dispatch_repo,
+      existing_dispatches returns ITEM IDS, and dispatch(item) derives
+      (repo, issue_number) from item.tracking + item.payload. Add a regression
+      test that a card title is still built by build_card_title with the same
+      format as today — the title remains VK's PRESENTATION, no longer its identity.
+      Run: uv run pytest tests/unit/test_vk_runner.py -q --no-cov
+      Expected: failures against the old signature.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: migrate packages/fr-vk/src/fr_vk/runner.py to v2. Add
+      capabilities = frozenset({"git","tests","scm"}). Map item ids to existing VK
+      cards in fr_vk/dedup.py by parsing the card title back to (repo, issue) and
+      recomposing the item id, so a card created before this change still dedups.
+      Run: uv run pytest tests/unit -k vk -q --no-cov
+      Expected: green.
+- number: 2
+  title: RED → GREEN — CncdRunner on the v2 protocol
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: update tests/unit/test_cncd_runner.py for v2 — dispatch(item),
+      can_dispatch(item) -> True, existing_dispatches() -> set() (server-side
+      idempotence), and build_ingest_payload gaining the item envelope
+      (id, unit, parent) while keeping every existing key byte-stable.
+      Run: uv run pytest tests/unit/test_cncd_runner.py -q --no-cov
+      Expected: failures.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: migrate packages/fr-cncd/src/fr_cncd/runner.py, adding
+      capabilities = frozenset({"git","tests","scm"}).
+      Run: uv run pytest tests/unit -k cncd -q --no-cov
+      Expected: green.
+- number: 3
+  title: Bridge daemon end-to-end on v2
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Update packages/fr-vk/src/fr_vk/bridge_cli.py for the new tick signature.
+      Change NOTHING else — the flock, the bridge-owned checkout sync, the
+      per-plan I9 boundary, metrics, seen-plans and done-closed state all stay.
+      Run the bridge's own suite:
+        uv run pytest tests/unit -k bridge -q --no-cov
+      Expected: green.
+  - id: P4.T3.S2
+    text: |-
+      Add tests/integration/test_bridge_dispatch_parity.py: drive a full tick with
+      a fake MCP client over a two-phase fixture plan and assert exactly one card
+      per ready phase, then run a SECOND tick and assert zero new cards
+      (identity-based dedup holds across ticks). This is the executable half of the
+      vk-dispatch-unchanged-after-cutover row; the live walk is the Test Plan's.
+      Run: uv run pytest tests/integration/test_bridge_dispatch_parity.py -q --no-cov
+      Expected: passed. Flip the matrix row's level refs with `fr acceptance add`
+      (same id re-adds idempotently) leaving status not-implemented until the
+      post-merge walk.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
