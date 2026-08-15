@@ -1,16 +1,25 @@
 """Public runner contract — the fr-dispatch / adapter seam.
 
-A *runner* is whatever consumes queued phases and executes them:
-VibeKanban (`fr_vk.VkRunner`, the first implementation), a future
-GitHub-Actions runner, a headless `claude -p` daemon. `fr_dispatch.tick`
-orchestrates the queue against this Protocol and nothing else — no
-adapter types, no board vocabulary, no VK strings (2026-06-05 super-fr
-split design, §Runner registry; promoted from the duck-typed MCP seam
-the bridge tests already used).
+A *runner* is whatever consumes queued work items and executes them:
+VibeKanban (`fr_vk.VkRunner`, the first implementation), the cncd control
+plane (`fr_cncd.CncdRunner`), a future GitHub-Actions runner, a headless
+agent daemon. `fr_dispatch.tick` orchestrates the queue against this
+Protocol and nothing else — no adapter types, no board vocabulary, no VK
+strings (2026-06-05 super-fr split design, §Runner registry; promoted from
+the duck-typed MCP seam the bridge tests already used).
+
+**v2 (2026-08-14 workflow-shapes-and-workitem-dispatch spec §4.D).** The
+unit of dispatch is a `WorkItem`, not a `(plan, phase, repo, issue_number)`
+tuple: the decomposition granularity (`run` | `phase` | `spec`, §4.E) is
+now a workflow shape's declared `unit`, not a hardcoded assumption. Six
+methods, down from seven — `dedup_key` is gone because identity lives on
+the item (`WorkItem.id`), so `existing_dispatches` returns item ids and
+`can_dispatch_repo(repo)` widens to `can_dispatch(item)`. Hard cutover, no
+compatibility shim.
 
 Implementations are duck-typed (`Protocol`): no inheritance required.
-Every method may raise — `tick` accumulates failures per phase and
-never lets one bad call kill the loop (apply's doctrine).
+Every method may raise — `tick` accumulates failures per item and never
+lets one bad call kill the loop (apply's doctrine).
 """
 
 from __future__ import annotations
@@ -18,8 +27,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from fr.parser import Plan
-    from fr.types import PhaseDoc
+    from collections.abc import Sequence
+
+    from fr_dispatch.work_item import WorkItem
 
 
 class Runner(Protocol):
@@ -28,12 +38,24 @@ class Runner(Protocol):
     name: str
     """Registry name (`runner:<name>` label value; e.g. ``vk``)."""
 
-    def preflight(self) -> str | None:
-        """Config check before any dispatch this tick.
+    capabilities: frozenset[str]
+    """What this backend can provide (§4.F).
 
-        Return an error string (every eligible phase fails cleanly with
-        it) or None when ready. Example: the VK runner requires a
-        project id outside workspace contexts.
+    Drawn from the closed capability set (`git`, `tests`, `scm`, `browser`,
+    `network`, `devcontainer`). A workflow shape declares `requires`; the
+    mismatch is refused in `preflight`, which is why that method receives
+    the items. The *negotiation* itself is not implemented here — declaring
+    the attribute is.
+    """
+
+    def preflight(self, items: Sequence[WorkItem]) -> str | None:
+        """Config/capability check before any dispatch this tick.
+
+        Return an error string (every eligible item fails cleanly with it,
+        and none is dispatched) or None when ready. Examples: the VK runner
+        requires a project id outside workspace contexts; a shape requiring
+        `browser` on a headless runner is refused here rather than dying
+        mid-flight (§4.F).
         """
         ...
 
@@ -46,21 +68,30 @@ class Runner(Protocol):
         ...
 
     def existing_dispatches(self) -> set[str]:
-        """Dedup snapshot: keys of work already handed to this runner."""
+        """Dedup snapshot: `WorkItem.id`s already handed to this runner.
+
+        Item ids, not backend-native keys — identity is the item's position
+        in the graph (`work_item.item_id`), computable before any tracker
+        artifact exists. An adapter whose board stores something else (a VK
+        card title, say) maps back to ids here; the title stays that
+        backend's *presentation* of an item and stops being its identity.
+        """
         ...
 
-    def dedup_key(self, repo: str, issue_number: int) -> str:
-        """The key `existing_dispatches` uses for one phase's Issue."""
+    def can_dispatch(self, item: WorkItem) -> bool:
+        """Routing gate — refuse early when this backend can't take `item`.
+
+        Replaces `can_dispatch_repo(repo)`: the repo is still the usual
+        reason to refuse (`item.repo`), but the item carries its unit,
+        workflow and payload too, so a runner that only handles some units
+        can say so without a second protocol method.
+        """
         ...
 
-    def can_dispatch_repo(self, repo: str) -> bool:
-        """Repo gate — refuse early when the backend doesn't know it."""
-        ...
+    def dispatch(self, item: WorkItem) -> None:
+        """Hand one item to the backend (create card/job/workspace…).
 
-    def dispatch(self, plan: Plan, phase: PhaseDoc, repo: str, issue_number: int) -> None:
-        """Hand one phase to the backend (create card/job/workspace…).
-
-        Raising marks the phase failed for this tick; the synced stamp
-        is NOT written, so the next tick retries.
+        Raising marks the item failed for this tick; the dispatch stamp is
+        NOT written, so the next tick retries.
         """
         ...

@@ -7,10 +7,13 @@ orchestrates observe → render → diff → apply → dispatch against the
 NOT wired into the CLI — the bridge daemon (`python -m fr_vk.bridge`)
 consumes them as a library.
 
-The per-phase backend dispatch is the runner's `dispatch()`; test B2
-enforces single-source on the VK adapter's MCP chain. Issue creation is
-operator-only (`apply(skip_issue_create=True)`) — see the 2026-05-18
-incident.
+`tick` iterates `WorkItem`s (2026-08-14 workflow-shapes spec §4.D), not
+phases: the granularity is the shape's declared `unit`. Today the only
+builder is the phase-unit one below — `unit: run` / `unit: spec` items
+arrive with the shape axis. The backend dispatch is the runner's
+`dispatch(item)`; test B2 enforces single-source on the VK adapter's MCP
+chain. Issue creation is operator-only (`apply(skip_issue_create=True)`)
+— see the 2026-05-18 incident.
 """
 
 from __future__ import annotations
@@ -25,29 +28,40 @@ from fr._urls import parse_issue_url
 from fr.apply import apply
 from fr.diff import diff
 from fr.ghclient import GhClient
-from fr.labels import FR_READY, FR_SYNCED
+from fr.item_state import DISPATCH_STAMP, state_from_labels
 from fr.observe import observe
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_ops import PlanEditError
 from fr.render import render
-from fr.types import PhaseDoc
+from fr.states import GhState, RenderedIssue, RenderedState
 
 from fr_dispatch.metrics import MetricsPusher, NullMetrics
 from fr_dispatch.protocols import Runner
-from fr_dispatch.work_item import ArtifactRef, WorkItem
+from fr_dispatch.work_item import ArtifactRef, WorkItem, item_id, parent_id
 
 __all__ = ["ArtifactRef", "Runner", "TickResult", "WorkItem", "discover_plans", "tick"]
 
 logger = logging.getLogger(__name__)
+
+# The shape these items come from until the shape axis lands: `fr-goal`'s
+# `implement` step is `for_each: phase` (spec §4.A), which is exactly what
+# the bridge dispatches today.
+_DEFAULT_WORKFLOW = "fr-goal"
+
+# `item_id` needs a spec segment, but `PlanMeta.spec` is optional. A plan
+# without one still needs a deterministic, collision-free identity, so the
+# segment degrades to this sentinel rather than raising — identity is pure
+# string composition and must never depend on an artifact existing.
+_NO_SPEC_SLUG = "_no-spec"
 
 
 @dataclass(frozen=True)
 class TickResult:
     """Counters for one `tick()` invocation, returned to the cron caller.
 
-    - `synced`: phases successfully handed to the runner this tick.
-    - `errors`: total failures accumulated (apply-side + per-phase).
-    - `skipped`: deferred phases (slot budget) when any were eligible;
+    - `synced`: items successfully handed to the runner this tick.
+    - `errors`: total failures accumulated (apply-side + per-item).
+    - `skipped`: deferred items (slot budget) when any were eligible;
       1 when the plan had nothing eligible (idle-plan counting).
     - `failures`: human-readable accumulated failure strings.
     """
@@ -58,8 +72,21 @@ class TickResult:
     failures: tuple[str, ...] = ()
 
 
+def _is_dispatchable(rendered_issue: RenderedIssue) -> bool:
+    """True iff a rendered tracker item is queued and not yet stamped.
+
+    The one eligibility rule, shared by discovery and the tick so the two
+    can never drift apart. Expressed in `fr.item_state` terms rather than
+    label names: the projected `ItemState` must be `queued`, and the
+    dispatch stamp must be absent. The stamp is read separately because it
+    is bookkeeping, not a state — `state_from_labels` ignores it outright.
+    """
+    label_names = {label.name for label in rendered_issue.labels}
+    return state_from_labels(label_names) == "queued" and DISPATCH_STAMP.name not in label_names
+
+
 def _plan_projects_ready(plan: Plan, gh: GhClient) -> bool:
-    """True iff rendering the plan projects a phase as ready, not synced.
+    """True iff rendering the plan projects a phase as dispatchable.
 
     Projection-based (the #251 deadlock fix): a phase whose dependency
     just completed may project ready while its on-Issue label is still
@@ -74,7 +101,7 @@ def _plan_projects_ready(plan: Plan, gh: GhClient) -> bool:
         ri = rendered.issue_per_phase.get(phase.phase.number)
         if ri is None:
             continue
-        if FR_READY in ri.labels and FR_SYNCED not in ri.labels:
+        if _is_dispatchable(ri):
             return True
     return False
 
@@ -122,6 +149,79 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
     return out
 
 
+def _spec_slug(plan: Plan) -> str:
+    """Identity segment for the plan's spec — its filename stem.
+
+    Mirrors the derivation `render.py` already uses for the `spec:` label,
+    so an item id and an Issue label name the same spec. Falls back to
+    `_NO_SPEC_SLUG` when the plan declares no spec.
+    """
+    spec = plan.spec_path or plan.meta.spec
+    return Path(spec).stem if spec else _NO_SPEC_SLUG
+
+
+def _plan_inputs(plan: Plan) -> tuple[ArtifactRef, ...]:
+    """The artifacts every item of this plan reads (§4.D `inputs`)."""
+    refs = [ArtifactRef(kind="plan", repo=plan.meta.target_repo, path=str(plan.repo_relative_dir))]
+    spec_rel = plan.spec_path or plan.meta.spec
+    if spec_rel:
+        refs.append(ArtifactRef(kind="spec", repo=plan.meta.target_repo, path=spec_rel))
+    return tuple(refs)
+
+
+def _eligible_items(
+    plan: Plan,
+    observed: GhState,
+    rendered: RenderedState,
+    failures: list[str],
+) -> list[WorkItem]:
+    """Phase-unit `WorkItem`s this tick should hand to the runner.
+
+    The gate runs against the **rendered** state, not the pre-apply
+    observation: a phase an agent claimed between dispatch and this tick
+    projects `in_progress` and is correctly skipped. Eligible means the
+    projected `ItemState` is `queued` **and** the dispatch stamp is absent
+    — the stamp is bookkeeping, not a state (see `fr.item_state`), so the
+    two are read separately.
+
+    One malformed phase (bad tracking URL, un-composable id) fails only
+    itself: the failure is accumulated and the loop continues.
+    """
+    spec_slug = _spec_slug(plan)
+    plan_slug = plan.meta.plan
+    inputs = _plan_inputs(plan)
+    items: list[WorkItem] = []
+    for phase in plan.phases:
+        n = phase.phase.number
+        if n not in observed.phases:
+            continue
+        ri = rendered.issue_per_phase.get(n)
+        tracking = phase.phase.tracking_issue
+        if ri is None or not tracking:  # pragma: no cover — defensive guard
+            continue
+        if not _is_dispatchable(ri):
+            continue
+        try:
+            issue_repo, issue_number = parse_issue_url(tracking)
+            iid = item_id(issue_repo, spec_slug, plan_slug, phase=n)
+            items.append(
+                WorkItem(
+                    id=iid,
+                    unit="phase",
+                    workflow=_DEFAULT_WORKFLOW,
+                    repo=issue_repo,
+                    parent=parent_id(iid),
+                    inputs=inputs,
+                    payload={"plan": plan, "phase": phase, "issue_number": issue_number},
+                    tracking=tracking,
+                )
+            )
+        except Exception as e:  # noqa: BLE001 — one bad phase mustn't kill the tick
+            failures.append(f"phase {n}: {e}")
+            continue
+    return items
+
+
 def tick(
     plan: Plan,
     gh: GhClient,
@@ -132,16 +232,15 @@ def tick(
     """One cron iteration for a single plan, against one runner.
 
     Pipeline: observe → render → diff → apply (GH-side only,
-    `skip_issue_create=True`) → for each phase whose **rendered** labels
-    say it's ready but not yet synced, `runner.dispatch(...)`, then flip
-    the synced label on the GH Issue. The gate runs against the
-    projected label set, not the pre-apply observation: an agent
-    claiming the Issue between dispatch and this tick projects
-    in-progress (no ready label), and the loop correctly skips.
+    `skip_issue_create=True`) → build a `WorkItem` for every eligible
+    unit of work → `runner.dispatch(item)` → flip the dispatch stamp on
+    the tracker item. Eligibility is read off the **rendered** state via
+    `fr.item_state` (projected `queued`, stamp absent), not off raw label
+    strings and not off the pre-apply observation.
 
     All failure paths accumulate; a raising `runner.dispatch` leaves the
-    synced stamp unwritten so the next tick retries. `skipped` counts
-    slot-deferred phases (or 1 when nothing was eligible — idle-plan
+    dispatch stamp unwritten so the next tick retries. `skipped` counts
+    slot-deferred items (or 1 when nothing was eligible — idle-plan
     counting, legacy behavior preserved).
     """
     m = metrics or NullMetrics()
@@ -165,39 +264,24 @@ def tick(
         except (PlanEditError, OSError, PlanSchemaError) as e:
             failures.append(f"phase {phase_n}: writeback failed: {e}")
 
-    eligible_phases: list[tuple[PhaseDoc, str, int]] = []
-    for phase in plan.phases:
-        if phase.phase.number not in observed.phases:
-            continue
-        ri = rendered.issue_per_phase.get(phase.phase.number)
-        tracking = phase.phase.tracking_issue
-        if ri is None or not tracking:  # pragma: no cover — defensive guard
-            continue
-        if FR_READY not in ri.labels or FR_SYNCED in ri.labels:
-            continue
-        try:
-            issue_repo, issue_number = parse_issue_url(tracking)
-        except Exception as e:  # noqa: BLE001 — one malformed URL mustn't kill the tick
-            failures.append(f"phase {phase.phase.number}: {e}")
-            continue
-        eligible_phases.append((phase, issue_repo, issue_number))
+    items = _eligible_items(plan, observed, rendered, failures)
 
     synced = 0
     deferred = 0
-    if eligible_phases:
+    if items:
         try:
-            blocker = runner.preflight()
+            blocker = runner.preflight(items)
         except Exception as e:  # noqa: BLE001
             blocker = f"runner preflight raised: {e}"
         if blocker:
-            for phase, _, _ in eligible_phases:
-                failures.append(f"phase {phase.phase.number}: {blocker}")
+            for item in items:
+                failures.append(f"{item.id}: {blocker}")
                 m.push_failure_total(reason="preflight")
             m.push_heartbeat()
             return TickResult(
                 synced=0,
                 errors=len(failures),
-                skipped=len(eligible_phases),
+                skipped=len(items),
                 failures=tuple(failures),
             )
 
@@ -208,60 +292,66 @@ def tick(
             failures.append(f"slot check failed: {e}")
             budget = 0
 
-        # Dedup snapshot: one backend call covers every phase in this plan.
+        # Dedup snapshot: one backend call covers every item in this plan.
+        # Keyed on `WorkItem.id` — identity lives on the item now, so there
+        # is no `dedup_key` round trip through the adapter.
         try:
             existing = runner.existing_dispatches()
         except Exception as e:  # noqa: BLE001
             failures.append(f"dedup fetch failed: {e}")
             existing = set()
 
-        for phase, issue_repo, issue_number in eligible_phases:
+        for item in items:
             try:
-                repo_ok = runner.can_dispatch_repo(issue_repo)
+                routable = runner.can_dispatch(item)
             except Exception as e:  # noqa: BLE001
-                failures.append(f"phase {phase.phase.number}: repo gate failed: {e}")
+                failures.append(f"{item.id}: repo gate failed: {e}")
                 m.push_failure_total(reason="repo_gate")
                 continue
-            if not repo_ok:
-                failures.append(f"phase {phase.phase.number}: unknown repo {issue_repo!r}")
+            if not routable:
+                failures.append(f"{item.id}: unknown repo {item.repo!r}")
                 m.push_failure_total(reason="unknown_repo")
                 continue
 
-            already_dispatched = runner.dedup_key(issue_repo, issue_number) in existing
+            already_dispatched = item.id in existing
 
             if not already_dispatched and budget <= 0:
-                # No slot left — defer this phase to the next tick.
+                # No slot left — defer this item to the next tick.
                 deferred += 1
                 continue
 
-            # Split backend-side and GH-side error paths so the `reason`
-            # label on the failure metric points at the broken system. A
-            # dedup hit skips the backend call entirely; the GH stamp
-            # still runs so the next tick won't retry.
+            # Split backend-side and tracker-side error paths so the
+            # `reason` label on the failure metric points at the broken
+            # system. A dedup hit skips the backend call entirely; the
+            # stamp still runs so the next tick won't retry.
             if not already_dispatched:
                 try:
-                    runner.dispatch(plan, phase, issue_repo, issue_number)
+                    runner.dispatch(item)
                     budget -= 1
                 except Exception as e:  # noqa: BLE001 — one bad backend call mustn't kill the tick
-                    failures.append(f"phase {phase.phase.number}: {e}")
+                    failures.append(f"{item.id}: {e}")
                     m.push_failure_total(reason="backend_error")
                     continue
 
             try:
-                gh.ensure_labels(issue_repo, [FR_SYNCED])
+                # `payload` is deliberately opaque (`Mapping[str, object]`)
+                # — the phase-unit builder puts the already-parsed number
+                # there, so this is a narrowing, not a re-parse.
+                issue_number = int(item.payload["issue_number"])  # type: ignore[call-overload]
+                gh.ensure_labels(item.repo, [DISPATCH_STAMP])
                 gh.edit_issue_labels(
-                    issue_repo,
+                    item.repo,
                     issue_number,
-                    add=frozenset({FR_SYNCED.name}),
+                    add=frozenset({DISPATCH_STAMP.name}),
                     remove=frozenset(),
                 )
                 synced += 1
                 m.push_sync_total()
             except Exception as e:  # noqa: BLE001 — GH outage mustn't kill the tick
-                failures.append(f"phase {phase.phase.number}: gh stamp failed: {e}")
+                failures.append(f"{item.id}: gh stamp failed: {e}")
                 m.push_failure_total(reason="gh_error")
 
-    skipped = deferred if eligible_phases else 1
+    skipped = deferred if items else 1
     m.push_heartbeat()
     return TickResult(
         synced=synced,

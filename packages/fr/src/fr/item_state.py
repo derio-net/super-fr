@@ -63,6 +63,25 @@ _STATE_BY_LABEL_NAME: dict[str, ItemState] = {
     for label in labels  # `done` contributes nothing — it has no label form
 }
 
+# Which state wins when an item carries MORE THAN ONE lifecycle label.
+# Most-restrictive first; `queued` is LAST, and that position is the
+# load-bearing one: `queued` is the only state that permits dispatch, so
+# "any other lifecycle signal is present" must always mean "do not
+# dispatch". `fr_dispatch.tick` gates on `state_from_labels(...) ==
+# "queued"`, which makes this tuple the thing standing between a stale
+# `fr:ready` and the bridge dispatching work an agent already holds.
+#
+# Among the non-queued states the order is "how much real work would a
+# duplicate dispatch destroy": `in_review` (a PR exists) beats
+# `in_progress` (an agent holds it) beats `blocked` (a dependency says no,
+# but nobody is working on it).
+#
+# `done` is absent because it has no label form — it can never be read off
+# labels at all; completion is the tracker's own item state.
+_PRECEDENCE: tuple[ItemState, ...] = ("in_review", "in_progress", "blocked", "queued")
+
+_PRECEDENCE_RANK: dict[ItemState, int] = {state: i for i, state in enumerate(_PRECEDENCE)}
+
 
 def project_github(state: ItemState) -> frozenset[LabelDef]:
     """The GitHub label set expressing `state`.
@@ -83,11 +102,27 @@ def state_from_labels(observed_labels: frozenset[str] | set[str]) -> ItemState |
     the dispatch stamp, not a state, so it neither yields a state on its own
     nor perturbs one that is expressed.
 
+    Several lifecycle labels can co-occur — the renderer projects one, but
+    an observed set is whatever the tracker says, and `fr apply` is not its
+    only writer. They are resolved by `_PRECEDENCE`, never by label-name
+    order: the label VOCABULARY is a tracker's business, the ordering of
+    the STATES is ours, so a rename (or a tracker with entirely different
+    names) cannot change which state wins.
+
     `done` has no label form, so it is never returned here; completion is
     read from the tracker's item state instead.
     """
-    for name in sorted(observed_labels):
+    winner: ItemState | None = None
+    winning_rank = len(_PRECEDENCE)
+    for name in observed_labels:
         state = _STATE_BY_LABEL_NAME.get(name)
-        if state is not None:
-            return state
-    return None
+        if state is None:
+            continue
+        # An unranked state (a lifecycle state added without a precedence
+        # decision) sorts ahead of everything — fail-closed: it can only
+        # ever make an item look LESS dispatchable, never more. The
+        # tripwire in tests/unit/test_item_state.py fails loudly for it.
+        rank = _PRECEDENCE_RANK.get(state, -1)
+        if rank < winning_rank:
+            winner, winning_rank = state, rank
+    return winner

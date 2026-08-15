@@ -113,3 +113,86 @@ Fix — grammar is now four levels, three of which are units:
 Tests added (RED confirmed before the fix, all pass after): `test_run_item_id_format`, `test_run_item_id_is_deterministic`, `test_item_id_rejects_run_as_spec_slug`, `test_parent_id_of_run_item_is_none`, `test_parent_id_of_plan_is_still_the_spec_level_not_confused_with_run`, `test_work_item_run_unit_matches_run_form_id`, `test_work_item_rejects_plan_form_id_for_any_unit`. Full suite: 22 passed (tests/unit/test_work_item.py), mypy clean, ruff clean.
 
 Handoff for Phase 8 (owns `fr run start`/the run-id shape and the no-PR-shape fixture): a run item's `id` is `run_item_id(repo, run_id)` where `run_id` is whatever `fr run start` assigns (§4.B shows `run: 2026-08-14-ticket-polling` as an example run id — looks like a date-prefixed slug, same shape as a plan slug, but it is NOT a plan slug and must not be passed through `item_id`). When/if a run later spawns a spec+plan (the common case, not the no-PR-shape case), the resulting spec/plan/phase items' `parent` should point at the run's `run_item_id`, NOT at `None` — only the run item itself has no parent.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-item-construction-in-tick created=2026-08-15T18:04:36 phase=3 -->
+### p3-item-construction-in-tick · discovery · How tick builds phase-unit items — the four derivations Phase 8's build_items must preserve (phase 3)
+
+`_eligible_items(plan, observed, rendered, failures)` in fr_dispatch/__init__.py is the whole item builder today. It is deliberately a private helper on the phase-unit path, NOT the general `build_items` Phase 8 owns; Phase 8 should generalize it rather than add a second builder beside it (two builders is exactly how the id grammar drifts).
+
+Four derivations it makes, each with a reason a later phase should not re-litigate casually:
+
+1. **repo = the ISSUE's repo**, parsed from `phase.tracking_issue`, NOT `plan.meta.target_repo`. Decisive argument: `can_dispatch(item)` replaces `can_dispatch_repo(issue_repo)`, so the adapter's repo gate must be reproducible from `item.repo` alone. On a cross-repo plan the phases of one plan therefore carry DIFFERENT id prefixes — which is correct, they execute in different repos.
+2. **spec_slug = Path(plan.spec_path or plan.meta.spec).stem**, mirroring render.py's `_spec_slug` so an item id and the Issue's `spec:` label name the same spec. `PlanMeta.spec` is OPTIONAL, so a plan without one degrades to the sentinel `_no-spec` rather than raising — identity is pure string composition and must stay computable when no artifact exists (this is the same property that lets a run item exist before its spec does). The multi-phase fixture exercises this path.
+3. **plan_slug = plan.meta.plan** (not the directory name).
+4. **workflow = "fr-goal"** (module constant `_DEFAULT_WORKFLOW`). Justification, not a placeholder: spec 4.A's shipped fr-goal manifest has `implement: for_each: phase`, which is literally what the bridge dispatches today. When Phase 6/7 make the shape real, this constant is the thing that becomes `shape.workflow`.
+
+Payload contract for a phase item (`Mapping[str, object]`, opaque to the framework): `{"plan": Plan, "phase": PhaseDoc, "issue_number": int}`. `tracking` is the Issue URL. Phase 4's adapters get everything the old `dispatch(plan, phase, repo, issue_number)` signature gave them, with no re-parsing: `item.repo` + `item.payload['issue_number']` + `item.payload['plan'|'phase']`. `inputs` carries ArtifactRefs `plan` (repo-relative plan dir) and `spec` (when set); `parent` is `parent_id(id)` = the PLAN level, which is a parent and never a dispatchable unit.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-tests-rewritten-not-ported created=2026-08-15T18:05:07 phase=3 -->
+### p3-tests-rewritten-not-ported · discovery · Two tick behaviors were REWRITTEN, not ported — failure-string format and the malformed-URL guard (phase 3)
+
+P3.T2.S3 asks for any test rewritten rather than ported to be surfaced. tests/unit/test_tick_workitem.py is a fresh file (the old tick tests all drive VkRunner and belong to Phase 4), but two behaviors changed shape in the process and review should see them named:
+
+**1. Failure strings are now prefixed with the item id, not `phase <n>`.** Was `f"phase {phase.phase.number}: {e}"`; is `f"{item.id}: {e}"` (e.g. `derio-net/super-fr/<spec>/<plan>/phase/3: boom`). Reasons: (a) the loop is unit-agnostic, so "phase N" is no longer a name it can always produce; (b) the old string did not say WHICH plan the phase belonged to, which on a bridge running many plans made log lines ambiguous — the id does. Consequence for Phase 4: every ported assertion of the form `assert "phase 1" in result.failures[0]` must become an id assertion. `TickResult`'s FIELDS are unchanged; only the human-readable strings inside `failures` moved.
+
+The ONE place `phase <n>` survives is item-construction failure inside `_eligible_items` — there is no item id yet at that point, so the phase number is the only handle.
+
+**2. The malformed-tracking-URL test could not be ported honestly — it was unreachable.** The old loop wrapped `parse_issue_url(tracking)` in a try/except and accumulated `f"phase {n}: {e}"`. That branch cannot be reached through `tick`: `observe()` runs first and calls the same `parse_issue_url` on every tracked phase WITHOUT a guard, so a malformed URL raises out of `tick` before the eligibility loop ever runs. This was true before the cutover too — the guard was defensive, not live. Rather than write a test that appears to pin per-item URL isolation while actually pinning nothing, the guard is kept (it still protects the newly-added id composition, e.g. `item_id` raising on a reserved spec slug) and pinned by calling `_eligible_items` directly with an injected bad URL. Named in the test's docstring so nobody 'fixes' it back into a tick-level test.
+
+**Deliberate narrowing, not a rewrite but worth flagging:** eligibility moved from `FR_READY in labels and FR_SYNCED not in labels` to `state_from_labels(names) == 'queued' and DISPATCH_STAMP.name not in names`. Identical for every realistic label set (at most one lifecycle label is projected). It differs only if an Issue somehow carried BOTH `fr:ready` and a later-lifecycle label: the old code dispatched, the new code does not (`state_from_labels` scans sorted names, so `fr:in-progress` wins over `fr:ready`). The new behavior is the conservative one — refusing to re-dispatch something that projects as claimed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-adapters-red-pending-phase-4 created=2026-08-15T18:05:35 phase=3 state=open -->
+### p3-adapters-red-pending-phase-4 · finding [open] · 25 tests are RED at the end of Phase 3 — every one is an adapter calling tick; Phase 4 closes them (phase 3)
+
+The cutover is hard by design (spec 4.D, plan prose): protocol and loop move in Phase 3, adapters in Phase 4, so the branch is red in between. Recording the exact set so Phase 4's implementer can use it as a checklist and so nobody mistakes it for collateral damage.
+
+Full suite after Phase 3: **1865 passed, 25 failed, 85 skipped** (`uv run pytest -q --no-cov`). Every failure is a test that calls `fr_dispatch.tick` with `VkRunner` or `CncdRunner`; the first v2 method call fails loud at the protocol boundary and `tick` reports it as a preflight blocker, e.g.:
+
+    TickResult(synced=0, errors=1, skipped=1, failures=('<item-id>: runner preflight raised: VkRunner.preflight() takes 1 positional argument but 2 were given',))
+
+unit (13): test_bridge_config.py (2), test_bridge_dedup.py (2), test_bridge_metrics.py (3), test_bridge_slots.py (1), test_vk_bridge_tick.py (5).
+integration (12): test_bridge_dispatch_repo_id.py (1), test_bridge_dispatch_response_shape.py (1), test_bridge_e2e.py (2), test_bridge_project_id.py (4), test_bridge_resilience.py (2), test_cncd_stub_server.py (2).
+
+Nothing else regressed: import-direction, cutover, no-issue-create, discover, render/diff/apply, install and tripwire suites are all green. `fr acceptance check`: 74 rows OK. `ruff check packages/ tests/`: clean. `mypy packages/fr-dispatch/src`: clean (the adapter trees are NOT clean — `mypy packages/fr-vk/src packages/fr-cncd/src` will report the stale signatures until Phase 4).
+
+Phase 4's mechanical checklist, from the v2 signatures: `preflight(self, items)`; `can_dispatch_repo(repo)` -> `can_dispatch(item)` reading `item.repo`; `dedup_key` DELETED, so `existing_dispatches()` must return `WorkItem.id`s; `dispatch(item)` unpacking `item.payload['plan'|'phase'|'issue_number']` + `item.repo`; add a `capabilities: frozenset[str]` class attribute (declaration only — negotiation is Phase 5). Note that VK's `existing_dispatches` is the one non-mechanical piece: see the Phase 2 journal entry p2-card-title-still-title-not-key, whose recommendation (have the adapter compute ids from context rather than reconstruct them from card titles) is now concretely satisfiable because `item.payload` carries the plan and phase.
+
+State is `open` because the branch does not go green until Phase 4 lands; flip it to `fixed` there.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-eligibility-single-rule created=2026-08-15T18:06:01 phase=3 -->
+### p3-eligibility-single-rule · discovery · Eligibility became ONE predicate shared by tick and discovery — they used to state the same rule twice (phase 3)
+
+Before this phase the same rule was written twice in fr_dispatch/__init__.py: `_plan_projects_ready` (the discovery gate behind `discover_plans`) tested `FR_READY in ri.labels and FR_SYNCED not in ri.labels`, and the tick's eligibility loop tested `FR_READY not in ri.labels or FR_SYNCED in ri.labels` — De Morgan twins that nothing forced to stay in agreement. Drift between them is the deadlock shape #251 already bit us with once (discovery seeing a plan the tick then declines, i.e. a plan re-picked every tick forever, or worse the reverse).
+
+Both now call `_is_dispatchable(rendered_issue)`, the only place in the package that reads lifecycle labels at all: `state_from_labels(names) == 'queued' and DISPATCH_STAMP.name not in names`. `fr.labels.FR_READY` / `FR_SYNCED` are no longer imported by fr_dispatch — the module's queue vocabulary is now entirely Phase 1's `fr.item_state`, which is what makes a non-GitHub tracker adapter (Phase 10 / part c) possible without touching the loop.
+
+Two Phase-1 facts this leans on and later phases must not forget: `state_from_labels` NEVER returns `done` (completion is the Issue's CLOSED state, not a label), so eligibility can only ever be decided among queued/blocked/in_progress/in_review; and `manual` is a routing ATTRIBUTE, not a state — a manual phase's rendered lifecycle label is `manual`, which `state_from_labels` does not recognize, so it returns None and the item is not eligible. That is the correct outcome (manual work is not routable to a runner) but it is reached incidentally, via 'no lifecycle label', rather than by an explicit routability check. Phase 5's capability negotiation should make routability explicit on the item rather than relying on this.
+
+`discover_plans` was otherwise left alone and `tick` still contains no reference to it — asserted directly in test_tick_workitem.py so the coupling Phase 10's tripwire forbids can never appear in the first place.
+
+<!-- fr:journal kind=finding scope=plan id=p3-label-precedence-alphabetical created=2026-08-15T18:13:47 phase=3 state=fixed -->
+### p3-label-precedence-alphabetical · finding [fixed] · state_from_labels resolved multi-label sets ALPHABETICALLY — dispatch correctness rested on a naming coincidence (phase 3)
+
+Found in coordinator review of Phase 3, not by self-review. `fr.item_state.state_from_labels` resolved a set carrying several lifecycle labels by scanning `sorted(observed_labels)` and returning the first recognized one. That is label-NAME order, not lifecycle order. It produced the right answer only because of how the GitHub label names happen to sort:
+
+    fr:blocked < fr:in-progress < fr:pr-ready < fr:ready
+
+i.e. `fr:ready` sorts LAST among the four, so in every real co-occurrence the other label won by accident.
+
+Why it mattered as of Phase 3: the tick's eligibility gate became `state_from_labels(...) == 'queued'` (replacing the raw `FR_READY in labels and FR_SYNCED not in labels` check). So a rename — or any lifecycle label sorting after `fr:ready`, e.g. a hypothetical `fr:working` — would make an Issue carrying a stale `fr:ready` alongside an active-work label resolve to `queued`, and the bridge would dispatch **over an agent already working the item**. That is exactly the case the Phase 3 narrowing was introduced to prevent, so the accident sat directly under the new guarantee. Latent, not live: no current label triggers it.
+
+**Fix — explicit state precedence, label names irrelevant.**
+
+    _PRECEDENCE: tuple[ItemState, ...] = ('in_review', 'in_progress', 'blocked', 'queued')
+
+`state_from_labels` now maps every observed label to its state and keeps the best-ranked one (`_PRECEDENCE_RANK`), instead of returning on first hit in sorted order. `sorted()` is gone; resolution no longer depends on iteration order at all.
+
+**The invariant, stated for Phase 10's tracker mapping** (which will have none of these label names): `queued` MUST be last in the precedence order. `queued` is the only state that permits dispatch, so 'any other lifecycle signal is present' must always mean 'do not dispatch'. Ordering among the non-queued states is 'how much real work a duplicate dispatch would destroy': `in_review` (a PR exists) > `in_progress` (an agent holds it) > `blocked` (a dependency says no, but nobody is working). A tracker adapter defines its own vocabulary -> ItemState mapping; it does NOT get to redefine this ordering, because the ordering is about the states, not the names. An unranked state is handled fail-closed (rank -1, outranks everything, so it can only ever make an item look less dispatchable).
+
+Tests added to tests/unit/test_item_state.py (3 RED before the fix, all pass after):
+- `test_any_lifecycle_label_beats_a_stale_ready_label` — the three pairwise co-occurrences, parametrized.
+- `test_ready_never_wins_over_any_other_lifecycle_label` — the PROPERTY, derived from `_STATE_BY_LABEL_NAME` so a label added tomorrow is covered without editing the test. This is the shape that would have caught the bug.
+- `test_precedence_does_not_depend_on_label_names_sorting_favourably` — monkeypatches in `fr:working` (sorts AFTER `fr:ready`) and asserts `in_progress` still wins; fails outright under the old scan.
+- `test_resolution_is_independent_of_iteration_order`, `test_every_label_bearing_state_has_a_declared_precedence` (tripwire: every label-bearing state is ranked, and `_PRECEDENCE[-1] == 'queued'`), `test_attributes_and_the_dispatch_stamp_never_perturb_precedence` (re-pins Phase 1's contract that `manual` and `fr:synced` are not states, now against multi-label sets).
+
+Gate after the fix: tests/unit/test_item_state.py + test_render_characterization.py + test_tick_workitem.py = 55 passed; mypy clean over packages/fr/src + packages/fr-dispatch/src (79 files); ruff clean. Full suite 1873 passed / 25 failed — the Phase-4 red set is UNCHANGED (same 25 adapter tests, see p3-adapters-red-pending-phase-4); the +8 is this file's new tests.

@@ -57,22 +57,26 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-08-15T17:52:11+00:00'
+      note: 'RED: 24 failed, 6 passed (vacuous) — v2 protocol absent'
     P3.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-08-15T17:57:44+00:00'
+      note: 'protocols.py v2: 6 methods, capabilities added, dedup_key deleted; mypy
+        clean over packages/fr-dispatch/src'
     P3.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-08-15T17:58:00+00:00'
+      note: tick() iterates WorkItems; 30 passed in tests/unit/test_tick_workitem.py
     P3.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-08-15T18:04:08+00:00'
+      note: 'Refactor: eligibility collapsed into _is_dispatchable (shared by tick
+        + discovery); FR_READY/FR_SYNCED imports gone. tests/unit -k ''dispatch or
+        tick'': 100 passed, 13 failed — ALL VkRunner/CncdRunner callers, stale by
+        design (Phase 4). Full suite 1865 passed / 25 failed, same cause.'
   completion:
-    at: null
+    at: '2026-08-15T18:06:16+00:00'
     note: null
     observed_prs: []
