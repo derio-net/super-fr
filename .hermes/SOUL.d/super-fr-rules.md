@@ -63,7 +63,14 @@ meant to be:
   repo**, since that repo is not fr-enabled;
 - any command at all in a session with no active pipeline sentinel — the bash
   guard exits immediately when there is none;
-- any work in a repo that never opted into fr.
+- any work in a repo that never opted into fr;
+- **anything riding on an already-permitted `fr …` command.** The bash guard's
+  allowances are start-anchored but not end-anchored, so
+  `fr isolation status && <anything>` is allowed as a unit. Closing that would
+  mean rejecting `fr isolation exec -- 'a && b'`, a legitimate and common shape,
+  so it stays open deliberately. (A leading `cd` is *not* a way to extend this:
+  the `cd` is only folded into the match when it lands inside the pipeline's own
+  repo or on another repo's toplevel — never on an arbitrary directory.)
 
 The `fr-isolation-guard.sh` cross-repo rules (super-fr#421) narrow *where a live
 pipeline may hop*; they are discipline, and must not be read as containment.

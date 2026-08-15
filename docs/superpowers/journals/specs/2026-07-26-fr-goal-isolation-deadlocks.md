@@ -34,3 +34,28 @@ The task brief points at it for triage rationale. Neither docs/audits/ nor docs/
 ### r1 · review · Spec review vs codebase: three claims corrected
 
 1) Hook delivery is the marketplace 'rsync -a --delete <repo root>' into $MARKETPLACE_DIR resolved via ${CLAUDE_PLUGIN_ROOT}, not a per-file hook copy in install.sh; corrected, and test_plugin_hooks.py::test_hooks_json_parses identified as an EXACT-set assertion that the new Agent matcher will break. 2) Neither .opencode/ nor .hermes/ carries an agents/ tree, so agents/fr-phase-executor.md has no generated mirror — only skills/fr-goal/SKILL.md does. 3) The Hermes guard sibling is marker-based, already computes an effective_dir from a leading cd, and allows non-fr repos via fr_isolation_decide_cwd — #421 is Claude-Code-only, and Hermes has no isolation flag on delegate_task so #420 is unrepresentable there. Spec updated on all three.
+
+<!-- fr:journal kind=decision scope=spec id=qa-d1 created=2026-08-15T21:20:22 -->
+### qa-d1 · decision · Ratified: hook backstop ships as a new super-fr plugin hook, not an org-hook mutation
+
+Operator answered the fr-goal §1 batched Q&A that the original non-interactive dispatch could not run (2026-08-15). Decision 1 in the PR body upheld as shipped: `plugins/super-fr/hooks/fr-phase-executor-guard.sh` registered via `hooks.json`, rather than editing `~/.claude/hooks/agent-worktree-required.sh`. Rationale accepted: versioned in-repo, unit-testable, ships via install.sh to every host, and Claude Code runs every matching PreToolUse hook with `deny` winning — so it overrides the org hook without super-fr editing a file it does not own.
+
+<!-- fr:journal kind=decision scope=spec id=qa-d2 created=2026-08-15T21:20:24 -->
+### qa-d2 · decision · Ratified: the phase-executor refusal is unconditional, not sentinel-gated
+
+Decision 2 upheld. #420 checklist asked for a refusal gated on a live pipeline sentinel; the PR overrode it because `fr-pipeline-sentinel.sh` deliberately writes no sentinel when the session cwd is a linked worktree — exactly where every fr-goal session lives after §1. A sentinel-gated backstop would be silent in the one shape it exists to catch. Operator confirmed the override.
+
+<!-- fr:journal kind=decision scope=spec id=qa-d3 created=2026-08-15T21:20:26 -->
+### qa-d3 · decision · Ratified: the chained-cd circumvention is blessed, not closed
+
+Decision 3 upheld. `cd /tmp && cd <other-repo> && …` stays reachable, documented by comment, deny message and a named test. Consistent with the pre-existing `test_cd_then_back_into_repo_allowed_by_design`, whose docstring cites the guard axiom "discipline backstop, not a security boundary". Closing it would flip that test and re-characterise the hook. Per-repo sentinels remain declined — #421 flags multi-repo fr workspaces as not-yet-designed.
+
+<!-- fr:journal kind=decision scope=spec id=qa-d4 created=2026-08-15T21:20:27 -->
+### qa-d4 · decision · Decision 4 (version bump) is no longer a live fork — reconciled at 3.20.0
+
+The PR body presented 3.18.1 -> 3.19.0 as an operator-owned minor-vs-patch call. Since then `main` itself reached 3.19.0 and this branch merged main and re-bumped to 3.20.0. Minor remains correct under AGENTS.md ("mandatory behavior": a dispatch that previously succeeded is now refused). Recorded rather than re-asked.
+
+<!-- fr:journal kind=decision scope=spec id=qa-d5 created=2026-08-15T21:20:29 -->
+### qa-d5 · decision · Post-merge Test Plan: this session drives all six steps
+
+Operator assigned all six Test Plan steps to this session rather than to themselves. Steps 1-4 (install.sh lands the hook, poisoned dispatch denied, clean dispatch allowed, org-hook stderr repaired) and 5-6 (second repo reachable from a live pipeline, repo A still denied) all run from this host. fr-goal §9 order still applies: verify the merge reached main before driving anything.

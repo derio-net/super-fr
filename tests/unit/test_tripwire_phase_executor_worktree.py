@@ -151,3 +151,72 @@ def test_fr_goal_contrasts_section_3s_correct_use() -> None:
         "§6 must contrast itself against §3's correct use of the flag, so the "
         "precedent cannot be misread"
     )
+
+
+# --- Spec §E, fifth bullet: "no shipped skill/agent instructs dispatching this
+# agent *with* the flag". The other four bullets assert that specific surfaces
+# say the right thing; this is the only NEGATIVE scan, and so the only one that
+# catches a NEW or edited surface reintroducing the instruction the #420 work
+# removed from three places. Without it, every existing tripwire stays green
+# while a freshly-added skill re-poisons the dispatch. (rev2-f9)
+
+SHIPPED_PROSE = sorted(
+    {
+        *(REPO_ROOT / "plugins").glob("*/skills/**/SKILL.md"),
+        *(REPO_ROOT / "plugins").glob("*/agents/*.md"),
+        *(REPO_ROOT / ".opencode" / "skills").glob("**/SKILL.md"),
+        *(REPO_ROOT / ".hermes" / "skills").glob("**/SKILL.md"),
+    }
+)
+
+# A sentence may pair the agent with the flag only to forbid the pairing.
+_NEGATED = re.compile(
+    r"without|\bnot\b|\bno\b|never|refus|mutually exclusive|wrong|instead of|deadlock",
+    re.IGNORECASE,
+)
+_FLAG = re.compile(r'isolation:\s*[`"\']?worktree', re.IGNORECASE)
+
+
+def _sentences(text: str) -> list[str]:
+    """Crude sentence/blocks split — enough to keep a nearby negation attached
+    to the clause it negates, which a whole-file scan would lose."""
+    return re.split(r"(?<=[.!?;])\s+|\n\s*\n+|\n(?=\s*[-*#|])", text)
+
+
+def test_no_shipped_prose_instructs_the_poisoned_dispatch() -> None:
+    assert SHIPPED_PROSE, "found no shipped skills/agents to scan — glob is wrong"
+    offenders = []
+    for path in SHIPPED_PROSE:
+        text = path.read_text(encoding="utf-8")
+        if "fr-phase-executor" not in text:
+            continue
+        for sentence in _sentences(text):
+            if "fr-phase-executor" not in sentence or not _FLAG.search(sentence):
+                continue
+            if _NEGATED.search(sentence):
+                continue
+            offenders.append(f"{path.relative_to(REPO_ROOT)}: {' '.join(sentence.split())[:200]}")
+
+    assert not offenders, (
+        "shipped prose appears to instruct dispatching fr-phase-executor WITH "
+        'isolation: "worktree" — the combination deadlocks the agent (super-fr#420).\n'
+        + "\n".join(offenders)
+    )
+
+
+def test_the_scan_is_not_vacuous() -> None:
+    """A negative scan that passes over compliant files proves nothing unless
+    the detector fires on a violation. Exercise it on synthetic prose so the
+    guarantee does not rest on the shipped files happening to be clean."""
+    poisoned = 'Dispatch super-fr:fr-phase-executor with isolation: "worktree" so it is isolated.'
+    assert _FLAG.search(poisoned), "the flag pattern must match the shape it hunts"
+    assert not _NEGATED.search(poisoned), "an instruction must not read as a prohibition"
+
+    for blessed in (
+        'Dispatch fr-phase-executor WITHOUT isolation: "worktree".',
+        'fr-phase-executor must never be dispatched with isolation: "worktree".',
+        'The two are mutually exclusive: fr-phase-executor + isolation: "worktree" deadlocks.',
+    ):
+        assert _FLAG.search(blessed) and _NEGATED.search(blessed), (
+            f"legitimate prohibition would be reported as an offender: {blessed}"
+        )

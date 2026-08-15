@@ -339,6 +339,19 @@ host, which no in-repo test can assert.
    dotfiles repo — `git -C ~ rev-parse --show-toplevel` succeeds), run
    `cd ~/.ssh && ls` from a session with a live pipeline elsewhere. Confirm it
    is **denied**. Repeat with `$HOME` not a git repo; also denied.
+9. **Rider check** (added at review — this is the form that actually changed).
+   From the same session run
+   `cd ~/.ssh && fr isolation status && cat id_ed25519`. Confirm it is
+   **denied**: an allowed `fr …` command must not launder a rider into a path
+   that is denied without it. For contrast, `fr isolation status && cat
+   ~/.ssh/id_ed25519` (no leading `cd`) **is** allowed — a deliberate, recorded
+   boundary, since closing it would reject `fr isolation exec -- 'a && b'`.
+10. **Retirement-aim check** (added at review). With a live pipeline in repo A,
+    run `fr isolation down --repo <repo-B>`, then `cd $UNSET_VAR && fr isolation
+    down`, then a heredoc whose body merely contains the words `fr isolation
+    down`. After each, confirm repo A's pipeline is **still live** (the next
+    `git status` in repo A is still denied). Then run a plain `fr isolation
+    down` and confirm it *does* end the pipeline.
 
 ## Implementation Plans
 
