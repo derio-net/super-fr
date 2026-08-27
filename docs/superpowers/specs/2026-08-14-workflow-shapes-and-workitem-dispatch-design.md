@@ -211,6 +211,46 @@ that name through the same order. A shipped shape can be overridden wholesale by
 a repo file of the same name — no merge semantics, because partial-override of a
 step graph is a class of subtle breakage nobody wants to debug.
 
+#### A.1 How a dispatched plan selects its shape
+
+Resolution above answers *"given a name, which manifest?"*. Dispatch needs the
+prior question — *"given a plan on disk, which name?"* — and nothing answered it
+until this section was added (Phase 12; the omission left §1's "dispatch is
+orthogonal to shape" true of the machinery and false of every shipped caller).
+
+`tick` already takes `workflow: WorkflowManifest`, and `fr apply --to` already
+derives its reachability gate from `required_inputs(<manifest>)`. Both simply
+defaulted to the built-in `FR_GOAL_PHASE_DISPATCH`, because a plan folder
+carries no shape reference: `_meta.yaml` records `plan`, `spec`, `target_repo`,
+`fr_version`, `created`, `parent_plan` — nothing naming a workflow. One missing
+field made an axis that is otherwise fully plumbed unreachable.
+
+**A plan names its shape in `_meta.yaml`:**
+
+```yaml
+workflow: fr-goal-phase-dispatch    # optional; omitted means exactly today
+```
+
+- **Optional, and absence means the current default.** An existing plan without
+  the key resolves `FR_GOAL_PHASE_DISPATCH` and behaves identically — the
+  back-compat that lets a live bridge keep ticking merged plans through the
+  upgrade.
+- **Resolved through `resolve_workflow`**, so a repo-authored shape beats a
+  shipped one of the same name. A named shape that does not resolve is an
+  **error**, never a silent fallback to the default: falling back would dispatch
+  a plan at the wrong granularity while reporting success, which is the failure
+  mode this design has produced most often.
+- **`fr plan create --workflow <name>`** writes it; `fr plan self-review`
+  validates that it resolves and passes `check_workflow`.
+- **`fr_version` floor.** `PlanMeta` is `extra="forbid"`, so a plan carrying
+  `workflow:` is unparseable by fr < 4.0.0 — a hard failure, not a warning. A
+  plan that uses the key must floor at `>=4.0.0`; one that omits it stays
+  loadable by older fr.
+
+The shape's declared `unit` then decides granularity, `requires` feeds capability
+negotiation (§4.F), and `needs` feeds reachability (§4.E) — all through
+parameters that already exist. This section is the datum that connects them.
+
 **Validation is code, not prose** (`fr workflow check`): schema-valid, step ids
 unique, `needs` referencing only artifacts that some earlier step `emits` **or
 that the shape's `unit` already implies exist**, no cycles, declared capabilities

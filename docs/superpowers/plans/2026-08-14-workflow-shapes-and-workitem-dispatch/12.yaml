@@ -1,0 +1,137 @@
+schema_version: 2
+phase:
+  number: 12
+  title: Bind a plan to its shape — the datum that joins the shape and dispatch axes
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 6
+  - 8
+  - 11
+  tracking_issue: null
+  acceptance:
+  - dispatch-unit-declared-by-shape
+  - reachability-derived-from-inputs
+  - runner-capability-refusal
+  - multi-repo-spec-fanout
+tasks:
+- number: 1
+  title: RED → GREEN — a plan names its shape, and omitting it means today
+  steps:
+  - id: P12.T1.S1
+    text: |-
+      RED: add tests to tests/unit/test_v2_plan_ops.py (or a new
+      tests/unit/test_plan_workflow_binding.py): PlanMeta accepts an optional
+      `workflow: str | None = None`; a _meta.yaml WITHOUT the key still parses
+      and yields None (back-compat — a live bridge must keep ticking existing
+      plans through the upgrade); a _meta.yaml WITH it round-trips byte-stably
+      through parse → write. Because PlanMeta is extra="forbid", also assert the
+      key is genuinely accepted rather than silently dropped.
+      Run: uv run pytest tests/unit/test_plan_workflow_binding.py -q --no-cov
+      Expected: failures (unknown field `workflow`).
+  - id: P12.T1.S2
+    text: |-
+      GREEN: add the field to PlanMeta in packages/fr/src/fr/types.py, keeping
+      it optional and last so existing plan files stay byte-stable when
+      rewritten. Run the full plan-ops and parser suites — a schema change to a
+      frozen extra="forbid" model is exactly where back-compat breaks:
+        uv run pytest tests/unit -k "plan_ops or parser or migrate" -q --no-cov
+      Expected: green, no fixture churn.
+- number: 2
+  title: RED → GREEN — resolve a plan to its manifest, erroring rather than defaulting
+  steps:
+  - id: P12.T2.S1
+    text: |-
+      RED: tests for a resolution helper (suggested:
+      fr.workflow.resolve.workflow_for_plan(plan, repo_root) -> WorkflowManifest):
+      (a) a plan with no `workflow` key resolves FR_GOAL_PHASE_DISPATCH — byte
+      identical to today's default; (b) a plan naming a shipped shape resolves
+      it; (c) a plan naming a repo-authored shape of the same name gets the repo
+      one (repo > shipped); (d) a plan naming a shape that does NOT resolve
+      raises a clear error naming the plan and the searched paths — it must NOT
+      fall back to the default. Assert (d) explicitly: a silent fallback would
+      dispatch at the wrong granularity while reporting success, which is the
+      failure mode this design keeps producing.
+      Run: uv run pytest tests/unit/test_plan_workflow_binding.py -q --no-cov
+      Expected: failures.
+  - id: P12.T2.S2
+    text: |-
+      GREEN: implement it. Reuse resolve_workflow — do not add a second lookup
+      path or a second default constant.
+      Run: uv run pytest tests/unit/test_plan_workflow_binding.py tests/unit/test_workflow_resolve.py -q --no-cov
+      Expected: passed.
+- number: 3
+  title: RED → GREEN — the shipped callers stop hardcoding the shape
+  steps:
+  - id: P12.T3.S1
+    text: |-
+      RED: tests proving each shipped caller now RESOLVES rather than assumes.
+      (a) fr apply --to: its reachability gate uses required_inputs of the plan's
+      OWN resolved manifest — pin with a plan naming a shape whose needs differ
+      from FR_GOAL_PHASE_DISPATCH's {spec, plan}, and assert the gate's behaviour
+      changes accordingly. (b) the bridge: `_tick` is called with `workflow=` and
+      `required_capabilities=frozenset(manifest.requires)` derived from the
+      plan's shape — assert with a fake runner lacking a capability the plan's
+      shape requires, and confirm the tick refuses via the capability path
+      (Phase 5's chain), synced=0, dispatch never called.
+      Run: uv run pytest tests/unit -k "reachab or apply or bridge" -q --no-cov
+      Expected: failures.
+  - id: P12.T3.S2
+    text: |-
+      GREEN: wire both. packages/fr/src/fr/commands/apply_cmd.py replaces its
+      module-level FR_GOAL_PHASE_DISPATCH use with per-plan resolution;
+      packages/fr-vk/src/fr_vk/bridge_cli.py resolves the plan's shape and passes
+      workflow= plus required_capabilities= to _tick.
+      NOTE: bridge_cli.py has been byte-unchanged for this entire branch by
+      design. This is the one authorized change to it. Keep the diff minimal —
+      the flock, the bridge-owned checkout sync (#286), the per-plan I9 error
+      boundary, the metrics wire format and the two state files are untouched.
+      A plan whose shape fails to resolve must fail THAT PLAN inside the existing
+      I9 boundary, never take the daemon down.
+      Run: uv run pytest tests/unit -k "reachab or apply or bridge" -q --no-cov && uv run pytest tests/integration -k bridge -q --no-cov
+      Expected: green.
+- number: 4
+  title: Authoring surface and the version floor
+  steps:
+  - id: P12.T4.S1
+    text: |-
+      RED → GREEN: `fr plan create --workflow <name>` writes the key (omitted =>
+      key absent, not `workflow: null`, so existing plans stay byte-identical);
+      `fr plan self-review` errors when a named shape does not resolve or fails
+      check_workflow. Because PlanMeta is extra="forbid", a plan carrying the key
+      is unparseable by fr < 4.0.0 — so `fr plan create --workflow` must floor
+      fr_version at '>=4.0.0'; without --workflow the existing default stands.
+      Test both floors.
+      Run: uv run pytest tests/unit -k "plan_cmd or self_review or plan_workflow" -q --no-cov
+      Expected: green.
+  - id: P12.T4.S2
+    text: |-
+      Sweep the four acceptance rows this phase unblocks
+      (dispatch-unit-declared-by-shape, reachability-derived-from-inputs,
+      runner-capability-refusal, multi-repo-spec-fanout). Their notes name this
+      exact blocker — a shipped caller that resolves a manifest. Flip only those
+      whose full claim an automated test now meets, and say in notes what
+      exercises it. Edit docs/acceptance/matrix.yaml directly (fr acceptance add errors on a
+      duplicate --id), regenerate with `fr acceptance report --deterministic`,
+      verify with `fr acceptance check`.
+      Then the full gate:
+        uv run ruff format packages/ tests/ && uv run ruff check packages/ tests/
+        uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+        uv run pytest -q
+        uv run --no-project python scripts/bump-version.py --check
+      Expected: all green; version stays 4.0.0 (this phase ships inside the same
+      major bump — do NOT bump again).
+state:
+  steps:
+    P12.T1.S1: {state: ' ', ticked_at: null, note: null}
+    P12.T1.S2: {state: ' ', ticked_at: null, note: null}
+    P12.T2.S1: {state: ' ', ticked_at: null, note: null}
+    P12.T2.S2: {state: ' ', ticked_at: null, note: null}
+    P12.T3.S1: {state: ' ', ticked_at: null, note: null}
+    P12.T3.S2: {state: ' ', ticked_at: null, note: null}
+    P12.T4.S1: {state: ' ', ticked_at: null, note: null}
+    P12.T4.S2: {state: ' ', ticked_at: null, note: null}
+  completion:
+    at: null
+    note: null
+    observed_prs: []
