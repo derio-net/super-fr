@@ -1093,21 +1093,22 @@ rows:
       - super-fr:tests/unit/test_no_pr_shape.py
       int:
       - super-fr:tests/integration/test_spec_fanout.py
+      - super-fr:tests/integration/test_bridge_shape_binding.py
     status: not-implemented
-    notes: Spec 4.E. Replaces the fixed one-Issue-per-phase assumption. Phase 8 landed
-      the mechanism — fr_dispatch.item_graph.build_items is the single builder and
-      honours all three units (run/phase/spec), tick takes the manifest and dispatches
-      a unit=run shape with no plan at all — pinned unit-only. Phase 9 closed the
-      remaining gap named here — tick's source is now Plan | SpecMeta | None, and
-      tests/integration/test_spec_fanout.py dispatches a real unit=spec graph through
-      tick with a fake runner. Stays not-implemented — Phase 11 wired shape RESOLUTION
-      into fr-goal/`fr run` (see workflow-shape-selection, now ci), but that is a
-      separate execution path from this row's dispatcher — fr_dispatch.tick's own
-      default and fr apply --to still pass the hardcoded fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH
-      constant (packages/fr/src/fr/commands/apply_cmd.py, packages/fr-dispatch/src/fr_dispatch/__init__.py),
-      never a manifest resolved via resolve_workflow. An operator still cannot SELECT
-      a granularity through fr apply/the bridge; that wiring is unclaimed by any
-      phase of this plan.
+    notes: 'Spec 4.E. Phase 8 landed the mechanism (fr_dispatch.item_graph.build_items is the
+      single builder and honours all three units) and Phase 9 widened tick''s source to Plan |
+      SpecMeta | None. Phase 12 removed the hardcoding this note used to name: the bridge no longer
+      rides tick''s built-in default but resolves each plan''s own shape from _meta.yaml''s `workflow:`
+      key (bridge_cli.py -> workflow_for_plan -> tick(workflow=...)), so the dispatcher genuinely
+      reads granularity off the shape. STAYS not-implemented because only one of the three declared
+      units is reachable that way — unit:phase. A unit:run shape needs a run id that plan discovery
+      has no source for, and a unit:spec shape needs a SpecMeta that no shipped caller ever produces
+      (discover_plans yields Plans, fr apply takes a plan dir; SpecMeta appears in no bridge or
+      CLI call site). An operator therefore still cannot SELECT run- or spec-granularity through
+      a shipped path. The remaining gap is pinned rather than described: tests/integration/test_bridge_shape_binding.py::test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id
+      asserts the loud per-plan failure inside the bridge''s I9 boundary (daemon survives, nothing
+      dispatched at the wrong granularity). Flip when a shipped caller can dispatch a run- or
+      spec-unit shape end to end.'
   - id: multi-repo-spec-fanout
     capability: Dispatch granularity
     acceptance: Dispatching a spec fans out one work item per target repo named in its
@@ -1120,21 +1121,18 @@ rows:
       int:
       - super-fr:tests/integration/test_spec_fanout.py
     status: not-implemented
-    notes: Spec 4.E/4.F. Addressing already exists via PlanRef/target_repo. Phase 9
-      landed the fan-out end to end - build_items._spec_items (Phase 8) decomposes
-      a SpecMeta into one item per distinct target repo, skipping manual/placeholder
-      rows (Repo cell not owner/name) rather than guessing, and tick now accepts a
-      SpecMeta source (widened from Plan | None) and dispatches it with zero tracker
-      calls, exactly like a unit=run shape with no plan. tests/integration/test_spec_fanout.py
-      drives this through tick with a fake runner — a 3-row fixture (local repo not
-      alphabetically first, a distinct cross-repo name, one manual-action row) yields
-      exactly 2 dispatched items, each parented to the spec-level id, with the cross-repo
-      item's spec input naming the spec's OWN (home) repo rather than the item's own
-      repo. Stays not-implemented — still not operator-observable — Phase 11 made
-      fr-goal/`fr run` resolve a real shape (workflow-shape-selection, now ci), but
-      no shipped caller passes a resolved unit=spec manifest into fr_dispatch.tick;
-      fr apply/the bridge still default to fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH
-      (unit=phase), so only fake-runner tests exercise the unit=spec fan-out path.
+    notes: 'Spec 4.E/4.F. Phase 9 landed the fan-out end to end at library level — build_items._spec_items
+      decomposes a SpecMeta into one item per distinct target repo (manual/placeholder rows skipped
+      by design, malformed Repo cells reported as failures), tick accepts a SpecMeta source, and
+      tests/integration/test_spec_fanout.py drives a 3-row fixture through tick with a fake runner,
+      each item parented to the spec-level id. Phase 12 added the plan->shape binding this note
+      previously named as the blocker, but that binding does NOT unblock this row: `workflow:`
+      lives in a PLAN''s _meta.yaml, while a unit:spec shape decomposes a SpecMeta. No shipped
+      caller ever produces a SpecMeta dispatch source — the bridge''s discover_plans yields Plans
+      and fr apply takes a plan dir (grep: SpecMeta appears nowhere in bridge_cli.py or packages/fr/src/fr/commands/).
+      Spec fan-out therefore remains fake-runner-only and operator-unobservable. Flip when a shipped
+      entry point dispatches a spec — a spec target for `fr apply --to`, or discovery that yields
+      specs alongside plans.'
   - id: reachability-derived-from-inputs
     capability: Dispatch granularity
     acceptance: A run-unit goal dispatches with no spec or plan on main (they are its
@@ -1144,19 +1142,22 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_reachability.py
-    status: not-implemented
-    notes: Spec 4.E. Generalizes the 2026-05-17 reachability gate from a hardcoded refusal
-      to a rule derived from each step's declared needs. Phase 8 landed the rule —
-      required_inputs is needs-minus-emits over the manifest, fr apply's gate now reads
-      it off FR_GOAL_PHASE_DISPATCH instead of naming plan+spec itself, and both halves
-      of the acceptance are pinned against real git repos (a unit=run shape allowed
-      on the same unmerged tree a unit=phase shape is refused on). Stays not-implemented —
-      Phase 11 does ship a command that starts a unit=run goal (`fr run start fr-goal`),
-      but `fr run` is a wholly separate execution path from fr_dispatch — it never calls
-      build_items/check_reachable/tick, so it exercises none of this row's machinery.
-      The item-level check_reachable still has no production caller; only fr apply's
-      phase-unit half (against the hardcoded FR_GOAL_PHASE_DISPATCH shape, not a
-      resolved manifest) runs in anger today.
+      - super-fr:tests/unit/test_plan_workflow_binding.py
+    status: ci
+    notes: 'Spec 4.E. Generalizes the 2026-05-17 reachability gate from a hardcoded refusal to
+      a rule derived from each step''s declared needs. Phase 8 landed required_inputs (needs minus
+      emits) and made fr apply''s gate read it off a manifest; Phase 12 makes that manifest the
+      PLAN''s own — fr.commands.apply_cmd._check_plan_reachable_on_origin_head now calls workflow_for_plan(plan,
+      repo_root) instead of the module-level FR_GOAL_PHASE_DISPATCH. Flipped to ci because both
+      halves of the acceptance are now exercised against real git repos through the SHIPPED gate
+      with the shape chosen by the plan rather than by a monkeypatched constant: tests/unit/test_reachability.py::test_a_plan_declaring_a_run_shape_passes_the_gate_with_nothing_on_main
+      (a plan naming a unit:run shape whose spec and plan are its own outputs passes on an unmerged
+      tree) and ::test_a_plan_declaring_no_shape_still_refuses_the_same_unmerged_tree (today''s
+      key-less plans resolve FR_GOAL_PHASE_DISPATCH and are still refused). ::test_a_plan_naming_an_unresolvable_shape_raises_rather_than_defaulting
+      and ::test_apply_refuses_a_plan_whose_shape_cannot_be_resolved pin that an unknown shape
+      is a loud refusal (exit 2, zero gh calls), never a silent fall back to the default gate.
+      NOT claimed here: fr apply''s own GitHub projection is still per-phase — creating a run-unit
+      WORK ITEM belongs to dispatch-unit-declared-by-shape, which stays not-implemented.'
   - id: runner-capability-refusal
     capability: Runner and tracker negotiation
     acceptance: A workflow shape whose required capabilities a runner cannot provide
@@ -1167,16 +1168,22 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_capabilities.py
-    status: not-implemented
-    notes: Spec 4.F. Phase 5 landed the mechanism — tick.required_capabilities is
-      checked against Runner.capabilities before runner.preflight runs, reusing the
-      preflight blocker's per-item failure path (one message, synced=0, dispatch never
-      called) — pinned unit-only. Stays not-implemented — a real workflow shape now
-      exists (Phase 6/11, requiring [git, tests, scm]), but nothing shipped resolves
-      it and passes `requires` into tick.required_capabilities — fr_dispatch.tick's
-      default is still the hardcoded FR_GOAL_PHASE_DISPATCH shape, and `fr run`
-      (Phase 7/11's fr-goal-as-a-shape caller) never calls tick at all, so no shipped
-      caller drives this parameter end-to-end yet.
+      int:
+      - super-fr:tests/integration/test_bridge_shape_binding.py
+    status: ci
+    notes: 'Spec 4.F. Phase 5 landed the mechanism — tick.required_capabilities is checked against
+      Runner.capabilities BEFORE runner.preflight runs, reusing the preflight blocker''s per-item
+      failure path (one message, synced=0, dispatch never called) — but nothing shipped resolved
+      a shape and fed `requires` into it, so it was pinned unit-only. Phase 12 supplies that caller:
+      packages/fr-vk/src/fr_vk/bridge_cli.py resolves each plan''s own shape (fr.workflow.resolve.workflow_for_plan,
+      off _meta.yaml''s optional `workflow:` key) and passes required_capabilities=frozenset(manifest.requires)
+      into tick. Flipped to ci on tests/integration/test_bridge_shape_binding.py::test_a_runner_lacking_the_shapes_capability_refuses_the_dispatch,
+      which drives a whole bridge_cli.main() tick with the REAL tick (not a spy): the plan''s
+      shape requires [git, browser], the runner provides {git, scm}, and the tick reports synced=0
+      errors=1 skipped=1 with runner.dispatched == [] and runner.preflight never called — the
+      capability short-circuit specifically, not a preflight or dispatch failure. Fixture discipline:
+      that shape''s `requires` deliberately differ from FR_GOAL_PHASE_DISPATCH''s {git, tests,
+      scm}, so the refusal can only come from the plan''s own declaration being read.'
   - id: tracker-partial-mapping
     capability: Runner and tracker negotiation
     acceptance: A tracker instance declares which item states it can express, per project;

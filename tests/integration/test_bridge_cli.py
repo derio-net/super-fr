@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -194,8 +195,15 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
 
     # Stub one fake plan with a slug we'll check in the log.
     class _StubPlan:
+        # `meta.workflow` / `repo_root` added in Phase 12: the bridge now
+        # resolves each plan's own shape before ticking it. `workflow=None`
+        # is the pre-Phase-12 plan every existing repo has, and resolves the
+        # same default `tick` was already using — so this stub still
+        # describes today's behaviour, with one more attribute.
         def __init__(self, slug: str) -> None:
             self.dir = tmp_path / slug
+            self.repo_root = tmp_path
+            self.meta = SimpleNamespace(plan=slug, workflow=None)
 
     monkeypatch.setattr(
         bridge_cli, "discover_plans", lambda repo, gh: [_StubPlan("fake-plan-slug")]

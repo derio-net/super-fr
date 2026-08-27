@@ -31,6 +31,7 @@ from typing import IO, Any, cast
 
 from fr import hostclient
 from fr.gh import GhError, _classify_error
+from fr.workflow.resolve import workflow_for_plan
 from fr_dispatch import discover_plans
 from fr_dispatch import tick as _tick
 from fr_dispatch.metrics import MetricsPusher
@@ -466,7 +467,21 @@ def main(argv: list[str] | None = None) -> int:
                         plan_slug = plan.dir.name
                         seen_plans_after.add(plan_slug)
                         try:
-                            result = _tick(plan, gh, runner, metrics=_metrics)
+                            # The plan's OWN shape (§4.A.1): no `workflow:`
+                            # key resolves FR_GOAL_PHASE_DISPATCH, i.e. this
+                            # call is byte-for-byte today's behaviour for
+                            # every plan in the wild. A shape that fails to
+                            # resolve raises here, inside the I9 boundary
+                            # below — that plan fails, the daemon does not.
+                            manifest = workflow_for_plan(plan)
+                            result = _tick(
+                                plan,
+                                gh,
+                                runner,
+                                workflow=manifest,
+                                required_capabilities=frozenset(manifest.requires),
+                                metrics=_metrics,
+                            )
                             total_plans_ticked += 1
                             total_synced += result.synced
                             total_errors += result.errors

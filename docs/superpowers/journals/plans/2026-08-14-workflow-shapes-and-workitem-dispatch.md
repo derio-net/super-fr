@@ -641,3 +641,94 @@ After bumping to 4.0.0, uv run pytest -q went from the 2085-passed baseline to 8
 Fixed by widening the ceiling to 5.0.0 everywhere the pre-bump 4.0.0-ceiling literal appeared: the three production defaults (plan_cmd.py, migrate.py, plan_ops.py -- floor unchanged, comments added explaining why), plus 21 test-fixture occurrences across tests/unit/test_v2_plan_ops.py (14), tests/unit/test_plan_acceptance_links.py (3, including the two meta.write_text().replace(...) calls that swap the FLOOR to test the low-floor warning -- both old/new strings updated to keep the ceiling consistent throughout), tests/unit/test_v2_migrate.py (1, a behavior-pin assertion of migrate's own default output), tests/unit/test_journal_lifecycle.py (1), tests/integration/test_v2_full_lifecycle.py (2). Deliberately did NOT touch: the version-GATE tests themselves (test_v2_parse.py's test_parse_enforces_fr_version uses an intentionally-unsatisfiable range far in the future, untouched), archived plans under docs/superpowers/implemented/ (historical, never re-parsed), or the unrelated live plan docs/superpowers/plans/2026-07-09-multi-backend-git-host-adapters/_meta.yaml (a different in-flight plan, not this plan's to silently rewrite -- its own author owns that widening if/when it's needed).
 
 Verification: full CI-form gate (uv run pytest -q, cov-fail-under=75) -- 2096 passed, 0 failed, 85 skipped, 90.88% coverage; ruff check/format and mypy over all four src trees all clean afterward.
+
+<!-- fr:journal kind=discovery scope=plan id=p12-workflow-for-plan-shape created=2026-08-27T13:03:20 phase=12 -->
+### p12-workflow-for-plan-shape · discovery · workflow_for_plan lives beside resolve_workflow and delegates to it — one search order, one default (phase 12)
+
+`fr.workflow.resolve.workflow_for_plan(plan, repo_root=None, *, shipped_root=None) -> WorkflowManifest` — deliberately a second function in the SAME module as `resolve_workflow`, not a second lookup path. `resolve_workflow` answers "given a name, which manifest?"; this answers dispatch's prior question "given a plan on disk, which name?" and then delegates. There is exactly one search order (repo > shipped) and one default constant.
+
+Three decisions worth keeping:
+
+1. **No key short-circuits before any I/O.** `plan.meta.workflow is None` returns `FR_GOAL_PHASE_DISPATCH` — the same object, `is`-identity asserted in tests, not a re-parse that looks like it. That is what makes "absence means exactly today" cheap and total: no filesystem access, no repo root needed, so a plan parsed outside a git checkout still ticks.
+
+2. **`repo_root` defaults to `plan.repo_root`.** The bridge holds a `Plan` and has no separate root to hand in; a plan parsed inside a repo already knows where its overrides live. `apply_cmd` still passes its root explicitly because it has one and the existing signature `_check_plan_reachable_on_origin_head(plan, repo_root)` (four tests monkeypatch it by name) was kept byte-identical.
+
+3. **A named shape with NO repo root raises rather than searching only the shipped half.** Silently resolving half the order and calling it resolution is the same class of bug as falling back to the default — the operator's repo-authored override would be invisible. Pinned by `test_a_named_shape_with_no_repo_root_to_search_fails_loudly`.
+
+The `WorkflowError` is re-raised wrapped as `plan '<slug>': unknown workflow shape 'x' — searched <repo path> and <shipped path>`, so one message names the broken plan AND both places to put the fix. `from e` preserves the chain.
+
+Import direction: `resolve.py` imports `fr.parser.Plan` under `TYPE_CHECKING` only (parser does not import `fr.workflow`, so there is no cycle today — the guard keeps it that way), and imports `FR_GOAL_PHASE_DISPATCH` lazily inside the function because `fr.workflow.shapes` imports `fr.workflow.model`, which `resolve` also imports at module scope.
+
+<!-- fr:journal kind=discovery scope=plan id=p12-bridge-diff-is-two-hunks created=2026-08-27T13:03:52 phase=12 -->
+### p12-bridge-diff-is-two-hunks · discovery · The one authorized bridge_cli.py change: an import plus two kwargs, resolution deliberately inside the I9 boundary (phase 12)
+
+Two hunks, +16/-1, and nothing else in the file moved:
+
+1. one import — `from fr.workflow.resolve import workflow_for_plan`;
+2. inside the EXISTING per-plan `try:` (the I9 boundary), `manifest = workflow_for_plan(plan)` followed by `_tick(plan, gh, runner, workflow=manifest, required_capabilities=frozenset(manifest.requires), metrics=_metrics)` — the same call, two keyword arguments richer.
+
+Why that is the minimum, not merely small:
+
+- **Resolution is INSIDE the boundary on purpose.** `workflow_for_plan` raising is the one new way this loop can fail, and the loop already has the right handler: `except Exception` → `total_errors += 1`, `logger.exception("bridge: plan %s tick raised; continuing")`, `push_failure_total(reason=f"plan_error:{slug}:{e}")`, next plan. Hoisting resolution above the try (or to the top of the repo loop) would have moved a per-plan failure into daemon-fatal territory for a production cron. Pinned by `test_a_plan_whose_shape_does_not_resolve_fails_only_that_plan`: two plans in, the broken one never reaches `tick`, the healthy one still ticks, `rc == 0`, exactly one `plan_error:` metric naming the shape.
+- **`workflow_for_plan(plan)` with no root argument** keeps the call one line and is correct here: `discover_plans` parses from the bridge-OWNED checkout (#286), so `plan.repo_root` IS that checkout and a repo-authored `docs/superpowers/workflows/<name>.yaml` resolves from the bridge's own synced copy of main — the same tree the runner will work from.
+- **`required_capabilities` is a no-op for every plan in the wild.** No `workflow:` key → `FR_GOAL_PHASE_DISPATCH` → `requires = (git, tests, scm)` → exactly `VkRunner.capabilities` (`fr_vk/runner.py:76`). Checked before wiring it, precisely because a shortfall refuses EVERY eligible item; a runner whose capability list had drifted would have turned the upgrade into a silent full stop. Pinned by `test_a_plan_with_no_shape_reference_still_ticks_at_todays_default`.
+
+Untouched, and asserted-untouched only where a test already covered them: the flock, `_ensure_bridge_checkout`/`_pull_managed_repo` (#286), `_seen_plans.json` / `_done_closed.json`, the metrics wire format and its reason aliases, `skip_issue_create=True` (it lives inside `tick`, not here), and the PR-state/reaper/done-reconcile tail.
+
+Two fixture stubs in the existing suite had to grow one attribute each — `_StubPlan` in `tests/integration/test_bridge_cli.py` and `_FakePlan` in `test_bridge_resilience.py` now carry `meta=SimpleNamespace(plan=..., workflow=None)` (and a `repo_root`), because the bridge now reads `plan.meta.workflow` before ticking. `workflow=None` is precisely the pre-Phase-12 plan, so both tests still describe today's behaviour.
+
+<!-- fr:journal kind=decision scope=plan id=p12-fr-version-floor created=2026-08-27T13:04:18 phase=12 -->
+### p12-fr-version-floor · decision · fr_version floor: shape-decided when unstated, REFUSED when the operator states a pre-4.0.0 range (phase 12)
+
+`PlanMeta` is `frozen=True, extra="forbid"`, so a plan carrying `workflow:` is not "unknown key ignored" on fr 3.x — it is `PlanSchemaError` at parse. The plan therefore has to tell older fr not to try, via `fr_version`.
+
+Decided rule for `fr plan create` (`packages/fr/src/fr/commands/plan_cmd.py`):
+
+- `--workflow` given, `--fr-version` NOT stated → the constraint becomes `WORKFLOW_FR_VERSION = ">=4.0.0,<5.0.0"` (the shape decides it).
+- `--workflow` given, `--fr-version` stated AND it admits some fr < 4.0.0 → **exit 2 with a message naming 4.0.0**; the plan folder is never created. An explicit constraint is the operator's, so it is refused rather than silently rewritten — silent substitution is the same sin as a silent shape fallback.
+- No `--workflow` → nothing changes. `DEFAULT_FR_VERSION` stays `">=3.0.0,<5.0.0"` (Phase 11's widening) and `_meta.yaml` is byte-identical to today: `plan_ops.create` only inserts the key `if workflow is not None`, so no plan grows a `workflow: null`.
+
+Two implementation notes a future reader will otherwise re-derive the hard way:
+
+1. **"Did the operator state a constraint?" is asked of click, not of the value.** An explicit `--fr-version '>=3.0.0,<5.0.0'` is byte-identical to the default, so a value comparison silently upgraded it and my RED test passed for the wrong reason. Fixed with `ctx.get_parameter_source("fr_version") is not ParameterSource.DEFAULT` (the command grew a `ctx: typer.Context` first parameter for this).
+2. **`_admits_pre_4` probes rather than parses bounds.** `SpecifierSet` exposes no "minimum version", and probing is the question that actually matters — would some real fr 3.x consider itself allowed? Probes are `0.1.0, 2.0.0, 3.0.0, 3.19.0, 3.999.999`. An unparseable constraint answers False deliberately: `fr.parser` fails it loudly at parse time and duplicating that error here would mask it.
+
+Trap avoided while testing: `--fr-version '>=4.1.0'` makes `create` fail with exit 1, not 0 — `plan_ops.create` re-parses the folder it just wrote, and installed fr is 4.0.0, which that range excludes. The test uses `>=4.0.0,<4.5.0`. This is the same shape as the finding `p11-fr-version-default-ceiling-broke-on-bump`: a plan's own constraint must contain the fr that writes it.
+
+`fr plan self-review` gained `_workflow_issues(plan)` (in `plan_ops.py`, called from `self_review`): silent when no shape is named; otherwise `workflow_for_plan` must resolve (error naming plan + searched paths) and `check_workflow(manifest)` must be clean (error per problem, prefixed with the shape name). A shape that resolves but is malformed would otherwise fail at tick time, far from the plan that chose it.
+
+<!-- fr:journal kind=decision scope=plan id=p12-acceptance-sweep created=2026-08-27T13:04:54 phase=12 -->
+### p12-acceptance-sweep · decision · Acceptance sweep: capability-refusal and reachability flipped to ci; the two unit-granularity rows stay not-implemented for reasons that are now precise (phase 12)
+
+Two flipped, two left with reasons, one untouched. What each claim actually needs, checked against what the tests exercise rather than what they are named:
+
+**FLIPPED → ci · runner-capability-refusal.** Claim: "a shape whose required capabilities a runner cannot provide is refused at preflight with one clear message." Phase 5 built the refusal; nothing shipped fed `requires` into it. Now the bridge does. `tests/integration/test_bridge_shape_binding.py::test_a_runner_lacking_the_shapes_capability_refuses_the_dispatch` runs a whole `bridge_cli.main()` tick with the REAL `tick` (only the runner and gh are fakes): plan's shape requires `[git, browser]`, runner provides `{git, scm}` → `synced=0 errors=1 skipped=1`, `runner.dispatched == []`, `runner.preflight_items is None`. That last assertion is what makes it the capability path specifically rather than a preflight or dispatch failure. Fixture discipline: `requires` deliberately differs from `FR_GOAL_PHASE_DISPATCH`'s `{git, tests, scm}`, so the refusal can only come from the plan's own declaration being read.
+
+**FLIPPED → ci · reachability-derived-from-inputs.** Claim has two halves: a run-unit goal dispatches with no spec/plan on main; a phase-unit dispatch still refuses an unmerged plan. Both now run through the SHIPPED gate against real git repos with the shape chosen by the plan, not by a monkeypatched constant: `test_a_plan_declaring_a_run_shape_passes_the_gate_with_nothing_on_main` and `test_a_plan_declaring_no_shape_still_refuses_the_same_unmerged_tree`. Plus the anti-fallback pair (`..._raises_rather_than_defaulting`, `test_apply_refuses_a_plan_whose_shape_cannot_be_resolved` → exit 2, zero gh calls). What I explicitly did NOT let the flip claim, and said so in the row's notes: `fr apply`'s own GitHub projection is still per-phase; creating a run-unit work ITEM is the dispatch-unit row's business.
+
+**LEFT not-implemented · dispatch-unit-declared-by-shape.** The row's claim enumerates all three units ("whole run, per plan phase, or per target repo of a spec"). Phase 12 kills the hardcoding — the dispatcher reads granularity off the plan's shape — but only `unit: phase` is REACHABLE through a shipped caller: a `unit: run` shape needs a run id plan discovery has no source for, and `unit: spec` needs a `SpecMeta` no shipped caller produces. Flipping on "the constant is gone" would claim an operator-selectable granularity that does not exist. Instead the gap is pinned: `test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id` asserts the loud per-plan failure inside the I9 boundary, so the day someone gives the bridge a run identity, a test tells them to sweep this row.
+
+**LEFT not-implemented · multi-repo-spec-fanout.** Its old note named "a shipped caller that resolves a manifest" as the blocker; that turned out to be the wrong diagnosis, and Phase 12 does not unblock it. `workflow:` lives in a PLAN's `_meta.yaml`, while a `unit: spec` shape decomposes a `SpecMeta`. Grep confirms `SpecMeta` appears in no bridge or CLI call site — `discover_plans` yields `Plan`s, `fr apply` takes a plan dir. Spec fan-out stays fake-runner-only. Rewrote the note to name the REAL blocker (a shipped entry point that dispatches a spec) so the next reader doesn't re-check the manifest wiring.
+
+**UNTOUCHED · vk-dispatch-unchanged-after-cutover** — its claim includes a live-bridge walk that belongs to the operator's post-merge Test Plan.
+
+Matrix after the sweep: 74 rows, `{ci: 58, skipped: 13, not-implemented: 3}` (was 56/13/5); `fr acceptance check` exits 0 with the three report renderings regenerated via `fr acceptance report --deterministic`. Edited `matrix.yaml` directly (`fr acceptance add` errors on a duplicate `--id`) with a surgical per-row script — status line + notes block + level refs only — rather than a whole-file `yaml.dump`, which would have reformatted all 74 rows into an unreviewable diff.
+
+<!-- fr:journal kind=discovery scope=plan id=p12-tick-projects-phases-regardless-of-unit created=2026-08-27T13:05:17 phase=12 -->
+### p12-tick-projects-phases-regardless-of-unit · discovery · tick's tracker projection is gated on the SOURCE TYPE, not the shape's unit — a Plan source is always phase-projected first (phase 12)
+
+Found while writing the `unit: run` gap test, and it cost a wrong RED: the expected failure was `ValueError: a run-unit shape needs a run_id` from `build_items`, but the actual failure was a `KeyError` from `observe()` — because `tick`'s preamble is gated on `isinstance(plan, Plan)`, NOT on `workflow.unit`:
+
+```python
+if isinstance(plan, Plan):
+    observed = observe(plan, gh)
+    rendered = render(plan, observed)
+    d = diff(rendered, observed, plan=plan)
+    apply(d, gh, plan=plan, skip_issue_create=True)
+```
+
+So for a `Plan` source, the whole GitHub phase projection (observe → render → diff → apply, label sync included) runs BEFORE the shape's `unit` is consulted at all. A plan that named a `unit: run` shape would still have its per-phase Issues label-synced, and only then fail for want of a run id.
+
+This is not a defect today — every `Plan` reaching `tick` is phase-unit in practice, and Phase 9's design note (`p9-tick-source-widened-not-second-path`) deliberately keyed the preamble on the SOURCE TYPE rather than the unit, because a `SpecMeta`/`None` source has no phases to project. But it means "granularity is declared by the shape" is only true of the ITEM GRAPH, not of the tracker projection: `unit` chooses what gets dispatched, `isinstance(plan, Plan)` chooses what gets synced. Whoever makes a run-unit dispatch work from a plan source has to decide whether that plan's phase Issues should still be synced, and the answer is not currently encoded anywhere.
+
+Consequence for the test: `test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id` seeds ready Issues via `_ready(...)` first, with a comment saying why — otherwise the observe KeyError masks the failure the test is actually about.

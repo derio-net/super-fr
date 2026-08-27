@@ -57,6 +57,19 @@ class PlanMeta(BaseModel):
     parent_plan: str | None = None
     prior_rework: str | None = None
     origin_items: list[OriginItem] = Field(default_factory=list)
+    # The workflow SHAPE this plan dispatches at (2026-08-14 workflow-shapes
+    # spec §4.A.1, Phase 12) — resolved through
+    # `fr.workflow.resolve.workflow_for_plan`, repo > shipped. Optional, and
+    # **absence means exactly today's behaviour**: no key resolves
+    # `FR_GOAL_PHASE_DISPATCH`, which is what lets the live bridge keep
+    # ticking every existing plan through the upgrade. A name that does NOT
+    # resolve is an error, never a fallback to the default.
+    #
+    # Declared LAST so a plan written before the field existed keeps its byte
+    # order when rewritten. Because this model is extra="forbid", a plan
+    # carrying the key is a hard parse failure on fr < 4.0.0 (not a warning) —
+    # hence `fr plan create --workflow` floors `fr_version` at >=4.0.0.
+    workflow: str | None = None
 
     @field_validator("created", mode="before")
     @classmethod

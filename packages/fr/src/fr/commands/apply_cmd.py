@@ -41,8 +41,9 @@ from fr.diff import (
 from fr.parser import Plan, PlanSchemaError
 from fr.plan_ops import PlanEditError
 from fr.render import archive_gate
+from fr.workflow.model import WorkflowError
 from fr.workflow.reachability import required_inputs, unreachable_paths
-from fr.workflow.shapes import FR_GOAL_PHASE_DISPATCH
+from fr.workflow.resolve import workflow_for_plan
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -71,18 +72,24 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
     when this returns non-empty.
 
     **Which artifacts those are is derived, not hardcoded** (spec §4.E,
-    Phase 8): `fr apply --to <runner>` dispatches at phase granularity, and
-    `FR_GOAL_PHASE_DISPATCH` is that shape written down — a single step
-    that `needs: [spec, plan]` and emits a PR. `required_inputs` reads the
-    unmet needs off it, so the refusal is a consequence of the shape rather
-    than a rule this function states. A shape that emitted its own plan
-    (a `unit: run` goal) would produce an empty requirement here, which is
-    exactly the §4.E asymmetry.
+    Phase 8): `required_inputs` reads the unmet needs off a shape, so the
+    refusal is a consequence of that shape rather than a rule this function
+    states. A shape that emitted its own plan (a `unit: run` goal) produces
+    an empty requirement here, which is exactly the §4.E asymmetry.
+
+    **Which shape is the PLAN's own** (spec §4.A.1, Phase 12): resolved via
+    `workflow_for_plan`, not the module-level default this function used to
+    read. A plan naming no shape still resolves `FR_GOAL_PHASE_DISPATCH`
+    (`needs: [spec, plan]`), so the 2026-05-17 gate is unchanged for every
+    plan in the wild; a plan naming a shape that does NOT resolve raises
+    `WorkflowError` rather than falling back — gating on the wrong shape's
+    inputs would let a dispatch through at the wrong granularity while
+    reporting success.
 
     Raises if origin/HEAD isn't resolvable locally — caller catches
     and re-raises with a setup hint.
     """
-    required = required_inputs(FR_GOAL_PHASE_DISPATCH)
+    required = required_inputs(workflow_for_plan(plan, repo_root))
     paths: list[str] = []
     if "plan" in required:
         paths.append(str(plan.repo_relative_dir))
@@ -254,6 +261,21 @@ def _apply_one(
 
     try:
         missing = _check_plan_reachable_on_origin_head(plan, plan.repo_root)
+    except WorkflowError as e:
+        # The plan names a shape that does not resolve (§4.A.1). Reported on
+        # its own, NOT through the origin/HEAD wrapper below: an operator
+        # told to run `git remote set-head` for a typo'd workflow name would
+        # be chasing the wrong thing entirely.
+        lines = [
+            parts[0],
+            "",
+            f"refuse to dispatch: {e}",
+            "",
+            "Author the shape under docs/superpowers/workflows/, or fix the "
+            "`workflow:` key in the plan's _meta.yaml.",
+        ]
+        json_out["workflow_error"] = str(e)
+        return 2, "\n".join(lines), json_out
     except Exception as e:  # noqa: BLE001 — wrap origin/HEAD errors with setup hint
         lines = [
             parts[0],

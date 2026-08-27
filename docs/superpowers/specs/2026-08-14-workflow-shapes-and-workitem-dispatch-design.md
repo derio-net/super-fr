@@ -318,6 +318,28 @@ step. The orchestrating harness calls `resolve` when a dispatched agent returns;
 it may also record `emitted` artifacts, since an agent step is how a spec or
 plan comes into existence.
 
+**A run is born in its workspace.** `fr run start` ensures isolation *itself*
+(`fr isolation up --branch <b>`) and writes the run file inside the resulting
+worktree — it is not a step the run later performs on itself.
+
+The alternative, which the first draft shipped and code review caught, does not
+work: `fr run start` wrote the run file at `git rev-parse --show-toplevel`, and
+an `isolate` **step** then created a linked worktree. From the worktree,
+`advance` resolved a different toplevel and could not find its own run; from the
+base clone, `cli` steps ran with `cwd` in the base clone, so `plan-review`'s
+`fr plan self-review {{ artifacts.plan }}` looked for a plan that existed only in
+the worktree. The first step moved the ground out from under the run.
+
+Writing run state to the base clone also defeats §4.B's own rationale: a file
+there is not on the feature branch and never reaches the PR that is supposed to
+make the run reviewable.
+
+Making isolation a precondition rather than a step matches this repo's existing
+doctrine — fr-brainstorming §0 and fr-goal both treat isolation as a hard gate
+that "precedes EVERYTHING", where "start with X" changes the first work item and
+never the first action. Consequently the shipped `fr-goal` manifest carries no
+`isolate` step, and `cli` steps run with `cwd` at the workspace root.
+
 **Archival keys on the emitted plan, not on a name convention.** A run and its
 plan do **not** share a slug: run ids are derived from the branch
 (`<date>-<flattened-branch>`, so `feat/x` yields `<date>-feat-x`) while a plan

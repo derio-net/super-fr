@@ -122,12 +122,21 @@ def _repo_with_origin(tmp_path: Path) -> Path:
     return work
 
 
-def _land_plan(work: Path, *, push: bool) -> Path:
+def _land_plan(work: Path, *, push: bool, workflow: str | None = None) -> Path:
+    """Commit (and optionally push) the fixture plan.
+
+    `workflow` writes the §4.A.1 shape reference into `_meta.yaml` — the
+    datum that makes the gate read the PLAN's shape instead of the
+    built-in default.
+    """
     import shutil
 
     plan_dir = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
     plan_dir.parent.mkdir(parents=True)
     shutil.copytree(MINIMAL, plan_dir)
+    if workflow is not None:
+        meta = plan_dir / "_meta.yaml"
+        meta.write_text(meta.read_text().rstrip("\n") + f"\nworkflow: {workflow}\n")
     spec_dir = work / "docs" / "superpowers" / "specs"
     spec_dir.mkdir(parents=True)
     (spec_dir / "fixture-spec-design.md").write_text("# stub spec\n")
@@ -285,22 +294,142 @@ def test_apply_cmds_gate_reads_the_shape_rather_than_hardcoding_plan_and_spec() 
     assert "required_inputs" in src
 
 
-def test_a_shape_that_does_not_need_the_plan_does_not_gate_on_it(tmp_path, monkeypatch) -> None:
-    """The derivation is real, not decorative: drop `plan` from the shape's
-    needs and the same unmerged tree stops being a refusal."""
+# ── the gate reads the PLAN's shape (spec §4.A.1, Phase 12) ───────────
+#
+# TEST CHANGE DECLARED: this section's single test used to monkeypatch
+# `apply_cmd.FR_GOAL_PHASE_DISPATCH` — the module-level constant the gate
+# read. `apply_cmd` no longer holds a shape of its own (it resolves the
+# plan's), so the seam moved from "patch the module constant" to "write
+# the shape reference into the plan and author the shape in the repo",
+# which is the surface an operator actually has. The BEHAVIOUR asserted is
+# unchanged: a shape that does not need the plan stops gating on it.
+
+SPEC_ONLY_SHAPE_YAML = """\
+workflow: spec-only-dispatch
+schema: 1
+unit: phase
+requires: [git, browser]
+steps:
+  - id: implement
+    kind: agent
+    needs: [spec]
+    emits: [pr]
+"""
+"""Deliberately DIFFERENT from `FR_GOAL_PHASE_DISPATCH` in both axes this
+phase wires: `needs: [spec]` (not `{spec, plan}`) and `requires:
+[git, browser]` (not `{git, tests, scm}`). A fixture shape that happened
+to need the same things would pass against the old hardcoded code and
+prove nothing."""
+
+
+def _author_repo_shape(work: Path, name: str, text: str) -> None:
+    d = work / "docs" / "superpowers" / "workflows"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{name}.yaml").write_text(text)
+
+
+def test_a_shape_that_does_not_need_the_plan_does_not_gate_on_it(tmp_path) -> None:
+    """The derivation is real, not decorative: a plan whose OWN shape drops
+    `plan` from its needs stops being refused for an unmerged plan — same
+    unmerged tree, different verdict, chosen by the plan."""
     from fr.commands import apply_cmd
 
     work = _repo_with_origin(tmp_path)
-    plan_dir = _land_plan(work, push=False)
-    plan = _plan_at(plan_dir)
+    default_plan = _plan_at(_land_plan(work, push=False))
 
-    assert apply_cmd._check_plan_reachable_on_origin_head(plan, work) != []
+    assert apply_cmd._check_plan_reachable_on_origin_head(default_plan, work) != []
 
-    spec_only = parse_manifest(
-        "workflow: fr-goal\nschema: 1\nunit: phase\n"
-        "steps:\n  - id: implement\n    kind: agent\n    needs: [spec]\n    emits: [pr]\n"
-    )
-    monkeypatch.setattr(apply_cmd, "FR_GOAL_PHASE_DISPATCH", spec_only)
-    missing = apply_cmd._check_plan_reachable_on_origin_head(plan, work)
+    other = _repo_with_origin(tmp_path / "second")
+    _author_repo_shape(other, "spec-only-dispatch", SPEC_ONLY_SHAPE_YAML)
+    shaped_plan = _plan_at(_land_plan(other, push=False, workflow="spec-only-dispatch"))
+
+    missing = apply_cmd._check_plan_reachable_on_origin_head(shaped_plan, other)
 
     assert [str(p) for p in missing] == ["docs/superpowers/specs/fixture-spec-design.md"]
+
+
+def test_a_plan_naming_an_unresolvable_shape_raises_rather_than_defaulting(tmp_path) -> None:
+    """Never a silent fallback: defaulting here would gate a plan on the
+    WRONG shape's inputs and then dispatch it at the wrong granularity."""
+    import pytest
+    from fr.commands import apply_cmd
+    from fr.workflow.model import WorkflowError
+
+    work = _repo_with_origin(tmp_path)
+    plan = _plan_at(_land_plan(work, push=True, workflow="no-such-shape"))
+
+    with pytest.raises(WorkflowError, match="no-such-shape"):
+        apply_cmd._check_plan_reachable_on_origin_head(plan, work)
+
+
+def test_apply_refuses_a_plan_whose_shape_cannot_be_resolved(tmp_path, monkeypatch) -> None:
+    """End of the wire: `fr apply --yes --to` exits 2 naming the shape, and
+    makes no GitHub calls — an unresolvable shape must not read as an
+    origin/HEAD problem, and must never dispatch."""
+    from fr.commands import apply_cmd
+
+    from tests.unit.fakes import FakeGhClient
+
+    work = _repo_with_origin(tmp_path)
+    plan_dir = _land_plan(work, push=True, workflow="no-such-shape")
+
+    fake = FakeGhClient()
+    monkeypatch.setattr(apply_cmd, "_make_gh_client", lambda: fake)
+
+    rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True, to="vk")
+
+    assert rc == 2
+    assert "no-such-shape" in text
+    assert "origin/HEAD" not in text
+    assert json_out.get("workflow_error")
+    assert fake.calls == []
+
+
+RUN_SHAPE_YAML = """\
+workflow: run-goal
+schema: 1
+unit: run
+requires: [git]
+steps:
+  - id: brainstorm
+    kind: agent
+    emits: [spec]
+  - id: plan
+    kind: agent
+    needs: [spec]
+    emits: [plan]
+  - id: implement
+    kind: agent
+    needs: [spec, plan]
+    emits: [pr]
+"""
+
+
+def test_a_plan_declaring_a_run_shape_passes_the_gate_with_nothing_on_main(tmp_path) -> None:
+    """The §4.E asymmetry, now reachable from the operator's side: the plan
+    NAMES a run-unit shape whose spec and plan are its own outputs, so the
+    same unmerged tree that refuses a phase-unit dispatch stops refusing.
+
+    The choice is the plan's — no monkeypatching, no constant swap.
+    """
+    from fr.commands import apply_cmd
+
+    work = _repo_with_origin(tmp_path)
+    _author_repo_shape(work, "run-goal", RUN_SHAPE_YAML)
+    plan = _plan_at(_land_plan(work, push=False, workflow="run-goal"))
+
+    assert apply_cmd._check_plan_reachable_on_origin_head(plan, work) == []
+
+
+def test_a_plan_declaring_no_shape_still_refuses_the_same_unmerged_tree(tmp_path) -> None:
+    """The other half, unchanged: today's plans name no shape, resolve
+    FR_GOAL_PHASE_DISPATCH, and are still refused until plan + spec merge."""
+    from fr.commands import apply_cmd
+
+    work = _repo_with_origin(tmp_path)
+    plan = _plan_at(_land_plan(work, push=False))
+
+    missing = [str(p) for p in apply_cmd._check_plan_reachable_on_origin_head(plan, work)]
+
+    assert "docs/superpowers/specs/fixture-spec-design.md" in missing
+    assert any("_meta.yaml" in p for p in missing)

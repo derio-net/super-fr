@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace as dc_replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -438,8 +439,16 @@ def test_per_plan_exception_does_not_kill_daemon(
     @dataclass
     class _FakePlan:
         dir: Path
+        # Phase 12: the bridge resolves each plan's shape before ticking.
+        # `workflow=None` (no key in `_meta.yaml`) is every pre-Phase-12
+        # plan and resolves the default `tick` already used.
+        meta: Any = None
+        repo_root: Path | None = None
 
-    plans = [_FakePlan(dir=Path(name)) for name in ("plan-a", "plan-b", "plan-c")]
+    plans = [
+        _FakePlan(dir=Path(name), meta=SimpleNamespace(plan=name, workflow=None))
+        for name in ("plan-a", "plan-b", "plan-c")
+    ]
 
     # One configured repo; discover_plans returns all three plans.
     repo_path = tmp_path / "repo"

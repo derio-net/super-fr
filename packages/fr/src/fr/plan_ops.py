@@ -122,8 +122,17 @@ def create(
     phases: list[PhaseSpec],
     prose: str,
     plans_dir: Path | None = None,
+    workflow: str | None = None,
 ) -> Plan:
     """Scaffold a new v2 plan folder + append spec row.
+
+    `workflow` is the shape the plan dispatches at (spec §4.A.1). It is
+    written ONLY when given — a `workflow: null` line in every new plan
+    would be a gratuitous diff against every plan written before the field
+    existed, and absence is meaningful (it resolves the default shape).
+    Callers that pass one own flooring `fr_version` at `>=4.0.0`; see
+    `fr.commands.plan_cmd` (`PlanMeta` is extra="forbid", so older fr
+    cannot parse the key at all).
 
     Returns the parsed Plan. Raises PlanEditError on collisions.
     """
@@ -155,7 +164,7 @@ def create(
         # can add it by hand when they create the spec file.
 
     # Build the expected folder contents in memory (no side effects yet).
-    meta = {
+    meta: dict[str, Any] = {
         "schema_version": 2,
         "plan": slug,
         "spec": spec_str,
@@ -163,6 +172,11 @@ def create(
         "fr_version": fr_version,
         "created": _dt.date.today().isoformat(),
     }
+    if workflow is not None:
+        # Last, mirroring `PlanMeta`'s field order — an existing plan's
+        # bytes are unaffected and a shaped plan reads bottom-up as
+        # "…and this one dispatches at <shape>".
+        meta["workflow"] = workflow
     meta_text = _yaml_dump(meta)
     prose_text = prose if prose.endswith("\n") else prose + "\n"
     phase_files = {f"{ps.number:02d}.yaml": _yaml_dump(_build_phase_doc(ps)) for ps in phases}
@@ -927,6 +941,12 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                         )
                     )
 
+    # The plan's declared workflow shape (spec §4.A.1): it must resolve,
+    # and it must be a valid shape. Both are errors — dispatch reads this
+    # reference, so an unresolvable or malformed one is a plan that cannot
+    # be dispatched at all.
+    issues.extend(_workflow_issues(plan))
+
     # Acceptance linkage (2026-07-04 acceptance-matrix spec, decision 2).
     issues.extend(_acceptance_link_issues(plan))
 
@@ -978,6 +998,35 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
         )
 
     return issues
+
+
+def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
+    """Validate `_meta.yaml`'s optional `workflow:` reference (spec §4.A.1).
+
+    A plan that names no shape is silent: absence resolves the default and
+    is the state of every plan written before the field existed. A plan
+    that DOES name one is checked twice — `workflow_for_plan` (does it
+    resolve, repo > shipped?) and `check_workflow` (is the resolved shape
+    internally valid?) — because a shape that resolves but is malformed
+    fails at tick time instead, far from the plan that chose it.
+    """
+    from fr.workflow.check import check_workflow
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import workflow_for_plan
+
+    if plan.meta.workflow is None:
+        return []
+    try:
+        manifest = workflow_for_plan(plan)
+    except WorkflowError as e:
+        return [ReviewIssue(severity="error", message=str(e))]
+    return [
+        ReviewIssue(
+            severity="error",
+            message=f"workflow shape {plan.meta.workflow!r}: {err}",
+        )
+        for err in check_workflow(manifest)
+    ]
 
 
 def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:

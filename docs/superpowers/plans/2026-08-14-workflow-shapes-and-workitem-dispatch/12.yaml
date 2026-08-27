@@ -123,15 +123,39 @@ tasks:
       major bump — do NOT bump again).
 state:
   steps:
-    P12.T1.S1: {state: ' ', ticked_at: null, note: null}
-    P12.T1.S2: {state: ' ', ticked_at: null, note: null}
-    P12.T2.S1: {state: ' ', ticked_at: null, note: null}
-    P12.T2.S2: {state: ' ', ticked_at: null, note: null}
-    P12.T3.S1: {state: ' ', ticked_at: null, note: null}
-    P12.T3.S2: {state: ' ', ticked_at: null, note: null}
-    P12.T4.S1: {state: ' ', ticked_at: null, note: null}
-    P12.T4.S2: {state: ' ', ticked_at: null, note: null}
+    P12.T1.S1:
+      state: x
+      ticked_at: '2026-08-27T12:41:59+00:00'
+      note: null
+    P12.T1.S2:
+      state: x
+      ticked_at: '2026-08-27T12:44:47+00:00'
+      note: null
+    P12.T2.S1:
+      state: x
+      ticked_at: '2026-08-27T12:44:51+00:00'
+      note: null
+    P12.T2.S2:
+      state: x
+      ticked_at: '2026-08-27T12:44:55+00:00'
+      note: null
+    P12.T3.S1:
+      state: x
+      ticked_at: '2026-08-27T12:48:11+00:00'
+      note: null
+    P12.T3.S2:
+      state: x
+      ticked_at: '2026-08-27T12:50:42+00:00'
+      note: null
+    P12.T4.S1:
+      state: x
+      ticked_at: '2026-08-27T12:54:53+00:00'
+      note: null
+    P12.T4.S2:
+      state: x
+      ticked_at: '2026-08-27T13:05:49+00:00'
+      note: null
   completion:
-    at: null
+    at: '2026-08-27T13:06:00+00:00'
     note: null
     observed_prs: []
