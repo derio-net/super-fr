@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None or shutil.which("git") is None,
-    reason="hook scripts require jq + git",
+    shutil.which("git") is None,
+    reason="hook scripts require git",
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

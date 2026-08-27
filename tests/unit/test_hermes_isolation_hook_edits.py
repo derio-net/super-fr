@@ -20,8 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "hermes" / "fr-isolation-required.sh"
 
 pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None or shutil.which("git") is None,
-    reason="hermes hook needs jq + git",
+    shutil.which("git") is None,
+    reason="hermes hook needs git",
 )
 
 

@@ -20,8 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LIB = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "lib" / "fr-isolation-decision.sh"
 
 pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None or shutil.which("git") is None,
-    reason="decision core needs jq + git",
+    shutil.which("git") is None,
+    reason="decision core needs git",
 )
 
 

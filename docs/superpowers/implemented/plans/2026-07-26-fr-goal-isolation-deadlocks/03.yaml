@@ -1,0 +1,80 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Make a second repo reachable from a live pipeline (#421)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - pipeline-guard-second-repo-reachable
+  - pipeline-guard-base-repo-still-denied
+tasks:
+- number: 1
+  title: Tests for cross-repo reachability (RED)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Extend tests/unit/test_hooks_guard.py with a TestCrossRepoReachability class using the existing _git_repo helper: from a base-repo cwd with a live sentinel AND a live linked worktree (so the self-heal cannot mask the result), `cd <other-git-repo> && fr isolation status` and `... && fr isolation up --branch x` are ALLOWED.
+  - id: P3.T1.S2
+    text: |-
+      Also assert: `cd <other-repo> && git push` is allowed (target scoping, not command scoping); `cd <non-repo-dir-outside-prefixes> && ls` is still DENIED; `cd <base-repo-subdir> && fr isolation up` is still DENIED (a cd back into the pipeline's own repo is not an escape).
+  - id: P3.T1.S3
+    text: |-
+      Add a named test recording that `cd /tmp && cd <other-repo> && …` is allowed BY DESIGN, citing the guard's discipline-backstop axiom (spec §D.3).
+  - id: P3.T1.S4
+    text: |-
+      Run and confirm the new tests FAIL and the whole existing TestCdTransitionAllowance / TestBootstrapAllowance classes still PASS.
+- number: 2
+  title: Implement the target-scoped allowance and composable fr-isolation match (GREEN)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      fr-isolation-guard.sh: in the leading-cd branch, before the prefix loop, allow when `git -C "$rtarget" rev-parse --show-toplevel` succeeds and its real path differs from $rroot.
+  - id: P3.T2.S2
+    text: |-
+      fr-isolation-guard.sh: compute a `rest` string with a leading `cd <target> &&|;` stripped, and evaluate the `fr init|skills|--version` and `fr isolation` allowances against `rest` so they compose after a cd. Only a LEADING cd is stripped, so test_non_leading_cd_denied still holds.
+  - id: P3.T2.S3
+    text: |-
+      fr-isolation-guard.sh: extend the deny reason with the different-repo escape clause; update the comment block to state the target-scoping rule and to bless the chained-cd shape explicitly.
+  - id: P3.T2.S4
+    text: |-
+      Run uv run pytest tests/unit/test_hooks_guard.py -q --no-cov and confirm the whole file is green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-07-26T15:46:10+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-07-26T15:46:10+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-07-26T15:46:10+00:00'
+      note: null
+    P3.T1.S4:
+      state: x
+      ticked_at: '2026-07-26T15:46:11+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-07-26T15:46:11+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-07-26T15:46:11+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-07-26T15:46:11+00:00'
+      note: null
+    P3.T2.S4:
+      state: x
+      ticked_at: '2026-07-26T15:46:11+00:00'
+      note: null
+  completion:
+    at: '2026-07-26T15:46:12+00:00'
+    note: Target-scoped cd allowance + rest-stripped fr allowances + deny-message
+      clause; 41/41 guard tests green (10 new, all pre-existing preserved).
+    observed_prs: []

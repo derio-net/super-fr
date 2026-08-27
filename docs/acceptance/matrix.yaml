@@ -1298,3 +1298,109 @@ rows:
       be automated. Not built in this PR - operator-requested follow-up. Each step is
       currently manual; the class of defect it guards (a release whose CLI cannot start)
       is invisible to the in-workspace suite.
+  - id: phase-executor-worktree-refused
+    capability: fr-goal phase dispatch
+    acceptance: 'Dispatching the fr-phase-executor WITH isolation: "worktree" is refused
+      loudly at the tool layer, so a poisoned dispatch can never look healthy'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#A
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_phase_executor_guard.py
+      - super-fr:tests/unit/test_plugin_hooks.py
+    status: ci
+    notes: 'super-fr#420. fr-phase-executor-guard.sh denies the dispatch (qualified and bare id); 13 behavioural tests cover the deny, the correct no-flag shape, and every out-of-scope dispatch. Unconditional rather than sentinel-gated, because fr-pipeline-sentinel.sh writes no sentinel for a worktree-launched session -- which is where fr-goal lives after step 1.'
+  - id: phase-executor-correct-dispatch-allowed
+    capability: fr-goal phase dispatch
+    acceptance: The correct dispatch — fr-phase-executor WITHOUT the isolation flag
+      — is still allowed, and the shipped skill/agent prose instructs that shape rather
+      than the poisoned one
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#B
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_phase_executor_worktree.py
+      - super-fr:tests/unit/test_hooks_phase_executor_guard.py
+    status: ci
+    notes: 'super-fr#420. Tripwire pins the hook registration, the agent front-matter description (literal flag plus a negation in the same sentence), and fr-goal section 6 without-the-flag wording along with its section 3 contrast.'
+  - id: phase-executor-allowlist-message-repaired
+    capability: fr-goal phase dispatch
+    acceptance: Installing super-fr leaves the org agent-worktree hook's human-readable
+      allowlist message agreeing with its own case arm
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#C
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ensure_phase_executor_allowlist.py
+    status: ci
+    notes: 'super-fr#420 checklist item 4. Two independently-probed repairs -- the case arm (fail-loud on anchor drift) and the Exempt message (silent no-op when absent). TestStaleStderrMessage covers stock, case-already-correct, absent-message, and idempotence.'
+  - id: pipeline-guard-second-repo-reachable
+    capability: fr pipeline guard
+    acceptance: A session holding an fr pipeline in repo A can start isolation in repo
+      B — 'cd <repo-B> && fr isolation up' is allowed, not denied by the guard that
+      recommends it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#D
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: ci
+    notes: 'super-fr#421. TestCrossRepoReachability -- cd <repo-B> && fr isolation up/status/init is allowed so another repo''s isolation is reachable, and once entered its worktree (valid marker) is a legitimate destination. The fixture carries a live linked worktree so the #341 self-heal cannot mask the result, fenced by test_precondition_base_repo_still_denied.'
+  - id: pipeline-guard-base-repo-still-denied
+    capability: fr pipeline guard
+    acceptance: 'Making a second repo reachable does not weaken the guard in its own
+      repo: base-repo-cwd commands, and a cd back into the base repo, stay denied'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md#D
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: ci
+    notes: 'super-fr#421 regression fence, all three directions. Repo A: base cwd denied, a cd back into it denied, a cd into a non-repo denied. Another repo (TestOtherRepoStillHonoursItsOwnIsolation): reaching it does NOT license general work there -- mutations in an un-isolated clone are denied with a reason naming that repo, and its fr isolation down cannot clear this session''s sentinel. Sensitive paths (TestSensitivePathsStayOutOfReach): cd ~/.ssh is denied whether or not $HOME is a dotfiles git repo -- the allowance is keyed on being an isolation workspace, not on repo identity, precisely so a dotfiles $HOME cannot expose a private key. All 31 pre-existing guard tests preserved.'
+  - id: pipeline-guard-allowance-carries-no-rider
+    capability: fr-isolation pipeline guard
+    acceptance: An allowed `fr …` command reached through a leading `cd` cannot launder
+      a rider into a path that is denied without it; the strip only folds in a `cd`
+      that lands inside the pipeline's repo or on another repo's toplevel, and only
+      the first line of a command is ever evaluated.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: ci
+    notes: 'TestAllowedFrCommandDoesNotCarryARider: the ~/.ssh rider in both fr isolation
+      and fr --version forms, the multi-line smuggling form, plus regression fences
+      that #421''s own reach (cd <repo-B> && fr isolation up) and journal p3-f1 (same-repo
+      subdir) still pass. The no-cd rider is a recorded, deliberate boundary (test_preexisting_rider_without_a_cd_is_still_allowed).'
+  - id: pipeline-guard-retirement-aimed-at-this-repo
+    capability: fr-isolation pipeline guard
+    acceptance: Retiring the session sentinel requires the `fr isolation down` to be
+      positively aimed at this repo — a `--repo` pointing elsewhere, an unresolvable
+      `cd` target, or a heredoc merely quoting the command must leave the live pipeline
+      running.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: ci
+    notes: TestSentinelRetirementMustBeAimedAtThisRepo, with a positive control (a plain
+      down still ends the pipeline) so the fix cannot pass by never retiring. Mirrors
+      clear_repo_sentinels() in fr/isolation/types.py, which already left foreign-repo
+      sentinels alone.
+  - id: phase-executor-allowlist-repair-is-line-scoped
+    capability: fr-goal phase executor dispatch
+    acceptance: 'The org-hook allowlist repair edits only the lines it owns: the `case`
+      arm and the stderr allowlist message, never a rationale comment, and never a foreign
+      plugin id — and no already-fixed line can mask a stale one.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-07-26-fr-goal-isolation-deadlocks-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ensure_phase_executor_allowlist.py
+    status: ci
+    notes: 'TestDoesNotRewriteLinesItDoesNotOwn + TestCaseArmProbeIgnoresComments, fixtures
+      modelled on the real agent-worktree-required.sh which carries the exempt list
+      twice. Verified against a copy of the live hook: exactly one line changes (the
+      message), the read-only rationale comment is untouched, second run byte-identical.'
