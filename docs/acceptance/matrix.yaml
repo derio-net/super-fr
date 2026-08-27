@@ -1254,3 +1254,47 @@ rows:
       — one card per ready phase, zero new cards on a second tick). Row stays
       not-implemented until the operator''s post-merge live-bridge walk confirms
       the same against the real board.'
+  - id: cli-starts-from-a-clean-install
+    capability: Release integrity
+    acceptance: The fr CLI starts from a clean tool install using only its declared
+      dependencies, so a consumer who installs the release can run it.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_no_direct_click_import.py
+    status: skipped
+    notes: Spec 8.0. 4.0.0 shipped a direct import of click - typer's TRANSITIVE dep,
+      not one fr declares - so the installed CLI could not start while the full local
+      suite stayed green; only CI's uv-tool path caught it. The tripwire pins that one
+      import; nothing yet asserts the installed CLI actually runs. Test Plan 8.0 covers
+      it manually until smoke-suite-automated lands.
+  - id: shape-resolution-fails-loud
+    capability: Dispatch granularity
+    acceptance: A plan naming a shape that does not resolve fails that plan loudly rather
+      than silently falling back to the default shape, and never takes the bridge daemon
+      down.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_workflow_binding.py
+      int:
+      - super-fr:tests/integration/test_bridge_shape_binding.py
+    status: ci
+    notes: Spec 4.A.1 and Test Plan 8.2 step 10. A silent fallback would dispatch a
+      plan at the WRONG granularity while reporting success - the failure mode this
+      design produced most often. Resolution sits inside the bridge's existing per-plan
+      I9 boundary, so a bad shape fails that plan and the tick continues.
+  - id: smoke-suite-automated
+    capability: Release integrity
+    acceptance: The post-merge smoke suite runs automatically against a clean install
+      rather than depending on an operator remembering to run it.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 8.0 is written as one scriptable command per step precisely so it can
+      be automated. Not built in this PR - operator-requested follow-up. Each step is
+      currently manual; the class of defect it guards (a release whose CLI cannot start)
+      is invisible to the in-workspace suite.
