@@ -900,3 +900,25 @@ def test_tick_does_not_reach_for_discover_plans():
     import fr_dispatch
 
     assert "discover_plans" not in inspect.getsource(fr_dispatch.tick)
+
+
+def test_a_run_unit_shape_with_no_run_id_fails_the_tick_not_the_cron_iteration():
+    """r2-f9: `tick` promises "all failure paths accumulate", and a cron
+    daemon calls it once per plan. `build_items` raising through
+    `_eligible_items` (which calls it outside any `try`) took the whole
+    iteration down instead of failing one shape."""
+    from fr.workflow.model import parse_manifest
+    from fr_dispatch import tick
+
+    run_shape = parse_manifest(
+        "workflow: goal\nschema: 1\nunit: run\n"
+        "steps:\n  - id: brainstorm\n    kind: agent\n    emits: [spec]\n"
+    )
+    m = RecordingMetrics()
+
+    result = tick(None, FakeGhClient(), FakeRunner(), workflow=run_shape, repo=REPO, metrics=m)
+
+    assert result.errors == 1
+    assert result.synced == 0
+    assert "run_id" in result.failures[0]
+    assert m.heartbeats == 1  # the iteration completed; the daemon lives

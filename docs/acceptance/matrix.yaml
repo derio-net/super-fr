@@ -1008,6 +1008,12 @@ rows:
       real and CI-covered; it is NOT about fr apply/the bridge deriving dispatch
       granularity from a resolved shape, which stays hardcoded to
       fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH (see the sibling rows' notes).
+      Milestone review r2: resolving the shipped shape was covered; EXECUTING it
+      was not, and it could not be executed -- its first step shelled out to `fr
+      isolation up` (moving run state out from under the run) and its second was
+      a gated agent step nothing could clear. test_fr_goal_shape.py now walks the
+      real manifest through the real CLI past both, so "no argument runs today's
+      pipeline" is a checked claim rather than a resolution-only one.
   - id: workflow-repo-authored
     capability: Workflow shapes
     acceptance: A consumer repo defines its own workflow shape, or overrides a shipped
@@ -1054,7 +1060,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_state.py
       - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_workspace.py
       - super-fr:tests/unit/test_archive_cmd.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+      - super-fr:tests/integration/test_run_workspace_lifecycle.py
     status: ci
     notes: >-
       Spec 4.B. docs/superpowers/runs/<run-id>.yaml, git-tracked, archives to
@@ -1080,6 +1090,25 @@ rows:
       slugs are authored independently), caught by a fixture using a
       deliberately unrelated run id and plan slug (test_archive_cmd.py); a
       same-name fixture would have hidden the bug. Phase 7.
+      Milestone review r2 corrected two claims this row's notes had already made
+      but nothing proved. (1) "a gate: operator step ... picked back up later"
+      was false: `advance` marked a gated step blocked and `resolve` refused
+      anything not `running`, so the shipped fr-goal shape -- whose SECOND step
+      is agent+gate -- wedged permanently, verified against the real CLI. The
+      old gate tests asserted only that a step BECOMES blocked, never that it
+      can be cleared; `resolve` now clears one (an agent step completes, a cli
+      step's gate is cleared so the next `advance` still executes it and its
+      exit code is still the verdict), pinned at fixture level in test_run_cli.py
+      AND at shape level in test_fr_goal_shape.py, which walks the SHIPPED
+      manifest start -> blocked brainstorm -> resolve -> the next step's brief.
+      (2) Durability now means durable IN THE WORKSPACE (spec 4.B amended): `fr
+      run start` ensures isolation itself and writes the run file inside the
+      resulting worktree, so `advance` from the worktree finds its own run and
+      cli steps run with cwd at the workspace root -- test_run_workspace.py
+      covers the marker/reuse/refusal paths, and test_run_workspace_lifecycle.py
+      walks a REAL host-worktree isolation (no docker) asserting the base clone
+      comes away with no run file at all. The shipped shape's `isolate` step is
+      gone; isolation is a precondition, not a step the run performs on itself.
   - id: dispatch-unit-declared-by-shape
     capability: Dispatch granularity
     acceptance: The granularity dispatch creates work items at (whole run, per plan

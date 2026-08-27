@@ -732,3 +732,97 @@ So for a `Plan` source, the whole GitHub phase projection (observe → render �
 This is not a defect today — every `Plan` reaching `tick` is phase-unit in practice, and Phase 9's design note (`p9-tick-source-widened-not-second-path`) deliberately keyed the preamble on the SOURCE TYPE rather than the unit, because a `SpecMeta`/`None` source has no phases to project. But it means "granularity is declared by the shape" is only true of the ITEM GRAPH, not of the tracker projection: `unit` chooses what gets dispatched, `isinstance(plan, Plan)` chooses what gets synced. Whoever makes a run-unit dispatch work from a plan source has to decide whether that plan's phase Issues should still be synced, and the answer is not currently encoded anywhere.
 
 Consequence for the test: `test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id` seeds ready Issues via `_ready(...)` first, with a comment saying why — otherwise the observe KeyError masks the failure the test is actually about.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f1 created=2026-08-27T13:42:49 phase=7 state=fixed -->
+### r2-f1 · finding [fixed] · A gate: operator step was a permanent dead end — the shipped fr-goal shape could not execute at all (phase 7)
+
+`advance` marked a gated step `blocked` and returned; `resolve` refused any step not `running`. The gate branch ran BEFORE the `kind: agent` branch, so a gated agent step never became `running` and nothing else could set `done`. The shipped `fr-goal` `brainstorm` step is exactly `kind: agent` + `gate: operator`, i.e. the run's first step. Verified against the real CLI before the fix: `advance` -> "brainstorm: blocked on operator gate"; `resolve --state done` -> exit 2 "not running (state='blocked')"; `advance` -> blocked forever.
+
+**Why the existing tests missed it.** `_GATE_SHAPE` in `tests/unit/test_run_cli.py` asserted only the ENTRY into the blocked state — that the step becomes `blocked`, that nothing executed, and that re-advancing is idempotent. Nothing asserted an EXIT from it. A state you can test your way into and never out of reads as covered: three green tests all describing the same one-way door. Two further reasons it survived: the fixture's gated step is `kind: cli`, so the agent-step interaction (gate branch ordering ahead of the brief) was never exercised at all; and no test walked the SHIPPED manifest through the CLI, so the fact that fr-goal's step 2 is precisely this combination never met a runtime.
+
+**Fix.** `resolve` now accepts a `blocked` step, and what that means is kind-dependent because execution ownership is kind-dependent:
+
+- `kind: agent` — resolves exactly like a `running` one (`done`/`failed`, same `_complete_step` cursor asymmetry). The gate WAS the agent's question; answering it and reporting the outcome are one act.
+- `kind: cli` — `--state done` CLEARS the gate (records `gate: cleared`, returns the step to `pending`) and the next `advance` executes it, so a cli step's exit code stays its verdict. Letting `resolve` mark it `done` would let an operator report success for a command that never ran — the same silent-green class as r2-f2. `--state failed` records a declined gate, cursor put.
+
+`StepRecord` gained `gate: Literal["cleared"] | None`, deliberately separate from `state`: a gate is an AUTHORIZATION, not a lifecycle position. It is sticky (carried through `_complete_step`), so a retry after a failure does not re-ask a question already answered — pinned by `test_a_cleared_gate_stays_cleared_across_a_retry`. Absent on every pre-existing run file, which is exactly "unanswered".
+
+`advance` also now prints the dispatch brief for a gated AGENT step while blocking. A gate stops the run, not the harness's view of the step: without the brief a generic harness has no `skill`/`agent` to dispatch and could never produce the answer the gate waits for.
+
+New coverage: fixture-level clearing tests (both kinds, both outcomes, the retry) in `tests/unit/test_run_cli.py`, plus a shape-level walk of the REAL shipped manifest through the real CLI in `tests/integration/test_fr_goal_shape.py::test_the_shipped_shape_walks_from_start_past_the_gated_brainstorm` — start -> blocked brainstorm (+ brief) -> resolve -> `spec-review`'s brief. `test_resolve_still_refuses_an_ungated_cli_step_pointing_at_advance` keeps the old refusal intact so gate-clearing is not a back door for hand-marking cli steps done.
+
+Side fix in the same area: `advance`'s machine-facing output (the JSON brief) and its copy-pasteable gate hint are now printed with `soft_wrap=True`. Rich folds a long token mid-string by default, which emitted INVALID JSON at a narrow terminal — pinned by `test_the_dispatch_brief_survives_a_narrow_terminal` (COLUMNS=40, long agent name), which fails without the flag.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f2 created=2026-08-27T13:42:50 phase=7 state=fixed -->
+### r2-f2 · finding [fixed] · A kind: cli step with no run: reported a green step that executed nothing (phase 7)
+
+`_render_template(step.run or "", ...)` produced `""`, `subprocess.run("", shell=True)` exits 0, and the cursor advanced. `Step.run` is optional because agent steps have none, so the schema alone cannot express "cli implies run", and `check_workflow` never required one.
+
+Fixed at both layers, so neither an authored manifest nor a hand-built `WorkflowManifest` can express it: `fr.workflow.check._cli_steps_without_a_command` rejects it at validation time (also catching a whitespace-only `run:`), and `advance` refuses a rendered command that is empty. Checking the RENDERED string covers the template that resolves to nothing as well as the omitted key.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f3 created=2026-08-27T13:42:51 phase=7 state=fixed -->
+### r2-f3 · finding [fixed] · Agent-supplied artifact values were interpolated into a shell unquoted (phase 7)
+
+The `# noqa: S602` justified `shell=True` as "shape manifests are operator-authored" — true of the manifest, false of the values substituted into it. `{{ artifacts.* }}` comes from `fr run resolve --emitted name=path`, i.e. from whatever a dispatched agent reports, and the shipped `plan-review` step is `fr plan self-review {{ artifacts.plan }}`. An emitted path containing `;` or backticks executed.
+
+Fixed at the substitution boundary rather than by dropping `shell=True`: `_render_template(text, context, *, quote: bool)` applies `shlex.quote` to every substituted value, so the manifest keeps its own shell syntax (pipes, redirects, `&&`) while an interpolated value is inert data. `quote` is explicit at the call site, so a future non-shell consumer of the renderer has to state which it wants.
+
+Pinned by `test_a_hostile_emitted_artifact_is_quoted_not_executed`: an emitted value of `plan.md; touch <marker>` leaves no marker and lands verbatim in the step's captured stdout.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f4 created=2026-08-27T13:42:52 phase=7 state=fixed -->
+### r2-f4 · finding [fixed] · The dispatch brief dropped for_each and gate, the two fields a harness most needs (phase 7)
+
+`_build_brief`'s docstring claimed its keys were "deliberately exhaustive of `Step`'s agent-relevant fields" while emitting only run/workflow/step/skill/agent/needs/emits/tier. A harness driving off the brief could not know that `implement` must fan out one executor per phase — that step's entire purpose — nor that a step is gated at all.
+
+Fixed by adding `for_each`, `gate` and `kind`, and by making exhaustiveness DERIVED rather than restated: `test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields` computes the expected key set from `Step.model_fields`, so a future `Step` field fails the test until the brief carries it. Exactly two fields are excluded, each with a reason: `id` (emitted as `step`) and `run` (the one cli-only field — `advance` executes it; it is never dispatched). `kind` is carried even though a brief is only printed for agent steps, so the exclusion list stays at the two that have a justification instead of growing a third by convenience.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f5 created=2026-08-27T13:43:51 phase=7 state=fixed -->
+### r2-f5 · finding [fixed] · Run state and the workspace were different checkouts — the run's first step moved the ground out from under it (phase 7)
+
+`fr run start` wrote `<repo_root>/docs/superpowers/runs/<id>.yaml` from `git rev-parse --show-toplevel` (`fr/commands/common.py:18`), and the shipped shape's `isolate` step then created a LINKED WORKTREE. From the worktree, `advance` resolved a different toplevel and could not find its own run; from the base clone, `cli` steps ran with `cwd=repo_root`, so `plan-review`'s `fr plan self-review {{ artifacts.plan }}` looked for a plan that existed only in the worktree. A run file in the base clone also defeats spec 4.B's own rationale: it is not on the feature branch and never reaches the PR that is supposed to make the run reviewable. Verified against the real CLI: `fr run start fr-goal` then `advance` failed on `isolate` immediately.
+
+**Fix, per the amended spec 4.B: a run is born in its workspace.** New module `packages/fr/src/fr/run/workspace.py` — `ensure_run_workspace(repo_root, branch)`, called by `start_cmd` AFTER the shape resolves (so a typo'd shape name never provisions a worktree) and before anything is written. Three cases, in order: (1) already inside a workspace — a `.fr-isolation` marker whose recorded `toplevel` IS this checkout, the same identity rule the `fr-isolation-required` hook applies, so a copied/stale marker proves nothing; a marker naming a DIFFERENT branch is refused rather than used, since the run would land on the wrong PR; (2) isolation state already records a workspace for the branch and its worktree is on disk — reuse it, because "ensure" must not mean "restart" (`up` starts containers); (3) otherwise enter isolation for the branch through whichever backend `FR_ISOLATION_TARGET` selects. `_select_target` is a module seam with a deferred import (`fr.commands.isolation_cmd` is a CLI module importing this one's caller), so tests monkeypatch a name in this module rather than a private of another.
+
+`start` then writes the run at the WORKSPACE root and prints it; `cli` steps already ran with `cwd=repo_root`, which from the worktree IS the workspace root, so nothing else needed changing.
+
+**What the isolate-step removal cost in skill lines: nothing net — `plugins/super-fr/skills/fr-goal/SKILL.md` is still exactly 120 lines, the hard cap.** Deleting the `### 1. isolate` section freed 5 lines (header + 4 body). All 5 went back into the shared mechanics paragraph at the top, which now has to carry three things the per-step section used to: that `start` itself enters isolation and prints the workspace to run later commands from, the "first action, not first work item" doctrine and the fr-init pause, and (new, from r2-f1/r2-f4) that a gate is answered by `resolve` with a gated `cli` step then executed by the next `advance`, plus `for_each` in the brief's field list. Remaining steps renumbered 1..7 with their cross-references updated (`unbound -> set at step 1`, `after step 6's fixes`, "The run's workspace is the working copy").
+
+Tests: `tests/unit/test_run_workspace.py` (6 — inside-a-workspace, enter-when-outside with the base clone left clean, reuse-without-re-entering, wrong-branch refusal, stale-marker-is-not-a-workspace, IsolationError -> clean exit 2) and `tests/integration/test_run_workspace_lifecycle.py` (2 — a REAL `FR_ISOLATION_TARGET=worktree` isolation over a real git repo: the run file lands in the linked worktree and nowhere in the base clone, `advance` invoked FROM the worktree works, a `cli` step's `git rev-parse --show-toplevel` returns the workspace root, no docker binary is ever invoked; and a second `fr run start` reuses the workspace with no second `git worktree add`). `tests/unit/test_run_cli.py`'s `_repo()` fixture now writes a marker, because being in a workspace is the precondition every one of those tests operates under, not a convenience.
+
+**Spec correction owed (not made here):** spec 4.A's example manifest still shows an `isolate` step. 4.B is the authority and says the shipped manifest carries none; the illustration is stale.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f6 created=2026-08-27T13:43:52 phase=8 state=fixed -->
+### r2-f6 · finding [fixed] · Cross-repo depends_on ids named the depending phase's repo, not the dependency's (phase 8)
+
+`_phase_items` composed each edge as `item_id(repo, slug, plan_slug, phase=d)` where `repo` is the CURRENT phase's issue repo. For a plan whose phase 1 is tracked in repo A and phase 2 in repo B, phase 2's `depends_on` yielded `B/<spec>/<plan>/phase/1` — an id no item has, since phase 1's item is keyed on A. Cross-repo phases are a supported concept (`render.py:438` builds cross-repo Issue URLs), so the edge has to survive the repo change.
+
+Latent — no consumer reads the payload key yet — so fixed properly rather than expediently: a new `_phase_repos(plan)` computes the repo of EVERY phase up front (issue repo when tracked, else `target_repo`) and edges are composed from that map. A dependency whose own tracking URL is malformed degrades to `target_repo` instead of failing the phase that merely depends on it — that phase already fails itself, once.
+
+Pinned by a genuinely cross-repo fixture (`test_a_cross_repo_dependency_id_names_the_dependencys_own_repo`): phase 1 tracked in org/repo-a, phase 2 in org/repo-b, phase 10 untracked; phase 2's edge is phase 1's A-keyed id and phase 10's is phase 2's B-keyed id, so the assertion fails under the old code for two different reasons rather than one. Plus `test_a_dependency_with_a_malformed_tracking_url_falls_back_to_the_target_repo`.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f7 created=2026-08-27T13:43:53 phase=7 state=fixed -->
+### r2-f7 · finding [fixed] · advance tracebacked on a cursor with no step record (phase 7)
+
+`_step_by_id` was guarded but the following `state.steps[state.cursor]` was a bare dict index, so a manifest that gained a step after `fr run start` produced a `KeyError` traceback instead of a usable error. Every other lookup in the module uses `.get` or catches.
+
+Now `.get` + exit 2 naming the run, the cursor step and the workflow, and telling the operator the shape changed after `start`. `resolve` gained the same guard on its own record lookup while the code was open. Pinned by `test_advance_reports_a_cursor_with_no_step_record_instead_of_tracebacking` (exit 2, the missing step id in the message, no traceback).
+
+<!-- fr:journal kind=finding scope=plan id=r2-f8 created=2026-08-27T13:43:54 phase=7 state=fixed -->
+### r2-f8 · finding [fixed] · resolve moved the cursor relative to --step, rewinding a run when the resolved step was behind it (phase 7)
+
+`_complete_step` assigned `_next_step_id(manifest, step_id)` unconditionally, so resolving a `running` step that is not the cursor moved the cursor BACK to just after that step. Unreachable today only because `advance` cannot produce two `running` steps.
+
+**Decision: make the cursor move correct regardless, rather than enforce the one-running-step invariant.** Reasons: (a) a rewind is a silent state-corruption class, while a refusal is policy — the correctness fix removes the corruption unconditionally, including for any future caller that builds run state itself; (b) enforcing "the cursor is the only resolvable step" would foreclose the concurrency the shape system is explicitly aiming at (spec 4.E derives concurrency from the item graph; a shape dispatching two agent steps at once is a design goal, not an error to be legislated against now); (c) the invariant would have to be re-litigated the moment that lands, whereas "only the cursor moves the cursor" stays true either way.
+
+`_complete_step` now advances only when `step_id == state.cursor`; any other step records its outcome and leaves the cursor alone. Pinned by `test_resolving_a_non_cursor_step_does_not_rewind_the_cursor` over a three-step shape (a two-step fixture cannot see the bug: `_next_step_id(first)` and the cursor coincide).
+
+<!-- fr:journal kind=finding scope=plan id=r2-f9 created=2026-08-27T13:43:55 phase=8 state=fixed -->
+### r2-f9 · finding [fixed] · _run_items raised out of tick's accumulate contract, taking a whole cron iteration with it (phase 8)
+
+`tick`'s docstring says "all failure paths accumulate", and `_eligible_items` calls `build_items` outside any `try`. A run-unit shape with `run_id=None` (or `repo=None` and no source) raised `ValueError` straight out of `tick`. `_phase_items`/`_spec_items` honoured the `failures` sink for a malformed row; the unit-level argument checks did not.
+
+Fixed as one rule rather than one branch: `_accumulate(failures, message)` appends and returns `[]` when a sink is given, and raises when it is not — applied to every argument-shaped failure in `build_items` (missing `run_id`, missing `repo`, missing `Plan`, missing `SpecMeta`, an un-composable `run_item_id`), each prefixed with an item ref like every other accumulated failure (`_run_item_ref` composes it segment-wise, same failure-strings-only doctrine as `phase_item_ref`). The line the split falls on is documented: DATA-shaped failures accumulate; a wrong source TYPE (`_as_plan`/`_as_spec`) still raises `TypeError` regardless, because that is the caller being wrong, not one plan.
+
+Tests: five sink cases plus `test_without_a_sink_every_one_of_those_still_raises` and `test_a_wrong_source_type_still_raises_even_with_a_sink` in `test_item_graph.py`, and the one that states the actual stake — `test_tick_workitem.py::test_a_run_unit_shape_with_no_run_id_fails_the_tick_not_the_cron_iteration` (errors=1, synced=0, the message in `result.failures`, heartbeat still pushed: the iteration completed and the daemon lives).
+
+Consequence for an existing test, updated not weakened: `test_bridge_shape_binding.py::test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id` used to assert the failure arrived as a `plan_error:` METRIC via bridge_cli's I9 boundary. It now arrives as an accumulated tick failure — identical to how a malformed tracking URL has always arrived — so the test asserts what belongs at that level: a whole `bridge_cli.main()` survives, dispatches nothing, and logs `synced=0 errors=1` for that plan. The failure STRING is asserted where it is produced. `bridge_cli.py` itself was not touched (still the two-hunk Phase 12 diff).

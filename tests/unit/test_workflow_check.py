@@ -194,3 +194,35 @@ def test_cli_all_validates_every_discoverable_shape(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert "ok" in result.output
     assert "bad" in result.output
+
+
+# --- r2-f2: a `kind: cli` step with no `run:` is not expressible ------------
+
+
+def test_a_cli_step_with_no_run_command_is_an_error() -> None:
+    """`Step.run` is optional (agent steps have none), so "cli implies run"
+    can only be a semantic check. Unchecked it produced a green run that
+    executed nothing: `advance` rendered `""` and `subprocess.run("",
+    shell=True)` exits 0."""
+    manifest = _manifest(
+        "workflow: x\nschema: 1\nunit: run\nsteps:\n  - id: silent\n    kind: cli\n"
+    )
+    errors = check_workflow(manifest)
+    assert len(errors) == 1
+    assert "silent" in errors[0]
+    assert "run:" in errors[0]
+
+
+def test_a_cli_step_whose_run_is_only_whitespace_is_an_error() -> None:
+    manifest = _manifest(
+        'workflow: x\nschema: 1\nunit: run\nsteps:\n  - id: blank\n    kind: cli\n    run: "   "\n'
+    )
+    assert [e for e in check_workflow(manifest) if "blank" in e]
+
+
+def test_an_agent_step_with_no_run_command_is_fine() -> None:
+    """The check must not leak onto the kind that legitimately has no `run:`."""
+    manifest = _manifest(
+        "workflow: x\nschema: 1\nunit: run\nsteps:\n  - id: think\n    kind: agent\n"
+    )
+    assert check_workflow(manifest) == []

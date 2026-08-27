@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
+import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -39,6 +40,7 @@ from fr.run.model import (
     run_path,
     save_run_state,
 )
+from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
 
@@ -113,20 +115,45 @@ def _complete_step(
     forked between them: the cursor advances to the next step on `done`,
     and stays exactly where it is on `failed` — a stalled step must stay
     the loudest thing `status`/`check` report, never slide past silently.
+
+    **The cursor moves off the CURSOR, never relative to `step_id`** (review
+    fix r2-f8). Assigning `_next_step_id(manifest, step_id)` unconditionally
+    meant completing any step *behind* the cursor rewound the run to just
+    after that step — a silent state corruption. Only a step that IS the
+    cursor can move it; anything else records its outcome and leaves the
+    cursor alone. That is correct however many steps are `running` at once,
+    so it stays correct if a shape ever dispatches steps concurrently —
+    which enforcing "one running step" as an invariant would have foreclosed.
+
+    The prior record's `gate` is carried forward: an operator authorizes a
+    step once, so a cleared gate survives the step's completion (and any
+    later retry of it).
     """
+    prior = state.steps.get(step_id)
     new_record = StepRecord(
         state=outcome,
         at=_now(),
+        gate=prior.gate if prior is not None else None,
         exit=exit_code,
         stdout=stdout,
         emitted=dict(emitted) if emitted else None,
     )
     new_state = _with_step(state, step_id, new_record)
-    if outcome == "done":
+    if outcome == "done" and step_id == state.cursor:
         next_id = _next_step_id(manifest, step_id)
         if next_id is not None:
             new_state = new_state.model_copy(update={"cursor": next_id})
     return new_state
+
+
+def _gate_pending(step: Step, record: StepRecord) -> bool:
+    """Is this step still waiting on its operator gate?
+
+    A gate is answered by `fr run resolve` (which records `gate: cleared`),
+    not by the step's lifecycle state — spec §4.A: "a pause. The step ends
+    the turn and the run does not advance until the operator answers."
+    """
+    return step.gate == "operator" and record.gate != "cleared" and record.state != "done"
 
 
 def _parse_emitted(pairs: list[str]) -> dict[str, str]:
@@ -148,12 +175,26 @@ def _template_context(state: RunState) -> dict[str, str]:
     return ctx
 
 
-def _render_template(text: str, context: Mapping[str, str]) -> str:
+def _render_template(text: str, context: Mapping[str, str], *, quote: bool) -> str:
+    """Substitute `{{ ... }}` from `context`.
+
+    `quote=True` shell-quotes every substituted value and is mandatory for
+    anything handed to a shell (review fix r2-f3). The manifest itself is
+    operator-authored, but `{{ artifacts.* }}` values are not: they arrive via
+    `fr run resolve --emitted name=path`, i.e. from whatever a dispatched
+    agent reports. The shipped `plan-review` step is `fr plan self-review
+    {{ artifacts.plan }}`, so an emitted path containing `;` or backticks was
+    a command-injection seam straight through `shell=True`. Quoting at the
+    substitution boundary keeps the manifest's own shell syntax (pipes,
+    redirects, `&&`) working while making an interpolated value inert data.
+    """
+
     def repl(m: re.Match[str]) -> str:
         key = m.group(1)
         if key not in context:
             raise RunStateError(f"unresolved template variable: {{{{ {key} }}}}")
-        return context[key]
+        value = context[key]
+        return shlex.quote(value) if quote else value
 
     return _TEMPLATE_RE.sub(repl, text)
 
@@ -164,17 +205,31 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
 
     Phase 11 wires `fr-goal` onto `fr run`; it must produce/consume this
     same shape, so its keys are deliberately exhaustive of `Step`'s
-    agent-relevant fields rather than a subset convenient for today's tests.
+    agent-relevant fields rather than a subset convenient for today's tests
+    — pinned by deriving the expected key set from `Step.model_fields` in
+    `test_run_cli.py`, so a future `Step` field cannot be silently omitted.
+
+    Exhaustive means every `Step` field except two: `id` (emitted as `step`)
+    and `run` (the one cli-only field — `advance` executes it; it is never
+    dispatched). `kind` is carried even though a brief is only ever printed
+    for an `agent` step, so the brief stays self-describing and the
+    exclusion list stays at exactly the two fields that have a reason.
+    `for_each` and `gate` were missing until review fix r2-f4, which made
+    the brief unable to express `implement`'s whole purpose (one executor
+    per phase) or the fact that a step is gated at all.
     """
     return {
         "run": state.run,
         "workflow": state.workflow,
         "step": step.id,
+        "kind": step.kind,
         "skill": step.skill,
         "agent": step.agent,
         "needs": list(step.needs),
         "emits": list(step.emits),
+        "gate": step.gate,
         "tier": step.tier,
+        "for_each": step.for_each,
     }
 
 
@@ -186,7 +241,16 @@ def start_cmd(
         None, "--run-id", help="Override the derived run id (default: date + sanitized branch)."
     ),
 ) -> None:
-    """Start a run: resolve the shape, write run state with the cursor on step 1."""
+    """Start a run: resolve the shape, ensure isolation, write run state in it.
+
+    Isolation is a PRECONDITION, not the run's first step (spec §4.B, review
+    fix r2-f5): the run file is written inside the workspace for `--branch`,
+    because that is where every later step runs and the only place the file
+    is on the feature branch. See `fr.run.workspace`.
+
+    The shape is resolved BEFORE isolation is ensured, so a typo'd shape name
+    fails without provisioning a worktree or starting a container.
+    """
     repo_root = resolve_repo_root()
     try:
         manifest = resolve_workflow(workflow, repo_root)
@@ -197,8 +261,14 @@ def start_cmd(
         err_console.print(f"[red]workflow {workflow!r} has no steps[/red]")
         raise typer.Exit(2)
 
+    try:
+        workspace = ensure_run_workspace(repo_root, branch)
+    except RunWorkspaceError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
+
     rid = run_id or derive_run_id(branch)
-    path = run_path(repo_root, rid)
+    path = run_path(workspace, rid)
     if path.exists():
         err_console.print(f"[red]run {rid!r} already exists at {path}[/red]")
         raise typer.Exit(2)
@@ -212,8 +282,15 @@ def start_cmd(
         cursor=manifest.steps[0].id,
         steps=steps,
     )
-    save_run_state(repo_root, state)
+    save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")
+    # soft_wrap: rich would fold a long worktree path across lines and break
+    # the operator's copy-paste (same reason `commands/common.py` uses a plain
+    # echo for its `fr migrate dirs` hint).
+    console.print(
+        f"workspace: {workspace} — run every later `fr run` command from there",
+        soft_wrap=True,
+    )
 
 
 @run_app.command("status")
@@ -240,8 +317,10 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
 
     `kind: cli` executes directly (exit code + stdout captured; cursor
     moves only on success). `kind: agent` is NEVER executed — it emits a
-    dispatch brief and marks itself `running`. A `gate: operator` step
-    marks `blocked` and stops before either happens.
+    dispatch brief and marks itself `running`. A `gate: operator` step whose
+    gate is unanswered marks `blocked` and executes nothing; an `agent` step
+    still prints its brief there, since the gate stops the run, not the
+    harness's view of what the step is. `fr run resolve` answers the gate.
     """
     repo_root = resolve_repo_root()
     try:
@@ -252,13 +331,38 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
 
-    record = state.steps[state.cursor]
+    record = state.steps.get(state.cursor)
+    if record is None:
+        # Every other lookup in this module is guarded; this one was not, so a
+        # manifest that gained a step after `fr run start` tracebacked instead
+        # of reporting something an operator could act on (review fix r2-f7).
+        err_console.print(
+            f"[red]run {state.run!r} has no record for its cursor step "
+            f"{state.cursor!r} — workflow {state.workflow!r} changed after "
+            "`fr run start`; start a new run[/red]"
+        )
+        raise typer.Exit(2)
 
-    if step.gate == "operator" and record.state != "done":
+    if _gate_pending(step, record):
         if record.state != "blocked":
             new_record = record.model_copy(update={"state": "blocked", "at": _now()})
             save_run_state(repo_root, _with_step(state, state.cursor, new_record))
-        console.print(f"{step.id}: blocked on operator gate")
+        # soft_wrap on both: the gate line ends in a command the operator
+        # copy-pastes, and the brief is JSON a harness parses off stdout —
+        # rich's default folding would break a long token mid-string and
+        # produce invalid JSON.
+        console.print(
+            f"{step.id}: blocked on operator gate — answer it, then "
+            f"`fr run resolve {state.run} --step {step.id} --state done`",
+            soft_wrap=True,
+        )
+        # A gate stops the RUN, not the harness's view of the step: an `agent`
+        # step still prints its brief here, because the skill/agent named in it
+        # is how the operator's question gets asked in the first place. Nothing
+        # is executed either way — a `cli` step's side effect is exactly what
+        # the gate is guarding.
+        if step.kind == "agent":
+            console.print(json.dumps(_build_brief(step, state), sort_keys=True), soft_wrap=True)
         return
 
     if step.kind == "agent":
@@ -267,18 +371,29 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             new_record = record.model_copy(update={"state": "running", "at": _now()})
             save_run_state(repo_root, _with_step(state, state.cursor, new_record))
         console.print(f"{step.id}: dispatch brief")
-        console.print(json.dumps(brief, sort_keys=True))
+        console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
         return
 
     # kind == "cli"
     context = _template_context(state)
     try:
-        command = _render_template(step.run or "", context)
+        command = _render_template(step.run or "", context, quote=True)
     except RunStateError as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
 
-    proc = subprocess.run(  # noqa: S602 — shape manifests are operator-authored, like `fr apply`
+    if not command.strip():
+        # `subprocess.run("", shell=True)` exits 0, so an omitted `run:` used
+        # to report a green step that did nothing (review fix r2-f2).
+        # `check_workflow` rejects the authored form; this catches the
+        # hand-built manifest and the template that renders to nothing.
+        err_console.print(
+            f"[red]{step.id}: kind: cli with no `run:` command — a cli step's "
+            "exit code is its verdict, so there is nothing to be the verdict[/red]"
+        )
+        raise typer.Exit(2)
+
+    proc = subprocess.run(  # noqa: S602 — manifest is operator-authored; values are shlex-quoted
         command, shell=True, cwd=repo_root, capture_output=True, text=True
     )
     if proc.returncode == 0:
@@ -305,11 +420,27 @@ def resolve_cmd(
         [], "--emitted", help="'name=path' artifact this step emitted (repeatable)."
     ),
 ) -> None:
-    """Record the outcome of an `agent` step — the harness calls this when a
-    dispatched agent returns. `advance` deliberately never executes an
-    `agent` step, so this is the only way its cursor can move past
-    `running`; `done` advances the cursor, `failed` leaves it put (same
-    asymmetry `advance` already has for `cli` steps — see `_complete_step`).
+    """Record the outcome of an `agent` step, or answer a step's operator gate.
+
+    The harness calls this when a dispatched agent returns. `advance`
+    deliberately never executes an `agent` step, so this is the only way its
+    cursor can move past `running`; `done` advances the cursor, `failed`
+    leaves it put (same asymmetry `advance` already has for `cli` steps —
+    see `_complete_step`).
+
+    It also clears an operator gate (review fix r2-f1), which is what makes
+    a `gate: operator` step something other than a permanent dead end — the
+    shipped `fr-goal` `brainstorm` step is `kind: agent` + `gate: operator`,
+    so before this the shipped shape wedged on its first step. A **blocked**
+    step resolves like this:
+
+    - `kind: agent` — exactly like a `running` one: `done`/`failed`, cursor
+      asymmetry unchanged. The gate WAS the agent's question; answering it
+      and reporting the outcome are the same act.
+    - `kind: cli` — `done` clears the gate and returns the step to `pending`
+      so the next `advance` executes it and its exit code is still the
+      verdict; `failed` records a declined gate. `resolve` executes nothing,
+      ever.
     """
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
@@ -325,19 +456,51 @@ def resolve_cmd(
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
 
-    if step.kind != "agent":
+    record = state.steps.get(step_id)
+    if record is None:
         err_console.print(
-            f"[red]{step_id}: kind {step.kind!r} — resolved by `fr run advance`, "
-            "not `fr run resolve` (resolve is for `agent` steps only)[/red]"
+            f"[red]{step_id}: no step record in run {run_id!r} — workflow "
+            f"{state.workflow!r} changed after `fr run start`[/red]"
         )
         raise typer.Exit(2)
 
-    record = state.steps.get(step_id)
-    if record is None or record.state != "running":
-        got = record.state if record is not None else "unknown"
+    if step.kind == "cli":
+        # A `cli` step is fr's to execute, so `resolve` may never declare one
+        # done — that would let an operator report success for a command that
+        # never ran. The ONE thing it can do is answer that step's operator
+        # gate (review fix r2-f1), which is a decision, not an execution.
+        if record.state != "blocked":
+            err_console.print(
+                f"[red]{step_id}: kind {step.kind!r} — resolved by `fr run advance`, "
+                "not `fr run resolve` (resolve records an `agent` step's outcome, "
+                "or clears a blocked step's operator gate)[/red]"
+            )
+            raise typer.Exit(2)
+        if state_value == "done":
+            new_record = record.model_copy(
+                update={
+                    "state": "pending",
+                    "gate": "cleared",
+                    "at": _now(),
+                    "emitted": dict(emitted_map) if emitted_map else record.emitted,
+                }
+            )
+            save_run_state(repo_root, _with_step(state, step_id, new_record))
+            console.print(
+                f"{step_id}: operator gate cleared — `fr run advance {run_id}` now executes it",
+                soft_wrap=True,
+            )
+            return
+        # `failed` = the operator declined the gate. Same cursor asymmetry as
+        # every other failure: recorded, and the run does not move past it.
+        save_run_state(repo_root, _complete_step(state, manifest, step_id, "failed"))
+        console.print(f"{step_id}: failed (operator gate declined)")
+        return
+
+    if record.state not in ("running", "blocked"):
         err_console.print(
-            f"[red]{step_id}: not running (state={got!r}) — only a running "
-            "step can be resolved[/red]"
+            f"[red]{step_id}: not running or blocked (state={record.state!r}) — "
+            "only a dispatched or gated step can be resolved[/red]"
         )
         raise typer.Exit(2)
 

@@ -24,8 +24,26 @@ from typer.testing import CliRunner
 runner_cli = CliRunner()
 
 
-def _repo(tmp_path: Path) -> Path:
+def _repo(tmp_path: Path, branch: str = "b") -> Path:
+    """A repo that IS an isolation workspace.
+
+    `fr run start` ensures isolation itself and writes the run inside the
+    resulting worktree (spec §4.B, review fix r2-f5), so the marker is part of
+    the precondition every one of these tests operates under — not a test
+    convenience. `tests/unit/test_run_workspace.py` covers the paths where the
+    marker is absent, stale, or names another branch.
+    """
     (tmp_path / "docs" / "superpowers" / "workflows").mkdir(parents=True)
+    (tmp_path / ".fr-isolation").write_text(
+        json.dumps(
+            {
+                "toplevel": str(tmp_path.resolve()),
+                "branch": branch,
+                "mode": "worktree",
+                "created_at": "2026-08-27T00:00:00+00:00",
+            }
+        )
+    )
     return tmp_path
 
 
@@ -111,7 +129,7 @@ steps:
 
 
 def test_start_writes_run_file_with_cursor_at_first_step(tmp_path: Path) -> None:
-    repo = _repo(tmp_path)
+    repo = _repo(tmp_path, branch="feat/x")
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
     result = _invoke(
@@ -133,7 +151,7 @@ def test_start_run_id_derivation_yields_a_single_path_segment(tmp_path: Path) ->
     """Whatever `fr run start` derives when `--run-id` is omitted must satisfy
     `run_item_id`'s "single path segment" constraint (Phase 2 review fix —
     `fr_dispatch.work_item.run_item_id` raises on a `/` or empty `run_id`)."""
-    repo = _repo(tmp_path)
+    repo = _repo(tmp_path, branch="feat/ticket-polling")
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
     result = _invoke(
@@ -166,7 +184,7 @@ def test_start_refuses_to_clobber_an_existing_run(tmp_path: Path) -> None:
 def test_advance_executes_cli_step_captures_exit_and_stdout_and_moves_cursor(
     tmp_path: Path,
 ) -> None:
-    repo = _repo(tmp_path)
+    repo = _repo(tmp_path, branch="myb")
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
     _invoke(
@@ -421,3 +439,398 @@ def test_check_exits_nonzero_when_cursor_sits_on_a_failed_step(tmp_path: Path) -
     _invoke(repo, shipped, ["run", "advance", "r1"])
     result = _invoke(repo, shipped, ["run", "check", "r1"])
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Milestone-review fixes (r2). Each block names the finding it pins.
+# ---------------------------------------------------------------------------
+
+_GATED_AGENT_SHAPE = """
+workflow: gated-agent
+schema: 1
+unit: run
+steps:
+  - id: brainstorm
+    kind: agent
+    skill: super-fr:fr-brainstorming
+    gate: operator
+    emits: [spec]
+  - id: after
+    kind: cli
+    run: "true"
+"""
+
+_THREE_AGENT_SHAPE = """
+workflow: three-agents
+schema: 1
+unit: run
+steps:
+  - id: first
+    kind: agent
+    skill: s:one
+  - id: second
+    kind: agent
+    skill: s:two
+  - id: third
+    kind: agent
+    skill: s:three
+"""
+
+_NO_RUN_SHAPE = """
+workflow: no-run
+schema: 1
+unit: run
+steps:
+  - id: silent
+    kind: cli
+  - id: after
+    kind: cli
+    run: "true"
+"""
+
+_HOSTILE_SHAPE = """
+workflow: hostile
+schema: 1
+unit: run
+steps:
+  - id: emit
+    kind: agent
+    emits: [plan]
+  - id: consume
+    kind: cli
+    run: echo {{ artifacts.plan }}
+"""
+
+
+def _brief_of(output: str) -> dict:
+    """The JSON brief `advance` prints, wherever in the output it sits (a
+    gated agent step prints the gate line first)."""
+    return json.loads(output[output.index("{") :])
+
+
+# --- r2-f1: a `gate: operator` step must be clearable, not a dead end -------
+
+
+def test_resolve_clears_a_blocked_agent_step_and_advances_the_cursor(tmp_path: Path) -> None:
+    """The shipped `fr-goal` `brainstorm` step is `kind: agent` + `gate:
+    operator`; before this fix `advance` marked it `blocked` and `resolve`
+    refused anything not `running`, so the run wedged on step 2 forever."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=s.md",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["brainstorm"].state == "done"
+    assert state.steps["brainstorm"].emitted == {"spec": "s.md"}
+    assert state.cursor == "after"
+
+    # and the run keeps going — the point of the fix
+    result2 = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert result2.exit_code == 0, result2.output
+    assert load_run_state(repo, "r1").steps["after"].state == "done"
+
+
+def test_advance_onto_a_gated_agent_step_still_prints_the_dispatch_brief(tmp_path: Path) -> None:
+    """A gate stops the RUN, not the harness's ability to see what the step
+    is: without the brief a generic harness has no skill/agent to dispatch
+    and could never produce the answer the gate is waiting for."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "blocked on operator gate" in result.output
+    brief = _brief_of(result.output)
+    assert brief["step"] == "brainstorm"
+    assert brief["skill"] == "super-fr:fr-brainstorming"
+    assert brief["gate"] == "operator"
+
+
+def test_resolving_a_blocked_cli_step_clears_the_gate_but_does_not_execute_it(
+    tmp_path: Path,
+) -> None:
+    """A `cli` step's verdict is its exit code (spec §4.A). Clearing its gate
+    therefore authorizes `advance` to run it — it never declares it done, or
+    an operator could report success for a command that never ran."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["brainstorm"].state == "pending"
+    assert state.steps["brainstorm"].gate == "cleared"
+    assert state.cursor == "brainstorm"
+    assert not (repo / "executed.marker").exists(), "resolve must never execute a cli step"
+
+    # the NEXT advance executes it and records the real exit code
+    result2 = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert result2.exit_code == 0, result2.output
+    state2 = load_run_state(repo, "r1")
+    assert state2.steps["brainstorm"].state == "done"
+    assert state2.steps["brainstorm"].exit == 0
+    assert state2.cursor == "after"
+    assert (repo / "executed.marker").exists()
+
+
+def test_a_declined_operator_gate_fails_the_step_and_leaves_the_cursor_put(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "brainstorm", "--state", "failed"]
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["brainstorm"].state == "failed"
+    assert state.cursor == "brainstorm"
+    assert not (repo / "executed.marker").exists()
+
+
+def test_a_cleared_gate_stays_cleared_across_a_retry(tmp_path: Path) -> None:
+    """`_complete_step` must carry the gate marker forward: an operator
+    authorizes a step once, and a re-`advance` after a failure must not
+    silently re-block on a gate that was already answered."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(
+        shipped,
+        "gated-fail",
+        "workflow: gated-fail\nschema: 1\nunit: run\n"
+        'steps:\n  - id: boom\n    kind: cli\n    gate: operator\n    run: "false"\n',
+    )
+    _invoke(repo, shipped, ["run", "start", "gated-fail", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "boom", "--state", "done"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # executes, fails
+    assert load_run_state(repo, "r1").steps["boom"].state == "failed"
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])  # retry
+
+    assert result.exit_code != 0  # failed again — NOT silently re-blocked
+    state = load_run_state(repo, "r1")
+    assert state.steps["boom"].state == "failed"
+    assert state.steps["boom"].gate == "cleared"
+
+
+def test_resolve_still_refuses_an_ungated_cli_step_pointing_at_advance(tmp_path: Path) -> None:
+    """The gate-clearing path must not become a back door for declaring an
+    ordinary `cli` step done by hand."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+    result = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "hello", "--state", "done"])
+    assert result.exit_code != 0
+    assert "advance" in result.output.lower()
+    assert load_run_state(repo, "r1").steps["hello"].state == "pending"
+
+
+# --- r2-f2: a `kind: cli` step with no `run:` must never report success -----
+
+
+def test_advance_refuses_a_cli_step_with_no_run_command(tmp_path: Path) -> None:
+    """`subprocess.run("", shell=True)` exits 0, so an omitted `run:` used to
+    report a green step that did nothing and move the cursor on."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "no-run", _NO_RUN_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "no-run", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code != 0
+    assert "run:" in result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["silent"].state != "done"
+    assert state.cursor == "silent"
+
+
+# --- r2-f3: an emitted artifact is data, not shell source ------------------
+
+
+def test_a_hostile_emitted_artifact_is_quoted_not_executed(tmp_path: Path) -> None:
+    """`{{ artifacts.* }}` values come from `fr run resolve --emitted`, i.e.
+    from whatever a dispatched agent reports — they are never operator-authored
+    and must not be able to inject a command."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "hostile", _HOSTILE_SHAPE)
+    marker = tmp_path / "pwned"
+    _invoke(repo, shipped, ["run", "start", "hostile", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "emit",
+            "--state",
+            "done",
+            "--emitted",
+            f"plan=plan.md; touch {marker}",
+        ],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert not marker.exists(), "an emitted value was interpolated into a shell unquoted"
+    state = load_run_state(repo, "r1")
+    assert state.steps["consume"].stdout is not None
+    assert f"plan.md; touch {marker}" in state.steps["consume"].stdout
+
+
+# --- r2-f4: the dispatch brief must be exhaustive of Step's agent fields ----
+
+
+def test_the_dispatch_brief_carries_for_each_and_gate(tmp_path: Path) -> None:
+    """`implement`'s whole purpose is fanning out one executor per phase; a
+    harness driving off the brief could not know that without `for_each`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(
+        shipped,
+        "fanout",
+        "workflow: fanout\nschema: 1\nunit: run\n"
+        "steps:\n  - id: implement\n    kind: agent\n"
+        "    agent: super-fr:fr-phase-executor\n    for_each: phase\n    gate: operator\n",
+    )
+    _invoke(repo, shipped, ["run", "start", "fanout", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    brief = _brief_of(result.output)
+    assert brief["for_each"] == "phase"
+    assert brief["gate"] == "operator"
+
+
+def test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields(tmp_path: Path) -> None:
+    """Derived from the model, not restated: a new `Step` field is carried by
+    the brief or this fails. `id` is emitted as `step`, and `run` is the one
+    cli-only field (`advance` executes it; it is never dispatched)."""
+    from fr.workflow.model import Step
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+
+    brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
+
+    step_fields = set(Step.model_fields) - {"id", "run"}
+    # `run`/`workflow`/`step` are the run-identity keys the brief adds on top.
+    assert set(brief) == step_fields | {"run", "workflow", "step"}
+
+
+# --- r2-f7: a manifest that grew a step must not traceback -----------------
+
+
+def test_advance_reports_a_cursor_with_no_step_record_instead_of_tracebacking(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+    run_file = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    run_file.write_text(run_file.read_text().replace("  hello:", "  gone:"))
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2
+    assert "hello" in result.output
+    assert "Traceback" not in result.output
+
+
+# --- r2-f8: resolving a non-cursor step must never rewind the run ----------
+
+
+def test_resolving_a_non_cursor_step_does_not_rewind_the_cursor(tmp_path: Path) -> None:
+    """`_complete_step` used to set the cursor to `_next_step_id(<resolved
+    step>)` unconditionally, so completing anything behind the cursor rewound
+    the run. The cursor moves off the cursor, or not at all."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "three-agents", _THREE_AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "three-agents", "--branch", "b", "--run-id", "r1"])
+    run_file = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    run_file.write_text(
+        run_file.read_text()
+        .replace("cursor: first", "cursor: third")
+        .replace("  first:\n    state: pending", "  first:\n    state: running")
+        .replace("  third:\n    state: pending", "  third:\n    state: running")
+    )
+
+    result = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "first", "--state", "done"])
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["first"].state == "done"
+    assert state.cursor == "third", "resolving a step behind the cursor rewound the run"
+
+
+def test_the_dispatch_brief_survives_a_narrow_terminal(tmp_path: Path) -> None:
+    """The brief is machine-facing: a harness parses it off stdout. Rich folds
+    a long token mid-string by default, which would emit invalid JSON exactly
+    when a value is long (an emitted path, a qualified agent name)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(
+        shipped,
+        "wide",
+        "workflow: wide\nschema: 1\nunit: run\nsteps:\n  - id: implement\n    kind: agent\n"
+        "    agent: super-fr:fr-phase-executor-with-a-deliberately-very-long-name\n"
+        "    for_each: phase\n",
+    )
+    env = {
+        **os.environ,
+        "VK_REPO_ROOT": str(repo),
+        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+        "COLUMNS": "40",
+    }
+    runner_cli.invoke(app, ["run", "start", "wide", "--branch", "b", "--run-id", "r1"], env=env)
+
+    result = runner_cli.invoke(app, ["run", "advance", "r1"], env=env)
+
+    assert result.exit_code == 0, result.output
+    brief = json.loads(result.output[result.output.index("{") :])
+    assert brief["agent"] == "super-fr:fr-phase-executor-with-a-deliberately-very-long-name"

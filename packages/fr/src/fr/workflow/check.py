@@ -5,10 +5,10 @@ unsupported `schema:`) is already enforced by `fr.workflow.model.parse_manifest`
 at parse time — a manifest that fails those checks can never become a
 `WorkflowManifest`, so it can never reach `check_workflow` here. What this
 module catches is everything only meaningful once a valid step graph
-exists: duplicate step ids, `needs` naming an artifact no earlier step
-`emits`, a cycle anywhere in the needs/emits graph, a capability name
-outside the closed set, and a `for_each` that contradicts its manifest's
-`unit`.
+exists: duplicate step ids, a `kind: cli` step with no `run:` command,
+`needs` naming an artifact no earlier step `emits`, a cycle anywhere in the
+needs/emits graph, a capability name outside the closed set, and a
+`for_each` that contradicts its manifest's `unit`.
 
 `check_workflow` is pure — no I/O, no exit codes. `fr workflow check`
 (`fr.commands.workflow_cmd`) is the one place a `WorkflowError` (parse-time)
@@ -30,6 +30,7 @@ def check_workflow(manifest: WorkflowManifest) -> list[str]:
     """Every problem with `manifest`, as human-readable strings. Empty = clean."""
     errors: list[str] = []
     errors.extend(_duplicate_step_ids(manifest.steps))
+    errors.extend(_cli_steps_without_a_command(manifest.steps))
     errors.extend(_dangling_needs(manifest.steps, manifest.unit))
     errors.extend(_cycles(manifest.steps))
     errors.extend(_unknown_capabilities(manifest.requires))
@@ -45,6 +46,23 @@ def _duplicate_step_ids(steps: tuple[Step, ...]) -> list[str]:
             errors.append(f"duplicate step id: {step.id!r}")
         seen.add(step.id)
     return errors
+
+
+def _cli_steps_without_a_command(steps: tuple[Step, ...]) -> list[str]:
+    """`kind: cli` with no `run:` is a step that cannot do anything.
+
+    `Step.run` is optional because `agent` steps have none, so the schema
+    alone cannot express "cli implies run". Left unchecked it is worse than
+    a crash: `advance` rendered `""`, `subprocess.run("", shell=True)` exited
+    0, and the run reported a green step that executed nothing and moved the
+    cursor on. `fr run advance` refuses it at runtime too — an authored
+    manifest is caught here, a hand-built `WorkflowManifest` there.
+    """
+    return [
+        f"step {step.id!r} is kind: cli but declares no `run:` command"
+        for step in steps
+        if step.kind == "cli" and not (step.run or "").strip()
+    ]
 
 
 def _dangling_needs(steps: tuple[Step, ...], unit: str) -> list[str]:

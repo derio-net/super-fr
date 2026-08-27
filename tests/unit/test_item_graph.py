@@ -371,3 +371,133 @@ def test_eligible_items_is_a_filter_over_build_items_not_a_second_builder() -> N
     src = inspect.getsource(fr_dispatch._eligible_items)
     assert "build_items(" in src
     assert "WorkItem(" not in src, "the tick must not construct items of its own"
+
+
+# ── review fixes (r2) ──────────────────────────────────────────────────
+
+
+def test_a_cross_repo_dependency_id_names_the_dependencys_own_repo() -> None:
+    """r2-f6: each `depends_on` id must be the DEPENDENCY's id.
+
+    A plan whose phase 1 is tracked in repo A and phase 2 in repo B used to
+    compose phase 2's dependency as `B/<spec>/<plan>/phase/1` — an id no
+    item has, because phase 1's item is keyed on A. Cross-repo phases are a
+    supported concept (`render.py` builds cross-repo Issue URLs), so the
+    edge has to survive the repo change.
+    """
+    from fr_dispatch.item_graph import build_items
+
+    a, b = "org/repo-a", "org/repo-b"
+    plan = _plan(MULTI)
+    tracked = tuple(
+        phase.model_copy(update={"phase": phase.phase.model_copy(update={"tracking_issue": url})})
+        if url
+        else phase
+        for phase, url in zip(
+            plan.phases,
+            (f"https://github.com/{a}/issues/1", f"https://github.com/{b}/issues/2", None),
+            strict=True,
+        )
+    )
+    plan = dc_replace(plan, phases=tracked)
+
+    first, second, tenth = build_items(PHASE_SHAPE, plan)
+
+    assert first.id.startswith(f"{a}/")
+    assert second.id.startswith(f"{b}/")
+    # phase 2 lives in B and depends on phase 1, which lives in A.
+    assert second.payload["depends_on"] == (first.id,)
+    # phase 10 is untracked (target_repo) and depends on phase 2, in B.
+    assert tenth.id.startswith(f"{REPO}/")
+    assert tenth.payload["depends_on"] == (second.id,)
+
+
+def test_a_dependency_with_a_malformed_tracking_url_falls_back_to_the_target_repo() -> None:
+    """The DEPENDING phase must not fail for a *dependency's* bad URL — that
+    phase already fails itself (see the failures-sink test above)."""
+    from fr_dispatch.item_graph import build_items
+
+    plan = _plan(MULTI)
+    broken = plan.phases[0].model_copy(
+        update={"phase": plan.phases[0].phase.model_copy(update={"tracking_issue": "not-a-url"})}
+    )
+    plan = dc_replace(plan, phases=(broken, plan.phases[1], plan.phases[2]))
+
+    failures: list[str] = []
+    second, tenth = build_items(PHASE_SHAPE, plan, failures=failures)
+
+    assert len(failures) == 1  # phase 1 only
+    assert second.payload["depends_on"] == (
+        f"{REPO}/_no-spec/2026-05-09-fixture-multi-phase/phase/1",
+    )
+
+
+def test_a_run_unit_shape_with_no_run_id_accumulates_instead_of_raising() -> None:
+    """r2-f9: `tick`'s docstring says "all failure paths accumulate", but the
+    run branch raised straight out of `build_items` — through
+    `_eligible_items`, which calls it outside any `try` — and took the whole
+    cron iteration with it."""
+    from fr_dispatch.item_graph import build_items
+
+    failures: list[str] = []
+    items = build_items(RUN_SHAPE, repo=REPO, failures=failures)
+
+    assert items == []
+    assert len(failures) == 1
+    assert "run_id" in failures[0]
+    assert REPO in failures[0]
+
+
+def test_a_run_unit_shape_with_no_repo_and_no_source_accumulates() -> None:
+    from fr_dispatch.item_graph import build_items
+
+    failures: list[str] = []
+    assert build_items(RUN_SHAPE, run_id="r1", failures=failures) == []
+    assert len(failures) == 1
+    assert "repo" in failures[0]
+
+
+def test_a_phase_unit_shape_with_no_plan_accumulates() -> None:
+    from fr_dispatch.item_graph import build_items
+
+    failures: list[str] = []
+    assert build_items(PHASE_SHAPE, None, failures=failures) == []
+    assert len(failures) == 1
+    assert "Plan" in failures[0]
+
+
+def test_a_spec_unit_shape_with_no_repo_accumulates(tmp_path: Path) -> None:
+    from fr.spec import parse_spec
+    from fr_dispatch.item_graph import build_items
+
+    path = _spec_file(tmp_path, "| P | derio-net/x | plans/p | — |")
+    failures: list[str] = []
+
+    assert build_items(SPEC_SHAPE, parse_spec(path), failures=failures) == []
+    assert len(failures) == 1
+    assert "repo" in failures[0]
+
+
+def test_without_a_sink_every_one_of_those_still_raises() -> None:
+    """A caller that wants to know still does — the sink is opt-in, and its
+    absence must not silently swallow a malformed call."""
+    import pytest
+    from fr_dispatch.item_graph import build_items
+
+    with pytest.raises(ValueError, match="run_id"):
+        build_items(RUN_SHAPE, repo=REPO)
+    with pytest.raises(ValueError, match="Plan"):
+        build_items(PHASE_SHAPE, None)
+
+
+def test_a_wrong_source_type_still_raises_even_with_a_sink(tmp_path: Path) -> None:
+    """The split is deliberate: DATA-shaped failures accumulate; handing a
+    `SpecMeta` to a phase-unit shape is a programming error in the caller,
+    not a bad plan on disk, and must not be counted as one plan's problem."""
+    import pytest
+    from fr.spec import parse_spec
+    from fr_dispatch.item_graph import build_items
+
+    spec = parse_spec(_spec_file(tmp_path, "| P | derio-net/x | plans/p | — |"))
+    with pytest.raises(TypeError):
+        build_items(PHASE_SHAPE, spec, failures=[])

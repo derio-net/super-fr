@@ -5,13 +5,20 @@
 # step and drives the cursor via `fr run start/advance/resolve`. A repo may
 # override this wholesale with `docs/superpowers/workflows/fr-goal.yaml`.
 #
-# One divergence from spec §4.A's illustration, reconciled against what
-# Phase 7 actually shipped: `deliver` is `kind: agent`, not `kind: cli`
-# running a nonexistent `fr run deliver` command — no such subcommand
-# exists (`fr run` is start/status/advance/resolve/check only). Composing
-# the PR body from the journal and deciding when to mark it ready is
-# judgment work the orchestrating agent does itself, the same shape as
-# `spec-review` below (a bare `agent` step, no subagent dispatch).
+# Two divergences from spec §4.A's illustration, reconciled against what
+# the code actually does:
+#
+# 1. `deliver` is `kind: agent`, not `kind: cli` running a nonexistent
+#    `fr run deliver` command — no such subcommand exists (`fr run` is
+#    start/status/advance/resolve/check only). Composing the PR body from
+#    the journal and deciding when to mark it ready is judgment work the
+#    orchestrating agent does itself, the same shape as `spec-review`
+#    below (a bare `agent` step, no subagent dispatch).
+# 2. There is NO `isolate` step (spec §4.B, review fix r2-f5). A run is
+#    born in its workspace: `fr run start` ensures isolation itself and
+#    writes the run file inside the worktree. As a step it moved the
+#    ground out from under the run — the run file stayed in the base
+#    clone while every later step ran in the worktree.
 workflow: fr-goal
 schema: 1
 description: TDD feature delivery, goal to reviewed PR.
@@ -20,10 +27,6 @@ unit: run
 requires: [git, tests, scm]
 
 steps:
-  - id: isolate
-    kind: cli
-    run: fr isolation up --branch {{ run.branch }}
-
   - id: brainstorm
     kind: agent
     skill: super-fr:fr-brainstorming

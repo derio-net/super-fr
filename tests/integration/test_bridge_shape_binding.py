@@ -20,6 +20,7 @@ about them.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace as dc_replace
 from pathlib import Path
 from typing import Any
@@ -252,7 +253,7 @@ steps:
 
 
 def test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """KNOWN GAP, pinned rather than described.
 
@@ -264,10 +265,18 @@ def test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id(
     yields `Plan`s only.
 
     So the failure below is the honest state of the `unit` axis at the
-    bridge: loud, per-plan, inside the I9 boundary — not a silent dispatch
-    at the wrong granularity. Whoever gives the bridge a run identity
-    should delete this test and flip the `dispatch-unit-declared-by-shape`
-    acceptance row.
+    bridge: per-plan, counted, dispatch-free — not a silent dispatch at the
+    wrong granularity. Whoever gives the bridge a run identity should delete
+    this test and flip the `dispatch-unit-declared-by-shape` acceptance row.
+
+    It reaches the bridge as an ACCUMULATED tick failure rather than a raise
+    into the I9 boundary (review fix r2-f9): `tick` promises "all failure
+    paths accumulate" and `_eligible_items` calls `build_items` outside any
+    `try`, so raising there took the whole cron iteration with it instead of
+    one plan. The failure STRING is asserted where it is produced
+    (`test_item_graph.py`, `test_tick_workitem.py`); what belongs here is
+    that a whole `bridge_cli.main()` survives it, dispatches nothing, and
+    counts exactly one error against this plan.
     """
     plan, repo, number = _shaped_plan(tmp_path, workflow="run-dispatch", shape_yaml=RUN_SHAPE_YAML)
     gh = FakeGhClient()
@@ -277,18 +286,12 @@ def test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id(
     # masked by an observe() KeyError.
     _ready(gh, plan, repo, (number,))
     runner = FakeRunner()
-    reasons: list[str] = []
 
-    rc = _run_bridge(
-        monkeypatch,
-        tmp_path,
-        plans=[plan],
-        gh=gh,
-        runner=runner,
-        reasons=reasons,
-    )
+    with caplog.at_level(logging.INFO, logger="vk-issue-bridge"):
+        rc = _run_bridge(monkeypatch, tmp_path, plans=[plan], gh=gh, runner=runner)
 
     assert rc == 0
     assert runner.dispatched == []
-    assert len(reasons) == 1, reasons
-    assert "run_id" in reasons[0], reasons
+    assert [m for m in caplog.messages if "v2_plan_minimal: synced=0 errors=1" in m], (
+        caplog.messages
+    )

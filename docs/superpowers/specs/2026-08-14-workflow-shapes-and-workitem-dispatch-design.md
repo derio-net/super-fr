@@ -118,11 +118,9 @@ description: TDD feature delivery, goal to reviewed PR.
 unit: run                 # run | phase | spec  (§4.E)
 requires: [git, tests, scm]
 
+# No `isolate` step: isolation is a PRECONDITION that `fr run start`
+# ensures, not a step the run performs on itself (§4.B).
 steps:
-  - id: isolate
-    kind: cli
-    run: fr isolation up --branch {{ run.branch }}
-
   - id: brainstorm
     kind: agent
     skill: super-fr:fr-brainstorming
@@ -291,7 +289,6 @@ branch: feat/ticket-polling
 started: 2026-08-14T09:00:00Z
 cursor: implement
 steps:
-  isolate:     {state: done, at: 2026-08-14T09:00:11Z}
   brainstorm:  {state: done, emitted: {spec: docs/superpowers/specs/2026-08-14-…-design.md}}
   spec-review: {state: done}
   plan:        {state: done, emitted: {plan: docs/superpowers/plans/2026-08-14-…}}

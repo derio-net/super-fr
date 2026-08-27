@@ -45,6 +45,17 @@ class StepRecord(BaseModel):
 
     state: StepState
     at: str | None = None
+    gate: Literal["cleared"] | None = None
+    """An operator gate the operator has answered (`fr run resolve`).
+
+    Separate from `state` on purpose: a gate is an *authorization*, not a
+    lifecycle position, and the two are independent — a `cli` step whose gate
+    was cleared goes back to `pending` so `advance` still executes it and its
+    exit code is still the verdict. Sticky for the life of the run (carried
+    across `_complete_step`), so a retry after a failure does not silently
+    re-block on a question already answered. Absent (`None`) on every step of
+    every pre-existing run file, which is exactly "not answered"."""
+
     emitted: dict[str, str] | None = None
     exit: int | None = None
     stdout: str | None = None

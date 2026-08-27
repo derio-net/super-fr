@@ -148,26 +148,68 @@ def _keep(refs: tuple[ArtifactRef, ...], kinds: frozenset[str]) -> tuple[Artifac
     return tuple(ref for ref in refs if ref.kind in kinds)
 
 
+def _accumulate(failures: list[str] | None, message: str) -> list[WorkItem]:
+    """Honour the `failures` sink for an argument-shaped failure.
+
+    `tick`'s docstring promises "all failure paths accumulate", and
+    `_eligible_items` calls `build_items` outside any `try` — so a raise
+    here escapes `tick` entirely and takes a whole cron iteration with it.
+    `_phase_items`/`_spec_items` already honoured the sink for a malformed
+    row; the unit-level argument checks did not, which is the inconsistency
+    this closes.
+
+    With NO sink the error still propagates, unchanged: a caller that wants
+    to know does. The line the split falls on is data vs. programming error
+    — a bad plan/shape combination accumulates, while handing a `SpecMeta`
+    to a phase-unit shape (`_as_plan`/`_as_spec`) still raises `TypeError`
+    regardless, because that is the caller being wrong, not one plan.
+    """
+    if failures is None:
+        raise ValueError(message)
+    failures.append(message)
+    return []
+
+
+def _run_item_ref(repo: str | None, run_id: str | None) -> str:
+    """A run item's would-be id, for FAILURE STRINGS only — same doctrine as
+    `phase_item_ref`: the failure is about a MISSING coordinate, so the ref
+    is composed segment-wise and never through `run_item_id` (which raises
+    on exactly the inputs that land here)."""
+    return f"{repo or '<no-repo>'}/run/{run_id or '<no-run-id>'}"
+
+
 def _run_items(
     workflow: WorkflowManifest,
     source: Plan | None,
     repo: str | None,
     run_id: str | None,
     required: frozenset[str],
+    failures: list[str] | None,
 ) -> list[WorkItem]:
     if run_id is None:
-        raise ValueError("a run-unit shape needs a run_id (see `fr run start`)")
+        return _accumulate(
+            failures,
+            f"{_run_item_ref(repo, run_id)}: a run-unit shape needs a run_id (see `fr run start`)",
+        )
     if repo is None:
         if source is None:
-            raise ValueError("a run-unit shape needs a repo when no source artifact is given")
+            return _accumulate(
+                failures,
+                f"{_run_item_ref(repo, run_id)}: a run-unit shape needs a repo when no "
+                "source artifact is given",
+            )
         repo = source.meta.target_repo
     inputs = _keep(plan_artifact_refs(source), required) if source is not None else ()
     payload: dict[str, object] = {"run_id": run_id}
     if source is not None:
         payload["plan"] = source
+    try:
+        iid = run_item_id(repo, run_id)
+    except ValueError as e:
+        return _accumulate(failures, f"{_run_item_ref(repo, run_id)}: {e}")
     return [
         WorkItem(
-            id=run_item_id(repo, run_id),
+            id=iid,
             unit="run",
             workflow=workflow.workflow,
             repo=repo,
@@ -179,6 +221,34 @@ def _run_items(
     ]
 
 
+def _phase_repos(plan: Plan) -> dict[int, str]:
+    """Which repo each phase's item is keyed on — the Issue's repo when the
+    phase is tracked, else `target_repo`.
+
+    Computed for the WHOLE plan up front because `depends_on` needs it: a
+    dependency edge must name the DEPENDENCY's id, and that id is keyed on
+    the dependency's own repo, which need not be the depending phase's
+    (`render.py` builds cross-repo Issue URLs, so this is a supported plan
+    shape, not a hypothetical). Composing the edge from the current phase's
+    repo produced an id no item has.
+
+    A dependency whose tracking URL is malformed degrades to `target_repo`
+    rather than failing the phase that merely depends on it — that phase
+    fails itself, once, in `_phase_items`.
+    """
+    repos: dict[int, str] = {}
+    for phase in plan.phases:
+        repo = plan.meta.target_repo
+        tracking = phase.phase.tracking_issue
+        if tracking:
+            try:
+                repo = parse_issue_url(tracking)[0]
+            except ValueError:
+                pass
+        repos[phase.phase.number] = repo
+    return repos
+
+
 def _phase_items(
     workflow: WorkflowManifest,
     plan: Plan,
@@ -188,6 +258,7 @@ def _phase_items(
     slug = spec_slug(plan)
     plan_slug = plan.meta.plan
     inputs = _keep(plan_artifact_refs(plan), required)
+    repo_by_phase = _phase_repos(plan)
     items: list[WorkItem] = []
     for phase in plan.phases:
         n = phase.phase.number
@@ -202,8 +273,11 @@ def _phase_items(
                 repo, issue_number = parse_issue_url(tracking)
                 payload["issue_number"] = issue_number
             iid = item_id(repo, slug, plan_slug, phase=n)
+            # Each edge is the DEPENDENCY's id, so it is keyed on the
+            # dependency's repo — not on `repo`, which is this phase's.
             payload["depends_on"] = tuple(
-                item_id(repo, slug, plan_slug, phase=d) for d in phase.phase.depends_on
+                item_id(repo_by_phase.get(d, plan.meta.target_repo), slug, plan_slug, phase=d)
+                for d in phase.phase.depends_on
             )
             items.append(
                 WorkItem(
@@ -233,7 +307,10 @@ def _spec_items(
     failures: list[str] | None,
 ) -> list[WorkItem]:
     if repo is None:
-        raise ValueError("a spec-unit shape needs the repo the spec itself lives in")
+        return _accumulate(
+            failures,
+            f"{spec.path.stem}: a spec-unit shape needs the repo the spec itself lives in",
+        )
     slug = spec.path.stem
     home = item_id(repo, slug)
     inputs = (
@@ -317,18 +394,29 @@ def build_items(
     accumulated as `"<item-ref>: <error>"` and the rest of the graph is
     still returned — one bad phase fails only itself. When `None`, the
     error propagates, so a caller that wants to know does.
+
+    **With a sink, no argument-shaped failure raises** (review fix r2-f9) —
+    a missing `run_id`, a missing `repo`, a missing source. `tick` promises
+    "all failure paths accumulate" and calls this outside any `try`, so a
+    raise there killed the whole cron iteration rather than one shape. The
+    one class that still raises regardless is a wrong source TYPE
+    (`_as_plan`/`_as_spec`): that is the caller being wrong, not the data.
     """
     required = required_inputs(workflow)
     if workflow.unit == "run":
-        return _run_items(workflow, _as_plan(source), repo, run_id, required)
+        return _run_items(workflow, _as_plan(source), repo, run_id, required, failures)
     if workflow.unit == "phase":
         plan = _as_plan(source)
         if plan is None:
-            raise ValueError("a phase-unit shape needs a Plan to decompose")
+            return _accumulate(
+                failures, f"{workflow.workflow}: a phase-unit shape needs a Plan to decompose"
+            )
         return _phase_items(workflow, plan, required, failures)
     spec = _as_spec(source)
     if spec is None:
-        raise ValueError("a spec-unit shape needs a SpecMeta to decompose")
+        return _accumulate(
+            failures, f"{workflow.workflow}: a spec-unit shape needs a SpecMeta to decompose"
+        )
     return _spec_items(workflow, spec, repo, required, failures)
 
 
