@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from click.core import ParameterSource
 from rich.console import Console
 from rich.table import Table
 
@@ -71,16 +70,18 @@ def _plan_guard() -> None:
 
 @plan_app.command("create")
 def create_cmd(
-    ctx: typer.Context,
     slug: str = typer.Option(..., "--slug", help="Plan slug (becomes folder name)."),
     target_repo: str = typer.Option(..., "--target-repo", help="owner/repo for phases."),
     spec: Path | None = typer.Option(
         None, "--spec", help="Spec path relative to repo root (optional)."
     ),
-    fr_version: str = typer.Option(
-        DEFAULT_FR_VERSION,
+    fr_version: str | None = typer.Option(
+        None,
         "--fr-version",
-        help="fr_version constraint for the plan.",
+        help=(
+            "fr_version constraint for the plan. Effective default: "
+            f"{DEFAULT_FR_VERSION!r}, or {WORKFLOW_FR_VERSION!r} when --workflow is given."
+        ),
     ),
     workflow: str | None = typer.Option(
         None,
@@ -127,16 +128,20 @@ def create_cmd(
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
 
+    # "Did the operator state a constraint?" is asked of the sentinel default
+    # (None), not of click: an explicit `--fr-version '>=3.0.0,<5.0.0'` is
+    # byte-identical to the default, and silently upgrading it would be
+    # exactly the kind of quiet substitution this phase exists to stop.
+    # (click's ParameterSource introspection would answer the same question
+    # but click is typer's transitive dep, not ours — see skills_cmd.py's
+    # duck-typing note; a bare `import click` breaks a clean `uv tool
+    # install` of fr, which has no direct click dependency.)
+    explicit = fr_version is not None
     if workflow is not None:
-        # "Did the operator state a constraint?" is asked of click, not of the
-        # VALUE: an explicit `--fr-version '>=3.0.0,<5.0.0'` is byte-identical
-        # to the default, and silently upgrading it would be exactly the kind
-        # of quiet substitution this phase exists to stop.
-        explicit = ctx.get_parameter_source("fr_version") is not ParameterSource.DEFAULT
         if not explicit:
             # No constraint stated, so the shape decides it.
             fr_version = WORKFLOW_FR_VERSION
-        elif _admits_pre_4(fr_version):
+        elif _admits_pre_4(fr_version):  # type: ignore[arg-type]  # explicit implies not None
             # An explicit constraint is the operator's, so it is refused
             # rather than silently rewritten — but one that invites fr 3.x
             # to load a plan whose `workflow:` key it cannot parse is a
@@ -148,6 +153,8 @@ def create_cmd(
                 f"--fr-version '{WORKFLOW_FR_VERSION}' or drop --workflow."
             )
             raise typer.Exit(2)
+    if fr_version is None:
+        fr_version = DEFAULT_FR_VERSION
 
     try:
         plan = create(
