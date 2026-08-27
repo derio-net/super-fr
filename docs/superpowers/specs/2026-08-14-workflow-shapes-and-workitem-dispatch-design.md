@@ -235,8 +235,25 @@ see in-flight runs; §4.H addresses that where it belongs, in the Source seam.
 
 **CLI:** `fr run start <workflow> --branch <b>`, `fr run status <run-id>`,
 `fr run advance <run-id>` (execute the cursor's step if `kind: cli`, else emit
-the dispatch brief), `fr run check <run-id>`. Archival mirrors `archive.py`:
-`implemented/runs/`.
+the dispatch brief), `fr run resolve <run-id> --step <id> --state done|failed`
+(record the outcome of an `agent` step), `fr run check <run-id>`.
+
+**`resolve` is not optional** (added in Phase 7 — the original four-command list
+was a dead end). `advance` deliberately does not execute `agent` steps, so
+without a way to record their outcome an agent step marked `running` can never
+reach `done`, and a run wedges permanently on its first one. For the shipped
+fr-goal shape, where nearly every step is `kind: agent`, that is the *second*
+step. The orchestrating harness calls `resolve` when a dispatched agent returns;
+it may also record `emitted` artifacts, since an agent step is how a spec or
+plan comes into existence.
+
+**Archival keys on the emitted plan, not on a name convention.** A run and its
+plan do **not** share a slug: run ids are derived from the branch
+(`<date>-<flattened-branch>`, so `feat/x` yields `<date>-feat-x`) while a plan
+slug is authored independently. Matching them by name silently no-ops, which is
+worse than failing. `archive.py` therefore locates the run whose recorded
+`emitted.plan` points at the plan directory being archived — data the run file
+already carries — and mirrors the journal's move into `implemented/runs/`.
 
 The journal is unchanged and remains the *content* log (decisions, findings,
 discoveries). Run state is the *control* log (which step, what it emitted). They

@@ -1033,9 +1033,36 @@ rows:
       in the PR, so a run can be audited or resumed mid-flight.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 4.B. docs/superpowers/runs/<run-id>.yaml, archives to implemented/runs/.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_state.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_archive_cmd.py
+    status: ci
+    notes: >-
+      Spec 4.B. docs/superpowers/runs/<run-id>.yaml, git-tracked, archives to
+      implemented/runs/ alongside its plan. Durability: byte-stable YAML round-trip
+      (test_run_state.py) plus git mv on archive, mirroring _archive_journal.
+      Resumability is exercised end-to-end, not merely in-memory: every `fr run`
+      CLI test issues separate start/advance/status/resolve/check invocations that
+      each reload state from disk, so a step surviving process exit -- including a
+      gate: operator step left blocked and picked back up later -- is what the
+      tests actually pin. Audit: `fr run status` prints the cursor and every
+      step's state. `fr run advance` never invokes a model (kind: cli executes
+      directly and captures exit+stdout; kind: agent only emits a dispatch brief
+      and marks itself running), asserted by monkeypatching subprocess.run to
+      raise if called on the agent-step path. `fr run resolve` (added in
+      milestone review, spec amended: the original 4-command CLI could mark an
+      agent step running but never move it to done, wedging every real run on
+      its first agent step) records that step's outcome via the same done/failed
+      cursor-advance logic advance's cli branch uses (_complete_step, shared not
+      forked) and is equally non-executing. Archival is keyed on the DATA a run
+      file already carries (the plan step's emitted.plan path), not on any
+      run-id/plan-slug name convention -- a name-keyed version landed first and
+      silently never matched in real use (run ids are date+branch-derived, plan
+      slugs are authored independently), caught by a fixture using a
+      deliberately unrelated run id and plan slug (test_archive_cmd.py); a
+      same-name fixture would have hidden the bug. Phase 7.
   - id: dispatch-unit-declared-by-shape
     capability: Dispatch granularity
     acceptance: The granularity dispatch creates work items at (whole run, per plan

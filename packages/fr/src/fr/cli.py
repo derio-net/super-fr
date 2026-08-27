@@ -30,6 +30,7 @@ from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
 from fr.commands.repair_cmd import repair_command
 from fr.commands.repos_cmd import repos_app
+from fr.commands.run_cmd import run_app
 from fr.commands.skills_cmd import skills as skills_command
 from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
@@ -68,6 +69,7 @@ app.add_typer(journal_app, name="journal")
 app.add_typer(models_app, name="models")
 app.add_typer(hermes_app, name="hermes")
 app.add_typer(workflow_app, name="workflow")
+app.add_typer(run_app, name="run")
 app.command(name="skills")(skills_command)
 
 
