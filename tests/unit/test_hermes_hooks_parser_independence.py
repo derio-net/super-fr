@@ -120,6 +120,9 @@ NO_PARSER = {
     "FR_JQ_CANDIDATES": "/nonexistent/jq",
 }
 
+# No git at all — the other way every decision silently degrades to "allow".
+NO_GIT = {"FR_GIT_CANDIDATES": "/nonexistent/git"}
+
 
 # --- 1. the source must not call a bare `jq` -------------------------------
 
@@ -251,6 +254,44 @@ def test_missing_parser_refuses_explicitly(script: Path, tmp_path: Path) -> None
     assert res.returncode == 0, f"{script.name} exited {res.returncode}: {res.stderr}"
     assert decision(res) == "block"
     assert "JSON parser" in json.loads(res.stdout)["reason"]
+
+
+@pytest.mark.parametrize("script", [GUARD, EDIT_GATE], ids=lambda p: p.name)
+def test_missing_git_refuses_explicitly(script: Path, tmp_path: Path) -> None:
+    """Without git the isolation decision degrades to 'not a repo' = allow.
+
+    That is a disarmed guard wearing an approval's clothes — the same class of
+    bug as the jq exit-127, so the isolation hooks must refuse instead.
+    """
+    repo = fr_repo(tmp_path)
+    res = run_hook(
+        script,
+        {
+            "tool_name": "terminal" if script is GUARD else "write_file",
+            "tool_input": {"command": "git add .", "path": str(repo / "README.md")},
+            "cwd": str(repo),
+        },
+        env=NO_GIT,
+    )
+    assert res.returncode == 0, f"{script.name} exited {res.returncode}: {res.stderr}"
+    assert decision(res) == "block"
+    assert "git" in json.loads(res.stdout)["reason"]
+
+
+def test_push_guard_stays_fail_open_without_git(tmp_path: Path) -> None:
+    """The push guard's contract is fail-open on every PR-state ambiguity.
+
+    It cannot resolve a PR without git, which is an ambiguity, not a disarmed
+    policy gate — so unlike the isolation hooks it keeps passing the call.
+    """
+    repo = fr_repo(tmp_path)
+    res = run_hook(
+        PUSH_GUARD,
+        {"tool_name": "terminal", "tool_input": {"command": "git push"}, "cwd": str(repo)},
+        env=NO_GIT,
+    )
+    assert res.returncode == 0
+    assert decision(res) is None
 
 
 @pytest.mark.parametrize("script", ALL_HERMES_HOOKS, ids=lambda p: p.name)

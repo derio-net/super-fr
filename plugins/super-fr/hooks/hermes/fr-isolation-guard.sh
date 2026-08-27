@@ -36,6 +36,12 @@ if ! fr_json_resolve; then
   emit_block 'fr-isolation guard unavailable: no JSON parser (python3 or jq) could be resolved, so the tool payload cannot be read. Refusing terminal/execute_code until the dependency is restored.'
   exit 0
 fi
+if ! fr_git_resolve; then
+  # Without git, every isolation decision degrades to "not a repo" = allow.
+  # That is a disarmed guard, not an approval — say so.
+  emit_block 'fr-isolation guard unavailable: git could not be resolved, so the isolation context cannot be established. Refusing terminal/execute_code until the dependency is restored.'
+  exit 0
+fi
 
 input=$(cat)
 

@@ -135,11 +135,50 @@ fr_json_file_field() {
   fr_json_field "$2" < "$1"
 }
 
+# --- git resolution --------------------------------------------------------
+#
+# git is the OTHER load-bearing dependency, and it fails the same silent way:
+# `_fr_toplevel_of` cannot distinguish "this is not a git repo" (allow — genuinely
+# not our concern) from "git is not runnable here" (every decision degrades to
+# allow, i.e. the guard is disarmed). Resolve it from absolute paths for the same
+# reason as the JSON parser, and let a hook entrypoint ask explicitly via
+# fr_git_resolve so it can refuse instead of silently passing.
+
+FR_GIT_BIN=""
+: "${FR_GIT_CANDIDATES:=git /usr/bin/git /usr/local/bin/git /bin/git /opt/homebrew/bin/git}"
+
+# Resolve git once into FR_GIT_BIN.
+#   returns 0 -> git is available; 1 -> no usable git
+fr_git_resolve() {
+  [ -n "$FR_GIT_BIN" ] && return 0
+  # Word-splitting the candidate list is intentional.
+  # shellcheck disable=SC2086
+  for _fr_cand in $FR_GIT_CANDIDATES; do
+    case "$_fr_cand" in
+      /*)
+        [ -x "$_fr_cand" ] || continue
+        FR_GIT_BIN="$_fr_cand"
+        ;;
+      *)
+        _fr_res=$(command -v "$_fr_cand" 2>/dev/null) || continue
+        [ -n "$_fr_res" ] || continue
+        FR_GIT_BIN="$_fr_res"
+        ;;
+    esac
+    return 0
+  done
+  return 1
+}
+
 # --- internal helpers (shared by decide_edit and decide_cwd) ---------------
 
 # Echo the resolved git toplevel for a directory, or return non-zero.
+# Returning non-zero when git itself is unavailable preserves the historical
+# "treat as not-a-repo" behavior for callers that do not check fr_git_resolve;
+# the Hermes entrypoints DO check, and refuse.
 _fr_toplevel_of() {
-  _fr_t=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 1
+  fr_git_resolve || return 1
+  _fr_t=$("$FR_GIT_BIN" -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 1
   [ -n "$_fr_t" ] || return 1
   (cd "$_fr_t" 2>/dev/null && pwd -P) || return 1
 }
@@ -178,8 +217,9 @@ _fr_marker_valid() {
   [ "$_fr_rrecorded" = "$_fr_rtop" ] || return 1
   case "$_fr_mode" in
     worktree)
-      _fr_common=$(git -C "$_fr_rtop" rev-parse --git-common-dir 2>/dev/null || true)
-      _fr_gitdir=$(git -C "$_fr_rtop" rev-parse --git-dir 2>/dev/null || true)
+      fr_git_resolve || return 1
+      _fr_common=$("$FR_GIT_BIN" -C "$_fr_rtop" rev-parse --git-common-dir 2>/dev/null || true)
+      _fr_gitdir=$("$FR_GIT_BIN" -C "$_fr_rtop" rev-parse --git-dir 2>/dev/null || true)
       _fr_rcommon=$(cd "$_fr_rtop" && cd "$_fr_common" 2>/dev/null && pwd -P) || _fr_rcommon="$_fr_common"
       _fr_rgitdir=$(cd "$_fr_rtop" && cd "$_fr_gitdir" 2>/dev/null && pwd -P) || _fr_rgitdir="$_fr_gitdir"
       [ "$_fr_rcommon" != "$_fr_rgitdir" ]
