@@ -254,6 +254,29 @@ item sits in its lifecycle; a manual item is still queued, then done. §4.F's
 capability negotiation and §4.G's tracker mapping must therefore carry
 routability as a separate item attribute rather than a sixth state.
 
+**Routability travels WITH the state at the neutral seam** (added in the
+phases 1–4 review; the seam originally returned a bare `ItemState` and dropped
+the attribute). The decision type is:
+
+```python
+@dataclass(frozen=True)
+class ItemDecision:
+    state: ItemState
+    routable: bool = True          # False == human-only (`manual`)
+
+    @property
+    def dispatchable(self) -> bool:  # the only question a dispatcher asks
+        return self.routable and self.state == "queued"
+```
+
+`render.phase_item_decision(plan, observed, phase_number)` returns it, and the
+GitHub `manual` label is the *projection* of `routable=False`
+(`_lifecycle_label_for_decision` takes the decision and no `PhaseDoc`), not a
+second read of `PhaseDoc.tag`. Splitting them is what let the projection stay
+correct while the neutral answer was wrong: a second tracker gating on
+`state == "queued"` would have routed human-only work to an agent runner. A
+tracker adapter maps its own vocabulary onto `ItemDecision`, both fields.
+
 `fr:synced` is deliberately **not** an `ItemState`. It is a dispatch bookkeeping
 stamp — "handed to the runner" — that happens to be stored on the Issue because
 there was previously nowhere else durable to put it. It stays a tracker-side
@@ -319,10 +342,18 @@ class Runner(Protocol):
     def preflight(self, items: Sequence[WorkItem]) -> str | None: ...
     def refresh(self) -> None: ...
     def slot_budget(self) -> int: ...
-    def existing_dispatches(self) -> set[str]: ...   # item ids
+    def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]: ...  # item ids
     def can_dispatch(self, item: WorkItem) -> bool: ...  # replaces can_dispatch_repo
     def dispatch(self, item: WorkItem) -> None: ...
 ```
+
+`existing_dispatches` takes the tick's `items` (corrected in the phases 1–4
+review; it was originally specced no-arg). An adapter whose board stores
+something other than item ids — VK stores card titles — has to invert board
+state *against* the candidate items, and the no-arg form left it reading them
+from an attribute `preflight(items)` had stashed. That made call ORDER
+load-bearing while the protocol documented none, and its failure mode is
+silent: an empty snapshot, hence a duplicate card and workspace per item.
 
 `tick` keeps its entire failure doctrine unchanged — per-item accumulation, one
 bad item never kills the loop, a raising `dispatch` leaves the synced stamp

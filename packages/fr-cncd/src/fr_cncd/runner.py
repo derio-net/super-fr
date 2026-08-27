@@ -19,7 +19,7 @@ Config mirrors the VK runner's env convention:
 
 Dedup is server-side by design: cncd ingest upserts by
 `(tenant, source_path)` and skips unchanged content hashes (spec §3.3),
-so `existing_dispatches()` is honestly empty — a re-POST after a lost
+so `existing_dispatches(items)` is honestly empty — a re-POST after a lost
 GitHub synced-stamp is a no-op, not a duplicate. stdlib `urllib` only;
 a thin client earns no third-party HTTP dependency.
 
@@ -123,10 +123,11 @@ class CncdRunner:
     def slot_budget(self) -> int:
         return int(os.environ.get("CNCD_SLOT_BUDGET", str(DEFAULT_SLOT_BUDGET)))
 
-    def existing_dispatches(self) -> set[str]:
+    def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]:
         # Server-side idempotence (content-hash skip on ingest) makes a
         # client-side dedup snapshot unnecessary — and phase-1 cncd has
-        # no query surface keyed by GitHub Issue to build one from.
+        # no query surface keyed by GitHub Issue to build one from. So
+        # `items` is deliberately unused here: honestly empty, not stale.
         return set()
 
     def can_dispatch(self, item: WorkItem) -> bool:

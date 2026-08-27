@@ -181,7 +181,7 @@ def test_dispatch_stamp_is_typed_separately_from_item_state() -> None:
 
 # --- The renderer's per-phase state decision, in ItemState terms ------------
 #
-# Same fixture shape as the characterization net: `phase_item_state` is the
+# Same fixture shape as the characterization net: `phase_item_decision` is the
 # tracker-neutral seam the GitHub projection is derived FROM, so the two must
 # agree phase for phase.
 
@@ -195,21 +195,21 @@ def test_dispatch_stamp_is_typed_separately_from_item_state() -> None:
         (5, "done"),
     ],
 )
-def test_phase_item_state_decides_in_tracker_neutral_terms(
+def test_phase_item_decision_decides_in_tracker_neutral_terms(
     tmp_path: Path, phase_number: int, expected: str
 ) -> None:
     from fr import parse
-    from fr.render import phase_item_state
+    from fr.render import phase_item_decision
 
     plan = parse(build_plan_dir(tmp_path))
-    assert phase_item_state(plan, build_observed(), phase_number) == expected
+    assert phase_item_decision(plan, build_observed(), phase_number).state == expected
 
 
-def test_phase_item_state_reports_in_review_for_an_open_nondraft_pr(tmp_path: Path) -> None:
+def test_phase_item_decision_reports_in_review_for_an_open_nondraft_pr(tmp_path: Path) -> None:
     from dataclasses import replace
 
     from fr import parse
-    from fr.render import phase_item_state
+    from fr.render import phase_item_decision
     from fr.states import PrObservation
 
     plan = parse(build_plan_dir(tmp_path))
@@ -226,10 +226,10 @@ def test_phase_item_state_reports_in_review_for_an_open_nondraft_pr(tmp_path: Pa
             ),
         ),
     )
-    assert phase_item_state(plan, observed, 2) == "in_review"
+    assert phase_item_decision(plan, observed, 2).state == "in_review"
 
 
-def test_phase_item_state_reports_queued_for_an_undispatched_phase(tmp_path: Path) -> None:
+def test_phase_item_decision_reports_queued_for_an_undispatched_phase(tmp_path: Path) -> None:
     """Phase 1 has no observation at all.
 
     The tracker-neutral decision is still `queued` — "not yet dispatched" is
@@ -237,7 +237,99 @@ def test_phase_item_state_reports_queued_for_an_undispatched_phase(tmp_path: Pat
     for a tracking-only Issue), not a sixth item state.
     """
     from fr import parse
-    from fr.render import phase_item_state
+    from fr.render import phase_item_decision
 
     plan = parse(build_plan_dir(tmp_path))
-    assert phase_item_state(plan, build_observed(), 1) == "queued"
+    assert phase_item_decision(plan, build_observed(), 1).state == "queued"
+
+
+# --- Routability rides alongside the state, not inside it -------------------
+#
+# `manual` is a routing ATTRIBUTE, not a sixth ItemState (spec §4.C). The
+# GitHub projection has always short-circuited on it, but the tracker-neutral
+# seam used to return a bare `ItemState`, so a caller gating dispatch on
+# `... == "queued"` — exactly what `fr_dispatch._is_dispatchable` does with the
+# label-side vocabulary — would hand a human-only phase to an agent runner.
+# The seam therefore returns a DECISION carrying both.
+
+_FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+
+
+def _manual_plan_dir(tmp_path: Path) -> Path:
+    """`v2_plan_minimal` with its single phase forced to `tag: manual`."""
+    import shutil
+
+    plan_dir = tmp_path / "plan"
+    shutil.copytree(_FIXTURE_MINIMAL, plan_dir)
+    phase = plan_dir / "01.yaml"
+    phase.write_text(phase.read_text().replace("tag: agentic", "tag: manual"))
+    return plan_dir
+
+
+def test_item_decision_pairs_a_state_with_routability() -> None:
+    """`dispatchable` is the ONE question a dispatcher asks — and it needs
+    both halves. Neither alone is the answer."""
+    from fr.item_state import ItemDecision
+
+    assert ItemDecision(state="queued", routable=True).dispatchable is True
+    # Human-only work is still `queued` — it is just not an agent's to take.
+    assert ItemDecision(state="queued", routable=False).dispatchable is False
+    # Routable but claimed/blocked/done is not dispatchable either.
+    for state in ("blocked", "in_progress", "in_review", "done"):
+        assert ItemDecision(state=state, routable=True).dispatchable is False, state
+
+
+def test_manual_phase_is_queued_but_not_routable(tmp_path: Path) -> None:
+    """The reproducer for the dropped routing attribute.
+
+    A `tag: manual` phase with no observation decides `queued` — correct, and
+    deliberately so: `manual` is not a state. What the neutral seam must ALSO
+    carry is that no agent may take it, so a second tracker gating on the
+    seam cannot dispatch it. GitHub's `manual` label is the projection of the
+    same fact.
+    """
+    from fr import parse
+    from fr.render import phase_item_decision, render
+    from fr.states import GhState
+
+    plan = parse(_manual_plan_dir(tmp_path))
+    assert plan.phases[0].phase.tag == "manual"
+    observed = GhState(phases={})
+
+    decision = phase_item_decision(plan, observed, 1)
+    assert decision.state == "queued"  # `manual` is an attribute, not a state
+    assert decision.routable is False
+    assert decision.dispatchable is False
+
+    # …and the GitHub projection still says `manual`, unchanged.
+    rendered = render(plan, observed)
+    assert "manual" in {ld.name for ld in rendered.issue_per_phase[1].labels}
+
+
+def test_an_agentic_queued_phase_is_routable_and_dispatchable(tmp_path: Path) -> None:
+    """The other half of the pair — without it the fix could be `routable`
+    hardwired to False."""
+    from fr import parse
+    from fr.render import phase_item_decision
+
+    plan = parse(build_plan_dir(tmp_path))
+    decision = phase_item_decision(plan, build_observed(), 2)
+    assert (decision.state, decision.routable, decision.dispatchable) == ("queued", True, True)
+
+
+def test_github_manual_label_is_projected_from_the_decision_not_the_phase_tag() -> None:
+    """The projection takes the neutral decision and nothing else.
+
+    Pinning the signature is the point: if `MANUAL` were re-injected by
+    re-reading `PhaseDoc.tag` at projection time, the neutral seam could keep
+    silently dropping routability and GitHub would still look right.
+    """
+    from fr.item_state import ItemDecision
+    from fr.render import _lifecycle_label_for_decision
+
+    unroutable = _lifecycle_label_for_decision(ItemDecision(state="queued", routable=False))
+    assert unroutable is not None and unroutable.name == "manual"
+    # `done` outranks the attribute: a finished manual phase closes, unlabelled.
+    assert _lifecycle_label_for_decision(ItemDecision(state="done", routable=False)) is None
+    routable = _lifecycle_label_for_decision(ItemDecision(state="queued", routable=True))
+    assert routable is not None and routable.name == "fr:ready"

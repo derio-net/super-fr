@@ -67,6 +67,7 @@ class FakeRunner:
         self._raise_in = set(raise_in)
         self.refreshed = 0
         self.preflight_items: Any = None
+        self.existing_dispatches_items: Any = None
         self.dispatched: list[Any] = []
         self.can_dispatch_seen: list[Any] = []
 
@@ -87,7 +88,8 @@ class FakeRunner:
         self._maybe_raise("slot_budget")
         return self._budget
 
-    def existing_dispatches(self) -> set[str]:
+    def existing_dispatches(self, items: Any) -> set[str]:
+        self.existing_dispatches_items = list(items)
         self._maybe_raise("existing_dispatches")
         return set(self._existing)
 
@@ -276,6 +278,45 @@ def test_workitem_declares_its_inputs_and_workflow():
     kinds = {ref.kind: ref for ref in item.inputs}
     assert kinds["plan"].path.endswith("v2_plan_minimal")
     assert kinds["spec"].path == "docs/superpowers/specs/fixture-spec-design.md"
+    # Same-repo spec: attributed to the plan's own target repo.
+    assert kinds["spec"].repo == plan.meta.target_repo
+
+
+def test_a_cross_repo_spec_input_names_the_other_repo_and_stays_repo_relative(tmp_path: Path):
+    """`ArtifactRef.path` is documented repo-relative and normalized.
+
+    `parser` deliberately leaves `plan.spec_path is None` for a cross-repo
+    `<owner>/<repo>:<path>` spec (it can't resolve a path in a checkout it
+    doesn't have), so falling back to `meta.spec` shipped the raw notation
+    as a `path` — and attributed it to `target_repo`, the one repo the file
+    is NOT in. `render.spec_url` and `repair` both split the notation for
+    exactly this case; the item's `inputs` must too, because Phase 8
+    (reachability from inputs) and Phase 9 (multi-repo fan-out) consume
+    these refs as coordinates.
+    """
+    import shutil
+
+    from fr import parse
+    from fr_dispatch import _plan_inputs
+
+    plan_dir = tmp_path / "plan"
+    shutil.copytree(MINIMAL, plan_dir)
+    meta = plan_dir / "_meta.yaml"
+    meta.write_text(
+        meta.read_text().replace(
+            "spec: docs/superpowers/specs/fixture-spec-design.md",
+            "spec: other-org/other-repo:docs/superpowers/specs/elsewhere-design.md",
+        )
+    )
+    plan = parse(plan_dir)
+    assert plan.spec_path is None  # the parser's cross-repo behaviour, pinned
+
+    refs = {ref.kind: ref for ref in _plan_inputs(plan)}
+    assert refs["spec"].repo == "other-org/other-repo"
+    assert refs["spec"].path == "docs/superpowers/specs/elsewhere-design.md"
+    assert ":" not in refs["spec"].path
+    # The plan itself still lives in the plan's own repo.
+    assert refs["plan"].repo == plan.meta.target_repo
 
 
 # ── (a) a raising dispatch fails ONLY that item, stamp unwritten ────────
@@ -377,7 +418,52 @@ def test_a_phase_whose_item_cannot_be_built_fails_only_itself():
 
     assert [i.id for i in items] == [f"{REPO}/_no-spec/2026-05-09-fixture-multi-phase/phase/2"]
     assert len(failures) == 1
-    assert failures[0].startswith("phase 1: ")
+    # Named like every other accumulated failure: the item ref, which also
+    # says WHICH plan the phase belongs to. (The id could not be *composed*
+    # here — that is what failed — so the ref is built segment-wise.)
+    assert failures[0].startswith(f"{REPO}/_no-spec/2026-05-09-fixture-multi-phase/phase/1: ")
+    assert not failures[0].startswith("phase ")
+
+
+def test_a_writeback_failure_is_named_by_item_ref_like_every_other_failure(monkeypatch):
+    """Both failure classes an operator reads must be formatted alike.
+
+    Every accumulator in the loop emits `f"{item.id}: …"` — deliberately,
+    because the id also names the plan. The writeback path (and item
+    construction, above) kept the old `phase N:` prefix, so of the failure
+    strings a bridge running many plans logs, only some identified the plan.
+    """
+    import fr_dispatch
+    from fr.apply import ApplyResult
+    from fr_dispatch import tick
+
+    plan, repo, n = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (n,))
+    url = f"https://github.com/{repo}/issues/{n}"
+
+    real_apply = fr_dispatch.apply
+
+    def fake_apply(*args, **kwargs):
+        result = real_apply(*args, **kwargs)
+        return ApplyResult(
+            applied=result.applied,
+            failures=result.failures,
+            created_issues={1: url},
+            dry_run=result.dry_run,
+        )
+
+    def boom(*args, **kwargs):
+        raise OSError("read-only filesystem")
+
+    monkeypatch.setattr(fr_dispatch, "apply", fake_apply)
+    monkeypatch.setattr(fr_dispatch.plan_ops, "set_tracking_issue", boom)
+
+    result = tick(plan, gh, FakeRunner())
+
+    writeback = [f for f in result.failures if "writeback failed" in f]
+    assert len(writeback) == 1
+    assert writeback[0].startswith(f"{MINIMAL_PHASE_1_ID}: writeback failed: ")
 
 
 # ── (c) preflight fails EVERY eligible item, synced=0 ──────────────────
@@ -766,6 +852,35 @@ def test_runner_protocol_v2_has_six_methods_and_no_dedup_key():
         "dispatch",
     ):
         assert hasattr(Runner, method), method
+
+
+def test_existing_dispatches_receives_this_tick_s_items():
+    """The dedup snapshot takes the items it is answering about.
+
+    Adapters have to map board state back to `WorkItem.id`s, and the only
+    honest source for that mapping is the item list itself. Passing it
+    removes the alternative — an adapter caching the items from an earlier
+    `preflight(items)` call and silently returning an empty snapshot if the
+    two are ever reordered (VkRunner did exactly that: duplicate cards and
+    workspaces on a re-ordered tick).
+    """
+    import inspect
+
+    from fr_dispatch import tick
+    from fr_dispatch.protocols import Runner
+
+    assert "items" in inspect.signature(Runner.existing_dispatches).parameters
+
+    plan, repo, n = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (n,))
+    runner = FakeRunner()
+
+    tick(plan, gh, runner)
+
+    assert [i.id for i in runner.existing_dispatches_items] == [MINIMAL_PHASE_1_ID]
+    # …the same list preflight saw, without either call depending on the other.
+    assert runner.existing_dispatches_items == runner.preflight_items
 
 
 def test_fake_runner_satisfies_the_runner_protocol():

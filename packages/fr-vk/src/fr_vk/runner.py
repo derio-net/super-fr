@@ -15,18 +15,21 @@ require it outside a workspace context — exactly the cron bridge's case
 
 **v2 (2026-08-14 workflow-shapes spec §4.D).** `dedup_key` and
 `can_dispatch_repo` are gone; identity lives on `WorkItem.id` and the
-repo gate reads `item.repo`. `existing_dispatches()` still has to answer
-in card-*title* terms (VK's board has no item-id concept, pre- or
-post-cutover), but per the protocol it takes no arguments — so it maps
-titles back to ids using THIS TICK's own items, cached from the
-`preflight(items)` call that always precedes it in `tick`'s per-plan
-loop (see `fr_dispatch.tick`). Every item in one tick shares one plan,
-so `(item.repo, item.payload["issue_number"])` is a stable coordinate a
-title also carries (`fr_vk.dedup.map_titles_to_item_ids`) — no title
-format change, no inversion of spec/plan slugs that were never encoded
-in the title to begin with (see the 2026-08-14 plan journal, phase 2/3
-findings). This is what makes a VK card created *before* this cutover
-still dedup correctly on the first post-deploy tick.
+repo gate reads `item.repo`. `existing_dispatches(items)` still has to
+answer in card-*title* terms (VK's board has no item-id concept, pre- or
+post-cutover), so it maps titles back to ids using the items it is
+handed — `(item.repo, item.payload["issue_number"])` is a coordinate the
+title also carries (`fr_vk.dedup.map_titles_to_item_ids`). No title
+format change, and no inversion of spec/plan slugs that were never
+encoded in a title to begin with (see the 2026-08-14 plan journal, phase
+2/3 findings). This is what makes a VK card created *before* this
+cutover still dedup correctly on the first post-deploy tick.
+
+The items arrive as an argument rather than cached from the preceding
+`preflight(items)` call (which is how the cutover first shipped it):
+that cache made the snapshot silently empty for any caller that skipped
+or reordered preflight, i.e. duplicate cards and duplicate workspaces
+from a protocol the contract never stated.
 """
 
 from __future__ import annotations
@@ -75,13 +78,8 @@ class VkRunner:
     def __init__(self, mcp: MCPDispatch, *, project_id: str | None = None) -> None:
         self.mcp = mcp
         self.project_id = project_id if project_id is not None else _env_project_id()
-        # Cached by `preflight(items)`, which `fr_dispatch.tick` always calls
-        # before `existing_dispatches()` in the same tick — see the module
-        # docstring for why this is what lets a title-only VK card dedup.
-        self._items_this_tick: Sequence[WorkItem] = ()
 
     def preflight(self, items: Sequence[WorkItem]) -> str | None:
-        self._items_this_tick = items
         if not self.project_id:
             return (
                 "VK_DERIO_OPS_PROJECT unset; cannot dispatch "
@@ -96,9 +94,9 @@ class VkRunner:
     def slot_budget(self) -> int:
         return _slots.max_concurrent() - _slots.count_active_ws(self.mcp)
 
-    def existing_dispatches(self) -> set[str]:
+    def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]:
         titles = _dedup.fetch_existing_titles(self.mcp, project_id=self.project_id)
-        return _dedup.map_titles_to_item_ids(titles, self._items_this_tick)
+        return _dedup.map_titles_to_item_ids(titles, items)
 
     def can_dispatch(self, item: WorkItem) -> bool:
         return _config.is_known_repo(item.repo, self.mcp)

@@ -17,7 +17,7 @@ from typing import Literal
 
 from fr._urls import is_cross_repo_spec
 from fr._urls import issue_number as _issue_number_from_url
-from fr.item_state import ItemState, project_github
+from fr.item_state import ItemDecision, ItemState, project_github
 from fr.labels import (
     FR_SYNCED,
     MANUAL,
@@ -100,31 +100,62 @@ def _item_state(
     return "queued"
 
 
-def phase_item_state(plan: Plan, observed: GhState, phase_number: int) -> ItemState:
-    """Public seam: the `ItemState` of `phase_number` under `observed`.
+def _routable(phase: PhaseDoc) -> bool:
+    """False for human-only work — `labels.MANUAL`'s meaning, stated neutrally.
+
+    The single place `tag == "manual"` is read as a *routing* fact. Everything
+    downstream (the neutral seam, the GitHub label) derives from this.
+    """
+    return phase.phase.tag != "manual"
+
+
+def _item_decision(
+    phase: PhaseDoc,
+    obs: PhaseObservation | None,
+    plan: Plan,
+    observed: GhState,
+) -> ItemDecision:
+    """The full tracker-neutral decision for one phase: state + routability."""
+    return ItemDecision(
+        state=_item_state(phase, obs, plan, observed),
+        routable=_routable(phase),
+    )
+
+
+def phase_item_decision(plan: Plan, observed: GhState, phase_number: int) -> ItemDecision:
+    """Public seam: the `ItemDecision` for `phase_number` under `observed`.
 
     Tracker-neutral by construction — the caller decides how (or whether) to
     project it onto labels. Raises `KeyError` for a phase the plan doesn't have.
+
+    Returns a *decision*, not a bare `ItemState`, on purpose: `manual` is a
+    routing attribute rather than a state (spec §4.C), so a seam that handed
+    back only the state would answer "queued" for human-only work and invite a
+    dispatcher to route it to an agent. Ask `decision.dispatchable`, never
+    `decision.state == "queued"` alone.
     """
     for phase in plan.phases:
         if phase.phase.number == phase_number:
-            return _item_state(phase, observed.phases.get(phase_number), plan, observed)
+            return _item_decision(phase, observed.phases.get(phase_number), plan, observed)
     raise KeyError(f"plan {plan.meta.plan} has no phase {phase_number}")
 
 
-def _lifecycle_label_for_state(phase: PhaseDoc, state: ItemState) -> LabelDef | None:
-    """Project an `ItemState` onto its single GitHub lifecycle label.
+def _lifecycle_label_for_decision(decision: ItemDecision) -> LabelDef | None:
+    """Project an `ItemDecision` onto its single GitHub lifecycle label.
 
-    `manual` short-circuits every non-`done` state: it is a routing
-    *attribute* ("human-only"), not a member of `ItemState`, and it has
-    always outranked the computed lifecycle on the Issue.
+    Takes the neutral decision and nothing else — no `PhaseDoc`. Unroutable
+    ("human-only") short-circuits every non-`done` state: `MANUAL` is the
+    GitHub *projection* of `routable=False`, and it has always outranked the
+    computed lifecycle on the Issue. Deriving it from the decision rather than
+    from a second read of `PhaseDoc.tag` is what keeps the neutral seam and
+    the GitHub projection from disagreeing about routability.
 
     `done` projects to no label — the Issue is CLOSED instead — which is
     exactly `project_github("done") == frozenset()`.
     """
-    if phase.phase.tag == "manual" and state != "done":
+    if not decision.routable and decision.state != "done":
         return MANUAL
-    return next(iter(project_github(state)), None)
+    return next(iter(project_github(decision.state)), None)
 
 
 def _lifecycle_label(
@@ -136,10 +167,10 @@ def _lifecycle_label(
     """Compute the single lifecycle LabelDef for a phase.
 
     Returns None when the Issue should be closed (phase complete). Decision
-    and projection are now two steps: `_item_state` then
-    `_lifecycle_label_for_state`.
+    and projection are two steps: `_item_decision` then
+    `_lifecycle_label_for_decision`.
     """
-    return _lifecycle_label_for_state(phase, _item_state(phase, obs, plan, observed))
+    return _lifecycle_label_for_decision(_item_decision(phase, obs, plan, observed))
 
 
 def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
@@ -566,9 +597,9 @@ def render(
         observed_names = obs.issue_labels if obs is not None else frozenset()
         phase_queued = queue_runner is not None or is_queued(observed_names)
         # Decide in tracker-neutral terms ONCE, project to GitHub second.
-        item_state = _item_state(phase, obs, plan, observed)
+        decision = _item_decision(phase, obs, plan, observed)
         if phase_queued:
-            lifecycle = _lifecycle_label_for_state(phase, item_state)
+            lifecycle = _lifecycle_label_for_decision(decision)
             if lifecycle is not None:
                 labels.add(lifecycle)
             # Preserve the runner attribution: the explicit --to choice, or
@@ -579,7 +610,7 @@ def render(
                 for name in observed_names:
                     if name.startswith("runner:"):
                         labels.add(runner_label(name.removeprefix("runner:")))
-        elif phase.phase.tag == "manual" and item_state != "done":
+        elif not decision.routable and decision.state != "done":
             # `manual` is a routing attribute, not queue lifecycle — it
             # stays on tracking-only issues so humans can filter their work.
             labels.add(MANUAL)
@@ -588,7 +619,7 @@ def render(
         # diff() sees no drift.
         if FR_SYNCED.name in observed_names:
             labels.add(FR_SYNCED)
-        state: Literal["OPEN", "CLOSED"] = "CLOSED" if item_state == "done" else "OPEN"
+        state: Literal["OPEN", "CLOSED"] = "CLOSED" if decision.state == "done" else "OPEN"
         issues[n] = RenderedIssue(
             body=render_body(
                 phase, plan, phase_to_issue=phase_to_issue, phase_to_repo=phase_to_repo

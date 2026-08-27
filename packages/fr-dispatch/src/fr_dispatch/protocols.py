@@ -13,9 +13,9 @@ unit of dispatch is a `WorkItem`, not a `(plan, phase, repo, issue_number)`
 tuple: the decomposition granularity (`run` | `phase` | `spec`, §4.E) is
 now a workflow shape's declared `unit`, not a hardcoded assumption. Six
 methods, down from seven — `dedup_key` is gone because identity lives on
-the item (`WorkItem.id`), so `existing_dispatches` returns item ids and
-`can_dispatch_repo(repo)` widens to `can_dispatch(item)`. Hard cutover, no
-compatibility shim.
+the item (`WorkItem.id`), so `existing_dispatches(items)` returns item ids
+and `can_dispatch_repo(repo)` widens to `can_dispatch(item)`. Hard cutover,
+no compatibility shim.
 
 Implementations are duck-typed (`Protocol`): no inheritance required.
 Every method may raise — `tick` accumulates failures per item and never
@@ -67,14 +67,22 @@ class Runner(Protocol):
         """Remaining dispatch capacity for this tick (0 = defer all)."""
         ...
 
-    def existing_dispatches(self) -> set[str]:
-        """Dedup snapshot: `WorkItem.id`s already handed to this runner.
+    def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]:
+        """Dedup snapshot: which of `items` this runner is already holding.
 
         Item ids, not backend-native keys — identity is the item's position
         in the graph (`work_item.item_id`), computable before any tracker
         artifact exists. An adapter whose board stores something else (a VK
         card title, say) maps back to ids here; the title stays that
         backend's *presentation* of an item and stops being its identity.
+
+        `items` is the same sequence `preflight` receives. An adapter that
+        has to invert board state into ids needs the candidate items to
+        invert *against*, and passing them is what keeps that from becoming
+        an undocumented "call `preflight` first" ordering contract — one
+        whose failure mode (an empty snapshot) is silent duplicate
+        dispatch. Returning ids outside `items` is harmless: `tick` only
+        tests membership for the items it is about to dispatch.
         """
         ...
 

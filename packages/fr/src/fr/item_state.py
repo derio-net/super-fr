@@ -30,6 +30,7 @@ bookkeeping, not the ability to represent an item's state.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, get_args
 
 from fr.labels import (
@@ -47,6 +48,38 @@ ITEM_STATES: tuple[ItemState, ...] = get_args(ItemState)
 
 # Dispatch bookkeeping, NOT a state — see the module docstring.
 DISPATCH_STAMP: LabelDef = FR_SYNCED
+
+
+@dataclass(frozen=True)
+class ItemDecision:
+    """One item's tracker-neutral decision: its state **and** its routability.
+
+    `manual` is a routing *attribute*, not a sixth `ItemState` (spec §4.C):
+    a human-only item is still `queued`, then `done` — what differs is that
+    no agent may take it. Both halves therefore have to travel together, or
+    a caller reading only the state re-derives a wrong answer.
+
+    That is not hypothetical: dispatch is gated on "is this queued", so a
+    seam handing back a bare `ItemState` invites
+    `decide(...) == "queued" → dispatch`, which routes human-only work to an
+    agent runner. GitHub is saved from this today only because its
+    *projection* re-reads `PhaseDoc.tag` and re-injects the `manual` label;
+    a second tracker (§4.G) has no such second chance. `dispatchable` is the
+    single question a dispatcher should ask, and it needs both fields.
+    """
+
+    state: ItemState
+    routable: bool = True
+
+    @property
+    def dispatchable(self) -> bool:
+        """True iff an agent runner may take this item right now.
+
+        `queued` is the only state that permits dispatch (see `_PRECEDENCE`),
+        and routability is the veto that rides alongside it.
+        """
+        return self.routable and self.state == "queued"
+
 
 _GITHUB_PROJECTION: dict[ItemState, frozenset[LabelDef]] = {
     "queued": frozenset({FR_READY}),

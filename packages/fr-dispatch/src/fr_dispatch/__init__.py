@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fr import plan_ops
-from fr._urls import parse_issue_url
+from fr._urls import is_cross_repo_spec, parse_issue_url
 from fr.apply import apply
 from fr.diff import diff
 from fr.ghclient import GhClient
@@ -161,12 +161,52 @@ def _spec_slug(plan: Plan) -> str:
 
 
 def _plan_inputs(plan: Plan) -> tuple[ArtifactRef, ...]:
-    """The artifacts every item of this plan reads (§4.D `inputs`)."""
+    """The artifacts every item of this plan reads (§4.D `inputs`).
+
+    Each ref is a *coordinate*: `repo` plus a path relative to THAT repo.
+    A cross-repo spec (`<owner>/<repo>:<path>` notation) is therefore split
+    rather than passed through — `plan.spec_path` is deliberately None for
+    one (the parser can't resolve a path in a checkout it doesn't have), so
+    the raw notation would otherwise land in `path` and be attributed to
+    `target_repo`, the one repo the file is not in. Same split
+    `render.spec_url` and `repair` already do.
+
+    Phase 8 (reachability from inputs) and Phase 9 (multi-repo fan-out)
+    consume these refs as coordinates, so a wrong `repo` is not cosmetic.
+    """
     refs = [ArtifactRef(kind="plan", repo=plan.meta.target_repo, path=str(plan.repo_relative_dir))]
     spec_rel = plan.spec_path or plan.meta.spec
     if spec_rel:
-        refs.append(ArtifactRef(kind="spec", repo=plan.meta.target_repo, path=spec_rel))
+        if is_cross_repo_spec(spec_rel):
+            spec_repo, spec_rel = spec_rel.split(":", 1)
+        else:
+            spec_repo = plan.meta.target_repo
+        refs.append(ArtifactRef(kind="spec", repo=spec_repo, path=spec_rel))
     return tuple(refs)
+
+
+def _phase_item_ref(plan: Plan, phase_number: int, tracking: str | None = None) -> str:
+    """The would-be `WorkItem.id` for a phase, for FAILURE STRINGS only.
+
+    Every failure `tick` accumulates is prefixed with the item it concerns,
+    because the id also names the plan — on a bridge running many plans,
+    `"phase 3: …"` says nothing about which phase 3. The two failures raised
+    before (or instead of) a `WorkItem` — item construction and tracking-issue
+    writeback — have no item to read an id off, so the ref is composed
+    segment-wise here.
+
+    Deliberately does NOT call `item_id`: this runs on the failure path, and
+    `item_id` raising (a reserved slug, a `/` in one) is one of the things
+    that lands here. Composition must never be the reason a failure string
+    can't be produced.
+    """
+    repo = plan.meta.target_repo
+    if tracking:
+        try:
+            repo = parse_issue_url(tracking)[0]
+        except ValueError:
+            pass  # keep target_repo — a malformed URL is likely the failure itself
+    return f"{repo}/{_spec_slug(plan)}/{plan.meta.plan}/phase/{phase_number}"
 
 
 def _eligible_items(
@@ -217,7 +257,7 @@ def _eligible_items(
                 )
             )
         except Exception as e:  # noqa: BLE001 — one bad phase mustn't kill the tick
-            failures.append(f"phase {n}: {e}")
+            failures.append(f"{_phase_item_ref(plan, n, tracking)}: {e}")
             continue
     return items
 
@@ -262,7 +302,7 @@ def tick(
         try:
             plan_ops.set_tracking_issue(plan.dir, phase_n, url)
         except (PlanEditError, OSError, PlanSchemaError) as e:
-            failures.append(f"phase {phase_n}: writeback failed: {e}")
+            failures.append(f"{_phase_item_ref(plan, phase_n, url)}: writeback failed: {e}")
 
     items = _eligible_items(plan, observed, rendered, failures)
 
@@ -294,9 +334,12 @@ def tick(
 
         # Dedup snapshot: one backend call covers every item in this plan.
         # Keyed on `WorkItem.id` — identity lives on the item now, so there
-        # is no `dedup_key` round trip through the adapter.
+        # is no `dedup_key` round trip through the adapter. The items are
+        # passed explicitly: an adapter that inverts board state into ids
+        # needs them, and reading them out of a `preflight`-set attribute
+        # instead would make the call ORDER load-bearing and silent.
         try:
-            existing = runner.existing_dispatches()
+            existing = runner.existing_dispatches(items)
         except Exception as e:  # noqa: BLE001
             failures.append(f"dedup fetch failed: {e}")
             existing = set()

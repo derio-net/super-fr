@@ -237,3 +237,116 @@ Worked around by editing docs/acceptance/matrix.yaml's existing row directly (ad
 The Phase 4 dispatch brief said closing p3-adapters-red-pending-phase-4 is 'fr journal add ... --kind finding --state fixed --id p3-adapters-red-pending-phase-4 re-adds idempotently on the id.' Ran exactly that command: exit 0, no error — but fr journal check --scope plan --slug ... still reported '1 open finding(s): p3-adapters-red-pending-phase-4' afterward. Root cause in packages/fr/src/fr/commands/journal_cmd.py's add_cmd: 'if any(e.id == eid for e in existing): return' — re-adding an existing id is a pure no-op (the new --state/--title/--body are discarded silently, no warning), not an upsert. There is no journal update/edit subcommand (fr journal --help lists only add/render/check).
 
 Worked around the same way as the sibling acceptance-matrix gap (p4-acceptance-add-not-idempotent-on-duplicate-id): hand-edited the entry's HTML comment (state=open -> state=fixed) and its rendered header ([open] -> [fixed]) directly in docs/superpowers/journals/plans/2026-08-14-workflow-shapes-and-workitem-dispatch.md, then verified fr journal check exits 0. No duplicate entry exists — the earlier --state fixed re-add call was confirmed a true no-op (grepped the file for a second p3-adapters-red-pending-phase-4 block; there is only one). Same shape of gap as the acceptance CLI: an --id-keyed 'idempotent add' primitive with no companion update path, so the only way to legitimately mutate an existing entry (flip a finding, correct a typo) is a direct file edit. Candidate fr issue: fr journal needs an update/edit verb, or add needs to special-case state as an allowed in-place change when --id matches and only --state/--body differ.
+
+<!-- fr:journal kind=finding scope=plan id=r-f1 created=2026-08-27T08:29:18 phase=1 state=fixed -->
+### r-f1 · finding [fixed] · phase_item_state dropped the manual routing attribute — the neutral seam now returns an ItemDecision (state + routable) (phase 1)
+
+Milestone (phases 1-4) code review, F1. `fr.render.phase_item_state(plan, observed, n) -> ItemState` was the exported tracker-neutral decision, but `_item_state` has no `manual` branch (the pre-extraction `_lifecycle_label` checked `tag == "manual"` BEFORE deps/obs). GitHub stayed correct only because `_lifecycle_label_for_state` re-injected `MANUAL` at projection time from a SECOND read of `PhaseDoc.tag`.
+
+Reproduced before fixing (v2_plan_minimal with `tag: manual`, empty GhState): `phase_item_state(...) == "queued"` while `render()` labelled the same phase `manual`. Why it mattered: dispatch is gated on "is this queued" — `fr_dispatch._is_dispatchable` does exactly that on the label side — so a second tracker (spec §4.G) reading the neutral seam and dispatching on `== "queued"` would hand human-only phases to an agent runner. The projection's re-read is a safety net GitHub has and no other tracker does.
+
+Fix — routability rides WITH the state; `manual` is still not a state (spec §4.C is explicit and no `ItemState` member was added):
+
+- `fr.item_state.ItemDecision(state: ItemState, routable: bool = True)` with a `dispatchable` property (`routable and state == "queued"`) — the single question a dispatcher should ask.
+- `render.phase_item_decision(plan, observed, n) -> ItemDecision` REPLACES `phase_item_state` (pre-release, introduced in Phase 1 of this same branch, no external consumer). Replacing rather than adding is deliberate: leaving a state-only accessor beside the safe one leaves the footgun loaded.
+- `render._routable(phase)` is now the one place `tag == "manual"` is read as a routing fact; `_item_decision` pairs it with `_item_state`.
+- `_lifecycle_label_for_state(phase, state)` -> `_lifecycle_label_for_decision(decision)` — takes the neutral decision and NO PhaseDoc, so `MANUAL` is the projection of `routable=False` rather than a second tag read. `render()`'s tracking-only `elif` branch and the OPEN/CLOSED choice read the decision too.
+
+Spec §4.C gained a paragraph specifying `ItemDecision` and that the GitHub `manual` label is its projection (docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md).
+
+Tests (RED first, tests/unit/test_item_state.py): `test_item_decision_pairs_a_state_with_routability`, `test_manual_phase_is_queued_but_not_routable` (the reproducer — asserts state stays `queued`, routable/dispatchable False, and render still emits `manual`), `test_an_agentic_queued_phase_is_routable_and_dispatchable`, `test_github_manual_label_is_projected_from_the_decision_not_the_phase_tag`. The four existing seam tests were migrated to `phase_item_decision(...).state == …` — same assertions, new vocabulary. Characterization net (byte-identical GitHub projection) unchanged and green.
+
+For phases 5-11: Phase 5's capability negotiation should consume `ItemDecision.routable`/`dispatchable` rather than inventing a second routability notion; Phase 10's tracker protocol maps a tracker's vocabulary onto BOTH fields.
+
+<!-- fr:journal kind=finding scope=plan id=r-f2 created=2026-08-27T08:29:38 phase=3 state=fixed -->
+### r-f2 · finding [fixed] · _plan_inputs shipped a cross-repo spec ref as a repo-relative path in the WRONG repo — now split into (repo, path) (phase 3)
+
+Milestone (phases 1-4) code review, F2. `fr_dispatch._plan_inputs` built `ArtifactRef(kind="spec", repo=plan.meta.target_repo, path=spec_rel)` where `spec_rel = plan.spec_path or plan.meta.spec`. `parser.py:178` deliberately leaves `plan.spec_path is None` when `is_cross_repo_spec(meta.spec)` (it cannot resolve a path in a checkout it does not have), so the fallback shipped the raw `<owner>/<repo>:<path>` notation as `path` — a field whose docstring says repo-relative and normalized — and attributed it to `target_repo`, the one repo the file is NOT in.
+
+Reproduced first: a plan whose `_meta.yaml` declares `spec: other-org/other-repo:docs/superpowers/specs/elsewhere-design.md` produced `ArtifactRef(kind='spec', repo='derio-net/superpowers-for-vk', path='other-org/other-repo:docs/…')`.
+
+Fix: `_plan_inputs` branches on `is_cross_repo_spec` and splits on the first `:` — `repo` becomes the named repo, `path` the repo-relative path inside it. Same precedent as `render.spec_url` (render.py:254) and `repair.py:212`. `fr._urls.is_cross_repo_spec` is now imported by fr_dispatch (fr-only dependency, no new coupling).
+
+Why it is not tidiness: `inputs` refs are COORDINATES. Phase 8 (reachability from inputs) would check the wrong repo for the spec's presence on origin/HEAD; Phase 9 (multi-repo fan-out) would fan out to the wrong repo. `_spec_slug` was checked and is unaffected — `Path("owner/repo:docs/x-design.md").stem` is already `x-design`.
+
+Tests (RED first, tests/unit/test_tick_workitem.py): `test_a_cross_repo_spec_input_names_the_other_repo_and_stays_repo_relative` (pins `plan.spec_path is None` for the cross-repo case as part of the reproduction, asserts repo/path/no-colon, and that the PLAN ref still names the plan's own repo) plus one added assertion to the existing `test_workitem_declares_its_inputs_and_workflow` that a same-repo spec is attributed to `target_repo`.
+
+<!-- fr:journal kind=finding scope=plan id=r-f3 created=2026-08-27T08:30:04 phase=4 state=fixed -->
+### r-f3 · finding [fixed] · Runner protocol v2 CHANGED: existing_dispatches(items) — the no-arg form made call ORDER load-bearing and silent (phase 4)
+
+Milestone (phases 1-4) code review, F3. PROTOCOL CHANGE — phases 5-11 must read this.
+
+`VkRunner.existing_dispatches()` answered from `self._items_this_tick`, stashed by `preflight(items)`. `_items_this_tick` defaults to `()`, so any caller that skipped preflight, or reordered the two calls, got an EMPTY dedup snapshot and re-dispatched every item: duplicate VK cards and duplicate workspaces, the exact failure the snapshot exists to prevent. `fr_dispatch.tick` ordered it correctly and is the only caller today, but `protocols.py:70` documented `existing_dispatches` as a standalone no-arg snapshot with no ordering contract at all — a hazard nobody reading the protocol could see.
+
+Fix (the reviewer's preferred option, taken as-is): **pass the items**. The protocol is pre-release — this branch introduces v2 — so widening now is far cheaper than shipping a documented ordering hazard.
+
+    def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]
+
+Changed: `fr_dispatch/protocols.py` (signature + docstring stating that `items` is the same sequence `preflight` receives, and that returning ids outside `items` is harmless), `fr_dispatch.tick` (`runner.existing_dispatches(items)`), `VkRunner` (`_items_this_tick` and the preflight stash DELETED — `preflight` no longer touches items at all), `CncdRunner` (accepts and ignores them; still honestly empty, server-side idempotence), the `FakeRunner` in tests/unit/test_tick_workitem.py, and `fr_vk.dedup.map_titles_to_item_ids`'s docstring. Spec §4.D's Runner-protocol block was corrected with the new signature and a paragraph on why.
+
+`bridge_cli.py` is byte-unchanged (plan invariant held): it never calls a Runner method directly — only the constructor and `tick`, whose outer signature is untouched.
+
+Tests (RED first): tests/unit/test_bridge_dedup.py `test_existing_dispatches_answers_from_the_items_it_is_given_not_from_preflight` (calls `VkRunner.existing_dispatches([item])` with preflight DELIBERATELY not called, against an out-of-band-seeded card) and `test_existing_dispatches_is_empty_when_no_card_matches_the_given_items` (the negative half); tests/unit/test_tick_workitem.py `test_existing_dispatches_receives_this_tick_s_items` (asserts `"items" in inspect.signature(Runner.existing_dispatches).parameters` AND that tick hands over the same list preflight saw); tests/unit/test_cncd_runner.py's dedup test rewritten to pass items and assert they are ignored.
+
+Whole dispatch/bridge surface re-run after the change: tests/unit test_tick_workitem, test_bridge_dedup, test_bridge_config, test_bridge_metrics, test_bridge_slots, test_vk_bridge_tick, test_cncd_runner + all of tests/integration — green.
+
+Handoff: any runner adapter written from Phase 5 onward (and Phase 10's tracker/source seams, which mirror this protocol's shape) takes `items` here. Do not reintroduce a preflight-cached snapshot.
+
+<!-- fr:journal kind=finding scope=plan id=r-f4 created=2026-08-27T08:30:27 phase=4 state=fixed -->
+### r-f4 · finding [fixed] · VK dedup ignored the card title's backend tag — a gl#/gt# card could suppress a GitHub dispatch and still stamp fr:synced (phase 4)
+
+Milestone (phases 1-4) code review, F4. `fr_vk.dedup.map_titles_to_item_ids` discarded `_tag` from `parse_card_title` and keyed its lookup on `(repo, issue_number)` only. Pre-cutover dedup was exact-title equality, tag included; `_cardref`/`TAG_FOR_BACKEND` exist precisely so `gh#`/`gl#`/`gt#` disambiguate hosts (the 2026-07-09 multi-backend design calls that parsing load-bearing, not optional). A `gl#42: [owner/repo]` card would have suppressed the GitHub dispatch of `owner/repo#42` while `tick` still stamped `fr:synced` — so the real dispatch never happens and never retries. Latent (nothing emits non-`gh` titles yet), but it disarmed the guard the tag exists for.
+
+Fix: the lookup is keyed on the FULL `(tag, repo, issue_number)` triple `parse_card_title` returns. The expected tag is derived from `_cardref.DISPATCH_BACKEND` — a new constant in `_cardref` (the leaf module both sides already import) holding the backend the bridge stamps today (`"github"`). `fr_vk.dispatch.build_card_title` now uses that same constant instead of its own hardcoded `"github"`, so producer and dedup cannot drift when a phase's real backend is eventually threaded through.
+
+Second half of the finding — the prefix-anchored widening — DECIDED AND KEPT: `"gh#42: [owner/repo] retry"` now dedups where exact string matching did not. `_cardref`'s regex is prefix-anchored on purpose (an operator annotation or a second bracketed token must not break the parse, matching the pre-consolidation per-file regexes). The coordinate is the identity; trailing text is presentation. Treating an annotated card as a different card would create a duplicate card + workspace for work already on the board — the failure dedup exists to prevent. Pinned by a test either way, including that the widening does NOT extend to the tag.
+
+Tests (RED first, tests/unit/test_bridge_dedup.py): `test_a_card_tagged_for_another_backend_does_not_dedup_a_github_dispatch` (gl#/gt# reject, gh# still resolves), `test_the_expected_tag_is_derived_from_the_title_builder_not_hardcoded` (round-trips `dispatch.build_card_title` through the mapper and iterates TAG_FOR_BACKEND, so a future backend switch fails loudly instead of silently duplicating cards), `test_a_free_text_suffix_on_a_card_title_still_dedups`.
+
+<!-- fr:journal kind=finding scope=plan id=r-f5 created=2026-08-27T08:30:46 phase=2 state=fixed -->
+### r-f5 · finding [fixed] · WorkItem.__hash__ was id-only while __eq__ was field-wise — identity is now the id on both sides (phase 2)
+
+Milestone (phases 1-4) code review, F5. `WorkItem.__hash__` returned `hash(self.id)` with a docstring claiming that keeps WorkItem usable as a set/dict key — but `@dataclass(frozen=True)` generated a field-wise `__eq__` comparing every field, including `payload` (which carries a `Plan` and a `PhaseDoc` on the phase path).
+
+Consequence, reproduced first: two items for the same graph position with different payloads hash equal and compare unequal, so `len({a, b}) == 2` and every dict lookup runs a deep `Plan.__eq__` before answering "no". The docstring's claim was false in exactly the case it was written for.
+
+Fix (the reviewer's preferred option): `@dataclass(frozen=True, eq=False)` plus an explicit `__eq__` comparing `self.id == other.id` and returning `NotImplemented` for a non-WorkItem. Identity IS the id — that is the whole premise of Phase 2's `item_id` — so equality and hashing now say the same thing. Module docstring updated: "Two items with the same `id` ARE the same item; `payload` is incidental cargo."
+
+Tests (RED first, tests/unit/test_work_item.py): `test_two_items_with_the_same_id_are_the_same_item_whatever_the_payload` (eq, hash, `len({a,b}) == 1`, dict lookup by the other instance), `test_items_with_different_ids_are_not_equal`, `test_a_work_item_is_not_equal_to_a_non_work_item` (a lookalike object carrying the same `.id`, and the bare id string, must both compare unequal). The pre-existing `test_work_item_equal_fields_are_equal` still passes unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=r-f6 created=2026-08-27T08:31:10 phase=2 state=fixed -->
+### r-f6 · finding [fixed] · _id_level misclassified a repo named 'phase'; run_item_id was unvalidated — id grammar is now checked by SHAPE, at construction (phase 2)
+
+Milestone (phases 1-4) code review, F6. Two defects in the same identity grammar.
+
+(a) `_id_level` tested `segments[-2] == "phase"` BEFORE any length check, so `_id_level("owner/phase/my-spec")` — a spec-level id in a repo literally named `phase` — returned `"phase"`. Reproduced: `parent_id` then walked two segments up to `"owner"`, and `WorkItem(id=..., unit="spec")` was rejected outright by the `__post_init__` agreement check.
+
+(b) `run_item_id(repo, run_id)` did no validation at all, so a `run_id` containing `/` composed a 5-segment string `_id_level` later rejects as malformed — far from the caller who could say what went wrong. Phase 7's `fr run start` mints those ids and nothing constrained them.
+
+Fix — classification by SHAPE (length first, marker second), and validation at construction:
+
+- `_id_level`: `len == 6 and segments[4] == "phase"` -> phase; `len == 4` -> `run` if `segments[2] == "run"` else `plan`; `len == 3` -> spec; else raise. `repo` is always `owner/name`, so each level has an exact length.
+- `_check_repo(repo)` — exactly two non-empty segments. Every segment count `_id_level` classifies by assumes it.
+- `_check_segment(name, value)` — non-empty, no `/`. Applied to `spec_slug`, `plan_slug` (same hazard as `run_id`: an embedded `/` silently changes which level the id parses as) and `run_id`.
+
+On the finding's "nothing reserves `phase`" remark: after the length fix, no reservation is needed and none was added. The `run` reservation exists because the run form and the plan form are BOTH `<owner>/<repo>` plus two segments — a genuine ambiguity. `phase` has no such twin: `owner/phase/<spec>` is 3 segments (spec), `owner/repo/<spec>/phase` is 4 (plan), and the phase form is 6. A reservation would forbid a legal repo/slug name for no collision. Recorded here so it is not re-litigated as an oversight.
+
+Tests (RED first, tests/unit/test_work_item.py): `test_a_repo_literally_named_phase_is_not_a_phase_level_id` (level, `parent_id is None`, and the `unit="spec"` item now constructible), `test_the_phase_marker_still_classifies_a_real_phase_id_in_such_a_repo`, `test_id_level_rejects_ids_that_are_too_long_to_be_any_level`, `test_run_item_id_rejects_a_run_id_containing_a_slash`, `test_run_item_id_rejects_an_empty_run_id`, `test_item_id_rejects_slugs_that_would_forge_extra_segments`, `test_identity_functions_reject_a_repo_that_is_not_owner_slash_name`.
+
+Handoff for Phase 7/8: `run_item_id` now RAISES on a `run_id` containing `/` or empty. `fr run start`'s run-id shape must be a single path segment (the spec's example `2026-08-14-ticket-polling` already is).
+
+<!-- fr:journal kind=finding scope=plan id=r-f7 created=2026-08-27T08:31:33 phase=3 state=fixed -->
+### r-f7 · finding [fixed] · Two tick failure strings still used the old 'phase N:' prefix — every accumulated failure now names the item (and therefore the plan) (phase 3)
+
+Milestone (phases 1-4) code review, F7. Every accumulator in the dispatch loop emits `f"{item.id}: …"` — deliberately, because the id also names the plan, which matters on a bridge running many plans. Two did not: `_eligible_items`'s own `except` (`f"phase {n}: {e}"`) and tick's tracking-issue writeback (`f"phase {phase_n}: writeback failed: {e}"`). So of the failure classes an operator reads, only some identified the plan, and the two were formatted differently.
+
+The Phase 3 journal (p3-tests-rewritten-not-ported) justified keeping `phase <n>` on the grounds that there is no item id yet at that point. True — but a REF can still be composed from the same segments.
+
+Fix: new `_phase_item_ref(plan, phase_number, tracking=None)` in fr_dispatch, used by both sites. It composes `<repo>/<spec-slug>/<plan-slug>/phase/<n>` segment-wise and deliberately does NOT call `item_id`: this runs on the failure path and `item_id` raising is one of the things that lands there, so id composition must never be the reason a failure string cannot be produced. `repo` prefers the issue URL's repo (cross-repo plans dispatch phases in different repos) and falls back to `target_repo` when the URL is absent or malformed — a malformed URL being, typically, the failure itself.
+
+Tests: the existing `test_a_phase_whose_item_cannot_be_built_fails_only_itself` assertion was updated from `startswith("phase 1: ")` to the item ref (plus `not startswith("phase ")`) — the format change IS the fix, not a weakened assertion. New `test_a_writeback_failure_is_named_by_item_ref_like_every_other_failure` monkeypatches `apply` to report a created issue and `plan_ops.set_tracking_issue` to raise; it covers a path that had NO test before (and that `skip_issue_create=True` makes unreachable through a normal tick — the guard stays because `apply` is not the only possible source of `created_issues`).
+
+<!-- fr:journal kind=finding scope=plan id=r-f8-version-bump created=2026-08-27T08:33:17 phase=4 state=refuted -->
+### r-f8-version-bump · finding [refuted] · REFUTED: milestone review flagged the missing 3.19.0 version bump (phase 4)
+
+The reviewer correctly cites AGENTS.md (any PR changing packages/*/src/** MUST bump before merge) and correctly observes pyproject.toml still reads 3.19.0 after four phases rewrote the Runner protocol. Refuted as a DEFECT, not as a rule: the bump is deliberately Phase 11's (task 3 step 2, bump-version.py major), because bumping mid-run would trip the plan's own fr_version gate for every later phase - which is why _meta.yaml carries the widened >=3.19.0,<5.0.0. The rule binds at merge and this branch cannot merge without Phase 11. Note CI version-sync only checks lockstep across manifests, so nothing would catch a genuinely missing bump; the guard is the plan plus fr-goal step 8 verification.

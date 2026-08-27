@@ -8,7 +8,7 @@ eligible phase cleanly when unset — same contract the VK runner has for
 its project id.
 
 Dedup is deliberately server-side: cncd's ingest is idempotent by
-content hash (spec §3.3), so `existing_dispatches()` is honestly empty
+content hash (spec §3.3), so `existing_dispatches(items)` is honestly empty
 and a re-POST after a lost GH synced-stamp is a no-op, not a duplicate.
 
 **v2 (2026-08-14 workflow-shapes spec §4.D).** `preflight` takes the
@@ -115,9 +115,17 @@ def test_no_dedup_key_method():
 
 
 def test_existing_dispatches_empty_server_side_idempotence():
+    """Honestly empty — even when handed items it could have answered about.
+
+    cncd's ingest is idempotent by content hash, so a client-side snapshot
+    would add nothing. The items are accepted (protocol v2 passes them so no
+    adapter has to cache them from `preflight`) and deliberately ignored.
+    """
     from fr_cncd import CncdRunner
 
-    assert CncdRunner(base_url="http://x").existing_dispatches() == set()
+    runner = CncdRunner(base_url="http://x")
+    assert runner.existing_dispatches([]) == set()
+    assert runner.existing_dispatches([_item()]) == set()
 
 
 def test_can_dispatch_any_repo():

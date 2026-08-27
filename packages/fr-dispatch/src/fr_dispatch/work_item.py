@@ -28,10 +28,19 @@ emits only a document may never gain one). `WorkItem.parent` seeds from
 `parent_id`, mirroring `PlanMeta.parent_plan`.
 
 `repo` is always `owner/name` (2 segments), which is what pins the segment
-counts above — slugs are assumed not to contain `/`. The run form and the
-plan form are both "`<owner>/<repo>` plus two segments"; the literal `run/`
-marker is what disambiguates them, and `item_id` rejects a spec slug of
-`"run"` so a spec-level id can never collide with a run-level one.
+counts above; slugs may not contain `/` and both are **checked at
+construction** rather than assumed, since an embedded `/` silently changes
+which level the composed id parses as. Classification is by shape — length
+first, marker second — so a repo literally named `phase` or `run` does not
+capture a level it isn't. The run form and the plan form are both
+"`<owner>/<repo>` plus two segments"; the literal `run/` marker
+disambiguates them, and `item_id` rejects a spec slug of `"run"` so a
+spec-level id can never collide with a run-level one.
+
+**Two items with the same `id` ARE the same item**: `__eq__` and `__hash__`
+both key on `id` alone. `payload` is incidental cargo (it carries a `Plan`
+and a `PhaseDoc` on the phase path), so letting it participate in equality
+would make a set hold two copies of one graph position.
 """
 
 from __future__ import annotations
@@ -51,6 +60,29 @@ _Level = Literal["run", "spec", "plan", "phase"]
 _RESERVED_SPEC_SLUG = "run"
 
 
+def _check_repo(repo: str) -> None:
+    """`repo` must be exactly `owner/name`.
+
+    Every segment count `_id_level` classifies by assumes it. A repo that is
+    not two segments therefore composes an id of the WRONG LEVEL — silently,
+    since composition is just string joining. Fail where the caller is.
+    """
+    parts = repo.split("/")
+    if len(parts) != 2 or not all(parts):
+        raise ValueError(f'repo must be "owner/name", got {repo!r}')
+
+
+def _check_segment(name: str, value: str) -> None:
+    """One id segment: non-empty and free of `/`.
+
+    A `/` inside a slug forges an extra segment and changes the id's level
+    (`_id_level` reads segment counts), so it is rejected at construction
+    rather than surfacing later as a mysteriously misclassified id.
+    """
+    if not value or "/" in value:
+        raise ValueError(f"{name} must be a single non-empty path segment, got {value!r}")
+
+
 def item_id(
     repo: str,
     spec_slug: str,
@@ -61,8 +93,14 @@ def item_id(
 
     Pure string composition — no I/O, no tracker calls. A phase cannot exist
     outside a plan, so `phase` without `plan_slug` raises. `spec_slug="run"`
-    raises — that name is reserved for `run_item_id`.
+    raises — that name is reserved for `run_item_id`. `repo` and every slug
+    are checked for shape, because composition alone cannot notice that an
+    embedded `/` has changed which grammar level the result parses as.
     """
+    _check_repo(repo)
+    _check_segment("spec_slug", spec_slug)
+    if plan_slug is not None:
+        _check_segment("plan_slug", plan_slug)
     if spec_slug == _RESERVED_SPEC_SLUG:
         raise ValueError(
             f'spec_slug cannot be "{_RESERVED_SPEC_SLUG}" — reserved for run-item '
@@ -85,19 +123,31 @@ def run_item_id(repo: str, run_id: str) -> str:
     A run item is dispatched before its spec and plan exist (§4.E — both are
     its outputs), so its only stable name at creation is the run id assigned
     by `fr run start` (§4.B). Pure string composition, like `item_id`.
+
+    `run_id` is constrained to a single non-empty segment: `fr run start`
+    (Phase 7) is what mints it, and a `/` in it would compose a 5-segment
+    string that `_id_level` rejects as malformed — long after the caller
+    that could have said what went wrong.
     """
+    _check_repo(repo)
+    _check_segment("run_id", run_id)
     return "/".join((repo, "run", run_id))
 
 
 def _id_level(some_item_id: str) -> _Level:
-    """Which of the four id shapes `some_item_id` is, or raise."""
+    """Which of the four id shapes `some_item_id` is, or raise.
+
+    Classified by SHAPE — segment count first, marker second. `repo` is
+    always `owner/name`, so each level has an exact length: 3 (spec), 4 (run
+    or plan, disambiguated by the literal `run` marker), 6 (phase). Testing
+    a marker before the length is what let `owner/phase/my-spec` — a spec in
+    a repo named `phase` — classify as a phase-level id.
+    """
     segments = some_item_id.split("/")
-    if len(segments) >= 2 and segments[-2] == "phase":
+    if len(segments) == 6 and segments[4] == "phase":
         return "phase"
-    if len(segments) == 4 and segments[2] == "run":
-        return "run"
     if len(segments) == 4:
-        return "plan"
+        return "run" if segments[2] == "run" else "plan"
     if len(segments) == 3:
         return "spec"
     raise ValueError(f"not a well-formed item id: {some_item_id!r}")
@@ -135,7 +185,7 @@ class ArtifactRef:
             object.__setattr__(self, "path", self.path[2:])
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class WorkItem:
     """One unit of dispatch — a run, a phase, or a per-repo spec item.
 
@@ -160,10 +210,18 @@ class WorkItem:
                 f"unit {self.unit!r} does not match id {self.id!r} (id looks like {level!r})"
             )
 
+    def __eq__(self, other: object) -> bool:
+        # Identity IS the id (`item_id` — see module docstring), so equality
+        # is too. The generated field-wise `__eq__` disagreed with
+        # `__hash__`: two items for the same graph position but different
+        # `payload` hashed equal and compared unequal, so a set held both
+        # and every dict lookup ran a deep `Plan.__eq__` to answer "no".
+        if not isinstance(other, WorkItem):
+            return NotImplemented
+        return self.id == other.id
+
     def __hash__(self) -> int:
-        # `id` is the item's stable identity by construction (that is the
-        # whole point of `item_id` — see module docstring); `payload` is an
-        # opaque `Mapping` that may not be hashable (e.g. a plain dict), so
-        # hashing on `id` alone keeps WorkItem usable as a set/dict key
-        # without demanding a hashable payload.
+        # Matches `__eq__` above. `payload` is an opaque `Mapping` that may
+        # not be hashable (e.g. a plain dict) — hashing the id alone is what
+        # keeps WorkItem usable as a set/dict key regardless.
         return hash(self.id)
