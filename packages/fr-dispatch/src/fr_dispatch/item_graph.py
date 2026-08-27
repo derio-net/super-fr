@@ -54,6 +54,18 @@ NO_SPEC_SLUG = "_no-spec"
 # item id could be composed for, so they are skipped rather than guessed at.
 _REPO_CELL_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 
+# The Repo-cell shapes `fr.spec.PlanRef` documents as DELIBERATE markers for
+# a non-repo row (§4.E: manual-action / placeholder). A cell that fails
+# `_REPO_CELL_RE` for any OTHER reason — a typo'd owner/name, a stray
+# character, a bare legacy name with no owner — is not one of these and is
+# reported instead of silently dropped (see `_spec_items`): "doesn't parse
+# as a repo" must never be indistinguishable from "wasn't meant to be one".
+_INTENTIONAL_NON_REPO_CELLS = frozenset({"—", "-", ""})
+
+
+def _is_intentional_non_repo_cell(cell: str) -> bool:
+    return cell in _INTENTIONAL_NON_REPO_CELLS or (cell.startswith("(") and cell.endswith(")"))
+
 
 def spec_slug(plan: Plan) -> str:
     """Identity segment for the plan's spec — its filename stem.
@@ -233,7 +245,21 @@ def _spec_items(
     seen: set[str] = set()
     for row in spec.plans:
         target = row.repo
-        if not _REPO_CELL_RE.match(target) or target in seen:
+        if not _REPO_CELL_RE.match(target):
+            if failures is not None and not _is_intentional_non_repo_cell(target):
+                # A cell that doesn't look like `owner/name` and doesn't
+                # look like a deliberate marker either is most likely a
+                # typo of a real repo — report it so the operator can fix
+                # the table row, rather than silently dropping that repo
+                # from the fan-out (indistinguishable from an omitted one).
+                failures.append(
+                    f"{home}: row {row.name!r} has Repo cell {target!r} — not an owner/name repo"
+                )
+            continue
+        if target in seen:
+            # A repo named on more than one plan row is a normal spec shape
+            # (one repo, several plans) — dedup silently. Not an error;
+            # do not start reporting this as a failure.
             continue
         seen.add(target)
         try:

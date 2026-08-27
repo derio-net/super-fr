@@ -1074,25 +1074,44 @@ rows:
       unit:
       - super-fr:tests/unit/test_item_graph.py
       - super-fr:tests/unit/test_no_pr_shape.py
+      int:
+      - super-fr:tests/integration/test_spec_fanout.py
     status: not-implemented
     notes: Spec 4.E. Replaces the fixed one-Issue-per-phase assumption. Phase 8 landed
       the mechanism — fr_dispatch.item_graph.build_items is the single builder and
       honours all three units (run/phase/spec), tick takes the manifest and dispatches
-      a unit=run shape with no plan at all — pinned unit-only. Stays not-implemented
-      because no shipped caller resolves a shape yet - fr apply --to and the bridge
-      both pass the default FR_GOAL_PHASE_DISPATCH constant, so an operator cannot
-      yet SELECT a granularity (Phase 11 wires resolution), and a unit=spec graph is
-      built but never dispatched through tick (tick's source is a Plan or None).
+      a unit=run shape with no plan at all — pinned unit-only. Phase 9 closed the
+      remaining gap named here — tick's source is now Plan | SpecMeta | None, and
+      tests/integration/test_spec_fanout.py dispatches a real unit=spec graph through
+      tick with a fake runner. Stays not-implemented because no shipped caller
+      resolves a shape yet - fr apply --to and the bridge both pass the default
+      FR_GOAL_PHASE_DISPATCH constant, so an operator still cannot SELECT a
+      granularity (Phase 11 wires resolution).
   - id: multi-repo-spec-fanout
     capability: Dispatch granularity
     acceptance: Dispatching a spec fans out one work item per target repo named in its
       Implementation Plans table, each carrying a parent reference to the spec.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_item_graph.py
+      int:
+      - super-fr:tests/integration/test_spec_fanout.py
     status: not-implemented
-    notes: Spec 4.E/4.F. Addressing already exists via PlanRef/target_repo; fan-out
-      dispatch is new.
+    notes: Spec 4.E/4.F. Addressing already exists via PlanRef/target_repo. Phase 9
+      landed the fan-out end to end - build_items._spec_items (Phase 8) decomposes
+      a SpecMeta into one item per distinct target repo, skipping manual/placeholder
+      rows (Repo cell not owner/name) rather than guessing, and tick now accepts a
+      SpecMeta source (widened from Plan | None) and dispatches it with zero tracker
+      calls, exactly like a unit=run shape with no plan. tests/integration/test_spec_fanout.py
+      drives this through tick with a fake runner — a 3-row fixture (local repo not
+      alphabetically first, a distinct cross-repo name, one manual-action row) yields
+      exactly 2 dispatched items, each parented to the spec-level id, with the cross-repo
+      item's spec input naming the spec's OWN (home) repo rather than the item's own
+      repo. Stays not-implemented because it is not yet operator-observable - no shipped
+      caller resolves a real unit=spec manifest and calls tick with it (Phase 11 wires
+      shape resolution); only fake-runner tests exercise this path today.
   - id: reachability-derived-from-inputs
     capability: Dispatch granularity
     acceptance: A run-unit goal dispatches with no spec or plan on main (they are its

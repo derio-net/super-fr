@@ -34,6 +34,7 @@ from fr.observe import observe
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_ops import PlanEditError
 from fr.render import render
+from fr.spec import SpecMeta
 from fr.states import GhState, RenderedIssue, RenderedState
 from fr.workflow.model import WorkflowManifest
 from fr.workflow.shapes import FR_GOAL_PHASE_DISPATCH
@@ -155,7 +156,7 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
 
 
 def _eligible_items(
-    plan: Plan | None,
+    plan: Plan | SpecMeta | None,
     observed: GhState | None,
     rendered: RenderedState | None,
     failures: list[str],
@@ -247,7 +248,7 @@ def _capability_blocker(
 
 
 def tick(
-    plan: Plan | None,
+    plan: Plan | SpecMeta | None,
     gh: GhClient,
     runner: Runner,
     *,
@@ -267,17 +268,20 @@ def tick(
     `workflow` is the shape whose declared `unit` decides the granularity
     (§4.E); it defaults to the phase-unit shape the bridge has always
     dispatched, so an existing caller sees no change. `plan` is the source
-    that shape decomposes — **`None` is legal**: a `unit: run` shape may
-    have no plan at all (the spec's marketing-research example emits only
-    a document), in which case `repo` and `run_id` name the run instead.
-    With no plan there is nothing to observe, render, diff or apply: those
-    stages project a plan onto a tracker, and a run that has neither is
-    dispatched without a single tracker call.
+    that shape decomposes — a `Plan` for `unit: phase`, a `SpecMeta` for
+    `unit: spec` (§4.E fan-out: one item per repo its plan table names),
+    and **`None` is legal** for `unit: run`: a run may have no plan at all
+    (the spec's marketing-research example emits only a document), in
+    which case `repo` and `run_id` name the run instead. Only a `Plan`
+    source is ever observed/rendered/diffed/applied — those stages project
+    a *plan* onto a GitHub tracker specifically, and neither `None` nor a
+    `SpecMeta` source has a plan's phases to project. A run or spec-unit
+    dispatch therefore makes no tracker call at all.
 
-    When a plan IS given: observe → render → diff → apply (GH-side only,
-    `skip_issue_create=True`) runs first, and eligibility is read off the
-    **rendered** state via `fr.item_state` (projected `queued`, stamp
-    absent), not off raw label strings and not off the pre-apply
+    When `plan` IS a `Plan`: observe → render → diff → apply (GH-side
+    only, `skip_issue_create=True`) runs first, and eligibility is read
+    off the **rendered** state via `fr.item_state` (projected `queued`,
+    stamp absent), not off raw label strings and not off the pre-apply
     observation.
 
     `required_capabilities` (§4.F) is the whole tick's declared need —
@@ -303,7 +307,7 @@ def tick(
     failures: list[str] = []
     observed: GhState | None = None
     rendered: RenderedState | None = None
-    if plan is not None:
+    if isinstance(plan, Plan):
         observed = observe(plan, gh)
         rendered = render(plan, observed)
         d = diff(rendered, observed, plan=plan)

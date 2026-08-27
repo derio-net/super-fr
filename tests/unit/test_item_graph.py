@@ -273,7 +273,10 @@ def test_the_home_repos_own_spec_item_is_a_root_not_its_own_parent(tmp_path: Pat
 def test_manual_and_placeholder_rows_are_skipped_not_turned_into_items(tmp_path: Path) -> None:
     """A Repo cell of `—`, an operator-action string, or a bare repo name
     with no owner names no dispatchable repo — skipping is the only honest
-    reading, and an item built from one would carry a malformed id."""
+    reading, and an item built from one would carry a malformed id. Only the
+    first two are DELIBERATE markers (§4.E) and stay silent; the bare-name
+    legacy form is `—`-shaped in what it produces (no item) but not in how
+    it's treated — see the next test."""
     from fr.spec import parse_spec
     from fr_dispatch.item_graph import build_items
 
@@ -288,6 +291,57 @@ def test_manual_and_placeholder_rows_are_skipped_not_turned_into_items(tmp_path:
     items = build_items(SPEC_SHAPE, parse_spec(path), repo="derio-net/home")
 
     assert [i.id for i in items] == ["derio-net/alpha/2026-08-14-rollout-design"]
+
+
+def test_a_malformed_repo_cell_is_reported_not_silently_dropped(tmp_path: Path) -> None:
+    """The hazard: a deliberate marker cell (em-dash, parenthetical prose)
+    and a TYPO of a real repo name both fail `_REPO_CELL_RE`, but only the
+    former is an intentional §4.E marker. A typo must cost the operator a
+    word, not just an item — silently matching the deliberate-skip behavior
+    would make a malformed repo indistinguishable from an omitted one."""
+    from fr.spec import parse_spec
+    from fr_dispatch.item_graph import build_items
+
+    path = _spec_file(
+        tmp_path,
+        "| P1 | `derio-net/alpha` | `plans/p1` | — |\n"
+        "| Manual sweep | — | — | — |\n"
+        "| Org rollout | (operator action across `derio-net/*`) | — | P1 |\n"
+        "| Typo'd repo | derionet-superfr | `plans/p4` | — |\n",
+    )
+
+    failures: list[str] = []
+    items = build_items(SPEC_SHAPE, parse_spec(path), repo="derio-net/home", failures=failures)
+
+    # Only the valid repo produced an item — the em-dash and parenthetical
+    # rows are still silently skipped.
+    assert [i.id for i in items] == ["derio-net/alpha/2026-08-14-rollout-design"]
+    # But the malformed cell is NOT silent: exactly one failure, naming the
+    # row and the offending cell, not the two deliberate marker rows.
+    assert len(failures) == 1
+    assert "Typo'd repo" in failures[0]
+    assert "derionet-superfr" in failures[0]
+    assert "owner/name" in failures[0]
+
+
+def test_a_repeated_repo_across_rows_dedupes_silently_not_an_error(tmp_path: Path) -> None:
+    """A duplicate repo is a normal spec shape (the same repo can own more
+    than one plan row) — deduping is intentional and must NOT be reported
+    as a failure, unlike a malformed cell."""
+    from fr.spec import parse_spec
+    from fr_dispatch.item_graph import build_items
+
+    path = _spec_file(
+        tmp_path,
+        "| P1 | `derio-net/alpha` | `plans/p1` | — |\n"
+        "| P2 | `derio-net/alpha` | `plans/p2` | P1 |\n",
+    )
+
+    failures: list[str] = []
+    items = build_items(SPEC_SHAPE, parse_spec(path), repo="derio-net/home", failures=failures)
+
+    assert [i.id for i in items] == ["derio-net/alpha/2026-08-14-rollout-design"]
+    assert failures == []
 
 
 def test_spec_items_declare_the_spec_as_a_repo_relative_input(tmp_path: Path) -> None:
