@@ -180,8 +180,20 @@ steps:
 
 ```
 docs/superpowers/workflows/<name>.yaml     # repo override / repo-authored
-plugins/super-fr/workflows/<name>.yaml     # shipped
+plugins/super-fr/workflows/<name>.yaml     # shipped (in THIS repo)
 ```
+
+**Where "shipped" resolves at runtime** (clarified in Phase 6 — the paths above
+read as though both were repo-relative, which is true only inside this
+monorepo). In a consumer repo the shipped manifests live wherever the plugin was
+installed, so the lookup is `~/.claude/plugins/marketplaces/derio-net--super-fr/
+plugins/super-fr/workflows/` — the same marketplace-clone convention
+`plan_validator_wrapper.py` and `isolation/local.py` already use — overridable
+via `$FR_SHIPPED_WORKFLOWS_DIR` for tests and for harnesses that are not Claude
+Code. The repo-side path stays genuinely repo-relative. Because that default is
+a *path built from a marketplace name*, and this repo has already survived one
+marketplace rename, it must be covered by a test rather than assumed: a wrong
+default degrades to "unknown workflow shape" for every lookup.
 
 `fr-goal` with no argument resolves `fr-goal`; `fr-goal ux-research` resolves
 that name through the same order. A shipped shape can be overridden wholesale by

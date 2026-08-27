@@ -997,9 +997,20 @@ rows:
       one of the same name, without modifying the plugin.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 4.A. Resolution repo > shipped, mirroring fr models.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_resolve.py
+    status: ci
+    notes: >-
+      Spec 4.A. Resolution repo > shipped, mirroring fr models; override is wholesale
+      (a repo file with fewer steps yields exactly those steps, never merged). Kept at
+      `ci` after the milestone review flagged that the default shipped-root path
+      ($FR_SHIPPED_WORKFLOWS_DIR unset, ~/.claude/plugins/marketplaces/derio-net--super-fr/...)
+      was untested — every prior test injected shipped_root directly, proving the
+      precedence algorithm but not that a real consumer repo's lookup is findable.
+      Now covered: the env-unset fallback path, and a wiring test proving that
+      resolve_workflow(name, repo_root) with NO shipped_root kwarg actually reaches
+      default_shipped_workflows_dir(). Phase 6.
   - id: workflow-manifest-validated
     capability: Workflow shapes
     acceptance: An invalid shape is rejected by 'fr workflow check' (duplicate step
@@ -1007,9 +1018,15 @@ rows:
       than failing mid-run.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 4.A. Guard in code, not prose; CI tripwire over shipped manifests.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_check.py
+      - super-fr:tests/unit/test_workflow_model.py
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    status: ci
+    notes: Spec 4.A. Guard in code (fr.workflow.check.check_workflow), not prose; every
+      failure named in the acceptance text is pinned, plus a CI tripwire over every
+      shipped manifest. Phase 6.
   - id: run-cursor-durable
     capability: Run state
     acceptance: A run's step cursor and emitted artifacts are durable and reviewable
