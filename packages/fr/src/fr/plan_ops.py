@@ -631,7 +631,8 @@ def rework_create(parent_plan_dir: Path) -> Plan:
         "plan": rework_slug,
         "spec": parent_spec,
         "target_repo": parent_plan.meta.target_repo,
-        "fr_version": parent_plan.meta.fr_version or ">=3.0.0,<4.0.0",
+        # Widened past the 4.0.0 major bump, same reasoning as plan_cmd.py's default.
+        "fr_version": parent_plan.meta.fr_version or ">=3.0.0,<5.0.0",
         "created": _dt.date.today().isoformat(),
         "parent_plan": parent_rel,
     }

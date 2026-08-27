@@ -236,6 +236,8 @@ Everyday:
 | `fr plan` | Plan editing: `create`, `edit` (tick steps, complete phases), `self-review`, `rework` |
 | `fr archive` | Move finished plans (and specs) to `implemented/` |
 | `fr skills` | Condensed overview of the skills + CLI surface |
+| `fr workflow` | `check <shape>` — validate a resolved workflow manifest (schema, duplicate ids, dangling `needs`, cycles, capabilities) |
+| `fr run` | Durable workflow-run cursor: `start`, `status`, `advance`, `resolve`, `check` — see [Workflow shapes](#workflow-shapes) |
 
 Maintenance:
 
@@ -268,6 +270,28 @@ docs/superpowers/plans/<YYYY-MM-DD-slug>/
 ├── 01.yaml       # phase 1: tasks + steps (P1.T1.S1 IDs), depends_on, tag
 └── 02.yaml       # phase 2 …
 ```
+
+### Workflow shapes
+
+`/fr-goal [shape]` — and, at the CLI layer, `fr run` — drive a **workflow
+shape**: a YAML manifest (`plugins/super-fr/workflows/<name>.yaml`, or a
+repo override at `docs/superpowers/workflows/<name>.yaml`) declaring an
+ordered list of steps, the decomposition **unit** they dispatch at
+(`run`/`phase`/`spec`), and the runner **capabilities** they require. No
+shape argument resolves `fr-goal` itself — today's TDD-feature pipeline,
+unchanged.
+
+```
+fr run start <shape> --branch <b>   # resolve the shape, start the cursor
+fr run advance <run-id>             # kind: cli executes; kind: agent emits a brief
+fr run resolve <run-id> --step <id> --state done|failed [--emitted name=path]
+fr run status <run-id>              # cursor + every step's state
+fr workflow check <shape>           # schema/graph validation (CI tripwire on every shipped shape)
+```
+
+Run state is git-tracked (`docs/superpowers/runs/<run-id>.yaml`, a sibling of
+`journals/`) and archives alongside the plan it produced. See spec
+`2026-08-14-workflow-shapes-and-workitem-dispatch-design.md` §4.A/§4.B.
 
 ### Label lifecycle
 

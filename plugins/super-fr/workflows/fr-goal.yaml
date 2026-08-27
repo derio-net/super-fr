@@ -1,17 +1,66 @@
-# STUB — Phase 6 of docs/superpowers/plans/2026-08-14-workflow-shapes-and-workitem-dispatch
-# landed this only to give the CI tripwire (tests/unit/test_tripwire_shipped_workflows.py)
-# a real, non-vacuous manifest to check. Phase 11 replaces this with the full spec §4.A
-# example (isolate → brainstorm → spec-review → plan → plan-review → implement → review →
-# deliver) and wires `fr-goal` itself onto it. Until then this manifest is not consumed by
-# any runner — `fr run` does not exist yet (that is Phase 7's `docs/superpowers/runs/`
-# cursor) — it exists purely so `fr workflow check fr-goal` has something real to validate.
+# The shipped `fr-goal` shape — spec §4.A, fleshed out in Phase 11 of
+# docs/superpowers/plans/2026-08-14-workflow-shapes-and-workitem-dispatch.
+# `fr-goal` (or `/fr-goal`/`/goal`) with no shape argument resolves this
+# manifest; `plugins/super-fr/skills/fr-goal/SKILL.md` narrates it step by
+# step and drives the cursor via `fr run start/advance/resolve`. A repo may
+# override this wholesale with `docs/superpowers/workflows/fr-goal.yaml`.
+#
+# One divergence from spec §4.A's illustration, reconciled against what
+# Phase 7 actually shipped: `deliver` is `kind: agent`, not `kind: cli`
+# running a nonexistent `fr run deliver` command — no such subcommand
+# exists (`fr run` is start/status/advance/resolve/check only). Composing
+# the PR body from the journal and deciding when to mark it ready is
+# judgment work the orchestrating agent does itself, the same shape as
+# `spec-review` below (a bare `agent` step, no subagent dispatch).
 workflow: fr-goal
 schema: 1
-description: >-
-  STUB (Phase 6) — fleshed out into the full TDD feature-delivery pipeline in Phase 11.
+description: TDD feature delivery, goal to reviewed PR.
+
 unit: run
-requires: [git, scm]
+requires: [git, tests, scm]
+
 steps:
   - id: isolate
     kind: cli
     run: fr isolation up --branch {{ run.branch }}
+
+  - id: brainstorm
+    kind: agent
+    skill: super-fr:fr-brainstorming
+    gate: operator
+    emits: [spec, journal:spec]
+
+  - id: spec-review
+    kind: agent
+    needs: [spec]
+    emits: [journal:spec]
+
+  - id: plan
+    kind: agent
+    skill: super-fr:fr-plan
+    needs: [spec]
+    emits: [plan, journal:plan]
+
+  - id: plan-review
+    kind: cli
+    run: fr plan self-review {{ artifacts.plan }}
+
+  - id: implement
+    kind: agent
+    agent: super-fr:fr-phase-executor
+    needs: [spec, plan]
+    for_each: phase
+    tier: from_phase
+    emits: [journal:plan]
+
+  - id: review
+    kind: agent
+    skill: superpowers:requesting-code-review
+    needs: [spec, plan]
+    emits: [journal:plan]
+
+  - id: deliver
+    kind: agent
+    skill: superpowers:verification-before-completion
+    needs: [spec, plan]
+    emits: [pr]

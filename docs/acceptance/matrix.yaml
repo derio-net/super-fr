@@ -987,10 +987,27 @@ rows:
       fr-goal with no argument runs today's TDD-feature pipeline unchanged.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 2026-08-14 4.A. Back-compat of the no-argument form is the load-bearing
-      half.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      - super-fr:tests/unit/test_skill_validation.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: >-
+      Spec 2026-08-14 4.A. Phase 11 landed the shipped caller: plugins/super-fr/workflows/fr-goal.yaml
+      is now the full spec-§4.A pipeline (not Phase 6's stub), and
+      plugins/super-fr/skills/fr-goal/SKILL.md is rewritten to accept an optional shape
+      argument, drive the resolved shape's cursor via `fr run start/advance/resolve`, and
+      default to `fr-goal` with no argument — the load-bearing back-compat half.
+      test_fr_goal_shape.py proves resolve_workflow finds the real shipped manifest, that
+      its step ids match the skill's numbered narration 1:1 (so the two cannot silently
+      drift), and that a repo-authored docs/superpowers/workflows/fr-goal.yaml overrides
+      it wholesale. Flipped to `ci` rather than the sibling dispatch-granularity rows:
+      this row is specifically about fr-goal/`fr run` selecting a shape, which is now
+      real and CI-covered; it is NOT about fr apply/the bridge deriving dispatch
+      granularity from a resolved shape, which stays hardcoded to
+      fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH (see the sibling rows' notes).
   - id: workflow-repo-authored
     capability: Workflow shapes
     acceptance: A consumer repo defines its own workflow shape, or overrides a shipped
@@ -1083,10 +1100,14 @@ rows:
       a unit=run shape with no plan at all — pinned unit-only. Phase 9 closed the
       remaining gap named here — tick's source is now Plan | SpecMeta | None, and
       tests/integration/test_spec_fanout.py dispatches a real unit=spec graph through
-      tick with a fake runner. Stays not-implemented because no shipped caller
-      resolves a shape yet - fr apply --to and the bridge both pass the default
-      FR_GOAL_PHASE_DISPATCH constant, so an operator still cannot SELECT a
-      granularity (Phase 11 wires resolution).
+      tick with a fake runner. Stays not-implemented — Phase 11 wired shape RESOLUTION
+      into fr-goal/`fr run` (see workflow-shape-selection, now ci), but that is a
+      separate execution path from this row's dispatcher — fr_dispatch.tick's own
+      default and fr apply --to still pass the hardcoded fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH
+      constant (packages/fr/src/fr/commands/apply_cmd.py, packages/fr-dispatch/src/fr_dispatch/__init__.py),
+      never a manifest resolved via resolve_workflow. An operator still cannot SELECT
+      a granularity through fr apply/the bridge; that wiring is unclaimed by any
+      phase of this plan.
   - id: multi-repo-spec-fanout
     capability: Dispatch granularity
     acceptance: Dispatching a spec fans out one work item per target repo named in its
@@ -1109,9 +1130,11 @@ rows:
       alphabetically first, a distinct cross-repo name, one manual-action row) yields
       exactly 2 dispatched items, each parented to the spec-level id, with the cross-repo
       item's spec input naming the spec's OWN (home) repo rather than the item's own
-      repo. Stays not-implemented because it is not yet operator-observable - no shipped
-      caller resolves a real unit=spec manifest and calls tick with it (Phase 11 wires
-      shape resolution); only fake-runner tests exercise this path today.
+      repo. Stays not-implemented — still not operator-observable — Phase 11 made
+      fr-goal/`fr run` resolve a real shape (workflow-shape-selection, now ci), but
+      no shipped caller passes a resolved unit=spec manifest into fr_dispatch.tick;
+      fr apply/the bridge still default to fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH
+      (unit=phase), so only fake-runner tests exercise the unit=spec fan-out path.
   - id: reachability-derived-from-inputs
     capability: Dispatch granularity
     acceptance: A run-unit goal dispatches with no spec or plan on main (they are its
@@ -1127,10 +1150,13 @@ rows:
       required_inputs is needs-minus-emits over the manifest, fr apply's gate now reads
       it off FR_GOAL_PHASE_DISPATCH instead of naming plan+spec itself, and both halves
       of the acceptance are pinned against real git repos (a unit=run shape allowed
-      on the same unmerged tree a unit=phase shape is refused on). Stays not-implemented
-      because it is not yet operator-observable - no shipped command dispatches a unit=run
-      goal (Phase 11), and the item-level check_reachable has no production caller,
-      so only fr apply's phase-unit half runs in anger today.
+      on the same unmerged tree a unit=phase shape is refused on). Stays not-implemented —
+      Phase 11 does ship a command that starts a unit=run goal (`fr run start fr-goal`),
+      but `fr run` is a wholly separate execution path from fr_dispatch — it never calls
+      build_items/check_reachable/tick, so it exercises none of this row's machinery.
+      The item-level check_reachable still has no production caller; only fr apply's
+      phase-unit half (against the hardcoded FR_GOAL_PHASE_DISPATCH shape, not a
+      resolved manifest) runs in anger today.
   - id: runner-capability-refusal
     capability: Runner and tracker negotiation
     acceptance: A workflow shape whose required capabilities a runner cannot provide
@@ -1145,9 +1171,12 @@ rows:
     notes: Spec 4.F. Phase 5 landed the mechanism — tick.required_capabilities is
       checked against Runner.capabilities before runner.preflight runs, reusing the
       preflight blocker's per-item failure path (one message, synced=0, dispatch never
-      called) — pinned unit-only. Stays not-implemented because no workflow shape
-      exists yet to supply the required set (Phase 6); flip once a shape's declared
-      capabilities drive this parameter end-to-end.
+      called) — pinned unit-only. Stays not-implemented — a real workflow shape now
+      exists (Phase 6/11, requiring [git, tests, scm]), but nothing shipped resolves
+      it and passes `requires` into tick.required_capabilities — fr_dispatch.tick's
+      default is still the hardcoded FR_GOAL_PHASE_DISPATCH shape, and `fr run`
+      (Phase 7/11's fr-goal-as-a-shape caller) never calls tick at all, so no shipped
+      caller drives this parameter end-to-end yet.
   - id: tracker-partial-mapping
     capability: Runner and tracker negotiation
     acceptance: A tracker instance declares which item states it can express, per project;

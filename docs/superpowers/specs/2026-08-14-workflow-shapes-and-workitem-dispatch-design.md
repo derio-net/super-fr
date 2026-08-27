@@ -159,10 +159,21 @@ steps:
     emits: [journal:plan]
 
   - id: deliver
-    kind: cli
-    run: fr run deliver {{ run.id }}
+    kind: agent                        # corrected in Phase 11 — see below
+    skill: superpowers:verification-before-completion
+    needs: [spec, plan]
     emits: [pr]
 ```
+
+**Two corrections to this illustration, made in Phase 11** once the shipped
+manifest had to actually run. First, `deliver` is `kind: agent`, not a `cli` step
+running `fr run deliver` — no such subcommand exists (`fr run` is
+`start`/`status`/`advance`/`resolve`/`check`), and composing a PR body from the
+journal is judgment work, not a deterministic command. Second, an `agent` step
+is completed by **`fr run resolve <run-id> --step <id> --state done|failed`**,
+added in Phase 7: `advance` deliberately never executes an agent step, so
+without `resolve` a run wedges permanently on `brainstorm`. Any reading of this
+example that implies otherwise is the example being stale, not the code.
 
 **Step kinds implement the hybrid execution model (operator decision).**
 

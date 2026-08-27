@@ -43,7 +43,14 @@ def create_cmd(
         None, "--spec", help="Spec path relative to repo root (optional)."
     ),
     fr_version: str = typer.Option(
-        ">=3.0.0,<4.0.0", "--fr-version", help="fr_version constraint for the plan."
+        # Widened past the 3.19.0 -> 4.0.0 major bump (Phase 11 of the
+        # 2026-08-14 workflow-shapes plan) — a <4.0.0 ceiling would make
+        # every plan created on 4.0.0+ fr fail its own version gate at
+        # parse time. See that plan's spec §5 "fr_version must span the
+        # bump".
+        ">=3.0.0,<5.0.0",
+        "--fr-version",
+        help="fr_version constraint for the plan.",
     ),
     phases_file: Path | None = typer.Option(
         None, "--phases-file", help="YAML file with a list of phase specs."
