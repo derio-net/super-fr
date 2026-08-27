@@ -1056,10 +1056,16 @@ rows:
       a run.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_capabilities.py
     status: not-implemented
-    notes: Spec 4.F. Uses the existing Runner.preflight seam; capability names are a
-      closed, validated set.
+    notes: Spec 4.F. Phase 5 landed the mechanism — tick.required_capabilities is
+      checked against Runner.capabilities before runner.preflight runs, reusing the
+      preflight blocker's per-item failure path (one message, synced=0, dispatch never
+      called) — pinned unit-only. Stays not-implemented because no workflow shape
+      exists yet to supply the required set (Phase 6); flip once a shape's declared
+      capabilities drive this parameter end-to-end.
   - id: tracker-partial-mapping
     capability: Runner and tracker negotiation
     acceptance: A tracker instance declares which item states it can express, per project;

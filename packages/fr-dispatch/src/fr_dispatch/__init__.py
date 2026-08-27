@@ -22,6 +22,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fr import plan_ops
 from fr._urls import is_cross_repo_spec, parse_issue_url
@@ -35,9 +36,13 @@ from fr.plan_ops import PlanEditError
 from fr.render import render
 from fr.states import GhState, RenderedIssue, RenderedState
 
+from fr_dispatch.capabilities import missing_capabilities
 from fr_dispatch.metrics import MetricsPusher, NullMetrics
 from fr_dispatch.protocols import Runner
 from fr_dispatch.work_item import ArtifactRef, WorkItem, item_id, parent_id
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 __all__ = ["ArtifactRef", "Runner", "TickResult", "WorkItem", "discover_plans", "tick"]
 
@@ -262,21 +267,59 @@ def _eligible_items(
     return items
 
 
+def _capability_blocker(
+    items: Sequence[WorkItem], runner: Runner, required_capabilities: frozenset[str]
+) -> str | None:
+    """§4.F: the tick-wide capability check, run BEFORE `runner.preflight`.
+
+    Ordered ahead of `runner.preflight` so a capability mismatch is
+    reported as a capability problem rather than a config one — the caller
+    (`tick`) skips the `preflight` call entirely when this returns
+    non-`None`, feeding the result into the SAME blocker-handling code
+    `preflight`'s own return value uses (one message, every eligible item
+    fails, `synced=0`, `dispatch` never called). This is deliberately the
+    one refusal mechanism, not a second one: Phase 10's tracker-state
+    refusals are expected to produce a blocker string through this same
+    path rather than add a third.
+
+    `required_capabilities` is empty by default (see `tick`'s docstring —
+    the Phase 6 seam), so every pre-Phase-6 caller sees no behavior change.
+    """
+    if not required_capabilities:
+        return None
+    missing = missing_capabilities(required_capabilities, runner.capabilities)
+    if not missing:
+        return None
+    word = "capability" if len(missing) == 1 else "capabilities"
+    return f"runner {runner.name!r} is missing {word}: {', '.join(missing)}"
+
+
 def tick(
     plan: Plan,
     gh: GhClient,
     runner: Runner,
     *,
+    required_capabilities: frozenset[str] = frozenset(),
     metrics: MetricsPusher | None = None,
 ) -> TickResult:
     """One cron iteration for a single plan, against one runner.
 
     Pipeline: observe → render → diff → apply (GH-side only,
     `skip_issue_create=True`) → build a `WorkItem` for every eligible
-    unit of work → `runner.dispatch(item)` → flip the dispatch stamp on
-    the tracker item. Eligibility is read off the **rendered** state via
-    `fr.item_state` (projected `queued`, stamp absent), not off raw label
-    strings and not off the pre-apply observation.
+    unit of work → capability check → `runner.preflight` → `runner.dispatch
+    (item)` → flip the dispatch stamp on the tracker item. Eligibility is
+    read off the **rendered** state via `fr.item_state` (projected
+    `queued`, stamp absent), not off raw label strings and not off the
+    pre-apply observation.
+
+    `required_capabilities` (§4.F) is the whole tick's declared need —
+    empty by default. Non-empty, it is checked against `runner.capabilities`
+    BEFORE `runner.preflight` is even called; a shortfall fails every
+    eligible item with one message and returns without touching `preflight`
+    or `dispatch`. This is a seam, not a manifest reader: nothing here
+    parses a workflow shape (Phase 6 does not exist yet) — a Phase-6 caller
+    resolves a shape's `requires:` and passes the result through this
+    keyword.
 
     All failure paths accumulate; a raising `runner.dispatch` leaves the
     dispatch stamp unwritten so the next tick retries. `skipped` counts
@@ -309,10 +352,12 @@ def tick(
     synced = 0
     deferred = 0
     if items:
-        try:
-            blocker = runner.preflight(items)
-        except Exception as e:  # noqa: BLE001
-            blocker = f"runner preflight raised: {e}"
+        blocker = _capability_blocker(items, runner, required_capabilities)
+        if blocker is None:
+            try:
+                blocker = runner.preflight(items)
+            except Exception as e:  # noqa: BLE001
+                blocker = f"runner preflight raised: {e}"
         if blocker:
             for item in items:
                 failures.append(f"{item.id}: {blocker}")
