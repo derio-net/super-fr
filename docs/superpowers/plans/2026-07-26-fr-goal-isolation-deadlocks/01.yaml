@@ -1,0 +1,79 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Refuse the poisoned phase-executor dispatch (#420 hook backstop)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - phase-executor-worktree-refused
+tasks:
+- number: 1
+  title: Behavioural tests for fr-phase-executor-guard.sh (RED)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write tests/unit/test_hooks_phase_executor_guard.py in test_hooks_guard.py's style (run_hook via subprocess with a JSON payload, decision() helper reading hookSpecificOutput.permissionDecision).
+  - id: P1.T1.S2
+    text: |-
+      Cover: qualified id + isolation=worktree DENIES; bare id + isolation=worktree DENIES; qualified id WITHOUT the flag allows (the correct shape); a different subagent_type with the flag allows; tool_name != Agent allows; missing/empty isolation allows.
+  - id: P1.T1.S3
+    text: |-
+      Assert the deny reason names the remedy (re-dispatch without the flag) and the why (fr's worktree IS the isolation) — a soft warning is explicitly rejected by the spec.
+  - id: P1.T1.S4
+    text: |-
+      Run the new tests and confirm they FAIL for the right reason (hook file absent).
+- number: 2
+  title: Implement the hook and register it (GREEN)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Write plugins/super-fr/hooks/fr-phase-executor-guard.sh per spec §A: set -eu, jq parsing, exit 0 for non-Agent / non-phase-executor / non-worktree, deny otherwise. chmod +x.
+  - id: P1.T2.S2
+    text: |-
+      Register it in plugins/super-fr/hooks/hooks.json under a PreToolUse matcher "Agent".
+  - id: P1.T2.S3
+    text: |-
+      Extend tests/unit/test_plugin_hooks.py::test_hooks_json_parses — its exact-set assertion on PreToolUse matchers must now include "Agent".
+  - id: P1.T2.S4
+    text: |-
+      Run uv run pytest tests/unit/test_hooks_phase_executor_guard.py tests/unit/test_plugin_hooks.py -q --no-cov and confirm green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-07-26T15:37:33+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-07-26T15:37:33+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-07-26T15:37:33+00:00'
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: '2026-07-26T15:37:34+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-07-26T15:37:34+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-07-26T15:37:34+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-07-26T15:37:34+00:00'
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: '2026-07-26T15:37:34+00:00'
+      note: null
+  completion:
+    at: '2026-07-26T15:37:35+00:00'
+    note: fr-phase-executor-guard.sh shipped + registered; 13 behavioural tests +
+      the exact-set matcher assertion green.
+    observed_prs: []
