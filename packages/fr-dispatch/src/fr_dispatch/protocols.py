@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
 
     from fr_dispatch.work_item import WorkItem
 
@@ -102,4 +102,33 @@ class Runner(Protocol):
         Raising marks the item failed for this tick; the dispatch stamp is
         NOT written, so the next tick retries.
         """
+        ...
+
+
+class Source(Protocol):
+    """Where `WorkItem`s come from — the seam the future poller consumes
+    (spec §4.H, guides part (b) of the brainstorm). **Nothing is extracted
+    in this phase**; this Protocol exists solely so that extraction, when
+    it happens, is mechanical rather than a redesign.
+
+    `discover_plans` (this module) is `Source`'s first intended
+    implementation, once (b) extracts it into a `PlansSource`. A Jira
+    query becomes another; a run-state watcher (watching branches, or
+    being handed runs explicitly) becomes a third — see spec §4.H for why
+    that third one is where the "in-flight runs not on main" cost noted in
+    §4.B eventually gets paid.
+
+    The one standing obligation this Protocol's existence creates: `tick`
+    must never acquire a new coupling to `discover_plans` specifically —
+    pinned by `tests/unit/test_tripwire_tick_source_neutral.py`, not left
+    as a promise. `tick` already takes a `Plan | SpecMeta | None` directly;
+    a `Source` is what will one day hand it that value, not something
+    `tick` reaches for itself.
+    """
+
+    name: str
+    """Registry name for this source (mirrors `Runner.name`)."""
+
+    def discover(self) -> Iterable[WorkItem]:
+        """Yield the work items this source currently knows about."""
         ...

@@ -1155,10 +1155,26 @@ rows:
       against the tracker mid-run.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 4.G. Protocol + mapping config only in this spec; no Jira adapter is
-      built. Per-project mapping is required because Jira workflows are per-project.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracker.py
+    status: ci
+    notes: Spec 4.G, Phase 10. Flipped not-implemented -> ci deliberately, not just
+      because a test file exists -- the PROTOCOL-LEVEL claim in `acceptance` above is
+      now genuinely exercised, not merely modeled. fr.tracker.model.state_supported
+      and GithubTracker.supports make "an instance declares which states it can
+      express" real (null or absent means unsupported, per-instance mapping resolved
+      repo-over-user like fr.models); fr_dispatch._tracker_blocker makes "refused up
+      front" real -- chained into the SAME preflight short-circuit Phase 5 built for
+      capability negotiation (§4.F), before runner.preflight ever runs, never
+      mid-tick. Two gaps this row does NOT cover, flagged rather than silently
+      claimed -- no Jira adapter is built (GithubTracker is the one concrete Tracker
+      and supports all five states by default; the partial-mapping case is exercised
+      via a fake tracker plus a GithubTracker instance override, not a second real
+      backend), and spec 4.G's "validate against the live server's actually-available
+      transitions" half is unimplemented -- fr.tracker.model.check_tracker_mapping_shape
+      validates config SHAPE only (an unresolvable instance, an unknown state key) and
+      its own docstring says so.
   - id: vk-dispatch-unchanged-after-cutover
     capability: Dispatch granularity
     acceptance: 'After the WorkItem cutover the live VK bridge dispatches an unchanged

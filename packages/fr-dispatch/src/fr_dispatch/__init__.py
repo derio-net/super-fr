@@ -29,7 +29,7 @@ from fr import plan_ops
 from fr.apply import apply
 from fr.diff import diff
 from fr.ghclient import GhClient
-from fr.item_state import DISPATCH_STAMP, state_from_labels
+from fr.item_state import DISPATCH_STAMP, ItemState, state_from_labels
 from fr.observe import observe
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_ops import PlanEditError
@@ -47,6 +47,8 @@ from fr_dispatch.work_item import ArtifactRef, WorkItem
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from fr.tracker.model import Tracker
 
 __all__ = [
     "ArtifactRef",
@@ -247,6 +249,38 @@ def _capability_blocker(
     return f"runner {runner.name!r} is missing {word}: {', '.join(missing)}"
 
 
+def _tracker_blocker(
+    tracker: Tracker | None,
+    tracker_instance: str | None,
+    required_tracker_states: frozenset[ItemState],
+) -> str | None:
+    """§4.G: the tracker-state refusal, chained AFTER `_capability_blocker`
+    and BEFORE `runner.preflight` — the same short-circuit `tick` already
+    runs for §4.F, not a second one. Phase 5's handoff named this shape
+    exactly: "a tracker-state refusal should be a third function with the
+    same `str | None` -> blocker-assignment shape, checked in the same
+    short-circuit chain."
+
+    `required_tracker_states` is empty by default, mirroring
+    `required_capabilities`: no caller that doesn't pass it (every
+    pre-Phase-10 caller, including the live bridge) sees any behavior
+    change. `tracker=None` is equally silent — a tracker that cannot be
+    reached (or was never configured) must not make dispatch impossible;
+    it just cannot be checked, so nothing here refuses on its behalf.
+    """
+    if not required_tracker_states or tracker is None:
+        return None
+    missing = tuple(sorted(s for s in required_tracker_states if not tracker.supports(s)))
+    if not missing:
+        return None
+    word = "state" if len(missing) == 1 else "states"
+    instance = tracker_instance if tracker_instance is not None else "?"
+    return (
+        f"tracker {tracker.name!r} instance {instance!r} cannot express required "
+        f"{word}: {', '.join(missing)}"
+    )
+
+
 def tick(
     plan: Plan | SpecMeta | None,
     gh: GhClient,
@@ -256,6 +290,9 @@ def tick(
     repo: str | None = None,
     run_id: str | None = None,
     required_capabilities: frozenset[str] = frozenset(),
+    tracker: Tracker | None = None,
+    tracker_instance: str | None = None,
+    required_tracker_states: frozenset[ItemState] = frozenset(),
     metrics: MetricsPusher | None = None,
 ) -> TickResult:
     """One cron iteration for a single unit of work, against one runner.
@@ -291,6 +328,14 @@ def tick(
     or `dispatch`. It stays a parameter rather than being read off
     `workflow.requires` so that passing a shape cannot silently start
     refusing work for a caller that never asked for the check.
+
+    `tracker`/`tracker_instance`/`required_tracker_states` (§4.G) is the
+    same negotiation, one step later in the SAME short-circuit: a
+    tracker-state shortfall is checked after the capability check and
+    still before `runner.preflight`, so a capability mismatch is always
+    reported first when both are wrong. `required_tracker_states` is empty
+    by default and `tracker` is `None` by default, so no pre-Phase-10
+    caller — including the live bridge — sees any behavior change.
 
     All failure paths accumulate; a raising `runner.dispatch` leaves the
     dispatch stamp unwritten so the next tick retries. `skipped` counts
@@ -330,6 +375,8 @@ def tick(
     deferred = 0
     if items:
         blocker = _capability_blocker(items, runner, required_capabilities)
+        if blocker is None:
+            blocker = _tracker_blocker(tracker, tracker_instance, required_tracker_states)
         if blocker is None:
             try:
                 blocker = runner.preflight(items)

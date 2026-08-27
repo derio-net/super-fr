@@ -488,24 +488,41 @@ jira:
 ```
 
 ```python
+class TrackedItem(Protocol):        # NOT WorkItem — see below
+    id: str
+    tracking: str | None
+
 class Tracker(Protocol):
     name: str
     def supports(self, state: ItemState) -> bool: ...
-    def observe(self, items: Sequence[WorkItem]) -> Mapping[str, ItemState]: ...
-    def create_item(self, item: WorkItem) -> str: ...
-    def transition(self, item: WorkItem, to: ItemState) -> None: ...
-    def link_parent(self, child: WorkItem, parent: WorkItem) -> None: ...
+    def observe(self, items: Sequence[TrackedItem]) -> Mapping[str, ItemState]: ...
+    def create_item(self, item: TrackedItem) -> str: ...
+    def transition(self, item: TrackedItem, to: ItemState) -> None: ...
+    def link_parent(self, child: TrackedItem, parent: TrackedItem) -> None: ...
 ```
+
+**Why `TrackedItem` and not `WorkItem`** (corrected in Phase 10 — this block
+originally said `WorkItem`, which cannot compile here). `Tracker` lives in `fr`,
+`WorkItem` lives in `fr_dispatch`, and **`fr` never imports `fr_dispatch`** —
+`tests/unit/test_import_direction.py` enforces that base/framework split with a
+raw-text scan, so even a `TYPE_CHECKING`-only import trips it. The structural
+Protocol gives the tracker exactly the two fields it needs and keeps the
+dependency pointing one way. Do not "fix" this back to `WorkItem`.
 
 **Mappings are partial by design.** A project with no "in review" status cannot
 express `in_review`; that must be declarable, and a shape whose steps require the
 state is refused at preflight — the same negotiation as §4.F, not a second
 mechanism.
 
-**Validation must reach the live server.** A Jira admin can retire a transition
-without telling anyone, so `fr tracker check` validates a mapping against the
-project's actually-available transitions. A mapping that only fails in production
-is not a guard.
+**Validation must eventually reach the live server, and today does not.** A Jira
+admin can retire a transition without telling anyone, so a mapping validated only
+against its own YAML is half a guard. What ships here is
+`check_tracker_mapping_shape` — config-shape validation (unresolvable instance,
+unknown state key), no CLI and no network. The `fr tracker check` command and
+live-transition validation land **with the Jira adapter in (c)**, when there is a
+server to ask. Stated plainly rather than implied, because a function named as
+though it validated against a server while only reading YAML is precisely how a
+gap becomes invisible.
 
 **Hierarchy note.** Jira's Epic → Story → Sub-task maps onto spec → plan → phase
 almost exactly; GitHub is the tracker that must *synthesize* hierarchy from links
