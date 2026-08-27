@@ -38,10 +38,11 @@ from fr.diff import (
     IssueStateChange,
     RepoLabelEnsure,
 )
-from fr.git import file_on_ref
 from fr.parser import Plan, PlanSchemaError
 from fr.plan_ops import PlanEditError
 from fr.render import archive_gate
+from fr.workflow.reachability import required_inputs, unreachable_paths
+from fr.workflow.shapes import FR_GOAL_PHASE_DISPATCH
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -64,23 +65,28 @@ def _make_gh_client() -> GhClient:
 
 
 def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Path]:
-    """Return plan files (and spec, if set) NOT present on origin/HEAD.
+    """Return the artifacts this dispatch NEEDS that are not on origin/HEAD.
 
     Empty list = gate passes. Caller (`_apply_one`) refuses `--yes`
     when this returns non-empty.
 
+    **Which artifacts those are is derived, not hardcoded** (spec §4.E,
+    Phase 8): `fr apply --to <runner>` dispatches at phase granularity, and
+    `FR_GOAL_PHASE_DISPATCH` is that shape written down — a single step
+    that `needs: [spec, plan]` and emits a PR. `required_inputs` reads the
+    unmet needs off it, so the refusal is a consequence of the shape rather
+    than a rule this function states. A shape that emitted its own plan
+    (a `unit: run` goal) would produce an empty requirement here, which is
+    exactly the §4.E asymmetry.
+
     Raises if origin/HEAD isn't resolvable locally — caller catches
     and re-raises with a setup hint.
     """
-    missing: list[Path] = []
-    plan_dir = plan.dir
-    for path in sorted(plan_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(repo_root)
-        if not file_on_ref("origin/HEAD", str(rel), cwd=repo_root):
-            missing.append(rel)
-    if plan.meta.spec:
+    required = required_inputs(FR_GOAL_PHASE_DISPATCH)
+    paths: list[str] = []
+    if "plan" in required:
+        paths.append(str(plan.repo_relative_dir))
+    if "spec" in required and plan.meta.spec:
         # Cross-repo spec refs use `<owner>/<repo>:path/to/spec.md` notation
         # (e.g., the v2-bridge-cutover plan in agent-images references the
         # spec in superpowers-for-vk). The reachability check operates on
@@ -93,10 +99,8 @@ def _check_plan_reachable_on_origin_head(plan: Plan, repo_root: Path) -> list[Pa
             # plan.spec_path is the parse-time lifecycle resolution
             # (2026-06-06 spec-path-repair): canonical slug-form refs and
             # archived specs check their REAL repo path on origin/HEAD.
-            spec_rel = Path(plan.spec_path or plan.meta.spec)
-            if not file_on_ref("origin/HEAD", str(spec_rel), cwd=repo_root):
-                missing.append(spec_rel)
-    return missing
+            paths.append(str(plan.spec_path or plan.meta.spec))
+    return unreachable_paths(repo_root, paths)
 
 
 def _format_diff(d: Diff) -> str:

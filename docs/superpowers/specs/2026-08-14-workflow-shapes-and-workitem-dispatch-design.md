@@ -201,9 +201,29 @@ a repo file of the same name — no merge semantics, because partial-override of
 step graph is a class of subtle breakage nobody wants to debug.
 
 **Validation is code, not prose** (`fr workflow check`): schema-valid, step ids
-unique, `needs` referencing only artifacts some earlier step `emits`, no cycles,
-declared capabilities drawn from the closed capability set, `unit` valid for the
-steps present. A CI tripwire runs it over every shipped manifest.
+unique, `needs` referencing only artifacts that some earlier step `emits` **or
+that the shape's `unit` already implies exist**, no cycles, declared capabilities
+drawn from the closed capability set, `unit` valid for the steps present. A CI
+tripwire runs it over every shipped manifest.
+
+**That "or" is load-bearing** (corrected in Phase 8 — without it this section
+contradicted §4.E and no valid manifest could exist). The two rules interlock:
+if every `needs` had to be emitted by an earlier step, then `needs − emits` — the
+very set §4.E derives reachability from — would be empty for *every* valid
+manifest, so the derived gate could never fire. A gate that passes everything is
+invisible, which is strictly worse than no gate. It also rejected `unit: phase`
+shapes outright, since their `needs: [spec, plan]` are inputs no step emits.
+
+The implied inputs follow from §4.D's grammar nesting, not from taste:
+`run → {}` (a run emits its own spec and plan), `spec → {spec}`,
+`phase → {spec, plan}`. Removing that seed silently disarms the reachability
+gate rather than breaking a test, so it is pinned by tests rather than left to
+prose.
+
+**Fan-out for `for_each: phase` is not `build_items`' job.** `build_items`
+decomposes strictly by `unit`; per-phase iteration inside a `unit: run` shape is
+the orchestrating step's concern, since those phases do not exist until the plan
+step has run.
 
 ### B. Run state — the cursor (a1)
 

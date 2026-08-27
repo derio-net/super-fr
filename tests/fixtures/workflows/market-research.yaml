@@ -1,0 +1,31 @@
+# PERMANENT REGRESSION SHAPE — do not delete.
+#
+# Spec 2026-08-14-workflow-shapes-and-workitem-dispatch §6 lists "shapes that
+# emit no PR" as a risk, with the mitigation "pinned by a test shape that emits
+# only a document". This is that shape, in miniature: a marketing-research run
+# whose entire output is a report. It has no plan, no phases, no tracking
+# Issue and no `pr` artifact anywhere.
+#
+# It exists so that nothing in the item graph or in `fr_dispatch.tick` can
+# quietly reacquire an assumption that a dispatch produces a PR, is decomposed
+# into phases, or has a tracker item to stamp. See
+# tests/unit/test_no_pr_shape.py.
+workflow: market-research
+schema: 1
+description: >-
+  Desk research on a market question, delivered as a document. No code, no
+  branch, no pull request.
+
+unit: run
+requires: [network]
+
+steps:
+  - id: gather
+    kind: agent
+    skill: superpowers:deep-research
+    emits: [report]
+
+  - id: summarise
+    kind: agent
+    needs: [report]
+    emits: [report]

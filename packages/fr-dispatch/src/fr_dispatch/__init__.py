@@ -8,9 +8,10 @@ NOT wired into the CLI — the bridge daemon (`python -m fr_vk.bridge`)
 consumes them as a library.
 
 `tick` iterates `WorkItem`s (2026-08-14 workflow-shapes spec §4.D), not
-phases: the granularity is the shape's declared `unit`. Today the only
-builder is the phase-unit one below — `unit: run` / `unit: spec` items
-arrive with the shape axis. The backend dispatch is the runner's
+phases: the granularity is the shape's declared `unit`, and every item
+comes from the one builder, `fr_dispatch.item_graph.build_items` —
+`_eligible_items` below is a tracker-state filter over it, not a second
+construction path. The backend dispatch is the runner's
 `dispatch(item)`; test B2 enforces single-source on the VK adapter's MCP
 chain. Issue creation is operator-only (`apply(skip_issue_create=True)`)
 — see the 2026-05-18 incident.
@@ -25,7 +26,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fr import plan_ops
-from fr._urls import is_cross_repo_spec, parse_issue_url
 from fr.apply import apply
 from fr.diff import diff
 from fr.ghclient import GhClient
@@ -35,29 +35,29 @@ from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_ops import PlanEditError
 from fr.render import render
 from fr.states import GhState, RenderedIssue, RenderedState
+from fr.workflow.model import WorkflowManifest
+from fr.workflow.shapes import FR_GOAL_PHASE_DISPATCH
 
 from fr_dispatch.capabilities import missing_capabilities
+from fr_dispatch.item_graph import build_items, phase_item_ref
 from fr_dispatch.metrics import MetricsPusher, NullMetrics
 from fr_dispatch.protocols import Runner
-from fr_dispatch.work_item import ArtifactRef, WorkItem, item_id, parent_id
+from fr_dispatch.work_item import ArtifactRef, WorkItem
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-__all__ = ["ArtifactRef", "Runner", "TickResult", "WorkItem", "discover_plans", "tick"]
+__all__ = [
+    "ArtifactRef",
+    "Runner",
+    "TickResult",
+    "WorkItem",
+    "build_items",
+    "discover_plans",
+    "tick",
+]
 
 logger = logging.getLogger(__name__)
-
-# The shape these items come from until the shape axis lands: `fr-goal`'s
-# `implement` step is `for_each: phase` (spec §4.A), which is exactly what
-# the bridge dispatches today.
-_DEFAULT_WORKFLOW = "fr-goal"
-
-# `item_id` needs a spec segment, but `PlanMeta.spec` is optional. A plan
-# without one still needs a deterministic, collision-free identity, so the
-# segment degrades to this sentinel rather than raising — identity is pure
-# string composition and must never depend on an artifact existing.
-_NO_SPEC_SLUG = "_no-spec"
 
 
 @dataclass(frozen=True)
@@ -154,73 +154,21 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
     return out
 
 
-def _spec_slug(plan: Plan) -> str:
-    """Identity segment for the plan's spec — its filename stem.
-
-    Mirrors the derivation `render.py` already uses for the `spec:` label,
-    so an item id and an Issue label name the same spec. Falls back to
-    `_NO_SPEC_SLUG` when the plan declares no spec.
-    """
-    spec = plan.spec_path or plan.meta.spec
-    return Path(spec).stem if spec else _NO_SPEC_SLUG
-
-
-def _plan_inputs(plan: Plan) -> tuple[ArtifactRef, ...]:
-    """The artifacts every item of this plan reads (§4.D `inputs`).
-
-    Each ref is a *coordinate*: `repo` plus a path relative to THAT repo.
-    A cross-repo spec (`<owner>/<repo>:<path>` notation) is therefore split
-    rather than passed through — `plan.spec_path` is deliberately None for
-    one (the parser can't resolve a path in a checkout it doesn't have), so
-    the raw notation would otherwise land in `path` and be attributed to
-    `target_repo`, the one repo the file is not in. Same split
-    `render.spec_url` and `repair` already do.
-
-    Phase 8 (reachability from inputs) and Phase 9 (multi-repo fan-out)
-    consume these refs as coordinates, so a wrong `repo` is not cosmetic.
-    """
-    refs = [ArtifactRef(kind="plan", repo=plan.meta.target_repo, path=str(plan.repo_relative_dir))]
-    spec_rel = plan.spec_path or plan.meta.spec
-    if spec_rel:
-        if is_cross_repo_spec(spec_rel):
-            spec_repo, spec_rel = spec_rel.split(":", 1)
-        else:
-            spec_repo = plan.meta.target_repo
-        refs.append(ArtifactRef(kind="spec", repo=spec_repo, path=spec_rel))
-    return tuple(refs)
-
-
-def _phase_item_ref(plan: Plan, phase_number: int, tracking: str | None = None) -> str:
-    """The would-be `WorkItem.id` for a phase, for FAILURE STRINGS only.
-
-    Every failure `tick` accumulates is prefixed with the item it concerns,
-    because the id also names the plan — on a bridge running many plans,
-    `"phase 3: …"` says nothing about which phase 3. The two failures raised
-    before (or instead of) a `WorkItem` — item construction and tracking-issue
-    writeback — have no item to read an id off, so the ref is composed
-    segment-wise here.
-
-    Deliberately does NOT call `item_id`: this runs on the failure path, and
-    `item_id` raising (a reserved slug, a `/` in one) is one of the things
-    that lands here. Composition must never be the reason a failure string
-    can't be produced.
-    """
-    repo = plan.meta.target_repo
-    if tracking:
-        try:
-            repo = parse_issue_url(tracking)[0]
-        except ValueError:
-            pass  # keep target_repo — a malformed URL is likely the failure itself
-    return f"{repo}/{_spec_slug(plan)}/{plan.meta.plan}/phase/{phase_number}"
-
-
 def _eligible_items(
-    plan: Plan,
-    observed: GhState,
-    rendered: RenderedState,
+    plan: Plan | None,
+    observed: GhState | None,
+    rendered: RenderedState | None,
     failures: list[str],
+    *,
+    workflow: WorkflowManifest = FR_GOAL_PHASE_DISPATCH,
+    repo: str | None = None,
+    run_id: str | None = None,
 ) -> list[WorkItem]:
-    """Phase-unit `WorkItem`s this tick should hand to the runner.
+    """The subset of this plan's item graph that is dispatchable right now.
+
+    A **filter over `build_items`**, never a second construction path —
+    `item_graph.build_items` is the one builder, and the granularity is the
+    shape's declared `unit`.
 
     The gate runs against the **rendered** state, not the pre-apply
     observation: a phase an agent claimed between dispatch and this tick
@@ -229,42 +177,46 @@ def _eligible_items(
     — the stamp is bookkeeping, not a state (see `fr.item_state`), so the
     two are read separately.
 
+    With no `observed`/`rendered` state there is no tracker projection to
+    filter against at all (a shape with no plan — see `tick`), so the graph
+    is returned whole.
+
+    A **non-phase** item is passed through: `observed`/`rendered` project
+    plan phases and nothing else, so there is no state to read for a run-
+    or spec-unit item. Inventing "ineligible" for one would make a shape
+    that tracks nothing undispatchable — re-dispatch protection for those
+    is the runner's `existing_dispatches`. A phase item with no Issue *is*
+    filtered out: its plan is tracked, so a missing Issue means the phase
+    has not been queued yet, not that it needs no tracker.
+
     One malformed phase (bad tracking URL, un-composable id) fails only
-    itself: the failure is accumulated and the loop continues.
+    itself: the failure is accumulated and the graph is still returned.
     """
-    spec_slug = _spec_slug(plan)
-    plan_slug = plan.meta.plan
-    inputs = _plan_inputs(plan)
-    items: list[WorkItem] = []
-    for phase in plan.phases:
-        n = phase.phase.number
-        if n not in observed.phases:
+    items = build_items(workflow, plan, repo=repo, run_id=run_id, failures=failures)
+    if observed is None or rendered is None:
+        return items
+    eligible: list[WorkItem] = []
+    for item in items:
+        phase_number = _phase_number(item)
+        if phase_number is None:
+            eligible.append(item)
             continue
-        ri = rendered.issue_per_phase.get(n)
-        tracking = phase.phase.tracking_issue
-        if ri is None or not tracking:  # pragma: no cover — defensive guard
+        if not item.tracking or phase_number not in observed.phases:
             continue
-        if not _is_dispatchable(ri):
+        ri = rendered.issue_per_phase.get(phase_number)
+        if ri is None or not _is_dispatchable(ri):
             continue
-        try:
-            issue_repo, issue_number = parse_issue_url(tracking)
-            iid = item_id(issue_repo, spec_slug, plan_slug, phase=n)
-            items.append(
-                WorkItem(
-                    id=iid,
-                    unit="phase",
-                    workflow=_DEFAULT_WORKFLOW,
-                    repo=issue_repo,
-                    parent=parent_id(iid),
-                    inputs=inputs,
-                    payload={"plan": plan, "phase": phase, "issue_number": issue_number},
-                    tracking=tracking,
-                )
-            )
-        except Exception as e:  # noqa: BLE001 — one bad phase mustn't kill the tick
-            failures.append(f"{_phase_item_ref(plan, n, tracking)}: {e}")
-            continue
-    return items
+        eligible.append(item)
+    return eligible
+
+
+def _phase_number(item: WorkItem) -> int | None:
+    """The phase number an item's payload carries, if it is a phase item."""
+    if item.unit != "phase":
+        return None
+    phase = item.payload.get("phase")
+    number = getattr(getattr(phase, "phase", None), "number", None)
+    return number if isinstance(number, int) else None
 
 
 def _capability_blocker(
@@ -295,31 +247,46 @@ def _capability_blocker(
 
 
 def tick(
-    plan: Plan,
+    plan: Plan | None,
     gh: GhClient,
     runner: Runner,
     *,
+    workflow: WorkflowManifest = FR_GOAL_PHASE_DISPATCH,
+    repo: str | None = None,
+    run_id: str | None = None,
     required_capabilities: frozenset[str] = frozenset(),
     metrics: MetricsPusher | None = None,
 ) -> TickResult:
-    """One cron iteration for a single plan, against one runner.
+    """One cron iteration for a single unit of work, against one runner.
 
-    Pipeline: observe → render → diff → apply (GH-side only,
-    `skip_issue_create=True`) → build a `WorkItem` for every eligible
-    unit of work → capability check → `runner.preflight` → `runner.dispatch
-    (item)` → flip the dispatch stamp on the tracker item. Eligibility is
-    read off the **rendered** state via `fr.item_state` (projected
-    `queued`, stamp absent), not off raw label strings and not off the
-    pre-apply observation.
+    Pipeline: [tracker sync] → build a `WorkItem` for every eligible unit
+    of work → capability check → `runner.preflight` → `runner.dispatch
+    (item)` → [flip the dispatch stamp]. The bracketed stages are the
+    tracker's, and they run only for the items that have one.
+
+    `workflow` is the shape whose declared `unit` decides the granularity
+    (§4.E); it defaults to the phase-unit shape the bridge has always
+    dispatched, so an existing caller sees no change. `plan` is the source
+    that shape decomposes — **`None` is legal**: a `unit: run` shape may
+    have no plan at all (the spec's marketing-research example emits only
+    a document), in which case `repo` and `run_id` name the run instead.
+    With no plan there is nothing to observe, render, diff or apply: those
+    stages project a plan onto a tracker, and a run that has neither is
+    dispatched without a single tracker call.
+
+    When a plan IS given: observe → render → diff → apply (GH-side only,
+    `skip_issue_create=True`) runs first, and eligibility is read off the
+    **rendered** state via `fr.item_state` (projected `queued`, stamp
+    absent), not off raw label strings and not off the pre-apply
+    observation.
 
     `required_capabilities` (§4.F) is the whole tick's declared need —
     empty by default. Non-empty, it is checked against `runner.capabilities`
     BEFORE `runner.preflight` is even called; a shortfall fails every
     eligible item with one message and returns without touching `preflight`
-    or `dispatch`. This is a seam, not a manifest reader: nothing here
-    parses a workflow shape (Phase 6 does not exist yet) — a Phase-6 caller
-    resolves a shape's `requires:` and passes the result through this
-    keyword.
+    or `dispatch`. It stays a parameter rather than being read off
+    `workflow.requires` so that passing a shape cannot silently start
+    refusing work for a caller that never asked for the check.
 
     All failure paths accumulate; a raising `runner.dispatch` leaves the
     dispatch stamp unwritten so the next tick retries. `skipped` counts
@@ -333,21 +300,27 @@ def tick(
     except Exception as e:  # noqa: BLE001 — cache refresh must not kill the tick
         logger.warning("runner refresh failed: %s", e)
 
-    observed = observe(plan, gh)
-    rendered = render(plan, observed)
-    d = diff(rendered, observed, plan=plan)
-    # Issue creation is operator-only (via `apply --yes`). The tick must
-    # NEVER auto-create Issues — see the 2026-05-18 incident
-    # (sfv#196-#214 and sfv#216-#234).
-    apply_result = apply(d, gh, plan=plan, skip_issue_create=True)
-    failures: list[str] = [f.error for f in apply_result.failures]
-    for phase_n, url in apply_result.created_issues.items():
-        try:
-            plan_ops.set_tracking_issue(plan.dir, phase_n, url)
-        except (PlanEditError, OSError, PlanSchemaError) as e:
-            failures.append(f"{_phase_item_ref(plan, phase_n, url)}: writeback failed: {e}")
+    failures: list[str] = []
+    observed: GhState | None = None
+    rendered: RenderedState | None = None
+    if plan is not None:
+        observed = observe(plan, gh)
+        rendered = render(plan, observed)
+        d = diff(rendered, observed, plan=plan)
+        # Issue creation is operator-only (via `apply --yes`). The tick must
+        # NEVER auto-create Issues — see the 2026-05-18 incident
+        # (sfv#196-#214 and sfv#216-#234).
+        apply_result = apply(d, gh, plan=plan, skip_issue_create=True)
+        failures.extend(f.error for f in apply_result.failures)
+        for phase_n, url in apply_result.created_issues.items():
+            try:
+                plan_ops.set_tracking_issue(plan.dir, phase_n, url)
+            except (PlanEditError, OSError, PlanSchemaError) as e:
+                failures.append(f"{phase_item_ref(plan, phase_n, url)}: writeback failed: {e}")
 
-    items = _eligible_items(plan, observed, rendered, failures)
+    items = _eligible_items(
+        plan, observed, rendered, failures, workflow=workflow, repo=repo, run_id=run_id
+    )
 
     synced = 0
     deferred = 0
@@ -420,6 +393,16 @@ def tick(
                     failures.append(f"{item.id}: {e}")
                     m.push_failure_total(reason="backend_error")
                     continue
+
+            if item.tracking is None:
+                # No tracker artifact to stamp. The dispatch stamp is
+                # bookkeeping that lives on the tracker item because there
+                # is nowhere better — an item that has none is not "unsynced",
+                # it simply has nothing to write to, and re-dispatch
+                # protection for it is `runner.existing_dispatches`.
+                synced += 1
+                m.push_sync_total()
+                continue
 
             try:
                 # `payload` is deliberately opaque (`Mapping[str, object]`)

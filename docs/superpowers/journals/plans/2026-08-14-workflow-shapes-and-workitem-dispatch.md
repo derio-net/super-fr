@@ -452,3 +452,99 @@ Milestone review, deferred not caught by self-review: the original 4-command CLI
 ### p7-run-archival-never-matched · finding [fixed] · Run archival was keyed on a name convention that real run/plan ids never satisfy -- silent permanent no-op, fixed by matching on the recorded emitted.plan artifact (spec §4.B amended, authorized) (phase 7)
 
 Milestone review, not caught by self-review or by my own p7-run-archival-slug-convention journal entry (which correctly flagged the assumption as unenforced but did not go on to verify it against derive_run_id, which was sitting in the same PR and actively contradicts it). _archive_run originally keyed its implemented/runs/ lookup on plan_dir.name, on the premise that a unit: run shape's plan step creates the plan under the run's own id. But fr.commands.run_cmd.derive_run_id produces <date>-<flattened-branch> -- e.g. this very branch would derive 2026-08-24-feat-fr-goal-composable-workflow against a plan dir slug like 2026-08-14-workflow-shapes-and-workitem-dispatch (different date, plus a feat- prefix a plan slug never carries). The two cannot match in real use, so the safe-looking no-op (no matching run file -> skip) was in fact a PERMANENT no-op: every run file would accumulate under docs/superpowers/runs/ forever, with nothing ever surfacing that archival silently never fired for it.\n\nRoot cause of why this passed review-by-test the first time: my own test fixture (test_archive_moves_run_state_file_alongside_its_plan) constructed the run file's name to EQUAL the plan slug, so it exercised exactly the coincidence the bug depended on and proved nothing about real usage. That is the explicit lesson the coordinator's review called out and I am recording it verbatim: a name-equality fixture hides this class of bug rather than catching it.\n\nFix: archival now matches by DATA, not name. _find_run_for_plan(repo_root, plan_rel) scans docs/superpowers/runs/*.yaml, parses each with parse_run_state (skipping any that fail to parse -- a malformed run file is not archival's problem), and returns the run whose recorded emitted.plan (on ANY step, not just one literally named 'plan') equals the plan's repo-relative path -- data every run file already carries per spec 4.B's own example (plan: {state: done, emitted: {plan: docs/superpowers/plans/2026-08-14-...}}). archive_plan_dir now calls _archive_run(repo_root, src_rel) with the plan's actual pre-move repo-relative path rather than plan_dir.name.\n\nTests (RED first, tests/unit/test_archive_cmd.py): rewrote test_archive_moves_run_state_file_alongside_its_plan to use a DELIBERATELY unrelated run id (2026-08-24-feat-fr-goal-composable-workflow) and plan slug (2026-08-20-goal-output) -- confirmed RED against the old name-keyed code (run file was left in place, not moved) before the fix, green after; added test_archive_does_not_move_an_unrelated_run_file_of_the_same_name, which seeds a run file that DOES share the plan's slug but carries no emitted.plan pointing at it, and asserts it is untouched -- proof the lookup is data-keyed, not name-keyed, in both directions. test_archive_is_a_no_op_when_no_run_file_exists (back-compat, no run file at all) still passes unchanged. Full tests/unit -k archive: 89 passed; full suite 2003 passed / 0 failed / 85 skipped; mypy clean over packages/fr/src.
+
+<!-- fr:journal kind=discovery scope=plan id=p8-build-items-signature created=2026-08-27T10:21:52 phase=8 -->
+### p8-build-items-signature · discovery · build_items signature and the one-builder guarantee — what Phase 9 extends (phase 8)
+
+The single item builder is fr_dispatch/item_graph.py:
+
+    build_items(
+        workflow: WorkflowManifest,
+        source: Plan | SpecMeta | None = None,
+        *,
+        repo: str | None = None,
+        run_id: str | None = None,
+        failures: list[str] | None = None,
+    ) -> list[WorkItem]
+
+Decisions inside that signature, each with a reason Phase 9 should not re-litigate casually:
+
+1. **source is Plan | SpecMeta | None, positional.** unit=phase needs a Plan, unit=spec a SpecMeta, unit=run NOTHING — a run may precede every artifact it emits, which is exactly the no-PR-shape case (task 3) and the reason §4.E says the reachability gate does not apply to a run. A wrong-typed source raises TypeError at the _as_plan/_as_spec narrowing rather than producing a nonsense graph.
+2. **repo is the repo the WORK belongs to.** Required for unit=spec (the repo the spec file itself lives in — a spec plan table never states it) and for a run with no source. A Plan source supplies it from meta.target_repo. Phase 9 fan-out: this is the parameter that names the HOME repo; the per-row target repos come from the table.
+3. **run_id is not derivable.** Per Phase 7 (p7-run-id-derivation) it is minted by `fr run start` as <date>-<flattened-branch>; build_items raises if a run shape is built without one rather than inventing a slug.
+4. **failures is an optional SINK, not a return value.** Given, per-item construction errors are accumulated as "<item-ref>: <error>" and the rest of the graph is still returned (one bad phase fails only itself — the doctrine tick relies on). None, the error propagates, so a unit test that wants the exception gets it. Same shape _eligible_items already had.
+
+**inputs is DERIVED, and that is the load-bearing part.** An item carries an ArtifactRef only for the repo-tracked artifacts `required_inputs(workflow)` reports (needs minus emits). A unit=run item of fr-goal therefore has inputs == () — its spec and plan are its OUTPUTS — while a phase item carries both. Reachability then needs no manifest at all: check_reachable just verifies every ref an item declares. The §4.E asymmetry falls out of the data instead of being coded as "if unit == run: skip".
+
+**One builder, enforced.** fr_dispatch._eligible_items is now a filter: it calls build_items and drops phase items whose rendered tracker state is not queued. tests/unit/test_item_graph.py::test_eligible_items_is_a_filter_over_build_items_not_a_second_builder asserts the source of _eligible_items contains "build_items(" and NOT "WorkItem(" — so a future edit that starts constructing items in the tick fails loudly, which is the drift Phase 3 warned about.
+
+Renames (no behaviour change): fr_dispatch._plan_inputs -> item_graph.plan_artifact_refs, _spec_slug -> spec_slug, _phase_item_ref -> phase_item_ref, _NO_SPEC_SLUG -> NO_SPEC_SLUG. The one external caller (tests/unit/test_tick_workitem.py) imports the new name; no compatibility aliases were left behind, deliberately — a private alias kept alive only for a test is how two names for one function survive.
+
+Also new on phase items: payload["depends_on"] is the tuple of PREDECESSOR ITEM IDS (not phase numbers). §4.E says concurrency is a consequence of the item graph, so the DAG edge has to survive onto the item in item vocabulary. Pinned with the multi-phase fixture whose third phase is numbered 10 and depends on 2 — a fixture where positional guessing would give the wrong answer.
+
+<!-- fr:journal kind=discovery scope=plan id=p8-pr-and-plan-assumptions-found created=2026-08-27T10:22:25 phase=8 -->
+### p8-pr-and-plan-assumptions-found · discovery · Every place a PR/plan/tracker was assumed — the no-PR shape found exactly one, and it was tick's whole preamble (phase 8)
+
+Task 3 predicted "failures wherever a PR or plan is still assumed" and the spec (§6) predicted the assumption exists but not where. The RED run answered precisely: **11 tests, 5 passed, 6 failed, and every failure was in `tick`.** check_workflow and build_items accepted the marketing-research shape unchanged (they were written unit-agnostic in tasks 1-2, so this is a real result, not a tautology — the shape was authored before either was pointed at it).
+
+The exhaustive list of assumptions found, all in packages/fr-dispatch/src/fr_dispatch/__init__.py:
+
+1. **`tick(plan: Plan, ...)` — the signature itself.** A run-unit shape has no plan; there was no way to express the dispatch. Now `plan: Plan | None`, with `workflow`/`repo`/`run_id` keywords. `workflow` defaults to FR_GOAL_PHASE_DISPATCH so every existing caller is byte-compatible; bridge_cli.py is byte-unchanged (verified against the branch base), as the plan requires.
+
+2. **The observe -> render -> diff -> apply preamble ran unconditionally.** All four project a PLAN onto a GITHUB TRACKER: observe parses tracking URLs, render builds Issue bodies and lifecycle labels, diff/apply mutate them. For a shape with neither, this is not "a no-op" — observe(None, gh) is not even callable. Now the whole block is inside `if plan is not None:`; with no plan there is nothing to observe. The test that pins it is the sharpest one in the file: `assert gh.calls == []` — a run-unit tick makes ZERO tracker calls, which is the concrete meaning of "touched no PR-shaped code path".
+
+3. **The dispatch stamp assumed `item.payload["issue_number"]` and a tracker.** Post-dispatch the loop unconditionally did `int(item.payload["issue_number"])`, `gh.ensure_labels(...)`, `gh.edit_issue_labels(...)`. For an item with no Issue that is a KeyError caught by the "gh stamp failed" handler — so the item WOULD have dispatched and then been reported as an error, with synced=0. Silent-ish and wrong in the worst direction (an operator sees a failure for work that actually ran). Now: `if item.tracking is None: synced += 1; continue` — the stamp is bookkeeping that lives on the tracker item because there is nowhere better (a plan invariant), and an item with no tracker is not "unsynced", it has nothing to write to. Re-dispatch protection for such items is runner.existing_dispatches, which is already id-keyed and needs no tracker.
+
+4. **`_eligible_items` filtered every item through a rendered Issue.** An item with no phase number had no rendered projection and would have been dropped. Now non-phase items pass through, and with `observed`/`rendered` both None (no plan) the filter is skipped entirely. Note the asymmetry that was deliberately KEPT: a phase item with no tracking_issue is still filtered OUT — its plan is tracked, so a missing Issue means "not queued yet", not "needs no tracker". Getting that backwards would have made the bridge dispatch untracked phases.
+
+Things that turned out NOT to be assumptions, checked rather than assumed:
+- `_capability_blocker` and the preflight blocker path are unit-agnostic already (pinned: test_capability_refusal_still_works_for_a_shape_with_no_pr).
+- The failure doctrine survives with no tracker: a raising dispatch on a run item accumulates "<run-item-id>: no egress", synced=0 (pinned).
+- Nothing anywhere special-cases the artifact name `pr`. Pinned behaviourally rather than by grepping: the same shape with `emits: [report, pr]` produces an identical item graph and an EQUAL TickResult. And `pr` is not in REPO_TRACKED_ARTIFACTS, so it can never become something the reachability gate waits for.
+
+The fixture lives at tests/fixtures/workflows/market-research.yaml with a header comment naming itself a permanent regression shape and pointing at tests/unit/test_no_pr_shape.py; test_the_fixture_shape_is_permanent_and_mentions_no_pr asserts the file exists and that its only emitted artifact is `report`, so deleting or hollowing it fails CI.
+
+<!-- fr:journal kind=finding scope=plan id=p8-check-workflow-forbade-phase-unit-shapes created=2026-08-27T10:22:56 phase=8 state=fixed -->
+### p8-check-workflow-forbade-phase-unit-shapes · finding [fixed] · check_workflow made a unit:phase shape unauthorable — needs-minus-emits was ALWAYS empty, so the derived gate could never have fired (spec §4.A correction owed) (phase 8)
+
+Found while implementing required_inputs, not by self-review of the plan. **The two spec sections contradict each other and Phase 6 implemented one of them literally.**
+
+- §4.A: validation requires "`needs` referencing only artifacts some earlier step `emits`". fr.workflow.check._dangling_needs implemented exactly that, seeded with an empty set.
+- §4.E: reachability is "a step`s `needs` are inputs and must be reachable; its `emits` are outputs and need not be" — a rule whose input set is precisely `needs - emits`.
+
+Together those say: any manifest that passes `fr workflow check` has an EMPTY needs-minus-emits set, so the derived reachability gate can never require anything, for any shape, ever. The Phase 8 task-2 step text ("required_inputs collects the repo-tracked artifacts every step needs but no step emits") describes a set §4.A forbids from being non-empty.
+
+Concretely: a `unit: phase` shape whose implement step `needs: [spec, plan]` — the shape `fr apply --to` has always dispatched — was REJECTED by check_workflow with two dangling-needs errors. There was no way to author the shape the whole phase is about.
+
+Root cause: `_dangling_needs` assumed a closed world. That is true for `unit: run` (a run starts from nothing and emits its own spec and plan) and false for every other unit, because the §4.D identity grammar NESTS: a phase id contains a plan slug which contains a spec slug, so a phase item exists only because a plan and spec already do. They were emitted by whatever produced the plan — a different shape, or a human.
+
+Fix — `fr.workflow.artifacts.IMPLIED_INPUTS_BY_UNIT`, seeded into `_dangling_needs`:
+
+    run   -> frozenset()                    (a run starts from nothing)
+    spec  -> {"spec"}                       (a spec item exists because a spec does)
+    phase -> {"spec", "plan"}               (a phase exists inside a plan, inside a spec)
+
+`_dangling_needs(steps, unit)` now starts `emitted_so_far` from that seed. `unit: run` validation is byte-identical to before, so every Phase 6 test passes unchanged (they all use `unit: run` with artifact names `ghost`/`late`, none of which the seed touches). The seed is deliberately derived from the grammar rather than being a per-shape `inputs:` declaration — adding a top-level manifest key would be a schema change, and the nesting already answers the question without one.
+
+SPEC CORRECTION OWED (flagged, not made — this phase`s brief forbids editing the spec): §4.A`s validation bullet should read something like "`needs` referencing only artifacts some earlier step `emits`, **or that the shape`s `unit` implies already exist** (a `unit: phase` shape may need the spec and plan it lives inside)". Without that sentence the next reader will "fix" the seed back out and silently disarm the reachability gate for every non-run shape — the failure would be a gate that passes everything, which is invisible.
+
+Second, smaller correction owed on the same section: §4.A`s example fr-goal manifest is `unit: run` and its `implement` step carries `for_each: phase`. Phase 8`s build_items decomposes by the manifest`s `unit` only — a run shape yields ONE run item, and the `for_each` fan-out into phase items is not performed here. That is deliberate (the fan-out happens when a run REACHES that step, which is `fr run advance`/Phase 11 territory, not tick`s), but the spec nowhere says which component owns it. `FR_GOAL_PHASE_DISPATCH` (fr/workflow/shapes.py) is that fan-out written down as a standalone unit:phase shape so the gate has real data to derive from until Phase 11; whoever wires resolution should reconcile the two.
+
+<!-- fr:journal kind=discovery scope=plan id=p8-reachability-split-across-packages created=2026-08-27T10:23:29 phase=8 -->
+### p8-reachability-split-across-packages · discovery · Reachability had to split fr / fr_dispatch: the gate lives in fr, WorkItem does not — and three apply_cmd tests changed seam (behaviour identical) (phase 8)
+
+The plan asks for `check_reachable(items, gh)` AND for `fr apply`s hardcoded gate to be re-pointed at the derived rule. Those two pull in opposite directions: items are `fr_dispatch` vocabulary, and `tests/unit/test_import_direction.py` forbids `fr` from importing `fr_dispatch` (the one sanctioned soft point is apply_cmd`s find_spec-guarded registry import, which a gate cannot hide behind — with fr-dispatch absent there would be no gate at all).
+
+Options considered: (a) move work_item.py into `fr` with a re-export shim, the precedent Phase 6 set for CAPABILITIES; (b) a structural Protocol in `fr` describing item-shaped objects; (c) split the rule so neither package needs the other`s types. Took (c), because the split falls on a real seam:
+
+- `fr.workflow.artifacts` — the vocabulary. REPO_TRACKED_ARTIFACTS = {spec, plan} (the only names that denote a path a gate could look for; `pr`, `report`, `journal:*` are real outputs with nothing to check), IMPLIED_INPUTS_BY_UNIT, and `required_inputs(manifest)`. Pure, no I/O.
+- `fr.workflow.reachability` — `unreachable_paths(repo_root, paths)`: which repo-relative paths are absent from origin/HEAD, expanding a DIRECTORY into its files (a plan is a folder, and "the folder is on main" is not the question — an unpushed 03.yaml inside a pushed plan dir is exactly what the gate must catch). Takes plain strings, so it needs no item type.
+- `fr_dispatch.reachability.check_reachable(items, repo_root, *, gh=None)` — the item-level gate, which just walks `item.inputs` and calls straight back into `unreachable_paths`. ONE implementation of "on origin/HEAD" for both callers, no duplication.
+
+`gh` is genuinely used, not decorative: a ref whose repo differs from the item`s cannot be answered by this repo`s git at all, so with a client it is resolved via `gh.file_exists` (the same contents-API read path compute_status uses for a cross-repo plan row) and without one it is SKIPPED — which is precisely what the 2026-05-17 gate did with a cross-repo spec, trusting the operator. All three states pinned (no client -> allowed; client + absent -> refused naming the other repo; client + present -> allowed). apply_cmd deliberately does NOT pass its gh client, so `fr apply --yes --to` makes no new network calls and its cross-repo behaviour is unchanged.
+
+**Test change to declare (behaviour identical, seam moved).** Three tests in tests/unit/test_apply_cmd.py — test_check_plan_reachable_skips_cross_repo_spec, test_check_plan_reachable_still_checks_same_repo_spec, test_check_plan_reachable_uses_resolved_spec_path — monkeypatched `apply_cmd.file_on_ref`. apply_cmd no longer imports file_on_ref (it calls unreachable_paths), so the patch target moved to `fr.workflow.reachability.file_on_ref`. Every assertion is byte-identical; only the module the fake is installed into changed, and a comment at each site says so. No reachability test`s BEHAVIOUR changed: the four `_check_plan_reachable_on_origin_head` tests in tests/unit/test_v2_apply.py (gate passes / missing plan files / missing spec / no spec declared) and the four `_apply_one` wiring tests pass completely untouched, which is the real evidence the refusal is unchanged.
+
+Also unchanged on purpose: `_check_plan_reachable_on_origin_head(plan, repo_root) -> list[Path]` keeps its name, signature and return type, because four existing tests monkeypatch it by name as the gate seam. What changed is only what it looks FOR: `required_inputs(FR_GOAL_PHASE_DISPATCH)` instead of the literal "plan dir plus spec". test_a_shape_that_does_not_need_the_plan_does_not_gate_on_it proves the derivation is live rather than decorative — swap in a shape whose step needs only the spec and the same unmerged tree stops flagging the plan files.
+
+Known gap for Phase 9/11: `check_reachable` has no production caller yet. `fr apply` uses the fr-side primitives with the phase shape; the bridge`s tick does not gate on reachability at all (it runs from its own checkout of main, where everything is on origin/HEAD by construction — adding a gate there would be a behaviour change nobody asked for). Both acceptance rows were therefore left at not-implemented with level refs added; see the matrix notes for the reasoning.

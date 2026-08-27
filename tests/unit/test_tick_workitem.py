@@ -297,7 +297,7 @@ def test_a_cross_repo_spec_input_names_the_other_repo_and_stays_repo_relative(tm
     import shutil
 
     from fr import parse
-    from fr_dispatch import _plan_inputs
+    from fr_dispatch.item_graph import plan_artifact_refs
 
     plan_dir = tmp_path / "plan"
     shutil.copytree(MINIMAL, plan_dir)
@@ -311,7 +311,7 @@ def test_a_cross_repo_spec_input_names_the_other_repo_and_stays_repo_relative(tm
     plan = parse(plan_dir)
     assert plan.spec_path is None  # the parser's cross-repo behaviour, pinned
 
-    refs = {ref.kind: ref for ref in _plan_inputs(plan)}
+    refs = {ref.kind: ref for ref in plan_artifact_refs(plan)}
     assert refs["spec"].repo == "other-org/other-repo"
     assert refs["spec"].path == "docs/superpowers/specs/elsewhere-design.md"
     assert ":" not in refs["spec"].path

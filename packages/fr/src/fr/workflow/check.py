@@ -20,6 +20,7 @@ failed at.
 from __future__ import annotations
 
 from fr.capabilities import CAPABILITIES
+from fr.workflow.artifacts import IMPLIED_INPUTS_BY_UNIT
 from fr.workflow.model import Step, WorkflowManifest
 
 __all__ = ["check_workflow"]
@@ -29,7 +30,7 @@ def check_workflow(manifest: WorkflowManifest) -> list[str]:
     """Every problem with `manifest`, as human-readable strings. Empty = clean."""
     errors: list[str] = []
     errors.extend(_duplicate_step_ids(manifest.steps))
-    errors.extend(_dangling_needs(manifest.steps))
+    errors.extend(_dangling_needs(manifest.steps, manifest.unit))
     errors.extend(_cycles(manifest.steps))
     errors.extend(_unknown_capabilities(manifest.requires))
     errors.extend(_for_each_unit_conflicts(manifest))
@@ -46,12 +47,21 @@ def _duplicate_step_ids(steps: tuple[Step, ...]) -> list[str]:
     return errors
 
 
-def _dangling_needs(steps: tuple[Step, ...]) -> list[str]:
+def _dangling_needs(steps: tuple[Step, ...], unit: str) -> list[str]:
     """A step's `needs` must name an artifact some STRICTLY EARLIER step
     `emits` — a forward reference (a later step's `emits`) or an artifact
-    nobody ever emits are both dangling, and both reported here."""
+    nobody ever emits are both dangling, and both reported here.
+
+    **Seeded with the artifacts the `unit` implies already exist**
+    (`IMPLIED_INPUTS_BY_UNIT`). Without that seed the rule as written in
+    spec §4.A would make a `unit: phase` shape impossible to author: a
+    phase item exists only inside a plan, so its steps legitimately need a
+    spec and a plan that no step of that shape emits — and §4.E's whole
+    reachability rule is about exactly those un-emitted needs. `unit: run`
+    seeds nothing, so a run shape is validated exactly as before.
+    """
     errors: list[str] = []
-    emitted_so_far: set[str] = set()
+    emitted_so_far: set[str] = set(IMPLIED_INPUTS_BY_UNIT.get(unit, frozenset()))
     for step in steps:
         for artifact in step.needs:
             if artifact not in emitted_so_far:

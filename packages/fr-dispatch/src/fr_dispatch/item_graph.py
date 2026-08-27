@@ -1,0 +1,322 @@
+"""`build_items` — the item graph a shape decomposes into (spec §4.E).
+
+The decomposition granularity is the shape's declared `unit`, not something
+the dispatcher hardcodes:
+
+| unit    | items created            | source            |
+|---------|--------------------------|-------------------|
+| `run`   | 1 per workflow run       | none needed       |
+| `phase` | 1 per plan phase         | a `Plan`          |
+| `spec`  | 1 per distinct target repo | a `SpecMeta`    |
+
+**This is the only item builder.** `fr_dispatch._eligible_items` is a
+tracker-state *filter* over it — the phase-unit construction that used to
+live there moved here whole. Two builders is how an id grammar drifts.
+
+`inputs` is derived, not assumed: an item declares an `ArtifactRef` for
+exactly the repo-tracked artifacts its shape `needs` and never `emits`
+(`fr.workflow.artifacts.required_inputs`). That is what makes a `unit: run`
+item carry no plan or spec ref — both are its outputs (§4.E) — and
+therefore what makes the reachability gate not apply to it.
+
+Nothing here assumes a tracker item, a PR, or even a plan exists: an
+untracked phase is an item without an Issue, and a run item can be built
+with no source artifact at all (the shape that emits only a document).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from fr._urls import is_cross_repo_spec, parse_issue_url
+from fr.workflow.artifacts import required_inputs
+
+from fr_dispatch.work_item import ArtifactRef, WorkItem, item_id, parent_id, run_item_id
+
+if TYPE_CHECKING:
+    from fr.parser import Plan
+    from fr.spec import SpecMeta
+    from fr.workflow.model import WorkflowManifest
+
+__all__ = ["build_items"]
+
+# `item_id` needs a spec segment, but `PlanMeta.spec` is optional. A plan
+# without one still needs a deterministic, collision-free identity, so the
+# segment degrades to this sentinel rather than raising — identity is pure
+# string composition and must never depend on an artifact existing.
+NO_SPEC_SLUG = "_no-spec"
+
+# A dispatchable Repo cell is `owner/name` and nothing else. Spec tables
+# also carry rows whose Repo cell is `—`, an operator-action sentence, or a
+# bare repo name with no owner (pre-v2 specs); none of those names a repo an
+# item id could be composed for, so they are skipped rather than guessed at.
+_REPO_CELL_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+def spec_slug(plan: Plan) -> str:
+    """Identity segment for the plan's spec — its filename stem.
+
+    Mirrors the derivation `render.py` already uses for the `spec:` label,
+    so an item id and an Issue label name the same spec. Falls back to
+    `NO_SPEC_SLUG` when the plan declares no spec.
+    """
+    spec = plan.spec_path or plan.meta.spec
+    return Path(spec).stem if spec else NO_SPEC_SLUG
+
+
+def plan_artifact_refs(plan: Plan) -> tuple[ArtifactRef, ...]:
+    """Every artifact of this plan an item could reference (§4.D `inputs`).
+
+    Each ref is a *coordinate*: `repo` plus a path relative to THAT repo.
+    A cross-repo spec (`<owner>/<repo>:<path>` notation) is therefore split
+    rather than passed through — `plan.spec_path` is deliberately None for
+    one (the parser can't resolve a path in a checkout it doesn't have), so
+    the raw notation would otherwise land in `path` and be attributed to
+    `target_repo`, the one repo the file is not in. Same split
+    `render.spec_url` and `repair` already do.
+
+    Returns everything available; `build_items` keeps only the kinds the
+    shape actually needs.
+    """
+    refs = [ArtifactRef(kind="plan", repo=plan.meta.target_repo, path=str(plan.repo_relative_dir))]
+    spec_rel = plan.spec_path or plan.meta.spec
+    if spec_rel:
+        if is_cross_repo_spec(spec_rel):
+            spec_repo, spec_rel = spec_rel.split(":", 1)
+        else:
+            spec_repo = plan.meta.target_repo
+        refs.append(ArtifactRef(kind="spec", repo=spec_repo, path=spec_rel))
+    return tuple(refs)
+
+
+def phase_item_ref(plan: Plan, phase_number: int, tracking: str | None = None) -> str:
+    """The would-be `WorkItem.id` for a phase, for FAILURE STRINGS only.
+
+    Every failure the tick accumulates is prefixed with the item it
+    concerns, because the id also names the plan — on a bridge running many
+    plans, `"phase 3: …"` says nothing about which phase 3. The failures
+    raised *instead of* a `WorkItem` (item construction, tracking-issue
+    writeback) have no item to read an id off, so the ref is composed
+    segment-wise here.
+
+    Deliberately does NOT call `item_id`: this runs on the failure path, and
+    `item_id` raising (a reserved slug, a `/` in one) is one of the things
+    that lands here. Composition must never be the reason a failure string
+    can't be produced.
+    """
+    repo = plan.meta.target_repo
+    if tracking:
+        try:
+            repo = parse_issue_url(tracking)[0]
+        except ValueError:
+            pass  # keep target_repo — a malformed URL is likely the failure itself
+    return f"{repo}/{spec_slug(plan)}/{plan.meta.plan}/phase/{phase_number}"
+
+
+def _repo_relative_spec_path(path: Path) -> str:
+    """A spec's path relative to its repo root.
+
+    `SpecMeta.path` is whatever the caller opened — usually absolute. Specs
+    live under `docs/superpowers/specs/`, so the last `docs` segment is the
+    repo-relative anchor. Falls back to the bare filename when the path has
+    no `docs` segment at all (a spec read from somewhere unconventional);
+    an `ArtifactRef.path` is documented repo-relative, so guessing an
+    absolute path into it would be worse than a name.
+    """
+    parts = path.parts
+    if "docs" in parts:
+        anchor = len(parts) - 1 - parts[::-1].index("docs")
+        return str(Path(*parts[anchor:]))
+    return path.name
+
+
+def _keep(refs: tuple[ArtifactRef, ...], kinds: frozenset[str]) -> tuple[ArtifactRef, ...]:
+    return tuple(ref for ref in refs if ref.kind in kinds)
+
+
+def _run_items(
+    workflow: WorkflowManifest,
+    source: Plan | None,
+    repo: str | None,
+    run_id: str | None,
+    required: frozenset[str],
+) -> list[WorkItem]:
+    if run_id is None:
+        raise ValueError("a run-unit shape needs a run_id (see `fr run start`)")
+    if repo is None:
+        if source is None:
+            raise ValueError("a run-unit shape needs a repo when no source artifact is given")
+        repo = source.meta.target_repo
+    inputs = _keep(plan_artifact_refs(source), required) if source is not None else ()
+    payload: dict[str, object] = {"run_id": run_id}
+    if source is not None:
+        payload["plan"] = source
+    return [
+        WorkItem(
+            id=run_item_id(repo, run_id),
+            unit="run",
+            workflow=workflow.workflow,
+            repo=repo,
+            parent=None,
+            inputs=inputs,
+            payload=payload,
+            tracking=None,
+        )
+    ]
+
+
+def _phase_items(
+    workflow: WorkflowManifest,
+    plan: Plan,
+    required: frozenset[str],
+    failures: list[str] | None,
+) -> list[WorkItem]:
+    slug = spec_slug(plan)
+    plan_slug = plan.meta.plan
+    inputs = _keep(plan_artifact_refs(plan), required)
+    items: list[WorkItem] = []
+    for phase in plan.phases:
+        n = phase.phase.number
+        tracking = phase.phase.tracking_issue
+        try:
+            payload: dict[str, object] = {"plan": plan, "phase": phase}
+            repo = plan.meta.target_repo
+            if tracking:
+                # The ISSUE's repo, not `target_repo`: `can_dispatch(item)`
+                # reads `item.repo`, so a cross-repo phase must carry the
+                # repo it actually executes in.
+                repo, issue_number = parse_issue_url(tracking)
+                payload["issue_number"] = issue_number
+            iid = item_id(repo, slug, plan_slug, phase=n)
+            payload["depends_on"] = tuple(
+                item_id(repo, slug, plan_slug, phase=d) for d in phase.phase.depends_on
+            )
+            items.append(
+                WorkItem(
+                    id=iid,
+                    unit="phase",
+                    workflow=workflow.workflow,
+                    repo=repo,
+                    parent=parent_id(iid),
+                    inputs=inputs,
+                    payload=payload,
+                    tracking=tracking,
+                )
+            )
+        except Exception as e:  # noqa: BLE001 — one bad phase mustn't kill the graph
+            if failures is None:
+                raise
+            failures.append(f"{phase_item_ref(plan, n, tracking)}: {e}")
+            continue
+    return items
+
+
+def _spec_items(
+    workflow: WorkflowManifest,
+    spec: SpecMeta,
+    repo: str | None,
+    required: frozenset[str],
+    failures: list[str] | None,
+) -> list[WorkItem]:
+    if repo is None:
+        raise ValueError("a spec-unit shape needs the repo the spec itself lives in")
+    slug = spec.path.stem
+    home = item_id(repo, slug)
+    inputs = (
+        (ArtifactRef(kind="spec", repo=repo, path=_repo_relative_spec_path(spec.path)),)
+        if "spec" in required
+        else ()
+    )
+    items: list[WorkItem] = []
+    seen: set[str] = set()
+    for row in spec.plans:
+        target = row.repo
+        if not _REPO_CELL_RE.match(target) or target in seen:
+            continue
+        seen.add(target)
+        try:
+            iid = item_id(target, slug)
+        except ValueError as e:
+            if failures is None:
+                raise
+            failures.append(f"{target}/{slug}: {e}")
+            continue
+        items.append(
+            WorkItem(
+                id=iid,
+                unit="spec",
+                workflow=workflow.workflow,
+                repo=target,
+                # Units compose recursively (§4.E): a per-repo item is
+                # decomposed further by that repo's own shape, and its
+                # parent is the spec item in the repo the spec lives in.
+                # The home repo's own item IS that item, and nothing is its
+                # own parent — it is a root, like `parent_id` says.
+                parent=None if iid == home else home,
+                inputs=inputs,
+                payload={
+                    "spec": spec,
+                    "plan_refs": tuple(r for r in spec.plans if r.repo == target),
+                },
+                tracking=None,
+            )
+        )
+    return items
+
+
+def build_items(
+    workflow: WorkflowManifest,
+    source: Plan | SpecMeta | None = None,
+    *,
+    repo: str | None = None,
+    run_id: str | None = None,
+    failures: list[str] | None = None,
+) -> list[WorkItem]:
+    """The `WorkItem` graph `workflow` decomposes `source` into.
+
+    `source` is unit-dependent: a `Plan` for `unit: phase`, a `SpecMeta` for
+    `unit: spec`, and *optional* for `unit: run` — a run may precede every
+    artifact it will eventually emit, which is the whole point of §4.E's
+    "the reachability gate does not apply to a run".
+
+    `repo` names the repo the work belongs to. It is required for
+    `unit: spec` (the repo the spec itself lives in, which its plan table
+    never states) and for a `unit: run` with no source; a `Plan` source
+    supplies it from `meta.target_repo`.
+
+    `failures` is an optional sink: when given, an item that cannot be
+    constructed (a malformed tracking URL, an un-composable id) is
+    accumulated as `"<item-ref>: <error>"` and the rest of the graph is
+    still returned — one bad phase fails only itself. When `None`, the
+    error propagates, so a caller that wants to know does.
+    """
+    required = required_inputs(workflow)
+    if workflow.unit == "run":
+        return _run_items(workflow, _as_plan(source), repo, run_id, required)
+    if workflow.unit == "phase":
+        plan = _as_plan(source)
+        if plan is None:
+            raise ValueError("a phase-unit shape needs a Plan to decompose")
+        return _phase_items(workflow, plan, required, failures)
+    spec = _as_spec(source)
+    if spec is None:
+        raise ValueError("a spec-unit shape needs a SpecMeta to decompose")
+    return _spec_items(workflow, spec, repo, required, failures)
+
+
+def _as_plan(source: Plan | SpecMeta | None) -> Plan | None:
+    from fr.parser import Plan
+
+    if source is None or isinstance(source, Plan):
+        return source
+    raise TypeError(f"expected a Plan source, got {type(source).__name__}")
+
+
+def _as_spec(source: Plan | SpecMeta | None) -> SpecMeta | None:
+    from fr.spec import SpecMeta
+
+    if source is None or isinstance(source, SpecMeta):
+        return source
+    raise TypeError(f"expected a SpecMeta source, got {type(source).__name__}")

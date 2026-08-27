@@ -1070,9 +1070,19 @@ rows:
       by the dispatcher.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_item_graph.py
+      - super-fr:tests/unit/test_no_pr_shape.py
     status: not-implemented
-    notes: Spec 4.E. Replaces the fixed one-Issue-per-phase assumption.
+    notes: Spec 4.E. Replaces the fixed one-Issue-per-phase assumption. Phase 8 landed
+      the mechanism — fr_dispatch.item_graph.build_items is the single builder and
+      honours all three units (run/phase/spec), tick takes the manifest and dispatches
+      a unit=run shape with no plan at all — pinned unit-only. Stays not-implemented
+      because no shipped caller resolves a shape yet - fr apply --to and the bridge
+      both pass the default FR_GOAL_PHASE_DISPATCH constant, so an operator cannot
+      yet SELECT a granularity (Phase 11 wires resolution), and a unit=spec graph is
+      built but never dispatched through tick (tick's source is a Plan or None).
   - id: multi-repo-spec-fanout
     capability: Dispatch granularity
     acceptance: Dispatching a spec fans out one work item per target repo named in its
@@ -1089,10 +1099,19 @@ rows:
       outputs), while a phase-unit dispatch still refuses an unmerged plan.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_reachability.py
     status: not-implemented
     notes: Spec 4.E. Generalizes the 2026-05-17 reachability gate from a hardcoded refusal
-      to a rule derived from each step's declared needs.
+      to a rule derived from each step's declared needs. Phase 8 landed the rule —
+      required_inputs is needs-minus-emits over the manifest, fr apply's gate now reads
+      it off FR_GOAL_PHASE_DISPATCH instead of naming plan+spec itself, and both halves
+      of the acceptance are pinned against real git repos (a unit=run shape allowed
+      on the same unmerged tree a unit=phase shape is refused on). Stays not-implemented
+      because it is not yet operator-observable - no shipped command dispatches a unit=run
+      goal (Phase 11), and the item-level check_reachable has no production caller,
+      so only fr apply's phase-unit half runs in anger today.
   - id: runner-capability-refusal
     capability: Runner and tracker negotiation
     acceptance: A workflow shape whose required capabilities a runner cannot provide
