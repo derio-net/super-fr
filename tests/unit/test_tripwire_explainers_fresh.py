@@ -50,8 +50,15 @@ def _text(value: str) -> str:
     staleness in the page — so markdown emphasis markers come out here too.
     """
     stripped = re.sub(r"<[^>]+>", "", value)
-    for entity, char in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'),
-                         ("&#39;", "'"), ("&nbsp;", " "), ("&#160;", " ")):
+    for entity, char in (
+        ("&amp;", "&"),
+        ("&lt;", "<"),
+        ("&gt;", ">"),
+        ("&quot;", '"'),
+        ("&#39;", "'"),
+        ("&nbsp;", " "),
+        ("&#160;", " "),
+    ):
         stripped = stripped.replace(entity, char)
     stripped = stripped.replace("`", "").replace("**", "").replace("*", "")
     return " ".join(stripped.split())
@@ -89,10 +96,7 @@ def test_rendered_pages_carry_their_sources_headings() -> None:
 def test_sourceless_pages_remain_a_known_closed_set() -> None:
     """Two published pages have no source here (rule gap 2). That is tracked
     debt; a third appearing silently would be untracked debt."""
-    actual = {
-        p.name for p in EXPLAINERS.glob("*.html")
-        if not p.with_suffix(".md").is_file()
-    }
+    actual = {p.name for p in EXPLAINERS.glob("*.html") if not p.with_suffix(".md").is_file()}
     assert actual == SOURCELESS, (
         "the set of explainer pages with no committed markdown source changed: "
         f"expected {sorted(SOURCELESS)}, found {sorted(actual)}. Adding a page "
