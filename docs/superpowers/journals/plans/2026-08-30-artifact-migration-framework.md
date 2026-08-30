@@ -123,7 +123,7 @@ format looser forever to save one character.
 
 Anyone updating spec 3.A's table should correct the string there too.
 
-<!-- fr:journal kind=finding scope=plan id=f-closed-world-models-reject-a-stamp created=2026-08-30T13:14:30 phase=1 state=open -->
+<!-- fr:journal kind=finding scope=plan id=f-closed-world-models-reject-a-stamp created=2026-08-30T13:14:30 phase=1 state=fixed -->
 ### f-closed-world-models-reject-a-stamp · finding [open] · run/matrix/plan models are extra=forbid: stamping a live file of those kinds breaks parsing (Phase 2 must not) (phase 1)
 
 Three of the five kinds carry a closed-world pydantic model, so writing the new
@@ -153,6 +153,12 @@ widening when a kind's version actually moves past 1 — at which point the
 same PR must add `schema_version: int = 1` (optional, defaulted) to the model,
 per the standing obligation Phase 7 writes into
 `.claude/rules/artifact-versioning.md`.
+
+RESOLVED in Phase 2 (state flipped by hand — `fr journal add` has no
+open->fixed transition). The runner derives its work list from
+`read_version(path) < kind.current_version`, never from the walk, and no
+schema migration is registered for any version-1 kind. See
+`f-closed-world-stamp-closed-by-construction` for the three tests that pin it.
 
 Concrete instruction for Phase 2: the runner must derive its work list from
 `read_version(kind, path) < kind.current_version`. If it instead stamps
@@ -195,3 +201,181 @@ Implications for Phase 2, none of which invalidate the phase:
   specs all reading 1 from an absent stamp; 0 runs — no runs/ dir yet), and the
   writers round-tripped on temp copies of every one of them with no line
   removed except a stamp being replaced in place.
+
+<!-- fr:journal kind=discovery scope=plan id=d-migration-runner-api created=2026-08-30T13:42:50 phase=2 -->
+### d-migration-runner-api · discovery · Runner registration API: MIGRATIONS, SchemaMigration, Repair, run_migrations (Phases 3, 4, 7 build on it) (phase 2)
+
+Phases 3 (trigger), 4 (atomic commit) and 7 (validator) all call into
+`fr.artifacts.runner`. Its public shape, now fixed:
+
+REGISTERING
+- `MIGRATIONS: MigrationRegistry` — the ONE registry of migrations, shipped in
+  `fr/artifacts/runner.py`. `fr/artifacts/__init__.py` imports
+  `fr.artifacts.fr_version` last, purely for its `MIGRATIONS.register(...)`
+  side effect: a migration nobody imports is a migration that silently never
+  runs, so registration rides on the package import, not on a caller
+  remembering. A new built-in migration adds a module and one import line.
+- `SchemaMigration(kind, from_version, to_version, fn, description="")` —
+  stamp-guarded. `fn(path) -> None` rewrites the BODY only; the runner writes
+  the new stamp itself, after `fn` returns. `__post_init__` rejects a
+  non-forward transition.
+- `Repair(kind, name, applies, fn, description="")` — see the repairs entry.
+- `registry.register(m)` raises `DuplicateMigrationError` (two migrations from
+  the same version, or two repairs with one name) and `UnknownArtifactKindError`
+  at import time for an unregistered kind.
+- `MigrationRegistry(kinds=...)` carries the artifact kinds it operates over,
+  defaulting to `ARTIFACT_KINDS`. That is the ONLY injection point the runner
+  has, and it exists so tests can use synthetic kinds without any second
+  enumeration of kinds appearing outside `registry.py` (Phase 7's tripwire
+  stays satisfiable).
+
+RUNNING
+- `plan_migrations(repo_root, *, registry=None) -> tuple[PlannedAction, ...]` —
+  read-only.
+- `is_stale(repo_root, *, registry=None) -> bool` — short-circuits on the first
+  stale artifact. Built for PHASE 3: the callback runs before every command and
+  must not walk the tree when the answer is available early.
+- `run_migrations(repo_root, *, dry_run=True, registry=None) -> MigrationReport`
+  — DRY-RUN BY DEFAULT. Plans the whole tree, then applies, so a chain gap
+  anywhere raises before anything anywhere is written.
+- `MigrationReport(dry_run, applied, skipped, failed)` with
+  `.changed_paths -> tuple[Path, ...]` (ordered, deduplicated) and `.ok`.
+  PHASE 4 stages exactly `report.changed_paths` — `git add -- <paths>`, never
+  `-A` — and the per-action `summary` / `from_version` / `to_version` /
+  `repair` fields are what its generated commit message should name.
+- `PlannedAction(kind, path, summary, from_version, to_version, repair)`;
+  `from_version is None` <=> it is a repair. `FailedAction(kind, path, summary,
+  error)`.
+
+Registry addition: `iter_paths_of(repo_root, kind)` in `registry.py`, taking
+the kind rather than its name, with `iter_artifact_paths` now delegating. The
+archive exclusion stays in exactly one function.
+
+TWO THINGS PHASE 3 MUST HANDLE
+1. `plan_migrations` / `is_stale` / `run_migrations` RAISE `MigrationChainError`
+   when an artifact sits at a version no registered migration moves. That is
+   deliberate (the phase contract: a gap raises, never skips) but it means the
+   CLI-entry callback must catch it and refuse loudly rather than let a
+   traceback escape from `fr --help`. It cannot currently fire in practice —
+   `PlanMeta.schema_version` is a required `Literal[2]`, so every parseable
+   plan is at 2 and every other kind is at 1 — but an unstamped `_meta.yaml`
+   would trigger it.
+2. A per-artifact failure is NOT an exception: it lands in `report.failed` and
+   the other artifacts still migrate. Only the CLI turns that into exit 2.
+
+<!-- fr:journal kind=discovery scope=plan id=d-repairs-vs-schema-migrations created=2026-08-30T13:43:24 phase=2 -->
+### d-repairs-vs-schema-migrations · discovery · Repairs vs schema migrations: stamp-guarded chain vs predicate-guarded fix, and why 4.0.0's is a repair (phase 2)
+
+Spec §3.B names two shapes; Phase 1 left the choice between them open (see
+`d-plan-stamp-is-schema-version`). Both are now built, and the difference in
+code is small but load-bearing.
+
+SCHEMA MIGRATION — guarded by the stamp
+- `SchemaMigration(kind, from_version, to_version, fn)`.
+- Selected when `kind.read_version(path) < kind.current_version`; the runner
+  resolves a CHAIN (1->2, 2->3, ...) up to `current_version`, and a missing
+  step raises `MigrationChainError` instead of silently skipping.
+- `fn(path)` rewrites the body ONLY. The runner writes the stamp itself, and
+  only after `fn` returns — so a migration that dies mid-write leaves the
+  artifact stale and the next run retries it, rather than marking a
+  half-migrated file as current forever (pinned by
+  `test_a_migration_that_raises_mid_write_is_not_stamped`).
+- Idempotence is free: the new stamp makes the artifact ineligible.
+
+REPAIR — guarded by its own predicate
+- `Repair(kind, name, applies, fn)`, version-INDEPENDENT. It never touches the
+  stamp.
+- Selected when `applies(path)` is True. Idempotence must be BUILT: applying
+  `fn` has to make `applies` False. That is the whole contract, and it is what
+  the acceptance row `migration-is-idempotent` tests from the repair side.
+- A predicate that RAISES is a per-artifact failure, not a crash: it is
+  reported, that artifact is left unmodified, and every other artifact still
+  migrates. This is how "a malformed constraint is reported, not rewritten"
+  falls out of the framework rather than being special-cased in the migration.
+
+ORDERING: all schema migrations for an artifact run before any repair on it. A
+repair inspects the artifact's CURRENT shape, so the shape must be current
+first (`test_schema_migrations_run_before_repairs_on_the_same_artifact`).
+
+RE-READING (spec §4, an agent writing concurrently): the plan pass decides
+nothing that the apply pass trusts. `_apply_to_one` re-reads the stamp before
+every schema step and re-evaluates every predicate before applying it, and
+every `fn` reads the file itself — it is handed a `Path`, never a parsed
+document. An action that has become unnecessary in between is recorded in
+`report.skipped`, not silently dropped.
+
+WHY 4.0.0's ONE MIGRATION IS A REPAIR. Widening a plan's `fr_version` ceiling
+(`<4.0.0` -> `<5.0.0`) changes a constraint, not a shape. A plan's artifact
+stamp IS its `_meta.yaml schema_version`, so expressing the widening as a
+schema migration would bump that to 3, declare a plan-folder shape change that
+did not happen, and force `PlanMeta.schema_version` to `Literal[2, 3]` to
+encode the lie. `test_the_repair_does_not_move_the_plan_stamp` asserts the
+migrated file still validates against `Literal[2]`.
+
+Implementation notes on the repair itself (`fr/artifacts/fr_version.py`):
+- `widen_ceiling(constraint, installed) -> str | None` is pure and separately
+  tested. `None` means "leave it alone", covering three distinct cases: already
+  admits us, no ceiling at all, and — the subtle one — excluded by the FLOOR
+  (`>=5.0.0,<6.0.0` under 4.0.0), where the plan wants a NEWER fr and widening
+  would not admit us anyway. Downgrades are a spec §2 non-goal.
+- It splits the constraint on commas by hand rather than iterating a
+  `SpecifierSet`, which iterates a frozenset and would silently reorder the
+  operator's text.
+- The write is line surgery preserving the quoting style, in the same spirit as
+  the registry's stamp writers: no document round-trips through
+  `yaml.safe_dump`. If the value is not on a rewritable line, it refuses and
+  tells the operator what to write instead.
+
+<!-- fr:journal kind=finding scope=plan id=f-closed-world-stamp-closed-by-construction created=2026-08-30T13:43:52 phase=2 state=fixed -->
+### f-closed-world-stamp-closed-by-construction · finding [fixed] · Closed: the runner cannot stamp a closed-world artifact — its work list is the stamp, never the walk (phase 2)
+
+RESOLVES `f-closed-world-models-reject-a-stamp` (Phase 1, state open). A new
+entry rather than an edit: `fr journal add` silently no-ops on an existing
+`--id`, so re-adding the finding as `fixed` would have changed nothing. The
+original entry stays `open` in the file; this is its disposition, and the plan
+journal should be read as: finding raised in Phase 1, closed here.
+
+WHAT THE FINDING SAID. `RunState`, `Matrix` and `PlanMeta` are all
+`extra="forbid"`, so writing a `schema_version` key into a LIVE run, into
+`matrix.yaml`, or bumping a plan's stamp past 2 makes the file unparseable by
+the current fr — and for the matrix that would take the `fr acceptance check`
+CI gate down. Phase 1 could only assert that a correct Phase 2 would never do
+it. Closing it means proving it.
+
+HOW IT IS CLOSED — three tests, not an assertion.
+
+1. `test_the_shipped_runner_never_writes_to_a_closed_world_artifact` seeds a
+   temp repo with a real run yaml, a real `matrix.yaml`, a journal, a spec and
+   a plan, freezes each file's bytes AND mtime, runs the SHIPPED registry with
+   `dry_run=False`, and asserts every one of them is untouched — then parses
+   the run through `parse_run_state` and the matrix through `load_matrix` to
+   prove the exact failure mode the finding named cannot have happened.
+2. `test_the_shipped_registry_registers_nothing_for_the_version_one_kinds`
+   asserts `MIGRATIONS.schema_migrations(k) == ()` for journal, run, matrix and
+   spec. This is the structural half: those kinds are at `current_version=1`
+   and an absent stamp already READS as 1, so no artifact of those kinds is
+   stale, so the runner has no reason to write to them. A future PR that
+   registers a schema migration for one of them trips this test and is told,
+   in the failure message, that the model must accept `schema_version` first.
+3. `test_this_repos_own_artifacts_plan_only_safe_actions` runs
+   `plan_migrations` over super-fr itself and asserts every planned action is a
+   plan-kind REPAIR and none is under `implemented/`. Deliberately NOT a count:
+   38 of the 39 `<4.0.0` ceilings here are archived, so a count would be
+   measuring the archive the runner must never touch (per
+   `d-migration-blast-radius-is-one-live-plan`).
+
+THE MECHANISM THAT MAKES IT STRUCTURAL, not vigilance. The runner's work list
+comes only from `read_version(path) < kind.current_version` (schema
+migrations) or a repair's predicate. There is no "normalise on write" path —
+the runner never stamps an artifact it did not migrate, and a repair never
+stamps at all. So the closed-world models are safe by construction, not by the
+author remembering.
+
+Verified live: `fr migrate artifacts` (dry-run) against this repo reports
+exactly one action —
+`docs/superpowers/plans/2026-07-09-multi-backend-git-host-adapters/_meta.yaml`,
+the ceiling widening — which is precisely the blast radius Phase 1 measured.
+The standing obligation still stands: the first PR that moves any kind's
+`current_version` past 1 must, in the SAME PR, add an optional defaulted
+`schema_version: int = 1` to that kind's model. Phase 7 writes that into
+`.claude/rules/artifact-versioning.md`.

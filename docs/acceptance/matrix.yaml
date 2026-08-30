@@ -1470,9 +1470,15 @@ rows:
     acceptance: Re-running any migration produces no second rewrite and no second commit.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.B. The stamp is the guard; migrations are written to be idempotent.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_runner.py
+      - super-fr:tests/unit/test_migration_fr_version.py
+    status: skipped
+    notes: Spec 3.B. The no-second-REWRITE half is ci-pinned both ways — the stamp guards
+      a schema migration, the predicate guards a repair, and both assert bytes AND mtime
+      unchanged on the second run. The no-second-COMMIT half is Phase 4's and stays
+      unverified until it lands, which is why this row is not yet ci.
   - id: artifact-structure-validator-per-version
     capability: Artifact migration
     acceptance: Every version ships a structural validator for every artifact kind it

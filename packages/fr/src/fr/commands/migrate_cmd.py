@@ -1,4 +1,4 @@
-"""`fr migrate v1-to-v2` CLI."""
+"""`fr migrate v1-to-v2 / dirs / artifacts` CLI."""
 
 from __future__ import annotations
 
@@ -123,3 +123,63 @@ def dirs_cmd(
         typer.echo("\nmoves staged via git mv — review and commit them.")
     else:
         typer.echo("\n(dry-run; pass --yes to apply)")
+
+
+@migrate_app.command("artifacts")
+def artifacts_cmd(
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Apply the migrations. Without this flag, runs as a preview (dry-run is the default).",
+    ),
+) -> None:
+    """Bring every live artifact up to the version this fr writes.
+
+    Walks the artifact registry (plans, journals, runs, the acceptance matrix,
+    specs), applies each registered migration whose guard says it is needed,
+    and reports what it did. Archived artifacts under `implemented/` are never
+    touched — they record what shipped.
+
+    Dry-run by default, like every other fr mutation. Committing is a separate
+    concern (spec §3.D); this verb only rewrites files.
+    """
+    from fr.artifacts.runner import MigrationChainError, run_migrations
+    from fr.commands.common import resolve_repo_root
+
+    repo_root = resolve_repo_root()
+    require_migrated_layout(repo_root)
+    try:
+        report = run_migrations(repo_root, dry_run=not yes)
+    except MigrationChainError as e:
+        err_console.print(f"[red]migration error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    verb = "migrated" if yes else "would migrate"
+    for action in report.applied:
+        # Plain echo, not rich: rich soft-wraps and splits long paths.
+        typer.echo(f"  {verb}: {_rel(action.path, repo_root)} · {action.summary}")
+    for skip in report.skipped:
+        typer.echo(f"  skipped (already done by another writer): {_rel(skip.path, repo_root)}")
+    for failure in report.failed:
+        typer.echo(f"  FAILED: {_rel(failure.path, repo_root)} · {failure.error}", err=True)
+
+    if not report.applied and not report.failed:
+        typer.echo("every artifact is already current.")
+        return
+    if not yes:
+        typer.echo(f"\n{len(report.applied)} to migrate (dry-run; pass --yes to apply)")
+    else:
+        typer.echo(f"\n{len(report.applied)} migrated.")
+    if report.failed:
+        typer.echo(
+            f"{len(report.failed)} artifact(s) could not be migrated and were left unmodified.",
+            err=True,
+        )
+        raise typer.Exit(2)
+
+
+def _rel(path: Path, repo_root: Path) -> str:
+    try:
+        return str(path.relative_to(repo_root))
+    except ValueError:  # pragma: no cover — every artifact is under the root
+        return str(path)

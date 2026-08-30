@@ -271,19 +271,28 @@ def artifact_kind(name: str) -> ArtifactKind:
         ) from None
 
 
-def iter_artifact_paths(repo_root: Path, name: str) -> Iterator[Path]:
-    """Every live artifact of kind `name` under `repo_root`, sorted.
+def iter_paths_of(repo_root: Path, kind: ArtifactKind) -> Iterator[Path]:
+    """Every live artifact of `kind` under `repo_root`, sorted.
 
     Archived artifacts are never yielded — the locators cannot reach
     `implemented/`, and this re-checks so a future locator edit cannot quietly
     start rewriting shipped history.
+
+    Takes the kind rather than its name so the migration runner can walk the
+    kinds it was handed without re-entering the global mapping (the runner's
+    registry is injectable in tests); `iter_artifact_paths` is the by-name
+    front door and the archive check lives here, once, for both.
     """
-    kind = artifact_kind(name)
     for path in sorted(repo_root.glob(kind.locator)):
         if ARCHIVE_SEGMENT in path.relative_to(repo_root).parts:
             continue
         if path.is_file():
             yield path
+
+
+def iter_artifact_paths(repo_root: Path, name: str) -> Iterator[Path]:
+    """Every live artifact of kind `name` under `repo_root`, sorted."""
+    yield from iter_paths_of(repo_root, artifact_kind(name))
 
 
 def iter_all_artifacts(repo_root: Path) -> Iterator[tuple[ArtifactKind, Path]]:
