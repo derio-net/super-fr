@@ -379,3 +379,146 @@ The standing obligation still stands: the first PR that moves any kind's
 `current_version` past 1 must, in the SAME PR, add an optional defaulted
 `schema_version: int = 1` to that kind's model. Phase 7 writes that into
 `.claude/rules/artifact-versioning.md`.
+
+<!-- fr:journal kind=discovery scope=plan id=d-interactive-predicate-and-exemptions created=2026-08-30T14:13:54 phase=3 -->
+### d-interactive-predicate-and-exemptions · discovery · Context detection is CI-unset AND both streams a TTY; the exemption list is exactly four things (phase 3)
+
+<!-- fr:journal kind=discovery scope=plan id=d-path-scoped-commit-and-message created=2026-08-30T14:25:30 phase=4 -->
+### d-path-scoped-commit-and-message · discovery · Path-scoping the commit, not just the staging: git commit needs the pathspec too, plus the generated message format (phase 4)
+
+`fr.artifacts.commit.commit_migration(repo_root, report, *, fr_version=None)
+-> CommitOutcome(committed, reason, paths, message)`. It never raises for an
+expected outcome; "not a git repo" and "nothing to commit" are answers.
+
+THE TWO GIT MISTAKES IT IS SHAPED TO AVOID. Both pass a clean-tree test, which
+is exactly why the spec spells this out and why every fixture here starts dirty.
+
+1. `git add -A` sweeps the operator's unrelated MODIFIED files into the commit.
+2. A plain `git commit -m` records the WHOLE INDEX, so it sweeps in a file the
+   operator had already STAGED — even when the staging was path-scoped. This is
+   the one that is easy to miss: scoping the `add` is not enough, the COMMIT
+   has to carry the pathspec too.
+
+So the sequence is:
+
+    git add -- <report.changed_paths>
+    git diff --cached --name-only HEAD -- <paths>     # anything to record?
+    git commit -m <generated> -- <paths>
+
+`add` first, so an artifact a migration CREATED is tracked and can be named by
+the pathspec. The pathspec on `commit` makes git build the tree from HEAD plus
+those paths and leave the rest of the index alone — the operator's staged file
+stays staged, and their modified file stays modified and uncommitted.
+
+The emptiness check is against HEAD (`diff --cached --name-only HEAD`), not
+against the index, so the answer does not change when the operator has staged
+something unrelated. When it comes back empty we make NO COMMIT AT ALL — not
+"an empty commit avoided", but the thing that stops an unrelated staged file
+being committed under a migration message.
+
+VERIFIED BY MUTATION, not by reading. Swapping in `git add -A` fails
+`test_an_unrelated_modified_file_stays_modified_and_uncommitted`; dropping the
+pathspec from the commit fails both
+`test_an_unrelated_staged_file_is_not_swept_in` and
+`test_the_commit_contains_only_the_paths_the_migration_rewrote`. Both mutations
+were applied and reverted.
+
+COMMIT MESSAGE FORMAT (`migration_commit_message(report, *, fr_version)`),
+grouped by kind and transition rather than listing files — `git show --stat`
+already lists them, and a consumer repo mid-upgrade migrates dozens of plans at
+once. Groups keep first-seen order, so a deterministic report gives a
+deterministic message.
+
+    chore(fr): migrate 3 artifacts to fr 4.0.0
+
+    - journal: schema 1 -> 2 (2 files)
+    - plan: repair widen-fr-version-ceiling (1 file)
+
+    Migrated automatically at fr CLI entry: the installed fr changed under
+    artifacts written for an older one (artifact migration framework, spec
+    2026-08-30 §3.C/§3.D). Only the rewritten artifact paths are in this
+    commit; unrelated working-tree and staged changes were left alone.
+
+Subject is singular for one artifact ("1 artifact"), plural otherwise; the
+count is `len(report.changed_paths)` (deduped paths), while the per-group count
+is that group's distinct paths.
+
+WHAT IT REFUSES RATHER THAN HANDLES, each returning `committed=False` with a
+reason the gate prints:
+
+- not a git repository -> migrate without committing, no crash (spec §3.D);
+- a repository with NO COMMITS YET -> a pathspec commit has no HEAD to build
+  its tree from, and falling back to a whole-index commit would sweep in
+  whatever was staged. An empty repo is not the case this feature exists for;
+- a changed path OUTSIDE the git toplevel -> refuse. It cannot happen through
+  the registry's locators, but this writes to git history from a callback that
+  fires before an unrelated command, so the precondition is asserted rather
+  than assumed to have been checked upstream;
+- `git add` or `git commit` failing (no user.email, hooks, a lock) -> reported,
+  and the CALLER STILL RUNS THE COMMAND. The files are migrated; refusing there
+  would strand the operator with a migrated tree and a command that never works.
+
+<!-- fr:journal kind=finding scope=plan id=f-live-gate-refused-ci-and-the-suite created=2026-08-30T14:26:03 phase=3 state=fixed -->
+### f-live-gate-refused-ci-and-the-suite · finding [fixed] · Switching the gate on refused this repo CI and 108 of its own tests; both fixed, and agents always land on the non-interactive side (phase 3)
+
+Turning the gate on made the repo's own CI red, and made every agent-driven
+`fr` command refuse. Both were found by running the tooling, not by reasoning.
+
+WHAT HAPPENED. The moment `fr.cli`'s callback went live, my own
+`fr isolation exec -- uv run fr acceptance report` refused:
+
+    fr: artifacts in /workspaces/... were written for a different fr and must be
+    migrated before this command can run.
+    This context is non-interactive (CI is set, or there is no TTY) ...
+
+That is the feature working. But it has two consequences worth writing down.
+
+1. CI WOULD HAVE GONE RED, and not in the phase that caused it.
+   `.github/workflows/acceptance-report.yml` does `uv tool install ./packages/fr`
+   (super-fr self-hosts, deliberately) and then `fr acceptance check`, with
+   `CI=true`. This repo carried exactly one live stale artifact —
+   `docs/superpowers/plans/2026-07-09-multi-backend-git-host-adapters/_meta.yaml`
+   at `fr_version: '>=3.0.0,<4.0.0'` — so that step would have exited 2 on every
+   PR. Note the plan was ALREADY unparseable under 4.0.0 (`PlanSchemaError` at
+   `parser.py`); the gate did not break it, it stopped the breakage being quiet.
+
+   FIXED by dogfooding the framework rather than hand-editing: ran
+   `fr migrate artifacts --yes` from this branch's build. One line,
+   `<4.0.0` -> `<5.0.0`, which is precisely the blast radius Phase 1 measured
+   and Phase 2 predicted. The 38 archived plans with the same ceiling are
+   untouched, as they must be. NOTE FOR THE ORCHESTRATOR: this is the one file
+   in the diff that is not Phase 3/4 code, and it is uncommitted like everything
+   else; it is here because leaving it would ship a repo whose own CI its own
+   `fr` refuses.
+
+2. THE WHOLE TEST SUITE REFUSED — 108 failures, none of them about migration.
+   In-process `CliRunner` tests and `fr` subprocesses inherit the PYTEST
+   process's cwd, so the gate resolved super-fr's own repo root and refused
+   ~100 unrelated CLI tests. Left alone, the suite's result would depend on the
+   repo's own artifact state rather than on the code under test — and it would
+   fail confusingly, in files that have nothing to do with this feature, the
+   next time anyone adds a plan with an old ceiling.
+
+   FIXED with an autouse fixture in `tests/conftest.py` setting
+   `FR_SKIP_MIGRATION=1` for the whole suite — the mechanism's own documented
+   bypass, not a hole cut for tests. `tests/unit/test_migration_trigger.py` and
+   `test_migration_commit.py` `monkeypatch.delenv` it for the invocations that
+   must actually see the gate. Note `CliRunner(env=...)` UPDATES `os.environ`
+   rather than replacing it, so omitting the variable from that dict is not
+   enough; it has to be deleted.
+
+3. AGENTS AND PODS ALWAYS LAND ON THE NON-INTERACTIVE SIDE. `fr isolation exec`,
+   `claude`'s bash tool, hermes pods and CI all lack a TTY, so while any live
+   artifact is stale EVERY fr command in those contexts refuses. That is spec
+   §3.C as designed, and it is not a deadlock: `fr migrate artifacts --yes` is
+   itself exempt from the gate and needs no TTY, so an agent that hits the
+   refusal can unblock itself with exactly the command the refusal names. What
+   an agent cannot do is silently proceed over stale artifacts — which is the
+   point.
+
+CONSEQUENCE FOR PHASES 5-8 AND FOR ANY FUTURE STAMP BUMP: the first PR that
+moves a kind's `current_version` makes every live artifact of that kind stale in
+this repo, which turns CI red until the same PR runs `fr migrate artifacts --yes`
+and commits the result. That obligation belongs in Phase 7's
+`.claude/rules/artifact-versioning.md` alongside the stamp/migration/validator
+trio it already names.

@@ -17,6 +17,7 @@ from __future__ import annotations
 import typer
 
 from fr import __version__
+from fr.artifacts.trigger import ensure_artifacts_current
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
@@ -81,6 +82,7 @@ def version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: bool | None = typer.Option(
         None,
         "--version",
@@ -90,3 +92,9 @@ def main(
     ),
 ) -> None:
     """VK toolchain: v2 plan-as-folder, render → observe → diff → apply."""
+    # The obligatory artifact-migration trigger (spec §3.C). It runs before
+    # every command: in an interactive context stale artifacts are migrated and
+    # committed and the typed command then runs, and in a daemon / CI context
+    # the command is refused loudly with nothing written. `--version`,
+    # `--help`, `fr migrate` and `FR_SKIP_MIGRATION=1` are the only exemptions.
+    ensure_artifacts_current(invoked_subcommand=ctx.invoked_subcommand)

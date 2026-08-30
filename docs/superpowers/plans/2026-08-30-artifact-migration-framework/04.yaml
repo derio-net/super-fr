@@ -33,14 +33,15 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-08-30T14:15:18+00:00'
       note: null
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-08-30T14:24:43+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-08-30T14:25:00+00:00'
+    note: 'Path-scoped commit: fr.artifacts.commit. git add -- <paths> then git commit
+      -m <msg> -- <paths>. 12 unit tests, both mutations verified.'
     observed_prs: []
