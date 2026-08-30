@@ -1,0 +1,44 @@
+schema_version: 2
+phase:
+  number: 5
+  title: The daemon stops swallowing staleness
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - daemon-refuses-stale-artifacts
+tasks:
+- number: 1
+  title: RED → GREEN — loud refusal in the bridge
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: extend the bridge tests: a stale artifact makes the tick REFUSE that
+      plan loudly — error logged, failure metric pushed, errors incremented —
+      rather than the current catch-and-continue at
+      fr_dispatch/__init__.py:146-149 which logs a warning and drops it. Assert
+      the daemon does not auto-commit, and that one stale plan does not take the
+      daemon down (the I9 boundary still holds for the others).
+      Run: uv run pytest tests/unit -k bridge -q --no-cov
+      Expected: failures.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: implement. Keep bridge_cli.py's diff minimal — flock, checkout
+      sync, metrics wire format and the state files are untouched.
+      Run: uv run pytest tests/unit -k bridge -q --no-cov && uv run pytest tests/integration -k bridge -q --no-cov
+      Expected: green.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

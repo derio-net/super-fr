@@ -1404,3 +1404,73 @@ rows:
       modelled on the real agent-worktree-required.sh which carries the exempt list
       twice. Verified against a copy of the live hook: exactly one line changes (the
       message), the read-only rationale comment is untouched, second run byte-identical.'
+  - id: artifacts-migrate-on-next-command
+    capability: Artifact migration
+    acceptance: An operator whose fr version changed under in-flight work has their
+      artifacts migrated by the very next fr command, which then completes normally.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.C. The 'pause, migrate, resume' the operator asked for, where the
+      pause is invisible because the typed command still runs.
+  - id: migration-commit-is-path-scoped
+    capability: Artifact migration
+    acceptance: The migration commit contains only the artifact paths it rewrote; unrelated
+      uncommitted work is left in the working tree, unmodified and uncommitted.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.D. In-flight work IS a dirty tree, so refusing until clean would block
+      the case this exists for; stash cycles risk a pop conflict over unsaved work.
+  - id: daemon-refuses-stale-artifacts
+    capability: Artifact migration
+    acceptance: The bridge and CI refuse loudly and exit non-zero on stale artifacts
+      rather than skipping them silently, and never auto-commit.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.C. Replaces discover_plans' current catch-and-continue, which stops
+      dispatch for every pre-4.0.0 plan while reporting a healthy tick. The bridge hard-resets
+      its checkout each tick, so a commit there would be discarded anyway.
+  - id: in-flight-work-is-adoptable
+    capability: Artifact migration
+    acceptance: A plan already under way acquires a run cursor reflecting the work actually
+      done, instead of being stranded without one.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.E. fr run start has no --at/resume today, so an in-flight plan cannot
+      get a cursor at all.
+  - id: every-artifact-declares-its-version
+    capability: Artifact migration
+    acceptance: Every artifact fr generates declares the version it was written for,
+      and a file with no stamp reads as version 1 rather than as an error.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.A. Only plans are stamped today; journals, runs, the matrix and specs
+      cannot even be DETECTED as stale. Per-artifact stamps chosen over a repo manifest
+      because a manifest cannot describe a half-migrated tree.
+  - id: migration-is-idempotent
+    capability: Artifact migration
+    acceptance: Re-running any migration produces no second rewrite and no second commit.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.B. The stamp is the guard; migrations are written to be idempotent.
+  - id: artifact-structure-validator-per-version
+    capability: Artifact migration
+    acceptance: Every version ships a structural validator for every artifact kind it
+      generates, and CI runs it over the repo's own artifacts.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.F. Standing obligation, not a one-off. Would have caught the duplicated-spec
+      corruption found on this branch, which no existing test could see.
