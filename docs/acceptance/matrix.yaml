@@ -1451,11 +1451,20 @@ rows:
       and a file with no stamp reads as version 1 rather than as an error.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_artifact_registry.py
     status: not-implemented
-    notes: Spec 3.A. Only plans are stamped today; journals, runs, the matrix and specs
-      cannot even be DETECTED as stale. Per-artifact stamps chosen over a repo manifest
-      because a manifest cannot describe a half-migrated tree.
+    notes: Spec 3.A. Per-artifact stamps chosen over a repo manifest because a manifest
+      cannot describe a half-migrated tree. Phase 1 lands the registry and a reader/writer
+      per kind, and the unit ref covers the second half of the claim in CI — an absent
+      stamp reads as version 1, not an error, for all five kinds. Row stays red because
+      the FIRST half is unmet — the generators still do not stamp. Only plans carry a
+      stamp in practice; `fr journal add`, `fr run start` and the spec writer emit
+      unstamped files, so "every artifact fr generates declares its version" is still
+      false. The run/matrix/plan models are also extra=forbid, so a live file of those
+      kinds cannot yet ACCEPT a stamp (plan journal, finding
+      f-closed-world-models-reject-a-stamp). Re-evaluate in Phase 7.
   - id: migration-is-idempotent
     capability: Artifact migration
     acceptance: Re-running any migration produces no second rewrite and no second commit.
@@ -1474,3 +1483,17 @@ rows:
     status: not-implemented
     notes: Spec 3.F. Standing obligation, not a one-off. Would have caught the duplicated-spec
       corruption found on this branch, which no existing test could see.
+  - id: archived-plans-survive-a-major-bump
+    capability: Artifact migration
+    acceptance: After a major fr bump, archived plans still report their real state
+      in spec status instead of reading as missing, while execution paths still refuse
+      an incompatible live plan.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec 3.E.1. Excluding archives from migration collides with the parse-time
+      gate: spec.py:370 catches PlanSchemaError and degrades the plan to Missing, which
+      under 4.0.0 hits all 38 archived plans here. The gate is over-scoped, not the
+      archives - it exists to stop an incompatible fr EXECUTING a plan, and reading
+      history executes nothing.'

@@ -1,0 +1,44 @@
+schema_version: 2
+phase:
+  number: 8
+  title: The fr_version gate applies to execution, not to historical reads
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - archived-plans-survive-a-major-bump
+tasks:
+- number: 1
+  title: RED → GREEN — scope the gate to execution
+  steps:
+  - id: P8.T1.S1
+    text: |-
+      RED: add tests asserting parse(plan_dir, enforce_fr_version=False) returns a
+      usable Plan for a plan whose ceiling excludes the installed version, while
+      the default (enforce on) still raises PlanSchemaError. Then assert
+      fr.spec.compute_status reports an ARCHIVED plan's real state rather than
+      state="Missing" with a parse-error warning — today spec.py:370 catches the
+      error and degrades, which under 4.0.0 turns all 38 archived plans here into
+      missing ones and makes spec status useless for any shipped spec.
+      Use a fixture whose ceiling genuinely excludes the installed version; one
+      that happens to admit it proves nothing.
+      Run: uv run pytest tests/unit -k "spec_status or parser" -q --no-cov
+      Expected: failures.
+  - id: P8.T1.S2
+    text: |-
+      GREEN: add the flag to fr.parser.parse, defaulting to enforce (safety stays
+      the default), and pass enforce_fr_version=False from the READ-ONLY status
+      path only. Execution paths — fr apply, fr_dispatch, fr pickup — keep
+      enforcing; assert that explicitly, because relaxing the gate for execution
+      is the one thing this must not do.
+      Run: uv run pytest tests/unit -k "spec_status or parser or apply" -q --no-cov && uv run pytest -q --no-cov
+      Expected: green.
+state:
+  steps:
+    P8.T1.S1: {state: ' ', ticked_at: null, note: null}
+    P8.T1.S2: {state: ' ', ticked_at: null, note: null}
+  completion:
+    at: null
+    note: null
+    observed_prs: []

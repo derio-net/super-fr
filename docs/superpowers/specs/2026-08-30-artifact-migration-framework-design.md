@@ -19,9 +19,12 @@ mid-plan, mid-implementation. The artifacts on disk do not change with it.
 
 Today that produces silent damage, verified on the 4.0.0 branch:
 
-- **`fr_version` is enforced at parse** (`parser.py:132-149`) and 39 of 40 plans
-  in this repo carry `>=3.x,<4.0.0`. Under 4.0.0 every one raises
-  `PlanSchemaError`.
+- **`fr_version` is enforced at parse** (`parser.py:132-149`) and plans written
+  before 4.0.0 carry `>=3.x,<4.0.0`, so under 4.0.0 they raise
+  `PlanSchemaError`. In *this* repo that is 39 `_meta.yaml` files — but 38 are
+  **archived** and out of scope (§2), leaving exactly one live plan to migrate.
+  A consumer repo mid-flight has no such luck: every active plan is affected.
+  A test asserting "39 plans migrated" here would be evidence of a bug.
 - **The bridge swallows it.** `discover_plans` catches `PlanSchemaError`, logs a
   warning and continues, so dispatch stops for every pre-4.0.0 plan while the
   daemon reports a healthy tick — a silent no-op at the exact moment an upgrade
@@ -68,7 +71,7 @@ silently when a migration dies partway.
 | Artifact | Stamp | Status |
 |---|---|---|
 | `plans/*/_meta.yaml` | `schema_version` (+ `fr_version` range) | exists |
-| `journals/**/*.md` | header comment `<!-- fr:journal schema=N -->` | new |
+| `journals/**/*.md` | header comment `<!-- fr:journal-schema=N -->` | new |
 | `runs/*.yaml` | `schema_version` | new |
 | `acceptance/matrix.yaml` | `schema_version` | new |
 | `specs/*.md` | front-matter `fr_schema:` | new |
@@ -85,9 +88,21 @@ A migration is `(kind, from_version, to_version, fn)`. The runner reads each
 artifact's stamp and applies the chain up to current. Re-running is a no-op:
 migrations are written to be idempotent, and the stamp is the guard.
 
-4.0.0 registers exactly one: **plan `fr_version` ceilings that exclude the
-installed major are widened** (`<4.0.0` → `<5.0.0`). That is the concrete blocker
-above, and it doubles as the framework's proof.
+Two kinds of migration, because not every version bump changes a shape:
+
+- a **schema migration** moves an artifact `from_version → to_version` and is
+  guarded by the stamp;
+- a **repair** is predicate-guarded and version-independent, idempotent because
+  applying it makes its own predicate false.
+
+4.0.0 registers exactly one, and it is a **repair**: plan `fr_version` ceilings
+that exclude the installed major are widened (`<4.0.0` → `<5.0.0`). It must not
+be a schema migration, because a plan's artifact stamp *is* its existing
+`_meta.yaml schema_version` (forced — `PlanMeta` is `extra="forbid"`, so a second
+key would make every stamped plan unparseable). Bumping that to 3 would declare a
+plan-folder shape change that did not happen, and drag `PlanMeta.schema_version`
+to `Literal[2, 3]` to encode a lie. The ceiling widening changes a constraint,
+not a shape.
 
 ### C. Obligatory trigger, context-aware (decision 1)
 
@@ -149,6 +164,20 @@ Adoption is **offered, not forced**: the migration reports in-flight plans with
 no run and adopts them in the interactive path. A plan whose work is finished
 gets no run — a cursor over completed work is noise.
 
+### E.1 The `fr_version` gate applies to execution, not to historical reads
+
+Excluding archived artifacts from migration collides with the gate that made
+migration necessary: `spec.py:370` parses plans under `implemented/` for spec
+status, catches `PlanSchemaError`, and reports the plan as **`state="Missing"`**.
+Under 4.0.0 that silently turns every archived plan into a missing one — 38 of
+them here — making spec status useless for any shipped spec.
+
+Migrating them is not the answer (§2: archives record what shipped). The gate is
+the thing that is over-scoped: it exists to stop an incompatible `fr` **executing**
+a plan, and reading history executes nothing. So `parse()` takes an explicit
+`enforce_fr_version` flag, defaulting to **on**; execution paths (`fr apply`,
+dispatch, `fr pickup`) keep enforcing, and read-only status paths do not.
+
 ### F. Every version ships a structure validator
 
 `fr validate artifacts [--kind K]` structurally validates every artifact of every
@@ -189,6 +218,10 @@ existing test could see.
 6. `fr validate artifacts` over the repo: passes; then corrupt one artifact
    (delete a required field) and confirm it fails naming the file and field.
 7. Re-run `fr status`: no second migration, no second commit (idempotence).
+8. `fr spec status` over a spec whose plans are **archived** and still carry a
+   pre-4.0.0 ceiling: every plan reports its real state, none reports `Missing`.
+   Then confirm `fr apply --yes` on an unmigrated *live* plan still refuses — the
+   gate must relax for reads without relaxing for execution.
 
 ## Implementation Plans
 
