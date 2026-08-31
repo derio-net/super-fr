@@ -337,3 +337,110 @@ def test_subcommand_help_is_exempt_at_the_app_level(
     result = _invoke(monkeypatch, tmp_path, ["plan", "--help"])
     assert result.exit_code == 0, result.output
     assert p.read_text() == before, "asking for help migrated the tree"
+
+
+# --- the offer of adoption (spec §3.E) -----------------------------------
+
+
+def _in_flight_plan(root: Path, slug: str = "2019-03-04-thermosiphon-rebuild") -> Path:
+    """A parseable, current, HALF-DONE plan — the adoption case."""
+    d = root / "docs" / "superpowers" / "plans" / slug
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "_meta.yaml").write_text(
+        f"schema_version: 2\nplan: {slug}\ntarget_repo: derio-net/super-fr\ncreated: 2019-03-04\n"
+    )
+    (d / "_prose.md").write_text("# Prose\n")
+    for n, tick in ((1, "x"), (2, '" "')):
+        (d / f"{n:02d}.yaml").write_text(
+            f"schema_version: 2\nphase:\n  number: {n}\n  title: P{n}\n  tag: agentic\n"
+            f"  depends_on: []\n  tracking_issue: null\n"
+            f"tasks:\n  - number: 1\n    title: T\n    steps:\n"
+            f"      - id: P{n}.T1.S1\n        text: s\n"
+            f"state:\n  steps:\n    P{n}.T1.S1:\n      state: {tick}\n"
+            f"      ticked_at: null\n      note: null\n"
+            f"  completion:\n    at: null\n    note: null\n    observed_prs: []\n"
+        )
+    return d
+
+
+def test_the_gate_reports_in_flight_plans_with_no_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Spec §3.E: the migration reports in-flight work that has no cursor, and
+    names the command that gives it one."""
+    _plan(tmp_path)  # something stale, so the gate does its work
+    _in_flight_plan(tmp_path)
+
+    trigger.ensure_artifacts_current(
+        argv=["status"],
+        invoked_subcommand="status",
+        env={},
+        repo_root=tmp_path,
+        interactive=True,
+        commit=lambda root, report: None,
+    )
+
+    err = capsys.readouterr().err
+    assert "fr run adopt docs/superpowers/plans/2019-03-04-thermosiphon-rebuild" in err
+    assert "not forced" in err
+
+
+def test_the_gate_creates_no_run_of_its_own(tmp_path: Path) -> None:
+    """The constraint that outranks the spec's wording: this callback fires
+    before an UNRELATED command. An operator who typed `fr status` must not
+    come back to new git-tracked files. Adoption is `fr run adopt` /
+    `fr migrate artifacts --adopt`, both of which the operator typed on
+    purpose."""
+    _plan(tmp_path)
+    _in_flight_plan(tmp_path)
+
+    trigger.ensure_artifacts_current(
+        argv=["status"],
+        invoked_subcommand="status",
+        env={},
+        repo_root=tmp_path,
+        interactive=True,
+        commit=lambda root, report: None,
+    )
+
+    assert not (tmp_path / "docs" / "superpowers" / "runs").exists()
+
+
+def test_a_complete_plan_is_not_offered_by_the_gate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The other direction — a cursor over finished work is noise."""
+    _plan(tmp_path)
+    plan_dir = _in_flight_plan(tmp_path)
+    (plan_dir / "02.yaml").write_text((plan_dir / "02.yaml").read_text().replace('" "', "x"))
+
+    trigger.ensure_artifacts_current(
+        argv=["status"],
+        invoked_subcommand="status",
+        env={},
+        repo_root=tmp_path,
+        interactive=True,
+        commit=lambda root, report: None,
+    )
+
+    assert "fr run adopt" not in capsys.readouterr().err
+
+
+def test_the_non_interactive_refusal_does_not_reach_the_offer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A refusal is a refusal: nothing migrated, so there is no "your fr
+    changed under this work" moment to report an offer in."""
+    _plan(tmp_path)
+    _in_flight_plan(tmp_path)
+
+    with pytest.raises(typer.Exit):
+        trigger.ensure_artifacts_current(
+            argv=["status"],
+            invoked_subcommand="status",
+            env={"CI": "true"},
+            repo_root=tmp_path,
+            interactive=False,
+        )
+
+    assert "fr run adopt" not in capsys.readouterr().err

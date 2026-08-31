@@ -617,3 +617,189 @@ reinvented. Confirmed RED before the parser.py/spec.py edit (git stash) --
 both new parser-level and spec-level tests failed exactly as predicted
 (TypeError: unexpected keyword argument; state == "Missing" with a "parse
 error" note) before the fix, and pass after.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p6-cursor-inference created=2026-08-31T09:29:11 phase=6 -->
+### d-p6-cursor-inference · discovery · How the adopted cursor is inferred: the shape, the one rule, PR detection, and the three states the table omits (phase 6)
+
+`fr run adopt <target>` (fr/run/adopt.py) reconstructs a cursor from artifacts
+already on disk. Five inputs, one rule, and three states the spec's table does
+not name.
+
+THE TARGET. A plan folder normally; a SPEC markdown file is also accepted,
+because the table's first row ("spec only") is by definition a state in which
+no plan dir exists to point at — refusing it would make the row unreachable
+through the command that implements the table. Anything else is a loud refusal
+naming both accepted forms.
+
+THE SHAPE. Default `fr-goal`, resolved through `resolve_workflow` (repo >
+shipped), overridable with `--workflow`. Deliberately NOT
+`workflow_for_plan`: that answers the granularity a plan DISPATCHES at and
+defaults to the `unit: phase` sub-shape whose only step is `implement`, so a
+cursor over it could never land on `plan`, `review` or `deliver`. A shape
+missing the inferred step is refused loudly, naming the step, the shape's
+steps and its `unit` — never silently retargeted.
+
+THE CURSOR RULE, one line: the cursor is the inferred step; every step BEFORE
+it is `done`, the cursor and everything after it are `pending`. Marking the
+cursor `running` would claim a dispatch that never happened (and `fr run
+advance` treats `running` as already-dispatched). Nothing here reimplements a
+transition — `_complete_step` in run_cmd stays the only implementation of the
+done/failed cursor asymmetry, and an adopted run advances exactly like a
+started one. `derive_run_id` is imported (lazily, to avoid the cycle
+run_cmd->adopt->run_cmd) rather than re-derived, so an adopted run id is
+byte-identical to a started one's.
+
+WHAT IS OBSERVED, per row:
+- phases: `fr.render.plan_locally_complete` per phase — the SAME offline
+  predicate the archive gate, the `fr status` sweep and the unarchived-plans
+  tripwire use. No third definition of "done".
+- spec: `plan.spec_path` (already lifecycle-resolved by `parse`), so an
+  archived spec resolves to its current location.
+- plan: the repo-relative plan dir.
+
+HOW "PR OPEN" IS DETECTED. Only when a PR URL is NAMED (`--pr <url>`), and
+resolved through `GhClient.pr_status_by_url` via `hostclient.client_for` —
+the protocol method that exists for exactly this question and is implemented
+for GitHub, GitLab and Gitea. So adoption inherits multi-backend support
+instead of shelling out to `gh pr list`, which fr-vk was deliberately moved
+AWAY from (2026-07-09 spec §6).
+
+Rejected: discovering the PR by branch. No adapter in the protocol answers
+"open PRs for head branch", adding one means three adapters plus fakes, and
+the guess has a wrong answer (a phase PR) that looks right.
+
+WHEN IT CANNOT BE DETERMINED OFFLINE: `pr_status_by_url` already fails soft
+(`None` on any not-found/error condition) and `default_pr_state` extends that
+to transport failures, so "cannot tell" is a first-class answer distinct from
+"no PR". It lands the cursor on `review` — the last row observable WITHOUT the
+network — and appends a note explaining why, printed by the CLI but NOT stored
+in the run file (a run file records where the cursor is, not why). Notes travel
+back through a `notes: list[str]` outparam, the same shape `discover_plans`
+uses for `failures`. Failing soft DOWNWARD matters: `review` under-claims by
+one step and `fr run resolve --step review --state done` fixes it in one
+command, while a wrong `deliver` claims the review happened.
+
+THREE STATES THE TABLE DOES NOT COVER, decided here:
+1. A plan folder with NO phase files (a skeleton) is IN FLIGHT -> `implement`.
+   `all([])` is vacuously true, so the naive reading calls an empty plan
+   finished; `completed_unarchived_plans` already guards the same trap with
+   `plan.phases and all(...)` and this agrees with it.
+2. An open PR over a plan whose phases are NOT all complete does NOT reach
+   `deliver`. The last two rows are one observation refined ("all phases
+   complete" PLUS "and there is a PR"), so an open PR over unfinished work is
+   a phase PR, not the delivery; landing on `deliver` would declare the
+   implementation over.
+3. A PR that resolves to MERGED/CLOSED is not an open one -> `review`, with a
+   note naming the observed state.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p6-what-an-adopted-run-records created=2026-08-31T09:29:49 phase=6 -->
+### d-p6-what-an-adopted-run-records · discovery · What an adopted run records: emitted spec/plan for archival, a new StepRecord.items for per-phase state, and why that needs no version bump (phase 6)
+
+An adopted run file is a normal run file — same `fr.run.model` types, same
+`save_run_state`, same path (`docs/superpowers/runs/<run-id>.yaml`). What it
+carries, and why each piece is load-bearing:
+
+EMITTED SPEC AND PLAN, attached to the step the SHAPE says emits them (for the
+shipped fr-goal manifest: `spec` on `brainstorm`, `plan` on `plan`, `pr` on
+`deliver`). This is what makes archival work: `fr.archive` locates a plan's run
+by scanning every step record for `emitted.plan == <plan dir>` (2026-08-14 spec
+§4.B), never by slug, because a run id is `<date>-<flattened-branch>` and a plan
+slug is authored independently. A run adopted without those recordings would be
+a run that never archives with its plan.
+
+FALLBACK, and it is deliberate: if the shape has no step declaring
+`emits: [plan]`, the artifact is recorded on the CURSOR step instead of being
+dropped. Archival depends on the value existing SOMEWHERE in the file; losing
+it to a shape's authoring choice would strand the plan. Same for `spec`/`pr`.
+
+`pr` IS RECORDED ONLY WHEN OBSERVED OPEN. A named-but-unresolvable PR leaves
+`emitted` unset — an artifact recording is a claim, and "the operator typed a
+URL" is not evidence the artifact exists.
+
+PER-PHASE STATE needed a field. `StepRecord` gained `items: dict[str, str] |
+None` — additive, optional, and exactly what spec §4.B's own illustration of
+run state shows (`implement: {state: running, items: {".../phase/1": done}}`);
+Phase 7 built the model without it because nothing wrote one yet. Adoption is
+the first writer: a half-implemented plan whose cursor says `implement` and
+nothing else has lost everything that made the adoption worth having. Keys are
+`phase/<n>`, the plan-relative TAIL of the §4.D identity grammar, not the full
+`<repo>/<spec>/<plan>/phase/<n>` item id — composing that is
+`fr_dispatch.work_item`'s job and `fr` may not import it
+(`tests/unit/test_import_direction.py`); the run file already records WHICH
+plan in `emitted.plan`, so the tail is unambiguous within the run. `items` is
+attached to the step with `for_each: phase` (again shape-driven), falling back
+to the cursor step.
+
+NO ARTIFACT-VERSION BUMP FOLLOWS, and that needed checking rather than
+assuming. The `run` kind sits at `current_version=1` in
+`fr.artifacts.registry`, and `RunState`/`StepRecord` are `extra="forbid"` — the
+exact hazard `f-closed-world-models-reject-a-stamp` raised in Phase 1. Adding a
+field is safe here only because `docs/superpowers/runs/` is NEW in 4.0.0:
+`packages/fr/src/fr/run/model.py` does not exist on origin/main and no released
+fr has ever read a run file, so there is no older reader for a file carrying
+`items` to break. Old files (none in the wild, and none in this repo) still
+parse — the field is optional. Had runs shipped in 3.x this would have required
+`current_version=2`, a schema migration, and `schema_version` on the model
+first.
+
+WHERE THE FILE IS WRITTEN: `repo_root`, directly — NOT through
+`ensure_run_workspace`. `fr run start` enters isolation because a run being
+BORN has no workspace yet; an adopted run describes work already under way, so
+its workspace is wherever those artifacts are. Provisioning a worktree (or
+starting a container) as a side effect of adopting would be the reverse of the
+§4.B rule it superficially resembles: the run belongs with its plan, and the
+plan is here. Adoption refuses rather than overwrite when a run id already
+exists.
+
+<!-- fr:journal kind=decision scope=plan id=d-p6-offer-reports-command-writes created=2026-08-31T09:30:20 phase=6 -->
+### d-p6-offer-reports-command-writes · decision · Offered, not forced: the CLI-entry gate REPORTS the offer and never writes; only `fr run adopt` / `fr migrate artifacts --adopt` create a run (phase 6)
+
+Spec §3.E says adoption is "offered, not forced: the migration reports
+in-flight plans with no run and adopts them in the interactive path". The
+operator's Phase 6 brief adds a constraint that outranks the wording: adoption
+"must never silently create runs during an unrelated command — an operator
+running `fr status` should not discover new tracked files."
+
+Those collide, because the interactive migration path IS an unrelated command:
+`ensure_artifacts_current` fires at CLI entry, before whatever the operator
+typed. Split accordingly, so the OFFER lands in the interactive path while the
+WRITE stays something the operator asked for:
+
+1. `ensure_artifacts_current` (CLI-entry gate) — REPORTS only. After a
+   migration it emits one line naming each in-flight plan with no run plus the
+   exact `fr run adopt <dir>` command, and creates nothing. It reaches the
+   offer only in the interactive arm; the non-interactive refusal exits before
+   it (nothing migrated, so there is no "your fr changed under this work"
+   moment to report an offer in). Pinned by
+   `test_the_gate_creates_no_run_of_its_own` and
+   `test_the_non_interactive_refusal_does_not_reach_the_offer`.
+2. `fr migrate artifacts` — reports the same offer by default (naming both
+   `--adopt` and the per-plan command), and ADOPTS with `--adopt`. `--adopt`
+   without `--yes` is a dry-run listing what it would adopt, like every other
+   fr mutation. A per-plan adoption failure is reported and the rest still
+   happen — a half-adoptable tree must not make the migration look broken.
+3. `fr run adopt` — the explicit single-plan command.
+
+Both surfaces share `adoptable_plans(repo_root)`, so they cannot describe the
+same situation differently. A plan is offered iff: parseable (a malformed or
+version-excluded plan is a different problem and must not wedge the
+migration), live (only `docs/superpowers/plans/` is walked, so archives are
+excluded structurally), NOT complete, and has no run.
+
+"NOT COMPLETE" reuses the repo's existing definition — every phase
+`plan_locally_complete` — the same one `completed_unarchived_plans`, the
+archive gate and the unarchived-plans tripwire use. Spec §3.E's "a cursor over
+completed work is noise" therefore needs no new predicate, and cannot drift
+from the archive's idea of done.
+
+"HAS NO RUN" reuses `fr.archive.find_run_for_plan` (promoted from
+`_find_run_for_plan` for this). It matches on the recorded `emitted.plan`, so
+the offer set self-heals after adoption: adopt a plan and it drops out of the
+offer, WITHOUT any name convention between run ids and plan slugs.
+
+Verified live on this repo: `uv run fr migrate artifacts` (dry-run) prints
+"every artifact is already current" and then offers exactly two plans —
+2026-07-09-multi-backend-git-host-adapters and
+2026-08-30-artifact-migration-framework — while
+2026-08-14-workflow-shapes-and-workitem-dispatch, whose phases are all ticked,
+is correctly not offered. No file was written.

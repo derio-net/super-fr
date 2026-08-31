@@ -60,6 +60,29 @@ class StepRecord(BaseModel):
     exit: int | None = None
     stdout: str | None = None
 
+    items: dict[str, str] | None = None
+    """Per-item state for a step that fans out (`for_each: phase`).
+
+    Spec §4.B's own illustration of run state carries it —
+    `implement: {state: running, items: {".../phase/1": done, ...}}` — and
+    `fr run adopt` (2026-08-30 §3.E) is the first writer: adopting a plan
+    that is half-implemented has to record WHICH phases are done, or the
+    cursor says `implement` and loses everything that makes the adoption
+    worth having.
+
+    Keys are the plan-relative tail of the §4.D identity grammar
+    (`phase/<n>`), not a full work-item id: composing the full
+    `<repo>/<spec>/<plan>/phase/<n>` is `fr_dispatch.work_item`'s job and
+    `fr` may not import it (`tests/unit/test_import_direction.py`). The run
+    file already records which plan it is about, in `emitted.plan`, so the
+    tail identifies the item unambiguously within the run.
+
+    Additive and optional, so every run file written without it still
+    parses; no artifact-version bump follows, because the run kind is new in
+    4.0.0 (`fr.artifacts.registry`, `current_version=1`) and no released fr
+    has ever read a run file.
+    """
+
 
 class RunState(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")

@@ -1458,10 +1458,22 @@ rows:
       done, instead of being stranded without one.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.E. fr run start has no --at/resume today, so an in-flight plan cannot
-      get a cursor at all.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py
+      - super-fr:tests/unit/test_migration_trigger.py
+    status: ci
+    notes: 'Spec 3.E. `fr run adopt <plan-dir|spec>` reconstructs a cursor from artifacts
+      that already exist, one row of the inference table per test: spec only -> `plan`;
+      plan with no phase complete -> `implement`; some phases complete -> `implement`
+      with per-phase state in the fan-out step''s `items`; all complete, no PR -> `review`;
+      an OBSERVED-open PR -> `deliver`. Adoption records `emitted.spec`/`emitted.plan`,
+      so archival-by-emitted.plan still keys correctly — pinned end-to-end by archiving
+      the plan and asserting the run follows it into implemented/runs/, with a plan slug
+      that deliberately does not resemble the branch-derived run id. The other direction
+      is pinned too: a plan whose work is complete is never offered a cursor, and the
+      CLI-entry migration gate REPORTS the offer without ever creating a run (only `fr
+      run adopt` and `fr migrate artifacts --yes --adopt` write one).'
   - id: every-artifact-declares-its-version
     capability: Artifact migration
     acceptance: Every artifact fr generates declares the version it was written for,

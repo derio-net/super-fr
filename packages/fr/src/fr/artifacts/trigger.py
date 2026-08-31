@@ -255,6 +255,14 @@ def ensure_artifacts_current(
             if reason:
                 emit(f"  {reason}")
 
+    # Spec §3.E: the migration REPORTS in-flight plans that have no run cursor.
+    # It stops at reporting here on purpose. This runs before an unrelated
+    # command — an operator who typed `fr status` must not come back to new
+    # git-tracked run files they never asked for. `fr migrate artifacts
+    # --adopt` and `fr run adopt` are the two places that actually write one.
+    for line in _adoption_offer(root):
+        emit(line)
+
     if report.failed:
         for failure in report.failed:
             emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
@@ -267,6 +275,15 @@ def ensure_artifacts_current(
                 f"{SKIP_ENV_VAR}=1 to bypass this check.",
             ],
         )
+
+
+def _adoption_offer(repo_root: Path) -> tuple[str, ...]:
+    """Imported lazily: `fr.run.adopt` reaches `fr.parser`/`fr.render`, and the
+    gate runs before EVERY command — it must stay cheap when nothing is stale
+    (the common case returns above without ever calling this)."""
+    from fr.run.adopt import adoption_offer_lines
+
+    return adoption_offer_lines(repo_root)
 
 
 def _rel(path: Path, repo_root: Path) -> str:

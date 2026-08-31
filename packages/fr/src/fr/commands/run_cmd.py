@@ -32,6 +32,7 @@ import typer
 from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
+from fr.run.adopt import AdoptError, adopt_run
 from fr.run.model import (
     RunState,
     RunStateError,
@@ -291,6 +292,67 @@ def start_cmd(
         f"workspace: {workspace} — run every later `fr run` command from there",
         soft_wrap=True,
     )
+
+
+@run_app.command("adopt")
+def adopt_cmd(
+    target: Path = typer.Argument(
+        ..., help="Plan folder to adopt (or the spec, when no plan exists yet)."
+    ),
+    branch: str | None = typer.Option(
+        None, "--branch", help="Branch this run operates on (default: the checked-out one)."
+    ),
+    run_id: str | None = typer.Option(
+        None, "--run-id", help="Override the derived run id (default: date + sanitized branch)."
+    ),
+    workflow: str | None = typer.Option(
+        None, "--workflow", help="Shape to adopt against (default: fr-goal)."
+    ),
+    pr: str | None = typer.Option(
+        None, "--pr", help="URL of the PR delivering this work, if one is already open."
+    ),
+) -> None:
+    """Give in-flight work a run cursor, inferred from artifacts that exist.
+
+    The other half of the 2026-08-30 artifact-migration framework (§3.E): the
+    installed fr changes under work already under way, and `fr run start` would
+    put the cursor at step one with the spec and plan already written. Adoption
+    reads what is on disk instead — spec only, plan with no phase complete, some
+    phases complete, all complete, a PR already open — and lands the cursor on
+    the step that state implies, recording the emitted spec and plan so
+    archival keys on them afterwards.
+
+    Explicit by design. `fr migrate artifacts` *reports* which plans could be
+    adopted, and adopts only with `--adopt`; nothing creates a run as a side
+    effect of an unrelated command.
+    """
+    repo_root = resolve_repo_root()
+    notes: list[str] = []
+    try:
+        state = adopt_run(
+            repo_root,
+            target,
+            branch=branch,
+            run_id=run_id,
+            workflow=workflow,
+            pr_url=pr,
+            notes=notes,
+        )
+    except AdoptError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
+
+    console.print(f"adopted run {state.run} ({state.workflow}) \u2014 cursor: {state.cursor}")
+    done = [sid for sid, rec in state.steps.items() if rec.state == "done"]
+    if done:
+        console.print(f"  already done: {', '.join(done)}")
+    items = state.steps[state.cursor].items or {}
+    if items:
+        complete = [k for k, v in items.items() if v == "done"]
+        console.print(f"  {len(complete)}/{len(items)} phases complete")
+    for note in notes:
+        console.print(f"  {note}", soft_wrap=True)
+    console.print(f"  advance it with: fr run advance {state.run}", soft_wrap=True)
 
 
 @run_app.command("status")

@@ -28,6 +28,7 @@ __all__ = [
     "ArchiveError",
     "archive_plan_dir",
     "completed_unarchived_plans",
+    "find_run_for_plan",
     "paths_dirty",
     "spec_archive_sweep",
 ]
@@ -136,7 +137,7 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
     return repo_root / dst_rel
 
 
-def _find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
+def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
     """The id of the run whose recorded `emitted.plan` points at `plan_rel`,
     or `None` if no run file references it (a plan not born from `fr run
     start` — the common case today, and a correct no-op).
@@ -149,6 +150,11 @@ def _find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
     review finding: a name-keyed lookup silently never matched). A
     malformed run file is skipped, not fatal to archival — a parse failure
     there is a different problem.
+
+    Public (it was `_find_run_for_plan` until the 2026-08-30 §3.E adoption
+    work) because `fr.run.adopt` asks the same question from the other end —
+    "does this plan already have a run?" — and a second implementation of
+    the match would be a second chance to key it on a name.
     """
     runs_dir = repo_root / RUNS_REL
     if not runs_dir.is_dir():
@@ -171,7 +177,7 @@ def _archive_run(repo_root: Path, plan_rel: Path) -> None:
     references this plan, or when the destination already holds one (a
     re-run) — same shape as `_archive_journal`.
     """
-    run_id = _find_run_for_plan(repo_root, plan_rel)
+    run_id = find_run_for_plan(repo_root, plan_rel)
     if run_id is None:
         return
     src = run_path(repo_root, run_id)

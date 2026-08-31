@@ -132,6 +132,11 @@ def artifacts_cmd(
         "--yes",
         help="Apply the migrations. Without this flag, runs as a preview (dry-run is the default).",
     ),
+    adopt: bool = typer.Option(
+        False,
+        "--adopt",
+        help="Also give every in-flight plan with no run a cursor (`fr run adopt`).",
+    ),
 ) -> None:
     """Bring every live artifact up to the version this fr writes.
 
@@ -165,17 +170,63 @@ def artifacts_cmd(
 
     if not report.applied and not report.failed:
         typer.echo("every artifact is already current.")
+        _offer_adoption(repo_root, adopt=adopt, yes=yes)
         return
     if not yes:
         typer.echo(f"\n{len(report.applied)} to migrate (dry-run; pass --yes to apply)")
     else:
         typer.echo(f"\n{len(report.applied)} migrated.")
+    _offer_adoption(repo_root, adopt=adopt, yes=yes)
+
     if report.failed:
         typer.echo(
             f"{len(report.failed)} artifact(s) could not be migrated and were left unmodified.",
             err=True,
         )
         raise typer.Exit(2)
+
+
+def _offer_adoption(repo_root: Path, *, adopt: bool, yes: bool) -> None:
+    """Report the in-flight plans with no run cursor — and adopt them only when
+    the operator asked (spec §3.E: "offered, not forced").
+
+    Without `--adopt` this prints the offer and the exact command; `--adopt`
+    without `--yes` says what it would do, like every other fr mutation. An
+    adoption that fails is reported and the others still happen: a
+    half-adoptable tree must not make the migration look broken.
+    """
+    from fr.run.adopt import PLANS_REL, AdoptError, adopt_run, adoptable_plans
+
+    plans = adoptable_plans(repo_root)
+    if not plans:
+        return
+
+    if not adopt:
+        typer.echo(
+            f"\n{len(plans)} in-flight plan(s) have no run cursor. Adoption is offered, "
+            "not forced — run `fr migrate artifacts --yes --adopt`, or adopt one at a time:"
+        )
+        for plan_dir in plans:
+            typer.echo(f"  fr run adopt {(PLANS_REL / plan_dir.name).as_posix()}")
+        return
+
+    if not yes:
+        typer.echo(f"\nwould adopt {len(plans)} in-flight plan(s) (dry-run; pass --yes to apply)")
+        for plan_dir in plans:
+            typer.echo(f"  {(PLANS_REL / plan_dir.name).as_posix()}")
+        return
+
+    typer.echo("")
+    for plan_dir in plans:
+        notes: list[str] = []
+        try:
+            state = adopt_run(repo_root, plan_dir, notes=notes)
+        except AdoptError as e:
+            typer.echo(f"  could not adopt {plan_dir.name}: {e}", err=True)
+            continue
+        typer.echo(f"  adopted {state.run} — cursor: {state.cursor} ({plan_dir.name})")
+        for note in notes:
+            typer.echo(f"    {note}")
 
 
 def _rel(path: Path, repo_root: Path) -> str:
