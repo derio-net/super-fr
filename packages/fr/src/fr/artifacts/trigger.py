@@ -12,7 +12,12 @@ migrate, resume" they asked for, and the pause is invisible because the command
 they typed still runs afterwards.
 
 **Non-interactive** means refuse, exit non-zero, name the command to run — and
-*never* migrate, never commit. The bridge works from a checkout it `reset
+*never* migrate, never commit. So does **HEAD being the repository's default
+branch**: a commit made automatically on `main`, before a command the operator
+typed for some other reason, is work they have to notice and undo. So does an
+artifact the operator has **uncommitted changes in**: `git add -- <path>`
+stages the whole file, so migrating it would commit their half-typed edit under
+a `chore(fr): migrate ...` message. The bridge works from a checkout it `reset
 --hard`s to `origin/main` every tick (#286), so a commit there is discarded on
 the next pass: auto-committing would be pointless *and* actively misleading.
 That asymmetry is the whole reason this module has a context predicate at all,
@@ -28,9 +33,14 @@ Three properties this module is built around:
    disables the mechanism in the quietest possible way — everything keeps
    working and nothing ever migrates. `EXEMPTIONS` is pinned by a test.
 3. **Nothing escapes as a traceback.** `is_stale` / `run_migrations` raise
-   `MigrationChainError` when an artifact sits at a version no registered
-   migration moves. That is a registry bug, and a registry bug must not crash
-   an unrelated command: it becomes a loud refusal with exit 2.
+   `MigrationChainError` when an artifact sits at a *declared* version no
+   registered migration moves. That is a registry bug, and a registry bug must
+   not crash an unrelated command: it becomes a loud refusal with exit 2.
+4. **Every refusal has the same shape.** Say what is wrong, say why fr will not
+   act here, then give the preview command, the apply command and the bypass.
+   Three of the four refusals below are the same six lines with one clause
+   changed, and that is deliberate: an operator who has read one has read them
+   all.
 """
 
 from __future__ import annotations
@@ -48,7 +58,7 @@ import typer
 # straight for the runner would give a gate that walks an empty registry and
 # cheerfully reports every tree as current.
 from fr.artifacts import is_stale, run_migrations
-from fr.artifacts.commit import commit_migration
+from fr.artifacts.commit import commit_migration, on_default_branch, uncommitted_veto
 from fr.artifacts.runner import MigrationRegistry, MigrationReport
 
 # --- what is exempt ------------------------------------------------------
@@ -56,14 +66,40 @@ from fr.artifacts.runner import MigrationRegistry, MigrationReport
 EXEMPT_OPTIONS: Final[frozenset[str]] = frozenset({"--help", "--version"})
 """Asking what `fr` is must never rewrite the repo."""
 
-EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate"})
+READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
+    "status",
+    "skills",
+    "isolation",
+    "init",
+    "validate",
+)
+"""Commands that promise not to mutate the repo's artifacts — so the gate must
+not mutate them on their behalf.
+
+`fr status` is registered as "Read-only plan report (allowlist-safe; never
+mutates)"; before this exemption it could rewrite every stale artifact and
+create a commit. `fr validate artifacts` is worse than surprising: interactive,
+the gate migrated and committed *before* the validator ran, so a human could
+never see it report a stale artifact — only CI, which is non-interactive, ever
+could. That guts the diagnostic. `fr isolation` and `fr init` are the two
+commands an operator reaches for when the workspace is not yet in a state to be
+migrated at all."""
+
+EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by
-default) has to stay a preview rather than becoming its own trigger."""
+default) has to stay a preview rather than becoming its own trigger. The rest
+are `READ_ONLY_COMMANDS`."""
 
 SKIP_ENV_VAR: Final[str] = "FR_SKIP_MIGRATION"
 """Recovery escape for when a migration is the thing that is broken."""
 
-EXEMPTIONS: Final[tuple[str, ...]] = ("--help", "--version", "migrate", f"{SKIP_ENV_VAR}=1")
+EXEMPTIONS: Final[tuple[str, ...]] = (
+    "--help",
+    "--version",
+    "migrate",
+    *READ_ONLY_COMMANDS,
+    f"{SKIP_ENV_VAR}=1",
+)
 """The complete list, flattened, so a test can assert it is *exactly* these."""
 
 _SKIP_FALSY: Final[frozenset[str]] = frozenset({"", "0", "false", "no", "off"})
@@ -209,22 +245,31 @@ def ensure_artifacts_current(
     if not live:
         raise _refuse(
             emit,
-            [
-                f"fr: artifacts in {root} were written for a different fr and must be "
-                "migrated before this command can run.",
-                "  This context is non-interactive (CI is set, or there is no TTY), so fr "
+            _will_not_act_here(
+                root,
+                "This context is non-interactive (CI is set, or there is no TTY), so fr "
                 "will not migrate or commit here:",
-                "  a daemon checkout is hard-reset every tick, so a commit made in it "
+                "a daemon checkout is hard-reset every tick, so a commit made in it "
                 "would be silently discarded.",
-                "  preview:  fr migrate artifacts",
-                "  apply:    fr migrate artifacts --yes",
-                f"  bypass (recovery only):  {SKIP_ENV_VAR}=1 fr <command>",
-            ],
+            ),
+        )
+
+    branch = on_default_branch(root)
+    if branch is not None:
+        raise _refuse(
+            emit,
+            _will_not_act_here(
+                root,
+                f"HEAD is {branch!r}, this repository's default branch, so fr will not "
+                "migrate or commit here:",
+                "an automatic commit on a protected branch is work you have to notice "
+                "and undo. Do it on a branch, or run the migration yourself.",
+            ),
         )
 
     emit(f"fr: artifacts in {root} are out of date — migrating before running the command.")
     try:
-        report = run_migrations(root, dry_run=False, registry=registry)
+        report = run_migrations(root, dry_run=False, registry=registry, veto=uncommitted_veto(root))
     except Exception as e:
         raise _refuse(
             emit,
@@ -275,6 +320,24 @@ def ensure_artifacts_current(
                 f"{SKIP_ENV_VAR}=1 to bypass this check.",
             ],
         )
+
+
+def _will_not_act_here(root: Path, because: str, detail: str) -> tuple[str, ...]:
+    """The refusal shape shared by every "stale, but fr will not touch it here".
+
+    One sentence of fact, one clause naming the context, one explaining why it
+    is the wrong place to write, then the three commands. Kept in one function
+    so a new refusal cannot quietly ship a different vocabulary.
+    """
+    return (
+        f"fr: artifacts in {root} were written for a different fr and must be "
+        "migrated before this command can run.",
+        f"  {because}",
+        f"  {detail}",
+        "  preview:  fr migrate artifacts",
+        "  apply:    fr migrate artifacts --yes",
+        f"  bypass (recovery only):  {SKIP_ENV_VAR}=1 fr <command>",
+    )
 
 
 def _adoption_offer(repo_root: Path) -> tuple[str, ...]:

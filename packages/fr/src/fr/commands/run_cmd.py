@@ -346,13 +346,30 @@ def adopt_cmd(
     done = [sid for sid, rec in state.steps.items() if rec.state == "done"]
     if done:
         console.print(f"  already done: {', '.join(done)}")
-    items = state.steps[state.cursor].items or {}
+    items = _fan_out_items(state)
     if items:
         complete = [k for k, v in items.items() if v == "done"]
         console.print(f"  {len(complete)}/{len(items)} phases complete")
     for note in notes:
         console.print(f"  {note}", soft_wrap=True)
     console.print(f"  advance it with: fr run advance {state.run}", soft_wrap=True)
+
+
+def _fan_out_items(state: RunState) -> dict[str, str]:
+    """The per-phase items of the step that fans out — NOT of the cursor.
+
+    `build_run_state` attaches `items` to the `for_each: phase` step
+    (`implement` in the shipped fr-goal shape), and adoption deliberately moves
+    the cursor PAST it when every phase is done. Reading the cursor's record
+    therefore made "N/M phases complete" vanish for `review` and `deliver` —
+    the two cases where the answer is most worth printing. At most one step
+    fans out, so scanning for the record that carries items needs no knowledge
+    of the workflow's step names.
+    """
+    for record in state.steps.values():
+        if record.items:
+            return dict(record.items)
+    return {}
 
 
 @run_app.command("status")

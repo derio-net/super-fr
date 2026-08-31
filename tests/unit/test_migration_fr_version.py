@@ -25,12 +25,14 @@ import yaml
 from fr.artifacts.fr_version import (
     CEILING_REPAIR,
     MalformedConstraintError,
+    UnwidenableConstraintError,
     needs_widening,
     widen_ceiling,
 )
 from fr.artifacts.runner import MIGRATIONS, run_migrations
 from fr.cli import app
 from fr.types import PlanMeta
+from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from typer.testing import CliRunner
 
@@ -103,6 +105,73 @@ def test_the_widened_constraint_actually_admits_the_installed_version() -> None:
 def test_a_malformed_constraint_raises_rather_than_guessing() -> None:
     with pytest.raises(MalformedConstraintError):
         widen_ceiling(">=3.0.0,<<4.0.0", Version("4.0.0"))
+
+
+# --- review r4-f9: a ceiling that is not spelled `<` ---------------------
+
+
+@pytest.mark.parametrize(
+    "constraint",
+    [
+        "~=3.19",  # compatible release: >=3.19, ==3.*
+        "~=3.19.0",
+        "==3.*",
+        "==3.19.0",
+        "!=4.0.0",  # excludes exactly the installed version
+        ">=3.0.0,==3.*",
+    ],
+)
+def test_a_ceiling_this_repair_cannot_widen_is_reported_not_ignored(constraint: str) -> None:
+    """`widen_ceiling` only ever rewrote `<` / `<=`. Every constraint above
+    excludes 4.0.0 through some other operator, so the widening produced no
+    candidate, `needs_widening` said False, and the plan was neither migrated
+    nor reported — `parse()` kept raising and dispatch stayed silently stopped,
+    which is the exact failure this repair exists to end.
+
+    Widening `~=3.19` or `==3.*` would mean *guessing* at what the author
+    meant, which this module refuses to do (`test_a_malformed_constraint_...`
+    above is the same rule). So it is reported instead: the operator sees the
+    file and the constraint, and edits it. Silence is the one unacceptable
+    outcome.
+    """
+    installed = Version("4.0.0")
+    assert installed not in SpecifierSet(constraint), "fixture must actually exclude 4.0.0"
+
+    with pytest.raises(UnwidenableConstraintError) as e:
+        widen_ceiling(constraint, installed)
+
+    assert constraint in str(e.value)
+    assert "4.0.0" in str(e.value), "the message must name the version being excluded"
+
+
+def test_an_unwidenable_ceiling_is_one_plans_failure_not_a_silent_pass(tmp_path: Path) -> None:
+    """End to end: the raising predicate lands in `report.failed`, the plan is
+    never rewritten, and a sibling plan still migrates (runner invariant 3)."""
+    bad = _plan(tmp_path, "aaa-tilde", fr_version="~=3.19")
+    good = _plan(tmp_path, "zzz-ok", fr_version=">=3.0.0,<4.0.0")
+    before = _freeze(bad)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert [f.path for f in report.failed] == [bad]
+    assert "~=3.19" in report.failed[0].error
+    assert _unchanged(bad, before), "a constraint fr will not guess at is never rewritten"
+    assert [a.path for a in report.applied] == [good]
+
+
+def test_a_floor_problem_is_still_silent(tmp_path: Path) -> None:
+    """The other side of the line, and the reason this is not just "raise when
+    nothing was widened": a plan asking for a NEWER fr is excluded by its
+    floor. Widening the ceiling would not admit us and downgrades are a
+    non-goal (spec §2), so there is nothing for the operator to do and nothing
+    to report."""
+    meta = _plan(tmp_path, "future", fr_version=">=5.0.0,<6.0.0")
+    before = _freeze(meta)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.failed == () and report.applied == ()
+    assert _unchanged(meta, before)
 
 
 # --- the repair over real plan folders ----------------------------------

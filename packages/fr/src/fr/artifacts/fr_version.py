@@ -15,13 +15,18 @@ own predicate and leaves the stamp at 2.
 
 Two rules the widening obeys:
 
-- It only ever moves the **ceiling**, to `<{installed major + 1}.0.0`. A
-  constraint that excludes the installed version because of its *floor* is a
-  plan asking for a newer `fr` than this one; widening would not admit us
-  anyway, and downgrades are a non-goal (spec §2).
-- A constraint it cannot parse is **reported, never rewritten**. The predicate
-  raises, the runner records that one artifact as failed, and every other plan
-  still migrates.
+- It only ever moves the **ceiling**, and only when the ceiling is spelled
+  `<` or `<=`, to `<{installed major + 1}.0.0`. A constraint that excludes the
+  installed version because of its *floor* is a plan asking for a newer `fr`
+  than this one; widening would not admit us anyway, and downgrades are a
+  non-goal (spec §2), so that case is silent.
+- A constraint it cannot parse — or one whose exclusion comes from a bound it
+  will not guess at, like `~=3.19` or `==3.*` — is **reported, never
+  rewritten**. The predicate raises, the runner records that one artifact as
+  failed, and every other plan still migrates. What must never happen is the
+  third outcome: no rewrite AND no report, which leaves `parse()` raising and
+  dispatch silently stopped for that plan — the exact failure this repair
+  exists to end.
 """
 
 from __future__ import annotations
@@ -39,6 +44,10 @@ FR_VERSION_KEY = "fr_version"
 REPAIR_NAME = "widen-fr-version-ceiling"
 
 _UPPER_BOUND_OPERATORS = ("<", "<=")
+"""The only ceilings this repair rewrites; anything else it reports."""
+
+_LOWER_BOUND_OPERATORS = (">", ">=")
+"""An exclusion caused only by these is a floor problem — silent by design."""
 
 # `fr_version` is a top-level scalar in `_meta.yaml`, so it owns a whole line
 # and the quoting style (usually `'`, sometimes none) is the operator's. The
@@ -53,6 +62,15 @@ _LINE_RE = re.compile(
 
 class MalformedConstraintError(ArtifactMigrationError):
     """An `fr_version` this repair refuses to guess at."""
+
+
+class UnwidenableConstraintError(ArtifactMigrationError):
+    """A well-formed `fr_version` that excludes this `fr` through a bound the
+    repair will not rewrite (`~=`, `==X.*`, `!=`, an exact pin).
+
+    Reported rather than widened: widening those means guessing what the author
+    meant. Reported rather than ignored: an unadmitted plan never parses, so
+    silence stops dispatch with no trace."""
 
 
 def installed_fr_version() -> Version:
@@ -70,12 +88,18 @@ def installed_fr_version() -> Version:
 def widen_ceiling(constraint: str, installed: Version) -> str | None:
     """The widened constraint, or `None` when `constraint` needs no widening.
 
-    `None` covers every "leave it alone" case: the constraint already admits
-    `installed`, it has no ceiling, or widening the ceiling still would not
-    admit `installed` (a floor problem — the plan wants a newer `fr`).
+    `None` means exactly two things, and nothing else:
+
+    - the constraint already admits `installed`;
+    - it excludes `installed` **only** through a lower bound — a plan asking
+      for a newer `fr` than this one. Widening a ceiling would not admit us and
+      downgrades are a non-goal (spec §2), so there is nothing to do and
+      nothing to say.
 
     Raises `MalformedConstraintError` if `constraint` is not a valid PEP 440
-    specifier set.
+    specifier set, and `UnwidenableConstraintError` if it excludes `installed`
+    through a bound this repair will not rewrite. Returning `None` for that
+    third case is what made an un-dispatchable plan invisible.
     """
     # Split by hand rather than iterating a `SpecifierSet`: that iterates a
     # frozenset, so rebuilding from it would silently reorder the operator's
@@ -88,13 +112,21 @@ def widen_ceiling(constraint: str, installed: Version) -> str | None:
     except InvalidSpecifier as e:
         raise MalformedConstraintError(f"invalid {FR_VERSION_KEY} {constraint!r}: {e}") from e
 
+    excluding = [s for s in specifiers if installed not in SpecifierSet(str(s))]
+    if excluding and all(s.operator in _LOWER_BOUND_OPERATORS for s in excluding):
+        return None  # a floor problem; see the docstring
+
     new_ceiling = f"<{installed.major + 1}.0.0"
     widened = [new_ceiling if s.operator in _UPPER_BOUND_OPERATORS else str(s) for s in specifiers]
     candidate = ",".join(widened)
-    if candidate == constraint or installed not in SpecifierSet(candidate):
-        # Nothing moved, or the exclusion was never about the ceiling.
-        return None
-    return candidate
+    if candidate != constraint and installed in SpecifierSet(candidate):
+        return candidate
+    raise UnwidenableConstraintError(
+        f"{FR_VERSION_KEY} {constraint!r} excludes the installed fr {installed}, but not "
+        f"through a `<` or `<=` ceiling this repair can widen "
+        f"({', '.join(f'`{s}`' for s in excluding)}). fr will not guess at what it should "
+        f"become — edit it by hand to admit {installed.major}.x."
+    )
 
 
 def _constraint_of(path: Path) -> str | None:
@@ -114,7 +146,12 @@ def _constraint_of(path: Path) -> str | None:
 
 
 def needs_widening(path: Path) -> bool:
-    """Does `path`'s ceiling exclude the installed major? Raises if unparseable."""
+    """Does `path`'s ceiling exclude the installed major?
+
+    Raises (and so is reported as that one artifact's failure) when the
+    constraint is unparseable, or excludes this `fr` through a bound the repair
+    will not rewrite.
+    """
     constraint = _constraint_of(path)
     if constraint is None:
         return False

@@ -472,3 +472,65 @@ def test_this_repos_own_artifacts_are_structurally_valid() -> None:
     report = validate_repo(REPO_ROOT)
     assert report.ok, "\n".join(str(i) for i in report.issues)
     assert report.checked > 0
+
+
+# --- review r4-f1: a duplicate YAML key is a SILENT drop ------------------
+
+
+def test_a_duplicated_key_in_the_matrix_is_caught_not_silently_dropped(tmp_path: Path) -> None:
+    """This is a bug this repo actually shipped, on this very branch.
+
+    `docs/acceptance/matrix.yaml` carried `levels:` twice on one row. PyYAML
+    keeps the LAST occurrence, so the first block — the ref to
+    `test_artifact_registry.py` — vanished: absent from the committed reports,
+    invisible to `fr acceptance check`, and invisible to this validator, which
+    only ever saw the mapping PyYAML handed back. A row that reads as valid
+    while quietly dropping half of what it claims is worse than a red row.
+    """
+    seed_good_repo(tmp_path)
+    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
+    matrix.write_text(
+        GOOD_MATRIX.replace(
+            "    status: ci\n",
+            "    levels:\n      integration:\n        - super-fr:tests/x.py\n    status: ci\n",
+        )
+    )
+
+    report = validate_repo(tmp_path)
+
+    assert not report.ok
+    problems = " ".join(str(i) for i in report.issues)
+    assert "duplicate key" in problems
+    assert "levels" in problems
+
+
+@pytest.mark.parametrize(
+    ("kind", "rel", "text"),
+    [
+        (
+            "plan",
+            f"docs/superpowers/plans/{PLAN_SLUG}/_meta.yaml",
+            GOOD_META + "plan: 2019-03-04-thermosiphon-rebuild\n",
+        ),
+        (
+            "run",
+            "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+            "cursor: implement\n" + GOOD_RUN,
+        ),
+    ],
+)
+def test_a_duplicated_key_is_caught_in_every_yaml_carrier(
+    tmp_path: Path, kind: str, rel: str, text: str
+) -> None:
+    """The same silent drop is available to plans and runs. `_load_mapping` is
+    shared, so the detector belongs there rather than in the matrix validator
+    alone — and a duplicate `schema_version` is also what makes the migration
+    runner's stamp writer chase a key the reader never sees (see
+    `test_migration_runner.py::test_a_stamp_that_does_not_move...`)."""
+    seed_good_repo(tmp_path)
+    _w(tmp_path, rel, text)
+
+    report = validate_repo(tmp_path)
+
+    assert not report.ok
+    assert "duplicate key" in " ".join(str(i) for i in report.issues)

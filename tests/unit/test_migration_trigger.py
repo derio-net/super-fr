@@ -58,6 +58,10 @@ class _Stream:
         return self._tty
 
 
+GATED_COMMAND = ["models", "get", "--harness", "claude-code"]
+"""An ordinary, non-exempt command that prints something identifiable."""
+
+
 def _tty() -> _Stream:
     return _Stream(True)
 
@@ -77,17 +81,55 @@ def _gap_registry() -> MigrationRegistry:
 # --- the exemption list --------------------------------------------------
 
 
-def test_the_exemption_list_is_exactly_four_things() -> None:
+def test_the_exemption_list_is_exactly_these_things() -> None:
     """Spec §3.C: "exemptions, narrow and explicit".
 
     Pinned as a literal rather than derived, because the failure mode of an
     extra entry is silence: every command keeps working and nothing ever
-    migrates. A fifth exemption has to be argued for in a diff to this line.
+    migrates. Another exemption has to be argued for in a diff to this line.
+
+    The read-only five were added by review r4-f5/r4-f11 and are a *narrowing*,
+    not a widening: `fr status` is registered as "Read-only plan report
+    (allowlist-safe; never mutates)" and was rewriting artifacts and creating
+    commits, and `fr validate artifacts` could never report a stale artifact to
+    a human because the gate migrated it away first.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
-    assert trigger.EXEMPT_COMMANDS == frozenset({"migrate"})
+    assert trigger.EXEMPT_COMMANDS == frozenset(
+        {"migrate", "status", "skills", "isolation", "init", "validate"}
+    )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
-    assert trigger.EXEMPTIONS == ("--help", "--version", "migrate", "FR_SKIP_MIGRATION=1")
+    assert trigger.EXEMPTIONS == (
+        "--help",
+        "--version",
+        "migrate",
+        "status",
+        "skills",
+        "isolation",
+        "init",
+        "validate",
+        "FR_SKIP_MIGRATION=1",
+    )
+
+
+def test_a_read_only_command_never_migrates_or_commits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """r4-f5 / r4-f11. Each of these either promises not to mutate, or is the
+    diagnostic whose whole job is to REPORT the state the gate would silently
+    repair. None of them may rewrite an artifact or write to git history."""
+    _plan(tmp_path)  # stale
+    ran: list[int] = []
+    monkeypatch.setattr(trigger, "is_stale", lambda *a, **k: ran.append(1) or True)
+    for command in ("status", "skills", "isolation", "init", "validate"):
+        trigger.ensure_artifacts_current(
+            argv=[command],
+            invoked_subcommand=command,
+            env={},
+            repo_root=tmp_path,
+            interactive=True,
+        )
+    assert ran == [], "an exempt command must not even look at the tree"
 
 
 def test_help_and_version_are_exempt_wherever_they_appear() -> None:
@@ -106,18 +148,18 @@ def test_a_migrate_shaped_argument_to_another_command_is_not_exempt() -> None:
 
 def test_fr_skip_migration_exempts_and_zero_does_not() -> None:
     assert trigger.is_exempt(
-        argv=["status"], invoked_subcommand="status", env={"FR_SKIP_MIGRATION": "1"}
+        argv=["apply"], invoked_subcommand="apply", env={"FR_SKIP_MIGRATION": "1"}
     )
     assert not trigger.is_exempt(
-        argv=["status"], invoked_subcommand="status", env={"FR_SKIP_MIGRATION": "0"}
+        argv=["apply"], invoked_subcommand="apply", env={"FR_SKIP_MIGRATION": "0"}
     )
     assert not trigger.is_exempt(
-        argv=["status"], invoked_subcommand="status", env={"FR_SKIP_MIGRATION": ""}
+        argv=["apply"], invoked_subcommand="apply", env={"FR_SKIP_MIGRATION": ""}
     )
 
 
 def test_an_ordinary_command_is_not_exempt() -> None:
-    assert not trigger.is_exempt(argv=["status"], invoked_subcommand="status", env={})
+    assert not trigger.is_exempt(argv=["apply"], invoked_subcommand="apply", env={})
     assert not trigger.is_exempt(argv=["plan", "edit"], invoked_subcommand="plan", env={})
 
 
@@ -181,7 +223,7 @@ def test_a_current_tree_neither_migrates_nor_commits(
     monkeypatch.setattr(trigger, "run_migrations", lambda *a, **k: ran.append(1))
     monkeypatch.setattr(trigger, "commit_migration", lambda *a, **k: committed.append(1))
     trigger.ensure_artifacts_current(
-        argv=["status"], invoked_subcommand="status", env={}, repo_root=tmp_path, interactive=True
+        argv=["apply"], invoked_subcommand="apply", env={}, repo_root=tmp_path, interactive=True
     )
     assert ran == [] and committed == []
 
@@ -191,8 +233,8 @@ def test_interactive_migrates_commits_and_returns(tmp_path: Path) -> None:
     p = _plan(tmp_path)
     committed: list[object] = []
     trigger.ensure_artifacts_current(
-        argv=["status"],
-        invoked_subcommand="status",
+        argv=["apply"],
+        invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
         interactive=True,
@@ -211,8 +253,8 @@ def test_non_interactive_refuses_without_migrating_or_committing(
     committed: list[object] = []
     with pytest.raises(typer.Exit) as e:
         trigger.ensure_artifacts_current(
-            argv=["status"],
-            invoked_subcommand="status",
+            argv=["apply"],
+            invoked_subcommand="apply",
             env={"CI": "true"},
             repo_root=tmp_path,
             interactive=False,
@@ -233,8 +275,8 @@ def test_a_chain_gap_refuses_instead_of_escaping_as_a_traceback(
     _plan(tmp_path)
     with pytest.raises(typer.Exit) as e:
         trigger.ensure_artifacts_current(
-            argv=["status"],
-            invoked_subcommand="status",
+            argv=["apply"],
+            invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
             interactive=True,
@@ -258,8 +300,8 @@ def test_a_half_migrated_tree_is_exit_two_not_a_silent_pass(
     bad = _plan(tmp_path, "bad", fr_version="not a specifier")
     with pytest.raises(typer.Exit) as e:
         trigger.ensure_artifacts_current(
-            argv=["status"],
-            invoked_subcommand="status",
+            argv=["apply"],
+            invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
             interactive=True,
@@ -298,12 +340,16 @@ def _invoke(
 def test_the_callback_runs_before_the_invoked_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Interactive: the migration happens and `fr skills` still prints."""
+    """Interactive: the migration happens and the typed command still prints.
+
+    `fr models get` and not `fr skills`: `skills` is read-only and therefore
+    exempt from the gate now (review r4-f5/r4-f11), so it would prove nothing.
+    """
     p = _plan(tmp_path)
-    result = _invoke(monkeypatch, tmp_path, ["skills"])
+    result = _invoke(monkeypatch, tmp_path, GATED_COMMAND)
     assert result.exit_code == 0, result.output
     assert "<5.0.0" in p.read_text()
-    assert "Commands" in result.output, "the typed command must still run"
+    assert "claude-code" in result.output, "the typed command must still run"
 
 
 def test_the_callback_refuses_the_command_in_ci(
@@ -311,10 +357,10 @@ def test_the_callback_refuses_the_command_in_ci(
 ) -> None:
     p = _plan(tmp_path)
     before = p.read_text()
-    result = _invoke(monkeypatch, tmp_path, ["skills"], interactive=False)
+    result = _invoke(monkeypatch, tmp_path, GATED_COMMAND, interactive=False)
     assert result.exit_code != 0
     assert p.read_text() == before
-    assert "Commands" not in result.output, "the command must not run on stale artifacts"
+    assert "claude-code" not in result.output, "the command must not run on stale artifacts"
 
 
 def test_the_callback_does_not_fire_for_migrate_itself(
@@ -372,8 +418,8 @@ def test_the_gate_reports_in_flight_plans_with_no_run(
     _in_flight_plan(tmp_path)
 
     trigger.ensure_artifacts_current(
-        argv=["status"],
-        invoked_subcommand="status",
+        argv=["apply"],
+        invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
         interactive=True,
@@ -395,8 +441,8 @@ def test_the_gate_creates_no_run_of_its_own(tmp_path: Path) -> None:
     _in_flight_plan(tmp_path)
 
     trigger.ensure_artifacts_current(
-        argv=["status"],
-        invoked_subcommand="status",
+        argv=["apply"],
+        invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
         interactive=True,
@@ -415,8 +461,8 @@ def test_a_complete_plan_is_not_offered_by_the_gate(
     (plan_dir / "02.yaml").write_text((plan_dir / "02.yaml").read_text().replace('" "', "x"))
 
     trigger.ensure_artifacts_current(
-        argv=["status"],
-        invoked_subcommand="status",
+        argv=["apply"],
+        invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
         interactive=True,
@@ -436,11 +482,146 @@ def test_the_non_interactive_refusal_does_not_reach_the_offer(
 
     with pytest.raises(typer.Exit):
         trigger.ensure_artifacts_current(
-            argv=["status"],
-            invoked_subcommand="status",
+            argv=["apply"],
+            invoked_subcommand="apply",
             env={"CI": "true"},
             repo_root=tmp_path,
             interactive=False,
         )
 
     assert "fr run adopt" not in capsys.readouterr().err
+
+
+# --- review r4-f4 / r4-f5 / r4-f2: what the gate must refuse -------------
+
+
+def test_an_artifact_the_gate_cannot_inspect_is_refused_not_waved_through(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """r4-f4. This module's docstring promises "refusing rather than running
+    over a tree of unknown state", but that only ever fired for exceptions that
+    ESCAPED — and a stamp error or a raising repair predicate never escapes,
+    it becomes a `FailedAction`. `is_stale` discarded those, so the single
+    unreadable artifact below produced `stale=False` and the command ran.
+
+    One plan, and it is the broken one: with a second, healthy-but-stale plan
+    the old code passed by accident.
+    """
+    bad = _plan(tmp_path, "bad", fr_version="not a specifier")
+    before = bad.read_text()
+    committed: list[object] = []
+
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=tmp_path,
+            interactive=True,
+            commit=lambda root, report: committed.append(report),
+        )
+
+    assert e.value.exit_code == 2
+    assert bad.read_text() == before
+    assert committed == []
+    err = capsys.readouterr().err
+    assert "FAILED" in err and "bad" in err
+
+
+def test_an_unreadable_stamp_is_refused_not_waved_through(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The same hole reached through the stamp rather than a predicate."""
+    d = tmp_path / "docs" / "superpowers" / "plans" / "bad"
+    d.mkdir(parents=True)
+    (d / "_meta.yaml").write_text("schema_version: two\nplan: bad\n")
+
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=tmp_path,
+            interactive=True,
+            commit=lambda root, report: None,
+        )
+
+    assert e.value.exit_code == 2
+    assert "FAILED" in capsys.readouterr().err
+
+
+def test_the_gate_refuses_on_the_repositorys_default_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """r4-f5. Running `fr` in the base clone on `main` migrated the tree and
+    made a local commit on a protected branch, automatically, before a command
+    typed for some other reason. Refusing is the operator's standing preference
+    when the situation is ambiguous, and this repo's own doctrine is that the
+    base clone is not where work happens."""
+    p = _plan(tmp_path)
+    before = p.read_text()
+    committed: list[object] = []
+    monkeypatch.setattr(trigger, "on_default_branch", lambda root: "main")
+
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=tmp_path,
+            interactive=True,
+            commit=lambda root, report: committed.append(report),
+        )
+
+    assert e.value.exit_code == 2
+    assert p.read_text() == before, "the default branch must never be migrated automatically"
+    assert committed == []
+    err = capsys.readouterr().err
+    assert "main" in err, "the refusal must name the branch"
+    assert "fr migrate artifacts" in err, "and the command to run instead"
+    assert trigger.SKIP_ENV_VAR in err
+
+
+def test_a_feature_branch_is_migrated_as_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal is scoped to the default branch and nothing else."""
+    p = _plan(tmp_path)
+    monkeypatch.setattr(trigger, "on_default_branch", lambda root: None)
+
+    trigger.ensure_artifacts_current(
+        argv=["apply"],
+        invoked_subcommand="apply",
+        env={},
+        repo_root=tmp_path,
+        interactive=True,
+        commit=lambda root, report: None,
+    )
+
+    assert "<5.0.0" in p.read_text()
+
+
+def test_the_gate_holds_back_an_artifact_with_uncommitted_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """r4-f2, at the gate: the veto is consulted, and a held-back artifact is a
+    refusal rather than a silent skip."""
+    p = _plan(tmp_path)
+    before = p.read_text()
+    monkeypatch.setattr(
+        trigger, "uncommitted_veto", lambda root: lambda path: "has uncommitted changes"
+    )
+
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=tmp_path,
+            interactive=True,
+            commit=lambda root, report: None,
+        )
+
+    assert e.value.exit_code == 2
+    assert p.read_text() == before
+    assert "uncommitted" in capsys.readouterr().err

@@ -35,6 +35,44 @@ any kind's `current_version` past 1 must, in that PR, add an optional defaulted
 make the file unparseable by the `fr` that wrote it. (`PlanMeta` is the
 exception that proves it: a plan's stamp *is* its existing `schema_version`.)
 
+## What the CLI-entry gate will and will not do
+
+It fires before every command, migrates when it can, and **refuses in four
+situations rather than write** (`fr.artifacts.trigger`). All four print the same
+six lines: what is stale, why fr will not act *here*, then `fr migrate
+artifacts` (preview), `fr migrate artifacts --yes` (apply) and
+`FR_SKIP_MIGRATION=1` (bypass).
+
+1. **Non-interactive** — CI, a pod, an agent's Bash tool, `fr isolation exec`.
+   See the section below; this is the load-bearing one.
+2. **HEAD is the repository's default branch.** No automatic migration and no
+   automatic commit on `main` (or whatever `origin/HEAD` says the default is).
+   An `fr` command typed in the base clone used to leave a real commit on a
+   protected branch that the operator then had to notice and undo. Work happens
+   on a branch; `fr migrate artifacts --yes` still works anywhere, because you
+   typed it.
+3. **An artifact you have uncommitted changes in.** `git add -- <path>` stages
+   the *whole* file, so migrating a `_meta.yaml` you are mid-edit in would
+   commit your half-typed line under `chore(fr): migrate ...`. fr holds that one
+   file back, reports it, and migrates the rest. Commit or stash your edit, or
+   run the migration yourself. (The alternative — migrate it but leave it out
+   of the commit — was rejected: it rewrites a file you have open and leaves no
+   sign it did.)
+4. **An artifact it cannot inspect** — an unreadable stamp, a repair predicate
+   that raises, a `_meta.yaml` that is empty or truncated. Unknown state is not
+   "current"; the gate refuses and names the file.
+
+**Exempt commands** are `migrate` plus the read-only five — `status`, `skills`,
+`isolation`, `init`, `validate` — along with `--help`, `--version` and
+`FR_SKIP_MIGRATION=1`. Two of those matter beyond tidiness: `fr status` is
+registered as never mutating and must not mutate by proxy, and `fr validate
+artifacts` is the diagnostic for exactly the state the gate repairs — if the
+gate ran first, a human could never see it report a stale artifact. The list is
+pinned literally by
+`tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things`:
+adding an exemption means arguing for it in a diff to that line, because the
+failure mode of an over-broad list is silence.
+
 ## Two operational facts, learned by running the thing
 
 ### 1. Agent sessions, pods and CI always land non-interactive — by design
@@ -87,6 +125,10 @@ patch the file by hand.
 - `tests/unit/test_migration_runner.py::test_the_shipped_registry_registers_nothing_for_the_version_one_kinds`
   — registering a schema migration for a kind still at version 1 fails, and the
   failure message tells you the model must accept `schema_version` first.
+- A **duplicate YAML key** in any of the three YAML-carried kinds fails
+  `fr validate artifacts`. PyYAML keeps the last occurrence silently, which is
+  how `docs/acceptance/matrix.yaml` lost a test ref that nothing reported
+  missing; `fr.artifacts.structure._StrictLoader` is the detector.
 
 ## What this rule does not cover
 

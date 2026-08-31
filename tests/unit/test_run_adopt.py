@@ -384,6 +384,40 @@ def test_cli_adopt_writes_the_run_and_reports_the_cursor(tmp_path: Path, repo_ro
     assert len(runs) == 1
 
 
+def test_cli_adopt_reports_phase_progress_when_the_cursor_is_past_implement(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """r4-f10. The progress line read `state.steps[state.cursor].items`, but
+    `items` hangs off the FAN-OUT step (`implement`). Adoption deliberately
+    lands the cursor on `review` when every phase is done — so the one case
+    where "N/M phases complete" is most worth printing was exactly the case
+    where `items` was `None` and the line disappeared.
+    """
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=3, complete=3)
+
+    result = _invoke(repo, shipped, ["run", "adopt", str(plan_dir), "--branch", BRANCH])
+
+    assert result.exit_code == 0, result.output
+    assert "review" in result.output, "the cursor moved past the fan-out step"
+    assert "3/3 phases complete" in result.output
+
+
+def test_cli_adopt_still_reports_progress_on_the_fan_out_step(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """The case that already worked must keep working."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=4, complete=2)
+
+    result = _invoke(repo, shipped, ["run", "adopt", str(plan_dir), "--branch", BRANCH])
+
+    assert result.exit_code == 0, result.output
+    assert "2/4 phases complete" in result.output
+
+
 def test_cli_adopt_exits_two_when_a_run_already_exists(tmp_path: Path, repo_root: Path) -> None:
     repo, shipped = _repo(tmp_path, repo_root)
     _write_spec(repo)

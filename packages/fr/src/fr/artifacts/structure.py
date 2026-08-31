@@ -17,6 +17,10 @@ Three rules the functions obey:
 3. **Read only.** These run against files an operator has open. Nothing here
    writes, and nothing re-serialises.
 
+The YAML kinds are parsed with `_StrictLoader`, not `yaml.safe_load`: a
+duplicate key is the one corruption a schema check cannot see, because PyYAML
+resolves it before the model ever runs (see the class docstring).
+
 Imports of the heavier `fr` modules are deliberately *inside* the functions:
 `fr.artifacts.registry` is imported at CLI entry by the migration trigger,
 before every command, and must not drag the plan parser and pydantic models in
@@ -34,10 +38,46 @@ import yaml
 # --- shared helpers ------------------------------------------------------
 
 
+class _StrictLoader(yaml.SafeLoader):
+    """`SafeLoader` that refuses a mapping with a repeated key.
+
+    PyYAML keeps the LAST occurrence and says nothing, which makes a duplicate
+    key a *silent drop* — the shape still validates, and everything the earlier
+    block declared is simply gone. This repo shipped exactly that: a row of
+    `docs/acceptance/matrix.yaml` carried `levels:` twice, so one of its two
+    test refs disappeared from the matrix, from the generated reports and from
+    `fr acceptance check`, with nothing anywhere reporting a problem.
+
+    Structure validation is the layer that can see it, because it is the only
+    one that reads the artifact as *text* rather than as whatever the parser
+    already decided it meant.
+    """
+
+    def construct_mapping(self, node: Any, deep: bool = False) -> dict[Any, Any]:
+        seen: set[Any] = set()
+        for key_node, _ in node.value:
+            # PyYAML ships no stubs for its constructor API, hence the cast.
+            key: Any = self.construct_object(key_node, deep=deep)  # type: ignore[no-untyped-call]
+            try:
+                duplicate = key in seen
+            except TypeError:  # pragma: no cover — an unhashable YAML key
+                continue
+            if duplicate:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 def _load_mapping(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
-    """`(mapping, problems)` — a non-mapping or unparseable file is a problem."""
+    """`(mapping, problems)` — a non-mapping, unparseable, or duplicate-keyed
+    file is a problem."""
     try:
-        data: Any = yaml.safe_load(path.read_text())
+        data: Any = yaml.load(path.read_text(), Loader=_StrictLoader)  # noqa: S506
     except yaml.YAMLError as e:
         return None, [f"not valid YAML: {e}"]
     if data is None:

@@ -1042,3 +1042,247 @@ all three committed renderings and `fr acceptance check` passed — 93 rows,
 recording: a `notes:` value written in PLAIN style dies on the first ": " it
 contains ("mapping values are not allowed here"). The rows that carry colons
 are single-quoted with doubled apostrophes; match that style when hand-editing.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f1 created=2026-08-31T11:02:15 phase=7 state=fixed -->
+### r4-f1 · finding [fixed] · The acceptance matrix carried `levels:` twice, and nothing could see it (phase 7)
+
+Row `every-artifact-declares-its-version` in `docs/acceptance/matrix.yaml`
+declared `levels:` at two places. PyYAML keeps the LAST occurrence and says
+nothing, so the first block — the ref to `tests/unit/test_artifact_registry.py`
+— was silently dropped: absent from all three committed reports, invisible to
+`fr acceptance check`, and invisible to `validate_matrix`, which only ever saw
+the mapping PyYAML handed back.
+
+Fixed in two parts. The row now carries one `levels:` with both refs. And
+`fr.artifacts.structure._StrictLoader` (a `yaml.SafeLoader` subclass overriding
+`construct_mapping`) now raises on any repeated key, at any nesting depth, for
+every YAML-carried kind — plan, run and matrix all go through `_load_mapping`,
+so the detector belongs there rather than in the matrix validator alone.
+
+A duplicate key is the one corruption a schema check structurally cannot see:
+the parser resolves it before the model runs. Structure validation is the only
+layer with a reason to look at the artifact as text. The same defect also
+explains r4-f7 — a duplicate `schema_version` is what makes the stamp reader and
+the stamp writer disagree about which line they mean.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f2 created=2026-08-31T11:02:16 phase=4 state=fixed -->
+### r4-f2 · finding [fixed] · The migration commit swept the operator's own in-flight edit to a migrated artifact (phase 4)
+
+The module exists because in-flight work is a dirty tree — and the one dirty
+file it could not handle was the artifact itself. `commit.py` staged with
+`git add -- <path>`, which stages the WHOLE file, so an operator half-way
+through adding `workflow:` to a stale `_meta.yaml` who typed any `fr` command
+got their unfinished line committed under `chore(fr): migrate ...`.
+
+DECISION: refuse to migrate a file that already has uncommitted changes, rather
+than migrate it and leave it out of the commit.
+
+Both options were live. The second loses because it rewrites a file the
+operator has open and then leaves no sign that it did: the migration sits
+uncommitted in a file they are still typing in, mixed with their own edit, and
+the command proceeds as if nothing happened. The first is consistent with r4-f5
+and with the operator standing preference to refuse when the situation is
+ambiguous — fr cannot know whether that edit is finished. The refusal names the
+file and both ways forward (commit/stash it, or `fr migrate artifacts --yes`),
+and `FR_SKIP_MIGRATION=1` still bypasses everything.
+
+Mechanically: `run_migrations` grew an optional `veto: Callable[[Path], str |
+None]`, and `commit.uncommitted_veto(root)` supplies the policy from one
+`git status --porcelain -z --untracked-files=all` read. The runner stays
+git-agnostic; the gate owns the policy. A vetoed artifact becomes a
+`FailedAction`, not a silent skip, so the gate refuses rather than continuing —
+and the veto is path-scoped, so an unrelated dirty file holds back nothing
+(runner invariant 3).
+
+<!-- fr:journal kind=finding scope=plan id=r4-f3 created=2026-08-31T11:02:17 phase=2 state=fixed -->
+### r4-f3 · finding [fixed] · One empty _meta.yaml made every fr command exit 2, blaming the registry (phase 2)
+
+`_actions_for` wrapped only `kind.read_version` in try/except; `reg.chain(name,
+version)` was called outside it. `plan` sits at `current_version=2` with no
+registered `SchemaMigration`, so ANY `_meta.yaml` reading as version 1 — empty,
+truncated, hand-made, or simply missing `schema_version` — raised
+`MigrationChainError`, which propagated through `is_stale` into the CLI-entry
+gate and became exit 2 for every command, with a message about a chain gap in
+the registry that pointed at the wrong thing entirely.
+
+The discriminator is where the version came from. A gap over a version an
+artifact DECLARES is a registry bug (a shape was bumped without a migration to
+reach it) and stays loud. A gap over a version nobody ever wrote is a data
+problem with one file.
+
+To tell them apart the registry now distinguishes the two. `ArtifactKind`
+carries `read_stamp: Callable[[Path], int | None]` — the version the artifact
+DECLARES, `None` when it declares none — and `read_version` became a method
+over it that still returns `PRE_FRAMEWORK_VERSION` for `None`. Every call site
+is unchanged. `runner._chain_for` is the one place that reads a stamp and asks
+for a chain, used by both the planning and the applying pass, and it turns an
+absent-stamp gap into that artifact `FailedAction` naming the file and saying
+what to check.
+
+Verified against a real tree: `fr migrate artifacts` over a repo with one empty
+`_meta.yaml` now reports
+"FAILED: docs/superpowers/plans/broken/_meta.yaml · declares no version
+(`schema_version` in `_meta.yaml` is absent), so it reads as version 1 — and no
+registered migration moves it to 2. The file may be empty, truncated or
+hand-made", and every other artifact still migrates.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f4 created=2026-08-31T11:02:18 phase=2 state=fixed -->
+### r4-f4 · finding [fixed] · The gate waved through exactly the state it promises to refuse (phase 2)
+
+`trigger.py` promises "refusing rather than running over a tree of unknown
+state". It only ever delivered that for exceptions that ESCAPED — and the
+failures that matter never escape, they are `FailedAction`s.
+`runner.is_stale` did `actions, _ = _actions_for(...)`, discarding them. So an
+unreadable stamp, or a repair predicate that raises, produced a `FailedAction`,
+no `PlannedAction`, `is_stale -> False`, and the command ran.
+
+`is_stale` now answers "not known to be CURRENT", not "has work planned": a
+failure counts as a yes. The interactive path then runs the migration, reports
+the failures, and refuses with exit 2; the non-interactive path refuses as
+before. Pinned by two tests whose fixture is a SINGLE broken plan — with a
+second, healthy-but-stale plan alongside it the old code passed by accident,
+which is how this survived Phase 3.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f5 created=2026-08-31T11:02:19 phase=3 state=fixed -->
+### r4-f5 · finding [fixed] · Read-only commands migrated and committed, and the gate would commit on main (phase 3)
+
+Two halves of one over-reach.
+
+(a) `fr status` is registered as "Read-only plan report (allowlist-safe; never
+mutates)" and could rewrite every stale artifact and create a commit.
+`EXEMPT_COMMANDS` now carries `READ_ONLY_COMMANDS` — `status`, `skills`,
+`isolation`, `init`, `validate` — alongside `migrate`. `validate` is r4-f11 and
+the sharpest of them: interactively the gate migrated and committed BEFORE the
+validator ran, so a human could never see `fr validate artifacts` report a
+stale artifact; only CI, which is non-interactive, ever could. That guts the
+diagnostic. `isolation` and `init` are what an operator reaches for when the
+workspace is not yet in a state to be migrated at all. The list stays pinned
+literally by `test_the_exemption_list_is_exactly_these_things` — this is a
+NARROWING, and the test is what stops it from becoming a habit.
+
+(b) `commit_migration` never looked at the branch, so running `fr` in the base
+clone on `main` produced a local commit on a protected branch, made
+automatically before a command typed for some other reason, which the operator
+then had to notice and undo. `commit.on_default_branch` now answers this and
+both layers refuse: the gate before it migrates anything, and
+`commit_migration` itself as a `CommitOutcome` that did nothing.
+
+"Default branch" resolves as `origin/HEAD` first (the host is the authority, so
+a repo whose trunk is `trunk` is protected as such and a `main` that is not the
+default is not), then `init.defaultBranch`, then the well-known names. The
+floor is deliberate: a local repo with no remote sitting on `main` is still a
+base clone, the predicate is used to REFUSE, and its failure mode should be one
+extra explicit step rather than one surprise commit. `fr migrate artifacts
+--yes` still works anywhere, because you typed it.
+
+All four gate refusals now render through one `_will_not_act_here` helper, so
+they share a vocabulary: what is stale, why fr will not act here, then preview
+/ apply / bypass. Both halves are documented in
+`.claude/rules/artifact-versioning.md` (new section "What the CLI-entry gate
+will and will not do") and mirrored into `.opencode/instructions/`.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f6 created=2026-08-31T11:02:20 phase=1 state=fixed -->
+### r4-f6 · finding [fixed] · Re-stamping a journal ate the blank lines after the stamp (phase 1)
+
+`_JOURNAL_STAMP_RE` ended `\s*$` under `re.MULTILINE`, and `\s` matches `\n`.
+So the match ran past the stamp own line and the re-stamping writer deleted
+every blank line that followed it. Verified by execution: re-stamping
+`"<!-- fr:journal-schema=1 -->\n\n\n# Journal\n"` returned
+`"<!-- fr:journal-schema=1 -->\n# Journal\n"` — two blank lines gone.
+
+That breaks property 3 of the registry module, the one the whole
+write-by-line-surgery design exists to guarantee: "writing a stamp disturbs
+nothing else ... comments, key order, blank lines". Anchored with `[ \t]*`
+throughout, so the pattern cannot leave its own line. Trailing spaces on the
+stamp line are the stamp; the newline is not.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f7 created=2026-08-31T11:02:22 phase=2 state=fixed -->
+### r4-f7 · finding [fixed] · A duplicate schema_version made the migration runner spin forever (phase 2)
+
+`_read_yaml_stamp` parses with `yaml.safe_load` (a duplicate top-level key ->
+the LAST wins) while `_yaml_write_key` rewrites the FIRST matching line. Over a
+`_meta.yaml` carrying `schema_version` twice, `_apply_to_one` re-read the same
+version after every write and never made progress: `while True` with no error
+and no output, `fr <anything>` simply hanging. Reproduced by executing it — the
+test run stopped dead on the fixture.
+
+Both belts, because they fail differently. The loop is now BOUNDED by
+`len(reg.schema_migrations(name)) + 1` (its `else` clause reports a chain that
+does not terminate), and every pass asserts the stamp ACTUALLY MOVED: after
+`write_version`, the stamp is re-read and a value that is not `step.to_version`
+becomes a `FailedAction` naming the likely cause ("the carrier probably
+declares the stamp twice"). Loud beats hung.
+
+r4-f1 closes the other end of the same defect: `fr validate artifacts` now
+fails a duplicate key in any YAML-carried artifact, so the file never reaches
+the runner.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f8 created=2026-08-31T11:02:23 phase=2 state=fixed -->
+### r4-f8 · finding [fixed] · One failure was reported twice and double-counted (phase 2)
+
+Planning added a failure to `failed`, and `_apply_to_one` — which by invariant 2
+re-evaluates every guard rather than trusting the plan — appended an identical
+`FailedAction`. An artifact with both a schema step and a raising repair
+predicate therefore printed twice in the gate output and in `fr migrate
+artifacts`, and inflated `len(report.failed)` in the "N artifact(s) could not
+be migrated" line.
+
+`_distinct` collapses exact duplicates on `(kind, path, summary, error)`,
+first-seen order preserved. Deliberately exact: two DIFFERENT errors on one
+artifact are two failures and both are still reported. Deduplicating on
+`(path, summary)` alone would have hidden a real second problem to fix a
+cosmetic one.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f9 created=2026-08-31T11:02:24 phase=2 state=fixed -->
+### r4-f9 · finding [fixed] · widen_ceiling silently no-opped on every ceiling not spelled < or <= (phase 2)
+
+`widen_ceiling` only ever rewrote `<` / `<=`, so `~=3.19`, `==3.*`, `==3.19.0`
+and `!=4.0.0` — all of which exclude 4.0.0 — produced no candidate,
+`needs_widening -> False`, and the plan was neither migrated nor reported.
+`parse()` kept raising `PlanSchemaError`, `discover_plans` kept swallowing it,
+and dispatch stayed silently stopped for that plan: precisely the failure this
+repair was written to end. Confirmed by execution — all four returned `None`.
+
+Reported, not guessed. Widening `~=3.19` or `==3.*` means inventing what the
+author meant, which this module already refuses to do for a malformed
+constraint. A new `UnwidenableConstraintError` now names the constraint, the
+installed version and the offending specifiers, and tells the operator to edit
+it by hand; the raising predicate makes it that one plan `FailedAction` while
+every other plan still migrates.
+
+The line between "report" and "stay silent" is which bound does the excluding.
+`widen_ceiling` now computes the specifiers that actually exclude the installed
+version: if they are ALL lower bounds, it is a plan asking for a newer fr, and
+that stays silent by design — widening a ceiling would not admit us and
+downgrades are a non-goal (spec 2). `>=5.0.0,<6.0.0` therefore still returns
+`None`, pinned by its own test so the rule cannot be simplified into "raise
+whenever nothing was widened".
+
+<!-- fr:journal kind=finding scope=plan id=r4-f10 created=2026-08-31T11:02:25 phase=6 state=fixed -->
+### r4-f10 · finding [fixed] · Phase progress vanished for exactly the runs where every phase was done (phase 6)
+
+`fr run adopt` printed "N/M phases complete" from
+`state.steps[state.cursor].items`, but `build_run_state` attaches `items` to the
+FAN-OUT step (`for_each: phase`, `implement` in the shipped fr-goal shape).
+Adoption deliberately moves the cursor past it — to `review` when every phase is
+done, to `deliver` when a PR is already open — so `items` was `None` and the
+line disappeared for the two cases where the count is most worth printing.
+
+`_fan_out_items` scans the recorded steps for the one carrying items. At most
+one step fans out, so this needs no knowledge of the workflow step names and
+holds for shapes other than fr-goal.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f11 created=2026-08-31T11:02:26 phase=3 state=fixed -->
+### r4-f11 · finding [fixed] · fr validate artifacts could never report a stale artifact to a human (phase 3)
+
+Folded into r4-f5: `validate` is now in `EXEMPT_COMMANDS`.
+
+Worth its own entry because the failure was not a surprise write, it was a
+missing observation. Interactively the gate migrated and committed BEFORE the
+validator ran, so the only context in which `fr validate artifacts` could ever
+report a stale artifact was CI — which is non-interactive, and therefore
+refuses the command outright. The diagnostic for artifact staleness was
+structurally unable to observe artifact staleness. Verified after the fix: over
+a tree with one empty `_meta.yaml`, `fr validate artifacts` reports
+"stale: written for plan artifact version 1, this fr writes version 2" and
+exits 1, with the tree untouched.

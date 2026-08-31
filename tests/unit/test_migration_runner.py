@@ -467,3 +467,121 @@ def test_this_repos_own_artifacts_plan_only_safe_actions() -> None:
         assert "implemented" not in a.path.relative_to(REPO_ROOT).parts
         assert a.kind == "plan", f"nothing but plans has a migration in 4.0.0, got {a.kind}"
         assert a.from_version is None, "the only 4.0.0 migration is a repair, not a schema bump"
+
+
+# --- review r4-f3 / r4-f4 / r4-f7 / r4-f8 --------------------------------
+#
+# Four failures of the same shape: a DATA problem escaping as something else.
+# A chain gap over an artifact that never declared a version is not a registry
+# bug, an artifact the runner cannot inspect is not "current", a stamp that
+# does not move is not progress, and one failure is not two.
+
+
+def _unstamped_plan(root: Path, slug: str, body: str) -> Path:
+    """A `_meta.yaml` carrying no `schema_version` at all — reads as version 1."""
+    d = root / "docs" / "superpowers" / "plans" / slug
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "_meta.yaml"
+    p.write_text(body)
+    return p
+
+
+def test_a_chain_gap_over_an_unstamped_artifact_is_that_artifacts_failure(
+    tmp_path: Path,
+) -> None:
+    """r4-f3. `plan` sits at `current_version=2` with no registered schema
+    migration, so *any* `_meta.yaml` that reads as version 1 hit
+    `MigrationChainError` — which escaped `is_stale` into the CLI-entry gate
+    and turned one empty file into exit 2 for every `fr` command.
+
+    A gap is a registry bug only when the version came from a real stamp. An
+    ABSENT stamp is a data problem, and invariant 3 says one artifact's failure
+    is one artifact's failure.
+    """
+    reg = _registry(current_version=2)  # nothing registered: every 1 is a gap
+    empty = _unstamped_plan(tmp_path, "a-empty", "")
+    truncated = _unstamped_plan(tmp_path, "b-truncated", "plan: b-truncated\ntarget_re")
+    fine = _plan(tmp_path, "c-fine", version=2)
+    empty_before, truncated_before = _freeze(empty), _freeze(truncated)
+
+    actions = plan_migrations(tmp_path, registry=reg)  # must not raise
+    report = run_migrations(tmp_path, dry_run=False, registry=reg)
+
+    assert actions == (), "an artifact fr cannot move has nothing PLANNED for it"
+    assert sorted(f.path for f in report.failed) == [empty, truncated]
+    for failure in report.failed:
+        assert failure.kind == "plan"
+        assert "version" in failure.error
+    assert _unchanged(empty, empty_before) and _unchanged(truncated, truncated_before)
+    assert report.applied == (), "the healthy artifact was already current"
+    assert read_version("plan", fine) == 2
+
+
+def test_a_chain_gap_over_a_stamped_artifact_still_raises(tmp_path: Path) -> None:
+    """The other half of r4-f3: the discriminator is where the version came
+    from. A file that declares `schema_version: 1` and has no migration off it
+    IS a registry gap, and stays loud."""
+    reg = _registry(current_version=2)
+    _plan(tmp_path, "a", version=1)
+
+    with pytest.raises(MigrationChainError):
+        plan_migrations(tmp_path, registry=reg)
+
+
+def test_is_stale_says_yes_when_an_artifact_cannot_even_be_inspected(tmp_path: Path) -> None:
+    """r4-f4. `is_stale` discarded `_actions_for`'s failures, so an unreadable
+    stamp or a raising repair predicate produced a `FailedAction`, no
+    `PlannedAction`, and a cheerful "nothing is stale" — the CLI-entry gate
+    then ran the command over exactly the tree it promises to refuse."""
+    reg = _registry(current_version=2)
+    reg.register(Repair("plan", "boom", applies=_raises, fn=lambda p: None))
+    _plan(tmp_path, "a", version=2)
+
+    assert is_stale(tmp_path, registry=reg), "a tree fr cannot inspect is not known-current"
+
+
+def _raises(path: Path) -> bool:
+    raise ValueError("cannot read this constraint")
+
+
+def test_is_stale_says_yes_for_an_unreadable_stamp(tmp_path: Path) -> None:
+    """The same hole reached through the stamp reader rather than a predicate."""
+    reg = _registry(current_version=2)
+    _unstamped_plan(tmp_path, "a", "schema_version: two\nplan: a\n")
+
+    assert is_stale(tmp_path, registry=reg)
+
+
+def test_a_stamp_that_does_not_move_fails_loudly_instead_of_looping(tmp_path: Path) -> None:
+    """r4-f7. `_read_yaml_stamp` parses with `yaml.safe_load` (duplicate
+    top-level key -> the LAST wins) while `_yaml_write_key` rewrites the FIRST
+    match. A schema migration over such a file re-read the same version
+    forever: `while True` with no progress and no error."""
+    reg = _registry(current_version=2)
+    reg.register(SchemaMigration("plan", 1, 2, _append("m")))
+    meta = _unstamped_plan(
+        tmp_path, "dup", "schema_version: 2\nplan: dup\ntarget_repo: x\nschema_version: 1\n"
+    )
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg)  # must terminate
+
+    assert [f.path for f in report.failed] == [meta]
+    assert "2" in report.failed[0].error
+    assert report.applied == (), "a step whose stamp did not take is not an applied step"
+
+
+def test_one_failure_is_reported_once_not_twice(tmp_path: Path) -> None:
+    """r4-f8. Planning recorded the raising predicate, then `_apply_to_one`
+    re-evaluated it and appended an identical `FailedAction`. The operator saw
+    the same problem twice and `len(report.failed)` over-counted in the exit
+    messages the gate and `fr migrate artifacts` print."""
+    reg = _registry(current_version=2)
+    reg.register(SchemaMigration("plan", 1, 2, _append("m")))
+    reg.register(Repair("plan", "boom", applies=_raises, fn=lambda p: None))
+    meta = _plan(tmp_path, "a", version=1)
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg)
+
+    assert len(report.failed) == 1, [f.error for f in report.failed]
+    assert report.failed[0].path == meta
+    assert [a.path for a in report.applied] == [meta], "the schema step still ran"

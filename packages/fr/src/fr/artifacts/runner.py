@@ -33,9 +33,17 @@ Three invariants the rest of the framework leans on:
    every `fn` reads the file itself.
 3. **One artifact's failure is one artifact's failure.** A raising migration
    leaves that artifact unmodified and unstamped (so the next run retries it),
-   is reported, and does not abort the others. A *chain gap* is different: it
-   is a bug in the registry, not in the data, so it raises before anything is
-   written.
+   is reported, and does not abort the others. A *chain gap* is different —
+   but only when the version it gapped on came from a stamp the artifact
+   actually declares. Then it is a bug in the registry, not in the data, and it
+   raises before anything is written. A gap over an artifact that declares NO
+   version (an empty, truncated or hand-made carrier, which reads as
+   `PRE_FRAMEWORK_VERSION`) is a data problem with one file, so it is that
+   file's `FailedAction` — otherwise a single empty `_meta.yaml` makes every
+   `fr` command exit 2 while blaming the registry.
+4. **A failure is visible or it is not a failure.** `is_stale` reports a tree
+   it could not inspect as stale, so the CLI-entry gate refuses instead of
+   running over it; and one problem is reported once, not once per pass.
 """
 
 from __future__ import annotations
@@ -46,6 +54,7 @@ from pathlib import Path
 
 from fr.artifacts.registry import (
     ARTIFACT_KINDS,
+    PRE_FRAMEWORK_VERSION,
     ArtifactError,
     ArtifactKind,
     iter_paths_of,
@@ -275,14 +284,58 @@ def is_stale(repo_root: Path, *, registry: MigrationRegistry | None = None) -> b
 
     Phase 3's CLI-entry callback runs before *every* command, so it must not
     walk the whole tree when the answer is available early.
+
+    A `FailedAction` counts as a yes. "Stale" here means *not known to be
+    current*: an artifact whose stamp will not read, or whose repair predicate
+    raises, is a tree of unknown state — and the gate's whole promise is to
+    refuse rather than run over one. Discarding those failures made the gate
+    wave through precisely the case it exists for.
     """
     reg = registry if registry is not None else MIGRATIONS
     for name, kind in reg.kinds.items():
         for path in iter_paths_of(repo_root, kind):
-            actions, _ = _actions_for(reg, name, kind, path)
-            if actions:
+            actions, failures = _actions_for(reg, name, kind, path)
+            if actions or failures:
                 return True
     return False
+
+
+def _chain_for(
+    reg: MigrationRegistry, name: str, kind: ArtifactKind, path: Path
+) -> tuple[tuple[SchemaMigration, ...], FailedAction | None]:
+    """The schema steps `path` needs — or the one failure that stands in for them.
+
+    Two data problems are caught here and turned into a `FailedAction` for this
+    artifact alone (invariant 3):
+
+    - the stamp does not read at all (`ArtifactStampError`, unparseable YAML);
+    - the artifact declares NO version, reads as `PRE_FRAMEWORK_VERSION`, and
+      no registered migration moves it off there.
+
+    A chain gap over a version the artifact *declares* still raises: that is a
+    registry bug — a shape was bumped without a migration to reach it — and
+    silently degrading it to a per-file failure would hide the one case the
+    loud error was written for.
+    """
+    try:
+        declared = kind.read_stamp(path)
+    except Exception as e:
+        return (), FailedAction(name, path, f"{name} stamp", f"{type(e).__name__}: {e}")
+    version = PRE_FRAMEWORK_VERSION if declared is None else declared
+    try:
+        return reg.chain(name, version), None
+    except MigrationChainError:
+        if declared is not None:
+            raise
+        return (), FailedAction(
+            name,
+            path,
+            f"{name} stamp",
+            f"declares no version ({kind.stamp} is absent), so it reads as version "
+            f"{PRE_FRAMEWORK_VERSION} — and no registered migration moves it to "
+            f"{kind.current_version}. The file may be empty, truncated or hand-made; "
+            f"check it and add the stamp by hand.",
+        )
 
 
 def _actions_for(
@@ -292,18 +345,15 @@ def _actions_for(
 
     The order matters: a repair inspects the artifact's current shape, so the
     shape has to be current before it looks. Any *data* problem (an unreadable
-    stamp, a predicate that raises) becomes a `FailedAction` for this one
-    artifact; a chain gap propagates, because that is a registry bug.
+    stamp, an unstamped artifact no migration can move, a predicate that
+    raises) becomes a `FailedAction` for this one artifact.
     """
     actions: list[PlannedAction] = []
     failures: list[FailedAction] = []
-    try:
-        version = kind.read_version(path)
-    except MigrationChainError:  # pragma: no cover — readers do not raise this
-        raise
-    except Exception as e:
-        return actions, [FailedAction(name, path, f"{name} stamp", f"{type(e).__name__}: {e}")]
-    for m in reg.chain(name, version):
+    chain, failure = _chain_for(reg, name, kind, path)
+    if failure is not None:
+        return actions, [failure]
+    for m in chain:
         actions.append(
             PlannedAction(
                 kind=name,
@@ -332,6 +382,7 @@ def run_migrations(
     *,
     dry_run: bool = True,
     registry: MigrationRegistry | None = None,
+    veto: Callable[[Path], str | None] | None = None,
 ) -> MigrationReport:
     """Migrate every stale artifact under `repo_root`.
 
@@ -342,6 +393,13 @@ def run_migrations(
     before anything anywhere is written, and so an action that has become
     unnecessary by the time its turn comes can be reported as `skipped` rather
     than silently vanishing.
+
+    `veto` is an optional per-artifact hold: given a path with work to do, it
+    returns a reason NOT to touch it, or `None`. The caller supplies the
+    policy — the CLI-entry gate passes `commit.uncommitted_veto`, which holds
+    back an artifact the operator has uncommitted edits in — and the runner
+    stays git-agnostic. A vetoed artifact becomes a `FailedAction`, not a
+    silent skip, so the gate refuses instead of continuing.
     """
     reg = registry if registry is not None else MIGRATIONS
     planned: list[tuple[str, ArtifactKind, Path, list[PlannedAction]]] = []
@@ -351,14 +409,19 @@ def run_migrations(
         for path in iter_paths_of(repo_root, kind):
             actions, planning_failures = _actions_for(reg, name, kind, path)
             failed.extend(planning_failures)
-            if actions:
-                planned.append((name, kind, path, actions))
+            if not actions:
+                continue
+            held = veto(path) if veto is not None else None
+            if held is not None:
+                failed.append(FailedAction(name, path, f"{name} migration held back", held))
+                continue
+            planned.append((name, kind, path, actions))
 
     if dry_run:
         return MigrationReport(
             dry_run=True,
             applied=tuple(a for _, _, _, actions in planned for a in actions),
-            failed=tuple(failed),
+            failed=_distinct(failed),
         )
 
     applied: list[PlannedAction] = []
@@ -376,8 +439,25 @@ def run_migrations(
         dry_run=False,
         applied=tuple(applied),
         skipped=tuple(skipped),
-        failed=tuple(failed),
+        failed=_distinct(failed),
     )
+
+
+def _distinct(failures: list[FailedAction]) -> tuple[FailedAction, ...]:
+    """The same failure, reported once. Order preserved, first occurrence kept.
+
+    Planning and applying deliberately evaluate the same guards (invariant 2:
+    nothing decided at plan time is trusted at apply time), so an artifact with
+    both a schema step and a raising repair predicate produced two identical
+    `FailedAction`s — printed twice by the gate and by `fr migrate artifacts`,
+    and double-counted in the "N artifact(s) could not be migrated" line. Two
+    *different* errors on one artifact are still two failures; only exact
+    duplicates collapse.
+    """
+    seen: dict[tuple[object, ...], FailedAction] = {}
+    for f in failures:
+        seen.setdefault((f.kind, f.path, f.summary, f.error), f)
+    return tuple(seen.values())
 
 
 def _key(action: PlannedAction) -> tuple[object, ...]:
@@ -397,14 +477,18 @@ def _apply_to_one(
     applied: list[PlannedAction] = []
     failed: list[FailedAction] = []
 
-    # Schema migrations: re-read the stamp before each step.
-    while True:
-        try:
-            version = kind.read_version(path)
-        except Exception as e:
-            failed.append(FailedAction(name, path, f"{name} stamp", f"{type(e).__name__}: {e}"))
+    # Schema migrations: re-read the stamp before each step. The loop is
+    # BOUNDED by the number of registered steps for this kind, and every pass
+    # must observe the stamp actually move. Neither guard is theoretical: the
+    # YAML carrier reads with `yaml.safe_load` (a duplicate top-level key ->
+    # the LAST wins) and writes by rewriting the FIRST matching line, so a
+    # `_meta.yaml` carrying `schema_version` twice made this spin forever —
+    # `fr <anything>` hanging with no output and no error.
+    for _ in range(len(reg.schema_migrations(name)) + 1):
+        chain, failure = _chain_for(reg, name, kind, path)
+        if failure is not None:
+            failed.append(failure)
             return applied, failed
-        chain = reg.chain(name, version)
         if not chain:
             break
         step = chain[0]
@@ -416,6 +500,23 @@ def _apply_to_one(
             failed.append(FailedAction(name, path, step.summary, f"{type(e).__name__}: {e}"))
             return applied, failed
         kind.write_version(path, step.to_version)
+        try:
+            landed = kind.read_version(path)
+        except Exception as e:
+            failed.append(FailedAction(name, path, step.summary, f"{type(e).__name__}: {e}"))
+            return applied, failed
+        if landed != step.to_version:
+            failed.append(
+                FailedAction(
+                    name,
+                    path,
+                    step.summary,
+                    f"stamping it with version {step.to_version} did not take — "
+                    f"{kind.stamp} still reads as {landed}. The carrier probably declares "
+                    f"the stamp twice; fix it by hand and re-run.",
+                )
+            )
+            return applied, failed
         applied.append(
             PlannedAction(
                 kind=name,
@@ -425,6 +526,18 @@ def _apply_to_one(
                 to_version=step.to_version,
             )
         )
+    else:
+        failed.append(
+            FailedAction(
+                name,
+                path,
+                f"{name} stamp",
+                f"more than {len(reg.schema_migrations(name))} schema step(s) were still "
+                f"pending after applying every registered one — the chain does not "
+                f"terminate for this artifact.",
+            )
+        )
+        return applied, failed
 
     # Repairs: re-evaluate the predicate immediately before applying.
     for r in reg.repairs(name):

@@ -1483,8 +1483,6 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_artifact_registry.py
-    levels:
-      unit:
       - super-fr:tests/unit/test_validate_artifacts.py
     status: not-implemented
     notes: 'Spec 3.A. Per-artifact stamps chosen over a repo manifest because a manifest

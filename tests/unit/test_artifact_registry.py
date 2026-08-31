@@ -314,3 +314,32 @@ def test_stamp_helpers_reject_an_unknown_kind(tmp_path: Path, name: str) -> None
         read_version("brainstorm", path)
     with pytest.raises(UnknownArtifactKindError):
         write_version("brainstorm", path, 2)
+
+
+# --- review r4-f6: re-stamping must not eat the operator's blank lines ----
+
+
+def test_restamping_a_journal_preserves_the_blank_lines_after_the_stamp(tmp_path: Path) -> None:
+    """Property 3 of this module: "writing a stamp disturbs nothing else".
+
+    `_JOURNAL_STAMP_RE` ended `\\s*$` under `re.MULTILINE`, and `\\s` matches
+    `\\n` — so the match ran past the stamp's own line and swallowed every
+    blank line that followed it. A journal re-stamped twice would lose the
+    separation the writer put there.
+    """
+    path = _artifact_path(tmp_path, "journal")
+    path.write_text("<!-- fr:journal-schema=1 -->\n\n\n# Journal\n")
+
+    write_version("journal", path, 2)
+
+    assert path.read_text() == "<!-- fr:journal-schema=2 -->\n\n\n# Journal\n"
+
+
+def test_restamping_a_journal_does_not_reach_past_its_own_line(tmp_path: Path) -> None:
+    """Trailing spaces on the stamp line are the stamp's; the newline is not."""
+    path = _artifact_path(tmp_path, "journal")
+    path.write_text("<!-- fr:journal-schema=1 -->  \n\n<!-- fr:journal kind=x -->\n")
+
+    write_version("journal", path, 4)
+
+    assert path.read_text() == "<!-- fr:journal-schema=4 -->\n\n<!-- fr:journal kind=x -->\n"

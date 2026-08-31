@@ -9,7 +9,7 @@ to serve, and a stash/unstash risks a pop conflict on top of work the operator
 has not saved anywhere. Path-scoped staging leaves every unrelated edit exactly
 where it was.
 
-Two `git` mistakes this module is shaped to avoid, both of which pass a
+Three `git` mistakes this module is shaped to avoid, all of which pass a
 clean-tree test:
 
 1. **`git add -A`** sweeps the operator's unrelated *modified* files into the
@@ -19,6 +19,16 @@ clean-tree test:
    if the staging was path-scoped. The commit itself has to carry the pathspec,
    which makes git build the tree from HEAD plus those paths and leave the rest
    of the index untouched.
+3. **`git add -- <a file the operator is editing>`** stages the *whole* file,
+   migration and half-typed edit together. Path-scoping is not enough when the
+   path is one the operator has open: the co-edited artifact is the case this
+   module most has to get right, and `uncommitted_veto` below is how — the
+   runner is told not to migrate that file at all, and the gate reports it.
+
+And one that no pathspec can make safe: **committing on the default branch.**
+`on_default_branch` refuses there. This runs automatically, before an unrelated
+command; a commit on `main` is a commit the operator must notice and undo, and
+in this repo's own doctrine the base clone is not where work happens.
 
 Everything here is fail-closed. This runs automatically, before a command the
 operator typed for some other reason, and it writes to git history: every
@@ -29,6 +39,7 @@ caller, and any doubt returns a `CommitOutcome` that did nothing.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,6 +79,111 @@ def _toplevel(root: Path) -> Path | None:
 
 def _has_head(root: Path) -> bool:
     return _git(root, "rev-parse", "--verify", "--quiet", "HEAD").returncode == 0
+
+
+# --- the default branch --------------------------------------------------
+
+_WELL_KNOWN_DEFAULTS = ("main", "master")
+"""Last resort when nothing in the repo declares a default."""
+
+
+def _current_branch(root: Path) -> str | None:
+    """The checked-out branch, or `None` on a detached HEAD / not a repo."""
+    done = _git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    return done.stdout.strip() or None if done.returncode == 0 else None
+
+
+def default_branch(root: Path) -> str | None:
+    """The repository's default branch, best available answer.
+
+    `origin/HEAD` is the authority when it exists — it is what the host says,
+    so a repo whose trunk is `trunk` or `develop` is protected as such and a
+    `main` that is *not* the default is not. `init.defaultBranch` is next, and
+    the well-known names are the floor: a local repo with no remote sitting on
+    `main` is still a base clone, and this predicate is used to refuse, so its
+    failure mode should be one extra explicit step rather than one surprise
+    commit.
+    """
+    done = _git(root, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    if done.returncode == 0 and done.stdout.strip():
+        return done.stdout.strip().removeprefix("origin/")
+    configured = _git(root, "config", "--get", "init.defaultBranch")
+    if configured.returncode == 0 and configured.stdout.strip():
+        return configured.stdout.strip()
+    for name in _WELL_KNOWN_DEFAULTS:
+        if _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").returncode == 0:
+            return name
+    return None
+
+
+def on_default_branch(root: Path) -> str | None:
+    """The branch name when HEAD is the repository's default branch, else None.
+
+    `None` for "not a git repo" and for a detached HEAD: neither is the case
+    this guards, and a detached HEAD never reaches the automatic commit path
+    anyway (CI is non-interactive, and the gate refuses there first).
+    """
+    toplevel = _toplevel(root)
+    if toplevel is None:
+        return None
+    branch = _current_branch(toplevel)
+    if branch is None:
+        return None
+    return branch if branch == default_branch(toplevel) else None
+
+
+# --- artifacts the operator is already editing ---------------------------
+
+
+def uncommitted_paths(root: Path) -> frozenset[Path]:
+    """Every path git reports as changed — staged, unstaged or untracked."""
+    toplevel = _toplevel(root)
+    if toplevel is None:
+        return frozenset()
+    done = _git(toplevel, "status", "--porcelain", "-z", "--untracked-files=all")
+    if done.returncode != 0:  # pragma: no cover — a working `git status` is the norm
+        return frozenset()
+    # `-z` entries are `XY <path>` with no quoting; a rename or copy emits the
+    # ORIGINAL path as the NEXT field, and both ends of the move count as
+    # touched.
+    out: set[Path] = set()
+    fields = [f for f in done.stdout.split("\0") if f]
+    i = 0
+    while i < len(fields):
+        entry = fields[i]
+        i += 1
+        code, rel = entry[:2], entry[3:]
+        if code[0] in "RC" and i < len(fields):
+            out.add((toplevel / fields[i]).resolve())
+            i += 1
+        out.add((toplevel / rel).resolve())
+    return frozenset(out)
+
+
+def uncommitted_veto(root: Path) -> Callable[[Path], str | None]:
+    """A `run_migrations(veto=...)` hold over artifacts with local changes.
+
+    Reads `git status` once, then answers from the set: the gate runs before
+    every command, and a subprocess per artifact would be felt.
+
+    Why refuse rather than migrate-and-not-commit: `git add -- <path>` stages
+    the whole file, so there is no way to commit the migration without the
+    operator's edit; and rewriting a file someone is typing in, then leaving it
+    uncommitted for them to discover, trades a visible refusal for an invisible
+    surprise. The refusal names the file and the two ways forward.
+    """
+    dirty = uncommitted_paths(root)
+
+    def veto(path: Path) -> str | None:
+        if path.resolve() not in dirty:
+            return None
+        return (
+            "has uncommitted changes, so migrating it would rewrite a file you are "
+            "editing and `git add` would commit your edit with it. Commit or stash it, "
+            "then run `fr migrate artifacts --yes`."
+        )
+
+    return veto
 
 
 def migration_commit_message(report: MigrationReport, *, fr_version: str) -> str:
@@ -117,6 +233,15 @@ def commit_migration(
         return CommitOutcome(
             committed=False,
             reason=f"{repo_root} is not a git repository; the migrated files are uncommitted",
+        )
+    on_default = on_default_branch(toplevel)
+    if on_default is not None:
+        return CommitOutcome(
+            committed=False,
+            reason=(
+                f"refusing to commit on {on_default!r}, the repository's default branch; "
+                f"the migrated files are in your working tree, uncommitted"
+            ),
         )
     if not _has_head(toplevel):
         # A partial (pathspec) commit needs a HEAD to build its tree from. An

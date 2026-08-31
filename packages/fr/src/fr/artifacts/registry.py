@@ -78,7 +78,15 @@ class ArtifactKind:
     """Glob relative to the repo root. Never reaches the archive."""
     stamp: str
     """Human description of the carrier, for messages and `--dry-run` output."""
-    read_version: Callable[[Path], int]
+    read_stamp: Callable[[Path], int | None]
+    """The version the artifact DECLARES, or `None` when it declares none.
+
+    `None` is not an error and not "unknown" — it is the pre-framework era
+    (property 1), and `read_version` below turns it into
+    `PRE_FRAMEWORK_VERSION`. The two are kept distinct because the migration
+    runner needs the distinction: a chain gap over a version an artifact
+    *declared* is a bug in the registry, while a gap over a version nobody ever
+    wrote is a data problem with one file (runner invariant 3)."""
     write_version: Callable[[Path, int], None]
     validate: Callable[[Path], list[str]]
     """Structural validation for this kind (spec §3.F), from
@@ -86,6 +94,11 @@ class ArtifactKind:
     and an empty list when the artifact is valid. Every kind carries one —
     "every version ships a structure validator" is only true if a new kind
     cannot be registered without one."""
+
+    def read_version(self, path: Path) -> int:
+        """The version `path` is on — `PRE_FRAMEWORK_VERSION` when unstamped."""
+        declared = self.read_stamp(path)
+        return PRE_FRAMEWORK_VERSION if declared is None else declared
 
 
 # --- YAML-carried stamps (plan / run / matrix) ---------------------------
@@ -97,14 +110,14 @@ class ArtifactKind:
 _TOP_LEVEL_KEY = "schema_version"
 
 
-def _yaml_read_key(path: Path, key: str) -> int:
+def _yaml_read_key(path: Path, key: str) -> int | None:
     text = path.read_text()
     try:
         data: Any = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise ArtifactStampError(f"{path}: not valid YAML, cannot read `{key}`: {e}") from e
     if not isinstance(data, dict) or key not in data:
-        return PRE_FRAMEWORK_VERSION
+        return None
     return _coerce_version(data[key], path, key)
 
 
@@ -144,7 +157,7 @@ def _yaml_write_key(path: Path, key: str, version: int) -> None:
     path.write_text("".join(lines))
 
 
-def _read_yaml_stamp(path: Path) -> int:
+def _read_yaml_stamp(path: Path) -> int | None:
     return _yaml_read_key(path, _TOP_LEVEL_KEY)
 
 
@@ -161,17 +174,21 @@ def _write_yaml_stamp(path: Path, version: int) -> None:
 # One character moves it out of the way (space -> hyphen) while keeping the
 # spec's shape: a header comment, invisible in rendered Markdown, on line 1.
 
-_JOURNAL_STAMP_RE = re.compile(r"^<!--\s*fr:journal-schema=(\d+)\s*-->\s*$", re.MULTILINE)
+# `[ \t]*`, never `\s*`: under `re.MULTILINE` a `\s` matches `\n` too, so a
+# trailing `\s*$` runs past the stamp's own line and the re-stamping writer
+# below then deletes every blank line that followed it — silently, and against
+# this module's property 3 ("writing a stamp disturbs nothing else").
+_JOURNAL_STAMP_RE = re.compile(r"^<!--[ \t]*fr:journal-schema=(\d+)[ \t]*-->[ \t]*$", re.MULTILINE)
 
 
 def _journal_stamp_line(version: int) -> str:
     return f"<!-- fr:journal-schema={version} -->"
 
 
-def _read_journal_stamp(path: Path) -> int:
+def _read_journal_stamp(path: Path) -> int | None:
     m = _JOURNAL_STAMP_RE.search(path.read_text())
     if m is None:
-        return PRE_FRAMEWORK_VERSION
+        return None
     return _coerce_version(int(m.group(1)), path, "fr:journal-schema")
 
 
@@ -194,17 +211,17 @@ _SPEC_KEY = "fr_schema"
 _FRONT_MATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
 
-def _read_spec_stamp(path: Path) -> int:
+def _read_spec_stamp(path: Path) -> int | None:
     text = path.read_text()
     m = _FRONT_MATTER_RE.match(text)
     if m is None:
-        return PRE_FRAMEWORK_VERSION
+        return None
     try:
         data: Any = yaml.safe_load(m.group(1))
     except yaml.YAMLError as e:
         raise ArtifactStampError(f"{path}: front matter is not valid YAML: {e}") from e
     if not isinstance(data, dict) or _SPEC_KEY not in data:
-        return PRE_FRAMEWORK_VERSION
+        return None
     return _coerce_version(data[_SPEC_KEY], path, _SPEC_KEY)
 
 
@@ -238,7 +255,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             current_version=2,
             locator="docs/superpowers/plans/*/_meta.yaml",
             stamp="`schema_version` in `_meta.yaml`",
-            read_version=_read_yaml_stamp,
+            read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_plan,
         ),
@@ -247,7 +264,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             current_version=1,
             locator="docs/superpowers/journals/**/*.md",
             stamp="`<!-- fr:journal-schema=N -->` header comment",
-            read_version=_read_journal_stamp,
+            read_stamp=_read_journal_stamp,
             write_version=_write_journal_stamp,
             validate=validate_journal,
         ),
@@ -256,7 +273,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             current_version=1,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
-            read_version=_read_yaml_stamp,
+            read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_run,
         ),
@@ -265,7 +282,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             current_version=1,
             locator="docs/acceptance/matrix.yaml",
             stamp="`schema_version` in `matrix.yaml`",
-            read_version=_read_yaml_stamp,
+            read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_matrix,
         ),
@@ -274,7 +291,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             current_version=1,
             locator="docs/superpowers/specs/*.md",
             stamp="`fr_schema:` in the front matter",
-            read_version=_read_spec_stamp,
+            read_stamp=_read_spec_stamp,
             write_version=_write_spec_stamp,
             validate=validate_spec,
         ),
