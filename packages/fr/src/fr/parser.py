@@ -101,7 +101,7 @@ _PHASE_FILE_RE = re.compile(r"^(\d{2})\.yaml$")
 INSTALLED_FR_VERSION = importlib.metadata.version("fr")
 
 
-def parse(plan_dir: Path) -> Plan:
+def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
     """Load and validate a v2 plan folder.
 
     Raises `PlanSchemaError` for any of:
@@ -109,8 +109,19 @@ def parse(plan_dir: Path) -> Plan:
       - missing `_meta.yaml` (looks like a v1 plan)
       - `_meta.yaml` fails schema validation
       - `fr_version` is malformed or unsatisfiable by the installed fr
-        (legacy `vk_version` is inert metadata — never enforced)
+        (legacy `vk_version` is inert metadata — never enforced), and
+        `enforce_fr_version` is True
       - any `NN.yaml` is malformed yaml or fails schema validation
+
+    `enforce_fr_version` (spec §3.E.1, artifact-migration-framework) defaults
+    to **on** — safety stays the default, so every existing caller keeps
+    today's behavior with no code change. The gate exists to stop an
+    incompatible `fr` from *executing* a plan (`fr apply`, `fr_dispatch`,
+    `fr pickup`); it must never apply to a purely historical read.
+    `fr.spec.compute_status` is the one caller that passes `False`, so an
+    archived plan (which records what shipped, under whatever `fr` shipped
+    it — spec §2 non-goal: archives are never migrated) still reports its
+    real state instead of `PlanSchemaError` degrading it to `state="Missing"`.
     """
     plan_dir = Path(plan_dir).resolve()
     if not plan_dir.is_dir():
@@ -126,10 +137,11 @@ def parse(plan_dir: Path) -> Plan:
     except Exception as e:
         raise PlanSchemaError(f"_meta.yaml: {e}") from e
 
-    # `fr_version` is enforced when present; the legacy `vk_version` field
-    # is inert (it constrains a tool that no longer exists — labels-are-data
-    # doctrine applied to plan files; see the super-fr split design).
-    if meta.fr_version:
+    # `fr_version` is enforced when present AND `enforce_fr_version` is True;
+    # the legacy `vk_version` field is inert (it constrains a tool that no
+    # longer exists — labels-are-data doctrine applied to plan files; see the
+    # super-fr split design).
+    if enforce_fr_version and meta.fr_version:
         try:
             spec = SpecifierSet(meta.fr_version)
         except InvalidSpecifier as e:

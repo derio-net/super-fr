@@ -1441,11 +1441,17 @@ rows:
       rather than skipping them silently, and never auto-commit.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.C. Replaces discover_plans' current catch-and-continue, which stops
-      dispatch for every pre-4.0.0 plan while reporting a healthy tick. The bridge hard-resets
-      its checkout each tick, so a commit there would be discarded anyway.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_bridge_discover.py
+    status: ci
+    notes: 'Spec 3.C. discover_plans (fr_dispatch/__init__.py) no longer catches PlanSchemaError
+      as a quiet warning-and-continue; it logs ERROR, pushes a `stale_artifact` failure metric,
+      and reports the failure to bridge_cli.py via a `failures` outparam that folds into the
+      tick error total -- one stale plan excludes only itself (I9 boundary), the daemon never
+      migrates or commits (the checkout is hard-reset every tick, issue #286). The "and CI" half
+      was already covered by Phase 3/4''s `ensure_artifacts_current` CLI-entry gate
+      (non-interactive when `CI` is set), unchanged here.'
   - id: in-flight-work-is-adoptable
     capability: Artifact migration
     acceptance: A plan already under way acquires a run cursor reflecting the work actually
@@ -1507,10 +1513,23 @@ rows:
       an incompatible live plan.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_parse.py
+      - super-fr:tests/unit/test_v2_spec.py
+      - super-fr:tests/unit/test_v2_pickup.py
+      - super-fr:tests/unit/test_status_cmd.py
+      - super-fr:tests/unit/test_vk_bridge_discover.py
+    status: ci
     notes: 'Spec 3.E.1. Excluding archives from migration collides with the parse-time
       gate: spec.py:370 catches PlanSchemaError and degrades the plan to Missing, which
       under 4.0.0 hits all 38 archived plans here. The gate is over-scoped, not the
       archives - it exists to stop an incompatible fr EXECUTING a plan, and reading
-      history executes nothing.'
+      history executes nothing. fr.parser.parse gained enforce_fr_version (keyword-only,
+      default True); fr.spec.compute_status is the ONE call site passing False. Every
+      execution path keeps the enforcing default and is pinned by its own test: fr pickup
+      (test_pickup_still_enforces_fr_version), fr status / fr apply''s shared
+      build_plan_report read path (test_build_plan_report_still_enforces_fr_version), and
+      the bridge''s discover_plans (test_discover_plans_still_enforces_fr_version), each
+      using a fixture whose fr_version ceiling genuinely excludes a monkeypatched installed
+      version.'

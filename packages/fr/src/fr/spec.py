@@ -367,7 +367,15 @@ def compute_status(spec: SpecMeta, repo_root: Path, gh: GhClient | None = None) 
             continue
 
         try:
-            plan = parse(local)
+            # spec §3.E.1: this is a historical read, not execution — an
+            # archived plan is never migrated (spec §2 non-goal) and may
+            # carry an `fr_version` ceiling that excludes the installed
+            # major. Enforcing that ceiling here would degrade every such
+            # plan to `state="Missing"` rather than reporting what actually
+            # shipped. Execution paths (`fr apply`, `fr_dispatch`,
+            # `fr pickup`) call `parse()` with the enforcing default — this
+            # is the one place that opts out.
+            plan = parse(local, enforce_fr_version=False)
         except PlanSchemaError as e:
             note = f"parse error: {e}"
             warnings.append(f"plan {ref.name!r}: {note}")

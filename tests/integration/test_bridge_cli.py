@@ -107,7 +107,7 @@ def test_tick_syncs_bridge_owned_checkout_before_discover(
 
     monkeypatch.setattr(bridge_cli, "_pull_managed_repo", spy_pull)
 
-    def spy_discover(repo: str, gh: Any) -> list[Any]:
+    def spy_discover(repo: str, gh: Any, **kwargs: Any) -> list[Any]:
         pull_order.append("discover")
         return []
 
@@ -206,7 +206,7 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
             self.meta = SimpleNamespace(plan=slug, workflow=None)
 
     monkeypatch.setattr(
-        bridge_cli, "discover_plans", lambda repo, gh: [_StubPlan("fake-plan-slug")]
+        bridge_cli, "discover_plans", lambda repo, gh, **kw: [_StubPlan("fake-plan-slug")]
     )
     # Tick returns a non-trivial counter so the per-plan log line is testable.
     monkeypatch.setattr(
@@ -293,7 +293,7 @@ def _stub_bridge_io(bridge_cli: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         bridge_cli, "_repo_owner_name", lambda repo_path: f"example/{repo_path.name}"
     )
-    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh: [])
+    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh, **kw: [])
 
     class _StubMcp:
         def list_workspaces(self, **kwargs: Any) -> list[Any]:

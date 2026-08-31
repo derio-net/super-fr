@@ -127,13 +127,46 @@ def _repo_checkout_root(repo: str) -> Path:
     return root / name
 
 
-def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
+def discover_plans(
+    repo: str,
+    gh: GhClient,
+    *,
+    metrics: MetricsPusher | None = None,
+    failures: list[str] | None = None,
+) -> list[Plan]:
     """Walk `docs/superpowers/plans/` in `repo`, return plans with a ready phase.
 
     Returns `[]` (no exception) if the checkout is missing or the plans
-    directory is absent. Individual unparseable plan folders are logged
-    and skipped so a single malformed plan can't take down the cron tick.
+    directory is absent. The per-plan I9 boundary still holds — one bad
+    plan folder can't take down the cron tick — but a `PlanSchemaError`
+    is no longer swallowed as a quiet warning (Phase 5, spec §3.C/§3.E.1).
+
+    Under a `fr` version bump, a plan's `_meta.yaml` can fail `parse()`
+    because its artifacts are stale (e.g. an `fr_version` ceiling that
+    excludes the installed major) — and the old behaviour here was to log
+    a WARNING and silently drop the plan, so the tick kept reporting
+    healthy while dispatch quietly stopped for it. That is now a LOUD
+    refusal: an ERROR log naming the plan, a `stale_artifact` failure
+    metric, and (via the `failures` outparam, mirroring `tick`'s own
+    `failures: list[str]` accumulator) a message the caller can count as
+    an error and fold into its own totals. `metrics` defaults to
+    `NullMetrics()` so a caller that doesn't care sees no behavior change;
+    `failures` defaults to `None` and is simply not written to.
+
+    This function never migrates and never shells out — it only reads.
+    The bridge's checkout is hard-reset to `origin/main` every tick
+    (#286), so a commit made here would be silently discarded next
+    tick: refusing loudly is the only correct response to staleness in
+    this context, mirroring `is_interactive()`'s daemon branch
+    (`fr.artifacts.trigger`) without calling it — the bridge never goes
+    through the CLI's `ensure_artifacts_current` gate at all (it calls
+    `fr_dispatch`/`fr.parser` as a library, not `fr <command>` as a
+    subprocess), so there is no TTY/CI context to test here: it is
+    unconditionally non-interactive by construction, and refuses
+    unconditionally rather than re-deriving that fact through the
+    predicate.
     """
+    m = metrics if metrics is not None else NullMetrics()
     repo_root = _repo_checkout_root(repo)
     plans_dir = repo_root / "docs" / "superpowers" / "plans"
     if not plans_dir.is_dir():
@@ -145,7 +178,11 @@ def discover_plans(repo: str, gh: GhClient) -> list[Plan]:
         try:
             plan = parse(plan_dir)
         except PlanSchemaError as e:
-            logger.warning("bridge: skipping unparseable plan %s: %s", plan_dir, e)
+            msg = f"{plan_dir}: refusing (artifacts stale or unparseable): {e}"
+            logger.error("bridge: %s", msg)
+            m.push_failure_total(reason="stale_artifact")
+            if failures is not None:
+                failures.append(msg)
             continue
         try:
             ready = _plan_projects_ready(plan, gh)

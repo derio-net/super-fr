@@ -102,7 +102,7 @@ def _run_bridge(
     )
     monkeypatch.setattr(bridge_cli, "_pull_managed_repo", lambda p: False)
     monkeypatch.setattr(bridge_cli, "_repo_owner_name", lambda p: "example/repo")
-    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, g: plans)
+    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, g, **kw: plans)
     monkeypatch.setattr(bridge_cli, "_construct_mcp_client", lambda: _StubMcp())
     monkeypatch.setattr(bridge_cli.hostclient, "client_for", lambda repo_root: gh)
     if runner is not None:

@@ -450,10 +450,19 @@ def main(argv: list[str] | None = None) -> int:
                     # 2026-07-09-multi-backend-git-host-adapters-design.md §6.
                     gh = hostclient.client_for(bridge_path)
 
+                    # Phase 5: a plan whose artifacts are stale/unparseable
+                    # is now a loud refusal inside `discover_plans` itself
+                    # (error logged, `stale_artifact` metric pushed); this
+                    # outparam is how that refusal reaches this tick's error
+                    # count without discover_plans growing a second return
+                    # shape.
+                    discover_failures: list[str] = []
+
                     def _fetch_plans(r: str = resolved_owner) -> Any:
-                        return discover_plans(r, gh)
+                        return discover_plans(r, gh, metrics=_metrics, failures=discover_failures)
 
                     discovered = _gh_rate_limit_guard(_fetch_plans)
+                    total_errors += len(discover_failures)
                     if discovered is None:
                         # _gh_rate_limit_guard already logged the reason
                         continue

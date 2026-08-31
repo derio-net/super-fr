@@ -36,9 +36,15 @@ tasks:
       Expected: green.
 state:
   steps:
-    P8.T1.S1: {state: ' ', ticked_at: null, note: null}
-    P8.T1.S2: {state: ' ', ticked_at: null, note: null}
+    P8.T1.S1:
+      state: x
+      ticked_at: '2026-08-30T14:57:05+00:00'
+      note: null
+    P8.T1.S2:
+      state: x
+      ticked_at: '2026-08-30T14:57:09+00:00'
+      note: null
   completion:
-    at: null
+    at: '2026-08-30T14:57:25+00:00'
     note: null
     observed_prs: []

@@ -459,7 +459,7 @@ def test_per_plan_exception_does_not_kill_daemon(
     )
     monkeypatch.setattr(bridge_cli, "_pull_managed_repo", lambda p: False)
     monkeypatch.setattr(bridge_cli, "_repo_owner_name", lambda p: "example/repo")
-    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh: plans)
+    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh, **kw: plans)
 
     ticks: list[str] = []
 

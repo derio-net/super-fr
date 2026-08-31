@@ -522,3 +522,98 @@ this repo, which turns CI red until the same PR runs `fr migrate artifacts --yes
 and commits the result. That obligation belongs in Phase 7's
 `.claude/rules/artifact-versioning.md` alongside the stamp/migration/validator
 trio it already names.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p5-loud-refusal created=2026-08-30T14:41:41 phase=5 -->
+### d-p5-loud-refusal · discovery · Phase 5: discover_plans refuses stale plans loudly, unconditionally non-interactive (phase 5)
+
+discover_plans's PlanSchemaError catch (fr_dispatch/__init__.py:145-149) was
+the swallow: it caught EVERY PlanSchemaError from parse() — both genuinely
+malformed plans and (post-4.0.0) plans whose fr_version ceiling excludes the
+installed major — logged a WARNING, and silently dropped the plan from
+discovery. Fixed uniformly rather than distinguishing "stale" from
+"malformed": both now log ERROR, push metrics.push_failure_total(reason=
+"stale_artifact"), and append a message to a new `failures: list[str] | None`
+outparam (mirroring tick()'s own `failures` accumulator pattern) so the
+caller can fold the count into its own error total. discover_plans gained
+`metrics: MetricsPusher | None = None` (defaults to NullMetrics(), same
+default-injection pattern as tick's `metrics=`).
+
+Predicate decision: did NOT call fr.artifacts.trigger.is_interactive(). The
+daemon never goes through fr's CLI entry point (`ensure_artifacts_current`)
+at all — bridge_cli.py calls fr_dispatch.discover_plans/tick as library
+functions, not `fr <command>` as a subprocess — so there is no argv/env/TTY
+context here to test in the first place. Calling is_interactive() would
+answer a question that doesn't apply to this call site (and would coincidentally
+always return False since stdin/stdout in caplog-captured pytest runs are
+non-tty too, masking the difference between "correctly detected non-interactive"
+and "the predicate literally cannot be reached here"). Refusing
+unconditionally is the correct read of "reuse the predicate, don't grow a
+second answer": the ANSWER (non-interactive => refuse, never migrate, never
+commit) is reused; the mechanism that computes it for CLI entry is a
+different question this call site doesn't need to ask.
+
+bridge_cli.py diff: one new `discover_failures: list[str] = []` per repo
+iteration, `discover_plans(r, gh, metrics=_metrics, failures=discover_failures)`
+in the `_fetch_plans` closure, and `total_errors += len(discover_failures)`
+after the `_gh_rate_limit_guard` call. flock, the bridge-owned checkout sync
+(_pull_managed_repo/_ensure_bridge_checkout), the metrics wire format/reason
+aliases, and _seen_plans.json/_done_closed.json are untouched.
+
+Four test-double call sites needed a signature update (not a behavior change)
+to tolerate the new kwargs: test_bridge_cli.py's spy_discover + two lambdas,
+test_bridge_resilience.py:462, test_bridge_shape_binding.py:105 — all
+`lambda repo, gh: ...` -> `lambda repo, gh, **kw: ...`.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p8-enforce-fr-version created=2026-08-30T14:56:54 phase=8 -->
+### d-p8-enforce-fr-version · discovery · Phase 8: enforce_fr_version scopes the gate to execution, spec.compute_status is the one opt-out (phase 8)
+
+fr.parser.parse gained `enforce_fr_version: bool = True` (keyword-only,
+defaults on -- safety stays default, every existing caller unchanged). The
+guarded block is exactly the pre-existing fr_version SpecifierSet check
+(parser.py, meta.fr_version ceiling vs INSTALLED_FR_VERSION) -- the
+schema_version: Literal[2] pydantic validation of _meta.yaml itself is NOT
+gated by this flag (that is plan-folder SHAPE validation, unrelated to the
+version-ceiling constraint; an archived plan is still a real v2 plan folder,
+just possibly pinned to an fr_version range that predates the installed
+major).
+
+Only one call site passes False: fr.spec.compute_status (spec.py:370, the
+per-plan-ref loop that builds SpecStatus for `fr spec status`). This is
+because spec §2 declares archived plans a non-goal for migration -- they
+record what shipped -- so parse-time enforcement of a stale ceiling there
+was pure noise (PlanSchemaError -> state="Missing" for every archived plan
+whose fr_version excludes 4.0.0, which is all 38 archived plans in this
+repo once any of them carry a ceiling narrower than the current major).
+
+Execution call sites audited and confirmed to still call parse()/pass no
+enforce_fr_version kwarg (default True holds):
+- fr/commands/pickup_cmd.py:29 (`fr pickup`) -- new unit test
+  test_pickup_still_enforces_fr_version (test_v2_pickup.py).
+- fr/commands/common.py build_plan_report (`fr status` AND `fr apply --yes`
+  share this one read->observe->render->diff path by design, per
+  test_status_cmd.py's own docstring: "the two can't drift") -- new unit
+  test test_build_plan_report_still_enforces_fr_version (test_status_cmd.py).
+  Confirms `fr status` (single-plan) is NOT the "read-only status path"
+  the phase brief means -- that is fr.spec.compute_status (spec-level
+  aggregate), a different function entirely; build_plan_report stays
+  execution-scoped because it is apply's own read path.
+- fr_dispatch/__init__.py discover_plans (the bridge daemon, Phase 5's own
+  surface) -- new unit test test_discover_plans_still_enforces_fr_version
+  (test_vk_bridge_discover.py), using an fr_version-excluded fixture
+  (not the generic schema_version:99 fixture Phase 5's test used) to prove
+  this specific gate, not just PlanSchemaError in general, stays enforced
+  here.
+- fr/plan_ops.py, fr/archive.py, fr/migrate.py, fr/parser.py's own
+  parse_strict -- all call parse(plan_dir) with no enforce_fr_version
+  kwarg; left untouched, not separately unit-tested (out of the phase's
+  named execution-path list, and each is a mutation path where enforcement
+  was never in question).
+
+Fixture discipline: both new tests build a plan with `fr_version:
+">=9.0.0,<10.0.0"` and monkeypatch `fr.parser.INSTALLED_FR_VERSION` to
+"3.0.0" (excluded) -- same pattern the pre-existing
+test_parse_enforces_fr_version already used, reused rather than
+reinvented. Confirmed RED before the parser.py/spec.py edit (git stash) --
+both new parser-level and spec-level tests failed exactly as predicted
+(TypeError: unexpected keyword argument; state == "Missing" with a "parse
+error" note) before the fix, and pass after.

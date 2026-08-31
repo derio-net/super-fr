@@ -62,6 +62,39 @@ def test_compute_status_aggregates_local_plan(tmp_path):
     assert plan_b.state in ("Unreachable", "Missing")
 
 
+def test_compute_status_reports_real_state_for_a_plan_fr_version_would_reject(
+    monkeypatch, tmp_path
+):
+    """Phase 8 (spec §3.E.1): a plan whose `fr_version` ceiling excludes the
+    installed major must still report its REAL state via `compute_status` —
+    not degrade to `state="Missing"` via the parse-time `fr_version` gate.
+    That gate exists to stop an incompatible `fr` from EXECUTING a plan; a
+    spec-status read executes nothing.
+
+    Uses a fixture whose ceiling genuinely excludes the installed version
+    (monkeypatched `INSTALLED_FR_VERSION`) — a ceiling that happens to admit
+    it would prove nothing about this behavior.
+    """
+    from fr.spec import compute_status, parse_spec
+
+    repo = _make_repo_with_spec(tmp_path)
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-05-10-fixture-spec-test"
+    meta_text = (plan_dir / "_meta.yaml").read_text()
+    (plan_dir / "_meta.yaml").write_text(meta_text + 'fr_version: ">=9.0.0,<10.0.0"\n')
+
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "3.0.0")
+
+    meta = parse_spec(repo / "docs" / "superpowers" / "specs" / "2026-05-10-fixture-spec.md")
+    st = compute_status(meta, repo)
+
+    plan_a = next(p for p in st.plans if p.plan_ref.name == "Test plan A")
+    assert plan_a.state == "Not Started", (
+        f"expected the plan's real state, got {plan_a.state!r} note={plan_a.note!r}"
+    )
+    assert plan_a.steps_total == 1
+    assert not any("parse error" in w for w in st.warnings)
+
+
 def test_compute_status_complete_when_all_phases_complete(tmp_path):
     """All steps ticked + completion.at set on every phase → state == Complete."""
     import yaml
