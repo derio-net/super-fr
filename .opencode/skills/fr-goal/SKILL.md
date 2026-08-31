@@ -28,6 +28,11 @@ operator` blocks until you resolve it (same command; a gated `cli` step then run
 next `advance`). Blocked → stop, say what you tried, ask. Another shape, same mechanics;
 below narrates the shipped `fr-goal` shape.
 
+**Work already in flight when your `fr` changed under it?** `fr run adopt <plan-dir|spec>`
+reconstructs a cursor from what is on disk — completed phases included — so the plan joins the
+run model instead of being stranded without one. Offered, never forced: the migration prints
+the command (`fr migrate artifacts --yes --adopt` for all of them), and adopts nothing itself.
+
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
 
 **Interactive touchpoints (all else autonomous):** `brainstorm`'s batched

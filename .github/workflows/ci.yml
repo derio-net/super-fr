@@ -32,6 +32,20 @@ jobs:
       - run: uv sync
       - run: uv run pytest
 
+  validate-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      # Spec 2026-08-30 3.F: every version ships a structure validator, and CI
+      # runs it over the repo's own artifacts. `CI` is set here, so a STALE
+      # artifact refuses at the migration gate before the validator even runs —
+      # both failures are the same instruction (`fr migrate artifacts --yes`,
+      # committed in the same PR; see .claude/rules/artifact-versioning.md).
+      - name: Every live artifact is structurally valid for this fr
+        run: uv run fr validate artifacts
+
   opencode-plugin-test:
     runs-on: ubuntu-latest
     steps:

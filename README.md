@@ -237,7 +237,7 @@ Everyday:
 | `fr archive` | Move finished plans (and specs) to `implemented/` |
 | `fr skills` | Condensed overview of the skills + CLI surface |
 | `fr workflow` | `check <shape>` — validate a resolved workflow manifest (schema, duplicate ids, dangling `needs`, cycles, capabilities) |
-| `fr run` | Durable workflow-run cursor: `start`, `status`, `advance`, `resolve`, `check` — see [Workflow shapes](#workflow-shapes) |
+| `fr run` | Durable workflow-run cursor: `start`, `status`, `advance`, `resolve`, `adopt`, `check` — see [Workflow shapes](#workflow-shapes) |
 
 Maintenance:
 
@@ -248,6 +248,7 @@ Maintenance:
 | `fr repair` | Normalize stale plan/spec refs **and strip dead `plan-config.yaml` keys** (dry-run; `--yes` to write) |
 | `fr migrate` | Plan format migration (v1→v2; also strips dead `plan-config.yaml` keys) |
 | `fr undispatch` | Close a plan's tracking Issues and null the fields |
+| `fr validate` | `artifacts [--kind K]` — structural validation of every live artifact against the version this `fr` writes (read-only; CI-gated) |
 | `fr pickup` | Output phase scope (markdown) for an agent |
 | `fr spec` | Spec status reporting |
 
@@ -286,6 +287,7 @@ fr run start <shape> --branch <b>   # resolve the shape, start the cursor
 fr run advance <run-id>             # kind: cli executes; kind: agent emits a brief
 fr run resolve <run-id> --step <id> --state done|failed [--emitted name=path]
 fr run status <run-id>              # cursor + every step's state
+fr run adopt <plan-dir|spec>        # give work already in flight a cursor (offered, not forced)
 fr workflow check <shape>           # schema/graph validation (CI tripwire on every shipped shape)
 ```
 

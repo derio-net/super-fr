@@ -803,3 +803,242 @@ Verified live on this repo: `uv run fr migrate artifacts` (dry-run) prints
 2026-08-30-artifact-migration-framework — while
 2026-08-14-workflow-shapes-and-workitem-dispatch, whose phases are all ticked,
 is correctly not offered. No file was written.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p7-validator-shape created=2026-08-31T10:01:15 phase=7 -->
+### d-p7-validator-shape · discovery · fr validate artifacts: stamp-then-structure, with ArtifactKind.validate as the required extension point (phase 7)
+
+`fr validate artifacts [--kind K]` (fr/artifacts/validate.py + structure.py,
+CLI in commands/validate_cmd.py). Two halves per artifact, in this order and no
+other:
+
+1. THE STAMP, generically, from the registry. Unreadable -> fail. NEWER than
+   this fr -> fail closed naming the upgrade, and STOP: an artifact from the
+   future cannot be checked against a schema that does not know it, and
+   rewriting it is a spec 2 non-goal. OLDER -> fail as stale naming
+   `fr migrate artifacts --yes`, and STOP: validating a v1 file against the v2
+   schema reports the migration's absence as a dozen structural errors, which
+   buries the one line that matters.
+2. THE STRUCTURE, through `ArtifactKind.validate` — a NEW REQUIRED FIELD on the
+   frozen dataclass, which is what makes "every version ships a validator for
+   every kind" structural rather than a promise: a kind cannot be registered
+   without one. This is the extension point Phase 1 forecast, used as forecast.
+
+Per-kind (all in fr/artifacts/structure.py, each `(path) -> list[str]`, every
+message naming a field or quoting a numbered line):
+
+- plan: `_meta.yaml` against `PlanMeta`, then the whole folder through
+  `fr.parser.parse(..., enforce_fr_version=False)` — Phase 8's flag, reused. A
+  ceiling that excludes this fr is a MIGRATION question the stamp check already
+  owns; reporting it again in different words helps nobody.
+- journal: `parse_journal`, plus duplicate entry ids (`fr journal add` is
+  idempotent on --id, so two entries sharing one id can only be a hand edit or
+  a bad splice — and `render --entry` would silently show the first).
+- run: `RunState`, plus the one cross-reference the model does not encode —
+  `cursor` must name a recorded step.
+- matrix: `Matrix`. Ref resolution and staleness stay `fr acceptance check`'s;
+  this is shape only, so the two gates cannot disagree.
+- spec: see the heuristics finding.
+
+Reuse over re-definition: the closed-world kinds go through their own pydantic
+model (the canonical schema, not a copy), the open ones through their own
+parser. `_model_problems` formats pydantic errors as
+"missing required field `rows[3].status`" so a nested row names its index.
+
+The walk is `iter_paths_of` over `ARTIFACT_KINDS`, so validate.py names no kind
+at all — a sixth kind is validated with no edit there. Archives are excluded by
+the same locators the runner uses, pinned by
+test_the_archive_is_never_validated.
+
+Exit codes: 0 valid, 1 invalid (the "lint failure" code cli.py already
+defines), 2 for an unknown --kind. NOT exempt from the CLI-entry migration
+gate: in CI a stale artifact refuses before the validator runs, and both
+failures carry the same instruction.
+
+Measured live on this branch: 22 artifacts (3 plans, 11 journals, 0 runs, 1
+matrix, 7 specs), all valid, under CI=true.
+
+<!-- fr:journal kind=finding scope=plan id=f-p7-heuristics-measured-not-reasoned created=2026-08-31T10:01:16 phase=7 state=fixed -->
+### f-p7-heuristics-measured-not-reasoned · finding [fixed] · Both structural heuristics had false positives on real code; measurement, not reasoning, picked the ones that shipped (phase 7)
+
+Spec-structure validation has no schema to lean on, so the checks had to be
+derived from the corruption this repo actually produced (commit 7ece5a9,
+repaired in de83df5: a splice with `end = text.index("## Implementation
+Plans")` matched an INLINE mention of that heading sitting BEFORE the replaced
+section, so end < start and the tail was re-appended — 638 duplicated lines and
+one heading fused mid-sentence).
+
+FIRST ATTEMPT, REJECTED BY MEASUREMENT. The obvious detector for the fused
+heading is "a `##` marker mid-line". Run over the seven live specs it flagged
+THREE lines, all legitimate prose quoting a heading in backticks — including
+line 76 of the workflow-shapes spec, which is the very inline mention that
+caused the splice. A validator that fails specs for correctly quoting a heading
+is a validator that gets switched off, so the heuristic was dropped rather than
+special-cased.
+
+WHAT SHIPPED, both measured before being written into the code:
+
+1. A heading line with an ODD number of backticks — an inline-code span that
+   never closes. The damaged line was
+   ``## Implementation Plans` into `PlanRef(plan, repo, file, …)`; `PlanMeta` carries``
+   (5 backticks). A legitimate heading quoting code balances them.
+2. A duplicated section heading at level <= 3, outside code fences. Deeper
+   headings (`####` notes) legitimately repeat and are not compared; fenced
+   `# Before` / `# After` blocks are skipped, which is what keeps two ARCHIVED
+   specs from being false positives if the archive were ever validated.
+
+MEASURED: 0 problems across all 7 live specs and 0 across the seeded fixtures;
+15 problems on the real damaged blob (14 duplicated sections + the fused
+heading). The unit test does not depend on git history — it reproduces the
+splice with the same `index()` bug and asserts both signals fire.
+
+SECOND FALSE POSITIVE, in the kinds tripwire.
+tests/unit/test_tripwire_artifact_kinds.py flags a literal collection holding
+>= 3 of the 5 kind names. Its first run flagged
+`fr_dispatch/work_item.py:56: _Level = Literal["run", "spec", "plan", "phase"]`
+— the DECOMPOSITION-UNIT grammar (2026-08-14 spec 4.D), which shares three
+nouns with the artifact kinds by coincidence: a run ITEM is not a run ARTIFACT.
+Fixed by skipping `Literal[...]` slices, with the reasoning in the docstring
+and its own test: a type-level vocabulary is a closed set the type checker
+already enforces, while a runtime collection of kind names is the thing that
+drifts. Raising the threshold to 4 was rejected — a genuine second list naming
+only three kinds is exactly what the tripwire is for.
+
+<!-- fr:journal kind=decision scope=plan id=d-p7-standing-obligation created=2026-08-31T10:01:55 phase=7 -->
+### d-p7-standing-obligation · decision · The rule, the explicit REPO_LOCAL_ONLY_RULES tuple, the CI job and the kinds tripwire — and the two facts that would have become folklore (phase 7)
+
+.claude/rules/artifact-versioning.md turns the framework into a standing
+obligation: any PR changing an artifact's SHAPE ships, in the same PR, a stamp
+bump (registry only), a registered migration (imported by
+fr/artifacts/__init__.py — a migration nobody imports never runs), and a
+structure validator for that kind. It also carries the closed-world corollary
+Phase 1/2 discovered: the first PR to move a kind's `current_version` past 1
+must, in that PR, widen that kind's extra=forbid model with an optional
+defaulted `schema_version`.
+
+It records the two operational facts earlier phases learned by running the
+thing, which would otherwise become folklore:
+
+1. AGENT SESSIONS, PODS AND CI ALWAYS LAND NON-INTERACTIVE. `is_interactive`
+   needs a TTY on BOTH stdin and stdout and treats `CI` as decisive, and
+   `fr isolation exec`, an agent's bash tool, a hermes pod and every runner
+   fail it. So after a version bump the first `fr` command there REFUSES and
+   the agent runs `fr migrate artifacts --yes` itself (that verb is exempt and
+   needs no TTY). The rule says in as many words that this is the operator's
+   deliberate choice — safe by default, one explicit step — and must NOT be
+   "fixed" later by loosening the predicate or adding an agent-detecting
+   exemption.
+2. MOVING `current_version` MAKES THIS REPO'S OWN CI RED until the same PR runs
+   `fr migrate artifacts --yes` and commits the result, because
+   acceptance-report.yml installs fr from the checkout and runs
+   `fr acceptance check` with CI=true. It already happened once on this branch
+   and was fixed by dogfooding the migration rather than hand-editing the file.
+
+WIRING, and the trap in it: `scripts/sync-opencode.py`'s REPO_LOCAL_ONLY_RULES
+is an EXPLICIT TUPLE, not a glob over `.claude/rules/`. A rule not listed there
+never reaches OpenCode and nothing complains — the mirror `--check` compares
+against the same tuple, so it agrees with itself. Added there (now 6
+instruction files); Hermes correctly does NOT get it: sync-hermes.py mirrors
+only the three installer-shipped plugin rules into a consumer's SOUL.md, and
+this is a maintainer rule about super-fr's own artifacts.
+
+CI: a new `validate-artifacts` job in .github/workflows/ci.yml runs
+`uv run fr validate artifacts` over the repo. Its comment names the ordering
+that would otherwise confuse: with CI set, a STALE artifact refuses at the
+migration gate before the validator runs, and both failures carry the same
+instruction. The same assertion also runs in the unit suite
+(test_this_repos_own_artifacts_are_structurally_valid), so it fails locally in
+seconds before it fails in Actions in minutes.
+
+TRIPWIRE: tests/unit/test_tripwire_artifact_kinds.py — an AST scan of
+packages/*/src for a literal set/list/tuple/dict-keys holding >= 3 of the 5
+registered kind names, registry.py excepted. Adding a kind stays a one-module
+edit; a second list is how a kind gets migrated but never validated.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p7-adopt-documented created=2026-08-31T10:01:56 phase=7 -->
+### d-p7-adopt-documented · discovery · fr run adopt is documented in four places now; the explainer renderer path in the rule is stale (re-derived, verified byte-identical) (phase 7)
+
+`fr run adopt` shipped in Phase 6 documented NOWHERE. Closed in four places,
+plus one the phase brief did not name:
+
+- plugins/super-fr/skills/fr-goal/SKILL.md — four lines before "Announce at
+  start", covering what it does (reconstructs a cursor from what is on disk,
+  completed phases included), when it is needed (the version moved under work
+  already in flight), and that adoption is OFFERED (the migration prints the
+  command; `fr migrate artifacts --yes --adopt` does the batch; nothing adopts
+  on your behalf). 109 -> 114 lines against the hard 120-line cap in
+  tests/unit/test_skill_validation.py, so ~6 lines of headroom remain for
+  whoever edits it next.
+- README.md — `adopt` added to the `fr run` verb list in the command table and
+  a line in the Workflow-shapes code block. A `fr validate` row was added to
+  the maintenance table in the same pass (a new user-facing verb with no home).
+- packages/fr/src/fr/commands/skills_cmd.py — the fr-goal skill's verb summary
+  (`fr run {start,advance,resolve,adopt,status,check}`). The COMMANDS half of
+  `fr skills` is introspected from the typer app, so `fr validate` appeared
+  there by itself; the SKILLS half is hand-maintained prose and did not.
+- docs/explainers/01-fr-goal.md + .html — NOT in the brief, but
+  .claude/rules/explainers-currency.md makes a shipped skill's surface change a
+  trigger, and the explainer's "Five commands move it" passage is exactly where
+  a reader would look. One paragraph added, in the page's own voice, framing
+  adopt as the command that CREATES a run rather than moving one.
+
+THE EXPLAINER REGENERATION, since the rule warns the .html is the file that
+actually ships and the .md alone is the failure mode: the rule's documented
+path (`~/.claude/plugins/cache/derio-net--blog-craft/blog-craft/<version>`) is
+DANGLING on this machine — `current` symlinks to 0.21.1, which is not there. The
+renderer is at
+/Users/derio/.claude/plugins/marketplaces/derio-net--blog-craft/tools/render_explainer.py.
+Re-derived rather than hand-editing the HTML, as the rule instructs. Verified
+before trusting it: re-rendering the UNMODIFIED .md reproduced the committed
+.html byte for byte (1028154 bytes, identical), so the diff after the edit is
++8 lines and nothing else. Anyone updating explainers-currency.md should
+correct the path there.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p7-acceptance-sweep created=2026-08-31T10:02:26 phase=7 -->
+### d-p7-acceptance-sweep · discovery · Acceptance sweep: two rows flipped to ci on what the tests actually exercise; every-artifact-declares-its-version stays red on purpose (phase 7)
+
+Three rows examined, two flipped, one deliberately left red.
+
+FLIPPED to ci:
+
+- artifact-structure-validator-per-version (was not-implemented, levels {}).
+  Both halves of the acceptance are now met and both are mechanical rather than
+  promised: "every kind" because `validate` is a REQUIRED field on the frozen
+  ArtifactKind, so a kind cannot be registered without one; "CI runs it over
+  the repo's own artifacts" by the new validate-artifacts job AND by a unit
+  test that runs the same walk over REPO_ROOT. Levels cite
+  test_validate_artifacts.py + test_tripwire_artifact_kinds.py.
+- migration-is-idempotent (was skipped). The notes said explicitly why it was
+  not ci: "the no-second-COMMIT half is Phase 4's and stays unverified until it
+  lands". It landed. Checked what the tests actually exercise before flipping:
+  test_a_report_whose_paths_are_already_committed_makes_no_empty_commit
+  (test_migration_commit.py) re-commits the same report and asserts HEAD is
+  unchanged — that is the second-commit half at the commit layer — and
+  test_a_current_tree_neither_migrates_nor_commits (test_migration_trigger.py)
+  asserts a tree already current never reaches the runner or the committer at
+  all. The no-second-REWRITE half was already pinned both ways (bytes AND mtime
+  on the second run). Test Plan item 7, the same two commands on a live node,
+  stays operator-driven and is named as such in the notes.
+
+LEFT RED, deliberately: every-artifact-declares-its-version stays
+not-implemented. Phase 1 left it red because the generators do not stamp, and
+NOTHING IN THIS PLAN CHANGED THAT: `fr journal add`, `fr run start` /
+`fr run adopt` (save_run_state) and the spec writer all still emit unstamped
+files; only plans carry a stamp, and only because a plan's stamp is its
+pre-existing schema_version. The tempting flip is to argue that "an absent
+stamp READS as version 1" satisfies "declares the version it was written for".
+It does not — that is the framework's READER convention, not a property of the
+generated file — and flipping on that equivalence would be precisely the
+overclaim this row exists to prevent. The unit ref was extended to
+test_validate_artifacts.py, which does strengthen the row's second half in CI
+(an unreadable or newer-than-this-fr stamp now fails on every kind), and the
+notes name what closes the first half: the generators write the stamp, owed at
+the moment a kind's current_version first moves past 1, in the same PR that
+widens that kind's extra=forbid model.
+
+`fr acceptance add` was not used (it errors on a duplicate --id); matrix.yaml
+was edited directly, then `fr acceptance report --deterministic` regenerated
+all three committed renderings and `fr acceptance check` passed — 93 rows,
+{ci: 74, skipped: 14, not-implemented: 5}, exit 0. One YAML trap worth
+recording: a `notes:` value written in PLAIN style dies on the first ": " it
+contains ("mapping values are not allowed here"). The rows that carry colons
+are single-quoted with doubled apostrophes; match that style when hand-editing.

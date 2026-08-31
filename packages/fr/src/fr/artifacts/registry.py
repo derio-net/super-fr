@@ -24,8 +24,10 @@ Three properties this module exists to guarantee:
    round-trip through `yaml.safe_dump` would silently normalise all three, so
    no writer here re-serialises a parsed document.
 
-Adding a kind means adding one entry to `ARTIFACT_KINDS`. Nothing outside this
-module may enumerate kinds (Phase 7 adds a tripwire that asserts it).
+Adding a kind means adding one entry to `ARTIFACT_KINDS` — including its
+structure validator (spec §3.F), so a kind cannot be registered without one.
+Nothing outside this module may enumerate kinds
+(`tests/unit/test_tripwire_artifact_kinds.py`).
 """
 
 from __future__ import annotations
@@ -37,6 +39,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from fr.artifacts.structure import (
+    validate_journal,
+    validate_matrix,
+    validate_plan,
+    validate_run,
+    validate_spec,
+)
 
 PRE_FRAMEWORK_VERSION = 1
 """What an artifact with no stamp reads as (spec §3.A)."""
@@ -70,6 +80,12 @@ class ArtifactKind:
     """Human description of the carrier, for messages and `--dry-run` output."""
     read_version: Callable[[Path], int]
     write_version: Callable[[Path, int], None]
+    validate: Callable[[Path], list[str]]
+    """Structural validation for this kind (spec §3.F), from
+    `fr.artifacts.structure`: returns one human-readable message per problem
+    and an empty list when the artifact is valid. Every kind carries one —
+    "every version ships a structure validator" is only true if a new kind
+    cannot be registered without one."""
 
 
 # --- YAML-carried stamps (plan / run / matrix) ---------------------------
@@ -224,6 +240,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             stamp="`schema_version` in `_meta.yaml`",
             read_version=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
+            validate=validate_plan,
         ),
         ArtifactKind(
             name="journal",
@@ -232,6 +249,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             stamp="`<!-- fr:journal-schema=N -->` header comment",
             read_version=_read_journal_stamp,
             write_version=_write_journal_stamp,
+            validate=validate_journal,
         ),
         ArtifactKind(
             name="run",
@@ -240,6 +258,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             stamp="`schema_version` in the run yaml",
             read_version=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
+            validate=validate_run,
         ),
         ArtifactKind(
             name="matrix",
@@ -248,6 +267,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             stamp="`schema_version` in `matrix.yaml`",
             read_version=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
+            validate=validate_matrix,
         ),
         ArtifactKind(
             name="spec",
@@ -256,6 +276,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             stamp="`fr_schema:` in the front matter",
             read_version=_read_spec_stamp,
             write_version=_write_spec_stamp,
+            validate=validate_spec,
         ),
     )
 }

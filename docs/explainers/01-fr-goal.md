@@ -216,6 +216,15 @@ command, or prints the dispatch brief if it is agent work; `fr run resolve`
 records how a dispatched step turned out and answers an operator gate; and
 `fr run check` fails loudly when the cursor is sitting on a failed step.
 
+One more command creates a run rather than moving one. If your `fr` was
+upgraded while a plan was already half-implemented, that work predates the run
+model and has no cursor at all; `fr run adopt <plan-dir>` reconstructs one from
+what is already on disk — which phases are finished, which spec the plan came
+from — so the plan rejoins the pipeline instead of being stranded outside it.
+The upgrade only ever *offers* this: it prints the command and adopts nothing
+on your behalf, because an unrelated command should not quietly add tracked
+files to your repository.
+
 Two details make this more than bookkeeping. First, a failed step **does not**
 move the cursor. Success advances, failure stays put, so a stalled run keeps
 reporting the same step until someone deals with it rather than sliding past it.

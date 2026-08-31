@@ -38,7 +38,7 @@ The pages are produced by the **`blog-craft:explainers`** skill; the renderer is
 `tools/render_explainer.py` in the blog-craft plugin. From the repo root:
 
 ```bash
-B=~/.claude/plugins/cache/derio-net--blog-craft/blog-craft/<version>
+B=~/.claude/plugins/marketplaces/derio-net--blog-craft
 uv run --no-project --with markdown --with pyyaml python "$B/tools/render_explainer.py" \
   docs/explainers/<name>.md --style broadsheet --embed-fonts \
   -o docs/explainers/<name>.html
@@ -50,9 +50,16 @@ check there before assuming. The renderer imports `markdown` and `yaml` but
 declares neither, hence `--with`; without them it aborts cleanly and leaves the
 existing page untouched, so a failed render cannot half-write a page.
 
-Pin `<version>` to whatever is installed; the path is a plugin cache, so a
-blog-craft upgrade moves it. If the command above stops resolving, that is the
-signal to re-derive it, not to hand-edit the HTML.
+Use the **marketplace** path, not the versioned plugin cache
+(`…/cache/derio-net--blog-craft/blog-craft/<version>/`): the cache path carries a
+version that a blog-craft upgrade moves, and this repo already references
+marketplace-installed resources that way (`plan_validator_wrapper.py`). If the
+command stops resolving, re-derive it — never hand-edit the HTML.
+
+Before trusting any renderer you did not just verify, re-render the
+**unmodified** `.md` first and confirm the output matches the committed `.html`
+byte for byte. That separates "the renderer changed" from "my prose changed",
+and turns the page diff into only what you actually wrote.
 
 ## Enforcement
 

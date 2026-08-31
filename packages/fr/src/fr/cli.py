@@ -36,6 +36,7 @@ from fr.commands.skills_cmd import skills as skills_command
 from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
 from fr.commands.undispatch_cmd import undispatch_command
+from fr.commands.validate_cmd import validate_app
 from fr.commands.workflow_cmd import workflow_app
 
 app = typer.Typer(
@@ -71,6 +72,7 @@ app.add_typer(models_app, name="models")
 app.add_typer(hermes_app, name="hermes")
 app.add_typer(workflow_app, name="workflow")
 app.add_typer(run_app, name="run")
+app.add_typer(validate_app, name="validate")
 app.command(name="skills")(skills_command)
 
 

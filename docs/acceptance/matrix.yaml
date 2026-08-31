@@ -1483,17 +1483,26 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_artifact_registry.py
+    levels:
+      unit:
+      - super-fr:tests/unit/test_validate_artifacts.py
     status: not-implemented
-    notes: Spec 3.A. Per-artifact stamps chosen over a repo manifest because a manifest
+    notes: 'Spec 3.A. Per-artifact stamps chosen over a repo manifest because a manifest
       cannot describe a half-migrated tree. Phase 1 lands the registry and a reader/writer
-      per kind, and the unit ref covers the second half of the claim in CI — an absent
-      stamp reads as version 1, not an error, for all five kinds. Row stays red because
-      the FIRST half is unmet — the generators still do not stamp. Only plans carry a
-      stamp in practice; `fr journal add`, `fr run start` and the spec writer emit
-      unstamped files, so "every artifact fr generates declares its version" is still
-      false. The run/matrix/plan models are also extra=forbid, so a live file of those
-      kinds cannot yet ACCEPT a stamp (plan journal, finding
-      f-closed-world-models-reject-a-stamp). Re-evaluate in Phase 7.
+      per kind, and the unit refs cover the second half of the claim in CI — an absent
+      stamp reads as version 1, not an error, for all five kinds, and `fr validate
+      artifacts` now fails an unreadable or newer-than-this-fr stamp on every kind.
+      RE-EVALUATED IN PHASE 7 AND DELIBERATELY LEFT RED. The FIRST half is still unmet
+      and nothing in this plan changed it — only plans carry a stamp in practice, while
+      `fr journal add`, `fr run start` / `fr run adopt` (save_run_state) and the spec
+      writer all emit unstamped files. Absence READING as 1 is not the same claim as
+      every generated artifact DECLARING its version, and flipping this row on that
+      equivalence would be exactly the overclaim the row exists to prevent. What closes
+      it — the generators write the stamp, which is owed at the moment a kind''s
+      current_version first moves past 1, in the same PR that must widen that kind''s
+      extra=forbid model with an optional defaulted schema_version field (finding
+      f-closed-world-models-reject-a-stamp; obligation now standing in
+      .claude/rules/artifact-versioning.md).'
   - id: migration-is-idempotent
     capability: Artifact migration
     acceptance: Re-running any migration produces no second rewrite and no second commit.
@@ -1503,21 +1512,40 @@ rows:
       unit:
       - super-fr:tests/unit/test_migration_runner.py
       - super-fr:tests/unit/test_migration_fr_version.py
-    status: skipped
+      - super-fr:tests/unit/test_migration_commit.py
+      - super-fr:tests/unit/test_migration_trigger.py
+    status: ci
     notes: Spec 3.B. The no-second-REWRITE half is ci-pinned both ways — the stamp guards
       a schema migration, the predicate guards a repair, and both assert bytes AND mtime
-      unchanged on the second run. The no-second-COMMIT half is Phase 4's and stays
-      unverified until it lands, which is why this row is not yet ci.
+      unchanged on the second run. The no-second-COMMIT half landed with Phase 4 and is
+      now pinned too, which is what moves this row to ci — test_a_report_whose_paths_are_already_committed_makes_no_empty_commit
+      (re-committing the same report leaves HEAD where it was) and, one level up,
+      test_a_current_tree_neither_migrates_nor_commits (a tree already current never
+      reaches the runner or the committer at all). Test Plan item 7 — the same two
+      commands on a live node — stays operator-driven.
   - id: artifact-structure-validator-per-version
     capability: Artifact migration
     acceptance: Every version ships a structural validator for every artifact kind it
       generates, and CI runs it over the repo's own artifacts.
     origin:
     - super-fr:docs/superpowers/specs/2026-08-30-artifact-migration-framework-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.F. Standing obligation, not a one-off. Would have caught the duplicated-spec
-      corruption found on this branch, which no existing test could see.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_validate_artifacts.py
+      - super-fr:tests/unit/test_tripwire_artifact_kinds.py
+    status: ci
+    notes: 'Spec 3.F. `fr validate artifacts [--kind K]` checks the stamp (unreadable,
+      stale, and newer-than-this-fr each fail, the last with an upgrade message — spec
+      2 forbids downgrades) and then the shape, through `ArtifactKind.validate`. "Every
+      KIND" is structural, not vigilance: `validate` is a required field on the frozen
+      dataclass, so a kind cannot be registered without a validator, and the tripwire
+      keeps the kind list in one module. Both halves of "CI runs it": a `validate-artifacts`
+      job in ci.yml, and test_this_repos_own_artifacts_are_structurally_valid, which
+      fails locally before CI does. The spec-structure check is the one that earns the
+      row — it reproduces commit 7ece5a9''s splice (index() matched an INLINE mention
+      of `## Implementation Plans` before the replaced section, so end < start and the
+      tail was re-appended) and fires on both signals; run against the real damaged blob
+      it reports 15 problems, and 0 against every spec in the tree today.'
   - id: archived-plans-survive-a-major-bump
     capability: Artifact migration
     acceptance: After a major fr bump, archived plans still report their real state
