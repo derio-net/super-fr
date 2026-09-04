@@ -58,7 +58,15 @@ import typer
 # straight for the runner would give a gate that walks an empty registry and
 # cheerfully reports every tree as current.
 from fr.artifacts import is_stale, run_migrations
-from fr.artifacts.commit import commit_migration, on_default_branch, uncommitted_veto
+from fr.artifacts.atomic import migration_lock
+from fr.artifacts.commit import (
+    GitContext,
+    GitRefusal,
+    commit_migration,
+    git_context,
+    lock_path,
+    uncommitted_veto,
+)
 from fr.artifacts.runner import MigrationRegistry, MigrationReport
 
 # --- what is exempt ------------------------------------------------------
@@ -105,6 +113,41 @@ EXEMPTIONS: Final[tuple[str, ...]] = (
 _SKIP_FALSY: Final[frozenset[str]] = frozenset({"", "0", "false", "no", "off"})
 """`FR_SKIP_MIGRATION=0` meaning "skip" would be a nasty surprise."""
 
+CI_ENV_VARS: Final[tuple[str, ...]] = (
+    "CI",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "BUILDKITE",
+    "JENKINS_URL",
+    "TF_BUILD",
+    "TEAMCITY_VERSION",
+    "CIRCLECI",
+)
+"""Environment markers that mean "this is automation, not an operator".
+
+`CI` alone was the whole test (review r5-e8). Every provider here sets `CI`
+*as well*, so this is belt-and-braces rather than a fix for a known escape —
+but the cost of a wrongly-interactive verdict is an unexpected commit in a
+runner's checkout, and the cost of the list is one dict lookup per name. Each
+is read with the same truthiness rule as `CI`: a marker set to `false`/`0` is
+someone explicitly saying "not CI", and is honoured.
+
+Pinned literally by `tests/unit/test_migration_trigger.py` so adding one means
+arguing for it in a diff.
+"""
+
+NON_INTERACTIVE_ENV_VAR: Final[str] = "FR_NON_INTERACTIVE"
+"""Explicit opt-out for an operator (or wrapper) that HAS a TTY but does not
+want fr writing to git — a `script`/`expect` harness, a tmux-driven agent, a
+pairing session. Truthy means non-interactive; falsy means "no opinion", not
+"force interactive": a real CI marker still wins."""
+
+_FALSY: Final[frozenset[str]] = frozenset({"", "0", "false", "no", "off"})
+
+
+def _truthy(environ: Mapping[str, str], name: str) -> bool:
+    return (environ.get(name) or "").strip().lower() not in _FALSY
+
 
 def is_exempt(
     *,
@@ -120,6 +163,13 @@ def is_exempt(
     never reaches this callback, but `fr plan --help` *does* reach it, and by
     then the group context no longer carries the subcommand's own arguments
     (`ctx.args` is empty on click 8.3).
+
+    **A `--help` that is an option VALUE is not a request for help** (review
+    r5-c5). The test was `any(token in EXEMPT_OPTIONS for token in tokens)`,
+    which matched anywhere — so `fr journal add --text --help` exempted a
+    command that writes to the repo, on the strength of somebody's entry text.
+    `_asks_for_help` instead refuses the match when the preceding token is an
+    option that could be consuming it.
     """
     environ = os.environ if env is None else env
     skip = (environ.get(SKIP_ENV_VAR) or "").strip().lower()
@@ -128,7 +178,45 @@ def is_exempt(
     if invoked_subcommand is not None and invoked_subcommand in EXEMPT_COMMANDS:
         return True
     tokens = sys.argv[1:] if argv is None else argv
-    return any(token in EXEMPT_OPTIONS for token in tokens)
+    return _asks_for_help(tokens)
+
+
+def _asks_for_help(tokens: Sequence[str]) -> bool:
+    """Is one of `EXEMPT_OPTIONS` here as an OPTION rather than as a value?
+
+    Without click's parameter table the arity of an option is unknowable, so
+    the rule is positional and deliberately conservative: `--help` counts
+    unless the token immediately before it is a bare option token, in which
+    case it may be that option's value.
+
+    - `fr --help`, `fr plan --help`, `fr plan create --help` → yes; the
+      preceding token is a command word or nothing.
+    - `fr apply --format json --help` → yes; `json` is a value, not an option.
+    - `fr journal add --text --help` → **no**; `--text` takes a value and this
+      is it. This is the case the fix exists for.
+    - `fr apply --yes --help` → no, conservatively. `--yes` is a flag, so this
+      IS a help request, and the cost of the false negative is that the gate
+      runs before help prints — a refusal at worst, never a silent write. The
+      opposite error disables the gate, so the asymmetry is deliberate.
+
+    `--opt=value` is self-contained and cannot consume the next token.
+    Everything after a bare `--` is a positional argument by definition.
+    """
+    previous: str | None = None
+    for token in tokens:
+        if token == "--":
+            return False
+        if token in EXEMPT_OPTIONS:
+            consumed_by_previous = (
+                previous is not None
+                and previous.startswith("-")
+                and previous != "-"
+                and "=" not in previous
+            )
+            if not consumed_by_previous:
+                return True
+        previous = token
+    return False
 
 
 # --- what context this is ------------------------------------------------
@@ -152,10 +240,15 @@ def is_interactive(
 ) -> bool:
     """Is this an operator at a terminal, as opposed to a daemon or CI?
 
-    Two independent signals, both of which must say yes:
+    Three independent signals, all of which must say yes:
 
-    - `CI` unset (or empty). Every CI provider sets it, and it is the one
-      signal that survives a runner that *does* allocate a pty.
+    - **No CI marker is truthy** (`CI_ENV_VARS`). These survive a runner that
+      *does* allocate a pty. Truthiness matters: `CI=false` is a person saying
+      "not CI", and reading it as "CI is set" was a real trap — the previous
+      test was `(environ.get("CI") or "").strip()`, so `CI=0` and `CI=false`
+      both made an operator's terminal non-interactive (review r5-e8).
+    - **`FR_NON_INTERACTIVE` is not truthy** — the explicit opt-out for a
+      TTY-bearing wrapper that still does not want fr writing to git.
     - stdin **and** stdout are both a TTY. Requiring both is deliberate: the
       cost of being wrongly non-interactive is a recoverable refusal that names
       the command to run, while the cost of being wrongly interactive is an
@@ -165,7 +258,9 @@ def is_interactive(
     predicate rather than inventing a second answer to the same question.
     """
     environ = os.environ if env is None else env
-    if (environ.get("CI") or "").strip():
+    if any(_truthy(environ, name) for name in CI_ENV_VARS):
+        return False
+    if _truthy(environ, NON_INTERACTIVE_ENV_VAR):
         return False
     return _isatty(sys.stdin if stdin is None else stdin) and _isatty(
         sys.stdout if stdout is None else stdout
@@ -201,9 +296,18 @@ def ensure_artifacts_current(
 ) -> None:
     """Migrate stale artifacts, or refuse — before the invoked command runs.
 
-    Returns normally in the two cases where the command should proceed: nothing
-    was stale, or everything stale was migrated. Every other outcome raises
-    `typer.Exit(2)`.
+    Four outcomes, not three (review r5-c5):
+
+    1. **Nothing was stale** — returns immediately, no git call.
+    2. **Everything stale was migrated** — returns; the command runs.
+    3. **fr will not act here** — non-interactive, the default branch, a
+       detached HEAD, unestablished git state, another fr holding the lock, or
+       an artifact the operator is editing. Nothing is written; `typer.Exit(2)`.
+    4. **PARTIAL success** — some artifacts migrated (and possibly committed)
+       and others did not. Still `typer.Exit(2)`, because a half-migrated tree
+       is not one to run a command over, but the message says how many landed:
+       an operator told only "N could not be migrated" re-runs and is surprised
+       by a commit that already exists.
 
     `registry`, `interactive`, `commit` and `err` are injection points for
     tests, mirroring the runner's own `registry=`; production passes none of
@@ -254,20 +358,97 @@ def ensure_artifacts_current(
             ),
         )
 
-    branch = on_default_branch(root)
-    if branch is not None:
+    # ONE place asks git anything (review r5-c1/c2/c3). Every branch below
+    # reads the same snapshot, so the default-branch guard, the detached-HEAD
+    # refusal and the uncommitted-file veto cannot disagree about the tree —
+    # and a git that could not answer refuses ONCE, loudly, instead of each
+    # predicate independently degrading to a permissive default.
+    state = git_context(root)
+    if isinstance(state, GitRefusal):
         raise _refuse(
             emit,
             _will_not_act_here(
                 root,
-                f"HEAD is {branch!r}, this repository's default branch, so fr will not "
+                "fr could not establish this repository's git state, so it will not "
                 "migrate or commit here:",
-                "an automatic commit on a protected branch is work you have to notice "
-                "and undo. Do it on a branch, or run the migration yourself.",
+                f"{state.reason} Unknown git state is not a clean one.",
             ),
         )
+    if isinstance(state, GitContext):
+        if _fell_back_to_cwd(root, state):
+            raise _refuse(
+                emit,
+                _will_not_act_here(
+                    root,
+                    f"{root} is not this repository's root (git says {state.toplevel}), so "
+                    "fr will not migrate or commit here:",
+                    "the migration would run over a subtree while the commit named paths "
+                    "outside it. Run fr from the repository root.",
+                ),
+            )
+        if state.branch is None:
+            raise _refuse(
+                emit,
+                _will_not_act_here(
+                    root,
+                    "HEAD is detached (a rebase, a bisect, or a checked-out commit), so fr "
+                    "will not migrate or commit here:",
+                    "a commit made now is folded into the operation in progress or "
+                    "orphaned by the next checkout. Finish or abort it first.",
+                ),
+            )
+        if state.branch == state.default_branch:
+            raise _refuse(
+                emit,
+                _will_not_act_here(
+                    root,
+                    f"HEAD is {state.branch!r}, this repository's default branch, so fr will "
+                    "not migrate or commit here:",
+                    "an automatic commit on a protected branch is work you have to notice "
+                    "and undo. Do it on a branch, or run the migration yourself.",
+                ),
+            )
 
     emit(f"fr: artifacts in {root} are out of date — migrating before running the command.")
+    # One migration at a time, per repository (review r5-e7). Two agents — or
+    # an agent and the operator — running `fr` in the same second would both
+    # plan the same work, both apply it, and both try to commit; the second
+    # produces a duplicate or an empty commit. The lock lives in the git COMMON
+    # directory, so linked worktrees of one repo share it.
+    with migration_lock(lock_path(root)) as acquired:
+        if not acquired:
+            if not _still_stale(root, registry):
+                emit("  another fr process migrated this tree; continuing.")
+                return
+            raise _refuse(
+                emit,
+                _will_not_act_here(
+                    root,
+                    "another fr process is migrating this repository right now, so fr "
+                    "will not migrate or commit here:",
+                    "two migrations of one tree race each other into two commits. "
+                    "Re-run this command once it finishes.",
+                ),
+            )
+        _migrate_and_commit(root, registry, commit, emit)
+
+
+def _still_stale(root: Path, registry: MigrationRegistry | None) -> bool:
+    """Re-check after losing the lock. The winner has very likely just done
+    exactly this work, in which case there is nothing left to do and the
+    command the operator typed should simply proceed."""
+    try:
+        return is_stale(root, registry=registry)
+    except Exception:
+        return True
+
+
+def _migrate_and_commit(
+    root: Path,
+    registry: MigrationRegistry | None,
+    commit: Callable[[Path, MigrationReport], Any] | None,
+    emit: Callable[[str], None],
+) -> None:
     try:
         report = run_migrations(root, dry_run=False, registry=registry, veto=uncommitted_veto(root))
     except Exception as e:
@@ -311,15 +492,40 @@ def ensure_artifacts_current(
     if report.failed:
         for failure in report.failed:
             emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
+        # PARTIAL SUCCESS is its own outcome and the message says so (review
+        # r5-c5). One plan migrated and committed while another failed on a
+        # `~=` ceiling is the ordinary shape of a consumer repo mid-upgrade;
+        # "N artifact(s) could not be migrated" alone reads as though nothing
+        # happened, and an operator who then re-runs is surprised by a commit
+        # that is already there.
         raise _refuse(
             emit,
             [
-                f"fr: {len(report.failed)} artifact(s) could not be migrated and were left "
-                "unmodified.",
+                f"fr: {len(report.applied)} artifact(s) migrated"
+                + (" and committed" if report.applied else "")
+                + f"; {len(report.failed)} left unmodified.",
                 "  Refusing to run over a half-migrated tree. Fix them by hand, or set "
                 f"{SKIP_ENV_VAR}=1 to bypass this check.",
             ],
         )
+
+
+def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
+    """Did `resolve_repo_root` hand us a cwd instead of the repository root?
+
+    `resolve_repo_root` swallows a failing `git rev-parse --show-toplevel` and
+    returns the cwd (`fr.commands.common`). Combined with the old fail-OPEN
+    git layer that produced the one outcome this module promises never to
+    reach: from a subdirectory of a repo git could not answer for, the gate
+    proceeded over a stale tree it had never established the state of (review
+    r5-c2). Now git answers separately, so the two can be compared — and a
+    disagreement is a refusal, not a shrug.
+
+    Not a refusal when `$VK_REPO_ROOT` deliberately points somewhere else and
+    that somewhere else IS a repo root; that is the documented test/override
+    seam, and it agrees with git by definition when it is a real root.
+    """
+    return root.resolve() != state.toplevel
 
 
 def _will_not_act_here(root: Path, because: str, detail: str) -> tuple[str, ...]:

@@ -166,7 +166,7 @@ steps:
 **Two corrections to this illustration, made in Phase 11** once the shipped
 manifest had to actually run. First, `deliver` is `kind: agent`, not a `cli` step
 running `fr run deliver` — no such subcommand exists (`fr run` is
-`start`/`status`/`advance`/`resolve`/`check`), and composing a PR body from the
+`start`/`adopt`/`status`/`advance`/`resolve`/`check`), and composing a PR body from the
 journal is judgment work, not a deterministic command. Second, an `agent` step
 is completed by **`fr run resolve <run-id> --step <id> --state done|failed`**,
 added in Phase 7: `advance` deliberately never executes an agent step, so
@@ -194,15 +194,42 @@ plugins/super-fr/workflows/<name>.yaml     # shipped (in THIS repo)
 
 **Where "shipped" resolves at runtime** (clarified in Phase 6 — the paths above
 read as though both were repo-relative, which is true only inside this
-monorepo). In a consumer repo the shipped manifests live wherever the plugin was
-installed, so the lookup is `~/.claude/plugins/marketplaces/derio-net--super-fr/
-plugins/super-fr/workflows/` — the same marketplace-clone convention
-`plan_validator_wrapper.py` and `isolation/local.py` already use — overridable
-via `$FR_SHIPPED_WORKFLOWS_DIR` for tests and for harnesses that are not Claude
-Code. The repo-side path stays genuinely repo-relative. Because that default is
-a *path built from a marketplace name*, and this repo has already survived one
-marketplace rename, it must be covered by a test rather than assumed: a wrong
-default degrades to "unknown workflow shape" for every lookup.
+monorepo). The full order, corrected in review r5-b5/r5-e14, is **four**
+places:
+
+1. `docs/superpowers/workflows/<name>.yaml` — the repo's own override, which
+   wins wholesale;
+2. `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml` when that variable is set — the
+   explicit escape, for tests and for any harness that is not Claude Code;
+3. `<the installed `fr` wheel>/fr/workflows/<name>.yaml` — a byte-identical
+   copy of `plugins/super-fr/workflows/`, shipped **inside the Python
+   package**;
+4. `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/
+   workflows/<name>.yaml` — the Claude Code plugin clone, the same
+   marketplace-clone convention `plan_validator_wrapper.py` and
+   `isolation/local.py` already use.
+
+**Step 3 was missing and its absence was a real gap.** Steps 1, 2 and 4 are
+all absent by default on a host that is not running Claude Code: a hermes pod
+gets hooks and a SOUL block from `fr hermes install`, not a marketplace clone;
+an OpenCode consumer never has one; and `$FR_SHIPPED_WORKFLOWS_DIR` was
+documented nowhere operator-facing. Verified on a clean `uv tool install` with
+an empty `HOME`: `fr run start fr-goal` failed with "unknown workflow shape",
+and `fr workflow check --all` printed "no workflow shapes found" **and exited
+0** — so §8.0 step 3 below passed on a host where nothing was installed.
+
+**Step 3 comes BEFORE step 4**, deliberately: the wheel copy ships with the
+`fr` that will execute the shape, so the two cannot disagree, while the
+marketplace clone is updated independently — an operator who upgrades `fr`
+without re-running `install.sh` would otherwise keep resolving a *stale* shape,
+silently, possibly at the wrong granularity. Anyone who really wants the clone
+to win has step 2, which is explicit.
+
+Because the step-4 default is a *path built from a marketplace name*, and this
+repo has already survived one marketplace rename, it is covered by a test
+rather than assumed: a wrong default degrades to "unknown workflow shape" for
+every lookup. The step-3 copy is covered by a tripwire asserting it is
+byte-identical to `plugins/super-fr/workflows/`.
 
 `fr-goal` with no argument resolves `fr-goal`; `fr-goal ux-research` resolves
 that name through the same order. A shipped shape can be overridden wholesale by
@@ -301,7 +328,9 @@ and it archives with the plan — the same properties that made journals
 git-tracked. The accepted cost is that a poller reading a `main` checkout cannot
 see in-flight runs; §4.H addresses that where it belongs, in the Source seam.
 
-**CLI:** `fr run start <workflow> --branch <b>`, `fr run status <run-id>`,
+**CLI:** `fr run start <workflow> --branch <b>`,
+`fr run adopt <plan-dir>` (2026-08-30 §3.E — give existing work a cursor),
+`fr run status <run-id>`,
 `fr run advance <run-id>` (execute the cursor's step if `kind: cli`, else emit
 the dispatch brief), `fr run resolve <run-id> --step <id> --state done|failed`
 (record the outcome of an `agent` step), `fr run check <run-id>`.
@@ -357,12 +386,28 @@ Lift the queue vocabulary off GitHub labels into a closed enum:
 ItemState = Literal["queued", "blocked", "in_progress", "in_review", "done"]
 ```
 
-`labels.py` becomes the **GitHub projection of** that enum rather than its
-definition: `queued → fr:ready`, `blocked → fr:blocked`,
-`in_progress → fr:in-progress`, `in_review → fr:pr-ready`, `done → closed`.
+The **projection onto GitHub** is `queued → fr:ready`,
+`blocked → fr:blocked`, `in_progress → fr:in-progress`,
+`in_review → fr:pr-ready`, `done → closed`.
+
+**Where that projection lives, corrected against what shipped.** This
+section originally said "`labels.py` becomes the GitHub projection of that
+enum rather than its definition". It did not: `labels.py` is
+**byte-unchanged** by this spec, and the dependency runs the other way —
+the new `fr/item_state.py` holds `ItemState`, `ItemDecision` and
+`project_github`, and *imports* `labels.py`'s `LabelDef`s to express the
+mapping. That is the better arrangement and was deliberate: `labels.py`
+stays the GitHub vocabulary (names and colours, a tracker's own business),
+`item_state.py` is the neutral vocabulary plus the one projection function,
+and a second tracker adds a second projection without touching either. A
+`labels.py` that "became the projection" would have had to import the
+neutral enum, pointing the dependency at the tracker-specific module.
+
 `render.py` continues to emit `RenderedIssue` for the GitHub tracker; what
 changes is that the *decision* of which state an item is in is computed in
-tracker-neutral terms first, and projected second.
+tracker-neutral terms first (`render.phase_item_decision`), and projected
+second (`render._lifecycle_label_for_decision`, which is the only caller of
+`project_github`).
 
 **`manual` is not an `ItemState` either** (found in Phase 1, not at design time —
 this mapping originally omitted it). `labels.py:101` defines
@@ -710,7 +755,14 @@ judgement, and stay manual by nature.
 
 1. `fr --version` → `4.0.0`.
 2. `fr --help` lists `workflow`, `run`, `plan`, `apply`, `acceptance`, `journal`.
-3. `fr workflow check --all` over the **installed** shipped manifests.
+3. `fr workflow check --all` over the **installed** shipped manifests. It must
+   report `fr-goal: ok` — and, when nothing is discoverable at all, **exit
+   non-zero** rather than printing "no workflow shapes found" and exiting 0
+   (review r5-b5: as written, this step passed against a host with no shapes
+   installed, which is precisely the state it exists to detect). The shipped
+   `fr-goal` is now inside the `fr` wheel (§4.A step 3), so a clean
+   `uv tool install` with an empty `HOME` and no repo override satisfies this
+   with no plugin installed at all.
 4. `fr acceptance check` and `fr status` in a checkout.
 5. `python -m fr_vk.bridge --dry-run` → banner, exit 0, no gh or MCP traffic.
 

@@ -61,6 +61,14 @@ Before trusting any renderer you did not just verify, re-render the
 byte for byte. That separates "the renderer changed" from "my prose changed",
 and turns the page diff into only what you actually wrote.
 
+**Where you run it from is load-bearing** (found 2026-09-04, by exactly the
+check above): run the command **from `/`** (or any directory outside the repo),
+never from inside the worktree. Run inside it, `uv run --no-project --with …`
+leaks the project venv's **pygments** into the render env, which flips
+markdown's codehilite into syntax-highlighting mode and rewrites every code
+block — a diff of hundreds of lines you did not write. From `/`, pygments is
+absent and the unmodified render is byte-identical.
+
 ## Enforcement
 
 `tests/unit/test_tripwire_explainers_fresh.py` fails when a rendered page stops

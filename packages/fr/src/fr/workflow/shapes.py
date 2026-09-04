@@ -40,10 +40,32 @@ steps:
 """
 
 FR_GOAL_PHASE_DISPATCH: WorkflowManifest = parse_manifest(FR_GOAL_PHASE_DISPATCH_YAML)
-"""The default shape for phase-granularity dispatch.
+"""The default shape for phase-granularity DISPATCH.
 
 `needs: [spec, plan]` with nothing emitting them is legal for a
 `unit: phase` shape — see `fr.workflow.artifacts.IMPLIED_INPUTS_BY_UNIT` —
 and is exactly what makes `required_inputs` non-empty, hence what keeps
 `fr apply --yes --to <runner>` refusing an unmerged plan.
+
+**There are TWO defaults in this codebase and they answer different
+questions** (documented here, once, per review r5-e3):
+
+- **`FR_GOAL_PHASE_DISPATCH`** (this module) answers *"a plan names no
+  `workflow:` — at what granularity does the bridge dispatch it?"*
+- **`DEFAULT_WORKFLOW`** (`"fr-goal"`, `fr.run.adopt`) answers *"`fr run
+  adopt` was given no `--workflow` — which shape's step list is the cursor a
+  position in?"*
+
+They are not two spellings of one thing and must not be merged. The first is
+a `unit: phase` MANIFEST OBJECT, resolved from nothing, describing the one
+item a phase executor runs; it exists so `fr apply --to` and `tick` keep
+today's behaviour for every plan in the wild. The second is a shape NAME,
+resolved repo > shipped like any other, naming the `unit: run` pipeline whose
+steps (`brainstorm` … `deliver`) a run cursor is a position in.
+
+A run cursor cannot live in `FR_GOAL_PHASE_DISPATCH` at all — it has one step
+— and a bridge cannot dispatch `DEFAULT_WORKFLOW` at phase granularity,
+because that shape is `unit: run`. They happen to share the name `fr-goal`
+because the shipped run-shape and the phase sub-shape it fans out to are two
+views of one pipeline (see this manifest's `description`).
 """

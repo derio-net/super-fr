@@ -95,8 +95,15 @@ def main(
 ) -> None:
     """VK toolchain: v2 plan-as-folder, render → observe → diff → apply."""
     # The obligatory artifact-migration trigger (spec §3.C). It runs before
-    # every command: in an interactive context stale artifacts are migrated and
-    # committed and the typed command then runs, and in a daemon / CI context
-    # the command is refused loudly with nothing written. `--version`,
-    # `--help`, `fr migrate` and `FR_SKIP_MIGRATION=1` are the only exemptions.
+    # every non-exempt command: in an interactive context stale artifacts are
+    # migrated and committed and the typed command then runs, and in a daemon /
+    # CI context the command is refused loudly with nothing written.
+    #
+    # The exemptions are EIGHT, not four (corrected in review r5-d1): `--help`,
+    # `--version`, `FR_SKIP_MIGRATION=1`, `fr migrate` — and the five read-only
+    # commands `status`, `skills`, `isolation`, `init`, `validate`. That
+    # matters for reading the spec's own Test Plan: `fr status` is EXEMPT, so
+    # it can never be the command that demonstrates a migration. The list lives
+    # in `fr.artifacts.trigger.EXEMPTIONS` and is pinned literally by
+    # `tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things`.
     ensure_artifacts_current(invoked_subcommand=ctx.invoked_subcommand)

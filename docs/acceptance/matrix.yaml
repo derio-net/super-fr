@@ -1014,6 +1014,15 @@ rows:
       a gated agent step nothing could clear. test_fr_goal_shape.py now walks the
       real manifest through the real CLI past both, so "no argument runs today's
       pipeline" is a checked claim rather than a resolution-only one.
+      Review r5-b5/r5-e14: resolution was covered only where a Claude Code
+      marketplace clone exists. The shipped manifests now also travel INSIDE the
+      fr wheel (packages/fr/src/fr/workflows/, reached via importlib.resources),
+      so lookup is repo override > $FR_SHIPPED_WORKFLOWS_DIR > packaged >
+      marketplace clone, and `fr run start fr-goal` resolves on a hermes pod, an
+      OpenCode consumer, or a bare `uv tool install fr` with an empty HOME.
+      test_tripwire_shipped_workflows.py gained three checks (the packaged set
+      matches the plugin set, is byte-identical, and is reachable through
+      importlib.resources); test_workflow_resolve.py pins the precedence.
   - id: workflow-repo-authored
     capability: Workflow shapes
     acceptance: A consumer repo defines its own workflow shape, or overrides a shipped
@@ -1294,10 +1303,18 @@ rows:
     - super-fr:docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md
     levels: {}
     status: not-implemented
-    notes: Spec 8.0 is written as one scriptable command per step precisely so it can
+    notes: >-
+      Spec 8.0 is written as one scriptable command per step precisely so it can
       be automated. Not built in this PR - operator-requested follow-up. Each step is
       currently manual; the class of defect it guards (a release whose CLI cannot start)
-      is invisible to the in-workspace suite.
+      is invisible to the in-workspace suite. Review r5-b5 sharpened WHY this row
+      matters: step 8.0.3 (`fr workflow check --all`) used to print "no workflow
+      shapes found" and exit 0, so the manual smoke suite REPORTED SUCCESS on a
+      host where no shape was installed at all — the exact state that step exists
+      to detect. `--all` now exits 1 on zero shapes (fr.commands.workflow_cmd,
+      tests/unit/test_workflow_check.py), so automating this row would now catch
+      the defect rather than inherit a green false negative. Until it is
+      automated the whole suite still depends on an operator running it.
   - id: phase-executor-worktree-refused
     capability: fr-goal phase dispatch
     acceptance: 'Dispatching the fr-phase-executor WITH isolation: "worktree" is refused

@@ -450,3 +450,23 @@ def test_self_review_says_nothing_about_a_plan_that_names_no_shape(tmp_path: Pat
     from fr.plan_ops import self_review
 
     assert self_review(parse(_plan_dir(tmp_path))) == []
+
+
+# ── review r5-b6: an exact 3.x pin must not slip through ──────────────
+
+
+def test_an_exact_pre_4_pin_is_recognised_as_admitting_fr_3() -> None:
+    """The original five probes (`0.1.0`, `2.0.0`, `3.0.0`, `3.19.0`,
+    `3.999.999`) answered `==3.5.0` with a flat "no fr 3.x is admitted" —
+    the constraint shape most likely to be hand-typed, waved through."""
+    from fr.commands.plan_cmd import _admits_pre_4
+
+    for pinned in ("==3.5.0", "==3.1.0", "==2.5.0", "==1.0.0", "==3.20.0"):
+        assert _admits_pre_4(pinned), pinned
+
+
+def test_a_4_only_constraint_still_admits_nothing_pre_4() -> None:
+    from fr.commands.plan_cmd import _admits_pre_4
+
+    for four_plus in (">=4.0.0,<5.0.0", "==4.0.0", ">=4.1"):
+        assert not _admits_pre_4(four_plus), four_plus

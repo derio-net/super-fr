@@ -38,6 +38,7 @@ caller, and any doubt returns a `CommitOutcome` that did nothing.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -61,88 +62,250 @@ class CommitOutcome:
     message: str | None = None
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+GIT_TIMEOUT_SECONDS = 30.0
+"""Wall-clock cap on every git subprocess here (review r5-c5).
+
+This layer runs at CLI entry, before the command the operator typed. A
+`pre-commit` hook that waits on the network, a `gpg` signing prompt with no
+agent, or an NFS mount that has gone away turns "fr status" into a process
+that never returns and prints nothing. A timeout converts all of those into a
+refusal that names what hung.
+"""
+
+_GIT_ENV: dict[str, str] = {
+    # Force the C locale: this module PARSES git's stderr to tell "not a git
+    # repository" (proceed) from every other failure (refuse). Under a German
+    # or Japanese locale that string is translated, the match fails, and the
+    # gate flips back to fail-OPEN — the exact regression review r5-c2 closed.
+    "LC_ALL": "C",
+    "LANG": "C",
+    "LANGUAGE": "C",
+    # Never block on credentials: a repo with an http remote can otherwise sit
+    # waiting for a username at CLI entry.
+    "GIT_TERMINAL_PROMPT": "0",
+    # Read-only commands must not take `index.lock`; another fr (or the
+    # operator's editor) may hold it, and we would rather report than contend.
+    "GIT_OPTIONAL_LOCKS": "0",
+}
 
 
-def _toplevel(root: Path) -> Path | None:
-    """The git toplevel containing `root`, or None when there is no repo."""
-    try:
-        done = _git(root, "rev-parse", "--show-toplevel")
-    except (OSError, FileNotFoundError):  # pragma: no cover — git missing
-        return None
-    if done.returncode != 0:
-        return None
-    text = done.stdout.strip()
-    return Path(text).resolve() if text else None
+class GitUnavailableError(Exception):
+    """git could not answer — NOT "there is no repository here"."""
 
 
-def _has_head(root: Path) -> bool:
-    return _git(root, "rev-parse", "--verify", "--quiet", "HEAD").returncode == 0
+@dataclass(frozen=True)
+class GitContext:
+    """Everything the commit step needs to know about the repo, read ONCE.
 
-
-# --- the default branch --------------------------------------------------
-
-_WELL_KNOWN_DEFAULTS = ("main", "master")
-"""Last resort when nothing in the repo declares a default."""
-
-
-def _current_branch(root: Path) -> str | None:
-    """The checked-out branch, or `None` on a detached HEAD / not a repo."""
-    done = _git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
-    return done.stdout.strip() or None if done.returncode == 0 else None
-
-
-def default_branch(root: Path) -> str | None:
-    """The repository's default branch, best available answer.
-
-    `origin/HEAD` is the authority when it exists — it is what the host says,
-    so a repo whose trunk is `trunk` or `develop` is protected as such and a
-    `main` that is *not* the default is not. `init.defaultBranch` is next, and
-    the well-known names are the floor: a local repo with no remote sitting on
-    `main` is still a base clone, and this predicate is used to refuse, so its
-    failure mode should be one extra explicit step rather than one surprise
-    commit.
+    Built by `git_context`, which is the only function here that shells out
+    more than incidentally. Before it (review r5-c2) each predicate ran its own
+    subprocesses and each swallowed failure independently, so "git is not on
+    PATH" and "this directory has dubious ownership" both looked exactly like
+    "not a git repository": the default-branch guard evaporated, the
+    uncommitted-file veto returned an empty set, the reason string said "is not
+    a git repository" about a repo that plainly was one, and — worst — from a
+    subdirectory `resolve_repo_root` fell back to the cwd and the gate migrated
+    a tree it had never established the state of.
     """
-    done = _git(root, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
-    if done.returncode == 0 and done.stdout.strip():
-        return done.stdout.strip().removeprefix("origin/")
-    configured = _git(root, "config", "--get", "init.defaultBranch")
-    if configured.returncode == 0 and configured.stdout.strip():
-        return configured.stdout.strip()
-    for name in _WELL_KNOWN_DEFAULTS:
-        if _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").returncode == 0:
+
+    toplevel: Path
+    branch: str | None
+    """`None` means a DETACHED HEAD. Never "no repo" — that is `NoRepo`."""
+    default_branch: str | None
+    """`None` only when the repo genuinely declares none (no remote, no
+    matching local branch). When a remote exists and nothing resolves,
+    `git_context` returns a refusal instead of guessing."""
+    dirty: frozenset[Path]
+    has_head: bool
+
+
+@dataclass(frozen=True)
+class NoRepo:
+    """`root` is genuinely not inside a git repository. An ordinary answer."""
+
+    root: Path
+
+
+@dataclass(frozen=True)
+class GitRefusal:
+    """git state could not be established. Fail CLOSED: never act on this."""
+
+    reason: str
+
+
+GitState = GitContext | NoRepo | GitRefusal
+
+
+def _git(
+    root: Path, *args: str, timeout: float = GIT_TIMEOUT_SECONDS
+) -> subprocess.CompletedProcess[str]:
+    """One git call, C-locale, prompt-free, time-boxed.
+
+    Raises `GitUnavailableError` when git could not be RUN or did not finish;
+    a non-zero exit is returned normally, because "this ref does not exist" is
+    an answer.
+    """
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env={**os.environ, **_GIT_ENV},
+        )
+    except FileNotFoundError as e:
+        raise GitUnavailableError("git is not installed or not on PATH") from e
+    except subprocess.TimeoutExpired as e:
+        raise GitUnavailableError(
+            f"`git {' '.join(args)}` did not finish within {timeout:g}s "
+            "(a hook, a credential prompt, or a stalled filesystem?)"
+        ) from e
+    except OSError as e:
+        raise GitUnavailableError(f"could not run git: {e}") from e
+
+
+_NOT_A_REPO_MARKERS = (
+    "not a git repository",
+    "not a working tree",
+)
+"""Substrings git uses for the ONE failure that means "there is no repo here".
+
+Matched against C-locale stderr (see `_GIT_ENV`). Everything else — dubious
+ownership, a corrupt object store, a permission error — is a refusal.
+"""
+
+_SCOPE_ENV_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
+
+
+def _scope_override() -> str | None:
+    for name in _SCOPE_ENV_VARS:
+        if os.environ.get(name):
             return name
     return None
 
 
-def on_default_branch(root: Path) -> str | None:
-    """The branch name when HEAD is the repository's default branch, else None.
+def _classify_failure(what: str, done: subprocess.CompletedProcess[str]) -> NoRepo | GitRefusal:
+    stderr = (done.stderr or "").strip()
+    if any(marker in stderr.lower() for marker in _NOT_A_REPO_MARKERS):
+        return NoRepo(root=Path())
+    return GitRefusal(reason=f"git could not answer `{what}`: {stderr or 'no output'}")
 
-    `None` for "not a git repo" and for a detached HEAD: neither is the case
-    this guards, and a detached HEAD never reaches the automatic commit path
-    anyway (CI is non-interactive, and the gate refuses there first).
+
+def _remote_name(root: Path) -> str | None | GitRefusal:
+    """Which remote speaks for "the default branch" (review r5-c3 / r5-e6).
+
+    `origin` is a convention, not a rule. `checkout.defaultRemote` is git's own
+    answer when there are several; a single remote of any name is unambiguous;
+    two unnamed-by-config remotes are a genuine ambiguity and this module
+    refuses rather than picking one — it is about to decide whether an
+    automatic commit is allowed.
     """
-    toplevel = _toplevel(root)
-    if toplevel is None:
+    configured = _git(root, "config", "--get", "checkout.defaultRemote")
+    if configured.returncode == 0 and configured.stdout.strip():
+        return configured.stdout.strip()
+    listed = _git(root, "remote")
+    if listed.returncode != 0:
+        return GitRefusal(reason=f"git could not list remotes: {listed.stderr.strip()}")
+    names = [n for n in listed.stdout.split() if n]
+    if not names:
         return None
-    branch = _current_branch(toplevel)
-    if branch is None:
-        return None
-    return branch if branch == default_branch(toplevel) else None
+    if len(names) == 1:
+        return names[0]
+    if "origin" in names:
+        return "origin"
+    return GitRefusal(
+        reason=(
+            f"{root} has {len(names)} remotes ({', '.join(sorted(names))}) and no "
+            "`checkout.defaultRemote`, so fr cannot tell which one names the default "
+            "branch. Set `git config checkout.defaultRemote <name>`."
+        )
+    )
 
 
-# --- artifacts the operator is already editing ---------------------------
+def _ref_exists(root: Path, ref: str) -> bool:
+    return _git(root, "rev-parse", "--verify", "--quiet", ref).returncode == 0
 
 
-def uncommitted_paths(root: Path) -> frozenset[Path]:
-    """Every path git reports as changed — staged, unstaged or untracked."""
-    toplevel = _toplevel(root)
-    if toplevel is None:
-        return frozenset()
+_WELL_KNOWN_DEFAULTS = ("main", "master", "trunk", "develop")
+"""Candidate trunk names, remote-tracking first, then local. Last resort."""
+
+
+def _default_branch(root: Path, *, unborn: bool) -> str | None | GitRefusal:
+    """The repository's default branch — or a refusal rather than a guess.
+
+    Four sources, in this order, each answering a strictly weaker question
+    than the one above (review r5-c3, which found the previous order wrong in
+    two ordinary configurations):
+
+    1. `<remote>/HEAD` — what the HOST says, and the only authority. Ignored
+       when it points at a ref that no longer exists (a deleted branch leaves
+       a dangling symbolic-ref behind).
+    2. `refs/remotes/<remote>/{main,master,trunk,develop}` — a remote WITHOUT
+       a HEAD. This has to beat the two local sources: a repo whose trunk is
+       `trunk` and which also has a local `main` was previously reported as
+       `main`, so an automatic commit landed on the real trunk.
+    3. `init.defaultBranch`, **only if that branch exists locally**. Trusted
+       unconditionally before, so a global `init.defaultBranch = main` in a
+       repo that only has `master` reported `main` — and the guard that is
+       supposed to refuse on the default branch let a commit onto `master`.
+    4. Local well-known names.
+
+    When a remote exists and none of the four resolves, this REFUSES. The
+    caller is deciding whether to commit automatically; "I could not tell
+    which branch is protected" must never read as "none is".
+    """
+    remote = _remote_name(root)
+    if isinstance(remote, GitRefusal):
+        return remote
+
+    if remote is not None:
+        head = _git(root, "symbolic-ref", "--quiet", "--short", f"refs/remotes/{remote}/HEAD")
+        if head.returncode == 0 and head.stdout.strip():
+            named = head.stdout.strip().removeprefix(f"{remote}/")
+            # A branch with a `/` in it (`release/main`) survives this: only the
+            # remote prefix is stripped, and only once.
+            if named and _ref_exists(root, f"refs/remotes/{remote}/{named}"):
+                return named
+        for name in _WELL_KNOWN_DEFAULTS:
+            if _ref_exists(root, f"refs/remotes/{remote}/{name}"):
+                return name
+
+    configured = _git(root, "config", "--get", "init.defaultBranch")
+    if configured.returncode == 0 and configured.stdout.strip():
+        name = configured.stdout.strip()
+        # `unborn`: a freshly `git init`ed repo has no refs at all, so "does
+        # the branch exist" cannot be asked. The configured name IS the branch
+        # HEAD points at, so it is the default by construction.
+        if unborn or _ref_exists(root, f"refs/heads/{name}"):
+            return name
+
+    for name in _WELL_KNOWN_DEFAULTS:
+        if _ref_exists(root, f"refs/heads/{name}"):
+            return name
+
+    if remote is not None:
+        return GitRefusal(
+            reason=(
+                f"{root} has a remote ({remote}) but fr could not determine its default "
+                f"branch: no {remote}/HEAD, no {remote}/<well-known> branch, and no local "
+                "branch matching one. Run `git remote set-head "
+                f"{remote} --auto`."
+            )
+        )
+    return None
+
+
+def _dirty_paths(toplevel: Path) -> frozenset[Path]:
+    """Every path git reports as changed — staged, unstaged or untracked.
+
+    Raises `GitUnavailableError` on a non-zero exit (review r5-c2). Returning an
+    empty set there silently disarmed the co-edited-artifact veto: the gate
+    would then happily `git add` a file the operator was mid-edit in.
+    """
     done = _git(toplevel, "status", "--porcelain", "-z", "--untracked-files=all")
-    if done.returncode != 0:  # pragma: no cover — a working `git status` is the norm
-        return frozenset()
+    if done.returncode != 0:
+        raise GitUnavailableError(f"`git status` failed: {done.stderr.strip() or 'no output'}")
     # `-z` entries are `XY <path>` with no quoting; a rename or copy emits the
     # ORIGINAL path as the NEXT field, and both ends of the move count as
     # touched.
@@ -153,11 +316,115 @@ def uncommitted_paths(root: Path) -> frozenset[Path]:
         entry = fields[i]
         i += 1
         code, rel = entry[:2], entry[3:]
-        if code[0] in "RC" and i < len(fields):
+        # `"R" in code`, not `code[0] in "RC"` (review r5-c5): a rename that is
+        # staged-and-then-modified reports as `" R"`/`"R "`/`"RM"`, and only the
+        # last of those has the letter in position 0. Missing it left the
+        # ORIGINAL path unconsumed, so the next loop pass read a PATH as a
+        # status code — silently shifting every remaining entry.
+        if ("R" in code or "C" in code) and i < len(fields):
             out.add((toplevel / fields[i]).resolve())
             i += 1
         out.add((toplevel / rel).resolve())
     return frozenset(out)
+
+
+def git_context(root: Path) -> GitState:
+    """Resolve toplevel, branch, default branch and dirty set — once, or refuse.
+
+    THE fail-closed boundary of this module. Exactly three outcomes:
+
+    - `GitContext` — git answered every question.
+    - `NoRepo` — `root` is genuinely not in a repository. Ordinary; the caller
+      migrates without committing.
+    - `GitRefusal` — git could not answer. The caller must do nothing.
+
+    A **linked worktree** (`.git` is a FILE, not a directory) is a first-class
+    case, not an edge one: fr's own isolation workspace is exactly that, so
+    every question here is asked through `git` rather than by looking for a
+    `.git` directory (review r5-e6).
+    """
+    override = _scope_override()
+    if override is not None:
+        return GitRefusal(
+            reason=(
+                f"${override} is set, so git's idea of 'this repository' is not the "
+                "directory fr is looking at. fr will not migrate or commit under an "
+                f"overridden git scope — unset ${override}, or run "
+                "`fr migrate artifacts --yes` yourself."
+            )
+        )
+
+    try:
+        inside = _git(root, "rev-parse", "--is-inside-work-tree")
+        if inside.returncode != 0:
+            outcome = _classify_failure("rev-parse --is-inside-work-tree", inside)
+            return NoRepo(root=root) if isinstance(outcome, NoRepo) else outcome
+        if inside.stdout.strip() != "true":
+            return GitRefusal(
+                reason=(
+                    f"{root} is inside a bare git repository, which has no working tree "
+                    "to migrate or commit into."
+                )
+            )
+
+        top = _git(root, "rev-parse", "--show-toplevel")
+        if top.returncode != 0 or not top.stdout.strip():
+            outcome = _classify_failure("rev-parse --show-toplevel", top)
+            return NoRepo(root=root) if isinstance(outcome, NoRepo) else outcome
+        toplevel = Path(top.stdout.strip()).resolve()
+
+        head = _git(toplevel, "symbolic-ref", "--quiet", "--short", "HEAD")
+        branch = head.stdout.strip() or None if head.returncode == 0 else None
+        has_head = _git(toplevel, "rev-parse", "--verify", "--quiet", "HEAD").returncode == 0
+        default = _default_branch(toplevel, unborn=not has_head)
+        if isinstance(default, GitRefusal):
+            return default
+        dirty = _dirty_paths(toplevel)
+    except GitUnavailableError as e:
+        # Deliberately does NOT say "not a git repository": that sentence was
+        # printed about repos that plainly were one, and it is the message an
+        # operator would act on by re-running somewhere else (review r5-c2).
+        return GitRefusal(reason=f"fr could not establish git state for {root}: {e}")
+
+    return GitContext(
+        toplevel=toplevel,
+        branch=branch,
+        default_branch=default,
+        dirty=dirty,
+        has_head=has_head,
+    )
+
+
+# --- thin wrappers kept for callers that ask one question -----------------
+
+
+def on_default_branch(root: Path) -> str | None:
+    """The branch name when HEAD is the repository's default branch, else None.
+
+    Thin over `git_context`, and deliberately lossy: it cannot express a
+    refusal. `fr.artifacts.trigger` calls `git_context` directly for that
+    reason; this remains for callers that only want the one boolean fact.
+    """
+    state = git_context(root)
+    if not isinstance(state, GitContext) or state.branch is None:
+        return None
+    return state.branch if state.branch == state.default_branch else None
+
+
+def uncommitted_paths(root: Path) -> frozenset[Path]:
+    """Every path git reports as changed. Raises `GitUnavailableError` on failure.
+
+    Raising is the fix (review r5-c2): returning an empty set on a git error
+    turned "I cannot see your working tree" into "your working tree is clean",
+    which is the single most dangerous possible default for a function whose
+    output is a veto list.
+    """
+    state = git_context(root)
+    if isinstance(state, GitRefusal):
+        raise GitUnavailableError(state.reason)
+    if isinstance(state, NoRepo):
+        return frozenset()
+    return state.dirty
 
 
 def uncommitted_veto(root: Path) -> Callable[[Path], str | None]:
@@ -184,6 +451,48 @@ def uncommitted_veto(root: Path) -> Callable[[Path], str | None]:
         )
 
     return veto
+
+
+# --- the advisory lock (review r5-e7) ------------------------------------
+
+LOCK_NAME = "fr-migrate.lock"
+"""Advisory lock file, in the repo's GIT DIRECTORY.
+
+Not in the working tree: the lock must not be an artifact, must not be
+committed, and must be shared by every linked worktree of one repository
+(`--git-common-dir`), because two worktrees of the same repo commit to the
+same object store. Same `flock` shape the VK bridge uses for its single-tick
+lock.
+"""
+
+
+def lock_path(toplevel: Path) -> Path | None:
+    """Where this repo's migration lock lives, or `None` if git cannot say."""
+    try:
+        done = _git(toplevel, "rev-parse", "--git-common-dir")
+    except GitUnavailableError:
+        return None
+    if done.returncode != 0 or not done.stdout.strip():
+        return None
+    git_dir = Path(done.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = (toplevel / git_dir).resolve()
+    return git_dir / LOCK_NAME
+
+
+def index_lock_held(toplevel: Path) -> Path | None:
+    """`<gitdir>/index.lock` when another git process holds the index."""
+    try:
+        done = _git(toplevel, "rev-parse", "--git-dir")
+    except GitUnavailableError:
+        return None
+    if done.returncode != 0 or not done.stdout.strip():
+        return None
+    git_dir = Path(done.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = (toplevel / git_dir).resolve()
+    candidate = git_dir / "index.lock"
+    return candidate if candidate.exists() else None
 
 
 def migration_commit_message(report: MigrationReport, *, fr_version: str) -> str:
@@ -228,22 +537,41 @@ def commit_migration(
     if not paths:
         return CommitOutcome(committed=False, reason="nothing was migrated; nothing to commit")
 
-    toplevel = _toplevel(repo_root)
-    if toplevel is None:
+    state = git_context(repo_root)
+    if isinstance(state, GitRefusal):
+        return CommitOutcome(
+            committed=False,
+            reason=f"{state.reason}; the migrated files are in your working tree, uncommitted",
+        )
+    if isinstance(state, NoRepo):
         return CommitOutcome(
             committed=False,
             reason=f"{repo_root} is not a git repository; the migrated files are uncommitted",
         )
-    on_default = on_default_branch(toplevel)
-    if on_default is not None:
+    toplevel = state.toplevel
+    if state.branch is None:
+        # Detached HEAD (review r5-c1). The previous code returned None here and
+        # called it unreachable — "a detached HEAD never reaches the automatic
+        # commit path anyway". It does: `git rebase -i` stops detached, and so
+        # does `git bisect`, and both are interactive with a TTY. A commit made
+        # then is folded into the rebase or orphaned on the next checkout.
         return CommitOutcome(
             committed=False,
             reason=(
-                f"refusing to commit on {on_default!r}, the repository's default branch; "
+                "refusing to commit on a detached HEAD (a rebase, a bisect, or a checked-out "
+                "commit): the commit would be folded into the operation in progress or "
+                "orphaned. The migrated files are in your working tree, uncommitted"
+            ),
+        )
+    if state.branch == state.default_branch:
+        return CommitOutcome(
+            committed=False,
+            reason=(
+                f"refusing to commit on {state.branch!r}, the repository's default branch; "
                 f"the migrated files are in your working tree, uncommitted"
             ),
         )
-    if not _has_head(toplevel):
+    if not state.has_head:
         # A partial (pathspec) commit needs a HEAD to build its tree from. An
         # empty repo is not a case this feature exists for, so it refuses
         # rather than falling back to a whole-index commit that would sweep in
@@ -251,6 +579,15 @@ def commit_migration(
         return CommitOutcome(
             committed=False,
             reason=f"{toplevel} has no commits yet; the migrated files are uncommitted",
+        )
+    held = index_lock_held(toplevel)
+    if held is not None:
+        return CommitOutcome(
+            committed=False,
+            reason=(
+                f"another git process holds {held}; the migrated files are in your "
+                "working tree, uncommitted"
+            ),
         )
 
     # Preconditions, asserted rather than trusted: this writes to git history
@@ -268,7 +605,10 @@ def commit_migration(
     # `add` first, so an artifact a migration *created* is tracked and can be
     # named by the pathspec below. Scoped with `--` so no path is ever read as
     # an option.
-    added = _git(toplevel, "add", "--", *rel)
+    try:
+        added = _git(toplevel, "add", "--", *rel)
+    except GitUnavailableError as e:
+        return CommitOutcome(committed=False, reason=f"refusing to commit: {e}")
     if added.returncode != 0:
         return CommitOutcome(
             committed=False,
@@ -280,7 +620,10 @@ def commit_migration(
     # staged something unrelated. No -> no empty commit, and — the important
     # half — no commit at all, which is what stops an unrelated staged file
     # from being committed under a migration message.
-    pending = _git(toplevel, "diff", "--cached", "--name-only", "HEAD", "--", *rel)
+    try:
+        pending = _git(toplevel, "diff", "--cached", "--name-only", "HEAD", "--", *rel)
+    except GitUnavailableError as e:
+        return CommitOutcome(committed=False, reason=f"refusing to commit: {e}")
     if pending.returncode != 0 or not pending.stdout.strip():
         return CommitOutcome(
             committed=False,
@@ -295,7 +638,17 @@ def commit_migration(
 
     # The pathspec on `commit` is what keeps an unrelated *staged* file out:
     # without it git records the whole index. It also leaves that file staged.
-    done = _git(toplevel, "commit", "-m", message, "--", *rel)
+    try:
+        # A commit can legitimately take longer than a read: pre-commit hooks
+        # and signing run here. Still bounded, still reported.
+        done = _git(toplevel, "commit", "-m", message, "--", *rel, timeout=GIT_TIMEOUT_SECONDS * 4)
+    except GitUnavailableError as e:
+        return CommitOutcome(
+            committed=False,
+            reason=f"the migration is in your working tree but could not be committed: {e}",
+            paths=paths,
+            message=message,
+        )
     if done.returncode != 0:
         return CommitOutcome(
             committed=False,

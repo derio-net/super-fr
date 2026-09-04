@@ -38,6 +38,7 @@ import yaml
 from packaging.specifiers import InvalidSpecifier, Specifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, Repair
 
 FR_VERSION_KEY = "fr_version"
@@ -181,7 +182,7 @@ def widen(path: Path) -> None:
         )
     q = match.group("q")
     replacement = f"{match.group('lead')}{q}{widened}{q}{match.group('trail')}"
-    path.write_text(text[: match.start()] + replacement + text[match.end() :])
+    write_text_atomic(path, text[: match.start()] + replacement + text[match.end() :])
 
 
 CEILING_REPAIR = Repair(

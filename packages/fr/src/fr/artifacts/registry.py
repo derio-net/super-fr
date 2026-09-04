@@ -40,6 +40,7 @@ from typing import Any
 
 import yaml
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.structure import (
     validate_journal,
     validate_matrix,
@@ -109,9 +110,37 @@ class ArtifactKind:
 
 _TOP_LEVEL_KEY = "schema_version"
 
+_BOM = "\ufeff"
+
+
+def read_verbatim(path: Path) -> tuple[str, str]:
+    """`(bom, body)` — the file's bytes as text, with NOTHING normalised.
+
+    `Path.read_text()` is wrong for every writer in this module (review
+    r5-e10). It opens in universal-newline mode, so a CRLF artifact comes back
+    with `\n` and the writer then rewrites the WHOLE file with LF endings — a
+    diff the operator never made, in a commit that says "migrate". It also
+    leaves a UTF-8 BOM as an invisible first character, which made
+    `^schema_version:` fail to match line 1, so the stamp was inserted a second
+    time above the BOM.
+
+    Splitting the BOM off explicitly lets every reader parse clean text and
+    every writer put the mark back exactly where it was.
+    """
+    text = path.read_bytes().decode("utf-8")
+    if text.startswith(_BOM):
+        return _BOM, text[len(_BOM) :]
+    return "", text
+
+
+def _dominant_newline(text: str) -> str:
+    """The line ending to give a line this module ADDS. CRLF only when the
+    file is already CRLF, so a mixed file is not made more mixed."""
+    return "\r\n" if "\r\n" in text else "\n"
+
 
 def _yaml_read_key(path: Path, key: str) -> int | None:
-    text = path.read_text()
+    _, text = read_verbatim(path)
     try:
         data: Any = yaml.safe_load(text)
     except yaml.YAMLError as e:
@@ -142,19 +171,20 @@ def _insertion_index(lines: list[str]) -> int:
 
 
 def _yaml_write_key(path: Path, key: str, version: int) -> None:
-    text = path.read_text()
+    bom, text = read_verbatim(path)
     lines = text.splitlines(keepends=True)
     pattern = re.compile(rf"^{re.escape(key)}\s*:")
     for i, line in enumerate(lines):
         if pattern.match(line):
-            # Preserve the original line ending; replace only the key's line.
-            newline = "\n" if line.endswith("\n") else ""
+            # Preserve the original line ending EXACTLY — `\r\n` stays `\r\n`,
+            # and a final line with none stays without one.
+            newline = line[len(line.rstrip("\r\n")) :]
             lines[i] = f"{key}: {version}{newline}"
-            path.write_text("".join(lines))
+            write_text_atomic(path, bom + "".join(lines))
             return
     at = _insertion_index(lines)
-    lines.insert(at, f"{key}: {version}\n")
-    path.write_text("".join(lines))
+    lines.insert(at, f"{key}: {version}{_dominant_newline(text)}")
+    write_text_atomic(path, bom + "".join(lines))
 
 
 def _read_yaml_stamp(path: Path) -> int | None:
@@ -178,7 +208,37 @@ def _write_yaml_stamp(path: Path, version: int) -> None:
 # trailing `\s*$` runs past the stamp's own line and the re-stamping writer
 # below then deletes every blank line that followed it — silently, and against
 # this module's property 3 ("writing a stamp disturbs nothing else").
-_JOURNAL_STAMP_RE = re.compile(r"^<!--[ \t]*fr:journal-schema=(\d+)[ \t]*-->[ \t]*$", re.MULTILINE)
+#
+# Anchored to the FIRST NON-BLANK LINE (review r5-c5). `re.MULTILINE` matched
+# the stamp anywhere in the file, including inside a fenced code block — and a
+# journal entry that QUOTES a stamp (this framework's own journal does exactly
+# that) was then read as declaring that version, and the writer rewrote the
+# quoted line instead of the real header. The stamp is a header comment on line
+# 1 by definition; anything further down is prose about a stamp, not a stamp.
+# No `^`: this pattern is applied with `Pattern.match(text, start, end)`, which
+# already anchors at `start`. `^` would additionally require `start == 0` (it
+# is not a MULTILINE pattern), so a journal with a blank line before its stamp
+# read as unstamped.
+_JOURNAL_STAMP_RE = re.compile(r"<!--[ \t]*fr:journal-schema=(\d+)[ \t]*-->[ \t]*$")
+
+
+def _first_non_blank(text: str) -> tuple[int, int] | None:
+    """`(start, end)` of the first non-blank line, or `None` for a blank file."""
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.rstrip("\r\n")
+        if stripped.strip():
+            return offset, offset + len(stripped)
+        offset += len(line)
+    return None
+
+
+def _journal_stamp_match(text: str) -> re.Match[str] | None:
+    span = _first_non_blank(text)
+    if span is None:
+        return None
+    start, end = span
+    return _JOURNAL_STAMP_RE.match(text, start, end)
 
 
 def _journal_stamp_line(version: int) -> str:
@@ -186,19 +246,28 @@ def _journal_stamp_line(version: int) -> str:
 
 
 def _read_journal_stamp(path: Path) -> int | None:
-    m = _JOURNAL_STAMP_RE.search(path.read_text())
+    _, text = read_verbatim(path)
+    m = _journal_stamp_match(text)
     if m is None:
         return None
     return _coerce_version(int(m.group(1)), path, "fr:journal-schema")
 
 
 def _write_journal_stamp(path: Path, version: int) -> None:
-    text = path.read_text()
-    m = _JOURNAL_STAMP_RE.search(text)
+    # `read_verbatim`, not `read_text` (review r5-e10). The reader already used
+    # it, so a BOM'd journal READ its stamp fine while this writer saw the BOM
+    # as the first character, failed to match the stamp behind it, and prepended
+    # a SECOND one — leaving a file with two stamps declaring two versions. And
+    # `read_text` normalises CRLF, so writing one line rewrote every line ending
+    # in the file.
+    bom, text = read_verbatim(path)
+    m = _journal_stamp_match(text)
     if m is not None:
-        path.write_text(text[: m.start()] + _journal_stamp_line(version) + text[m.end() :])
+        write_text_atomic(
+            path, bom + text[: m.start()] + _journal_stamp_line(version) + text[m.end() :]
+        )
         return
-    path.write_text(_journal_stamp_line(version) + "\n" + text)
+    write_text_atomic(path, bom + _journal_stamp_line(version) + _dominant_newline(text) + text)
 
 
 # --- spec: YAML front matter ---------------------------------------------
@@ -208,11 +277,16 @@ def _write_journal_stamp(path: Path, version: int) -> None:
 # a horizontal rule, not a delimiter.
 
 _SPEC_KEY = "fr_schema"
-_FRONT_MATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+# `\r?\n`, not `\n` (review r5-e10). A CRLF spec's front matter did not match
+# at all, so `_read_spec_stamp` reported "unstamped" for a file that plainly
+# carried `fr_schema:` — and `_write_spec_stamp` then prepended a SECOND front
+# matter block above the first. The artifact stayed "stale" forever, gaining
+# one more block per migration.
+_FRONT_MATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 
 
 def _read_spec_stamp(path: Path) -> int | None:
-    text = path.read_text()
+    _, text = read_verbatim(path)
     m = _FRONT_MATTER_RE.match(text)
     if m is None:
         return None
@@ -226,18 +300,22 @@ def _read_spec_stamp(path: Path) -> int | None:
 
 
 def _write_spec_stamp(path: Path, version: int) -> None:
-    text = path.read_text()
+    bom, text = read_verbatim(path)
     m = _FRONT_MATTER_RE.match(text)
     if m is None:
-        path.write_text(f"---\n{_SPEC_KEY}: {version}\n---\n" + text)
+        nl = _dominant_newline(text)
+        write_text_atomic(path, f"{bom}---{nl}{_SPEC_KEY}: {version}{nl}---{nl}" + text)
         return
     block = m.group(1)
-    pattern = re.compile(rf"^{re.escape(_SPEC_KEY)}\s*:.*$", re.MULTILINE)
+    # `[^\r\n]*` rather than `.*$`: `.` matches `\r`, so on a CRLF spec the
+    # substitution swallowed the carriage return and left ONE line of the block
+    # with a bare LF (review r5-e10).
+    pattern = re.compile(rf"^{re.escape(_SPEC_KEY)}\s*:[^\r\n]*", re.MULTILINE)
     if pattern.search(block):
         new_block = pattern.sub(f"{_SPEC_KEY}: {version}", block, count=1)
     else:
-        new_block = f"{_SPEC_KEY}: {version}\n{block}"
-    path.write_text(text[: m.start(1)] + new_block + text[m.end(1) :])
+        new_block = f"{_SPEC_KEY}: {version}{_dominant_newline(text)}{block}"
+    write_text_atomic(path, bom + text[: m.start(1)] + new_block + text[m.end(1) :])
 
 
 # --- the registry --------------------------------------------------------

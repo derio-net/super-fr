@@ -130,6 +130,49 @@ Exemptions, narrow and explicit: `fr --version`/`--help`, `fr migrate` itself
 (it cannot require itself), and `FR_SKIP_MIGRATION=1` for recovery when a
 migration is the thing that is broken.
 
+**Corrected in review against what shipped.** The three exemptions above are
+the three this design *predicted*; the gate ships **eight**, and refuses in
+**five** situations rather than one. Both lists live in
+`fr.artifacts.trigger` and are pinned literally by
+`tests/unit/test_migration_trigger.py`; they are restated here because a spec
+that under-describes its own gate is how the Test Plan below came to name an
+exempt command.
+
+*Exemptions (8):* `--help`, `--version`, `FR_SKIP_MIGRATION=1`,
+`fr migrate` — plus the five **read-only** commands `status`, `skills`,
+`isolation`, `init`, `validate`. `fr status` is registered as never mutating
+and must not mutate by proxy; `fr validate artifacts` is the diagnostic for
+exactly the state the gate repairs, so a gate that ran first would make a
+stale artifact unobservable to a human; `fr isolation` and `fr init` are what
+an operator reaches for when the workspace is not yet in a state to be
+migrated at all.
+
+*Refusals (5) — stale, but fr will not act HERE:*
+
+1. **Non-interactive** — CI, a pod, an agent's Bash tool, `fr isolation
+   exec`. The load-bearing one: the agent runs `fr migrate artifacts --yes`
+   itself and continues.
+2. **HEAD is the repository's default branch.** An automatic commit on a
+   protected branch is work the operator has to notice and undo.
+3. **HEAD is detached** (review r5-c1). A `rebase -i` stop and a `bisect` are
+   both interactive and both detached; a commit made then is folded into the
+   operation in progress or orphaned by the next checkout. The original text
+   asserted this path was unreachable. It is not.
+4. **git state could not be established** (review r5-c2/c3). git absent from
+   `PATH`, `safe.directory` "dubious ownership" (routine in a pod with a uid
+   mismatch), a repo whose default branch cannot be determined, a `$GIT_DIR`
+   override, a bare repo. Every one of these used to be indistinguishable from
+   "not a git repository", which the gate treats as *proceed*: the
+   default-branch guard vanished and the uncommitted-file veto returned an
+   empty set, i.e. "your tree is clean". Unknown git state is now a refusal.
+5. **An artifact the operator has uncommitted changes in.** `git add -- <path>`
+   stages the whole file, so migrating one would commit their half-typed edit.
+   That artifact is held back and reported; the rest still migrate.
+
+A sixth, narrower stop: **another `fr` process holds the migration lock**
+(review r5-e7) — the loser re-checks and either proceeds (the winner already
+did the work) or refuses.
+
 ### D. Atomic commit means *only* the migrated paths (decision 2)
 
 `git add <exact paths the migration rewrote>` then `git commit`. Never `add -A`,
@@ -160,9 +203,14 @@ already exist, inferring the cursor from observable state:
 It records the emitted artifacts (spec path, plan path) so §4.B's
 archival-by-`emitted.plan` keys correctly afterwards.
 
-Adoption is **offered, not forced**: the migration reports in-flight plans with
-no run and adopts them in the interactive path. A plan whose work is finished
-gets no run — a cursor over completed work is noise.
+Adoption is **offered, not forced**: the migration *reports* in-flight plans
+with no run, and adopts only when explicitly asked — `fr migrate artifacts
+--yes --adopt`, or `fr run adopt <plan-dir>` one at a time. It never adopts as
+a side effect of the interactive path (corrected in review r5-d1; the original
+sentence said "adopts them in the interactive path", which the code has never
+done and should not: an operator who typed `fr status` must not come back to
+git-tracked run files they did not ask for). A plan whose work is finished gets
+no run — a cursor over completed work is noise.
 
 ### E.1 The `fr_version` gate applies to execution, not to historical reads
 
@@ -199,15 +247,24 @@ existing test could see.
   the command runs) and the commit is path-scoped, but a migration and an agent
   writing the same artifact concurrently is a real hazard; migrations must
   re-read immediately before writing rather than trusting a stale parse.
-- **A migration is itself buggy.** `FR_SKIP_MIGRATION=1` exists for exactly that,
-  and the explicit `fr migrate artifacts --dry-run` shows the plan first.
+- **A migration is itself buggy.** `FR_SKIP_MIGRATION=1` exists for exactly
+  that, and the explicit `fr migrate artifacts` shows the plan first. (There is
+  no `--dry-run` flag, corrected in review r5-d1: dry-run is the DEFAULT for
+  every fr mutation and `--yes` applies. A flag that does not exist is worse
+  than no flag — an operator who types it gets a usage error at the moment
+  they were trying to be careful.)
 - **Stamp sprawl.** Five artifact kinds each grow a field. Mitigated by the
   single registry — adding a kind touches one module.
 
 ## 5. Test Plan (post-merge, operator-driven)
 
-1. On a node still running 3.x artifacts, install 4.0.0 and run `fr status`:
-   it migrates, commits only `_meta.yaml` paths, and the command completes.
+1. On a node still running 3.x artifacts, install 4.0.0 and run
+   `fr plan self-review <plan-dir>`: it migrates, commits only `_meta.yaml`
+   paths, and the command completes. (**Not `fr status`** — corrected in
+   review r5-d1: `status` is one of the five read-only exemptions, so it can
+   never demonstrate a migration. Any non-exempt command works; `fr plan
+   self-review` is chosen because it is read-only in its own right, so the
+   only thing it changes is what the gate changed.)
 2. `git show --stat HEAD` on that commit: only artifact paths, nothing else.
 3. Repeat with an unrelated uncommitted edit in the tree: the edit survives,
    uncommitted and unmodified.
@@ -217,7 +274,8 @@ existing test could see.
    `implement` with completed phases recorded, and `fr run advance` proceeds.
 6. `fr validate artifacts` over the repo: passes; then corrupt one artifact
    (delete a required field) and confirm it fails naming the file and field.
-7. Re-run `fr status`: no second migration, no second commit (idempotence).
+7. Re-run `fr plan self-review <plan-dir>`: no second migration, no second
+   commit (idempotence). Again not `fr status`, for the reason in step 1.
 8. `fr spec status` over a spec whose plans are **archived** and still carry a
    pre-4.0.0 ceiling: every plan reports its real state, none reports `Missing`.
    Then confirm `fr apply --yes` on an unmigrated *live* plan still refuses — the
@@ -231,9 +289,18 @@ existing test could see.
 
 ## References
 
-- `packages/fr/src/fr/parser.py:132-149` — the enforced `fr_version` gate.
-- `packages/fr-dispatch/src/fr_dispatch/__init__.py:146-149` — the silent skip
-  this spec replaces with a loud refusal.
+- `packages/fr/src/fr/parser.py` — the enforced `fr_version` gate, now
+  `_enforce_fr_version`. Unnumbered for the same reason as the entry below:
+  review r5-b4 lifted the gate OUT of `parse` so it could run on the raw
+  mapping before schema validation, which moved every line the original
+  `:132-149` named.
+- `packages/fr-dispatch/src/fr_dispatch/__init__.py` — `discover_plans`'
+  handling of a `PlanSchemaError`. The line numbers this reference originally
+  carried (`:146-149`) pointed at the **pre-Phase-5** silent-skip code and no
+  longer resolve to it; the loud refusal that replaced it is in the same
+  function (search for `stale_artifact`). Qualified rather than re-numbered,
+  because a line reference into a file this spec's own plan rewrites is stale
+  by construction (review r5-d1).
 - `packages/fr/src/fr/migrate.py` — the existing v1→v2 migration, whose shape the
   registered-migration model generalizes.
 - `docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`

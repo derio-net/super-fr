@@ -31,16 +31,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fr._urls import is_cross_repo_spec, parse_issue_url
+from fr.parser import Plan
+from fr.types import PhaseDoc
 from fr.workflow.artifacts import required_inputs
 
 from fr_dispatch.work_item import ArtifactRef, WorkItem, item_id, parent_id, run_item_id
 
 if TYPE_CHECKING:
-    from fr.parser import Plan
     from fr.spec import SpecMeta
     from fr.workflow.model import WorkflowManifest
 
-__all__ = ["build_items"]
+__all__ = ["PayloadError", "build_items", "phase_payload"]
 
 # `item_id` needs a spec segment, but `PlanMeta.spec` is optional. A plan
 # without one still needs a deterministic, collision-free identity, so the
@@ -65,6 +66,60 @@ _INTENTIONAL_NON_REPO_CELLS = frozenset({"—", "-", ""})
 
 def _is_intentional_non_repo_cell(cell: str) -> bool:
     return cell in _INTENTIONAL_NON_REPO_CELLS or (cell.startswith("(") and cell.endswith(")"))
+
+
+class PayloadError(Exception):
+    """A `WorkItem`'s payload is not the shape its `unit` promises.
+
+    Raised by `phase_payload` only. An adapter that reaches it has been
+    handed an item its `can_dispatch` should have refused, so the message
+    names the unit and the item — `tick` accumulates it against that one
+    item and the rest of the tick survives.
+    """
+
+
+def phase_payload(item: WorkItem) -> tuple[Plan, PhaseDoc, int]:
+    """The `(plan, phase, issue_number)` a phase item carries — narrowed once.
+
+    `WorkItem.payload` is deliberately `Mapping[str, Any]` (§4.D: runners
+    treat it as opaque), which left every adapter doing its own
+    `item.payload["plan"]` plus a `# type: ignore[attr-defined]` per
+    attribute reach — six in `fr_cncd.runner.build_ingest_payload` alone.
+    Six ignores are six places a wrong payload becomes a `KeyError` or an
+    `AttributeError` at dispatch time; one accessor is one place, and it
+    raises something an operator can act on.
+
+    Refuses a non-phase item outright (review r5-a2): before `can_dispatch`
+    learned to check `unit`, a run- or spec-unit item reached
+    `item.payload["plan"]` and surfaced through `tick` as the bare string
+    `"<id>: 'plan'"` under `reason=backend_error` — a KeyError's `repr`,
+    naming neither the unit nor the mismatch.
+    """
+    if item.unit != "phase":
+        raise PayloadError(
+            f"{item.id}: expected a phase item, got unit {item.unit!r} "
+            "(a runner that only dispatches phases must say so in `can_dispatch`)"
+        )
+    try:
+        plan = item.payload["plan"]
+        phase = item.payload["phase"]
+        raw_issue = item.payload["issue_number"]
+    except KeyError as e:
+        raise PayloadError(f"{item.id}: phase payload is missing {e.args[0]!r}") from e
+    # `payload` is `Mapping[str, object]` by design, so the types are asserted
+    # here rather than assumed by every adapter. A wrong type is the same class
+    # of bug as a missing key and gets the same actionable error.
+    if not isinstance(plan, Plan):
+        raise PayloadError(f"{item.id}: payload['plan'] is {type(plan).__name__}, not a Plan")
+    if not isinstance(phase, PhaseDoc):
+        raise PayloadError(f"{item.id}: payload['phase'] is {type(phase).__name__}, not a PhaseDoc")
+    try:
+        issue_number = int(raw_issue)  # type: ignore[call-overload]
+    except (TypeError, ValueError) as e:
+        raise PayloadError(
+            f"{item.id}: payload['issue_number'] is not an int: {raw_issue!r}"
+        ) from e
+    return plan, phase, issue_number
 
 
 def spec_slug(plan: Plan) -> str:
@@ -312,7 +367,16 @@ def _spec_items(
             f"{spec.path.stem}: a spec-unit shape needs the repo the spec itself lives in",
         )
     slug = spec.path.stem
-    home = item_id(repo, slug)
+    try:
+        home = item_id(repo, slug)
+    except ValueError as e:
+        # `item_id` rejects the reserved slug `run` (it would collide with
+        # the run-item form). A spec file literally named `run.md` is
+        # therefore un-addressable — and this call sat OUTSIDE the sink, so
+        # it raised straight through `tick` (review r5-a4). Route it through
+        # `_accumulate` like every other argument-shaped failure: with a
+        # sink it is one bad spec, without one it still raises.
+        return _accumulate(failures, f"{repo}/{slug}: {e}")
     inputs = (
         (ArtifactRef(kind="spec", repo=repo, path=_repo_relative_spec_path(spec.path)),)
         if "spec" in required
@@ -421,8 +485,6 @@ def build_items(
 
 
 def _as_plan(source: Plan | SpecMeta | None) -> Plan | None:
-    from fr.parser import Plan
-
     if source is None or isinstance(source, Plan):
         return source
     raise TypeError(f"expected a Plan source, got {type(source).__name__}")

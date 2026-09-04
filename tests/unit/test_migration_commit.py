@@ -472,3 +472,362 @@ def test_the_gate_never_commits_on_the_default_branch(
     assert result.exit_code == 2
     assert _git(root, "rev-parse", "HEAD") == before_head
     assert meta.read_text() == before_text
+
+
+# =========================================================================
+# `git_context` — the fail-closed boundary (review r5-c1/c2/c3, r5-e6)
+# =========================================================================
+#
+# Before it, every predicate here shelled out for itself and swallowed its own
+# failures, so "git is not on PATH" and "dubious ownership" were
+# indistinguishable from "not a git repository": the default-branch guard
+# vanished, the uncommitted-file veto returned an empty set (i.e. "your tree is
+# clean"), and the reason string said "is not a git repository" about a repo
+# that plainly was one.
+
+
+def _ctx(root: Path):
+    from fr.artifacts.commit import git_context
+
+    return git_context(root)
+
+
+def test_a_genuine_non_repo_directory_still_reads_as_no_repo(tmp_path: Path) -> None:
+    """The one failure that must NOT become a refusal: an ordinary directory.
+    The caller migrates it and simply does not commit."""
+    from fr.artifacts.commit import NoRepo
+
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+
+    assert isinstance(_ctx(plain), NoRepo)
+
+
+def test_git_missing_from_path_refuses_without_claiming_there_is_no_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """r5-c2's headline: `_toplevel` returned None for ANY failure, so a
+    missing git read as "not a repository" — and the message said so."""
+    from fr.artifacts.commit import GitRefusal
+
+    root = _repo(tmp_path)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+
+    state = _ctx(root)
+
+    assert isinstance(state, GitRefusal)
+    assert "not a git repository" not in state.reason.lower()
+    assert "PATH" in state.reason
+
+
+def test_a_broken_repository_refuses_rather_than_reading_as_clean(tmp_path: Path) -> None:
+    """A repo git recognises but cannot answer for — the class that includes
+    `safe.directory` "dubious ownership", common in pods with a uid mismatch.
+    A truncated `.git/config` reproduces it deterministically and without
+    needing a second uid: git says `fatal: bad config line ...`, which is NOT
+    "not a git repository"."""
+    from fr.artifacts.commit import GitRefusal, NoRepo
+
+    root = _repo(tmp_path)
+    (root / ".git" / "config").write_text("[core\nrepositoryformatversion = 0\n")
+
+    state = _ctx(root)
+
+    assert not isinstance(state, NoRepo)
+    assert isinstance(state, GitRefusal)
+    assert "not a git repository" not in state.reason.lower()
+
+
+def test_uncommitted_paths_raises_instead_of_reporting_a_clean_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The veto list is the one place an empty set is the most dangerous
+    possible default: it means "nothing is being edited, migrate everything"."""
+    from fr.artifacts.commit import GitUnavailableError, uncommitted_paths
+
+    root = _repo(tmp_path)
+    _dirty(root)
+    assert uncommitted_paths(root), "fixture drift: the tree should be dirty"
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+
+    with pytest.raises(GitUnavailableError):
+        uncommitted_paths(root)
+
+
+def test_a_linked_worktree_is_a_first_class_case(tmp_path: Path) -> None:
+    """fr's OWN isolation workspace is a linked worktree, where `.git` is a
+    FILE. Any logic that looked for a `.git` DIRECTORY would be broken in the
+    primary use case (review r5-e6)."""
+    from fr.artifacts.commit import GitContext
+
+    root = _repo(tmp_path, branch="main")
+    wt = tmp_path / "linked"
+    _git(root, "worktree", "add", "-q", "-b", "feat/linked", str(wt))
+    assert (wt / ".git").is_file(), "fixture drift: a linked worktree has a .git FILE"
+
+    state = _ctx(wt)
+
+    assert isinstance(state, GitContext)
+    assert state.toplevel == wt.resolve()
+    assert state.branch == "feat/linked"
+    assert state.default_branch == "main"
+
+
+def test_a_bare_repository_is_refused(tmp_path: Path) -> None:
+    from fr.artifacts.commit import GitRefusal
+
+    bare = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+
+    state = _ctx(bare)
+
+    assert isinstance(state, GitRefusal)
+    assert "bare" in state.reason
+
+
+def test_a_nested_repository_resolves_to_the_inner_one(tmp_path: Path) -> None:
+    from fr.artifacts.commit import GitContext
+
+    outer = _repo(tmp_path)
+    inner = outer / "vendor" / "thing"
+    inner.mkdir(parents=True)
+    _git(inner, "init", "-q", "-b", "main")
+
+    state = _ctx(inner)
+
+    assert isinstance(state, GitContext)
+    assert state.toplevel == inner.resolve()
+
+
+@pytest.mark.parametrize("var", ["GIT_DIR", "GIT_WORK_TREE"])
+def test_an_overridden_git_scope_is_refused_not_silently_honoured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, var: str
+) -> None:
+    """ "Honour or refuse, never silently mis-scope" — fr refuses, because the
+    next thing it would do is `git add` a path list computed against a
+    different tree than the one git would commit from."""
+    from fr.artifacts.commit import GitRefusal
+
+    root = _repo(tmp_path)
+    monkeypatch.setenv(var, str(tmp_path / "elsewhere"))
+
+    state = _ctx(root)
+
+    assert isinstance(state, GitRefusal)
+    assert var in state.reason
+
+
+def test_an_unborn_branch_is_reported_as_the_default(tmp_path: Path) -> None:
+    """`git init -b main` with no commits: no ref exists, so "does the branch
+    exist" cannot be asked — but HEAD points at it, so it IS the default."""
+    from fr.artifacts.commit import GitContext
+
+    root = tmp_path / "fresh"
+    root.mkdir()
+    _git(root, "init", "-q", "-b", "main")
+
+    state = _ctx(root)
+
+    assert isinstance(state, GitContext)
+    assert state.branch == "main"
+    assert state.default_branch == "main"
+    assert state.has_head is False
+
+
+def test_a_default_branch_with_a_slash_survives_prefix_stripping(tmp_path: Path) -> None:
+    """`origin/release/main` must strip only the REMOTE prefix, once."""
+    from fr.artifacts.commit import GitContext
+
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "release/main", str(origin)], check=True)
+    work = tmp_path / "work"
+    _git(tmp_path, "clone", "-q", str(origin), str(work))
+    _git(work, "config", "user.email", "t@example.com")
+    _git(work, "config", "user.name", "T")
+    (work / "seed.md").write_text("x\n")
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "seed")
+    _git(work, "push", "-q", "-u", "origin", "HEAD")
+    _git(work, "remote", "set-head", "origin", "--auto")
+
+    state = _ctx(work)
+
+    assert isinstance(state, GitContext)
+    assert state.default_branch == "release/main"
+
+
+def test_init_default_branch_is_ignored_when_that_branch_does_not_exist(
+    tmp_path: Path,
+) -> None:
+    """r5-c3, config one: a global `init.defaultBranch = main` in a repo that
+    only has `master`. Trusting it reported `main`, so the guard that refuses
+    on the default branch let an automatic commit land on `master`."""
+    from fr.artifacts.commit import GitContext
+
+    root = tmp_path / "master-only"
+    root.mkdir()
+    _git(root, "init", "-q", "-b", "master")
+    _git(root, "config", "user.email", "t@example.com")
+    _git(root, "config", "user.name", "T")
+    _git(root, "config", "init.defaultBranch", "main")
+    (root / "seed.md").write_text("x\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "seed")
+
+    state = _ctx(root)
+
+    assert isinstance(state, GitContext)
+    assert state.default_branch == "master"
+
+
+def test_a_remote_without_head_beats_a_local_well_known_name(tmp_path: Path) -> None:
+    """r5-c3, config two: trunk is `trunk`, `origin/HEAD` is unset, and a
+    local `main` exists. The old order answered `main`, so the automatic
+    commit landed on the real trunk."""
+    from fr.artifacts.commit import GitContext
+
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "trunk", str(origin)], check=True)
+    work = tmp_path / "work"
+    _git(tmp_path, "clone", "-q", str(origin), str(work))
+    _git(work, "config", "user.email", "t@example.com")
+    _git(work, "config", "user.name", "T")
+    (work / "seed.md").write_text("x\n")
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "seed")
+    _git(work, "push", "-q", "-u", "origin", "HEAD")
+    _git(work, "checkout", "-q", "-b", "main")
+    _git(work, "checkout", "-q", "trunk")
+    # No `remote set-head`: this is a clone whose origin/HEAD was never set.
+    subprocess.run(["git", "-C", str(work), "remote", "set-head", "origin", "-d"], check=False)
+
+    state = _ctx(work)
+
+    assert isinstance(state, GitContext)
+    assert state.default_branch == "trunk"
+
+
+def test_a_dangling_remote_head_is_not_trusted(tmp_path: Path) -> None:
+    """A deleted default branch leaves `origin/HEAD` pointing at nothing."""
+    from fr.artifacts.commit import GitContext
+
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(origin)], check=True)
+    work = tmp_path / "work"
+    _git(tmp_path, "clone", "-q", str(origin), str(work))
+    _git(work, "config", "user.email", "t@example.com")
+    _git(work, "config", "user.name", "T")
+    (work / "seed.md").write_text("x\n")
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "seed")
+    _git(work, "push", "-q", "-u", "origin", "HEAD")
+    _git(work, "remote", "set-head", "origin", "--auto")
+    (work / ".git" / "refs" / "remotes" / "origin" / "HEAD").write_text(
+        "ref: refs/remotes/origin/gone\n"
+    )
+
+    state = _ctx(work)
+
+    assert isinstance(state, GitContext)
+    # Falls through to the remote well-knowns, which DO exist.
+    assert state.default_branch == "main"
+
+
+def test_a_single_non_origin_remote_is_used(tmp_path: Path) -> None:
+    from fr.artifacts.commit import GitContext
+
+    upstream = tmp_path / "upstream.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(upstream)], check=True)
+    work = _repo(tmp_path, branch="feat/x")
+    _git(work, "remote", "add", "upstream", str(upstream))
+    _git(work, "push", "-q", "upstream", "main")
+    _git(work, "fetch", "-q", "upstream")
+
+    state = _ctx(work)
+
+    assert isinstance(state, GitContext)
+    assert state.default_branch == "main"
+
+
+def test_two_remotes_with_no_default_remote_configured_refuses(tmp_path: Path) -> None:
+    from fr.artifacts.commit import GitRefusal
+
+    work = _repo(tmp_path, branch="feat/x")
+    for name in ("alpha", "beta"):
+        bare = tmp_path / f"{name}.git"
+        subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(bare)], check=True)
+        _git(work, "remote", "add", name, str(bare))
+
+    state = _ctx(work)
+
+    assert isinstance(state, GitRefusal)
+    assert "checkout.defaultRemote" in state.reason
+
+
+def test_checkout_default_remote_picks_the_remote(tmp_path: Path) -> None:
+    from fr.artifacts.commit import GitContext
+
+    work = _repo(tmp_path, branch="feat/x")
+    for name, head in (("alpha", "alpha-trunk"), ("beta", "main")):
+        bare = tmp_path / f"{name}.git"
+        subprocess.run(["git", "init", "--bare", "-q", "-b", head, str(bare)], check=True)
+        _git(work, "remote", "add", name, str(bare))
+    _git(work, "push", "-q", "beta", "main")
+    _git(work, "fetch", "-q", "beta")
+    _git(work, "config", "checkout.defaultRemote", "beta")
+
+    state = _ctx(work)
+
+    assert isinstance(state, GitContext)
+    assert state.default_branch == "main"
+
+
+# --- C1: a detached HEAD must not get an automatic commit -----------------
+
+
+def test_a_detached_head_is_refused_by_commit_migration(tmp_path: Path) -> None:
+    """The old comment claimed a detached HEAD "never reaches the automatic
+    commit path anyway". `git rebase -i` stops detached, and so does
+    `git bisect` — both interactive, both with a TTY."""
+    root = _repo(tmp_path)
+    _plan(root, "q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "second")
+    report = _migrate(root)
+    _git(root, "checkout", "-q", "--detach")
+
+    outcome = commit_migration(root, report)
+
+    assert outcome.committed is False
+    assert "detached" in outcome.reason
+
+
+def test_the_gate_refuses_on_a_detached_head(tmp_path: Path) -> None:
+    """And the gate refuses BEFORE migrating, so the rebase's tree is not
+    rewritten under it either."""
+    root = _repo(tmp_path)
+    plan = root / "docs" / "superpowers" / "plans" / "p" / "_meta.yaml"
+    before = plan.read_text()
+    _git(root, "checkout", "-q", "--detach")
+
+    with pytest.raises(SystemExit if False else Exception) as e:  # typer.Exit
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=root,
+            interactive=True,
+            commit=lambda r, report: None,
+        )
+
+    assert getattr(e.value, "exit_code", None) == 2
+    assert plan.read_text() == before
+
+
+def test_on_default_branch_stays_a_thin_boolean_wrapper(tmp_path: Path) -> None:
+    """Kept for callers that want the one fact. It cannot express a refusal,
+    which is exactly why the gate calls `git_context` instead."""
+    root = _repo(tmp_path, branch="main")
+    assert on_default_branch(root) == "main"
+    _git(root, "checkout", "-q", "-b", "feat/y")
+    assert on_default_branch(root) is None

@@ -124,9 +124,34 @@ def test_implement_step_is_the_only_for_each_phase_step() -> None:
 
 def _workspace(tmp_path: Path, branch: str) -> Path:
     """A checkout that IS an isolation workspace — `fr run start` now ensures
-    isolation itself (spec §4.B) and writes the run inside the workspace."""
+    isolation itself (spec §4.B) and writes the run inside the workspace.
+
+    FIXTURE CHANGE, assertions unchanged (review r5-e3): the marker's `mode` is
+    corroborated now, and `mode: worktree` means "this IS a linked worktree"
+    (`git rev-parse --git-dir` != `--git-common-dir`) — the same structural
+    check the `fr-isolation-required` PreToolUse hook makes. A marker written
+    into a bare directory is the forgery that check refuses, so the fixture is
+    a real linked worktree. `tests/unit/test_run_workspace.py` owns the forged
+    and stale cases.
+    """
+    import subprocess
+
+    base = tmp_path / "base"
+    base.mkdir(parents=True, exist_ok=True)
+
+    def git(root: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    subprocess.run(["git", "init", "-q", "-b", "main", str(base)], check=True)
+    git(base, "config", "user.email", "t@example.com")
+    git(base, "config", "user.name", "T")
+    (base / "seed.md").write_text("seed\n")
+    git(base, "add", "-A")
+    git(base, "commit", "-qm", "seed")
+
     root = tmp_path / "workspace"
-    (root / "docs" / "superpowers").mkdir(parents=True)
+    git(base, "worktree", "add", "-q", "-b", branch, str(root))
+    (root / "docs" / "superpowers").mkdir(parents=True, exist_ok=True)
     (root / ".fr-isolation").write_text(
         json.dumps(
             {
@@ -180,6 +205,13 @@ def test_the_shipped_shape_walks_from_start_past_the_gated_brainstorm(tmp_path: 
     assert brief["skill"] == "super-fr:fr-brainstorming"
     assert brief["gate"] == "operator"
 
+    # The spec must EXIST to be recorded (review r5-e2): a run records
+    # artifacts that were actually written, and the `brainstorm` agent writes
+    # this file before it resolves the step.
+    spec = root / "docs" / "superpowers" / "specs" / "2026-08-27-x-design.md"
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_text("# x design\n")
+
     resolved = _fr(
         root,
         [
@@ -210,6 +242,12 @@ def test_the_implement_steps_brief_tells_a_harness_to_fan_out_per_phase(tmp_path
     off the brief (`for_each`) is the only thing that knows it (r2-f4)."""
     root = _workspace(tmp_path, "feat/x")
     _fr(root, ["run", "start", "fr-goal", "--branch", "feat/x", "--run-id", "r1"])
+    # Both emitted artifacts are written first — `--emitted` records what an
+    # agent actually produced, and a path that is not there is refused
+    # (review r5-e2).
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "spec.md").write_text("# spec\n")
+    (root / "docs" / "superpowers" / "plans" / "2026-08-27-x").mkdir(parents=True, exist_ok=True)
     for step, emitted in (
         ("brainstorm", "spec=docs/spec.md"),
         ("spec-review", None),

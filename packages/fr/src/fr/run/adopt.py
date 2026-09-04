@@ -41,6 +41,7 @@ archives with its plan.
 from __future__ import annotations
 
 import datetime as _dt
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -48,7 +49,14 @@ from pathlib import Path
 
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.render import plan_locally_complete
-from fr.run.model import RunState, StepRecord, run_path, save_run_state
+from fr.run.model import (
+    RunState,
+    RunStateError,
+    StepRecord,
+    run_path,
+    save_run_state,
+    validate_run_id,
+)
 from fr.workflow.model import WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
 
@@ -64,12 +72,16 @@ __all__ = [
 ]
 
 DEFAULT_WORKFLOW = "fr-goal"
-"""The `unit: run` shape a run cursor belongs to.
+"""The `unit: run` shape a run cursor belongs to, when `--workflow` is absent.
 
 NOT `fr.workflow.resolve.workflow_for_plan`, which answers a different
 question — the granularity a plan *dispatches* at, defaulting to the
 `unit: phase` sub-shape whose only step is `implement`. A cursor over that
 shape could never land on `plan`, `review` or `deliver`.
+
+The two defaults are contrasted in full at
+`fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH`'s docstring — one place, so the
+distinction cannot be half-remembered in two (review r5-e3).
 """
 
 PLANS_REL = Path("docs") / "superpowers" / "plans"
@@ -266,6 +278,36 @@ def _rel(repo_root: Path, path: Path) -> str:
         raise AdoptError(f"{path} is not inside the repo at {repo_root}") from e
 
 
+ARCHIVE_SEGMENT = "implemented"
+
+
+def _check_live_plan_location(repo_root: Path, target: Path) -> None:
+    """The plan must be a LIVE plan of THIS repo (review r5-e4).
+
+    `_rel` already refuses a target outside the repo, which covers traversal.
+    Two more shapes need saying out loud:
+
+    - a directory that merely happens to hold a `_meta.yaml` (a scratch copy, a
+      vendored tree) — adoption would write a run about a plan `fr archive`,
+      `fr apply` and the bridge will never see, because none of them look
+      outside `docs/superpowers/plans/`;
+    - an **archived** plan under `implemented/` — archived work is not in
+      flight, `implemented/` is frozen (2026-08-30 spec §2), and a cursor over
+      completed work is exactly the noise §3.E says adoption must not create.
+    """
+    rel = Path(_rel(repo_root, target))
+    if ARCHIVE_SEGMENT in rel.parts:
+        raise AdoptError(
+            f"{rel} is an archived plan — adoption gives a cursor to work in flight, "
+            "and archived plans are frozen (they record what shipped)"
+        )
+    if rel.parent != PLANS_REL:
+        raise AdoptError(
+            f"{rel} is not a plan of this repo: a plan folder lives directly under "
+            f"{PLANS_REL.as_posix()}/"
+        )
+
+
 def _observe(repo_root: Path, target: Path) -> tuple[Plan | None, str | None, str | None]:
     """`(plan, spec_rel, plan_rel)` for an adoption target.
 
@@ -275,6 +317,7 @@ def _observe(repo_root: Path, target: Path) -> tuple[Plan | None, str | None, st
     unreachable through the command that implements the table.
     """
     if target.is_dir() and (target / "_meta.yaml").is_file():
+        _check_live_plan_location(repo_root, target)
         try:
             plan = parse(target)
         except PlanSchemaError as e:
@@ -329,6 +372,40 @@ def default_pr_state(repo_root: Path) -> PrStateFn:
     return observe
 
 
+_PR_URL_RE = re.compile(
+    r"^https?://[^/]+/(?P<repo>.+?)(?:/-)?/(?:pull|pulls|merge_requests)/\d+/?$"
+)
+"""`<host>/<owner>/<name>/{pull,pulls,-/merge_requests}/<n>` — the three PR-URL
+shapes `fr.hostclient` already speaks (2026-07-09 multi-backend spec). GitLab
+subgroups make `<repo>` more than two segments, hence the non-greedy `.+?`."""
+
+
+def _pr_repo(pr_url: str) -> str | None:
+    """The `owner/name` a PR URL names, or `None` when it is unreadable."""
+    m = _PR_URL_RE.match(pr_url.strip())
+    return m.group("repo") if m else None
+
+
+def _check_pr_repo(pr_url: str, target_repo: str) -> None:
+    """`--pr` must name a PR in the plan's own repo (review r5-e4).
+
+    "This PR delivers this plan" is what the flag asserts. A PR in another
+    repo does not, and recording it lands the cursor on `deliver` pointing at
+    somebody else's work — a wrong answer that looks like a right one. A URL
+    this parser cannot read at all is left alone: `infer_adoption` already
+    degrades unreadable PR state to `review` with a note, which is the
+    conservative direction.
+    """
+    pr_repo = _pr_repo(pr_url)
+    if pr_repo is None:
+        return
+    if pr_repo != target_repo:
+        raise AdoptError(
+            f"--pr names a PR in {pr_repo!r}, but this plan targets {target_repo!r}. "
+            "A run's PR is the one delivering ITS plan."
+        )
+
+
 def adopt_run(
     repo_root: Path,
     target: Path,
@@ -371,6 +448,24 @@ def adopt_run(
     except WorkflowError as e:
         raise AdoptError(str(e)) from e
 
+    if plan_rel is not None:
+        # IDEMPOTENT (review r5-e4). A plan that already has a run has a
+        # cursor; minting a second splits the control log in two, and
+        # `fr archive` moves only the one it finds. Matched by `emitted.plan`,
+        # the same data `fr archive` keys on — never by a name convention.
+        from fr.archive import find_run_for_plan
+
+        existing = find_run_for_plan(repo_root, Path(plan_rel))
+        if existing is not None:
+            raise AdoptError(
+                f"{plan_rel} already has a run: {existing}. Inspect it with "
+                f"`fr run status {existing}`, or advance it with "
+                f"`fr run advance {existing}`."
+            )
+
+    if pr_url is not None and plan is not None:
+        _check_pr_repo(pr_url, plan.meta.target_repo)
+
     adoption = infer_adoption(
         plan=plan,
         spec_rel=spec_rel,
@@ -385,7 +480,13 @@ def adopt_run(
     # run-id derivation must stay identical to `fr run start`'s.
     from fr.commands.run_cmd import derive_run_id
 
-    rid = run_id or derive_run_id(resolved_branch)
+    try:
+        # Same gate `fr run start` applies (review r5-b1): `--run-id` is
+        # operator input and becomes a path segment. `derive_run_id`'s output
+        # always passes, so this only fires on an explicit override.
+        rid = validate_run_id(run_id) if run_id else derive_run_id(resolved_branch)
+    except RunStateError as e:
+        raise AdoptError(str(e)) from e
     path = run_path(repo_root, rid)
     if path.exists():
         raise AdoptError(

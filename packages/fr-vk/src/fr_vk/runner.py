@@ -37,6 +37,8 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from fr_dispatch.item_graph import phase_payload
+
 from fr_vk import config as _config
 from fr_vk import dedup as _dedup
 from fr_vk import slots as _slots
@@ -99,11 +101,20 @@ class VkRunner:
         return _dedup.map_titles_to_item_ids(titles, items)
 
     def can_dispatch(self, item: WorkItem) -> bool:
-        return _config.is_known_repo(item.repo, self.mcp)
+        """VK dispatches PHASES, and says so here (review r5-a2).
+
+        `protocols.Runner.can_dispatch` is documented as the place a
+        unit-limited runner refuses — "a runner that only handles some units
+        can say so without a second protocol method". This one accepted
+        every unit and then died inside `dispatch` on
+        `item.payload["plan"]`, which `tick` reported as the bare
+        `"<id>: 'plan'"` under `reason=backend_error`: a KeyError repr
+        standing in for "this backend does not do run-unit work".
+        """
+        return item.unit == "phase" and _config.is_known_repo(item.repo, self.mcp)
 
     def dispatch(self, item: WorkItem) -> None:
         # preflight() guarantees project_id is set before tick dispatches.
         assert self.project_id is not None
-        plan = item.payload["plan"]
-        phase = item.payload["phase"]
-        dispatch_phase(plan, phase, self.mcp, project_id=self.project_id)  # type: ignore[arg-type]
+        plan, phase, _issue_number = phase_payload(item)
+        dispatch_phase(plan, phase, self.mcp, project_id=self.project_id)

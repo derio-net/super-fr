@@ -47,7 +47,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     sibling of `fr/workflow`, not inside it; `fr_dispatch.capabilities` is
     a two-line re-export kept for import back-compat.
   - **`fr/run`** — the durable cursor (`docs/superpowers/runs/<run-id>.yaml`,
-    git-tracked), driven by `fr run {start,status,advance,resolve,check}`
+    git-tracked), driven by `fr run {start,adopt,status,advance,resolve,check}`
     (`model.py`'s `RunState`/`StepRecord`, `commands/run_cmd.py`). `advance`
     executes a `kind: cli` step directly and never a `kind: agent` one — it
     emits a dispatch brief instead; `resolve` is the only way an `agent`
@@ -74,9 +74,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
 - `fr-opencode-plugin` — **the one non-Python package**: TypeScript/Bun,
   ports the `fr-isolation-required` Claude Code hook to an OpenCode
   `tool.execute.before` plugin. Excluded from the uv workspace
-  (`pyproject.toml`'s `[tool.uv.workspace].exclude`); has its own
-  `package.json`/version; **not wired into CI** — if you touch it, run
-  `bun test` inside `packages/fr-opencode-plugin/` yourself.
+  (`pyproject.toml`'s `[tool.uv.workspace].exclude`) and has its own
+  `package.json`/version, so `uv run pytest` does not cover it — but it IS
+  wired into CI, as the `opencode-plugin-test` job (`bun test`). Run that
+  locally inside `packages/fr-opencode-plugin/` if you touch it.
 
 `plugins/super-fr` and `plugins/super-fr-dispatch` are the Claude Code plugin
 manifests (skills + rules + hooks) built from those packages.
@@ -94,7 +95,8 @@ uv run --no-project python scripts/bump-version.py --check   # version lockstep
 ```
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
-`test`, `version-sync` jobs) is the single source of truth for the gate; if
+`test`, `validate-artifacts`, `opencode-plugin-test`, `version-sync`,
+`version-bump-required` jobs) is the single source of truth for the gate; if
 this file and `ci.yml` ever disagree, trust `ci.yml` and fix this file. Run
 `ruff format` then `pytest` yourself before pushing — CI is slow to fail-loud.
 
@@ -105,9 +107,11 @@ and a CI tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
-  `fr-plan-override.md`, `no-claude-p-batch.md`), plus
-  `.claude/rules/acceptance-matrix.md` (repo-local-only, no plugin
-  equivalent — still a *source*, edit it directly).
+  `fr-plan-override.md`, `no-claude-p-batch.md`), plus the THREE
+  repo-local-only rules with no plugin counterpart —
+  `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`
+  and `.claude/rules/explainers-currency.md` (still *sources*, edit them
+  directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
 - Generated: `.opencode/skills/<name>/SKILL.md` and
   `.opencode/instructions/*.md`. After editing a canonical skill/rule, run
   `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
@@ -132,9 +136,9 @@ and a CI tripwire will catch drift anyway:
 
 ## This repo dogfoods fr-isolation on itself
 
-super-fr is itself fr-enabled (`.devcontainer/dev` + `.devcontainer/admin`
-profiles exist, even with no live `docs/superpowers/plans/` right now — the
-devcontainer alone qualifies it). Both the Claude Code PreToolUse hook and
+super-fr is itself fr-enabled — `.devcontainer/dev` + `.devcontainer/admin`
+profiles exist, and `docs/superpowers/plans/` currently holds three live plans.
+Either alone qualifies it. Both the Claude Code PreToolUse hook and
 the OpenCode plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
 re-export of `packages/fr-opencode-plugin`) block Edit/Write/MultiEdit
 outside a valid `.fr-isolation` workspace — editing this repo's own source is

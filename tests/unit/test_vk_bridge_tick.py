@@ -397,3 +397,67 @@ def test_tick_defers_all_when_slot_counting_fails(monkeypatch):
     assert any("slot check failed" in f for f in result.failures)
     # No dispatch reached the backend.
     assert [c for c in mcp.calls if c[0] == "create_issue"] == []
+
+
+# ── unit refusal lives in `can_dispatch` (review r5-a2) ────────────────
+
+
+def test_vk_can_dispatch_refuses_a_non_phase_item() -> None:
+    """`protocols.Runner.can_dispatch` documents itself as the place a
+    unit-limited runner refuses. VK accepted every unit and then died in
+    `dispatch` on `item.payload["plan"]`, which `tick` surfaced as the bare
+    `"<id>: 'plan'"` under `reason=backend_error`."""
+    from fr_dispatch.work_item import WorkItem, item_id, parent_id, run_item_id
+
+    repo = "derio-net/superpowers-for-vk"
+    mcp = FakeMcpClient()
+    mcp.repos = [{"name": "superpowers-for-vk", "git_repo_path": "/repos/superpowers-for-vk"}]
+    runner = VkRunner(mcp, project_id="proj-1")
+
+    phase_iid = item_id(repo, "some-spec", "some-plan", phase=1)
+    phase_item = WorkItem(
+        id=phase_iid,
+        unit="phase",
+        workflow="fr-goal",
+        repo=repo,
+        parent=parent_id(phase_iid),
+        inputs=(),
+        payload={"issue_number": 42},
+        tracking=f"https://github.com/{repo}/issues/42",
+    )
+    run_item = WorkItem(
+        id=run_item_id(repo, "2026-08-31-feat-x"),
+        unit="run",
+        workflow="research",
+        repo=repo,
+        parent=None,
+        inputs=(),
+        payload={"run_id": "2026-08-31-feat-x"},
+        tracking=None,
+    )
+
+    assert runner.can_dispatch(phase_item) is True
+    assert runner.can_dispatch(run_item) is False
+
+
+def test_vk_dispatch_names_the_unit_mismatch_rather_than_raising_keyerror() -> None:
+    import pytest
+    from fr_dispatch.item_graph import PayloadError
+    from fr_dispatch.work_item import WorkItem, run_item_id
+
+    runner = VkRunner(FakeMcpClient(), project_id="proj-1")
+    run_item = WorkItem(
+        id=run_item_id("derio-net/superpowers-for-vk", "2026-08-31-feat-x"),
+        unit="run",
+        workflow="research",
+        repo="derio-net/superpowers-for-vk",
+        parent=None,
+        inputs=(),
+        payload={"run_id": "2026-08-31-feat-x"},
+        tracking=None,
+    )
+
+    with pytest.raises(PayloadError) as e:
+        runner.dispatch(run_item)
+
+    assert "unit 'run'" in str(e.value)

@@ -122,7 +122,14 @@ def test_starting_a_second_run_reuses_the_same_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`ensure` must not mean `restart`: the recorded workspace for the branch
-    is reused, and `git worktree add` runs exactly once."""
+    is reused, and `git worktree add` runs exactly once.
+
+    The second run is a DIFFERENT shape (review r5-e5): a second run of the
+    same shape on the same branch is now refused outright, because it is
+    nearly always a re-run after a wedge or a forgotten in-flight run. The
+    workspace-reuse property under test here is about the branch, not the
+    shape, so a second shape exercises it without asking `start` to do the
+    thing it is supposed to refuse. `test_run_cli.py` owns the refusal."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
     repo = _base_repo_with_origin(tmp_path)
@@ -132,11 +139,14 @@ def test_starting_a_second_run_reuses_the_same_workspace(
     shipped = tmp_path / "shipped"
     shipped.mkdir()
     (shipped / "where.yaml").write_text(_SHAPE)
+    (shipped / "elsewhere.yaml").write_text(
+        _SHAPE.replace("workflow: where", "workflow: elsewhere")
+    )
 
     _fr(repo, shipped, ["run", "start", "where", "--branch", "feat/slug", "--run-id", "r1"])
     adds = [c for c in runner.calls if c[:3] == ["git", "worktree", "add"]]
     second = _fr(
-        repo, shipped, ["run", "start", "where", "--branch", "feat/slug", "--run-id", "r2"]
+        repo, shipped, ["run", "start", "elsewhere", "--branch", "feat/slug", "--run-id", "r2"]
     )
 
     assert second.exit_code == 0, second.output

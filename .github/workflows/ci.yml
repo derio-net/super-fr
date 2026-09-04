@@ -37,14 +37,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync
+      # A CLEAN install, like `acceptance-report.yml` — not `uv sync` + `uv run`
+      # (review r5-d4). The validator's own resolution depends on packaging: the
+      # shipped workflow manifests now travel INSIDE the `fr` wheel, so a
+      # workspace run would validate files the wheel might not actually ship.
+      - name: Install fr (from this checkout — super-fr self-hosts)
+        run: uv tool install ./packages/fr
       # Spec 2026-08-30 3.F: every version ships a structure validator, and CI
-      # runs it over the repo's own artifacts. `CI` is set here, so a STALE
-      # artifact refuses at the migration gate before the validator even runs —
-      # both failures are the same instruction (`fr migrate artifacts --yes`,
-      # committed in the same PR; see .claude/rules/artifact-versioning.md).
+      # runs it over the repo's own artifacts.
+      #
+      # `fr validate` is EXEMPT from the migration gate (review r5-c5 corrected
+      # the note that used to sit here). A stale artifact is therefore reported
+      # by the VALIDATOR'S OWN stamp check — "stale: written for version N, this
+      # fr writes M — run `fr migrate artifacts --yes`" — not by the gate
+      # refusing first. That exemption is deliberate: if the gate ran ahead of
+      # this command, a stale artifact would be unobservable to a human, since
+      # interactively the gate would have already fixed it. Either way the
+      # instruction is the same (`fr migrate artifacts --yes`, committed in the
+      # same PR; see .claude/rules/artifact-versioning.md).
       - name: Every live artifact is structurally valid for this fr
-        run: uv run fr validate artifacts
+        run: fr validate artifacts
 
   opencode-plugin-test:
     runs-on: ubuntu-latest

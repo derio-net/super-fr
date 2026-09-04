@@ -21,6 +21,7 @@ Design mirrors `fr.journal.model` / `fr.workflow.model`:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -93,6 +94,91 @@ class RunState(BaseModel):
     started: str  # ISO 8601; kept as a string for round-trip stability
     cursor: str  # the step id currently active (running/blocked) or next-up
     steps: dict[str, StepRecord]
+
+
+RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+"""What a run id may contain. Deliberately narrow (review r5-e1).
+
+A run id becomes THREE things: a file stem (`runs/<id>.yaml`), a segment of a
+`WorkItem` id (`<repo>/run/<id>`, §4.D) and a token in copy-pasted shell
+(`fr run advance <id>`). The intersection of what all three tolerate is
+alphanumerics, dot, dash and underscore — and a first character that is
+alphanumeric, so an id can never be read as a CLI option or a git pathspec.
+"""
+
+RUN_ID_MAX_LENGTH = 128
+"""Long enough for `<date>-<flattened-branch>` with a very long branch; short
+enough to stay under every filesystem's 255-byte name limit once `.yaml` and
+any suffix are added."""
+
+
+def validate_run_id(run_id: str) -> str:
+    """`run_id` unchanged, or `RunStateError` if it is not a safe single segment.
+
+    A run id becomes a **path segment** (`docs/superpowers/runs/<id>.yaml`)
+    and an **item id segment** (`<repo>/run/<id>`, §4.D). Neither `fr run
+    start --run-id` nor `fr run adopt --run-id` checked it, so (verified
+    live, review r5-b1):
+
+    - `--run-id ../../../escaped` exited 0 and wrote the run file OUTSIDE
+      `runs/` — a caller-controlled path traversal, with the escape hidden
+      because the success line prints the id, not the path;
+    - `--run-id weird/id` wrote `runs/weird/id.yaml`, which
+      `find_run_for_plan`'s non-recursive `glob("*.yaml")` cannot see (so
+      `fr archive` would strand it) and which `fr_dispatch.work_item.
+      run_item_id` rejects outright (so the run can never be dispatched).
+
+    The rule is an ALLOWLIST, not a list of the characters that happened to
+    break something (review r5-e1). A denylist of `/` and `..` still admits a
+    leading `-` (git reads it as a pathspec and argparse as an option), a
+    backslash (a separator on the other platform, and an escape in most
+    shells), a NUL or control character (unrepresentable in a filename and
+    invisible in a terminal), and whitespace (a token that silently becomes
+    two). `RUN_ID_RE` admits none of them.
+
+    Mirrors `run_item_id`'s constraint and is strictly stricter; duplicated
+    rather than imported because `fr` may not import `fr_dispatch`
+    (`tests/unit/test_import_direction.py`). `derive_run_id` is written to
+    satisfy it, so this only ever fires on an operator-supplied override.
+    """
+    if not run_id:
+        raise RunStateError("run id must not be empty")
+    if len(run_id) > RUN_ID_MAX_LENGTH:
+        raise RunStateError(
+            f"run id is {len(run_id)} characters; the limit is {RUN_ID_MAX_LENGTH} "
+            "(it becomes a filename)"
+        )
+    if not RUN_ID_RE.match(run_id):
+        raise RunStateError(
+            f"run id {run_id!r} must match {RUN_ID_RE.pattern} — it names a file in "
+            "docs/superpowers/runs/ and a segment of the work-item id, so it may "
+            "contain only letters, digits, '.', '-' and '_' and must start with a "
+            "letter or digit"
+        )
+    if run_id in (".", ".."):  # pragma: no cover — RUN_ID_RE already rejects both
+        raise RunStateError(f"run id {run_id!r} is a directory reference, not a name")
+    return run_id
+
+
+def existing_run_id_colliding_with(repo_root: Path, run_id: str) -> str | None:
+    """An existing run whose id differs from `run_id` only by CASE, if any.
+
+    macOS (APFS, case-insensitive by default) and Windows treat `Run-1.yaml`
+    and `run-1.yaml` as ONE file, so `fr run start --run-id Run-1` would
+    silently overwrite an existing `run-1` — while the `path.exists()` guard
+    passed on Linux and the two runs then diverged per platform (review
+    r5-e1). Detecting the collision explicitly makes the behaviour the same
+    everywhere, and the same as the operator's intuition: two runs whose ids
+    differ only by case are one run with a typo.
+    """
+    runs_dir = repo_root / RUNS_REL
+    if not runs_dir.is_dir():
+        return None
+    wanted = run_id.casefold()
+    for path in sorted(runs_dir.glob("*.yaml")):
+        if path.stem != run_id and path.stem.casefold() == wanted:
+            return path.stem
+    return None
 
 
 def run_path(repo_root: Path, run_id: str) -> Path:

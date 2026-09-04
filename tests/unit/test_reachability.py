@@ -433,3 +433,257 @@ def test_a_plan_declaring_no_shape_still_refuses_the_same_unmerged_tree(tmp_path
 
     assert "docs/superpowers/specs/fixture-spec-design.md" in missing
     assert any("_meta.yaml" in p for p in missing)
+
+
+# ── the home repo is the checkout's, not the item's (review r5-a1) ─────
+#
+# A phase tracked by an Issue in ANOTHER repo carries `item.repo` = the
+# Issue's repo (`_phase_items`, so `can_dispatch` routes it there). Its
+# PLAN, though, still lives in `target_repo` — the repo `repo_root` is a
+# checkout of. Comparing `ref.repo != item.repo` therefore misread the
+# plan's own ref as cross-repo and skipped the local check entirely: an
+# unmerged plan dispatched clean.
+
+
+def _land_cross_repo_tracked_plan(work: Path) -> Path:
+    """The fixture plan, committed but NOT pushed, phase 1 tracked by an
+    Issue in a DIFFERENT repo than `target_repo`."""
+    import shutil
+
+    plan_dir = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    plan_dir.parent.mkdir(parents=True)
+    shutil.copytree(MINIMAL, plan_dir)
+    phase = plan_dir / "01.yaml"
+    phase.write_text(
+        phase.read_text().replace(
+            "tracking_issue: null",
+            "tracking_issue: https://github.com/other-org/other-repo/issues/7",
+        )
+    )
+    spec_dir = work / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "fixture-spec-design.md").write_text("# stub spec\n")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land"], check=True)
+    return plan_dir
+
+
+def test_a_cross_repo_tracked_phase_still_gates_on_its_own_unmerged_plan(tmp_path: Path) -> None:
+    from fr import parse
+    from fr_dispatch.item_graph import build_items
+    from fr_dispatch.reachability import check_reachable
+
+    work = _repo_with_origin(tmp_path)
+    plan_dir = _land_cross_repo_tracked_plan(work)
+    plan = parse(plan_dir)
+    items = build_items(PHASE_SHAPE, plan)
+
+    # The item is routed to the Issue's repo…
+    assert items[0].repo == "other-org/other-repo"
+    # …but its plan and spec live in the checkout this gate reads.
+    refusal = check_reachable(items, work)
+
+    assert refusal is not None
+    assert "_meta.yaml" in refusal
+    assert "fixture-spec-design.md" in refusal
+
+
+def test_an_explicit_home_repo_overrides_the_derivation(tmp_path: Path) -> None:
+    """`home_repo` names the repo `repo_root` is a checkout of. Naming a
+    DIFFERENT one makes every ref cross-repo, hence skipped without a
+    client — the escape hatch the derivation defaults to."""
+    from fr import parse
+    from fr_dispatch.item_graph import build_items
+    from fr_dispatch.reachability import check_reachable
+
+    work = _repo_with_origin(tmp_path)
+    plan = parse(_land_cross_repo_tracked_plan(work))
+    items = build_items(PHASE_SHAPE, plan)
+
+    assert check_reachable(items, work, home_repo="some-org/elsewhere") is None
+
+
+def test_a_plan_directory_ref_is_probed_as_a_directory_not_a_file(tmp_path: Path) -> None:
+    """`ArtifactRef(kind="plan")` names a FOLDER. Probing it with
+    `file_exists` asks the contents API a question about a file; the
+    dir-aware read is `list_dir`, and an EMPTY listing must read as
+    absent rather than present."""
+    import shutil
+
+    from fr import parse
+    from fr_dispatch.item_graph import build_items
+    from fr_dispatch.reachability import check_reachable
+
+    from tests.unit.fakes import FakeGhClient
+
+    work = _repo_with_origin(tmp_path)
+    plan_dir = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    plan_dir.parent.mkdir(parents=True)
+    shutil.copytree(MINIMAL, plan_dir)
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land"], check=True)
+    items = build_items(PHASE_SHAPE, parse(plan_dir))
+
+    # Home repo elsewhere → every ref is cross-repo and answered by `gh`.
+    gh = FakeGhClient()
+    refusal = check_reachable(items, work, gh=gh, home_repo="some-org/elsewhere")
+    assert refusal is not None
+    assert any(c[0] == "list_dir" for c in gh.calls), gh.calls
+
+    present = FakeGhClient()
+    present.remote_tree[
+        ("derio-net/superpowers-for-vk", "docs/superpowers/plans/v2_plan_minimal/_meta.yaml")
+    ] = "x"
+    present.remote_files.add(
+        ("derio-net/superpowers-for-vk", "docs/superpowers/specs/fixture-spec-design.md")
+    )
+    assert check_reachable(items, work, gh=present, home_repo="some-org/elsewhere") is None
+
+
+def test_apply_cmds_gate_is_the_item_graph_one(tmp_path: Path) -> None:
+    """No hand-rolled path list survives in `apply_cmd`: the gate walks the
+    same `build_items` graph `check_reachable` does (review r5-a1)."""
+    import inspect
+
+    from fr.commands import apply_cmd
+
+    src = inspect.getsource(apply_cmd._check_plan_reachable_on_origin_head)
+    assert "build_items" in src
+    assert "unreachable_inputs" in src
+    # The hand-rolled list is gone: the gate no longer names an artifact.
+    body = src.split('"""', 2)[2]
+    assert "plan.repo_relative_dir" not in body
+    assert "plan.spec_path" not in body
+
+
+# =========================================================================
+# review r5-e13: what the gate does when it cannot answer
+# =========================================================================
+
+
+def test_an_unverifiable_cross_repo_input_is_reported_not_silently_passed(
+    tmp_path: Path,
+) -> None:
+    """Offline (`gh=None`), a cross-repo ref cannot be checked at all. The
+    2026-05-17 gate skipped it and trusted the operator, which is the right
+    DEFAULT — but "skipped" must be visible, or a cross-repo dispatch reads as
+    verified when nothing was verified."""
+    import shutil
+
+    from fr import parse
+    from fr_dispatch.item_graph import build_items
+    from fr_dispatch.reachability import unverifiable_inputs
+
+    work = _repo_with_origin(tmp_path)
+    plan_dir = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    plan_dir.parent.mkdir(parents=True)
+    shutil.copytree(MINIMAL, plan_dir)
+    meta = plan_dir / "_meta.yaml"
+    meta.write_text(
+        meta.read_text().replace(
+            "spec: docs/superpowers/specs/fixture-spec-design.md",
+            "spec: other-org/other-repo:docs/superpowers/specs/elsewhere-design.md",
+        )
+    )
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "origin", "HEAD"], check=True, capture_output=True
+    )
+    items = build_items(PHASE_SHAPE, parse(plan_dir))
+
+    unverifiable = unverifiable_inputs(items, home_repo="derio-net/superpowers-for-vk")
+
+    assert [f"{r.repo}:{r.path}" for r in unverifiable] == [
+        "other-org/other-repo:docs/superpowers/specs/elsewhere-design.md"
+    ]
+    # With a client there is nothing unverifiable — it can be asked.
+    assert unverifiable_inputs(items, home_repo="derio-net/superpowers-for-vk", gh=object()) == []
+
+
+def test_apply_reports_an_unverifiable_cross_repo_input(tmp_path: Path) -> None:
+    """End of the wire: `fr apply --yes --to` says which inputs it could not
+    verify rather than implying it checked them."""
+    import shutil
+
+    from fr.commands import apply_cmd
+
+    from tests.unit.fakes import FakeGhClient
+
+    work = _repo_with_origin(tmp_path)
+    plan_dir = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    plan_dir.parent.mkdir(parents=True)
+    shutil.copytree(MINIMAL, plan_dir)
+    meta = plan_dir / "_meta.yaml"
+    meta.write_text(
+        meta.read_text().replace(
+            "spec: docs/superpowers/specs/fixture-spec-design.md",
+            "spec: other-org/other-repo:docs/superpowers/specs/elsewhere-design.md",
+        )
+    )
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "-q", "origin", "HEAD"], check=True, capture_output=True
+    )
+
+    fake = FakeGhClient()
+    rc, text, json_out = apply_cmd._apply_one(plan_dir, fake, yes=True, to="vk")
+
+    assert "unverifiable offline" in text
+    assert "other-org/other-repo" in text
+    assert json_out["unverifiable_inputs"] == [
+        "other-org/other-repo:docs/superpowers/specs/elsewhere-design.md"
+    ]
+
+
+def test_a_plan_with_no_spec_declares_only_a_plan_ref(tmp_path: Path) -> None:
+    """`spec: null` is legal (`PlanMeta.spec` is optional). The gate must ask
+    about the plan and nothing else — not about a path composed from None."""
+    import shutil
+
+    from fr import parse
+    from fr_dispatch.item_graph import build_items
+
+    work = _repo_with_origin(tmp_path)
+    plan_dir = work / "docs" / "superpowers" / "plans" / "v2_plan_minimal"
+    plan_dir.parent.mkdir(parents=True)
+    shutil.copytree(MINIMAL, plan_dir)
+    meta = plan_dir / "_meta.yaml"
+    meta.write_text(
+        meta.read_text().replace(
+            "spec: docs/superpowers/specs/fixture-spec-design.md\n", "spec: null\n"
+        )
+    )
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-q", "-m", "land"], check=True)
+    items = build_items(PHASE_SHAPE, parse(plan_dir))
+
+    assert [r.kind for r in items[0].inputs] == ["plan"]
+
+    from fr.commands import apply_cmd
+
+    unreachable = apply_cmd._check_plan_reachable_on_origin_head(parse(plan_dir), work)
+    missing = [str(p) for p in unreachable]
+    assert missing and all("_meta.yaml" in m or ".yaml" in m or ".md" in m for m in missing)
+    assert not any(m == "None" for m in missing)
+
+
+def test_an_artifact_kind_with_no_repo_path_is_never_looked_up(tmp_path: Path) -> None:
+    """`report`, `pr` and `journal:*` are real inputs with no path on
+    `origin/HEAD`. A shape needing one must not make the gate stat a file
+    called `report`."""
+    from fr import parse
+    from fr.workflow.model import parse_manifest
+    from fr_dispatch.item_graph import build_items
+
+    shape = parse_manifest(
+        "workflow: reporty\nschema: 1\nunit: phase\n"
+        "steps:\n"
+        "  - id: a\n    kind: agent\n    needs: [plan, report, 'journal:plan']\n    emits: [pr]\n"
+    )
+    work = _repo_with_origin(tmp_path)
+    plan_dir = _land_plan(work, push=True)
+    items = build_items(shape, parse(plan_dir))
+
+    assert {r.kind for r in items[0].inputs} == {"plan"}

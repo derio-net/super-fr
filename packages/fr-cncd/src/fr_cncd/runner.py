@@ -39,6 +39,8 @@ import urllib.error
 import urllib.request
 from typing import TYPE_CHECKING, Any
 
+from fr_dispatch.item_graph import phase_payload
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -73,20 +75,24 @@ def build_ingest_payload(item: WorkItem) -> dict[str, Any]:
     Issue's repo — see `fr_dispatch._eligible_items`). Every existing key
     stays byte-stable; `id`/`unit`/`parent` are new, additive envelope
     fields for a phase-unit item today.
+
+    The three values are narrowed ONCE, by `fr_dispatch.item_graph.
+    phase_payload` (review r5-a2). Reaching into the opaque payload here
+    cost six `# type: ignore[attr-defined]` — six places where a
+    non-phase item became a `KeyError` mid-dispatch instead of a refusal
+    at `can_dispatch`.
     """
-    plan = item.payload["plan"]
-    phase = item.payload["phase"]
-    issue_number = int(item.payload["issue_number"])  # type: ignore[call-overload]
-    files = {p.name: p.read_text() for p in sorted(plan.dir.iterdir()) if p.is_file()}  # type: ignore[attr-defined]
+    plan, phase, issue_number = phase_payload(item)
+    files = {p.name: p.read_text() for p in sorted(plan.dir.iterdir()) if p.is_file()}
     return {
         "kind": "plan_folder",
         "schema_version": 2,
-        "plan": plan.meta.plan,  # type: ignore[attr-defined]
-        "target_repo": plan.meta.target_repo,  # type: ignore[attr-defined]
+        "plan": plan.meta.plan,
+        "target_repo": plan.meta.target_repo,
         "repo": item.repo,
         "issue_number": issue_number,
-        "phase": phase.phase.number,  # type: ignore[attr-defined]
-        "source_path": plan.repo_relative_dir.as_posix(),  # type: ignore[attr-defined]
+        "phase": phase.phase.number,
+        "source_path": plan.repo_relative_dir.as_posix(),
         "files": files,
         "id": item.id,
         "unit": item.unit,
@@ -131,9 +137,18 @@ class CncdRunner:
         return set()
 
     def can_dispatch(self, item: WorkItem) -> bool:
-        # cncd ingests any repo's plan bundle; tenant scoping is
-        # server-side, so there is no client-visible known-repo set.
-        return True
+        """cncd ingests PLAN FOLDERS, so it takes phase items only.
+
+        Repo is not the limit — cncd ingests any repo's bundle and scopes
+        tenants server-side, so there is no client-visible known-repo set.
+        The *unit* is: `build_ingest_payload` serialises a plan folder plus
+        a phase number, which a run- or spec-unit item does not have.
+        Refusing here is what `protocols.Runner.can_dispatch` is for
+        (review r5-a2); before it, such an item reached
+        `item.payload["plan"]` and failed as `"<id>: 'plan'"` under
+        `reason=backend_error`.
+        """
+        return item.unit == "phase"
 
     def dispatch(self, item: WorkItem) -> None:
         # preflight() guarantees base_url is set before tick dispatches.

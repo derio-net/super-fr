@@ -226,3 +226,71 @@ def test_an_agent_step_with_no_run_command_is_fine() -> None:
         "workflow: x\nschema: 1\nunit: run\nsteps:\n  - id: think\n    kind: agent\n"
     )
     assert check_workflow(manifest) == []
+
+
+# ── review r5-b5: `--all` must not pass vacuously ─────────────────────
+
+
+def test_cli_all_fails_when_nothing_is_discoverable(tmp_path: Path, monkeypatch) -> None:
+    """`--all` printed "no workflow shapes found" and exited 0, so smoke
+    step §8.0.3 of the 2026-08-14 spec — "`fr workflow check --all` over the
+    INSTALLED shipped manifests" — passed on a host where nothing was
+    installed: the exact state it exists to detect."""
+    from fr.workflow import resolve as resolve_mod
+
+    repo = _repo(tmp_path)
+    empty_shipped = tmp_path / "shipped"
+    empty_shipped.mkdir()
+    # Defeat the wheel-internal copy too, or there is no "nothing" to test.
+    monkeypatch.setattr(resolve_mod, "packaged_shipped_workflows_dir", lambda: None)
+
+    result = _invoke(None, repo, empty_shipped, ["workflow", "check", "--all"])
+
+    assert result.exit_code == 1, result.output
+    assert "no workflow shapes found" in result.output
+    # The refusal names every place it looked, so the operator can fix one.
+    assert str(empty_shipped) in result.output
+    assert "FR_SHIPPED_WORKFLOWS_DIR" in result.output
+
+
+def test_cli_all_finds_the_wheel_internal_shapes_with_no_plugin_installed(
+    tmp_path: Path,
+) -> None:
+    """The other half: with nothing but the `fr` wheel — no marketplace
+    clone, no repo shapes — the shipped `fr-goal` still validates. This is
+    what a hermes pod and an OpenCode consumer actually have."""
+    repo = _repo(tmp_path)
+    absent = tmp_path / "no-such-plugin-install"
+
+    result = _invoke(None, repo, absent, ["workflow", "check", "--all"])
+
+    assert result.exit_code == 0, result.output
+    assert "fr-goal: ok" in result.output
+
+
+def test_a_shipped_shape_resolves_from_the_wheel_when_no_plugin_is_installed(
+    tmp_path: Path,
+) -> None:
+    from fr.workflow.resolve import resolve_workflow
+
+    manifest = resolve_workflow("fr-goal", tmp_path, shipped_root=tmp_path / "nope")
+
+    assert manifest.workflow == "fr-goal"
+
+
+def test_an_installed_plugin_still_beats_the_wheel_copy(tmp_path: Path) -> None:
+    """The wheel copy is LAST on purpose: an operator can update the
+    marketplace clone independently of the `fr` wheel, so a shape they
+    installed must win."""
+    from fr.workflow.resolve import resolve_workflow
+
+    shipped = tmp_path / "shipped"
+    shipped.mkdir()
+    (shipped / "fr-goal.yaml").write_text(
+        "workflow: fr-goal\nschema: 1\nunit: run\n"
+        "steps:\n  - id: only\n    kind: cli\n    run: echo installed\n"
+    )
+
+    manifest = resolve_workflow("fr-goal", tmp_path, shipped_root=shipped)
+
+    assert [s.id for s in manifest.steps] == ["only"]

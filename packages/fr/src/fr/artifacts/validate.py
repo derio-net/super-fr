@@ -18,7 +18,20 @@ outside the registry enumerates kinds).
 
 A failing artifact never stops the others. The report is the whole tree's
 answer — an operator fixing a corrupted repo wants every problem at once, not
-one per run.
+one per run. "Failing" includes the file-system answers, not just the schema
+ones: a locator match that is a DIRECTORY, a file this process cannot read, or
+bytes that are not UTF-8 are all reported by path (review r5-e11). Each of
+those used to escape as a traceback or — worse, for the directory — be filtered
+out by `iter_paths_of`'s `is_file()` and never mentioned again.
+
+**Workflow manifests are deliberately NOT an artifact kind** (review r5-e11).
+`docs/superpowers/workflows/*.yaml` is a repo-authored *shape*, not a
+generated artifact: it has no stamp, no migration and no `current_version`,
+and `fr workflow check` is its validator. Registering it would mean inventing
+all three. But a repo whose shapes do not parse is broken in exactly the way
+this command exists to report, so `validate_repo` runs `check_workflow` over
+them and reports the findings — under the `workflow` label, without the
+manifests becoming migratable.
 """
 
 from __future__ import annotations
@@ -79,6 +92,10 @@ def validate_artifact(kind: ArtifactKind, path: Path) -> tuple[ValidationIssue, 
         version = kind.read_version(path)
     except ArtifactStampError as e:
         return issue(f"unreadable {kind.name} version stamp ({kind.stamp}): {e}")
+    except UnicodeDecodeError as e:
+        return issue(f"is not valid UTF-8 and cannot be read: {e}")
+    except OSError as e:
+        return issue(f"cannot be read: {e}")
 
     if version > kind.current_version:
         return issue(
@@ -92,10 +109,41 @@ def validate_artifact(kind: ArtifactKind, path: Path) -> tuple[ValidationIssue, 
             f"version {kind.current_version} — run `fr migrate artifacts --yes`"
         )
 
+    try:
+        problems = kind.validate(path)
+    except UnicodeDecodeError as e:
+        return issue(f"is not valid UTF-8 and cannot be read: {e}")
+    except OSError as e:
+        return issue(f"cannot be read: {e}")
     return tuple(
-        ValidationIssue(kind=kind.name, path=path, message=message)
-        for message in kind.validate(path)
+        ValidationIssue(kind=kind.name, path=path, message=message) for message in problems
     )
+
+
+WORKFLOWS_REL = Path("docs") / "superpowers" / "workflows"
+WORKFLOW_LABEL = "workflow"
+"""Label for a repo-authored shape's findings. NOT a registered artifact kind —
+see the module docstring."""
+
+
+def _workflow_issues(repo_root: Path) -> list[ValidationIssue]:
+    from fr.workflow.check import check_workflow
+    from fr.workflow.model import WorkflowError, parse_manifest
+
+    out: list[ValidationIssue] = []
+    for path in sorted((repo_root / WORKFLOWS_REL).glob("*.yaml")):
+        if not path.is_file():
+            continue
+        try:
+            manifest = parse_manifest(path.read_text())
+        except (WorkflowError, OSError, UnicodeDecodeError) as e:
+            out.append(ValidationIssue(kind=WORKFLOW_LABEL, path=path, message=str(e)))
+            continue
+        out.extend(
+            ValidationIssue(kind=WORKFLOW_LABEL, path=path, message=message)
+            for message in check_workflow(manifest)
+        )
+    return out
 
 
 def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> ValidationReport:
@@ -108,9 +156,35 @@ def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> Validatio
     issues: list[ValidationIssue] = []
     checked = 0
     for kind in kinds:
+        # A locator hit that is NOT a file is a real finding, and
+        # `iter_paths_of` filters it out (it must — the migration runner cannot
+        # rewrite a directory). Reporting it here is the difference between
+        # "your `_meta.yaml` is a directory" and silence.
+        for match in sorted(repo_root.glob(kind.locator)):
+            if match.is_dir():
+                issues.append(
+                    ValidationIssue(
+                        kind=kind.name,
+                        path=match,
+                        message=f"is a directory, but {kind.name} artifacts are files",
+                    )
+                )
+        # Deduplicated by RESOLVED path: a symlinked artifact is followed (its
+        # target is the real content), but validating the same target twice
+        # would report every problem twice.
+        seen: set[Path] = set()
         for path in iter_paths_of(repo_root, kind):
+            try:
+                real = path.resolve()
+            except OSError:  # pragma: no cover — a broken symlink loop
+                real = path
+            if real in seen:
+                continue
+            seen.add(real)
             checked += 1
             issues.extend(validate_artifact(kind, path))
+    if kind_name is None:
+        issues.extend(_workflow_issues(repo_root))
     return ValidationReport(issues=tuple(issues), checked=checked)
 
 

@@ -155,7 +155,19 @@ def _lifecycle_label_for_decision(decision: ItemDecision) -> LabelDef | None:
     """
     if not decision.routable and decision.state != "done":
         return MANUAL
-    return next(iter(project_github(decision.state)), None)
+    labels = project_github(decision.state)
+    # `project_github` returns a SET so a future state can need two labels
+    # (or none, like `done`). This projection can only carry one, and
+    # `next(iter(...))` would silently pick an arbitrary member of a
+    # two-label set — a lifecycle label chosen by hash order. Fail loudly
+    # instead: the fix is here, in the projection, not in the caller.
+    if len(labels) > 1:
+        raise AssertionError(
+            f"item state {decision.state!r} projects {len(labels)} GitHub labels "
+            f"({sorted(label.name for label in labels)}); the Issue lifecycle carries "
+            "exactly one — teach `_lifecycle_label_for_decision` how to render both"
+        )
+    return next(iter(labels), None)
 
 
 def _lifecycle_label(

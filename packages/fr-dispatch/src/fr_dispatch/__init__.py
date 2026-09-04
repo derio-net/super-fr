@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -46,8 +47,6 @@ from fr_dispatch.protocols import Runner
 from fr_dispatch.work_item import ArtifactRef, WorkItem
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     from fr.tracker.model import Tracker
 
 __all__ = [
@@ -237,9 +236,18 @@ def _eligible_items(
         return items
     eligible: list[WorkItem] = []
     for item in items:
+        if item.unit != "phase":
+            # Run/spec items have no tracker projection to filter against.
+            eligible.append(item)
+            continue
         phase_number = _phase_number(item)
         if phase_number is None:
-            eligible.append(item)
+            # Fail CLOSED (review r5-a3). This used to share the branch
+            # above, so a phase item whose number could not be read was
+            # waved past the tracker gate — dispatching work the tracker
+            # had marked blocked, in-progress or done. "Cannot tell" is
+            # not "no gate applies"; it is a reason to skip.
+            failures.append(f"{item.id}: cannot determine the phase number — not dispatched")
             continue
         if not item.tracking or phase_number not in observed.phases:
             continue
@@ -250,18 +258,31 @@ def _eligible_items(
     return eligible
 
 
+_PHASE_ID_TAIL = re.compile(r"/phase/(\d+)$")
+
+
 def _phase_number(item: WorkItem) -> int | None:
-    """The phase number an item's payload carries, if it is a phase item."""
+    """The phase number of a `unit: phase` item, or `None` if unreadable.
+
+    Two sources, because either alone has a hole. The payload is
+    authoritative — `_phase_items` puts the parsed `PhaseDoc` there — but
+    an item built elsewhere (a `Source` implementation, a test double, a
+    future adapter) need not carry one. The **id** always does: §4.D fixes
+    the phase form as `<repo>/<spec>/<plan>/phase/<n>`, composed by
+    `item_id` before any tracker call, so it is the more stable of the two.
+
+    `None` means the caller must fail closed, never "this isn't a phase".
+    """
     if item.unit != "phase":
         return None
-    phase = item.payload.get("phase")
-    number = getattr(getattr(phase, "phase", None), "number", None)
-    return number if isinstance(number, int) else None
+    number = getattr(getattr(item.payload.get("phase"), "phase", None), "number", None)
+    if isinstance(number, int):
+        return number
+    m = _PHASE_ID_TAIL.search(item.id)
+    return int(m.group(1)) if m else None
 
 
-def _capability_blocker(
-    items: Sequence[WorkItem], runner: Runner, required_capabilities: frozenset[str]
-) -> str | None:
+def _capability_blocker(runner: Runner, required_capabilities: frozenset[str]) -> str | None:
     """§4.F: the tick-wide capability check, run BEFORE `runner.preflight`.
 
     Ordered ahead of `runner.preflight` so a capability mismatch is
@@ -411,9 +432,22 @@ def tick(
     synced = 0
     deferred = 0
     if items:
-        blocker = _capability_blocker(items, runner, required_capabilities)
+        # Each link of the refusal chain is wrapped, not just the last one
+        # (review r5-a4). `preflight` was already guarded; the two blockers
+        # were not, so a v1-shaped third-party runner with no
+        # `capabilities` attribute raised `AttributeError` straight out of
+        # `tick` and took the whole cron iteration with it — the one thing
+        # this loop promises never to do. The messages stay distinct so the
+        # failure still says WHICH check broke.
+        try:
+            blocker = _capability_blocker(runner, required_capabilities)
+        except Exception as e:  # noqa: BLE001
+            blocker = f"runner capability check raised: {e}"
         if blocker is None:
-            blocker = _tracker_blocker(tracker, tracker_instance, required_tracker_states)
+            try:
+                blocker = _tracker_blocker(tracker, tracker_instance, required_tracker_states)
+            except Exception as e:  # noqa: BLE001
+                blocker = f"tracker state check raised: {e}"
         if blocker is None:
             try:
                 blocker = runner.preflight(items)

@@ -33,12 +33,43 @@ err_console = Console(stderr=True)
 DEFAULT_FR_VERSION = ">=3.0.0,<5.0.0"
 
 # The floor a plan that names a `workflow:` shape must carry (spec §4.A.1).
-# `PlanMeta` is extra="forbid", so fr < 4.0.0 does not skip the unknown key
-# — it fails the parse outright. The constraint is the plan telling older fr
-# not to try.
+# `PlanMeta` is extra="forbid", so fr < 4.0.0 does not skip the unknown
+# `workflow:` key — it fails the parse outright.
+#
+# What each fr actually reports (corrected in review r5-b4). Every RELEASED
+# fr 3.x validates the schema before it reads `fr_version`, so it dies on
+# pydantic's `extra_forbidden` for `workflow:` and never prints this floor:
+# a hard failure, but not a legible one. fr 4.0.0+ enforces the version gate
+# off the raw mapping FIRST (`fr.parser._enforce_fr_version`), so from here
+# on an old-reader-hostile key is reported as "requires fr_version …, but
+# installed is …". The constraint is still the plan's way of telling an
+# older fr not to try; the reason to carry it is that the NEXT field
+# addition will be announced properly, not that 3.x ever was.
 WORKFLOW_FR_VERSION = ">=4.0.0,<5.0.0"
 
-_PRE_4_PROBES = ("0.1.0", "2.0.0", "3.0.0", "3.19.0", "3.999.999")
+_PRE_4_PROBES = (
+    "0.1.0",
+    "1.0.0",
+    "2.0.0",
+    "2.5.0",
+    "3.0.0",
+    "3.0.1",
+    "3.1.0",
+    "3.5.0",
+    "3.10.0",
+    "3.19.0",
+    "3.20.0",
+    "3.999.999",
+)
+"""Versions probed for "would some real fr 3.x load this plan?".
+
+Denser than the original five (review r5-b6): a probe LIST answers an
+`==3.5.0` constraint with a flat no unless 3.5.0 happens to be in it, and an
+operator pinning one exact 3.x is exactly the case the check exists to
+refuse. `SpecifierSet.filter` over the list is what `_admits_pre_4` runs, so
+adding a probe is the only way to widen coverage; the list deliberately
+includes a 0.x, a 1.x, a 2.x, several 3.minor values and both ends of 3.x.
+"""
 
 
 def _admits_pre_4(constraint: str) -> bool:
@@ -49,6 +80,10 @@ def _admits_pre_4(constraint: str) -> bool:
     question is whether some real fr 3.x would consider itself allowed.
     An unparseable constraint answers False; `fr.parser` fails it loudly at
     parse time and duplicating that error here would only mask it.
+
+    A probe list is only as good as its density (review r5-b6): the original
+    five missed `==3.5.0` and every other exact pin between them, quietly
+    letting through the one constraint shape most likely to be hand-written.
     """
     from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
@@ -56,7 +91,11 @@ def _admits_pre_4(constraint: str) -> bool:
         spec = SpecifierSet(constraint)
     except InvalidSpecifier:
         return False
-    return any(spec.contains(v) for v in _PRE_4_PROBES)
+    # `filter` rather than `contains`: it applies the specifier's own
+    # prerelease semantics uniformly over the probe list, which is the same
+    # question `pip` asks. The list is what bounds the answer — see
+    # `_PRE_4_PROBES`.
+    return any(spec.filter(_PRE_4_PROBES))
 
 
 plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)

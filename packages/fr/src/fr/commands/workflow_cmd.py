@@ -7,10 +7,15 @@ whether a parse-time `WorkflowError` (bad schema, unknown key) or a
 semantic `check_workflow` finding (dangling needs, cycle, unknown
 capability, `for_each`/`unit` conflict) — through the SAME exit-1 report,
 so an operator never has to know which layer a shape failed at.
-`--all` validates every manifest discoverable in either directory.
+`--all` validates every manifest discoverable in any of the three lookup
+sources (`fr.workflow.resolve.shipped_workflow_dirs`) — and **fails when
+there are none**. It used to print "no workflow shapes found" and exit 0,
+which made smoke step §8.0.3 of the 2026-08-14 spec pass on a host where
+nothing was installed: the exact state the step exists to detect (review
+r5-b5).
 
-Exit codes: 0 clean, 1 any manifest failed to resolve or validate, 2 usage
-(neither a name nor `--all` given).
+Exit codes: 0 clean, 1 any manifest failed to resolve or validate — or `--all`
+found nothing to validate at all, 2 usage (neither a name nor `--all` given).
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from fr.workflow.resolve import (
     REPO_WORKFLOWS_REL,
     default_shipped_workflows_dir,
     resolve_workflow,
+    shipped_workflow_dirs,
 )
 
 console = Console(highlight=False)
@@ -38,11 +44,20 @@ workflow_app = typer.Typer(
 )
 
 
+def _search_dirs(repo_root: Path, shipped_dir: Path) -> list[Path]:
+    """Every directory `resolve_workflow` would look in, in the same order.
+
+    Derived from `shipped_workflow_dirs` rather than restated, so discovery
+    and resolution cannot disagree about where a shape lives.
+    """
+    return [repo_root / REPO_WORKFLOWS_REL, *shipped_workflow_dirs(shipped_dir)]
+
+
 def _discover_names(repo_root: Path, shipped_dir: Path) -> list[str]:
-    repo_dir = repo_root / REPO_WORKFLOWS_REL
-    names = {p.stem for p in repo_dir.glob("*.yaml")} if repo_dir.is_dir() else set()
-    if shipped_dir.is_dir():
-        names |= {p.stem for p in shipped_dir.glob("*.yaml")}
+    names: set[str] = set()
+    for d in _search_dirs(repo_root, shipped_dir):
+        if d.is_dir():
+            names |= {p.stem for p in d.glob("*.yaml")}
     return sorted(names)
 
 
@@ -66,8 +81,22 @@ def check_cmd(
     if all_:
         names = _discover_names(repo_root, shipped_dir)
         if not names:
-            console.print("no workflow shapes found.")
-            return
+            # Exit 1, not 0 (review r5-b5). "Nothing to validate" is a broken
+            # installation, not a clean bill of health, and reporting it as
+            # success is what let the 2026-08-14 spec's §8.0.3 smoke step pass
+            # against a host with no shapes installed at all.
+            err_console.print("[red]no workflow shapes found — nothing to validate.[/red]")
+            err_console.print("Searched:")
+            for d in _search_dirs(repo_root, shipped_dir):
+                # soft_wrap: these are paths the operator inspects and pastes;
+                # rich's default folding would break one across lines.
+                err_console.print(f"  {d}", soft_wrap=True)
+            err_console.print(
+                f"Install the super-fr plugin, author a shape under {REPO_WORKFLOWS_REL}, "
+                "or point $FR_SHIPPED_WORKFLOWS_DIR at a directory of manifests.",
+                soft_wrap=True,
+            )
+            raise typer.Exit(1)
     elif name:
         names = [name]
     else:

@@ -119,13 +119,27 @@ def _model_problems(model: Any, data: dict[str, Any]) -> list[str]:
 # --- plan ----------------------------------------------------------------
 
 
+_PHASE_FILE_RE = re.compile(r"^\d{2}\.yaml$")
+
+
 def validate_plan(path: Path) -> list[str]:
-    """`_meta.yaml` against `PlanMeta`, then the whole folder through the parser.
+    """`_meta.yaml` against `PlanMeta`, every `NN.yaml` strict-loaded, then the
+    whole folder through the parser.
 
     The folder parse is what catches a malformed `NN.yaml`, and it passes
     `enforce_fr_version=False`: a ceiling that excludes this fr is a *migration*
     question (the stamp check and `fr migrate artifacts` own it), not a
     structural one, and reporting it twice in different words helps nobody.
+
+    **Every YAML file in the folder gets the strict loader, not just
+    `_meta.yaml`** (review r5-c4). A plan is a FOLDER of YAML carriers and the
+    interesting one is `NN.yaml`: tick state lives there, so a `01.yaml`
+    declaring `state:` twice loses whichever block PyYAML drops — silently
+    un-ticking steps an agent had completed — and `parse()` uses
+    `yaml.safe_load`, which keeps the last occurrence and says nothing. Before
+    this, `.claude/rules/artifact-versioning.md`'s "a duplicate YAML key in any
+    of the three YAML-carried kinds fails `fr validate artifacts`" was true of
+    a plan's `_meta.yaml` and false of the file that actually carries its state.
     """
     from fr.parser import PlanSchemaError, parse
     from fr.types import PlanMeta
@@ -134,6 +148,13 @@ def validate_plan(path: Path) -> list[str]:
     if problems or data is None:
         return problems
     problems = _model_problems(PlanMeta, data)
+    if problems:
+        return problems
+    for phase_file in sorted(path.parent.iterdir()):
+        if not phase_file.is_file() or not _PHASE_FILE_RE.match(phase_file.name):
+            continue
+        _, phase_problems = _load_mapping(phase_file)
+        problems.extend(f"{phase_file.name}: {p}" for p in phase_problems)
     if problems:
         return problems
     try:

@@ -100,7 +100,11 @@ def archive_command(
         except ValueError:
             msg = f"{target} is not under this repo root ({repo_root})"
             if not all_plans:
-                err_console.print(f"refusing to archive — {msg}")
+                # soft_wrap: the message carries TWO absolute paths, so rich's
+                # default folding splits it — and, on a long tmp root, splits
+                # it mid-sentence (review r5-e15). Everything an operator
+                # copy-pastes or greps goes out unwrapped.
+                err_console.print(f"refusing to archive — {msg}", soft_wrap=True)
                 raise typer.Exit(2) from None
             skipped.append(f"{target.name}: skipped — {msg}")
             continue

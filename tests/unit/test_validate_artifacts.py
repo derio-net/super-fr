@@ -517,6 +517,18 @@ def test_a_duplicated_key_in_the_matrix_is_caught_not_silently_dropped(tmp_path:
             "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
             "cursor: implement\n" + GOOD_RUN,
         ),
+        # review r5-c4: a plan is a FOLDER of YAML carriers and `NN.yaml` is
+        # the one that matters — tick state lives there. A second `state:`
+        # block silently replaces the first, un-ticking completed steps, and
+        # `parse()`'s `yaml.safe_load` reports nothing.
+        (
+            "plan phase",
+            f"docs/superpowers/plans/{PLAN_SLUG}/01.yaml",
+            GOOD_PHASE
+            + 'state:\n  steps:\n    P1.T1.S1:\n      state: " "\n      ticked_at: null\n'
+            "      note: null\n  completion:\n    at: null\n    note: null\n"
+            "    observed_prs: []\n",
+        ),
     ],
 )
 def test_a_duplicated_key_is_caught_in_every_yaml_carrier(
@@ -534,3 +546,154 @@ def test_a_duplicated_key_is_caught_in_every_yaml_carrier(
 
     assert not report.ok
     assert "duplicate key" in " ".join(str(i) for i in report.issues)
+
+
+def test_a_duplicate_state_block_in_a_phase_file_un_ticks_steps_invisibly(
+    tmp_path: Path,
+) -> None:
+    """The concrete damage behind r5-c4, spelled out: the second `state:`
+    block wins, so every step the first one marked done reads as pending —
+    and `fr validate artifacts` said the plan was fine.
+    """
+    import yaml as _yaml
+
+    seed_good_repo(tmp_path)
+    ticked = GOOD_PHASE.replace('state: " "', 'state: "x"')
+    unticked_tail = (
+        "state:\n  steps:\n    P1.T1.S1:\n"
+        '      state: " "\n      ticked_at: null\n      note: null\n'
+        "  completion:\n    at: null\n    note: null\n    observed_prs: []\n"
+    )
+    _w(tmp_path, f"docs/superpowers/plans/{PLAN_SLUG}/01.yaml", ticked + unticked_tail)
+
+    # PyYAML really does drop the ticked block, silently.
+    loaded = _yaml.safe_load(
+        (tmp_path / "docs" / "superpowers" / "plans" / PLAN_SLUG / "01.yaml").read_text()
+    )
+    assert loaded["state"]["steps"]["P1.T1.S1"]["state"] == " "
+
+    report = validate_repo(tmp_path)
+
+    assert not report.ok
+    problems = " ".join(str(i) for i in report.issues)
+    assert "duplicate key" in problems
+    assert "01.yaml" in problems
+
+
+def test_a_structurally_clean_plan_folder_still_validates(tmp_path: Path) -> None:
+    """The strict load added for r5-c4 must not start rejecting good plans."""
+    seed_good_repo(tmp_path)
+
+    assert validate_repo(tmp_path).ok
+
+
+# =========================================================================
+# File-system answers are findings too (review r5-e11)
+# =========================================================================
+
+
+def test_a_symlinked_artifact_is_followed_and_validated_once(tmp_path: Path) -> None:
+    """Following is right — the symlink's target is the real content. Counting
+    it twice is not: an operator fixing one file would see two identical
+    complaints."""
+    seed_good_repo(tmp_path)
+    real_dir = tmp_path / "elsewhere"
+    real_dir.mkdir()
+    real = real_dir / "matrix.yaml"
+    real.write_text(GOOD_MATRIX.replace("status: ci", "status: not-a-status"))
+    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
+    matrix.unlink()
+    matrix.symlink_to(real)
+
+    report = validate_repo(tmp_path)
+
+    matrix_issues = [i for i in report.issues if i.kind == "matrix"]
+    assert len(matrix_issues) == 1, matrix_issues
+
+
+def test_an_artifact_path_that_is_a_directory_is_reported(tmp_path: Path) -> None:
+    """`iter_paths_of`'s `is_file()` filter made this silent — the plan simply
+    stopped being validated, and nothing said so."""
+    seed_good_repo(tmp_path)
+    meta = tmp_path / "docs" / "superpowers" / "plans" / PLAN_SLUG / "_meta.yaml"
+    meta.unlink()
+    meta.mkdir()
+
+    report = validate_repo(tmp_path)
+
+    problems = " ".join(str(i) for i in report.issues)
+    assert not report.ok
+    assert "is a directory" in problems
+    assert "_meta.yaml" in problems
+
+
+def test_an_unreadable_artifact_is_a_failure_naming_it(tmp_path: Path) -> None:
+    import os
+
+    seed_good_repo(tmp_path)
+    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
+    os.chmod(matrix, 0o000)
+    try:
+        report = validate_repo(tmp_path)
+    finally:
+        os.chmod(matrix, 0o644)
+
+    problems = " ".join(str(i) for i in report.issues)
+    assert not report.ok
+    assert "matrix.yaml" in problems
+    assert "cannot be read" in problems
+
+
+def test_non_utf8_bytes_are_a_failure_naming_the_file(tmp_path: Path) -> None:
+    seed_good_repo(tmp_path)
+    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
+    matrix.write_bytes(b"schema_version: 1\nrows: \xff\xfe\n")
+
+    report = validate_repo(tmp_path)
+
+    problems = " ".join(str(i) for i in report.issues)
+    assert not report.ok
+    assert "matrix.yaml" in problems
+    assert "UTF-8" in problems
+
+
+# --- repo-authored workflow shapes ---------------------------------------
+
+
+def test_a_broken_repo_authored_workflow_shape_is_reported(tmp_path: Path) -> None:
+    """Not an artifact KIND — no stamp, no migration, no `current_version` —
+    but a repo whose shapes do not parse is broken in exactly the way this
+    command reports. `fr workflow check` stays the shapes' own validator."""
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/workflows/broken.yaml",
+        "workflow: broken\nschema: 1\nunit: run\n"
+        "steps:\n  - id: a\n    kind: agent\n    needs: [ghost]\n",
+    )
+
+    report = validate_repo(tmp_path)
+
+    problems = " ".join(str(i) for i in report.issues)
+    assert not report.ok
+    assert "broken.yaml" in problems
+    assert "ghost" in problems
+
+
+def test_workflow_shapes_are_not_a_registered_artifact_kind() -> None:
+    """Registering them would mean inventing a stamp, a migration chain and a
+    `current_version` for a hand-authored file."""
+    from fr.artifacts.registry import ARTIFACT_KINDS
+
+    assert "workflow" not in ARTIFACT_KINDS
+
+
+def test_a_valid_repo_authored_shape_does_not_fail_validation(tmp_path: Path) -> None:
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/workflows/fine.yaml",
+        "workflow: fine\nschema: 1\nunit: run\nsteps:\n  - id: a\n    kind: cli\n    run: 'true'\n",
+    )
+
+    assert validate_repo(tmp_path).ok

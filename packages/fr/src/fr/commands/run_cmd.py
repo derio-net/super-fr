@@ -34,14 +34,21 @@ from rich.console import Console
 from fr.commands.common import resolve_repo_root
 from fr.run.adopt import AdoptError, adopt_run
 from fr.run.model import (
+    RUN_ID_MAX_LENGTH,
+    RUNS_REL,
     RunState,
     RunStateError,
     StepRecord,
+    existing_run_id_colliding_with,
     load_run_state,
+    parse_run_state,
     run_path,
     save_run_state,
+    validate_run_id,
 )
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
+from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS
+from fr.workflow.check import check_workflow
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
 
@@ -60,20 +67,32 @@ def _now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
 
 
+_UNSAFE_IN_RUN_ID = re.compile(r"[^A-Za-z0-9._-]+")
+
+
 def derive_run_id(branch: str, *, today: _dt.date | None = None) -> str:
     """Derive a run id from `branch` when `--run-id` is not given.
 
-    Must satisfy `fr_dispatch.work_item.run_item_id`'s constraint: a single
-    non-empty path segment, no `/` (Phase 2 review fix — that validation
-    exists specifically because this function feeds it). `branch` routinely
-    contains `/` (e.g. `feat/ticket-polling`), so it is flattened; the
-    date prefix mirrors the plan-slug shape spec §4.B's own example
-    (`2026-08-14-ticket-polling`) uses, keeping a run id visually
-    consistent with the plan slug a `unit: run` shape will go on to create.
+    Must satisfy `validate_run_id` — and therefore
+    `fr_dispatch.work_item.run_item_id` — because it FEEDS them: a single
+    segment of `[A-Za-z0-9._-]`, starting with an alphanumeric. `branch`
+    routinely contains `/` (e.g. `feat/ticket-polling`), so it is flattened;
+    the date prefix mirrors the plan-slug shape spec §4.B's own example
+    (`2026-08-14-ticket-polling`) uses, keeping a run id visually consistent
+    with the plan slug a `unit: run` shape will go on to create.
+
+    **Every unsafe run collapses, not just `/`** (review r5-e1). Git branch
+    names admit far more than this: `feat/../x`, `-weird`, `wip #3`, a
+    non-ASCII word. Replacing only `/` produced ids that `validate_run_id`
+    then rejected — turning a legal branch into a `fr run start` that could
+    not run at all — or, worse, an id starting with `-`. The date prefix
+    guarantees the leading character, so only the tail needs sanitising, and
+    a branch that sanitises to nothing still yields the bare date.
     """
     day = today or _dt.date.today()
-    sanitized = branch.strip("/").replace("/", "-")
-    return f"{day.isoformat()}-{sanitized}"
+    sanitized = _UNSAFE_IN_RUN_ID.sub("-", branch.strip("/")).strip("-.")
+    derived = f"{day.isoformat()}-{sanitized}" if sanitized else day.isoformat()
+    return derived[:RUN_ID_MAX_LENGTH].rstrip("-.") or day.isoformat()
 
 
 def _step_by_id(manifest: WorkflowManifest, step_id: str) -> Step:
@@ -90,8 +109,57 @@ def _next_step_id(manifest: WorkflowManifest, step_id: str) -> str | None:
 
 
 def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
-    name = state.workflow.split("@", 1)[0]
-    return resolve_workflow(name, repo_root)
+    """The manifest this run was started against — name AND schema version.
+
+    `state.workflow` is `"<name>@<schema>"`. The suffix used to be sliced off
+    and thrown away (review r5-e3), so a run started against `fr-goal@1` would
+    happily keep advancing after the shape was rewritten as `schema: 2` — with
+    a step graph the cursor was never computed for. The suffix is a version
+    stamp; a version stamp nobody checks is decoration.
+    """
+    name, _, recorded_schema = state.workflow.partition("@")
+    manifest = resolve_workflow(name, repo_root)
+    if recorded_schema and str(manifest.schema_version) != recorded_schema:
+        raise RunStateError(
+            f"run {state.run!r} was started against {state.workflow!r}, but "
+            f"{name!r} now declares schema {manifest.schema_version}. A shape's "
+            "schema version changes its step grammar; start a new run rather than "
+            "advancing this one against a different one."
+        )
+    _check_step_drift(state, manifest)
+    return manifest
+
+
+def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
+    """Refuse when the shape's STEPS have changed since `fr run start`.
+
+    A step added, removed or renamed makes every recorded position suspect:
+    the cursor may name a step that no longer exists, a new step silently
+    never runs, and `_next_step_id` moves the run somewhere the operator never
+    reviewed. Each of those used to surface as a `KeyError` or a `ValueError`
+    from `list.index` deep inside `advance` (review r5-e3) — or, for an added
+    step, as nothing at all.
+
+    Reported as a DIFF, because "the workflow changed" is not actionable and
+    "added: verify; removed: spec-review" is.
+    """
+    recorded = set(state.steps)
+    current = {s.id for s in manifest.steps}
+    if recorded == current:
+        return
+    added = sorted(current - recorded)
+    removed = sorted(recorded - current)
+    parts = []
+    if added:
+        parts.append(f"added: {', '.join(added)}")
+    if removed:
+        parts.append(f"removed: {', '.join(removed)}")
+    raise RunStateError(
+        f"run {state.run!r} was started against a different version of "
+        f"{state.workflow!r} ({'; '.join(parts)}). A run's cursor is a position in "
+        "a step list; start a new run rather than advancing this one against a "
+        "list it was never computed for."
+    )
 
 
 def _with_step(state: RunState, step_id: str, record: StepRecord) -> RunState:
@@ -126,9 +194,16 @@ def _complete_step(
     so it stays correct if a shape ever dispatches steps concurrently —
     which enforcing "one running step" as an invariant would have foreclosed.
 
-    The prior record's `gate` is carried forward: an operator authorizes a
-    step once, so a cleared gate survives the step's completion (and any
-    later retry of it).
+    The prior record's `gate` is carried forward on `done`, and on `failed`
+    it is deliberately not — which is narrower than "an operator authorizes a
+    step once" (corrected in review r5-b6). `StepRecord.gate` is only ever set
+    to `"cleared"` by `resolve`'s **cli** branch, which returns the step to
+    `pending`; the `agent` branch below records `done`/`failed` and writes no
+    `gate` at all. So a *failed* gated agent step keeps `gate: None` and
+    `_gate_pending` re-asks on the next `advance`. That re-ask is correct — a
+    step that failed after its gate was answered is a new question, not a
+    resumption — but the claim that the gate is answered once for the life of
+    the run was not true of it.
     """
     prior = state.steps.get(step_id)
     new_record = StepRecord(
@@ -157,14 +232,91 @@ def _gate_pending(step: Step, record: StepRecord) -> bool:
     return step.gate == "operator" and record.gate != "cleared" and record.state != "done"
 
 
-def _parse_emitted(pairs: list[str]) -> dict[str, str]:
+def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
+    """`--emitted name=path` pairs, validated and made repo-relative.
+
+    **The normalization is the point** (review r5-b2). `emitted.plan` is the
+    key `archive.find_run_for_plan` and `run.adopt.adoptable_plans` match a
+    run to its plan by, and both compare against a repo-relative posix path.
+    A stored ABSOLUTE path matches neither — verified live: it made `fr run
+    adopt` create a SECOND run for a plan that already had one, and would
+    have left the first behind at `fr archive`. Both are silent no-ops, which
+    spec §4.B calls out as worse than failing. And an absolute path is what
+    an agent following SKILL.md's `--emitted plan=<path>` produces routinely.
+
+    Only `REPO_TRACKED_ARTIFACTS` (`spec`, `plan`) are path-normalised: `pr`
+    is a URL, `report` and `journal:*` have no repo path, and rewriting those
+    would be nonsense.
+
+    Five further rules, each closing a way to record a wrong thing quietly
+    (review r5-e2):
+
+    1. **Split on the FIRST `=` only.** A path may contain `=`; splitting on
+       the last, or on all, silently truncates it.
+    2. **Neither half may be empty.** `plan=` records the repo root as the
+       plan; `=x` records an artifact with no name.
+    3. **The name must be one the step declares it `emits`.** An artifact the
+       manifest never mentions is a shape/agent mismatch — the agent emitted
+       something the workflow does not know about, or misspelled the name it
+       does — and storing it means the run carries a key nothing will ever
+       read. The refusal names the step's declared emits.
+    4. **No duplicate names in one call.** `--emitted plan=a --emitted plan=b`
+       silently kept `b`.
+    5. **A repo-tracked artifact must EXIST.** An agent reporting a spec that
+       is not on disk is precisely the silent-wrong-state case the run cursor
+       exists to prevent.
+    """
     result: dict[str, str] = {}
     for pair in pairs:
-        name, sep, value = pair.partition("=")
+        name, sep, value = pair.partition("=")  # partition splits on the FIRST `=`
         if not sep:
             raise RunStateError(f"--emitted must be 'name=path', got {pair!r}")
-        result[name] = value
+        name = name.strip()
+        if not name:
+            raise RunStateError(f"--emitted has an empty artifact name: {pair!r}")
+        if not value.strip():
+            raise RunStateError(f"--emitted {name}= has an empty value")
+        if name in result:
+            raise RunStateError(
+                f"--emitted {name}= given twice ({result[name]!r} then {value!r}) — "
+                "one artifact, one value"
+            )
+        if step is not None and name not in step.emits:
+            emits = ", ".join(sorted(step.emits)) or "(nothing)"
+            raise RunStateError(
+                f"step {step.id!r} does not emit {name!r}; it declares: {emits}. "
+                "Either the workflow shape is missing an `emits:` entry or the "
+                "artifact name is misspelled."
+            )
+        result[name] = _repo_relative_artifact(name, value.strip(), repo_root)
     return result
+
+
+def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
+    if name not in REPO_TRACKED_ARTIFACTS:
+        return value
+    raw = Path(value)
+    target = raw if raw.is_absolute() else repo_root / raw
+    # `resolve()` on BOTH sides (review r5-e2): an fr worktree lives under
+    # `~/.cache`, which on macOS is reached through `/private/var/...` — so a
+    # resolved artifact path and an unresolved repo root have no common
+    # prefix and `relative_to` raises on a file that is plainly inside.
+    resolved_root = repo_root.resolve()
+    try:
+        rel = target.resolve().relative_to(resolved_root)
+    except ValueError as e:
+        raise RunStateError(
+            f"--emitted {name}={value!r} is outside the repo ({resolved_root}) — "
+            "a run records repo-relative artifact paths"
+        ) from e
+    if not (resolved_root / rel).exists():
+        raise RunStateError(
+            f"--emitted {name}={value!r} does not exist ({resolved_root / rel}). "
+            "A run records artifacts that were actually written; recording one "
+            "that is not there is the silent-wrong-state this cursor exists to "
+            "prevent."
+        )
+    return rel.as_posix()
 
 
 def _template_context(state: RunState) -> dict[str, str]:
@@ -234,6 +386,26 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
     }
 
 
+def _existing_run_for_workflow(repo_root: Path, workflow: str) -> str | None:
+    """The id of a run in this workspace already driving `workflow`, if any.
+
+    Scoped to the workspace, which IS the branch: `fr run start` writes the
+    run inside the isolation worktree for `--branch`, so every run file here
+    belongs to that branch by construction.
+    """
+    runs_dir = repo_root / RUNS_REL
+    if not runs_dir.is_dir():
+        return None
+    for candidate in sorted(runs_dir.glob("*.yaml")):
+        try:
+            state = parse_run_state(candidate.read_text())
+        except (RunStateError, OSError):
+            continue  # a broken run file is a different problem
+        if state.workflow.split("@", 1)[0] == workflow:
+            return state.run
+    return None
+
+
 @run_app.command("start")
 def start_cmd(
     workflow: str = typer.Argument(..., help="Workflow shape name (resolved repo > shipped)."),
@@ -261,6 +433,18 @@ def start_cmd(
     if not manifest.steps:
         err_console.print(f"[red]workflow {workflow!r} has no steps[/red]")
         raise typer.Exit(2)
+    # Validate the RESOLVED manifest before provisioning anything (review
+    # r5-b6). `fr workflow check` was opt-in, so a repo-authored shape with a
+    # dangling `needs`, a cycle, or a `kind: cli` step carrying no `run:`
+    # started a run — and a `cli` step with no command exits 0, i.e. a green
+    # step that did nothing. Cheap, and it runs before isolation is ensured,
+    # so a bad shape costs no worktree and no container.
+    shape_errors = check_workflow(manifest)
+    if shape_errors:
+        err_console.print(f"[red]workflow {workflow!r} is not valid:[/red]")
+        for err in shape_errors:
+            err_console.print(f"  {err}", soft_wrap=True)
+        raise typer.Exit(2)
 
     try:
         workspace = ensure_run_workspace(repo_root, branch)
@@ -268,10 +452,69 @@ def start_cmd(
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
 
-    rid = run_id or derive_run_id(branch)
+    if workspace.resolve() != repo_root.resolve():
+        # RE-RESOLVE inside the workspace (review r5-e3). The first resolution
+        # is a cheap name check, done before anything is provisioned so a typo
+        # costs no worktree; but `advance` runs in the WORKSPACE, and a repo
+        # override lives at `docs/superpowers/workflows/<name>.yaml` — which is
+        # a different file in the base clone and in the worktree. Starting
+        # against one and advancing against the other is the "manifest changed
+        # under the run" case, arranged by fr itself.
+        try:
+            manifest = resolve_workflow(workflow, workspace)
+        except WorkflowError as e:
+            err_console.print(f"[red]{e}[/red]")
+            raise typer.Exit(2) from e
+        shape_errors = check_workflow(manifest)
+        if shape_errors:
+            err_console.print(f"[red]workflow {workflow!r} is not valid in {workspace}:[/red]")
+            for err in shape_errors:
+                err_console.print(f"  {err}", soft_wrap=True)
+            raise typer.Exit(2)
+
+    try:
+        # `--run-id` is operator input and becomes a path segment
+        # (`runs/<id>.yaml`) plus a §4.D item-id segment. Unvalidated,
+        # `--run-id ../../../escaped` exited 0 and wrote outside `runs/`
+        # (review r5-b1). `derive_run_id` already flattens `/`, so this only
+        # ever fires on an explicit override.
+        rid = validate_run_id(run_id) if run_id else derive_run_id(branch)
+    except RunStateError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
     path = run_path(workspace, rid)
+    # The case check runs FIRST so its (more informative) message wins on both
+    # kinds of filesystem: on macOS/APFS `path.exists()` is already true for a
+    # case-variant, and "run 'Run-1' already exists" would leave the operator
+    # hunting for a file that is spelled differently.
+    collision = existing_run_id_colliding_with(workspace, rid)
+    if collision is not None:
+        # macOS/APFS and Windows are case-insensitive, so `Run-1` and `run-1`
+        # are ONE file there and two on Linux (review r5-e1). Refusing makes
+        # the behaviour identical everywhere, and matches the intuition that
+        # two ids differing only by case are one id with a typo.
+        err_console.print(
+            f"[red]run {collision!r} already exists and differs from {rid!r} only by "
+            "case; on a case-insensitive filesystem these are the same file[/red]"
+        )
+        raise typer.Exit(2)
     if path.exists():
         err_console.print(f"[red]run {rid!r} already exists at {path}[/red]")
+        raise typer.Exit(2)
+    existing = _existing_run_for_workflow(workspace, manifest.workflow)
+    if existing is not None:
+        # A second `start` on the same branch and shape is nearly always a
+        # mistake — a re-run after a wedge, or a forgotten in-flight run
+        # (review r5-e5). Both have better answers than a duplicate cursor.
+        err_console.print(
+            f"[red]branch {branch!r} already has a {manifest.workflow!r} run: {existing}[/red]"
+        )
+        err_console.print(
+            f"  inspect it:  fr run status {existing}\n"
+            f"  resume it:   fr run advance {existing}\n"
+            "  or start a differently-named shape, or delete that run file.",
+            soft_wrap=True,
+        )
         raise typer.Exit(2)
 
     steps = {s.id: StepRecord(state="pending") for s in manifest.steps}
@@ -372,15 +615,31 @@ def _fan_out_items(state: RunState) -> dict[str, str]:
     return {}
 
 
+def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
+    """Load a run, or exit 2 naming the FILE (review r5-e3).
+
+    Every `fr run` subcommand needs this and each did it slightly differently.
+    A missing or unparseable run file is an ordinary operator situation — a
+    typo'd id, a half-written file, a bad merge — and must never be a
+    traceback; `RunStateError` already carries the path.
+    """
+    try:
+        return load_run_state(repo_root, run_id)
+    except RunStateError as e:
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    except OSError as e:  # pragma: no cover — unreadable file
+        err_console.print(
+            f"[red]cannot read {run_path(repo_root, run_id)}: {e}[/red]", soft_wrap=True
+        )
+        raise typer.Exit(2) from e
+
+
 @run_app.command("status")
 def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Print the cursor and every step's state."""
     repo_root = resolve_repo_root()
-    try:
-        state = load_run_state(repo_root, run_id)
-    except RunStateError as e:
-        err_console.print(f"[red]{e}[/red]")
-        raise typer.Exit(2) from e
+    state = _load_or_exit(repo_root, run_id)
 
     console.print(f"run: {state.run}")
     console.print(f"workflow: {state.workflow}")
@@ -421,6 +680,16 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             "`fr run start`; start a new run[/red]"
         )
         raise typer.Exit(2)
+
+    if record.state == "done" and _next_step_id(manifest, state.cursor) is None:
+        # The run is finished: the cursor sits on the LAST step and that step
+        # is done. Without this, one more `advance` flipped the last step from
+        # `done` back to `running` (verified live, review r5-b3) — and for a
+        # `cli` last step it would have RE-EXECUTED the command, after
+        # `fr run check` had already exited 0. Nothing is written here; a
+        # finished run is read-only until something else moves it.
+        console.print(f"run {state.run} complete — cursor {state.cursor!r} is done")
+        return
 
     if _gate_pending(step, record):
         if record.state != "blocked":
@@ -530,7 +799,7 @@ def resolve_cmd(
         state = load_run_state(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
         step = _step_by_id(manifest, step_id)
-        emitted_map = _parse_emitted(emitted)
+        emitted_map = _parse_emitted(emitted, repo_root, step)
     except (RunStateError, WorkflowError) as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
@@ -540,6 +809,22 @@ def resolve_cmd(
         err_console.print(
             f"[red]{step_id}: no step record in run {run_id!r} — workflow "
             f"{state.workflow!r} changed after `fr run start`[/red]"
+        )
+        raise typer.Exit(2)
+
+    cursor_record = state.steps.get(state.cursor)
+    finished = (
+        cursor_record is not None
+        and cursor_record.state == "done"
+        and _next_step_id(manifest, state.cursor) is None
+    )
+    if finished and not emitted_map:
+        # Symmetric with `advance` (review r5-b3/e3): a finished run is
+        # read-only. Amending `emitted` is still allowed — that is a
+        # correction to the record, not a resumption of the run.
+        err_console.print(
+            f"[red]run {run_id!r} is complete (cursor {state.cursor!r} is done). "
+            "Pass --emitted to amend what a step recorded; nothing else moves.[/red]"
         )
         raise typer.Exit(2)
 
@@ -576,6 +861,28 @@ def resolve_cmd(
         console.print(f"{step_id}: failed (operator gate declined)")
         return
 
+    if record.state == "done" and state_value == "done":
+        # AMEND, not a re-resolve (review r5-b6). A wrong `emitted` on a step
+        # already `done` was unamendable: `resolve` refused ("not running or
+        # blocked") and nothing else writes the field, so a run whose
+        # `emitted.plan` pointed at the wrong path stayed that way — and that
+        # is the key `fr archive` and `fr run adopt` match on. The cursor is
+        # deliberately NOT moved: `_complete_step` only moves it when the
+        # step IS the cursor, and re-running that for a step already done
+        # would advance the run a second time.
+        if not emitted_map:
+            err_console.print(
+                f"[red]{step_id}: already done — re-resolving it does nothing. "
+                "Pass --emitted to amend the artifacts it recorded.[/red]"
+            )
+            raise typer.Exit(2)
+        merged = {**(record.emitted or {}), **emitted_map}
+        save_run_state(
+            repo_root, _with_step(state, step_id, record.model_copy(update={"emitted": merged}))
+        )
+        console.print(f"{step_id}: amended emitted artifacts (still done; cursor unchanged)")
+        return
+
     if record.state not in ("running", "blocked"):
         err_console.print(
             f"[red]{step_id}: not running or blocked (state={record.state!r}) — "
@@ -598,11 +905,7 @@ def resolve_cmd(
 def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Freshness gate: non-zero when the cursor sits on a failed step."""
     repo_root = resolve_repo_root()
-    try:
-        state = load_run_state(repo_root, run_id)
-    except RunStateError as e:
-        err_console.print(f"[red]{e}[/red]")
-        raise typer.Exit(2) from e
+    state = _load_or_exit(repo_root, run_id)
 
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"

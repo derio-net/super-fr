@@ -34,6 +34,78 @@ MARKER = ".fr-isolation"
 __all__ = ["RunWorkspaceError", "ensure_run_workspace"]
 
 
+def _is_linked_worktree(root: Path) -> bool:
+    """Is `root` a real linked worktree — `--git-common-dir` != `--git-dir`?
+
+    The same structural check the `fr-isolation-required` PreToolUse hook makes
+    for `mode: worktree`. A marker can be copied; a linked worktree cannot.
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-dir", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if out.returncode != 0:
+        return False
+    lines = [line.strip() for line in out.stdout.splitlines() if line.strip()]
+    if len(lines) != 2:
+        return False
+    git_dir, common = (Path(root) / lines[0], Path(root) / lines[1])
+    return git_dir.resolve() != common.resolve()
+
+
+def _container_evidence() -> bool:
+    import os
+
+    return (
+        Path("/.dockerenv").exists()
+        or Path("/run/.containerenv").exists()
+        or bool(os.environ.get("KUBERNETES_SERVICE_HOST"))
+    )
+
+
+def _marker_mode_holds(repo_root: Path, marker: dict[str, Any]) -> str | None:
+    """`None` when the marker's `mode` is corroborated, else why it is not.
+
+    **The same mode-specific validation the edit hook does** (review r5-e3).
+    `_marker_at` only checked that the recorded `toplevel` is this directory —
+    which a marker copied into a base clone satisfies trivially, since the copy
+    can simply be edited. Then `fr run start` would write the run file into the
+    base clone and every later step would run there: exactly the failure mode
+    §4.B's "a run is born in its workspace" exists to prevent, reached through
+    a file anyone can create.
+
+    - `worktree` (devcontainer or host-worktree) → must BE a linked worktree.
+    - `external` (a preparer-adopted container) → the toplevel match plus
+      container evidence, so a marker forged on a bare host never validates.
+    - anything else → fail closed.
+    """
+    mode = marker.get("mode")
+    if mode == "worktree":
+        if _is_linked_worktree(repo_root):
+            return None
+        return (
+            f"{repo_root} carries a `mode: worktree` isolation marker but is not a "
+            "linked git worktree — the marker is stale or was copied here"
+        )
+    if mode == "external":
+        if _container_evidence():
+            return None
+        return (
+            f"{repo_root} carries a `mode: external` isolation marker but there is no "
+            "container evidence (/.dockerenv, /run/.containerenv, "
+            "$KUBERNETES_SERVICE_HOST) — an external marker is a preparer's hand-off, "
+            "not something a bare host can claim"
+        )
+    return f"{repo_root} carries an isolation marker with unknown mode {mode!r}"
+
+
 class RunWorkspaceError(Exception):
     """No workspace could be given to a run being started. CLI maps it to exit 2."""
 
@@ -84,7 +156,8 @@ def ensure_run_workspace(repo_root: Path, branch: str) -> Path:
        it. This is the normal fr-goal case: the pipeline is already in
        isolation before a run exists. A marker naming a DIFFERENT branch is
        refused rather than used, since writing the run there would put it on
-       the wrong PR.
+       the wrong PR — and so is a marker whose `mode` the directory does not
+       corroborate (`_marker_mode_holds`).
     2. **A workspace already exists for `branch`** (recorded isolation state,
        worktree still on disk) — use it, without re-entering. `up` starts
        containers; "ensure" must not mean "restart".
@@ -101,6 +174,9 @@ def ensure_run_workspace(repo_root: Path, branch: str) -> Path:
                 f"start the run with --branch {recorded} or run `fr run start` from "
                 "outside the workspace"
             )
+        problem = _marker_mode_holds(repo_root, marker)
+        if problem is not None:
+            raise RunWorkspaceError(problem)
         return repo_root
 
     state = load_state(repo_root, branch)

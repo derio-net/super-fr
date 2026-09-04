@@ -15,23 +15,29 @@ description: >
 
 One operator touchpoint — the batched Q&A — from goal to reviewed PR, driven by a **workflow
 shape** (spec §4.A, `2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`): `fr run
-start <shape> --branch <b>` (defaults to `fr-goal`; a repo
-`docs/superpowers/workflows/<shape>.yaml` overrides the shipped one wholesale), then loop
-`fr run advance <run-id>`. **`start` enters isolation itself** and writes the run inside
-that workspace — the first action, before anything else ("start with X" changes the first
-work item, never the first action); run every later command from the workspace it prints. No
-devcontainer profile → pause for fr-init. `kind: cli` executes directly — exit code is the
-verdict, fix and re-`advance` on failure. `kind: agent` never executes itself: it prints a
-dispatch brief (skill/agent/needs/emits/tier/for_each) you fulfill per that step below, then
-`fr run resolve <run-id> --step <id> --state done|failed [--emitted name=path ...]`. `gate:
-operator` blocks until you resolve it (same command; a gated `cli` step then runs on the
-next `advance`). Blocked → stop, say what you tried, ask. Another shape, same mechanics;
-below narrates the shipped `fr-goal` shape.
+start <shape> --branch <b>` (defaults to `fr-goal`), then loop `fr run advance <run-id>`.
+**Shape lookup:** repo `docs/superpowers/workflows/<shape>.yaml` (overrides wholesale) →
+`$FR_SHIPPED_WORKFLOWS_DIR` → the installed `fr` wheel's own copy → the Claude Code
+marketplace clone — so shipped shapes work on a hermes pod or under OpenCode with no plugin
+installed. **`start` enters isolation itself** and writes the run inside that workspace — the
+first action, before anything else ("start with X" changes the first work item, never the
+first action); run every later command from the workspace it prints. No devcontainer profile
+→ pause for fr-init. `kind: cli` executes directly — exit code is the verdict, fix and
+re-`advance` on failure. `kind: agent` never executes itself: it prints a dispatch brief
+(skill/agent/needs/emits/tier/for_each) you fulfill per that step below, then `fr run resolve
+<run-id> --step <id> --state done|failed [--emitted name=path ...]` (each `name` must be one
+the step `emits`; a `spec`/`plan` path must exist and is stored repo-relative). `gate:
+operator` blocks until you resolve it (same command; a gated `cli` step then runs on the next
+`advance`). Blocked → stop, say what you tried, ask. Another shape, same mechanics; below
+narrates the shipped `fr-goal` shape.
 
-**Work already in flight when your `fr` changed under it?** `fr run adopt <plan-dir|spec>`
-reconstructs a cursor from what is on disk — completed phases included — so the plan joins the
-run model instead of being stranded without one. Offered, never forced: the migration prints
-the command (`fr migrate artifacts --yes --adopt` for all of them), and adopts nothing itself.
+**`fr` refused with "artifacts … must be migrated"?** Expected: a pod, CI and an agent's Bash
+tool are all non-interactive, where fr never migrates or commits by itself. Run `fr migrate
+artifacts --yes` yourself and continue — exempt from that gate, needs no TTY. **Work already
+in flight when your `fr` changed under it?** `fr run adopt <plan-dir|spec>` reconstructs a
+cursor from what is on disk — completed phases included — so the plan joins the run model
+instead of being stranded. Offered, never forced: the migration prints the command (`--yes
+--adopt` does all of them) and adopts nothing itself.
 
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
 

@@ -199,7 +199,7 @@ pull request: it returns after the merge and walks the operator through it.</p>
 <p>This is autonomous work, not blind work. <code>fr-goal</code> stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-36</code>). The reviews shown above are
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-32</code>, <code>:44-47</code>). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.</p>
 <h2>When it triggers</h2>
@@ -218,7 +218,7 @@ risks instead.</p>
 <p>Because the pipeline is a shape, the command also takes an optional shape name.
 <code>/fr-goal</code> runs the feature-delivery shape this article describes;
 <code>/fr-goal &lt;name&gt;</code> runs another one that the project or the plugin provides
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-29</code>). Most requests never need
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-32</code>). Most requests never need
 the argument, and nothing about the rest of this article changes when you use
 it: the machinery is the same, only the list of steps differs.</p>
 <p>The skill also recognizes <code>/goal</code> and natural-language requests such as "build
@@ -358,7 +358,7 @@ It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
 question set, with no more than four questions and recommended choices first.
 A deployed change may include a question about how you will verify it in the
-real environment (<code>plugins/super-fr/skills/fr-goal/SKILL.md:38-45</code>).</p>
+real environment (<code>plugins/super-fr/skills/fr-goal/SKILL.md:49-56</code>).</p>
 <p>This is the shape's one operator gate, and an unanswered batch is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
 decisions are batched rather than dripped out as repeated interruptions. When
@@ -422,8 +422,10 @@ expected path, not an unconditional promise of one conversation turn.</p>
 and why. The next step checks that document against both your answers and the
 existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning. The file lives at
-<code>docs/superpowers/specs/&lt;YYYY-MM-DD-slug&gt;-design.md</code>
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:47-53</code>).</p>
+<code>docs/superpowers/specs/&lt;YYYY-MM-DD-slug&gt;-design.md</code> — the path is
+<code>fr-brainstorming</code>'s, which <code>brainstorm</code> invokes
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:49-56</code>,
+<code>plugins/super-fr/skills/fr-brainstorming/SKILL.md</code>).</p>
 <p>The important promises also become <strong>acceptance tests</strong>: concrete statements of
 what a user or operator must be able to do when the feature is complete. For
 example, "a saved filter survives export and import" is acceptance; "a helper
@@ -439,7 +441,7 @@ during the spec review rather than asking for another approval
 <code>plugins/super-fr/skills/fr-plan/SKILL.md:79-84</code>).</p>
 <p>Not every promise can be automated immediately. Any remaining acceptance debt
 stays visible in the final pull request instead of being quietly described as
-done (<code>plugins/super-fr/skills/fr-goal/SKILL.md:93-103</code>).</p>
+done (<code>plugins/super-fr/skills/fr-goal/SKILL.md:104-114</code>).</p>
 <h3>4. Turn the design into a checkable plan (<code>plan</code> and <code>plan-review</code>)</h3>
 <p>The specification says what success means; the plan says how to get there.
 <code>fr-goal</code> invokes <code>fr-plan</code> to divide the work into phases and small steps. It
@@ -476,7 +478,7 @@ inside an automated step. <code>fr-goal</code> then decides where that phase bel
 and the operator performs it and records a completion note on the same branch.
 Front-loading is reserved for genuine prerequisites; then the manual
 instructions are themselves the first deliverable
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:55-63</code>).</p>
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:69-74</code>).</p>
 <h3>6. Build, test, and review in a loop (<code>implement</code> and <code>review</code>)</h3>
 <p>Now the central loop from the opening diagram begins. The shape says this step
 runs once per plan phase, so the phases are worked through in dependency order,
@@ -491,7 +493,7 @@ from one phase to the next: findings, decisions, and discoveries are written
 down rather than being remembered, which is what makes a phase handover
 survivable at all. Progress is recorded step by step, and acceptance rows are
 updated only when there is honest test evidence
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:70-84</code>,
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:81-95</code>,
 <code>plugins/super-fr/skills/fr-execute/SKILL.md:79-82</code>).</p>
 <p>At each completed phase, or after all implementation for a small plan, the
 agent reviews the spec, plan, and code together. It fixes every valid finding
@@ -499,12 +501,12 @@ with tests. It may reject a finding only with explicit, factual reasoning;
 silent dismissal is not allowed. Each finding is recorded as open, fixed, or
 refuted, and that durable list — not anyone's memory of the review — is what
 the pull-request description is later written from
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:86-91</code>).</p>
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:97-102</code>).</p>
 <h3>7. Keep delivery in draft until the checks pass (<code>deliver</code>)</h3>
 <p>The agent opens one <strong>draft pull request</strong>, a visible change that GitHub marks as
 not ready to merge. It remains a draft while reviews and fixes continue. Only
 after the full test suite and plan checks pass does <code>fr-goal</code> mark it ready for
-your review (<code>plugins/super-fr/skills/fr-goal/SKILL.md:93-103</code>).</p>
+your review (<code>plugins/super-fr/skills/fr-goal/SKILL.md:104-114</code>).</p>
 <p>This ordering follows a recurring failure: implementers opened mergeable PRs
 before orchestration review, operators merged them, and later fixes were pushed
 to branches whose PRs were already closed. The draft state, a merged-PR push
@@ -536,14 +538,14 @@ part, records the result, and continues until the plan passes or a failure
 requires recovery. It then reports any remaining acceptance debt, confirms plan
 completion, archives the plan, its journal, and its run record through a
 housekeeping PR, and tears down isolation or lets garbage collection reap it
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:105-109</code>).</p>
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:116-120</code>).</p>
 <h3>When one goal spans several repositories</h3>
 <p>The delivery unit is still one repository: one workspace, one plan, one branch,
 and one PR. A coordinating spec may cover several repositories, but <code>fr-goal</code>
 locates each checkout and assigns one isolated agent per other repository, each
 running this same pipeline from planning onward in its own repo. Dependencies
 between repositories live in the spec and PR order, not in a plan phase's local
-<code>depends_on</code> field (<code>plugins/super-fr/skills/fr-goal/SKILL.md:47-53</code>).</p>
+<code>depends_on</code> field (<code>plugins/super-fr/skills/fr-goal/SKILL.md:58-64</code>).</p>
 <p>The shape decides the granularity at which its work is handed out, by declaring
 one of three units: a whole run as a single item, which is what the shipped
 shape does; one item per plan phase; or one item per target repository of a

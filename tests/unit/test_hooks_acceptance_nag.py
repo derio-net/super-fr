@@ -109,3 +109,42 @@ def test_hook_registered_for_session_start() -> None:
     session_start = hooks["hooks"].get("SessionStart", [])
     commands = [h["command"] for entry in session_start for h in entry.get("hooks", [])]
     assert any("fr-acceptance-nag.sh" in c for c in commands)
+
+
+def test_a_stale_artifact_refusal_is_reported_not_swallowed(tmp_path, monkeypatch):
+    """review r5-c5: `|| exit 0` swallowed EVERY failure, so the nag simply
+    vanished when `fr` refused over stale artifacts — silence at the exact
+    moment the operator most needed to know why."""
+    import json
+    import subprocess
+
+    repo = tmp_path / "repo"
+    (repo / "docs" / "acceptance").mkdir(parents=True)
+    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: []\n")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_fr = bin_dir / "fr"
+    fake_fr.write_text(
+        "#!/bin/sh\n"
+        "echo 'fr: artifacts in . were written for a different fr and must be "
+        "migrated before this command can run.' >&2\n"
+        "exit 2\n"
+    )
+    fake_fr.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    done = subprocess.run(
+        ["bash", str(SCRIPT)],
+        input=json.dumps({"cwd": str(repo)}),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "acceptance nag skipped: artifacts stale" in done.stdout

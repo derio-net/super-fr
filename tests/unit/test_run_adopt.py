@@ -22,6 +22,7 @@ Two properties matter as much as the table itself:
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -49,7 +50,9 @@ BRANCH = "feat/widget-machinery"
 
 
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
+    done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    if done.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} failed: {done.stderr.strip()}")
 
 
 def _repo(tmp_path: Path, repo_root: Path) -> tuple[Path, Path]:
@@ -71,6 +74,25 @@ def _repo(tmp_path: Path, repo_root: Path) -> tuple[Path, Path]:
         shipped / "fr-goal.yaml",
     )
     return tmp_path, shipped
+
+
+def _as_linked_worktree(repo: Path) -> Path:
+    """Move `repo`'s superpowers tree into a REAL linked worktree and mark it.
+
+    `fr run start` corroborates the marker's `mode` (review r5-e3):
+    `mode: worktree` means "this IS a linked worktree", checked structurally
+    with `git rev-parse --git-dir/--git-common-dir`. A marker dropped into a
+    plain checkout is precisely the forgery that check refuses, so a fixture
+    that needs `fr run start` has to be the real thing.
+    """
+    # Sibling of the test's own tmp dir, named after it: pytest tmp roots are
+    # shared between tests in a run, so a fixed name collides.
+    wt = repo.parent.resolve() / f"{repo.name}-fr-worktree"
+    _git(repo, "worktree", "add", "-q", "-b", BRANCH.replace("/", "-") + "-wt", str(wt))
+    (wt / ".fr-isolation").write_text(
+        json.dumps({"toplevel": str(wt), "branch": BRANCH, "mode": "worktree"})
+    )
+    return wt
 
 
 def _write_spec(repo: Path, rel: str = SPEC_REL) -> str:
@@ -572,3 +594,223 @@ def test_migrate_artifacts_adopt_without_yes_is_a_dry_run(tmp_path: Path, repo_r
     assert result.exit_code == 0, result.output
     assert "would adopt 1" in result.output
     assert not (repo / "docs" / "superpowers" / "runs").exists()
+
+
+# --- review r5-b1/b2: `--run-id` and absolute emitted paths ---------------
+
+
+def test_adopt_refuses_a_traversing_run_id(tmp_path: Path, repo_root: Path) -> None:
+    """`fr run start` and `fr run adopt` are the two writers of a run file,
+    so both need the gate — fixing only one leaves the traversal open."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+
+    with pytest.raises(AdoptError, match="must match"):
+        adopt_run(repo, plan_dir, branch=BRANCH, run_id="../../../escaped", shipped_root=shipped)
+
+    assert list(tmp_path.rglob("escaped.yaml")) == []
+
+
+def test_adopt_refuses_a_run_id_with_a_slash(tmp_path: Path, repo_root: Path) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+
+    with pytest.raises(AdoptError, match="must match"):
+        adopt_run(repo, plan_dir, branch=BRANCH, run_id="weird/id", shipped_root=shipped)
+
+
+def _worktree_with_plan(tmp_path: Path, repo_root: Path, *, complete: int = 0):
+    """A base repo carrying a plan, plus the linked worktree a run is born in."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    _write_plan(repo, phases=2, complete=complete)
+    _commit_all(repo)
+    wt = _as_linked_worktree(repo)
+    return wt, shipped, wt / "docs" / "superpowers" / "plans" / PLAN_SLUG
+
+
+def _drive_to_plan_step(wt: Path, shipped: Path, plan_dir: Path) -> None:
+    """`fr run start` … `resolve plan --emitted plan=<ABSOLUTE path>`."""
+    assert (
+        _invoke(
+            wt, shipped, ["run", "start", "fr-goal", "--branch", BRANCH, "--run-id", "r-first"]
+        ).exit_code
+        == 0
+    )
+    for step in ("brainstorm", "spec-review"):
+        assert _invoke(wt, shipped, ["run", "advance", "r-first"]).exit_code == 0
+        assert (
+            _invoke(
+                wt, shipped, ["run", "resolve", "r-first", "--step", step, "--state", "done"]
+            ).exit_code
+            == 0
+        )
+    assert _invoke(wt, shipped, ["run", "advance", "r-first"]).exit_code == 0
+    resolved = _invoke(
+        wt,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r-first",
+            "--step",
+            "plan",
+            "--state",
+            "done",
+            # ABSOLUTE — what an agent following SKILL.md passes.
+            "--emitted",
+            f"plan={plan_dir}",
+        ],
+    )
+    assert resolved.exit_code == 0, resolved.output
+
+
+def test_adopt_does_not_create_a_second_run_for_a_plan_recorded_absolutely(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """Live repro of r5-b2: a run whose `emitted.plan` was stored as an
+    ABSOLUTE path was invisible to `find_run_for_plan`, so `fr run adopt`
+    happily minted a SECOND run for the same plan — and `fr archive` would
+    have left the first behind."""
+    wt, shipped, plan_dir = _worktree_with_plan(tmp_path, repo_root)
+
+    _drive_to_plan_step(wt, shipped, plan_dir)
+
+    plan_rel = Path("docs/superpowers/plans") / PLAN_SLUG
+    assert find_run_for_plan(wt, plan_rel) == "r-first"
+    assert plan_dir not in adoptable_plans(wt)
+
+
+def test_archive_moves_a_run_whose_plan_was_emitted_absolutely(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """The other half of the same no-op: `fr archive` locates the run by
+    `emitted.plan`, so an absolute value left the run file in `runs/` forever
+    while its plan moved to `implemented/`."""
+    wt, shipped, plan_dir = _worktree_with_plan(tmp_path, repo_root, complete=2)
+
+    _drive_to_plan_step(wt, shipped, plan_dir)
+    _commit_all(wt)
+
+    archive_plan_dir(wt, plan_dir)
+
+    assert not run_path(wt, "r-first").exists()
+    assert (wt / "docs" / "superpowers" / "implemented" / "runs" / "r-first.yaml").exists()
+
+
+# --- review r5-e4: what `fr run adopt` accepts ---------------------------
+
+
+def test_adopt_refuses_a_plan_outside_this_repos_plans_directory(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """The argument names a plan folder; anything else is a typo or a
+    traversal, and inferring a cursor from it produces a run about nothing."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    stray = tmp_path / "elsewhere" / PLAN_SLUG
+    stray.mkdir(parents=True)
+    (stray / "_meta.yaml").write_text(
+        f"schema_version: 2\nplan: {PLAN_SLUG}\ntarget_repo: derio-net/super-fr\n"
+        "created: '2019-03-04'\n"
+    )
+
+    with pytest.raises(AdoptError, match="docs/superpowers/plans"):
+        adopt_run(repo, stray, branch=BRANCH, shipped_root=shipped)
+
+
+def test_adopt_refuses_an_archived_plan(tmp_path: Path, repo_root: Path) -> None:
+    """Archived work is not in flight — a cursor over it is noise, and
+    `implemented/` is frozen by definition (2026-08-30 spec §2)."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    archived = repo / "docs" / "superpowers" / "implemented" / "plans" / PLAN_SLUG
+    archived.mkdir(parents=True)
+    (archived / "_meta.yaml").write_text(
+        f"schema_version: 2\nplan: {PLAN_SLUG}\ntarget_repo: derio-net/super-fr\n"
+        "created: '2019-03-04'\n"
+    )
+    (archived / "01.yaml").write_text(_phase_yaml(1, ticked=False))
+
+    with pytest.raises(AdoptError, match="archived"):
+        adopt_run(repo, archived, branch=BRANCH, shipped_root=shipped)
+
+
+def test_adopt_refuses_a_traversing_plan_argument(tmp_path: Path, repo_root: Path) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=1)
+    traversal = repo / "docs" / "superpowers" / "plans" / ".." / ".." / ".." / plan_dir.name
+
+    with pytest.raises(AdoptError):
+        adopt_run(repo, traversal, branch=BRANCH, shipped_root=shipped)
+
+
+def test_adopt_is_idempotent_and_names_the_existing_run(tmp_path: Path, repo_root: Path) -> None:
+    """A plan with a run already has a cursor. Minting a second one splits the
+    control log in two — and `fr archive` moves only one of them."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+
+    first = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
+
+    with pytest.raises(AdoptError, match=first.run):
+        adopt_run(repo, plan_dir, branch=BRANCH, run_id="second", shipped_root=shipped)
+    assert not run_path(repo, "second").exists()
+
+
+def test_adopt_refuses_a_pr_in_a_different_repo_than_the_plans_target(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """`--pr` says "this PR delivers this plan". A PR in another repo does
+    not, and recording it would make `deliver` point at someone else's work."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=1, complete=1)
+
+    with pytest.raises(AdoptError, match="derio-net/super-fr"):
+        adopt_run(
+            repo,
+            plan_dir,
+            branch=BRANCH,
+            pr_url="https://github.com/other-org/other-repo/pull/9",
+            shipped_root=shipped,
+        )
+
+
+def test_a_plan_whose_phases_are_all_manual_is_still_in_flight(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """`[manual]` is a routing attribute, not a lifecycle state (2026-08-14
+    §4.C): a human-only phase is still queued, then done. Treating such a plan
+    as finished would deny a cursor to the work most likely to need one."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+    for n in (1, 2):
+        phase = plan_dir / f"{n:02d}.yaml"
+        phase.write_text(phase.read_text().replace("tag: agentic", "tag: manual"))
+
+    state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
+
+    assert state.cursor == "implement"
+
+
+def test_adopt_refuses_a_shape_missing_the_inferred_step(tmp_path: Path, repo_root: Path) -> None:
+    """Adoption lands the cursor on a step NAME; a shape without it cannot
+    carry the run, and guessing a nearby step would put the cursor somewhere
+    the operator never chose."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+    (shipped / "no-implement.yaml").write_text(
+        "workflow: no-implement\nschema: 1\nunit: run\n"
+        "steps:\n  - id: brainstorm\n    kind: agent\n    emits: [spec]\n"
+        "  - id: plan\n    kind: agent\n    needs: [spec]\n    emits: [plan]\n"
+    )
+
+    with pytest.raises(AdoptError, match="implement"):
+        adopt_run(repo, plan_dir, branch=BRANCH, workflow="no-implement", shipped_root=shipped)

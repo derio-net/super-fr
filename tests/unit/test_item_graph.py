@@ -501,3 +501,52 @@ def test_a_wrong_source_type_still_raises_even_with_a_sink(tmp_path: Path) -> No
     spec = parse_spec(_spec_file(tmp_path, "| P | derio-net/x | plans/p | — |"))
     with pytest.raises(TypeError):
         build_items(PHASE_SHAPE, spec, failures=[])
+
+
+# ── the reserved spec slug goes through the sink (review r5-a4) ────────
+
+
+def test_a_spec_named_run_accumulates_instead_of_raising_through_tick(tmp_path: Path) -> None:
+    """`item_id` rejects the slug `run` — it collides with the run-item
+    form. That call sat OUTSIDE the `failures` sink, so a spec file named
+    `run.md` raised straight out of `build_items` and, since
+    `_eligible_items` calls it outside any `try`, out of `tick` itself."""
+    from fr.spec import parse_spec
+    from fr_dispatch.item_graph import build_items
+
+    spec_dir = tmp_path / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True)
+    path = spec_dir / "run.md"
+    path.write_text(
+        "# Run\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+        f"| p1 | `{REPO}` | p1 | — |\n"
+    )
+    spec = parse_spec(path)
+
+    failures: list[str] = []
+    items = build_items(SPEC_SHAPE, spec, repo=REPO, failures=failures)
+
+    assert items == []
+    assert len(failures) == 1
+    assert "run" in failures[0]
+
+
+def test_without_a_sink_the_reserved_slug_still_raises(tmp_path: Path) -> None:
+    import pytest
+    from fr.spec import parse_spec
+    from fr_dispatch.item_graph import build_items
+
+    spec_dir = tmp_path / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True)
+    path = spec_dir / "run.md"
+    path.write_text(
+        "# Run\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+        f"| p1 | `{REPO}` | p1 | — |\n"
+    )
+
+    with pytest.raises(ValueError, match="reserved"):
+        build_items(SPEC_SHAPE, parse_spec(path), repo=REPO)

@@ -922,3 +922,305 @@ def test_a_run_unit_shape_with_no_run_id_fails_the_tick_not_the_cron_iteration()
     assert result.synced == 0
     assert "run_id" in result.failures[0]
     assert m.heartbeats == 1  # the iteration completed; the daemon lives
+
+
+# ── a phase item with no readable number fails CLOSED (review r5-a3) ───
+
+
+def _broken_phase_item(plan, repo: str, issue_number: int):
+    """A `unit: phase` item whose payload carries no usable `phase`.
+
+    The shape `_phase_number` returned `None` for — which
+    `_eligible_items` then read as "not a phase item" and waved past the
+    tracker gate entirely.
+    """
+    from fr_dispatch.work_item import WorkItem, item_id, parent_id
+
+    iid = item_id(repo, "fixture-spec-design", plan.meta.plan, phase=1)
+    return WorkItem(
+        id=iid,
+        unit="phase",
+        workflow="fr-goal",
+        repo=repo,
+        parent=parent_id(iid),
+        inputs=(),
+        payload={"issue_number": issue_number},  # no "phase"
+        tracking=f"https://github.com/{repo}/issues/{issue_number}",
+    )
+
+
+def test_a_phase_item_whose_number_is_unreadable_is_not_waved_past_the_gate(monkeypatch) -> None:
+    """The Issue already carries the dispatch stamp, so the tracker gate
+    must refuse this item — it has been handed to a runner once already.
+
+    `_phase_number` returning `None` made `_eligible_items` treat the item
+    as a non-phase one — the run/spec branch, which is deliberately
+    unfiltered — so an already-dispatched phase went out a second time.
+    Patched to defeat the id fallback as well, because the point is what
+    happens when the number cannot be recovered AT ALL.
+    """
+    import fr_dispatch
+
+    plan, repo, issue_number = _one_phase_plan()
+    gh = FakeGhClient()
+    gh.add_issue(repo, issue_number, state="OPEN", labels={"fr:ready", "fr:synced", "phase:1"})
+    broken = _broken_phase_item(plan, repo, issue_number)
+    monkeypatch.setattr(fr_dispatch, "build_items", lambda *a, **k: [broken])
+    runner = FakeRunner()
+
+    result = fr_dispatch.tick(plan, gh, runner)
+
+    assert runner.dispatched == []
+    assert result.synced == 0
+
+
+def test_an_unrecoverable_phase_number_is_reported_not_silently_dispatched(
+    monkeypatch,
+) -> None:
+    """Neither payload nor id yields a number: the item is skipped AND the
+    reason is accumulated, because a silent drop is the other half of the
+    same bug."""
+    from dataclasses import replace as _replace
+
+    import fr_dispatch
+
+    plan, repo, issue_number = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (issue_number,))
+    nameless = _replace(_broken_phase_item(plan, repo, issue_number), id=f"{repo}/a/b/phase/x")
+    monkeypatch.setattr(fr_dispatch, "build_items", lambda *a, **k: [nameless])
+    runner = FakeRunner()
+
+    result = fr_dispatch.tick(plan, gh, runner)
+
+    assert runner.dispatched == []
+    assert any("cannot determine the phase number" in f for f in result.failures), result.failures
+
+
+def test_the_number_is_recovered_from_the_item_id_when_the_payload_lacks_it(
+    monkeypatch,
+) -> None:
+    """Failing closed must not mean failing blind: the id already carries
+    `…/phase/<n>`, so a queued phase is still dispatched."""
+    import fr_dispatch
+
+    plan, repo, issue_number = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (issue_number,))
+    broken = _broken_phase_item(plan, repo, issue_number)
+    monkeypatch.setattr(fr_dispatch, "build_items", lambda *a, **k: [broken])
+    runner = FakeRunner()
+
+    result = fr_dispatch.tick(plan, gh, runner)
+
+    assert [i.id for i in runner.dispatched] == [broken.id]
+    assert result.synced == 1
+
+
+def test_phase_number_reads_the_id_before_giving_up() -> None:
+    from fr_dispatch import _phase_number
+
+    plan, repo, issue_number = _one_phase_plan()
+
+    assert _phase_number(_broken_phase_item(plan, repo, issue_number)) == 1
+
+
+# ── the whole blocker chain is wrapped, not just preflight (r5-a4) ─────
+
+
+class _V1ShapedRunner:
+    """A third-party runner written against Runner v1: no `capabilities`.
+
+    v2 added the attribute (§4.F). A registered runner that has not caught
+    up is exactly what `tick`'s per-item failure doctrine exists for — and
+    `_capability_blocker` reading `runner.capabilities` outside any `try`
+    turned it into an `AttributeError` escaping `tick`.
+    """
+
+    name = "v1"
+
+    def preflight(self, items: Any) -> str | None:
+        return None
+
+    def refresh(self) -> None:
+        return None
+
+    def slot_budget(self) -> int:
+        return 10
+
+    def existing_dispatches(self, items: Any) -> set[str]:
+        return set()
+
+    def can_dispatch(self, item: Any) -> bool:
+        return True
+
+    def dispatch(self, item: Any) -> None:
+        return None
+
+
+def test_a_runner_without_capabilities_fails_the_tick_cleanly() -> None:
+    import fr_dispatch
+
+    plan, repo, issue_number = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (issue_number,))
+
+    result = fr_dispatch.tick(plan, gh, _V1ShapedRunner(), required_capabilities=frozenset({"git"}))
+
+    assert result.synced == 0
+    assert result.errors == 1
+    assert any("capability check raised" in f for f in result.failures), result.failures
+
+
+def test_a_raising_tracker_check_is_a_blocker_not_a_crash() -> None:
+    import fr_dispatch
+
+    class _AngryTracker:
+        name = "angry"
+
+        def supports(self, state: Any) -> bool:
+            raise RuntimeError("transitions endpoint down")
+
+    plan, repo, issue_number = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (issue_number,))
+    runner = FakeRunner()
+
+    result = fr_dispatch.tick(
+        plan,
+        gh,
+        runner,
+        tracker=_AngryTracker(),  # type: ignore[arg-type]
+        tracker_instance="derio-net/x",
+        required_tracker_states=frozenset({"queued"}),
+    )
+
+    assert runner.dispatched == []
+    assert any("tracker state check raised" in f for f in result.failures), result.failures
+
+
+# =========================================================================
+# review r5-e12: a MIXED-unit item list through the real tick
+# =========================================================================
+
+
+class _UnitLimitedRunner(FakeRunner):
+    """A runner that takes phases only — the shape both shipped adapters have
+    after review r5-a2, and the shape `protocols.Runner.can_dispatch`
+    documents ("a runner that only handles some units can say so")."""
+
+    def __init__(self, **kw: Any) -> None:
+        super().__init__(**kw)
+        self.existing_dispatches_seen: list[Any] = []
+
+    def can_dispatch(self, item: Any) -> bool:
+        self.can_dispatch_seen.append(item)
+        return item.unit == "phase"
+
+    def existing_dispatches(self, items: Any) -> set[str]:
+        self.existing_dispatches_seen = list(items)
+        return _titles_to_ids(items)
+
+
+def _titles_to_ids(items: Any) -> set[str]:
+    """`fr_vk.dedup.map_titles_to_item_ids`, exercised through the framework.
+
+    Its inversion reads `item.payload["issue_number"]`, so a mixed list is
+    exactly where a `KeyError` would live."""
+    from fr_vk.dedup import map_titles_to_item_ids
+
+    return map_titles_to_item_ids(set(), items)
+
+
+def _mixed_items(plan, repo: str, issue_number: int):
+    from fr_dispatch.work_item import WorkItem, item_id, parent_id, run_item_id
+
+    phase_iid = item_id(repo, "fixture-spec-design", plan.meta.plan, phase=1)
+    phase = WorkItem(
+        id=phase_iid,
+        unit="phase",
+        workflow="fr-goal",
+        repo=repo,
+        parent=parent_id(phase_iid),
+        inputs=(),
+        payload={"plan": plan, "phase": plan.phases[0], "issue_number": issue_number},
+        tracking=f"https://github.com/{repo}/issues/{issue_number}",
+    )
+    run = WorkItem(
+        id=run_item_id(repo, "2026-08-31-feat-x"),
+        unit="run",
+        workflow="research",
+        repo=repo,
+        parent=None,
+        inputs=(),
+        payload={"run_id": "2026-08-31-feat-x"},  # no `issue_number`
+        tracking=None,
+    )
+    spec = WorkItem(
+        id=item_id(repo, "some-spec"),
+        unit="spec",
+        workflow="rollout",
+        repo=repo,
+        parent=None,
+        inputs=(),
+        payload={},  # no `issue_number` either
+        tracking=None,
+    )
+    return [phase, run, spec]
+
+
+def test_a_mixed_unit_list_does_not_keyerror_on_issue_number(monkeypatch) -> None:
+    """`existing_dispatches` inverts board state via `item.payload
+    ["issue_number"]`. A run- or spec-unit item has none; reaching for it with
+    `[...]` instead of `.get(...)` would take the whole tick down."""
+    import fr_dispatch
+
+    plan, repo, issue_number = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (issue_number,))
+    items = _mixed_items(plan, repo, issue_number)
+    monkeypatch.setattr(fr_dispatch, "build_items", lambda *a, **k: items)
+    runner = _UnitLimitedRunner()
+
+    result = fr_dispatch.tick(plan, gh, runner)
+
+    # Only the phase item is dispatched; neither non-phase item raises.
+    assert [i.unit for i in runner.dispatched] == ["phase"]
+    assert result.synced == 1
+    # And the non-phase items were offered to `existing_dispatches` unharmed.
+    assert {i.unit for i in runner.existing_dispatches_seen} == {"phase", "run", "spec"}
+
+
+def test_the_unit_refusal_runs_before_the_backend_is_asked_to_dispatch(monkeypatch) -> None:
+    """`can_dispatch` is the gate. A refused item must never reach
+    `dispatch`, which is where the `KeyError: 'plan'` lived."""
+    import fr_dispatch
+
+    plan, repo, issue_number = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (issue_number,))
+    items = _mixed_items(plan, repo, issue_number)
+    monkeypatch.setattr(fr_dispatch, "build_items", lambda *a, **k: items)
+    runner = _UnitLimitedRunner()
+
+    result = fr_dispatch.tick(plan, gh, runner)
+
+    dispatched_ids = {i.id for i in runner.dispatched}
+    for item in items:
+        if item.unit != "phase":
+            assert item.id not in dispatched_ids
+            assert any(item.id in f for f in result.failures), result.failures
+
+
+def test_map_titles_to_item_ids_survives_a_mixed_list() -> None:
+    """Unit-level, so the guarantee does not depend on tick's shape."""
+    from fr_vk._cardref import DISPATCH_BACKEND, TAG_FOR_BACKEND
+    from fr_vk.dedup import map_titles_to_item_ids
+
+    plan, repo, issue_number = _one_phase_plan()
+    items = _mixed_items(plan, repo, issue_number)
+    tag = TAG_FOR_BACKEND[DISPATCH_BACKEND]
+
+    resolved = map_titles_to_item_ids({f"{tag}#{issue_number}: [{repo}]"}, items)
+
+    assert resolved == {items[0].id}

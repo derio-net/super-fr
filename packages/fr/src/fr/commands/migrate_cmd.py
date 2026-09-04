@@ -145,16 +145,33 @@ def artifacts_cmd(
     and reports what it did. Archived artifacts under `implemented/` are never
     touched — they record what shipped.
 
-    Dry-run by default, like every other fr mutation. Committing is a separate
-    concern (spec §3.D); this verb only rewrites files.
+    Dry-run by default, like every other fr mutation. **This verb never
+    commits** (spec §3.D; review r5-e9): committing is the CLI-entry gate's
+    job, where fr can see that it is interactive, on a branch, and not racing
+    another writer. Here the operator typed the command, so it applies
+    everywhere the gate would refuse — the default branch, a detached HEAD, a
+    pod, CI — and prints exactly what to commit instead of committing it.
+
+    It does take the same advisory lock the gate does (review r5-e7): an
+    operator running this while an agent's `fr` is mid-migration would
+    otherwise both rewrite the same files.
     """
+    from fr.artifacts.atomic import migration_lock
+    from fr.artifacts.commit import lock_path
     from fr.artifacts.runner import MigrationChainError, run_migrations
     from fr.commands.common import resolve_repo_root
 
     repo_root = resolve_repo_root()
     require_migrated_layout(repo_root)
     try:
-        report = run_migrations(repo_root, dry_run=not yes)
+        with migration_lock(lock_path(repo_root)) as acquired:
+            if not acquired:
+                err_console.print(
+                    "[red]another fr process is migrating this repository right now.[/red]\n"
+                    "Re-run once it finishes; nothing was written."
+                )
+                raise typer.Exit(2)
+            report = run_migrations(repo_root, dry_run=not yes)
     except MigrationChainError as e:
         err_console.print(f"[red]migration error:[/red] {e}")
         raise typer.Exit(2) from e
@@ -175,7 +192,16 @@ def artifacts_cmd(
     if not yes:
         typer.echo(f"\n{len(report.applied)} to migrate (dry-run; pass --yes to apply)")
     else:
-        typer.echo(f"\n{len(report.applied)} migrated.")
+        typer.echo(f"\n{len(report.applied)} migrated, not committed.")
+        if report.changed_paths:
+            # Says exactly what to commit (review r5-e9). This verb applies in
+            # contexts the automatic gate refuses — on `main`, on a detached
+            # HEAD, in a pod — precisely because the operator asked; the
+            # corollary is that they, not fr, decide when it lands in history.
+            typer.echo("Commit them yourself when you are ready:")
+            rels = " ".join(_rel(p, repo_root) for p in report.changed_paths)
+            typer.echo(f"  git add -- {rels}")
+            typer.echo("  git commit -m 'chore(fr): migrate artifacts'")
     _offer_adoption(repo_root, adopt=adopt, yes=yes)
 
     if report.failed:

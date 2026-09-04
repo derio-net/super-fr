@@ -335,3 +335,81 @@ def test_planmeta_rejects_extra_field():
                 "extra_field": "boom",
             }
         )
+
+
+# ── the fr_version floor must be reachable by the fr it is aimed at ────
+
+
+def test_the_version_floor_is_reported_before_an_unknown_key_kills_the_parse(tmp_path):
+    """Review r5-b4, the whole point of a floor.
+
+    `PlanMeta` is `extra="forbid"`, so a plan carrying a key this fr does not
+    know is a hard parse failure. Validating the schema BEFORE the version
+    gate meant the upgrade message — the plan's way of telling an older fr
+    not to try — was never printed: fr 3.x meeting 4.0.0's `workflow:` key
+    died on pydantic's `extra_forbidden` instead. Simulated here with a key
+    no fr knows, plus a floor no installed fr satisfies.
+    """
+    import pytest
+    from fr.parser import PlanSchemaError, parse
+
+    plan_dir = tmp_path / "p"
+    plan_dir.mkdir()
+    (plan_dir / "_meta.yaml").write_text(
+        "schema_version: 2\n"
+        "plan: 2026-08-31-from-the-future\n"
+        "target_repo: acme/demo\n"
+        "created: 2026-08-31\n"
+        'fr_version: ">=99.0.0,<100.0.0"\n'
+        "a_key_from_a_later_fr: yes\n"
+    )
+
+    with pytest.raises(PlanSchemaError) as e:
+        parse(plan_dir)
+
+    assert "requires fr_version >=99.0.0,<100.0.0" in str(e.value)
+    assert "To upgrade" in str(e.value)
+    assert "extra_forbidden" not in str(e.value)
+
+
+def test_an_unknown_key_still_fails_when_the_version_gate_passes(tmp_path):
+    """The gate moved earlier; it did not become a substitute for schema
+    validation."""
+    import pytest
+    from fr.parser import PlanSchemaError, parse
+
+    plan_dir = tmp_path / "p"
+    plan_dir.mkdir()
+    (plan_dir / "_meta.yaml").write_text(
+        "schema_version: 2\n"
+        "plan: 2026-08-31-ok\n"
+        "target_repo: acme/demo\n"
+        "created: 2026-08-31\n"
+        'fr_version: ">=4.0.0,<5.0.0"\n'
+        "a_key_from_a_later_fr: yes\n"
+    )
+
+    with pytest.raises(PlanSchemaError, match="_meta.yaml"):
+        parse(plan_dir)
+
+
+def test_enforce_fr_version_false_still_skips_the_gate_entirely(tmp_path):
+    """`fr.spec.compute_status` reads archived plans with the gate off; that
+    must stay true now that the gate runs earlier."""
+    import pytest
+    from fr.parser import PlanSchemaError, parse
+
+    plan_dir = tmp_path / "p"
+    plan_dir.mkdir()
+    (plan_dir / "_meta.yaml").write_text(
+        "schema_version: 2\n"
+        "plan: 2026-08-31-archived\n"
+        "target_repo: acme/demo\n"
+        "created: 2026-08-31\n"
+        'fr_version: ">=99.0.0,<100.0.0"\n'
+    )
+
+    plan = parse(plan_dir, enforce_fr_version=False)
+    assert plan.meta.plan == "2026-08-31-archived"
+    with pytest.raises(PlanSchemaError):
+        parse(plan_dir)

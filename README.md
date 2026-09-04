@@ -246,7 +246,7 @@ Maintenance:
 | `fr init` | Devcontainer profile scaffolding (`scaffold`) |
 | `fr repos` | Instrument locally-checked-out repos with a `plan-config.yaml` (`sync`; never clones) |
 | `fr repair` | Normalize stale plan/spec refs **and strip dead `plan-config.yaml` keys** (dry-run; `--yes` to write) |
-| `fr migrate` | Plan format migration (v1→v2; also strips dead `plan-config.yaml` keys) |
+| `fr migrate` | `v1-to-v2` (plan format; also strips dead `plan-config.yaml` keys), `dirs`, and `artifacts` — bring every live artifact up to the version this `fr` writes (dry-run; `--yes` to apply, `--adopt` to give in-flight plans a run cursor) |
 | `fr undispatch` | Close a plan's tracking Issues and null the fields |
 | `fr validate` | `artifacts [--kind K]` — structural validation of every live artifact against the version this `fr` writes (read-only; CI-gated) |
 | `fr pickup` | Output phase scope (markdown) for an agent |
@@ -294,6 +294,24 @@ fr workflow check <shape>           # schema/graph validation (CI tripwire on ev
 Run state is git-tracked (`docs/superpowers/runs/<run-id>.yaml`, a sibling of
 `journals/`) and archives alongside the plan it produced. See spec
 `2026-08-14-workflow-shapes-and-workitem-dispatch-design.md` §4.A/§4.B.
+
+**Where a shape name resolves**, in order — first hit wins:
+
+1. `docs/superpowers/workflows/<name>.yaml` — this repo's override, wholesale;
+2. `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml` — the explicit escape, for tests and
+   for harnesses that are not Claude Code;
+3. the installed `fr` wheel's own copy (`fr/workflows/`) — ships **with** the
+   `fr` that runs the shape, so the two cannot disagree;
+4. `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows/`
+   — the Claude Code plugin clone.
+
+Source 3 is why `fr run start fr-goal` and `fr workflow check --all` work on a
+host with **no** Claude Code marketplace clone (a hermes pod, an OpenCode
+consumer, a bare `uv tool install fr`); it deliberately outranks the clone, so
+upgrading `fr` without re-running `install.sh` cannot leave you silently
+running a stale shape. `fr workflow check --all` **exits non-zero** when no
+shape is discoverable anywhere — "nothing installed" is a broken installation,
+not a clean bill of health.
 
 ### Label lifecycle
 

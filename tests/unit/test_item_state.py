@@ -333,3 +333,21 @@ def test_github_manual_label_is_projected_from_the_decision_not_the_phase_tag() 
     assert _lifecycle_label_for_decision(ItemDecision(state="done", routable=False)) is None
     routable = _lifecycle_label_for_decision(ItemDecision(state="queued", routable=True))
     assert routable is not None and routable.name == "fr:ready"
+
+
+def test_a_two_label_projection_is_refused_rather_than_silently_narrowed(monkeypatch) -> None:
+    """`project_github` returns a SET so a future state can need two labels.
+    The Issue lifecycle carries exactly one, and `next(iter(...))` would
+    have picked an arbitrary member of that set — a lifecycle label chosen
+    by hash order, on a surface where the wrong label means the wrong
+    dispatch decision (review r5-a4)."""
+    import pytest
+    from fr import render as render_mod
+    from fr.item_state import ItemDecision
+    from fr.labels import FR_BLOCKED, FR_READY
+
+    two_labels = frozenset({FR_READY, FR_BLOCKED})
+    monkeypatch.setattr(render_mod, "project_github", lambda state: two_labels)
+
+    with pytest.raises(AssertionError, match="projects 2 GitHub labels"):
+        render_mod._lifecycle_label_for_decision(ItemDecision(state="queued", routable=True))

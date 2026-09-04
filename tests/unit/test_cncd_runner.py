@@ -150,3 +150,46 @@ def test_refresh_is_a_noop():
     from fr_cncd import CncdRunner
 
     CncdRunner(base_url="http://x").refresh()  # must not raise
+
+
+# ── unit refusal lives in `can_dispatch` (review r5-a2) ────────────────
+
+
+def _run_item(repo: str = "agentic-stoa/cnc-demo"):
+    """A run-unit item — the shape `build_ingest_payload` cannot serialise."""
+    from fr_dispatch.work_item import WorkItem, run_item_id
+
+    return WorkItem(
+        id=run_item_id(repo, "2026-08-31-feat-x"),
+        unit="run",
+        workflow="research",
+        repo=repo,
+        parent=None,
+        inputs=(),
+        payload={"run_id": "2026-08-31-feat-x"},
+        tracking=None,
+    )
+
+
+def test_can_dispatch_refuses_a_non_phase_item():
+    """`protocols.Runner.can_dispatch` is where a unit-limited runner says
+    so. Accepting everything and dying in `dispatch` on
+    `item.payload["plan"]` reported as `"<id>: 'plan'"` — a KeyError repr
+    under `reason=backend_error`."""
+    from fr_cncd import CncdRunner
+
+    runner = CncdRunner(base_url="http://localhost:8787")
+
+    assert runner.can_dispatch(_item()) is True
+    assert runner.can_dispatch(_run_item()) is False
+
+
+def test_build_ingest_payload_refuses_a_non_phase_item_by_name():
+    from fr_cncd.runner import build_ingest_payload
+    from fr_dispatch.item_graph import PayloadError
+
+    with pytest.raises(PayloadError) as e:
+        build_ingest_payload(_run_item())
+
+    assert "unit 'run'" in str(e.value)
+    assert "can_dispatch" in str(e.value)

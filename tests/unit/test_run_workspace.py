@@ -84,12 +84,93 @@ class _FakeTarget:
         return st
 
 
+def _real_worktree(tmp_path: Path, branch: str = "feat/x") -> Path:
+    """A genuine linked worktree with a valid marker.
+
+    FIXTURE CHANGE, assertion unchanged (review r5-e3): `ensure_run_workspace`
+    now corroborates the marker's `mode`, and `mode: worktree` means "this IS a
+    linked worktree" — `git rev-parse --git-dir` != `--git-common-dir`, the
+    same structural check the `fr-isolation-required` PreToolUse hook makes. A
+    marker written into a bare directory is the forgery that check refuses, so
+    the "inside a workspace" fixture must be the real thing. The forged case
+    now has its own test below.
+    """
+    import subprocess
+
+    base = tmp_path / "base"
+    base.mkdir(parents=True, exist_ok=True)
+
+    def git(root: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    subprocess.run(["git", "init", "-q", "-b", "main", str(base)], check=True)
+    git(base, "config", "user.email", "t@example.com")
+    git(base, "config", "user.name", "T")
+    (base / "seed.md").write_text("seed\n")
+    git(base, "add", "-A")
+    git(base, "commit", "-qm", "seed")
+    wt = tmp_path / "wt"
+    git(base, "worktree", "add", "-q", "-b", branch, str(wt))
+    _marker(wt, branch)
+    return wt
+
+
 def test_a_run_started_inside_a_workspace_is_written_there(tmp_path: Path) -> None:
-    repo = tmp_path / "wt"
-    _marker(repo, "feat/x")
+    repo = _real_worktree(tmp_path)
     result = _start(repo, _shipped(tmp_path))
     assert result.exit_code == 0, result.output
     assert run_path(repo, "r1").is_file()
+
+
+def test_a_forged_worktree_marker_in_a_plain_directory_is_refused(tmp_path: Path) -> None:
+    """A `.fr-isolation` file is text anyone can write, and its `toplevel` can
+    simply be edited to match wherever it sits. Without the mode check
+    (review r5-e3), dropping one into a base clone made `fr run start` write
+    the run file THERE — the exact failure §4.B's "a run is born in its
+    workspace" exists to prevent, reached through a file with no privileges."""
+    repo = tmp_path / "plain"
+    _marker(repo, "feat/x")
+
+    result = _start(repo, _shipped(tmp_path))
+
+    assert result.exit_code == 2, result.output
+    assert "not a linked git worktree" in result.output
+    assert not (repo / "docs" / "superpowers" / "runs").exists()
+
+
+def test_an_external_marker_without_container_evidence_is_refused(tmp_path: Path) -> None:
+    """`mode: external` is a preparer's hand-off from inside a container; a
+    bare host cannot claim it."""
+    import json as _json
+
+    repo = tmp_path / "ext"
+    repo.mkdir(parents=True, exist_ok=True)
+    (repo / ".fr-isolation").write_text(
+        _json.dumps({"toplevel": str(repo.resolve()), "branch": "feat/x", "mode": "external"})
+    )
+
+    result = _start(repo, _shipped(tmp_path))
+
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+        assert result.exit_code == 0, result.output  # we ARE in a container
+    else:
+        assert result.exit_code == 2, result.output
+        assert "container evidence" in result.output
+
+
+def test_an_unknown_marker_mode_fails_closed(tmp_path: Path) -> None:
+    import json as _json
+
+    repo = tmp_path / "weird"
+    repo.mkdir(parents=True, exist_ok=True)
+    (repo / ".fr-isolation").write_text(
+        _json.dumps({"toplevel": str(repo.resolve()), "branch": "feat/x", "mode": "vibes"})
+    )
+
+    result = _start(repo, _shipped(tmp_path))
+
+    assert result.exit_code == 2, result.output
+    assert "unknown mode" in result.output
 
 
 def test_a_run_started_outside_a_workspace_enters_isolation_first(

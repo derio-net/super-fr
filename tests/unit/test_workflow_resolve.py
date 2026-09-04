@@ -166,3 +166,104 @@ def test_resolve_workflow_without_shipped_root_consults_the_default(
 
     assert manifest.description == "shipped"
     assert [s.id for s in manifest.steps] == ["a", "b"]
+
+
+# =========================================================================
+# review r5-e14: precedence, and where the wheel copy sits in it
+# =========================================================================
+
+
+def test_the_wheel_copy_beats_a_stale_marketplace_clone(tmp_path, monkeypatch) -> None:
+    """The clone is updated independently of the `fr` wheel, so an operator
+    who upgrades `fr` without re-running `install.sh` would otherwise keep
+    resolving a STALE shape — silently, possibly at the wrong granularity.
+    The wheel copy ships with the code that reads it and cannot disagree."""
+    from fr.workflow.resolve import MARKETPLACE_ROOT, SHIPPED_WORKFLOWS_REL, resolve_workflow
+
+    home = tmp_path / "home"
+    clone = home / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL
+    clone.mkdir(parents=True)
+    (clone / "fr-goal.yaml").write_text(
+        "workflow: fr-goal\nschema: 1\nunit: run\n"
+        "steps:\n  - id: stale-clone\n    kind: cli\n    run: 'true'\n"
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("FR_SHIPPED_WORKFLOWS_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    manifest = resolve_workflow("fr-goal", tmp_path / "repo")
+
+    assert [s.id for s in manifest.steps] != ["stale-clone"]
+
+
+def test_the_explicit_env_override_beats_everything_but_the_repo(tmp_path, monkeypatch) -> None:
+    """`$FR_SHIPPED_WORKFLOWS_DIR` is set on purpose, so it cannot surprise
+    anyone — that is what makes it, not the clone, the way to override."""
+    from fr.workflow.resolve import resolve_workflow
+
+    shipped = tmp_path / "explicit"
+    shipped.mkdir()
+    (shipped / "fr-goal.yaml").write_text(
+        "workflow: fr-goal\nschema: 1\nunit: run\n"
+        "steps:\n  - id: from-env\n    kind: cli\n    run: 'true'\n"
+    )
+    monkeypatch.setenv("FR_SHIPPED_WORKFLOWS_DIR", str(shipped))
+
+    manifest = resolve_workflow("fr-goal", tmp_path / "repo")
+
+    assert [s.id for s in manifest.steps] == ["from-env"]
+
+
+def test_a_repo_override_still_beats_every_shipped_source(tmp_path, monkeypatch) -> None:
+    from fr.workflow.resolve import REPO_WORKFLOWS_REL, resolve_workflow
+
+    repo = tmp_path / "repo"
+    (repo / REPO_WORKFLOWS_REL).mkdir(parents=True)
+    (repo / REPO_WORKFLOWS_REL / "fr-goal.yaml").write_text(
+        "workflow: fr-goal\nschema: 1\nunit: run\n"
+        "steps:\n  - id: from-repo\n    kind: cli\n    run: 'true'\n"
+    )
+    monkeypatch.delenv("FR_SHIPPED_WORKFLOWS_DIR", raising=False)
+
+    manifest = resolve_workflow("fr-goal", repo)
+
+    assert [s.id for s in manifest.steps] == ["from-repo"]
+
+
+def test_the_shipped_fr_goal_resolves_with_an_empty_home_and_no_repo_override(
+    tmp_path, monkeypatch
+) -> None:
+    """The clean-install case, unit-level: nothing but the `fr` wheel."""
+    from fr.workflow.resolve import resolve_workflow
+
+    empty_home = tmp_path / "empty-home"
+    empty_home.mkdir()
+    monkeypatch.setenv("HOME", str(empty_home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: empty_home))
+    monkeypatch.delenv("FR_SHIPPED_WORKFLOWS_DIR", raising=False)
+
+    manifest = resolve_workflow("fr-goal", tmp_path / "no-such-repo")
+
+    assert manifest.workflow == "fr-goal"
+    assert manifest.unit == "run"
+
+
+def test_the_lookup_order_is_the_one_the_docstring_states(tmp_path, monkeypatch) -> None:
+    from fr.workflow.resolve import (
+        MARKETPLACE_ROOT,
+        SHIPPED_WORKFLOWS_REL,
+        packaged_shipped_workflows_dir,
+        shipped_workflow_dirs,
+    )
+
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("FR_SHIPPED_WORKFLOWS_DIR", raising=False)
+
+    assert shipped_workflow_dirs() == [
+        packaged_shipped_workflows_dir(),
+        home / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL,
+    ]
+
+    monkeypatch.setenv("FR_SHIPPED_WORKFLOWS_DIR", str(tmp_path / "env"))
+    assert shipped_workflow_dirs()[0] == tmp_path / "env"

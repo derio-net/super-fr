@@ -561,7 +561,20 @@ def test_the_gate_refuses_on_the_repositorys_default_branch(
     p = _plan(tmp_path)
     before = p.read_text()
     committed: list[object] = []
-    monkeypatch.setattr(trigger, "on_default_branch", lambda root: "main")
+    # SEAM MOVED, behaviour identical (review r5-c2): the gate now reads ONE
+    # `git_context` snapshot instead of calling `on_default_branch` and
+    # `uncommitted_paths` separately, each swallowing its own git failures.
+    monkeypatch.setattr(
+        trigger,
+        "git_context",
+        lambda root: trigger.GitContext(
+            toplevel=tmp_path.resolve(),
+            branch="main",
+            default_branch="main",
+            dirty=frozenset(),
+            has_head=True,
+        ),
+    )
 
     with pytest.raises(typer.Exit) as e:
         trigger.ensure_artifacts_current(
@@ -587,7 +600,17 @@ def test_a_feature_branch_is_migrated_as_before(
 ) -> None:
     """The refusal is scoped to the default branch and nothing else."""
     p = _plan(tmp_path)
-    monkeypatch.setattr(trigger, "on_default_branch", lambda root: None)
+    monkeypatch.setattr(
+        trigger,
+        "git_context",
+        lambda root: trigger.GitContext(
+            toplevel=tmp_path.resolve(),
+            branch="feat/x",
+            default_branch="main",
+            dirty=frozenset(),
+            has_head=True,
+        ),
+    )
 
     trigger.ensure_artifacts_current(
         argv=["apply"],
@@ -625,3 +648,186 @@ def test_the_gate_holds_back_an_artifact_with_uncommitted_changes(
     assert e.value.exit_code == 2
     assert p.read_text() == before
     assert "uncommitted" in capsys.readouterr().err
+
+
+# =========================================================================
+# review r5-c5 / r5-e7 / r5-e8 / r5-e9
+# =========================================================================
+
+
+def test_a_help_shaped_option_value_does_not_exempt_a_writing_command() -> None:
+    """`fr journal add --text --help` is somebody's entry text, not a request
+    for help — and it silently disabled the gate for a command that writes."""
+    assert not trigger.is_exempt(
+        argv=["journal", "add", "--text", "--help"], invoked_subcommand="journal", env={}
+    )
+    assert not trigger.is_exempt(
+        argv=["journal", "add", "--title", "--version"], invoked_subcommand="journal", env={}
+    )
+
+
+def test_a_genuine_help_request_is_still_exempt_at_every_depth() -> None:
+    for argv in (
+        ["--help"],
+        ["--version"],
+        ["plan", "--help"],
+        ["plan", "create", "--help"],
+        ["apply", "--format", "json", "--help"],
+        ["apply", "--format=json", "--help"],
+    ):
+        assert trigger.is_exempt(argv=argv, invoked_subcommand=argv[0], env={}), argv
+
+
+def test_help_after_a_bare_double_dash_is_a_positional_not_a_request() -> None:
+    assert not trigger.is_exempt(
+        argv=["journal", "add", "--", "--help"], invoked_subcommand="journal", env={}
+    )
+
+
+# --- r5-e8: CI markers, and CI=false meaning "not CI" --------------------
+
+
+def test_the_ci_marker_list_is_exactly_these() -> None:
+    """Pinned literally: an over-broad list makes an operator's terminal
+    non-interactive and a too-narrow one lets a runner commit."""
+    assert trigger.CI_ENV_VARS == (
+        "CI",
+        "GITHUB_ACTIONS",
+        "GITLAB_CI",
+        "BUILDKITE",
+        "JENKINS_URL",
+        "TF_BUILD",
+        "TEAMCITY_VERSION",
+        "CIRCLECI",
+    )
+
+
+class _Tty:
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.mark.parametrize("marker", trigger.CI_ENV_VARS)
+def test_every_ci_marker_makes_the_context_non_interactive(marker: str) -> None:
+    assert not trigger.is_interactive(env={marker: "true"}, stdin=_Tty(), stdout=_Tty())
+
+
+@pytest.mark.parametrize("falsy", ["false", "0", "no", "off", ""])
+def test_a_falsy_ci_marker_is_someone_saying_not_ci(falsy: str) -> None:
+    """`CI=false` meant "CI is set" — so an operator whose shell exports it
+    (many do, defensively) could never get an automatic migration."""
+    assert trigger.is_interactive(env={"CI": falsy}, stdin=_Tty(), stdout=_Tty())
+
+
+def test_fr_non_interactive_is_an_explicit_opt_out() -> None:
+    assert not trigger.is_interactive(
+        env={trigger.NON_INTERACTIVE_ENV_VAR: "1"}, stdin=_Tty(), stdout=_Tty()
+    )
+    assert trigger.is_interactive(
+        env={trigger.NON_INTERACTIVE_ENV_VAR: "0"}, stdin=_Tty(), stdout=_Tty()
+    )
+
+
+# --- r5-e7: one migration at a time --------------------------------------
+
+
+def test_the_gate_refuses_while_another_fr_holds_the_migration_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Deterministic by construction: the test itself holds the lock, so there
+    is no sleep and no second process to race."""
+    from fr.artifacts.atomic import migration_lock
+
+    p = _plan(tmp_path)
+    before = p.read_text()
+    lock = tmp_path / "fr-migrate.lock"
+    monkeypatch.setattr(trigger, "lock_path", lambda root: lock)
+
+    with migration_lock(lock) as held:
+        assert held
+        with pytest.raises(typer.Exit) as e:
+            trigger.ensure_artifacts_current(
+                argv=["apply"],
+                invoked_subcommand="apply",
+                env={},
+                repo_root=tmp_path,
+                interactive=True,
+                commit=lambda root, report: None,
+            )
+
+    assert e.value.exit_code == 2
+    assert p.read_text() == before, "the loser of the race must write nothing"
+    assert "another fr process is migrating" in capsys.readouterr().err
+
+
+def test_the_loser_proceeds_when_the_winner_already_migrated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The common shape of the race: by the time we look, there is nothing
+    left to do. Refusing there would turn a resolved race into an error."""
+    from fr.artifacts.atomic import migration_lock
+
+    _plan(tmp_path, fr_version=">=3.0.0,<5.0.0")  # already current
+    lock = tmp_path / "fr-migrate.lock"
+    monkeypatch.setattr(trigger, "lock_path", lambda root: lock)
+    # Force the "stale" verdict once so the gate reaches the lock at all.
+    monkeypatch.setattr(trigger, "is_stale", lambda root, registry=None: True)
+    monkeypatch.setattr(trigger, "_still_stale", lambda root, registry: False)
+
+    with migration_lock(lock) as held:
+        assert held
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=tmp_path,
+            interactive=True,
+            commit=lambda root, report: None,
+        )
+
+    assert "another fr process migrated this tree" in capsys.readouterr().err
+
+
+def test_a_lock_free_repo_still_migrates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No git dir to put a lock in is not a reason to stop migrating."""
+    p = _plan(tmp_path)
+    monkeypatch.setattr(trigger, "lock_path", lambda root: None)
+
+    trigger.ensure_artifacts_current(
+        argv=["apply"],
+        invoked_subcommand="apply",
+        env={},
+        repo_root=tmp_path,
+        interactive=True,
+        commit=lambda root, report: None,
+    )
+
+    assert "<5.0.0" in p.read_text()
+
+
+# --- r5-c5: partial success is its own outcome ---------------------------
+
+
+def test_a_partial_migration_says_how_many_landed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One plan migrated, one refused on a `~=` ceiling fr will not guess at.
+    "N could not be migrated" alone reads as though nothing happened."""
+    good = _plan(tmp_path, slug="good")
+    _plan(tmp_path, slug="bad", fr_version="~=3.19")
+
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=tmp_path,
+            interactive=True,
+            commit=lambda root, report: None,
+        )
+
+    assert e.value.exit_code == 2
+    assert "<5.0.0" in good.read_text()
+    err = capsys.readouterr().err
+    assert "1 artifact(s) migrated" in err
+    assert "1 left unmodified" in err

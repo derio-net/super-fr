@@ -273,7 +273,7 @@ def plan_migrations(
     """
     reg = registry if registry is not None else MIGRATIONS
     actions: list[PlannedAction] = []
-    for name, kind in reg.kinds.items():
+    for name, kind in _ordered_kinds(reg):
         for path in iter_paths_of(repo_root, kind):
             actions.extend(_actions_for(reg, name, kind, path)[0])
     return tuple(actions)
@@ -292,12 +292,24 @@ def is_stale(repo_root: Path, *, registry: MigrationRegistry | None = None) -> b
     wave through precisely the case it exists for.
     """
     reg = registry if registry is not None else MIGRATIONS
-    for name, kind in reg.kinds.items():
+    for name, kind in _ordered_kinds(reg):
         for path in iter_paths_of(repo_root, kind):
             actions, failures = _actions_for(reg, name, kind, path)
             if actions or failures:
                 return True
     return False
+
+
+def _ordered_kinds(reg: MigrationRegistry) -> list[tuple[str, ArtifactKind]]:
+    """Kinds in a stable, name-sorted order (review r5-e7).
+
+    `dict` preserves insertion order, which is stable for the SHIPPED registry
+    but not for one assembled by a caller — and `iter_paths_of` already sorts
+    within a kind. Sorting here makes the whole walk a function of the data
+    alone, so `report.changed_paths` (hence the `git add` pathspec, hence the
+    commit) is byte-reproducible for a given tree.
+    """
+    return sorted(reg.kinds.items())
 
 
 def _chain_for(
@@ -405,7 +417,7 @@ def run_migrations(
     planned: list[tuple[str, ArtifactKind, Path, list[PlannedAction]]] = []
     failed: list[FailedAction] = []
 
-    for name, kind in reg.kinds.items():
+    for name, kind in _ordered_kinds(reg):
         for path in iter_paths_of(repo_root, kind):
             actions, planning_failures = _actions_for(reg, name, kind, path)
             failed.extend(planning_failures)
@@ -430,9 +442,21 @@ def run_migrations(
         done, failures = _apply_to_one(reg, name, kind, path)
         applied.extend(done)
         failed.extend(failures)
-        settled = {_key(a) for a in done} | {(f.path, f.summary) for f in failures}
+        # `skipped` means "planned, then found unnecessary — another writer got
+        # there first". An action that FAILED is not skipped, and neither is
+        # anything that never ran because an earlier step for the same artifact
+        # failed and returned: `_apply_to_one` abandons the whole path.
+        #
+        # Keyed on the PATH (review r5-c5). Keying the failure half on
+        # `(path, summary)` only matched the one action whose summary the
+        # failure happened to carry, so an artifact with a schema step AND a
+        # repair — where the schema step failed and the repair therefore never
+        # ran — reported the repair as `skipped`, i.e. "already done", when it
+        # had not been attempted at all.
+        applied_keys = {_key(a) for a in done}
+        abandoned = {f.path for f in failures}
         skipped.extend(
-            a for a in actions if _key(a) not in settled and (a.path, a.summary) not in settled
+            a for a in actions if _key(a) not in applied_keys and a.path not in abandoned
         )
 
     return MigrationReport(
