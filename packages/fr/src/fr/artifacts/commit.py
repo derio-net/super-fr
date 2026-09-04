@@ -271,13 +271,22 @@ def _default_branch(root: Path, *, unborn: bool) -> str | None | GitRefusal:
             if _ref_exists(root, f"refs/remotes/{remote}/{name}"):
                 return name
 
+    if unborn:
+        # A freshly `git init`ed repo has no refs at all, so no existence
+        # question below can be asked — but `.git/HEAD` already names the
+        # branch (`git init -b <name>` writes it there, config or no config),
+        # and the branch HEAD points at IS the default by construction. Asking
+        # `init.defaultBranch` here instead was review fix r5-ci1: it made the
+        # answer depend on host git config, so the same repo reported `main`
+        # on a machine with the config set and None on CI without it.
+        head = _git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if head.returncode == 0 and head.stdout.strip():
+            return head.stdout.strip()
+
     configured = _git(root, "config", "--get", "init.defaultBranch")
     if configured.returncode == 0 and configured.stdout.strip():
         name = configured.stdout.strip()
-        # `unborn`: a freshly `git init`ed repo has no refs at all, so "does
-        # the branch exist" cannot be asked. The configured name IS the branch
-        # HEAD points at, so it is the default by construction.
-        if unborn or _ref_exists(root, f"refs/heads/{name}"):
+        if _ref_exists(root, f"refs/heads/{name}"):
             return name
 
     for name in _WELL_KNOWN_DEFAULTS:
