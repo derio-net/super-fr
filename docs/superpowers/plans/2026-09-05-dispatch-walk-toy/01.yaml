@@ -1,0 +1,31 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Record the live bridge walk in the toy spec
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - vk-dispatch-unchanged-after-cutover
+tasks:
+- number: 1
+  title: Append the walk-log line and open a PR
+  steps:
+  - id: P1.T1.S1
+    text: |
+      In docs/superpowers/specs/2026-09-05-dispatch-walk-toy-design.md, under
+      the `## Walk log` heading, append exactly one bullet:
+      `- <today's date>: phase 1 dispatched through the VK bridge after the
+      4.0.0 cutover; this line was written by the runner's agent.`
+      Change nothing else. Commit on the workspace branch and open a PR
+      titled `docs: dispatch-walk toy — runner wrote the walk-log line`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
