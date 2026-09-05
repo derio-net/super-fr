@@ -31,8 +31,42 @@ uv workspace monorepo, version lockstepped across every manifest (see
     shared workspace); `scripts/ensure-phase-executor-allowlist.sh` (called by
     install.sh) allowlists it in the org agent-worktree hook, else fr-goal
     falls back to inline.
+  - **`fr/workflow`** (2026-08-14 spec, `workflow-shapes-and-workitem-dispatch`)
+    — the shape axis: `model.py` (`WorkflowManifest`/`Step` schema,
+    `parse_manifest`), `resolve.py` (repo > shipped resolution — `fr run
+    start`'s real call site), `check.py` (`fr workflow check`: duplicate
+    ids, dangling `needs`, cycles, unknown capabilities), `artifacts.py`
+    (`REPO_TRACKED_ARTIFACTS`/`IMPLIED_INPUTS_BY_UNIT`/`required_inputs` —
+    the vocabulary reachability derives from), `reachability.py`
+    (path-level "is this on `origin/HEAD`", no item type — `fr_dispatch`'s
+    item-level gate calls into it, never the reverse), `shapes.py`
+    (`FR_GOAL_PHASE_DISPATCH` — the default phase-granularity shape `fr
+    apply`/the bridge still dispatch against; not yet resolved from a real
+    manifest end to end, see the acceptance matrix). `fr.capabilities`
+    (`CAPABILITIES`, the closed set `requires:` validates against) is a
+    sibling of `fr/workflow`, not inside it; `fr_dispatch.capabilities` is
+    a two-line re-export kept for import back-compat.
+  - **`fr/run`** — the durable cursor (`docs/superpowers/runs/<run-id>.yaml`,
+    git-tracked), driven by `fr run {start,adopt,status,advance,resolve,check}`
+    (`model.py`'s `RunState`/`StepRecord`, `commands/run_cmd.py`). `advance`
+    executes a `kind: cli` step directly and never a `kind: agent` one — it
+    emits a dispatch brief instead; `resolve` is the only way an `agent`
+    step's cursor moves past `running`. `plugins/super-fr/workflows/` ships
+    the manifests this resolves (`fr-goal.yaml`, the pipeline `/fr-goal`
+    itself now narrates); a repo may override one wholesale under
+    `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT
+    mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
+    surface every harness drives the same way, not a per-harness prompt.
+  - **`fr/tracker`** — the tracker protocol (`model.py`'s `Tracker` Protocol
+    + `TrackedItem`, a structural stand-in for `WorkItem` so `fr` never
+    imports `fr_dispatch`; `github.py`'s `GithubTracker` is the one
+    concrete adapter). No second adapter exists yet — protocol-level only.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
+  `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
+  and `item_graph.py` (`build_items` — the one item builder for all three
+  decomposition units, `run`/`phase`/`spec`) are the dispatch-cutover core;
+  `reachability.py` is the item-level gate wrapping `fr.workflow.reachability`.
 - `fr-vk`, `fr-cncd` — runner adapters (`vk`, `cncd`) implementing that
   protocol. `fr-cncd` is real but predates its own README/CLAUDE mentions —
   don't assume tables in `README.md` are exhaustive; check `packages/*/pyproject.toml`
@@ -40,9 +74,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
 - `fr-opencode-plugin` — **the one non-Python package**: TypeScript/Bun,
   ports the `fr-isolation-required` Claude Code hook to an OpenCode
   `tool.execute.before` plugin. Excluded from the uv workspace
-  (`pyproject.toml`'s `[tool.uv.workspace].exclude`); has its own
-  `package.json`/version; **not wired into CI** — if you touch it, run
-  `bun test` inside `packages/fr-opencode-plugin/` yourself.
+  (`pyproject.toml`'s `[tool.uv.workspace].exclude`) and has its own
+  `package.json`/version, so `uv run pytest` does not cover it — but it IS
+  wired into CI, as the `opencode-plugin-test` job (`bun test`). Run that
+  locally inside `packages/fr-opencode-plugin/` if you touch it.
 
 `plugins/super-fr` and `plugins/super-fr-dispatch` are the Claude Code plugin
 manifests (skills + rules + hooks) built from those packages.
@@ -60,7 +95,8 @@ uv run --no-project python scripts/bump-version.py --check   # version lockstep
 ```
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
-`test`, `version-sync` jobs) is the single source of truth for the gate; if
+`test`, `validate-artifacts`, `opencode-plugin-test`, `version-sync`,
+`version-bump-required` jobs) is the single source of truth for the gate; if
 this file and `ci.yml` ever disagree, trust `ci.yml` and fix this file. Run
 `ruff format` then `pytest` yourself before pushing — CI is slow to fail-loud.
 
@@ -71,9 +107,11 @@ and a CI tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
-  `fr-plan-override.md`, `no-claude-p-batch.md`), plus
-  `.claude/rules/acceptance-matrix.md` (repo-local-only, no plugin
-  equivalent — still a *source*, edit it directly).
+  `fr-plan-override.md`, `no-claude-p-batch.md`), plus the THREE
+  repo-local-only rules with no plugin counterpart —
+  `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`
+  and `.claude/rules/explainers-currency.md` (still *sources*, edit them
+  directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
 - Generated: `.opencode/skills/<name>/SKILL.md` and
   `.opencode/instructions/*.md`. After editing a canonical skill/rule, run
   `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
@@ -86,12 +124,21 @@ and a CI tripwire will catch drift anyway:
 - `scripts/install.sh` must copy every canonical skill/rule to consumer
   machines; `test_install_copies_rules.py` / `test_install_copies_opencode_skills.py`
   fail if a shipped file isn't wired in.
+- **Shipped workflow manifests are a separate, NOT-mirrored category.**
+  `plugins/super-fr/workflows/*.yaml` (spec §4.A) has no OpenCode/Hermes
+  copy — `fr run` is a CLI surface every harness drives identically, so
+  there is nothing harness-specific to generate. It rides install.sh's
+  existing wholesale marketplace rsync (no per-file `cp`, unlike
+  skills/rules — see the comment above that rsync in `install.sh`);
+  `test_install_copies_workflows.py` / `test_install_sh.py::TestInstallWorkflows`
+  are its drift guards, and `test_tripwire_shipped_workflows.py` guards
+  every shipped manifest passing `fr workflow check`.
 
 ## This repo dogfoods fr-isolation on itself
 
-super-fr is itself fr-enabled (`.devcontainer/dev` + `.devcontainer/admin`
-profiles exist, even with no live `docs/superpowers/plans/` right now — the
-devcontainer alone qualifies it). Both the Claude Code PreToolUse hook and
+super-fr is itself fr-enabled — `.devcontainer/dev` + `.devcontainer/admin`
+profiles exist, and `docs/superpowers/plans/` currently holds three live plans.
+Either alone qualifies it. Both the Claude Code PreToolUse hook and
 the OpenCode plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
 re-export of `packages/fr-opencode-plugin`) block Edit/Write/MultiEdit
 outside a valid `.fr-isolation` workspace — editing this repo's own source is
@@ -181,6 +228,14 @@ workspace / GitHub Issue label-lifecycle surfaces **MUST start by reading
 without reading it is the root cause documented in #147. These two packages
 are the canonical read-target for any bridge-behavior investigation (they
 replaced a pre-rebuild single script, `agent-images/kali/scripts/vk-issue-bridge.py`).
+Since the 2026-08-14 workitem-dispatch cutover, the seam is **split, not
+moved**: `fr_dispatch.tick`'s decision-making (unit/capability/reachability
+rules) now calls into `fr.workflow.*` + `fr.capabilities` + `fr.tracker`
+(`packages/fr/src/fr/`) rather than owning that logic itself — a bridge
+investigation touching *why* an item was or wasn't dispatched needs both
+packages, not `fr_dispatch`/`fr_vk` alone; the wire protocol
+(`Runner`/`WorkItem`/`tick`'s outer signature) is still entirely
+`fr_dispatch`'s.
 
 ## Standing conventions enforced by tests, not just prose (#328)
 

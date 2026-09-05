@@ -1,0 +1,45 @@
+schema_version: 2
+phase:
+  number: 9
+  title: Multi-repo spec fan-out
+  tag: agentic
+  depends_on:
+  - 8
+  tracking_issue: null
+  acceptance:
+  - multi-repo-spec-fanout
+tasks:
+- number: 1
+  title: RED → GREEN — one item per target repo, parented to the spec
+  steps:
+  - id: P9.T1.S1
+    text: |-
+      RED: create tests/integration/test_spec_fanout.py: a fixture spec whose
+      Implementation Plans table names three repos (one of them the local repo, one
+      cross-repo, one a manual-action row) dispatches through tick with a fake
+      runner and produces exactly two items, each with unit="spec", the right repo,
+      and parent equal to the spec-level id. Assert the cross-repo item's inputs
+      reference the spec in ITS OWN repo (the owner/repo: form), not a local path.
+      Run: uv run pytest tests/integration/test_spec_fanout.py -q --no-cov
+      Expected: failures.
+  - id: P9.T1.S2
+    text: |-
+      GREEN: wire fan-out through build_items + tick. Reuse fr.spec's existing
+      cross-repo resolution (the gh contents API path compute_status already uses,
+      memoized on (repo, slug)) rather than adding a second remote-read path.
+      Run: uv run pytest tests/integration/test_spec_fanout.py -q --no-cov
+      Expected: passed.
+state:
+  steps:
+    P9.T1.S1:
+      state: x
+      ticked_at: '2026-08-27T10:36:39+00:00'
+      note: null
+    P9.T1.S2:
+      state: x
+      ticked_at: '2026-08-27T10:36:47+00:00'
+      note: null
+  completion:
+    at: '2026-08-27T10:40:28+00:00'
+    note: null
+    observed_prs: []

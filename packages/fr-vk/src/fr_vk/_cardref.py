@@ -23,7 +23,22 @@ import re
 
 from fr._hosts import BACKEND_FOR_TAG, TAG_FOR_BACKEND, HostBackend
 
-__all__ = ["BACKEND_FOR_TAG", "TAG_FOR_BACKEND", "build_card_title", "parse_card_title"]
+__all__ = [
+    "BACKEND_FOR_TAG",
+    "DISPATCH_BACKEND",
+    "TAG_FOR_BACKEND",
+    "build_card_title",
+    "parse_card_title",
+]
+
+# The backend every card the bridge CREATES is tagged with today. Lives
+# here, beside the format it parameterises, because two call sites need to
+# agree on it: `fr_vk.dispatch.build_card_title` (which stamps the tag) and
+# `fr_vk.dedup` (which must not treat another host's card as a dispatch of
+# this one). Threading a phase's real backend through the tick is out of
+# scope for the multi-backend pass (§ that spec's non-goals) — the format
+# is already multi-backend-capable; the producer is not yet.
+DISPATCH_BACKEND: HostBackend = "github"
 
 # Anchored at the start only — a free-text suffix (or a second bracketed
 # token an operator typed) must not break the parse, matching the original

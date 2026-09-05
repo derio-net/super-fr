@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Foundation — ItemState extracted from GitHub labels, projection preserved
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Characterization net — pin today's GitHub projection before touching it
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create tests/unit/test_render_characterization.py. Build a fixture plan
+      (tmp_path plan folder, 5 phases) whose observed GhState puts one phase in
+      each situation the renderer distinguishes: not-yet-dispatched, ready,
+      blocked-by-dependency, in-progress (assignee + fr:in-progress), and
+      merged/done. Call render(plan, observed) and assert the FULL
+      RenderedIssue for each phase — body, `labels` as a sorted list of label
+      NAMES, and `state` — against literals written into the test.
+      This test must PASS as-is against unmodified code: it is a
+      characterization net, not a red step. Run:
+        uv run pytest tests/unit/test_render_characterization.py -q --no-cov
+      Expected: 5 passed. If any assertion fails, fix the EXPECTED literal to
+      match current behavior — never change render.py in this step.
+- number: 2
+  title: RED → GREEN — the ItemState enum and its GitHub projection
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: create tests/unit/test_item_state.py covering a new module
+      packages/fr/src/fr/item_state.py:
+      (a) ItemState is exactly {"queued","blocked","in_progress","in_review","done"};
+      (b) project_github(state) -> frozenset[LabelDef] maps queued→FR_READY,
+          blocked→FR_BLOCKED, in_progress→FR_IN_PROGRESS, in_review→FR_PR_READY,
+          and done→frozenset() (done is expressed by Issue state CLOSED, not a label);
+      (c) state_from_labels(frozenset[str]) -> ItemState | None is the inverse for
+          every state, returns None for an unrecognized/empty set, and IGNORES
+          "fr:synced" entirely;
+      (d) DISPATCH_STAMP is a separate constant equal to FR_SYNCED and is NOT a
+          member of ItemState — assert FR_SYNCED.name not in any project_github result.
+      Run: uv run pytest tests/unit/test_item_state.py -q --no-cov
+      Expected: collection error / ModuleNotFoundError for fr.item_state.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: write packages/fr/src/fr/item_state.py with ItemState (a Literal),
+      project_github, state_from_labels, and DISPATCH_STAMP. Import the LabelDef
+      constants from fr.labels — item_state depends on labels, never the reverse
+      (labels.py stays the GitHub vocabulary; item_state is the neutral one).
+      Docstring must state why fr:synced is excluded: it is dispatch bookkeeping,
+      not an item state, so a tracker that cannot express it is still usable.
+      Run: uv run pytest tests/unit/test_item_state.py tests/unit/test_render_characterization.py -q --no-cov
+      Expected: all passed (characterization still green — nothing rewired yet).
+- number: 3
+  title: Rewire the renderer to decide in ItemState and project second
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: add to tests/unit/test_item_state.py a test importing a new public
+      seam from fr.render: phase_item_state(plan, observed, phase_number) -> ItemState.
+      Assert it returns "queued" for a ready phase, "blocked" for a
+      dependency-blocked phase, "in_progress" for a claimed one, "in_review" for
+      one with an open non-draft PR, and "done" for a merged one — using the same
+      fixture shape as the characterization test.
+      Run: uv run pytest tests/unit/test_item_state.py -q --no-cov
+      Expected: ImportError / AttributeError for phase_item_state.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/render.py, extract the per-phase state decision
+      into phase_item_state(...) returning ItemState, and have the existing
+      RenderedIssue construction call it and then project_github(...) to build its
+      label set. Do NOT restructure anything else in render.py — the goal is that
+      the state DECISION is tracker-neutral while the PROJECTION stays GitHub's.
+      Run: uv run pytest tests/unit/test_render_characterization.py tests/unit/test_item_state.py -q --no-cov
+      Expected: all passed — byte-identical projection is the acceptance bar for
+      this phase.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR (optional): if labels.py now holds label-set logic duplicated by
+      project_github, delete the duplicate and re-point callers; keep is_queued's
+      public signature. Then run the full suite:
+        uv run pytest -q --no-cov && uv run ruff check packages/ tests/ && uv run mypy packages/fr/src
+      Expected: green, no lint/type errors. Journal a discovery recording whether
+      render.py absorbed this cleanly or fought back — the spec flags this as its
+      most optimistic assumption.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-08-15T17:10:57+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-08-15T17:12:32+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-08-15T17:13:25+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-08-15T17:14:31+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-08-15T17:16:43+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-08-15T17:26:45+00:00'
+      note: null
+  completion:
+    at: '2026-08-15T17:26:50+00:00'
+    note: null
+    observed_prs: []

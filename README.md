@@ -236,6 +236,8 @@ Everyday:
 | `fr plan` | Plan editing: `create`, `edit` (tick steps, complete phases), `self-review`, `rework` |
 | `fr archive` | Move finished plans (and specs) to `implemented/` |
 | `fr skills` | Condensed overview of the skills + CLI surface |
+| `fr workflow` | `check <shape>` — validate a resolved workflow manifest (schema, duplicate ids, dangling `needs`, cycles, capabilities) |
+| `fr run` | Durable workflow-run cursor: `start`, `status`, `advance`, `resolve`, `adopt`, `check` — see [Workflow shapes](#workflow-shapes) |
 
 Maintenance:
 
@@ -244,8 +246,9 @@ Maintenance:
 | `fr init` | Devcontainer profile scaffolding (`scaffold`) |
 | `fr repos` | Instrument locally-checked-out repos with a `plan-config.yaml` (`sync`; never clones) |
 | `fr repair` | Normalize stale plan/spec refs **and strip dead `plan-config.yaml` keys** (dry-run; `--yes` to write) |
-| `fr migrate` | Plan format migration (v1→v2; also strips dead `plan-config.yaml` keys) |
+| `fr migrate` | `v1-to-v2` (plan format; also strips dead `plan-config.yaml` keys), `dirs`, and `artifacts` — bring every live artifact up to the version this `fr` writes (dry-run; `--yes` to apply, `--adopt` to give in-flight plans a run cursor) |
 | `fr undispatch` | Close a plan's tracking Issues and null the fields |
+| `fr validate` | `artifacts [--kind K]` — structural validation of every live artifact against the version this `fr` writes (read-only; CI-gated) |
 | `fr pickup` | Output phase scope (markdown) for an agent |
 | `fr spec` | Spec status reporting |
 
@@ -268,6 +271,47 @@ docs/superpowers/plans/<YYYY-MM-DD-slug>/
 ├── 01.yaml       # phase 1: tasks + steps (P1.T1.S1 IDs), depends_on, tag
 └── 02.yaml       # phase 2 …
 ```
+
+### Workflow shapes
+
+`/fr-goal [shape]` — and, at the CLI layer, `fr run` — drive a **workflow
+shape**: a YAML manifest (`plugins/super-fr/workflows/<name>.yaml`, or a
+repo override at `docs/superpowers/workflows/<name>.yaml`) declaring an
+ordered list of steps, the decomposition **unit** they dispatch at
+(`run`/`phase`/`spec`), and the runner **capabilities** they require. No
+shape argument resolves `fr-goal` itself — today's TDD-feature pipeline,
+unchanged.
+
+```
+fr run start <shape> --branch <b>   # resolve the shape, start the cursor
+fr run advance <run-id>             # kind: cli executes; kind: agent emits a brief
+fr run resolve <run-id> --step <id> --state done|failed [--emitted name=path]
+fr run status <run-id>              # cursor + every step's state
+fr run adopt <plan-dir|spec>        # give work already in flight a cursor (offered, not forced)
+fr workflow check <shape>           # schema/graph validation (CI tripwire on every shipped shape)
+```
+
+Run state is git-tracked (`docs/superpowers/runs/<run-id>.yaml`, a sibling of
+`journals/`) and archives alongside the plan it produced. See spec
+`2026-08-14-workflow-shapes-and-workitem-dispatch-design.md` §4.A/§4.B.
+
+**Where a shape name resolves**, in order — first hit wins:
+
+1. `docs/superpowers/workflows/<name>.yaml` — this repo's override, wholesale;
+2. `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml` — the explicit escape, for tests and
+   for harnesses that are not Claude Code;
+3. the installed `fr` wheel's own copy (`fr/workflows/`) — ships **with** the
+   `fr` that runs the shape, so the two cannot disagree;
+4. `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows/`
+   — the Claude Code plugin clone.
+
+Source 3 is why `fr run start fr-goal` and `fr workflow check --all` work on a
+host with **no** Claude Code marketplace clone (a hermes pod, an OpenCode
+consumer, a bare `uv tool install fr`); it deliberately outranks the clone, so
+upgrading `fr` without re-running `install.sh` cannot leave you silently
+running a stale shape. `fr workflow check --all` **exits non-zero** when no
+shape is discoverable anywhere — "nothing installed" is a broken installation,
+not a clean bill of health.
 
 ### Label lifecycle
 

@@ -50,7 +50,11 @@ SKILLS_MIRROR_DIR = REPO_ROOT / ".opencode" / "skills"
 # Canonical rule sources: every installer-shipped rule, plus the one
 # repo-local-only rule that has no plugins/super-fr/rules/ counterpart.
 RULES_CANONICAL_DIR = REPO_ROOT / "plugins" / "super-fr" / "rules"
-REPO_LOCAL_ONLY_RULES = (REPO_ROOT / ".claude" / "rules" / "acceptance-matrix.md",)
+REPO_LOCAL_ONLY_RULES = (
+    REPO_ROOT / ".claude" / "rules" / "acceptance-matrix.md",
+    REPO_ROOT / ".claude" / "rules" / "artifact-versioning.md",
+    REPO_ROOT / ".claude" / "rules" / "explainers-currency.md",
+)
 INSTRUCTIONS_MIRROR_DIR = REPO_ROOT / ".opencode" / "instructions"
 
 COMMANDS_MIRROR_DIR = REPO_ROOT / ".opencode" / "commands"

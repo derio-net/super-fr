@@ -12,6 +12,24 @@ single-source).
 `VK_DERIO_OPS_PROJECT` as fallback. VK's `create_issue`/`list_issues`
 require it outside a workspace context — exactly the cron bridge's case
 — so `preflight()` fails every eligible phase cleanly when unset.
+
+**v2 (2026-08-14 workflow-shapes spec §4.D).** `dedup_key` and
+`can_dispatch_repo` are gone; identity lives on `WorkItem.id` and the
+repo gate reads `item.repo`. `existing_dispatches(items)` still has to
+answer in card-*title* terms (VK's board has no item-id concept, pre- or
+post-cutover), so it maps titles back to ids using the items it is
+handed — `(item.repo, item.payload["issue_number"])` is a coordinate the
+title also carries (`fr_vk.dedup.map_titles_to_item_ids`). No title
+format change, and no inversion of spec/plan slugs that were never
+encoded in a title to begin with (see the 2026-08-14 plan journal, phase
+2/3 findings). This is what makes a VK card created *before* this
+cutover still dedup correctly on the first post-deploy tick.
+
+The items arrive as an argument rather than cached from the preceding
+`preflight(items)` call (which is how the cutover first shipped it):
+that cache made the snapshot silently empty for any caller that skipped
+or reordered preflight, i.e. duplicate cards and duplicate workspaces
+from a protocol the contract never stated.
 """
 
 from __future__ import annotations
@@ -19,14 +37,17 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from fr_dispatch.item_graph import phase_payload
+
 from fr_vk import config as _config
 from fr_vk import dedup as _dedup
 from fr_vk import slots as _slots
-from fr_vk.dispatch import MCPDispatch, build_card_title, dispatch_phase
+from fr_vk.dispatch import MCPDispatch, dispatch_phase
 
 if TYPE_CHECKING:
-    from fr.parser import Plan
-    from fr.types import PhaseDoc
+    from collections.abc import Sequence
+
+    from fr_dispatch.work_item import WorkItem
 
 # Reserved for a runner that builds its own agent prompt (fr_dispatch.prompt.
 # build_prompt params). VK derives workspace prompts server-side from the
@@ -54,11 +75,13 @@ class VkRunner:
 
     name = "vk"
 
+    capabilities = frozenset({"git", "tests", "scm"})
+
     def __init__(self, mcp: MCPDispatch, *, project_id: str | None = None) -> None:
         self.mcp = mcp
         self.project_id = project_id if project_id is not None else _env_project_id()
 
-    def preflight(self) -> str | None:
+    def preflight(self, items: Sequence[WorkItem]) -> str | None:
         if not self.project_id:
             return (
                 "VK_DERIO_OPS_PROJECT unset; cannot dispatch "
@@ -73,16 +96,25 @@ class VkRunner:
     def slot_budget(self) -> int:
         return _slots.max_concurrent() - _slots.count_active_ws(self.mcp)
 
-    def existing_dispatches(self) -> set[str]:
-        return _dedup.fetch_existing_titles(self.mcp, project_id=self.project_id)
+    def existing_dispatches(self, items: Sequence[WorkItem]) -> set[str]:
+        titles = _dedup.fetch_existing_titles(self.mcp, project_id=self.project_id)
+        return _dedup.map_titles_to_item_ids(titles, items)
 
-    def dedup_key(self, repo: str, issue_number: int) -> str:
-        return build_card_title(repo, issue_number)
+    def can_dispatch(self, item: WorkItem) -> bool:
+        """VK dispatches PHASES, and says so here (review r5-a2).
 
-    def can_dispatch_repo(self, repo: str) -> bool:
-        return _config.is_known_repo(repo, self.mcp)
+        `protocols.Runner.can_dispatch` is documented as the place a
+        unit-limited runner refuses — "a runner that only handles some units
+        can say so without a second protocol method". This one accepted
+        every unit and then died inside `dispatch` on
+        `item.payload["plan"]`, which `tick` reported as the bare
+        `"<id>: 'plan'"` under `reason=backend_error`: a KeyError repr
+        standing in for "this backend does not do run-unit work".
+        """
+        return item.unit == "phase" and _config.is_known_repo(item.repo, self.mcp)
 
-    def dispatch(self, plan: Plan, phase: PhaseDoc, repo: str, issue_number: int) -> None:
+    def dispatch(self, item: WorkItem) -> None:
         # preflight() guarantees project_id is set before tick dispatches.
         assert self.project_id is not None
+        plan, phase, _issue_number = phase_payload(item)
         dispatch_phase(plan, phase, self.mcp, project_id=self.project_id)

@@ -8,14 +8,18 @@ post_number: 1
 archetype: skill-presentation
 tldr: |
   Tell fr-goal what outcome you want, answer one round of questions, and it
-  carries the work to a pull request. Before doing anything else, fr-isolation
-  creates a separate Git worktree and development container so the autonomous
-  run cannot wander through your original checkout. Inside that boundary the
-  agent writes down the design, breaks the work into checkable pieces, builds
-  each piece, runs acceptance tests, reviews it, and fixes what the review
-  finds. After merge, the agent can guide you through a manual Test Plan in the
-  real environment. You remain responsible for human decisions, privileged
-  actions, and the final merge.
+  carries the work to a pull request. The sequence it follows is not buried in
+  the tool: it is a workflow shape, a short YAML file listing the steps, which
+  your own repository can extend or replace. Before the first step runs,
+  `fr run start` creates a separate Git worktree and development container, so
+  the autonomous run cannot wander through your original checkout, and it keeps
+  a durable record of the run's progress on the feature branch, so the journey
+  can be reviewed or picked back up instead of vanishing with the chat. Inside
+  that boundary the agent writes down the design, breaks the work into
+  checkable pieces, builds each piece, runs acceptance tests, reviews it, and
+  fixes what the review finds. After merge, the agent can guide you through a
+  manual Test Plan in the real environment. You remain responsible for human
+  decisions, privileged actions, and the final merge.
 tags: ["fr-goal", "agent-workflows", "automation", "pull-requests"]
 target: "."
 standalone: true
@@ -36,12 +40,30 @@ change. It does not repeatedly ask you to approve documents or tell it to
 continue. Instead, it works in small loops: build something, check it, fix what
 the check finds, then continue.
 
-That autonomy begins with a hard physical boundary. Before the agent explores
-the project or asks its first question, **`fr-isolation` creates a separate
-workspace and starts the project's development container**. All later stages
-reuse that workspace. The original checkout is not the place where autonomous
-work happens, and a missing container profile stops the run rather than
-silently weakening this guarantee.
+The journey itself is written down. A **workflow shape** is a small YAML file
+that lists the steps of a run — brainstorm, review the spec, plan, review the
+plan, implement, review, deliver — and `fr-goal` reads that file rather than
+containing the sequence in its own prose. Asking for `fr-goal` with no argument
+runs the shape described in this article: feature delivery, test first. Naming
+one, as in `fr-goal ux-research`, runs a different shape. A project can write
+shapes of its own, or replace a shipped one by saving a file of the same name
+in its own repository, without modifying the tool that runs them.
+
+That autonomy begins with a hard physical boundary, and the boundary is
+established before the first step of the shape runs — not by the run, but for
+it. **`fr run start` creates the isolated workspace** — a separate Git worktree,
+plus the project's development container — and only then writes down that a run
+exists. Everything after that happens inside it. The original checkout is not
+the place where autonomous work happens, and where containers are used, a
+missing container profile stops the run rather than silently weakening this
+guarantee.
+
+A run also keeps a **durable record of its own progress**. A file on the feature
+branch says which step the run is on, what each finished step produced, and
+whether it is waiting on you. Without one, all of that would live in the
+conversation and end with it: interrupt the run, and the thread is gone. With
+one, you can ask where a run got to, pick it back up, or read afterwards — in
+the pull request, next to the code — what happened in what order.
 
 Verification also happens at two levels. **Acceptance tests** gather evidence
 that the promised user-visible behavior works while the feature is being built.
@@ -51,7 +73,7 @@ pull request: it returns after the merge and walks the operator through it.
 
 ```mermaid
 flowchart TD
-    A[You describe the outcome] --> X[fr-isolation creates a protected workspace]
+    A[You describe the outcome] --> X[fr run start creates the workspace and the run record]
     X --> B[Agent studies the existing project inside it]
     B --> C[You answer one set of questions]
     C --> D[Agent writes the design and acceptance tests]
@@ -75,7 +97,7 @@ flowchart TD
 This is autonomous work, not blind work. `fr-goal` stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(`plugins/super-fr/skills/fr-goal/SKILL.md:14-30`). The reviews shown above are
+(`plugins/super-fr/skills/fr-goal/SKILL.md:16-32`, `:44-47`). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.
 
@@ -96,25 +118,123 @@ a pull request," so repeating that contract wastes the most useful part of the
 prompt. Add business rules, compatibility requirements, examples, or known
 risks instead.
 
+Because the pipeline is a shape, the command also takes an optional shape name.
+`/fr-goal` runs the feature-delivery shape this article describes;
+`/fr-goal <name>` runs another one that the project or the plugin provides
+(`plugins/super-fr/skills/fr-goal/SKILL.md:16-32`). Most requests never need
+the argument, and nothing about the rest of this article changes when you use
+it: the machinery is the same, only the list of steps differs.
+
 The skill also recognizes `/goal` and natural-language requests such as "build
 this autonomously" or "take this to a PR"
-(`plugins/super-fr/skills/fr-goal/SKILL.md:3-9`). Use interactive
+(`plugins/super-fr/skills/fr-goal/SKILL.md:3-11`). Use interactive
 `fr-brainstorming` instead when you want to shape the design together over
 several conversations. `fr-goal` also requires the repository's isolated
 development environment; if that has not been set up, it pauses and offers the
 setup interview rather than working directly on your machine
-(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:22-38`).
+(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:23-44`).
 
 ## Workflow
 
-The simple loop above is assembled from several narrower super-fr features.
-Each one solves a different failure mode: damaging the original checkout,
-building the wrong thing, losing track of unfinished work, hiding human-only
-steps, merging before review fixes arrive, or cleaning up before the change is
-actually present. The following sections introduce each feature at the point
-where it joins the whole.
+The simple loop above is assembled from several narrower super-fr features, and
+the assembly itself is a file you can open. Each feature solves a different
+failure mode: damaging the original checkout, building the wrong thing, losing
+track of unfinished work, hiding human-only steps, merging before review fixes
+arrive, or cleaning up before the change is actually present. The two sections
+below describe the file that orders those features and the record that tracks
+them; the numbered sections after that introduce each feature at the point where
+it joins the whole.
 
-### 1. Establish the boundary before everything else (`fr-isolation`)
+### The pipeline is a manifest, not a script
+
+Here are two steps from the shape that runs when you ask for `fr-goal` with no
+argument (`plugins/super-fr/workflows/fr-goal.yaml`):
+
+```yaml
+workflow: fr-goal
+unit: run
+requires: [git, tests, scm]
+
+steps:
+  - id: brainstorm
+    kind: agent
+    skill: super-fr:fr-brainstorming
+    gate: operator
+    emits: [spec, journal:spec]
+
+  - id: plan-review
+    kind: cli
+    run: fr plan self-review {{ artifacts.plan }}
+```
+
+Three ideas in that fragment do most of the work.
+
+**A step declares its kind.** `kind: cli` marks a deterministic command. `fr`
+runs it directly and the exit code is the verdict — nothing interprets the
+result, nothing negotiates with it. `kind: agent` marks judgment work, and
+`fr` does not run those steps at all. It prints a brief saying which skill or
+agent should do the work, what that work needs, and what it must produce; the
+coding agent does the work; the outcome is then recorded back into the run.
+That separation is deliberate rather than incidental. It keeps the engine a
+plain program you can read, re-run, and get the same answer from, and it means
+every unpredictable part of the pipeline happens on the far side of a clearly
+marked handoff where a human can see it. There is no path through the engine
+that could call a language model even by accident.
+
+**A step can carry a gate.** `gate: operator` means the run stops there until a
+person answers. The shipped shape declares exactly one such gate, on the
+batched question round — the single operator touchpoint the pipeline promises.
+An unanswered gate is a stop, not a timeout with a default.
+
+**A step declares what it needs and what it emits.** Artifacts are named —
+`spec`, `plan`, `pr` — so a later step can find the specification an earlier
+step wrote, and so the tool can tell whether the inputs a step depends on
+actually exist before anything is dispatched anywhere.
+
+Shapes are looked up in one order: your repository's
+`docs/superpowers/workflows/<name>.yaml` first, then the copy shipped with the
+plugin. A repository file of the same name replaces the shipped shape whole.
+There is no field-by-field merging, and that is a decision rather than an
+omission: a list of steps that is half yours and half the plugin's fails in
+ways that are very hard to see. `fr workflow check` validates a shape before
+you rely on it: unique step ids, no cycles, every `needs` satisfiable, and only
+capabilities drawn from a known list, so a typo is an error you see rather than
+a step that quietly never runs
+(`docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`,
+section 4.A).
+
+### The run keeps its place
+
+Starting a run creates `docs/superpowers/runs/<run-id>.yaml` inside the isolated
+workspace. It holds the shape's name, the branch, the **cursor** — the step the
+run is currently on — and one record per step: pending, running, blocked on a
+gate, done, or failed, along with the paths of whatever that step produced.
+
+Five commands move it. `fr run start` begins a run; `fr run status` prints
+where it is; `fr run advance` executes the step under the cursor if it is a
+command, or prints the dispatch brief if it is agent work; `fr run resolve`
+records how a dispatched step turned out and answers an operator gate; and
+`fr run check` fails loudly when the cursor is sitting on a failed step.
+
+One more command creates a run rather than moving one. If your `fr` was
+upgraded while a plan was already half-implemented, that work predates the run
+model and has no cursor at all; `fr run adopt <plan-dir>` reconstructs one from
+what is already on disk — which phases are finished, which spec the plan came
+from — so the plan rejoins the pipeline instead of being stranded outside it.
+The upgrade only ever *offers* this: it prints the command and adopts nothing
+on your behalf, because an unrelated command should not quietly add tracked
+files to your repository.
+
+Two details make this more than bookkeeping. First, a failed step **does not**
+move the cursor. Success advances, failure stays put, so a stalled run keeps
+reporting the same step until someone deals with it rather than sliding past it.
+Second, the file is committed on the feature branch, not kept in a scratch
+directory. That is why the run arrives in the pull request alongside the code:
+a reviewer can see which steps ran, what each one emitted, and where the run
+paused, without having been present for it. When the plan is archived after
+merge, its run record is archived with it.
+
+### 1. Establish the boundary before everything else (`fr run start`)
 
 Before reading deeply, running measurements, asking design questions, or
 changing code, `fr-goal` creates an **isolation** for this one goal. This is not
@@ -129,13 +249,26 @@ The worktree remains visible on the host, so the agent can edit it normally.
 Builds, tests, and project commands cross an execution bridge into the
 container. Authenticated Git and GitHub operations stay on the host, while the
 container receives only the secrets explicitly assigned to its profile and no
-SSH identity (`plugins/super-fr/skills/fr-isolation/SKILL.md:63-77`).
+SSH identity (`plugins/super-fr/skills/fr-isolation/SKILL.md:67-80`). On a host
+with no container runtime the worktree is the isolation on its own, and the
+project's container profile is not required.
 
-Technically, `fr-goal` reaches this through `fr-brainstorming`, which runs
-`fr isolation up`. A new feature branch is normally based on the latest remote
-default branch. Source lives in a linked Git worktree outside the base clone;
-project commands run inside its devcontainer
-(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:22-41`).
+Technically, this happens inside `fr run start`. It resolves the shape first —
+so a mistyped shape name fails before any worktree or container is created —
+then ensures the isolation for the branch, then writes the run's record inside
+the resulting workspace. Every later command is run from there. A new feature
+branch is normally based on the latest remote default branch
+(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:23-44`).
+
+It is worth knowing why isolation is a precondition rather than the run's own
+first step, because the alternative was tried and does not work. If entering
+isolation were step one, the run's record would be written in the original
+checkout and the worktree would be created afterwards — so the run could no
+longer find itself from inside its own workspace, and a command like
+`fr plan self-review` would look for a plan in the checkout where it does not
+exist. A run recorded in the original checkout also misses the whole point of
+recording it: it would not be on the feature branch, and would never reach the
+pull request. A run is born in its workspace.
 
 The same isolation persists through brainstorming, specification, planning,
 implementation, review fixes, and pull-request delivery. There is no handoff to
@@ -144,20 +277,22 @@ tool-layer edit hook, and session-sentinel Bash guard also make accidental drift
 back into the base checkout harder. These are discipline backstops with
 documented escapes and fail-open cases, not a security boundary.
 
-### 2. Explore first, then ask once (`fr-brainstorming`)
+### 2. Explore first, then ask once (`brainstorm`)
 
 The agent does not begin by asking questions it could answer from the project.
 It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
 question set, with no more than four questions and recommended choices first.
 A deployed change may include a question about how you will verify it in the
-real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:32-40`).
+real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:49-56`).
 
-An unanswered batch is a hard stop. "Recommended" communicates judgment; it is
-not a timeout default. Straggling decisions are batched rather than dripped out
-as repeated interruptions (`plugins/super-fr/skills/fr-goal/SKILL.md:38-41`).
-This is why "one operator touchpoint" describes the expected path, not an
-unconditional promise of one conversation turn.
+This is the shape's one operator gate, and an unanswered batch is a hard stop.
+"Recommended" communicates judgment; it is not a timeout default. Straggling
+decisions are batched rather than dripped out as repeated interruptions. When
+you do answer, the step is closed by recording both the outcome and the path of
+the specification it produced, which is how every later step knows where to
+find that document. This is why "one operator touchpoint" describes the
+expected path, not an unconditional promise of one conversation turn.
 
 | Event | Pause? | Why |
 |---|---:|---|
@@ -170,14 +305,16 @@ unconditional promise of one conversation turn.
 | PR merge | Yes | The agent never self-merges. |
 | Post-merge environment validation | Usually | It needs the deployed environment. |
 
-### 3. Define how success will be proved (acceptance tests)
+### 3. Define how success will be proved (`spec-review` and acceptance tests)
 
 Your answers become a **specification**, a document that says what will change
-and why. The agent checks that document against both your answers and the
+and why. The next step checks that document against both your answers and the
 existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning. The file lives at
-`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`
-(`plugins/super-fr/skills/fr-goal/SKILL.md:43-49`).
+`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
+`fr-brainstorming`'s, which `brainstorm` invokes
+(`plugins/super-fr/skills/fr-goal/SKILL.md:49-56`,
+`plugins/super-fr/skills/fr-brainstorming/SKILL.md`).
 
 The important promises also become **acceptance tests**: concrete statements of
 what a user or operator must be able to do when the feature is complete. For
@@ -190,15 +327,15 @@ to the plan phase that will satisfy it. As implementation lands, `fr-goal`
 updates the row with honest evidence such as a unit, integration, or end-to-end
 test. This prevents completed code from being mistaken for proven behavior.
 Under `fr-goal`, the agent presents these rows and a short defense for each
-during spec review rather than asking for another approval
-(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:64-73`,
+during the spec review rather than asking for another approval
+(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:67-76`,
 `plugins/super-fr/skills/fr-plan/SKILL.md:79-84`).
 
 Not every promise can be automated immediately. Any remaining acceptance debt
 stays visible in the final pull request instead of being quietly described as
-done (`plugins/super-fr/skills/fr-goal/SKILL.md:101-111`).
+done (`plugins/super-fr/skills/fr-goal/SKILL.md:104-114`).
 
-### 4. Turn the design into a checkable plan (`fr-plan`)
+### 4. Turn the design into a checkable plan (`plan` and `plan-review`)
 
 The specification says what success means; the plan says how to get there.
 `fr-goal` invokes `fr-plan` to divide the work into phases and small steps. It
@@ -208,12 +345,17 @@ dependencies, and links to the acceptance criteria it advances
 (`plugins/super-fr/skills/fr-plan/SKILL.md:15-38`,
 `plugins/super-fr/skills/fr-plan/SKILL.md:63-84`).
 
-Before implementation, `fr plan self-review` must pass. The agent also reads
-the phases against the spec to ensure every requirement is covered. The CLI
-errors on defects such as dependency cycles and manual work hidden inside an
-agentic phase; when a local Test Plan and readable acceptance matrix are
-present, it also errors on unknown acceptance IDs. It warns about unresolved
-local spec references (`packages/fr/src/fr/plan_ops.py:832-1026`).
+Reviewing that plan is the shape's one command step, and a good illustration of
+why the distinction between kinds matters. `fr plan self-review` runs against
+the plan the previous step emitted, and its exit code decides whether the run
+moves on; nobody has to judge whether the output "looks fine." The CLI errors on
+defects such as dependency cycles and manual work hidden inside an agentic
+phase; when a local Test Plan and readable acceptance matrix are present, it
+also errors on unknown acceptance IDs, and it checks that a plan naming its own
+workflow shape names one that actually resolves. It warns about unresolved
+local spec references (`packages/fr/src/fr/plan_ops.py:867-1029`). The agent
+fixes what it reports and advances the run again; there is nothing to record by
+hand, because a command step completes itself.
 
 ### 5. Separate work only a human can do (manual phases)
 
@@ -237,33 +379,41 @@ Back-loading is the default. The final PR labels the phase as unimplemented,
 and the operator performs it and records a completion note on the same branch.
 Front-loading is reserved for genuine prerequisites; then the manual
 instructions are themselves the first deliverable
-(`plugins/super-fr/skills/fr-goal/SKILL.md:67-79`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:69-74`).
 
-### 6. Build, test, and review in a loop (`fr-execute`)
+### 6. Build, test, and review in a loop (`implement` and `review`)
 
-Now the central loop from the opening diagram begins. For each automated phase,
-`fr-execute` guides the agent through writing a failing test, implementing the
-behavior, and cleaning up without changing that behavior. This test-first
-cycle is commonly called **TDD**, or test-driven development.
+Now the central loop from the opening diagram begins. The shape says this step
+runs once per plan phase, so the phases are worked through in dependency order,
+one at a time. Each one goes to a dedicated phase executor, which is given the
+phase's scope, the specification, and the running journal of what earlier phases
+discovered. It writes a failing test, implements the behavior, and cleans up
+without changing that behavior. This test-first cycle is commonly called
+**TDD**, or test-driven development.
 
-The work stays in the original isolated workspace so the agent retains your
-answers, the design reasoning, and the plan. Progress is recorded step by step,
-and acceptance rows are updated only when there is honest test evidence
-(`plugins/super-fr/skills/fr-goal/SKILL.md:81-87`,
+The work stays in the original isolated workspace, so the design reasoning, the
+plan, and your answers all remain in reach. The journal is what carries context
+from one phase to the next: findings, decisions, and discoveries are written
+down rather than being remembered, which is what makes a phase handover
+survivable at all. Progress is recorded step by step, and acceptance rows are
+updated only when there is honest test evidence
+(`plugins/super-fr/skills/fr-goal/SKILL.md:81-95`,
 `plugins/super-fr/skills/fr-execute/SKILL.md:79-82`).
 
 At each completed phase, or after all implementation for a small plan, the
 agent reviews the spec, plan, and code together. It fixes every valid finding
 with tests. It may reject a finding only with explicit, factual reasoning;
-silent dismissal is not allowed
-(`plugins/super-fr/skills/fr-goal/SKILL.md:94-99`).
+silent dismissal is not allowed. Each finding is recorded as open, fixed, or
+refuted, and that durable list — not anyone's memory of the review — is what
+the pull-request description is later written from
+(`plugins/super-fr/skills/fr-goal/SKILL.md:97-102`).
 
-### 7. Keep delivery in draft until the checks pass
+### 7. Keep delivery in draft until the checks pass (`deliver`)
 
 The agent opens one **draft pull request**, a visible change that GitHub marks as
 not ready to merge. It remains a draft while reviews and fixes continue. Only
 after the full test suite and plan checks pass does `fr-goal` mark it ready for
-your review (`plugins/super-fr/skills/fr-goal/SKILL.md:89-105`).
+your review (`plugins/super-fr/skills/fr-goal/SKILL.md:104-114`).
 
 This ordering follows a recurring failure: implementers opened mergeable PRs
 before orchestration review, operators merged them, and later fixes were pushed
@@ -273,8 +423,9 @@ guard, and post-merge content verification now protect that transition
 
 The final PR discloses the spec and plan, review findings and fixes, refuted
 findings, unfinished manual work, operator-driven Test Plan, and remaining
-acceptance debt. The agent then stops. Merge remains the operator's decision
-(`plugins/super-fr/skills/fr-goal/SKILL.md:101-112`).
+acceptance debt — and, because the run's record is committed on the same branch,
+the sequence of steps that produced all of it. The agent then stops. Merge
+remains the operator's decision.
 
 ### 8. Confirm the merge, then drive the manual Test Plan
 
@@ -284,8 +435,8 @@ arrived on the project's main line before deleting its workspace. It runs
 PR state, and compares that content. This deliberately verifies results rather
 than commit identity, so squash, rebase, and merge commits are supported. If a
 late fix is missing, the workflow stops for a cherry-pick or fresh PR instead
-of archiving incomplete work (`packages/fr/src/fr/commands/isolation_cmd.py:313-371`,
-`packages/fr/src/fr/isolation/local.py:400-424`).
+of archiving incomplete work (`packages/fr/src/fr/commands/isolation_cmd.py:455-516`,
+`packages/fr/src/fr/isolation/local.py:492-525`).
 
 For a change that must be proven in a deployed environment, the specification
 contains a **manual Test Plan** agreed during the initial question round. This
@@ -298,46 +449,64 @@ After merge verification, the agent drives this session interactively. It
 presents the next check, asks the operator to perform or observe the human-only
 part, records the result, and continues until the plan passes or a failure
 requires recovery. It then reports any remaining acceptance debt, confirms plan
-completion, archives the plan and eligible spec through a housekeeping PR, and
-tears down isolation or lets garbage collection reap it
-(`plugins/super-fr/skills/fr-goal/SKILL.md:22-30`,
-`plugins/super-fr/skills/fr-goal/SKILL.md:114-120`).
+completion, archives the plan, its journal, and its run record through a
+housekeeping PR, and tears down isolation or lets garbage collection reap it
+(`plugins/super-fr/skills/fr-goal/SKILL.md:116-120`).
 
 ### When one goal spans several repositories
 
 The delivery unit is still one repository: one workspace, one plan, one branch,
 and one PR. A coordinating spec may cover several repositories, but `fr-goal`
-locates each checkout and assigns one isolated agent per other repository.
-Dependencies between repositories live in the spec and PR order, not in a
-plan phase's local `depends_on` field
-(`plugins/super-fr/skills/fr-goal/SKILL.md:51-57`,
-`plugins/super-fr/skills/fr-goal/SKILL.md:78-79`).
+locates each checkout and assigns one isolated agent per other repository, each
+running this same pipeline from planning onward in its own repo. Dependencies
+between repositories live in the spec and PR order, not in a plan phase's local
+`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:58-64`).
+
+The shape decides the granularity at which its work is handed out, by declaring
+one of three units: a whole run as a single item, which is what the shipped
+shape does; one item per plan phase; or one item per target repository of a
+cross-repo spec. Because the unit is declared in the manifest rather than fixed
+in the tool, how finely a goal is divided is a property of the pipeline you
+chose, not of the machine that happens to run it.
 
 ## Configuration
 
-There is no separate `fr-goal` settings screen or command configuration. It
+There is still no `fr-goal` settings screen or per-command configuration. It
 takes the feature-specific intent from your request and gets the rest from the
 project: its isolated development environment, specification folder, plan
-folder, and acceptance criteria.
+folder, and acceptance criteria. The sequence is one of those project-supplied
+inputs too: a repository that wants a different pipeline writes a shape, rather
+than looking for a flag that bends this one.
 
 | Input or boundary | Source | Effect |
 |---|---|---|
 | Goal and autonomy request | Operator prompt | Defines scope and activates the skill. |
+| Workflow shape | `docs/superpowers/workflows/<name>.yaml`, else the shipped copy | Defines the steps, their kinds, gates, and dispatch granularity. |
+| Run record | `docs/superpowers/runs/<run-id>.yaml` | Tracks the cursor, each step's outcome, and what it emitted. |
 | Product decisions | One batched Q&A | Constrains the spec and all later work. |
 | Devcontainer profile | `.devcontainer/<profile>/devcontainer.json` | Defines isolated execution. |
 | Profile secrets | `~/.config/fr/secrets/<repo>/<profile>.env` | Exposes only configured runtime secrets. |
 | Spec | `docs/superpowers/specs/` | Records design, acceptance tests, and optional manual Test Plan. |
 | Acceptance matrix | `docs/acceptance/matrix.yaml` | Tracks each business promise and the evidence proving it. |
 | Plan | `docs/superpowers/plans/<slug>/` | Defines phases, TDD steps, and acceptance-test links. |
+| Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
 
-The workflow is not one large program. The skill provides the sequence and
-decision rules; smaller commands and safety checks enforce the risky parts.
-They protect the original checkout, inspect the plan, prevent remote work from
-starting before its instructions are available, warn about pushes to closed
-pull requests, and compare the merged result. These checks are guardrails with
-documented limits, not a security boundary.
+The workflow is not one large program. The shape supplies the sequence, the
+skill supplies the judgment each step needs, and smaller commands and safety
+checks enforce the risky parts. They protect the original checkout, inspect the
+plan, prevent remote work from starting before its instructions are available,
+warn about pushes to closed pull requests, and compare the merged result. These
+checks are guardrails with documented limits, not a security boundary.
+
+Shapes and run records arrived in super-fr 4.0.0, which is worth knowing in two
+narrow cases. A plan that names its own workflow shape cannot be read by an
+older `fr` at all, so such a plan requires the new version rather than
+degrading; plans that name none are unaffected. And if you have written your own
+runner to execute work elsewhere, its interface now receives a single work item
+rather than a plan-and-phase pair, which is what allows one runner to serve
+shapes of different granularity.
 
 ## Try it yourself
 
@@ -352,22 +521,28 @@ Keep existing saved filters compatible, document the JSON format, and test round
 
 Expect this visible sequence:
 
-1. The agent announces `fr-goal` and starts isolation before examining code.
+1. The agent announces `fr-goal`, starts the run, and enters isolation before
+   examining code.
 2. It explores the implementation and asks one consolidated question set.
 3. After your answers, it writes and reviews the spec without section approvals.
-4. It creates and self-reviews the plan, then implements agentic phases with TDD.
-5. It opens a draft PR, fixes review findings, verifies, and marks the PR ready.
-6. You complete any disclosed manual phase and merge the PR.
-7. After you report the merge, it verifies the merged content.
-8. When a manual Test Plan exists, it guides you through each real-world check.
-9. It reports remaining acceptance debt and closes out the isolated workspace.
+4. It creates the plan, and the plan self-review runs as a command whose exit
+   code decides whether the run continues.
+5. It implements the agentic phases with TDD, one phase at a time.
+6. It opens a draft PR, fixes review findings, verifies, and marks the PR ready.
+7. You complete any disclosed manual phase and merge the PR.
+8. After you report the merge, it verifies the merged content.
+9. When a manual Test Plan exists, it guides you through each real-world check.
+10. It reports remaining acceptance debt and closes out the isolated workspace.
 
-If you leave a required design question unanswered, the expected output is not
-a guessed implementation. The agent should restate the open questions and
-wait. If a manual prerequisite blocks later code, expect a reviewed spec-and-
-plan PR followed by a pause. Those stops are not failures of autonomy; they are
-the controls that keep autonomous execution from silently making operator
+At any point you can ask `fr run status <run-id>` where the run has got to, and
+after the fact the same record is in the pull request. If you leave a required
+design question unanswered, the expected output is not a guessed
+implementation. The agent should restate the open questions and wait. If a
+manual prerequisite blocks later code, expect a reviewed spec-and-plan PR
+followed by a pause. Those stops are not failures of autonomy; they are the
+controls that keep autonomous execution from silently making operator
 decisions.
 
 For a compact inventory of surrounding skills and commands, run `fr skills`.
-The canonical contract is `plugins/super-fr/skills/fr-goal/SKILL.md`.
+The canonical contract is `plugins/super-fr/skills/fr-goal/SKILL.md`, and the
+shipped shape it drives is `plugins/super-fr/workflows/fr-goal.yaml`.

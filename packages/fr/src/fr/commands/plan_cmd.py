@@ -26,6 +26,78 @@ from fr.plan_ops import (
 console = Console()
 err_console = Console(stderr=True)
 
+# Widened past the 3.19.0 -> 4.0.0 major bump (Phase 11 of the 2026-08-14
+# workflow-shapes plan) — a <4.0.0 ceiling would make every plan created on
+# 4.0.0+ fr fail its own version gate at parse time. See that plan's spec
+# §5 "fr_version must span the bump".
+DEFAULT_FR_VERSION = ">=3.0.0,<5.0.0"
+
+# The floor a plan that names a `workflow:` shape must carry (spec §4.A.1).
+# `PlanMeta` is extra="forbid", so fr < 4.0.0 does not skip the unknown
+# `workflow:` key — it fails the parse outright.
+#
+# What each fr actually reports (corrected in review r5-b4). Every RELEASED
+# fr 3.x validates the schema before it reads `fr_version`, so it dies on
+# pydantic's `extra_forbidden` for `workflow:` and never prints this floor:
+# a hard failure, but not a legible one. fr 4.0.0+ enforces the version gate
+# off the raw mapping FIRST (`fr.parser._enforce_fr_version`), so from here
+# on an old-reader-hostile key is reported as "requires fr_version …, but
+# installed is …". The constraint is still the plan's way of telling an
+# older fr not to try; the reason to carry it is that the NEXT field
+# addition will be announced properly, not that 3.x ever was.
+WORKFLOW_FR_VERSION = ">=4.0.0,<5.0.0"
+
+_PRE_4_PROBES = (
+    "0.1.0",
+    "1.0.0",
+    "2.0.0",
+    "2.5.0",
+    "3.0.0",
+    "3.0.1",
+    "3.1.0",
+    "3.5.0",
+    "3.10.0",
+    "3.19.0",
+    "3.20.0",
+    "3.999.999",
+)
+"""Versions probed for "would some real fr 3.x load this plan?".
+
+Denser than the original five (review r5-b6): a probe LIST answers an
+`==3.5.0` constraint with a flat no unless 3.5.0 happens to be in it, and an
+operator pinning one exact 3.x is exactly the case the check exists to
+refuse. `SpecifierSet.filter` over the list is what `_admits_pre_4` runs, so
+adding a probe is the only way to widen coverage; the list deliberately
+includes a 0.x, a 1.x, a 2.x, several 3.minor values and both ends of 3.x.
+"""
+
+
+def _admits_pre_4(constraint: str) -> bool:
+    """Does `constraint` allow an fr older than 4.0.0 to load the plan?
+
+    Probes rather than parses the specifier's bounds: `SpecifierSet` has no
+    "minimum version" accessor, and probing is what actually matters — the
+    question is whether some real fr 3.x would consider itself allowed.
+    An unparseable constraint answers False; `fr.parser` fails it loudly at
+    parse time and duplicating that error here would only mask it.
+
+    A probe list is only as good as its density (review r5-b6): the original
+    five missed `==3.5.0` and every other exact pin between them, quietly
+    letting through the one constraint shape most likely to be hand-written.
+    """
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
+    try:
+        spec = SpecifierSet(constraint)
+    except InvalidSpecifier:
+        return False
+    # `filter` rather than `contains`: it applies the specifier's own
+    # prerelease semantics uniformly over the probe list, which is the same
+    # question `pip` asks. The list is what bounds the answer — see
+    # `_PRE_4_PROBES`.
+    return any(spec.filter(_PRE_4_PROBES))
+
+
 plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
 
 
@@ -42,8 +114,22 @@ def create_cmd(
     spec: Path | None = typer.Option(
         None, "--spec", help="Spec path relative to repo root (optional)."
     ),
-    fr_version: str = typer.Option(
-        ">=3.0.0,<4.0.0", "--fr-version", help="fr_version constraint for the plan."
+    fr_version: str | None = typer.Option(
+        None,
+        "--fr-version",
+        help=(
+            "fr_version constraint for the plan. Effective default: "
+            f"{DEFAULT_FR_VERSION!r}, or {WORKFLOW_FR_VERSION!r} when --workflow is given."
+        ),
+    ),
+    workflow: str | None = typer.Option(
+        None,
+        "--workflow",
+        help=(
+            "Workflow shape this plan dispatches at (repo > shipped). "
+            "Omitted, the plan resolves the default phase-dispatch shape "
+            "and the key is not written at all."
+        ),
     ),
     phases_file: Path | None = typer.Option(
         None, "--phases-file", help="YAML file with a list of phase specs."
@@ -81,6 +167,34 @@ def create_cmd(
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
 
+    # "Did the operator state a constraint?" is asked of the sentinel default
+    # (None), not of click: an explicit `--fr-version '>=3.0.0,<5.0.0'` is
+    # byte-identical to the default, and silently upgrading it would be
+    # exactly the kind of quiet substitution this phase exists to stop.
+    # (click's ParameterSource introspection would answer the same question
+    # but click is typer's transitive dep, not ours — see skills_cmd.py's
+    # duck-typing note; a bare `import click` breaks a clean `uv tool
+    # install` of fr, which has no direct click dependency.)
+    explicit = fr_version is not None
+    if workflow is not None:
+        if not explicit:
+            # No constraint stated, so the shape decides it.
+            fr_version = WORKFLOW_FR_VERSION
+        elif _admits_pre_4(fr_version):  # type: ignore[arg-type]  # explicit implies not None
+            # An explicit constraint is the operator's, so it is refused
+            # rather than silently rewritten — but one that invites fr 3.x
+            # to load a plan whose `workflow:` key it cannot parse is a
+            # promise the plan cannot keep.
+            err_console.print(
+                f"[red]error:[/red] --workflow requires an fr_version floored at 4.0.0 "
+                f"(PlanMeta forbids unknown keys, so fr < 4.0.0 cannot parse a plan "
+                f"carrying `workflow:`); got {fr_version!r}. Use "
+                f"--fr-version '{WORKFLOW_FR_VERSION}' or drop --workflow."
+            )
+            raise typer.Exit(2)
+    if fr_version is None:
+        fr_version = DEFAULT_FR_VERSION
+
     try:
         plan = create(
             repo_root=repo_root,
@@ -90,6 +204,7 @@ def create_cmd(
             fr_version=fr_version,
             phases=phases,
             prose=prose,
+            workflow=workflow,
         )
         console.print(f"created plan: {plan.dir}")
     except PlanEditError as e:

@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Obligatory trigger at CLI entry, context-aware
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - artifacts-migrate-on-next-command
+tasks:
+- number: 1
+  title: RED → GREEN — detection and context
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: create tests/unit/test_migration_trigger.py. Assert: a callback runs
+      before any fr command; with stale artifacts in an INTERACTIVE context it
+      migrates and the invoked command still runs; in a NON-INTERACTIVE context
+      (CI env set, or no TTY) it refuses, exits non-zero, and names the command
+      to run — and does NOT migrate or commit. Exemptions do not trigger at all:
+      `--version`, `--help`, `fr migrate` itself (it cannot require itself), and
+      FR_SKIP_MIGRATION=1. Assert the exemption list is exactly those.
+      Run: uv run pytest tests/unit/test_migration_trigger.py -q --no-cov
+      Expected: failures.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement the callback on the Typer app in fr/cli.py plus context
+      detection. Keep the detection cheap: it runs before EVERY command, so it
+      must not walk the whole tree when nothing is stale — read stamps lazily
+      and bail on the first current-everything answer.
+      Run: uv run pytest tests/unit/test_migration_trigger.py -q --no-cov
+      Expected: passed.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-08-30T14:10:04+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-08-30T14:10:08+00:00'
+      note: null
+  completion:
+    at: '2026-08-30T14:12:53+00:00'
+    note: 'Trigger at CLI entry: fr.artifacts.trigger + fr.cli root callback. 21 unit
+      tests.'
+    observed_prs: []

@@ -8,9 +8,11 @@ pins the structure the bridge will see at runtime.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
+from fr_dispatch.metrics import NullMetrics
 
 _META_TEMPLATE = """\
 schema_version: 2
@@ -188,6 +190,115 @@ def test_discover_plans_skips_unparseable_plan_and_keeps_going(
     assert len(found) == 1
     assert found[0].meta.plan == "2026-05-09-good"
     assert any("2026-05-09-bad" in rec.getMessage() for rec in caplog.records)
+
+
+def test_discover_plans_refuses_stale_plan_loudly_and_keeps_going(
+    repo_layout: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Phase 5 (spec §3.C/§3.E.1): a plan whose artifacts fail `parse()`
+    (stale `fr_version` ceiling, or any other `PlanSchemaError`) must be a
+    LOUD refusal — error logged, failure metric pushed, and reported to the
+    caller via the `failures` outparam — not the old silent
+    warn-and-continue. The I9 boundary still holds: a stale plan excludes
+    only itself; a good plan alongside it is still discovered.
+    """
+    from fr_dispatch import discover_plans
+
+    from tests.unit.fakes import FakeGhClient
+
+    _write_plan(
+        repo_layout,
+        "2026-05-09-good",
+        tracking_issue="https://github.com/derio-net/test/issues/1",
+    )
+    bad_dir = repo_layout / "docs" / "superpowers" / "plans" / "2026-05-09-stale"
+    bad_dir.mkdir(parents=True)
+    # schema_version is Literal[2] in PlanMeta; 99 is unreachable by any
+    # registered migration and fails parse() exactly like a stale/incompatible
+    # artifact would.
+    (bad_dir / "_meta.yaml").write_text("schema_version: 99\nplan: 2026-05-09-stale\n")
+
+    gh = FakeGhClient()
+    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"fr:ready"})
+
+    pushed: list[str] = []
+
+    class _RecordingMetrics(NullMetrics):
+        def push_failure_total(self, *, reason: str) -> None:
+            pushed.append(reason)
+
+    failures: list[str] = []
+    with caplog.at_level("ERROR", logger="fr_dispatch"):
+        found = discover_plans("derio-net/test", gh, metrics=_RecordingMetrics(), failures=failures)
+
+    assert len(found) == 1, "the good plan must still be discovered (I9 boundary)"
+    assert found[0].meta.plan == "2026-05-09-good"
+    assert pushed == ["stale_artifact"], "a failure metric must be pushed for the stale plan"
+    assert len(failures) == 1, "errors must be reported to the caller so it can count them"
+    assert "2026-05-09-stale" in failures[0]
+    assert any(
+        rec.levelname == "ERROR" and "2026-05-09-stale" in rec.getMessage()
+        for rec in caplog.records
+    ), "the refusal must be logged loudly (ERROR), not a warning"
+
+
+def test_discover_plans_still_enforces_fr_version(
+    repo_layout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 8 (spec §3.E.1): the bridge is `fr_dispatch`, an execution path
+    (it dispatches phases to a runner) — `discover_plans`'s `parse()` call
+    must keep enforcing `fr_version` at its unspecified (True) default.
+    `enforce_fr_version=False` is reserved for `fr.spec.compute_status`
+    alone. Uses a fixture whose ceiling genuinely excludes the installed
+    version (monkeypatched `INSTALLED_FR_VERSION`), matching Phase 5's
+    stale-plan refusal path exactly."""
+    from fr_dispatch import discover_plans
+
+    from tests.unit.fakes import FakeGhClient
+
+    plan_dir = _write_plan(
+        repo_layout,
+        "2026-05-09-fr-version-excluded",
+        tracking_issue="https://github.com/derio-net/test/issues/1",
+    )
+    meta = (plan_dir / "_meta.yaml").read_text()
+    (plan_dir / "_meta.yaml").write_text(meta + 'fr_version: ">=9.0.0,<10.0.0"\n')
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "3.0.0")
+
+    gh = FakeGhClient()
+    gh.add_issue("derio-net/test", 1, state="OPEN", labels={"fr:ready"})
+
+    failures: list[str] = []
+    found = discover_plans("derio-net/test", gh, failures=failures)
+
+    assert found == [], "an fr_version-excluded plan must not be dispatched"
+    assert len(failures) == 1
+    assert "requires fr_version" in failures[0]
+
+
+def test_discover_plans_never_shells_out_when_refusing_a_stale_plan(
+    repo_layout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The daemon must never auto-commit (#286): the bridge checkout is
+    hard-reset every tick, so a commit made here would be silently discarded.
+    Discovery refuses the stale plan loudly but never shells out to git (or
+    anything else) to do so."""
+    from fr_dispatch import discover_plans
+
+    from tests.unit.fakes import FakeGhClient
+
+    bad_dir = repo_layout / "docs" / "superpowers" / "plans" / "2026-05-09-stale"
+    bad_dir.mkdir(parents=True)
+    (bad_dir / "_meta.yaml").write_text("schema_version: 99\nplan: 2026-05-09-stale\n")
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise AssertionError("discover_plans must never shell out (no auto-commit)")
+
+    monkeypatch.setattr(subprocess, "run", _boom)
+    monkeypatch.setattr(subprocess, "Popen", _boom)
+
+    found = discover_plans("derio-net/test", FakeGhClient())
+    assert found == []
 
 
 def test_discover_plans_includes_phase_unblocked_by_completed_dependency(

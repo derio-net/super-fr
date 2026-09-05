@@ -278,7 +278,8 @@ def _migrate_one(
         "spec": v1plan.spec,
         "target_repo": resolved_target,
         # Match `fr plan create`'s default (fr_version) — migrated plans are v2 plans (#245).
-        "fr_version": ">=3.0.0,<4.0.0",
+        # Widened past the 4.0.0 major bump, same reasoning as plan_cmd.py's default.
+        "fr_version": ">=3.0.0,<5.0.0",
         "created": slug[:10],  # YYYY-MM-DD prefix is enforced above
     }
     if parent_plan:

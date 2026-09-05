@@ -72,7 +72,7 @@ def _create_plan(repo: Path, acceptance: tuple[str, ...] = ()) -> Path:
         slug="2026-07-04-toy",
         spec="docs/superpowers/specs/2026-07-04-toy.md",
         target_repo="derio-net/own",
-        fr_version=">=3.0.0,<4.0.0",
+        fr_version=">=3.0.0,<5.0.0",
         phases=[
             PhaseSpec(
                 number=1,
@@ -190,7 +190,7 @@ def test_self_review_passes_with_valid_links(tmp_path: Path) -> None:
     _spec(repo, test_plan=True)
     plan_dir = _create_plan(repo, acceptance=("row-a",))
     meta = plan_dir / "_meta.yaml"  # acceptance: requires the 3.7.0 floor
-    meta.write_text(meta.read_text().replace(">=3.0.0,<4.0.0", ">=3.7.0,<4.0.0"))
+    meta.write_text(meta.read_text().replace(">=3.0.0,<5.0.0", ">=3.7.0,<5.0.0"))
     issues = _issues(repo, plan_dir)
     assert not any("acceptance" in i.message for i in issues), issues
 
@@ -220,7 +220,7 @@ def test_self_review_no_version_warn_with_raised_floor(tmp_path: Path) -> None:
     _spec(repo, test_plan=True)
     plan_dir = _create_plan(repo, acceptance=("row-a",))
     meta = plan_dir / "_meta.yaml"
-    meta.write_text(meta.read_text().replace(">=3.0.0,<4.0.0", ">=3.7.0,<4.0.0"))
+    meta.write_text(meta.read_text().replace(">=3.0.0,<5.0.0", ">=3.7.0,<5.0.0"))
     issues = _issues(repo, plan_dir)
     assert not any("fr_version" in i.message for i in issues), issues
 

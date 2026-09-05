@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -106,7 +107,7 @@ def test_tick_syncs_bridge_owned_checkout_before_discover(
 
     monkeypatch.setattr(bridge_cli, "_pull_managed_repo", spy_pull)
 
-    def spy_discover(repo: str, gh: Any) -> list[Any]:
+    def spy_discover(repo: str, gh: Any, **kwargs: Any) -> list[Any]:
         pull_order.append("discover")
         return []
 
@@ -194,11 +195,18 @@ def test_tick_logs_configured_repos_count_discovered_plans_and_summary(
 
     # Stub one fake plan with a slug we'll check in the log.
     class _StubPlan:
+        # `meta.workflow` / `repo_root` added in Phase 12: the bridge now
+        # resolves each plan's own shape before ticking it. `workflow=None`
+        # is the pre-Phase-12 plan every existing repo has, and resolves the
+        # same default `tick` was already using — so this stub still
+        # describes today's behaviour, with one more attribute.
         def __init__(self, slug: str) -> None:
             self.dir = tmp_path / slug
+            self.repo_root = tmp_path
+            self.meta = SimpleNamespace(plan=slug, workflow=None)
 
     monkeypatch.setattr(
-        bridge_cli, "discover_plans", lambda repo, gh: [_StubPlan("fake-plan-slug")]
+        bridge_cli, "discover_plans", lambda repo, gh, **kw: [_StubPlan("fake-plan-slug")]
     )
     # Tick returns a non-trivial counter so the per-plan log line is testable.
     monkeypatch.setattr(
@@ -285,7 +293,7 @@ def _stub_bridge_io(bridge_cli: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         bridge_cli, "_repo_owner_name", lambda repo_path: f"example/{repo_path.name}"
     )
-    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh: [])
+    monkeypatch.setattr(bridge_cli, "discover_plans", lambda repo, gh, **kw: [])
 
     class _StubMcp:
         def list_workspaces(self, **kwargs: Any) -> list[Any]:

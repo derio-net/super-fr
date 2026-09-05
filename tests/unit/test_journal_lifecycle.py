@@ -42,7 +42,7 @@ def _create_plan(repo: Path, slug: str, spec_path: Path):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<4.0.0",
+        fr_version=">=1.0.0,<5.0.0",
         phases=[
             PhaseSpec(
                 number=1,

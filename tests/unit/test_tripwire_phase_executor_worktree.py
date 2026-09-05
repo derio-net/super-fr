@@ -96,12 +96,29 @@ def test_agent_description_carries_the_constraint() -> None:
     )
 
 
-def test_fr_goal_section_6_says_without_the_flag() -> None:
-    text = FR_GOAL.read_text(encoding="utf-8")
-    section = text.split("### 6.", 1)
-    assert len(section) == 2, "fr-goal SKILL.md has no §6"
-    body = section[1].split("\n### ", 1)[0]
-    assert 'isolation: "worktree"' in body, "§6 must name the flag it is ruling out"
+def _dispatch_section(text: str) -> str:
+    """The section that dispatches `fr-phase-executor`, located by CONTENT.
+
+    This originally split on a hardcoded `### 6.`. When fr-goal became
+    manifest-driven the pipeline was renumbered (dispatch moved to §5, the
+    cross-repo case into §2) and the hardcoded number silently stopped naming
+    the section it meant — the tripwire went red for the right reason but the
+    wrong cause. A section number is itself prose that drifts; the agent name
+    is the thing this file is actually about, so anchor on that.
+    """
+    sections = re.split(r"(?m)^### ", text)
+    hits = [s for s in sections if "fr-phase-executor" in s]
+    assert len(hits) == 1, (
+        f"expected exactly one fr-goal section dispatching fr-phase-executor, found {len(hits)}"
+    )
+    return hits[0]
+
+
+def test_fr_goal_dispatch_section_says_without_the_flag() -> None:
+    body = _dispatch_section(FR_GOAL.read_text(encoding="utf-8"))
+    assert 'isolation: "worktree"' in body, (
+        "the dispatch section must name the flag it is ruling out"
+    )
     assert re.search(r"without\b[^\n]*isolation|isolation[^\n]*\bwithout\b", body, re.IGNORECASE), (
         '§6 must say to dispatch WITHOUT `isolation: "worktree"`'
     )
@@ -141,15 +158,16 @@ def test_carve_out_reaches_opencode_and_hermes() -> None:
     )
 
 
-def test_fr_goal_contrasts_section_3s_correct_use() -> None:
-    """§3 passes the flag correctly (one fresh pipeline per repo). Without an
-    explicit contrast, a reader takes §3 as precedent for §6 — the exact
-    misreading #420 reports."""
-    text = FR_GOAL.read_text(encoding="utf-8")
-    body = text.split("### 6.", 1)[1].split("\n### ", 1)[0]
-    assert "§3" in body or "step 3" in body.lower(), (
-        "§6 must contrast itself against §3's correct use of the flag, so the "
-        "precedent cannot be misread"
+def test_fr_goal_contrasts_the_correct_use_of_the_flag() -> None:
+    """Another section passes the flag correctly (one fresh pipeline per repo).
+    Without an explicit contrast, a reader takes that as precedent for the
+    dispatch section — the exact misreading #420 reports. The cross-reference is
+    asserted by shape (`§N` / `step N`) rather than a fixed number, so a future
+    renumbering cannot quietly drop the contrast while staying green."""
+    body = _dispatch_section(FR_GOAL.read_text(encoding="utf-8"))
+    assert re.search(r"§\s*\d|\bstep\s+\d", body, re.IGNORECASE), (
+        "the dispatch section must point at the section that uses the flag "
+        "correctly, so the precedent cannot be misread"
     )
 
 

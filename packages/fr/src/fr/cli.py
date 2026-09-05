@@ -17,6 +17,7 @@ from __future__ import annotations
 import typer
 
 from fr import __version__
+from fr.artifacts.trigger import ensure_artifacts_current
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
@@ -30,10 +31,13 @@ from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
 from fr.commands.repair_cmd import repair_command
 from fr.commands.repos_cmd import repos_app
+from fr.commands.run_cmd import run_app
 from fr.commands.skills_cmd import skills as skills_command
 from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
 from fr.commands.undispatch_cmd import undispatch_command
+from fr.commands.validate_cmd import validate_app
+from fr.commands.workflow_cmd import workflow_app
 
 app = typer.Typer(
     name="fr",
@@ -66,6 +70,9 @@ app.add_typer(repos_app, name="repos")
 app.add_typer(journal_app, name="journal")
 app.add_typer(models_app, name="models")
 app.add_typer(hermes_app, name="hermes")
+app.add_typer(workflow_app, name="workflow")
+app.add_typer(run_app, name="run")
+app.add_typer(validate_app, name="validate")
 app.command(name="skills")(skills_command)
 
 
@@ -77,6 +84,7 @@ def version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: bool | None = typer.Option(
         None,
         "--version",
@@ -86,3 +94,16 @@ def main(
     ),
 ) -> None:
     """VK toolchain: v2 plan-as-folder, render → observe → diff → apply."""
+    # The obligatory artifact-migration trigger (spec §3.C). It runs before
+    # every non-exempt command: in an interactive context stale artifacts are
+    # migrated and committed and the typed command then runs, and in a daemon /
+    # CI context the command is refused loudly with nothing written.
+    #
+    # The exemptions are EIGHT, not four (corrected in review r5-d1): `--help`,
+    # `--version`, `FR_SKIP_MIGRATION=1`, `fr migrate` — and the five read-only
+    # commands `status`, `skills`, `isolation`, `init`, `validate`. That
+    # matters for reading the spec's own Test Plan: `fr status` is EXEMPT, so
+    # it can never be the command that demonstrates a migration. The list lives
+    # in `fr.artifacts.trigger.EXEMPTIONS` and is pinned literally by
+    # `tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things`.
+    ensure_artifacts_current(invoked_subcommand=ctx.invoked_subcommand)

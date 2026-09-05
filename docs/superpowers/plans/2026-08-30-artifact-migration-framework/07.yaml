@@ -1,0 +1,77 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Structure validator, CI wiring, and the standing rule
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - artifact-structure-validator-per-version
+tasks:
+- number: 1
+  title: RED → GREEN — `fr validate artifacts`
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: create tests/unit/test_validate_artifacts.py. For every registered
+      kind: a well-formed artifact passes; a missing required field fails NAMING
+      the file and the field; an unknown stamp version fails; a stamp newer than
+      this fr fails closed with an upgrade message (spec §2 non-goals — no
+      downgrades). Include a spec-structure check that would catch a DUPLICATED
+      section block, which is a real corruption this repo has already produced
+      and no existing test could see.
+      Run: uv run pytest tests/unit/test_validate_artifacts.py -q --no-cov
+      Expected: failures.
+  - id: P7.T1.S2
+    text: |-
+      GREEN: implement `fr validate artifacts [--kind K]` over the registry.
+      Run: uv run pytest tests/unit/test_validate_artifacts.py -q --no-cov
+      Expected: passed.
+- number: 2
+  title: Make the obligation standing, not a one-off
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      Add a repo rule .claude/rules/artifact-versioning.md: any PR changing an
+      artifact's shape ships, in the SAME PR, a stamp bump, a registered
+      migration, and a validator for that kind. Wire it into
+      scripts/sync-opencode.py's REPO_LOCAL_ONLY_RULES (an explicit tuple — a
+      rule not listed there never reaches OpenCode), regenerate the mirrors, and
+      run `fr validate artifacts` over this repo in CI (.github/workflows/ci.yml).
+      Add a tripwire asserting nothing outside the registry enumerates artifact
+      kinds.
+      Run: uv run python scripts/sync-opencode.py && uv run python scripts/sync-opencode.py --check && uv run pytest tests/unit -k "tripwire or sync or validate" -q --no-cov
+      Expected: green.
+  - id: P7.T2.S2
+    text: |-
+      Full gate, and flip the acceptance rows this plan earns — check what each
+      test actually exercises, not what it appears to; leave any row red whose
+      claim is only met by the post-merge Test Plan and say so in its notes.
+      Edit docs/acceptance/matrix.yaml directly (fr acceptance add errors on a
+      duplicate --id), regenerate with `fr acceptance report --deterministic`,
+      verify with `fr acceptance check`.
+      Run: uv run ruff format packages/ tests/ && uv run ruff check packages/ tests/ && uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src && uv run pytest -q && uv run --no-project python scripts/bump-version.py --check
+      Expected: all green; version stays 4.0.0 — this ships inside the same major.
+state:
+  steps:
+    P7.T1.S1:
+      state: x
+      ticked_at: '2026-08-31T10:02:57+00:00'
+      note: null
+    P7.T1.S2:
+      state: x
+      ticked_at: '2026-08-31T10:02:59+00:00'
+      note: null
+    P7.T2.S1:
+      state: x
+      ticked_at: '2026-08-31T10:03:00+00:00'
+      note: null
+    P7.T2.S2:
+      state: x
+      ticked_at: '2026-08-31T10:03:01+00:00'
+      note: null
+  completion:
+    at: '2026-08-31T10:03:12+00:00'
+    note: null
+    observed_prs: []

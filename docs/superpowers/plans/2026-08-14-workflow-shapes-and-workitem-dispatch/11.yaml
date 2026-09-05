@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 11
+  title: fr-goal as a shape — shipped manifest, skill rewiring, install/sync, 4.0.0
+  tag: agentic
+  depends_on:
+  - 4
+  - 5
+  - 7
+  - 9
+  - 10
+  tracking_issue: null
+  acceptance:
+  - workflow-shape-selection
+tasks:
+- number: 1
+  title: RED → GREEN — the shipped fr-goal manifest
+  steps:
+  - id: P11.T1.S1
+    text: |-
+      Write plugins/super-fr/workflows/fr-goal.yaml expressing today's pipeline:
+      unit: run; requires [git, tests, scm]; the steps from the spec §4.A example
+      (isolate, brainstorm[gate: operator], spec-review, plan, plan-review,
+      implement[for_each: phase, tier: from_phase], review, deliver).
+      Run: uv run pytest tests/unit/test_tripwire_shipped_workflows.py -q --no-cov
+      Expected: passed — the Phase 6 tripwire now has a real manifest to validate.
+  - id: P11.T1.S2
+    text: |-
+      RED → GREEN: add tests/integration/test_fr_goal_shape.py asserting
+      resolve_workflow("fr-goal", repo_root) finds the shipped manifest, that its
+      step ids match the fr-goal SKILL.md step order, and that a repo-level
+      docs/superpowers/workflows/fr-goal.yaml overrides it wholesale.
+      Run: uv run pytest tests/integration/test_fr_goal_shape.py -q --no-cov
+      Expected: passed.
+- number: 2
+  title: Skill rewiring and shipped-file plumbing
+  steps:
+  - id: P11.T2.S1
+    text: |-
+      Rewrite plugins/super-fr/skills/fr-goal/SKILL.md so the pipeline is READ from
+      the manifest: accept an optional shape argument, no argument -> "fr-goal",
+      and describe driving the cursor via `fr run`. Stay under the 120-line cap
+      (tests/unit/test_skill_validation.py enforces it) — the prose that moves into
+      the manifest is what buys the room.
+      Run: uv run pytest tests/unit/test_skill_validation.py -q --no-cov
+      Expected: passed.
+  - id: P11.T2.S2
+    text: |-
+      Wire the new shipped directory through scripts/install.sh (copy
+      plugins/super-fr/workflows/) and add the assertion to
+      tests/unit/test_install_copies_rules.py's sibling coverage so an unshipped
+      manifest fails CI. Then regenerate the OpenCode mirrors:
+        uv run python scripts/sync-opencode.py
+        uv run python scripts/sync-opencode.py --check
+      Expected: --check clean; commit the regenerated mirrors.
+- number: 3
+  title: Version bump and documentation
+  steps:
+  - id: P11.T3.S1
+    text: |-
+      Update AGENTS.md: the workflow-manifest source/generated rules, the new
+      packages/module map entries (fr/workflow, fr/run, fr/tracker,
+      fr_dispatch/work_item, item_graph), and the Bridge audit rule's read-target
+      list if the seam moved. Update README.md's surface tables.
+      Run: uv run pytest tests/unit -k "tripwire or sync" -q --no-cov
+      Expected: green.
+  - id: P11.T3.S2
+    text: |-
+      Bump to 4.0.0 and verify the full gate:
+        uv run --no-project python scripts/bump-version.py major
+        uv run --no-project python scripts/bump-version.py --check
+        uv run ruff format packages/ tests/
+        uv run ruff check packages/ tests/
+        uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+        uv run pytest -q
+      Expected: version-sync clean, lint clean, mypy clean, full suite green with
+      cov-fail-under=75 satisfied. Commit the manifests and uv.lock together.
+state:
+  steps:
+    P11.T1.S1:
+      state: x
+      ticked_at: '2026-08-27T11:53:21+00:00'
+      note: null
+    P11.T1.S2:
+      state: x
+      ticked_at: '2026-08-27T11:53:24+00:00'
+      note: null
+    P11.T2.S1:
+      state: x
+      ticked_at: '2026-08-27T11:58:29+00:00'
+      note: null
+    P11.T2.S2:
+      state: x
+      ticked_at: '2026-08-27T11:58:33+00:00'
+      note: null
+    P11.T3.S1:
+      state: x
+      ticked_at: '2026-08-27T12:02:04+00:00'
+      note: null
+    P11.T3.S2:
+      state: x
+      ticked_at: '2026-08-27T12:21:39+00:00'
+      note: null
+  completion:
+    at: '2026-08-27T12:22:15+00:00'
+    note: null
+    observed_prs: []

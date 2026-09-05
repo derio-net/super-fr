@@ -18,6 +18,7 @@ from pathlib import Path
 from fr.apply import ApplyResult
 from fr.commands import apply_cmd
 from fr.parser import parse
+from fr.workflow import reachability
 
 from tests.unit.fakes import FakeGhClient
 
@@ -89,7 +90,11 @@ def test_check_plan_reachable_skips_cross_repo_spec(monkeypatch):
         checked_paths.append(path)
         return True  # pretend every checked file exists
 
-    monkeypatch.setattr(apply_cmd, "file_on_ref", fake_file_on_ref)
+    # Phase 8 moved the origin/HEAD primitive behind
+    # `fr.workflow.reachability.unreachable_paths` (one implementation
+    # shared with the item-level gate); the behaviour asserted below is
+    # unchanged, only the seam this patches.
+    monkeypatch.setattr(reachability, "file_on_ref", fake_file_on_ref)
 
     missing = apply_cmd._check_plan_reachable_on_origin_head(
         plan_with_cross_repo_spec, plan.repo_root or plan.dir
@@ -124,7 +129,11 @@ def test_check_plan_reachable_still_checks_same_repo_spec(monkeypatch):
         checked_paths.append(path)
         return True
 
-    monkeypatch.setattr(apply_cmd, "file_on_ref", fake_file_on_ref)
+    # Phase 8 moved the origin/HEAD primitive behind
+    # `fr.workflow.reachability.unreachable_paths` (one implementation
+    # shared with the item-level gate); the behaviour asserted below is
+    # unchanged, only the seam this patches.
+    monkeypatch.setattr(reachability, "file_on_ref", fake_file_on_ref)
 
     apply_cmd._check_plan_reachable_on_origin_head(plan_same_repo, plan.repo_root or plan.dir)
 
@@ -280,7 +289,11 @@ def test_check_plan_reachable_uses_resolved_spec_path(monkeypatch):
         checked_paths.append(path)
         return True
 
-    monkeypatch.setattr(apply_cmd, "file_on_ref", fake_file_on_ref)
+    # Phase 8 moved the origin/HEAD primitive behind
+    # `fr.workflow.reachability.unreachable_paths` (one implementation
+    # shared with the item-level gate); the behaviour asserted below is
+    # unchanged, only the seam this patches.
+    monkeypatch.setattr(reachability, "file_on_ref", fake_file_on_ref)
     apply_cmd._check_plan_reachable_on_origin_head(plan_slug_spec, plan.repo_root or plan.dir)
 
     assert "docs/superpowers/implemented/specs/x-design.md" in checked_paths
