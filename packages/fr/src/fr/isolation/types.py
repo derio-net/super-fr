@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def _warn_legacy(what: str, path: Path) -> None:
@@ -26,6 +26,16 @@ class IsolationError(Exception):
     """User-facing isolation failure; CLI maps it to exit 2."""
 
 
+class SessionBinding(BaseModel):
+    """One agent session attached to a workspace (spec 2026-09-04 §5.A)."""
+
+    session_id: str
+    harness: str = "unknown"  # claude | hermes | opencode | unknown
+    attached_at: str  # ISO-8601 UTC
+
+    model_config = {"frozen": True}
+
+
 class IsolationState(BaseModel):
     """Everything needed to re-address an isolation workspace later."""
 
@@ -34,6 +44,9 @@ class IsolationState(BaseModel):
     worktree: Path
     profile: str
     created_at: str
+    # Sessions bound to this workspace (spec 2026-09-04 §5.A). Default keeps
+    # pre-feature state files loadable; frozen models still `model_copy(update=)`.
+    sessions: list[SessionBinding] = Field(default_factory=list)
 
     model_config = {"frozen": True}
 

@@ -1097,9 +1097,17 @@ rows:
       to, and which sessions hold a workspace, without inspecting the harness.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_sessions.py
+      - super-fr:tests/unit/test_isolation_sessions_cmd.py
+    status: ci
+    notes: 'Unit level (phase 1): fr.isolation.sessions attach/detach/detach_all/stale
+      index classification, IsolationState.sessions round-trip, and the CLI surface
+      (attach, detach, status --session / sessions column, up --session, down unbind +
+      warning) pinned per-PR. The hook level (Claude Code PostToolUse/SessionEnd binding
+      hooks, spec 5.B) lands in phase 3 of the same plan and will be added as a `hook`
+      ref then.'
   - id: statusline-shows-bound-workspace
     capability: isolation-traceability
     acceptance: The Claude Code status line shows the session isolation path alongside
