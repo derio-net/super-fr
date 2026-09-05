@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from fr.journal.model import archived_journal_path, journal_path, spec_journal_slug
 from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
+from fr.run.model import RUNS_REL, RunStateError, archived_run_path, parse_run_state, run_path
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -27,6 +28,7 @@ __all__ = [
     "ArchiveError",
     "archive_plan_dir",
     "completed_unarchived_plans",
+    "find_run_for_plan",
     "paths_dirty",
     "spec_archive_sweep",
 ]
@@ -131,7 +133,61 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
         )
     _git_mv(repo_root, src_rel, dst_rel)
     _archive_journal(repo_root, "plan", plan_dir.name)
+    _archive_run(repo_root, src_rel)
     return repo_root / dst_rel
+
+
+def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
+    """The id of the run whose recorded `emitted.plan` points at `plan_rel`,
+    or `None` if no run file references it (a plan not born from `fr run
+    start` — the common case today, and a correct no-op).
+
+    Matches by DATA — the `plan` step's `emitted` artifact every run file
+    already carries (spec §4.B) — never by a name/slug convention. A run id
+    is `<date>-<flattened-branch>` (`fr.commands.run_cmd.derive_run_id`)
+    and a plan slug is authored independently by whatever agent step
+    creates it; the two share no naming relationship in real use (Phase 7
+    review finding: a name-keyed lookup silently never matched). A
+    malformed run file is skipped, not fatal to archival — a parse failure
+    there is a different problem.
+
+    Public (it was `_find_run_for_plan` until the 2026-08-30 §3.E adoption
+    work) because `fr.run.adopt` asks the same question from the other end —
+    "does this plan already have a run?" — and a second implementation of
+    the match would be a second chance to key it on a name.
+    """
+    runs_dir = repo_root / RUNS_REL
+    if not runs_dir.is_dir():
+        return None
+    target = str(plan_rel).rstrip("/")
+    for run_file in sorted(runs_dir.glob("*.yaml")):
+        try:
+            state = parse_run_state(run_file.read_text())
+        except RunStateError:
+            continue
+        for record in state.steps.values():
+            if record.emitted and record.emitted.get("plan", "").rstrip("/") == target:
+                return state.run
+    return None
+
+
+def _archive_run(repo_root: Path, plan_rel: Path) -> None:
+    """Move the run-state file that created `plan_rel` (if any) to
+    implemented/runs/, alongside its plan. A no-op when no run file
+    references this plan, or when the destination already holds one (a
+    re-run) — same shape as `_archive_journal`.
+    """
+    run_id = find_run_for_plan(repo_root, plan_rel)
+    if run_id is None:
+        return
+    src = run_path(repo_root, run_id)
+    if not src.exists():
+        return
+    dst = archived_run_path(repo_root, run_id)
+    if dst.exists():
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
 
 
 def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:

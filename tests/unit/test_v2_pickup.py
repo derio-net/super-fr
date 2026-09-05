@@ -36,6 +36,31 @@ def test_pickup_unknown_phase_exits_2():
     assert "not found" in result.output.lower() or "not found" in (result.stderr or "").lower()
 
 
+def test_pickup_still_enforces_fr_version(monkeypatch, tmp_path):
+    """Phase 8 (spec §3.E.1): `fr pickup` is an execution path — it must
+    keep enforcing the `fr_version` gate. `enforce_fr_version=False` is
+    reserved for the read-only spec-status path (`fr.spec.compute_status`)
+    only. Uses a fixture whose ceiling genuinely excludes the installed
+    version (monkeypatched `INSTALLED_FR_VERSION`), not one that happens to
+    admit it."""
+    import shutil
+
+    from fr.cli import app
+
+    plan_dir = tmp_path / "plan"
+    shutil.copytree(FIXTURE, plan_dir)
+    meta = (plan_dir / "_meta.yaml").read_text()
+    (plan_dir / "_meta.yaml").write_text(meta + 'fr_version: ">=9.0.0,<10.0.0"\n')
+
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "3.0.0")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["pickup", str(plan_dir), "--phase", "1"])
+    assert result.exit_code == 2, result.output
+    output = " ".join(result.output.split())  # rich soft-wraps; normalize before matching
+    assert "requires fr_version" in output
+
+
 def test_pickup_includes_dependency_reminder():
     from fr.cli import app
 

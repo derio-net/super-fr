@@ -17,11 +17,8 @@ from typing import Literal
 
 from fr._urls import is_cross_repo_spec
 from fr._urls import issue_number as _issue_number_from_url
+from fr.item_state import ItemDecision, ItemState, project_github
 from fr.labels import (
-    FR_BLOCKED,
-    FR_IN_PROGRESS,
-    FR_PR_READY,
-    FR_READY,
     FR_SYNCED,
     MANUAL,
     LabelDef,
@@ -68,6 +65,111 @@ def _deps_satisfied(phase: PhaseDoc, plan: Plan, observed: GhState) -> bool:
     return True
 
 
+def _item_state(
+    phase: PhaseDoc,
+    obs: PhaseObservation | None,
+    plan: Plan,
+    observed: GhState,
+) -> ItemState:
+    """The tracker-neutral state decision for one phase (spec §4.C).
+
+    This is the *decision*; `_lifecycle_label` (and `render`) are the GitHub
+    *projection* of it. Nothing here names a label — a second tracker adapter
+    consumes this and projects its own vocabulary.
+
+    `obs is None` (never dispatched) yields `queued`, not a sixth state:
+    "no tracker item exists yet" is a projection concern, and `render`
+    handles it by withholding the lifecycle label from a tracking-only Issue.
+    """
+    if _phase_complete(phase, obs):
+        return "done"
+    if not _deps_satisfied(phase, plan, observed):
+        return "blocked"
+    if obs is None:
+        return "queued"
+    has_open_pr_nondraft = any(
+        pr.state == "OPEN" and not pr.draft and not pr.merged for pr in obs.linked_prs
+    )
+    if has_open_pr_nondraft:
+        return "in_review"
+    has_assignee_or_draft_pr = bool(obs.issue_assignees) or any(
+        pr.state == "OPEN" and pr.draft for pr in obs.linked_prs
+    )
+    if has_assignee_or_draft_pr:
+        return "in_progress"
+    return "queued"
+
+
+def _routable(phase: PhaseDoc) -> bool:
+    """False for human-only work — `labels.MANUAL`'s meaning, stated neutrally.
+
+    The single place `tag == "manual"` is read as a *routing* fact. Everything
+    downstream (the neutral seam, the GitHub label) derives from this.
+    """
+    return phase.phase.tag != "manual"
+
+
+def _item_decision(
+    phase: PhaseDoc,
+    obs: PhaseObservation | None,
+    plan: Plan,
+    observed: GhState,
+) -> ItemDecision:
+    """The full tracker-neutral decision for one phase: state + routability."""
+    return ItemDecision(
+        state=_item_state(phase, obs, plan, observed),
+        routable=_routable(phase),
+    )
+
+
+def phase_item_decision(plan: Plan, observed: GhState, phase_number: int) -> ItemDecision:
+    """Public seam: the `ItemDecision` for `phase_number` under `observed`.
+
+    Tracker-neutral by construction — the caller decides how (or whether) to
+    project it onto labels. Raises `KeyError` for a phase the plan doesn't have.
+
+    Returns a *decision*, not a bare `ItemState`, on purpose: `manual` is a
+    routing attribute rather than a state (spec §4.C), so a seam that handed
+    back only the state would answer "queued" for human-only work and invite a
+    dispatcher to route it to an agent. Ask `decision.dispatchable`, never
+    `decision.state == "queued"` alone.
+    """
+    for phase in plan.phases:
+        if phase.phase.number == phase_number:
+            return _item_decision(phase, observed.phases.get(phase_number), plan, observed)
+    raise KeyError(f"plan {plan.meta.plan} has no phase {phase_number}")
+
+
+def _lifecycle_label_for_decision(decision: ItemDecision) -> LabelDef | None:
+    """Project an `ItemDecision` onto its single GitHub lifecycle label.
+
+    Takes the neutral decision and nothing else — no `PhaseDoc`. Unroutable
+    ("human-only") short-circuits every non-`done` state: `MANUAL` is the
+    GitHub *projection* of `routable=False`, and it has always outranked the
+    computed lifecycle on the Issue. Deriving it from the decision rather than
+    from a second read of `PhaseDoc.tag` is what keeps the neutral seam and
+    the GitHub projection from disagreeing about routability.
+
+    `done` projects to no label — the Issue is CLOSED instead — which is
+    exactly `project_github("done") == frozenset()`.
+    """
+    if not decision.routable and decision.state != "done":
+        return MANUAL
+    labels = project_github(decision.state)
+    # `project_github` returns a SET so a future state can need two labels
+    # (or none, like `done`). This projection can only carry one, and
+    # `next(iter(...))` would silently pick an arbitrary member of a
+    # two-label set — a lifecycle label chosen by hash order. Fail loudly
+    # instead: the fix is here, in the projection, not in the caller.
+    if len(labels) > 1:
+        raise AssertionError(
+            f"item state {decision.state!r} projects {len(labels)} GitHub labels "
+            f"({sorted(label.name for label in labels)}); the Issue lifecycle carries "
+            "exactly one — teach `_lifecycle_label_for_decision` how to render both"
+        )
+    return next(iter(labels), None)
+
+
 def _lifecycle_label(
     phase: PhaseDoc,
     obs: PhaseObservation | None,
@@ -76,27 +178,11 @@ def _lifecycle_label(
 ) -> LabelDef | None:
     """Compute the single lifecycle LabelDef for a phase.
 
-    Returns None when the Issue should be closed (phase complete).
+    Returns None when the Issue should be closed (phase complete). Decision
+    and projection are two steps: `_item_decision` then
+    `_lifecycle_label_for_decision`.
     """
-    if _phase_complete(phase, obs):
-        return None  # closed; no lifecycle label
-    if phase.phase.tag == "manual":
-        return MANUAL
-    if not _deps_satisfied(phase, plan, observed):
-        return FR_BLOCKED
-    if obs is None:
-        return FR_READY
-    has_open_pr_nondraft = any(
-        pr.state == "OPEN" and not pr.draft and not pr.merged for pr in obs.linked_prs
-    )
-    if has_open_pr_nondraft:
-        return FR_PR_READY
-    has_assignee_or_draft_pr = bool(obs.issue_assignees) or any(
-        pr.state == "OPEN" and pr.draft for pr in obs.linked_prs
-    )
-    if has_assignee_or_draft_pr:
-        return FR_IN_PROGRESS
-    return FR_READY
+    return _lifecycle_label_for_decision(_item_decision(phase, obs, plan, observed))
 
 
 def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
@@ -522,8 +608,10 @@ def render(
         labels: set[LabelDef] = set(_phase_labels(phase, plan))
         observed_names = obs.issue_labels if obs is not None else frozenset()
         phase_queued = queue_runner is not None or is_queued(observed_names)
+        # Decide in tracker-neutral terms ONCE, project to GitHub second.
+        decision = _item_decision(phase, obs, plan, observed)
         if phase_queued:
-            lifecycle = _lifecycle_label(phase, obs, plan, observed)
+            lifecycle = _lifecycle_label_for_decision(decision)
             if lifecycle is not None:
                 labels.add(lifecycle)
             # Preserve the runner attribution: the explicit --to choice, or
@@ -534,7 +622,7 @@ def render(
                 for name in observed_names:
                     if name.startswith("runner:"):
                         labels.add(runner_label(name.removeprefix("runner:")))
-        elif phase.phase.tag == "manual" and not _phase_complete(phase, obs):
+        elif not decision.routable and decision.state != "done":
             # `manual` is a routing attribute, not queue lifecycle — it
             # stays on tracking-only issues so humans can filter their work.
             labels.add(MANUAL)
@@ -543,7 +631,7 @@ def render(
         # diff() sees no drift.
         if FR_SYNCED.name in observed_names:
             labels.add(FR_SYNCED)
-        state: Literal["OPEN", "CLOSED"] = "CLOSED" if _phase_complete(phase, obs) else "OPEN"
+        state: Literal["OPEN", "CLOSED"] = "CLOSED" if decision.state == "done" else "OPEN"
         issues[n] = RenderedIssue(
             body=render_body(
                 phase, plan, phase_to_issue=phase_to_issue, phase_to_repo=phase_to_repo

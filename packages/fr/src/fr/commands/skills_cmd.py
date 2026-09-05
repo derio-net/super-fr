@@ -44,8 +44,9 @@ SKILLS: list[tuple[str, str, str]] = [
     ),
     (
         "fr-goal",
-        "Autonomous goal-to-PR pipeline (skill).",
-        "fr plan {create,self-review,edit}  →  fr spec status",
+        "Autonomous goal-to-PR pipeline, driven by a workflow shape (skill).",
+        "fr run {start,advance,resolve,adopt,status,check}  ·  fr workflow check"
+        "  ·  fr plan {create,self-review,edit}",
     ),
     (
         "fr-isolation",

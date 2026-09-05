@@ -101,7 +101,41 @@ _PHASE_FILE_RE = re.compile(r"^(\d{2})\.yaml$")
 INSTALLED_FR_VERSION = importlib.metadata.version("fr")
 
 
-def parse(plan_dir: Path) -> Plan:
+def _enforce_fr_version(plan_dir: Path, declared: object) -> None:
+    """Refuse the plan when the installed fr is outside its `fr_version`.
+
+    Takes the raw declared value rather than a validated `PlanMeta` so it can
+    run before schema validation — see `parse`. A non-string (or absent)
+    value is left to `PlanMeta` to reject with a type error; this function
+    only answers the version question. The legacy `vk_version` field is inert
+    (it constrains a tool that no longer exists — labels-are-data doctrine
+    applied to plan files; see the super-fr split design).
+    """
+    if not declared:
+        return
+    if not isinstance(declared, str):
+        return
+    try:
+        spec = SpecifierSet(declared)
+    except InvalidSpecifier as e:
+        raise PlanSchemaError(f"_meta.yaml: invalid fr_version {declared!r}: {e}") from e
+    try:
+        installed = Version(INSTALLED_FR_VERSION)
+    except InvalidVersion as e:  # pragma: no cover — installed version comes from packaging
+        raise PlanSchemaError(
+            f"installed fr version {INSTALLED_FR_VERSION!r} is not a valid PEP 440 version: {e}"
+        ) from e
+    if installed not in spec:
+        raise PlanSchemaError(
+            f"plan {plan_dir} requires fr_version {declared} "
+            f"but installed is {INSTALLED_FR_VERSION}. "
+            f"To upgrade: uv tool install --force "
+            f'"fr @ git+https://github.com/derio-net/super-fr@vX.Y.Z#subdirectory=packages/fr" '
+            f"where X.Y.Z is a version satisfying {declared}."
+        )
+
+
+def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
     """Load and validate a v2 plan folder.
 
     Raises `PlanSchemaError` for any of:
@@ -109,8 +143,19 @@ def parse(plan_dir: Path) -> Plan:
       - missing `_meta.yaml` (looks like a v1 plan)
       - `_meta.yaml` fails schema validation
       - `fr_version` is malformed or unsatisfiable by the installed fr
-        (legacy `vk_version` is inert metadata — never enforced)
+        (legacy `vk_version` is inert metadata — never enforced), and
+        `enforce_fr_version` is True
       - any `NN.yaml` is malformed yaml or fails schema validation
+
+    `enforce_fr_version` (spec §3.E.1, artifact-migration-framework) defaults
+    to **on** — safety stays the default, so every existing caller keeps
+    today's behavior with no code change. The gate exists to stop an
+    incompatible `fr` from *executing* a plan (`fr apply`, `fr_dispatch`,
+    `fr pickup`); it must never apply to a purely historical read.
+    `fr.spec.compute_status` is the one caller that passes `False`, so an
+    archived plan (which records what shipped, under whatever `fr` shipped
+    it — spec §2 non-goal: archives are never migrated) still reports its
+    real state instead of `PlanSchemaError` degrading it to `state="Missing"`.
     """
     plan_dir = Path(plan_dir).resolve()
     if not plan_dir.is_dir():
@@ -122,32 +167,26 @@ def parse(plan_dir: Path) -> Plan:
             f"Run `fr migrate v1-to-v2` first if migrating from v1."
         )
     try:
-        meta = PlanMeta.model_validate(yaml.safe_load(meta_path.read_text()))
+        raw_meta = yaml.safe_load(meta_path.read_text())
     except Exception as e:
         raise PlanSchemaError(f"_meta.yaml: {e}") from e
 
-    # `fr_version` is enforced when present; the legacy `vk_version` field
-    # is inert (it constrains a tool that no longer exists — labels-are-data
-    # doctrine applied to plan files; see the super-fr split design).
-    if meta.fr_version:
-        try:
-            spec = SpecifierSet(meta.fr_version)
-        except InvalidSpecifier as e:
-            raise PlanSchemaError(f"_meta.yaml: invalid fr_version {meta.fr_version!r}: {e}") from e
-        try:
-            installed = Version(INSTALLED_FR_VERSION)
-        except InvalidVersion as e:  # pragma: no cover — installed version comes from packaging
-            raise PlanSchemaError(
-                f"installed fr version {INSTALLED_FR_VERSION!r} is not a valid PEP 440 version: {e}"
-            ) from e
-        if installed not in spec:
-            raise PlanSchemaError(
-                f"plan {plan_dir} requires fr_version {meta.fr_version} "
-                f"but installed is {INSTALLED_FR_VERSION}. "
-                f"To upgrade: uv tool install --force "
-                f'"fr @ git+https://github.com/derio-net/super-fr@vX.Y.Z#subdirectory=packages/fr" '
-                f"where X.Y.Z is a version satisfying {meta.fr_version}."
-            )
+    # The `fr_version` gate runs on the RAW mapping, BEFORE schema validation
+    # (review r5-b4). `PlanMeta` is `extra="forbid"`, so a plan carrying a key
+    # this fr does not know is a hard parse failure — and validating first
+    # meant the version floor, the one message that says "upgrade fr", was
+    # never reached. fr 3.x meeting 4.0.0's `workflow:` key therefore died on
+    # pydantic's `extra_forbidden` instead of the floor the plan carries
+    # precisely to be understood by an old reader. The gate is the plan's way
+    # of telling an older fr not to try, so it has to be answerable by an fr
+    # that cannot parse the rest of the file.
+    if enforce_fr_version and isinstance(raw_meta, dict):
+        _enforce_fr_version(plan_dir, raw_meta.get("fr_version"))
+
+    try:
+        meta = PlanMeta.model_validate(raw_meta)
+    except Exception as e:
+        raise PlanSchemaError(f"_meta.yaml: {e}") from e
 
     indexed_phase_files: list[tuple[int, Path]] = []
     for p in plan_dir.iterdir():

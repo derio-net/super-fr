@@ -1,0 +1,74 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Artifact registry and per-kind version stamps
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - every-artifact-declares-its-version
+tasks:
+- number: 1
+  title: RED → GREEN — the registry
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_artifact_registry.py for a new module
+      packages/fr/src/fr/artifacts/registry.py. Assert: ARTIFACT_KINDS covers
+      plan, journal, run, matrix, spec; each entry carries a current version, a
+      locator glob relative to repo root, and read_version/write_version
+      callables; locators EXCLUDE docs/superpowers/implemented/** (archived
+      artifacts are frozen — spec §2 non-goals); an unknown kind raises.
+      Run: uv run pytest tests/unit/test_artifact_registry.py -q --no-cov
+      Expected: ModuleNotFoundError.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: implement the registry. It is the ONE place that enumerates kinds —
+      nothing else may hardcode the list, and a later phase's tripwire asserts
+      that.
+      Run: uv run pytest tests/unit/test_artifact_registry.py -q --no-cov
+      Expected: passed.
+- number: 2
+  title: RED → GREEN — stamps, with absent meaning version 1
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: extend the test file: read_version returns the declared stamp for each
+      kind, and returns 1 when the stamp is ABSENT (the pre-framework era — spec
+      §3.A: no flag day, and absence is itself information). Cover each carrier:
+      plan `schema_version` in _meta.yaml (already exists — do not change its
+      meaning), journal `<!-- fr:journal schema=N -->` header comment, run yaml
+      `schema_version`, matrix.yaml `schema_version`, spec front-matter
+      `fr_schema:`. write_version round-trips each WITHOUT disturbing the rest of
+      the file — assert byte-stability of everything except the stamp.
+      Run: uv run pytest tests/unit/test_artifact_registry.py -q --no-cov
+      Expected: failures.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement the five readers/writers. Byte-stability matters: these
+      run against files an operator has open. Reuse fr._yaml where a kind is
+      YAML; do not reformat.
+      Run: uv run pytest tests/unit/test_artifact_registry.py -q --no-cov && uv run mypy packages/fr/src
+      Expected: passed, clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-08-30T13:06:11+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-08-30T13:06:15+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-08-30T13:16:15+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-08-30T13:16:19+00:00'
+      note: null
+  completion:
+    at: '2026-08-30T13:16:22+00:00'
+    note: null
+    observed_prs: []

@@ -1,0 +1,161 @@
+"""Tracker-neutral queue vocabulary — the abstract transition set.
+
+`ItemState` is the closed set of states a work item can be in, expressed
+without reference to any tracker. `labels.py` stays the *GitHub* vocabulary;
+this module is the neutral one and depends on it, never the reverse — the
+dependency direction is what makes a second tracker adapter possible without
+touching either.
+
+GitHub projection (spec 2026-08-14-workflow-shapes-and-workitem-dispatch §4.C):
+
+    queued      → fr:ready
+    blocked     → fr:blocked
+    in_progress → fr:in-progress
+    in_review   → fr:pr-ready
+    done        → no label; the Issue is CLOSED
+
+`done` deliberately projects to the empty label set: completion is carried by
+the tracker's own item state (GitHub's CLOSED), not by a lifecycle label. A
+tracker without a closed/open notion would project `done` differently; the
+enum does not presume one.
+
+**`fr:synced` is not an `ItemState`.** It is *dispatch bookkeeping* — "this
+item was handed to a runner, don't re-dispatch it" — that lives on the Issue
+only because there is nowhere more durable to put it (a run file on a feature
+branch is invisible to a bridge reading `main`). Typing it separately as
+`DISPATCH_STAMP` keeps it out of the state vocabulary, so a tracker that
+cannot express the stamp is still a usable tracker: it loses idempotency
+bookkeeping, not the ability to represent an item's state.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal, get_args
+
+from fr.labels import (
+    FR_BLOCKED,
+    FR_IN_PROGRESS,
+    FR_PR_READY,
+    FR_READY,
+    FR_SYNCED,
+    LabelDef,
+)
+
+ItemState = Literal["queued", "blocked", "in_progress", "in_review", "done"]
+
+ITEM_STATES: tuple[ItemState, ...] = get_args(ItemState)
+
+# Dispatch bookkeeping, NOT a state — see the module docstring.
+DISPATCH_STAMP: LabelDef = FR_SYNCED
+
+
+@dataclass(frozen=True)
+class ItemDecision:
+    """One item's tracker-neutral decision: its state **and** its routability.
+
+    `manual` is a routing *attribute*, not a sixth `ItemState` (spec §4.C):
+    a human-only item is still `queued`, then `done` — what differs is that
+    no agent may take it. Both halves therefore have to travel together, or
+    a caller reading only the state re-derives a wrong answer.
+
+    That is not hypothetical: dispatch is gated on "is this queued", so a
+    seam handing back a bare `ItemState` invites
+    `decide(...) == "queued" → dispatch`, which routes human-only work to an
+    agent runner. GitHub is saved from this today only because its
+    *projection* re-reads `PhaseDoc.tag` and re-injects the `manual` label;
+    a second tracker (§4.G) has no such second chance. `dispatchable` is the
+    single question a dispatcher should ask, and it needs both fields.
+    """
+
+    state: ItemState
+    routable: bool = True
+
+    @property
+    def dispatchable(self) -> bool:
+        """True iff an agent runner may take this item right now.
+
+        `queued` is the only state that permits dispatch (see `_PRECEDENCE`),
+        and routability is the veto that rides alongside it.
+        """
+        return self.routable and self.state == "queued"
+
+
+_GITHUB_PROJECTION: dict[ItemState, frozenset[LabelDef]] = {
+    "queued": frozenset({FR_READY}),
+    "blocked": frozenset({FR_BLOCKED}),
+    "in_progress": frozenset({FR_IN_PROGRESS}),
+    "in_review": frozenset({FR_PR_READY}),
+    # Expressed by Issue state CLOSED, not by a label.
+    "done": frozenset(),
+}
+
+_STATE_BY_LABEL_NAME: dict[str, ItemState] = {
+    label.name: state
+    for state, labels in _GITHUB_PROJECTION.items()
+    for label in labels  # `done` contributes nothing — it has no label form
+}
+
+# Which state wins when an item carries MORE THAN ONE lifecycle label.
+# Most-restrictive first; `queued` is LAST, and that position is the
+# load-bearing one: `queued` is the only state that permits dispatch, so
+# "any other lifecycle signal is present" must always mean "do not
+# dispatch". `fr_dispatch.tick` gates on `state_from_labels(...) ==
+# "queued"`, which makes this tuple the thing standing between a stale
+# `fr:ready` and the bridge dispatching work an agent already holds.
+#
+# Among the non-queued states the order is "how much real work would a
+# duplicate dispatch destroy": `in_review` (a PR exists) beats
+# `in_progress` (an agent holds it) beats `blocked` (a dependency says no,
+# but nobody is working on it).
+#
+# `done` is absent because it has no label form — it can never be read off
+# labels at all; completion is the tracker's own item state.
+_PRECEDENCE: tuple[ItemState, ...] = ("in_review", "in_progress", "blocked", "queued")
+
+_PRECEDENCE_RANK: dict[ItemState, int] = {state: i for i, state in enumerate(_PRECEDENCE)}
+
+
+def project_github(state: ItemState) -> frozenset[LabelDef]:
+    """The GitHub label set expressing `state`.
+
+    A frozenset (not a single LabelDef) so a future state that needs two
+    labels — or a tracker that needs none, like `done` — does not change the
+    signature.
+    """
+    return _GITHUB_PROJECTION[state]
+
+
+def state_from_labels(observed_labels: frozenset[str] | set[str]) -> ItemState | None:
+    """Inverse of `project_github`: read an ItemState off observed labels.
+
+    Returns None when no lifecycle label is present — an empty set, a
+    tracking-only Issue, or one carrying only attributes (`manual`,
+    `phase:<n>`, `runner:<name>`). `fr:synced` is ignored entirely: it is
+    the dispatch stamp, not a state, so it neither yields a state on its own
+    nor perturbs one that is expressed.
+
+    Several lifecycle labels can co-occur — the renderer projects one, but
+    an observed set is whatever the tracker says, and `fr apply` is not its
+    only writer. They are resolved by `_PRECEDENCE`, never by label-name
+    order: the label VOCABULARY is a tracker's business, the ordering of
+    the STATES is ours, so a rename (or a tracker with entirely different
+    names) cannot change which state wins.
+
+    `done` has no label form, so it is never returned here; completion is
+    read from the tracker's item state instead.
+    """
+    winner: ItemState | None = None
+    winning_rank = len(_PRECEDENCE)
+    for name in observed_labels:
+        state = _STATE_BY_LABEL_NAME.get(name)
+        if state is None:
+            continue
+        # An unranked state (a lifecycle state added without a precedence
+        # decision) sorts ahead of everything — fail-closed: it can only
+        # ever make an item look LESS dispatchable, never more. The
+        # tripwire in tests/unit/test_item_state.py fails loudly for it.
+        rank = _PRECEDENCE_RANK.get(state, -1)
+        if rank < winning_rank:
+            winner, winning_rank = state, rank
+    return winner

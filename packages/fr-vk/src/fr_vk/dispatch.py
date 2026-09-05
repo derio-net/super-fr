@@ -66,9 +66,12 @@ def build_card_title(repo: str, issue_n: int) -> str:
     post-dispatch create_issue payload cannot drift. Format pinned by
     test D2 — `"gh#{n}: [{owner/repo}]"`.
 
-    Delegates to `fr_vk._cardref.build_card_title`, defaulting to the
-    `"github"` tag — preserves every existing call site's behavior with
-    zero call-site changes. Nothing in the dispatch bridge threads a
+    Delegates to `fr_vk._cardref.build_card_title` with
+    `_cardref.DISPATCH_BACKEND` (`"github"`) — preserves every existing call
+    site's behavior with zero call-site changes, and is the same constant
+    `fr_vk.dedup` keys its snapshot on, so producer and dedup cannot drift.
+
+    Nothing in the dispatch bridge threads a
     phase's actual backend through to here yet (that would mean plumbing
     it through `fr_dispatch.tick`/`dispatch_phase`'s signatures, out of
     scope for this pass — see docs/superpowers/specs/
@@ -76,7 +79,7 @@ def build_card_title(repo: str, issue_n: int) -> str:
     the card-title FORMAT is multi-backend-capable (parses gl#/gt#-tagged
     titles correctly) even though nothing produces them yet.
     """
-    return _cardref.build_card_title("github", repo, issue_n)
+    return _cardref.build_card_title(_cardref.DISPATCH_BACKEND, repo, issue_n)
 
 
 class MCPDispatch(Protocol):

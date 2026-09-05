@@ -282,6 +282,95 @@ def test_apply_dry_run_prints_archive_nudge(tmp_path, monkeypatch):
     assert "fr archive" in text
 
 
+# --- Phase 7 (2026-08-14 workflow-shapes-and-workitem-dispatch): run state ---
+
+
+def test_archive_moves_run_state_file_alongside_its_plan(tmp_path, monkeypatch):
+    """A run file archives to implemented/runs/ in the same operation as the
+    plan its `plan` step emitted, mirroring `_archive_journal`.
+
+    The run id and the plan slug are DELIBERATELY UNRELATED here — a run id
+    is `<date>-<flattened-branch>` (fr.commands.run_cmd.derive_run_id) while
+    a plan slug is authored independently, so this fixture would fail
+    against a name-keyed lookup even though it is exactly the realistic
+    case (spec §4.B, corrected in the Phase 7 review: a name-equality
+    fixture would have hidden that bug rather than catching it). Matching
+    is by the DATA the run file already carries — the `plan` step's
+    recorded `emitted.plan` path — never by any slug convention.
+    """
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(repo, "2026-08-20-goal-output", ticked=True)
+    runs_dir = repo / "docs" / "superpowers" / "runs"
+    runs_dir.mkdir(parents=True)
+    run_id = "2026-08-24-feat-fr-goal-composable-workflow"
+    run_file = runs_dir / f"{run_id}.yaml"
+    run_file.write_text(
+        "run: 2026-08-24-feat-fr-goal-composable-workflow\n"
+        "workflow: fr-goal@1\n"
+        "branch: feat/fr-goal-composable-workflow\n"
+        "started: '2026-08-24T09:00:00Z'\n"
+        "cursor: plan-review\n"
+        "steps:\n"
+        "  isolate: {state: done}\n"
+        "  brainstorm:\n"
+        "    state: done\n"
+        "    emitted: {spec: docs/superpowers/specs/2026-08-20-goal-output-design.md}\n"
+        "  plan:\n"
+        "    state: done\n"
+        "    emitted: {plan: docs/superpowers/plans/2026-08-20-goal-output}\n"
+        "  plan-review: {state: pending}\n"
+    )
+    _git_seed(repo)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 0, result.output
+    assert not run_file.exists()
+    moved = repo / "docs" / "superpowers" / "implemented" / "runs" / f"{run_id}.yaml"
+    assert moved.is_file()
+    assert "plan: docs/superpowers/plans/2026-08-20-goal-output" in moved.read_text()
+
+
+def test_archive_does_not_move_an_unrelated_run_file_of_the_same_name(tmp_path, monkeypatch):
+    """A run file that happens to share the plan's slug but was never
+    resolved to it (no `emitted.plan` pointing at this plan) is untouched —
+    proof the lookup is data-keyed, not name-keyed."""
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(repo, "2026-08-20-goal-output", ticked=True)
+    runs_dir = repo / "docs" / "superpowers" / "runs"
+    runs_dir.mkdir(parents=True)
+    decoy = runs_dir / "2026-08-20-goal-output.yaml"
+    decoy.write_text(
+        "run: 2026-08-20-goal-output\n"
+        "workflow: fr-goal@1\n"
+        "branch: some/other/branch\n"
+        "started: '2026-01-01T00:00:00Z'\n"
+        "cursor: isolate\n"
+        "steps:\n"
+        "  isolate: {state: pending}\n"
+    )
+    _git_seed(repo)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 0, result.output
+    assert decoy.exists()
+    assert not (repo / "docs" / "superpowers" / "implemented" / "runs").exists()
+
+
+def test_archive_is_a_no_op_when_no_run_file_exists(tmp_path, monkeypatch):
+    """Back-compat: a plan with no matching run file archives exactly as it
+    did before this phase — no `implemented/runs/` directory materializes."""
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
+    _git_seed(repo)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 0, result.output
+    assert not (repo / "docs" / "superpowers" / "implemented" / "runs").exists()
+
+
 # --- 2026-06-06 review fixes ---
 
 

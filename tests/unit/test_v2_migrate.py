@@ -960,7 +960,7 @@ def test_migrate_aligns_vk_version_with_create_default(tmp_path):
 
     migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
     plan = parse(_plans(repo) / "2026-05-10-vkver")
-    assert plan.meta.fr_version == ">=3.0.0,<4.0.0"
+    assert plan.meta.fr_version == ">=3.0.0,<5.0.0"
 
 
 # ---------------------------------------------------------------------------

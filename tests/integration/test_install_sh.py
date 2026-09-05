@@ -544,3 +544,83 @@ class TestPluginCacheSymlink:
             "super-fr-dispatch@derio-net--super-fr"
         ][0]
         assert entry["installPath"].endswith("/cache/derio-net--super-fr/super-fr-dispatch/current")
+
+
+# ── Workflow manifests ──────────────────────────────────────────────
+
+
+class TestInstallWorkflows:
+    """Drift guard for shipped workflow manifests (spec §4.A, Phase 11).
+
+    Unlike rules (test_install_copies_rules.py) or the OpenCode skill mirror
+    (test_install_copies_opencode_skills.py), a shipped workflow manifest
+    needs NO per-file `cp` line: `plugins/super-fr/workflows/` lives inside
+    `plugins/super-fr/`, so it rides the same wholesale, un-excluded rsync
+    (`$PLUGIN_ROOT/` -> `$MARKETPLACE_DIR/`) every other file under
+    `plugins/super-fr/` already takes. These tests prove that delivery for
+    real rather than trusting the absence of an `--exclude` — an install.sh
+    edit that added one (or moved the rsync source) would fail this loudly,
+    which is the whole point of a drift guard.
+
+    `fr.workflow.resolve.default_shipped_workflows_dir()`'s fallback is
+    literally `$HOME/.claude/plugins/marketplaces/derio-net--super-fr/
+    plugins/super-fr/workflows` — i.e. `$MARKETPLACE_DIR/plugins/super-fr/
+    workflows` — so the marketplace directory (not the version-pinned cache)
+    is the one this module's own runtime lookup actually reads.
+    """
+
+    def test_shipped_manifest_lands_in_the_marketplace_directory(self, fake_home: Path) -> None:
+        _run_install(fake_home)
+
+        manifest = (
+            fake_home
+            / ".claude"
+            / "plugins"
+            / "marketplaces"
+            / "derio-net--super-fr"
+            / "plugins"
+            / "super-fr"
+            / "workflows"
+            / "fr-goal.yaml"
+        )
+        assert manifest.exists(), (
+            "plugins/super-fr/workflows/fr-goal.yaml must be delivered by install.sh's "
+            "marketplace-directory rsync"
+        )
+        assert "workflow: fr-goal" in manifest.read_text()
+
+    def test_shipped_manifest_matches_the_repo_source_byte_for_byte(self, fake_home: Path) -> None:
+        _run_install(fake_home)
+
+        installed = (
+            fake_home
+            / ".claude"
+            / "plugins"
+            / "marketplaces"
+            / "derio-net--super-fr"
+            / "plugins"
+            / "super-fr"
+            / "workflows"
+            / "fr-goal.yaml"
+        )
+        source = REPO_ROOT / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+        assert installed.read_text() == source.read_text()
+
+    def test_every_shipped_workflow_manifest_is_delivered(self, fake_home: Path) -> None:
+        _run_install(fake_home)
+
+        source_dir = REPO_ROOT / "plugins" / "super-fr" / "workflows"
+        installed_dir = (
+            fake_home
+            / ".claude"
+            / "plugins"
+            / "marketplaces"
+            / "derio-net--super-fr"
+            / "plugins"
+            / "super-fr"
+            / "workflows"
+        )
+        source_names = sorted(p.name for p in source_dir.glob("*.yaml"))
+        assert source_names, "expected at least the shipped fr-goal.yaml"
+        installed_names = sorted(p.name for p in installed_dir.glob("*.yaml"))
+        assert installed_names == source_names

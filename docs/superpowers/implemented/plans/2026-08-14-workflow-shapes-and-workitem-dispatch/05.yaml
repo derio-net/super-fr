@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Capability negotiation — shapes declare needs, runners declare provisions
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - runner-capability-refusal
+tasks:
+- number: 1
+  title: RED → GREEN — the closed capability set and preflight refusal
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: create tests/unit/test_capabilities.py:
+      (a) CAPABILITIES is the closed set {"git","tests","scm","browser","network","devcontainer"};
+      (b) missing_capabilities(required, provided) returns the sorted shortfall;
+      (c) tick refuses when an item's workflow requires a capability the runner
+          lacks — EVERY eligible item fails with ONE message naming the missing
+          capability and the runner, synced=0, and dispatch is never called;
+      (d) a runner whose capabilities are a superset dispatches normally.
+      Run: uv run pytest tests/unit/test_capabilities.py -q --no-cov
+      Expected: failures.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: add CAPABILITIES + missing_capabilities to fr_dispatch, and have
+      tick consult them BEFORE runner.preflight so a capability mismatch is
+      reported as a capability problem rather than a config one. Reuse the existing
+      preflight failure path (per-item failure accumulation + the "preflight"
+      metric reason) rather than inventing a second refusal mechanism.
+      Run: uv run pytest tests/unit/test_capabilities.py -q --no-cov
+      Expected: all passed.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-08-27T08:44:29+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-08-27T08:44:33+00:00'
+      note: null
+  completion:
+    at: '2026-08-27T08:47:15+00:00'
+    note: null
+    observed_prs: []

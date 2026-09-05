@@ -1,0 +1,1348 @@
+# Journal: 2026-08-30-artifact-migration-framework
+
+<!-- fr:journal kind=discovery scope=plan id=d-registry-shape created=2026-08-30T13:13:29 phase=1 -->
+### d-registry-shape · discovery · Registry shape: ArtifactKind + four module-level helpers (Phases 2, 6, 7 build on it) (phase 1)
+
+packages/fr/src/fr/artifacts/registry.py is the ONE enumeration of artifact
+kinds. Public shape:
+
+- `ARTIFACT_KINDS: Mapping[str, ArtifactKind]` — keyed by kind name; order is
+  plan, journal, run, matrix, spec.
+- `ArtifactKind` (frozen dataclass): `name`, `current_version: int`,
+  `locator: str` (glob relative to repo root), `stamp: str` (human description
+  of the carrier, for `--dry-run` output and validator messages),
+  `read_version: Callable[[Path], int]`,
+  `write_version: Callable[[Path, int], None]`. The callables are instance
+  attributes, so `kind.read_version(path)` takes only the path — no self-binding.
+- `artifact_kind(name) -> ArtifactKind`, raising `UnknownArtifactKindError`
+  (subclass of `ArtifactError`; the `Error` suffix is ruff N818, not taste).
+- `iter_artifact_paths(repo_root, name) -> Iterator[Path]`, sorted.
+- `iter_all_artifacts(repo_root) -> Iterator[tuple[ArtifactKind, Path]]` — the
+  walk Phase 2's runner and Phase 7's validator both want.
+- `read_version(name, path)` / `write_version(name, path, version)` —
+  module-level convenience over the kind's callables.
+- `PRE_FRAMEWORK_VERSION = 1`, `ARCHIVE_SEGMENT = "implemented"`.
+
+Current versions: plan=2, journal=1, run=1, matrix=1, spec=1. The four at 1
+mean every existing file of those kinds is ALREADY current — 4.0.0 changes none
+of their shapes — so Phase 2's runner will not rewrite them. That matters more
+than it looks; see the `extra="forbid"` finding.
+
+Extension point for Phase 7: add a `validate` callable field to `ArtifactKind`.
+Nothing else needs to change, and nothing outside this module may grow a second
+list of kinds (Phase 7's tripwire).
+
+Archive exclusion is structural: every locator is rooted at a live directory,
+so `docs/superpowers/implemented/**` is unreachable by construction.
+`iter_artifact_paths` re-checks `ARCHIVE_SEGMENT` anyway, because a careless
+future locator edit is exactly the mistake that would otherwise silently start
+rewriting shipped history.
+
+<!-- fr:journal kind=discovery scope=plan id=d-plan-stamp-is-schema-version created=2026-08-30T13:13:32 phase=1 -->
+### d-plan-stamp-is-schema-version · discovery · Decision: the plan artifact-version IS _meta.yaml schema_version, not a new field (phase 1)
+
+The brief asked whether the artifact-framework version for plans is the
+existing `schema_version` or a separate field. Decision: the same field — and
+it is FORCED, not merely convenient.
+
+Why the same field:
+
+1. `PlanMeta` is `ConfigDict(extra="forbid")`. Any new key in `_meta.yaml`
+   makes every stamped plan fail to parse. Adding one would have required
+   changing plan parse behaviour, which Phase 1 is explicitly barred from
+   doing — and would break plan reads under any older fr.
+2. `schema_version` already MEANS "the version this artifact was written for".
+   It already owns a migration chain (`fr migrate v1-to-v2`). That is exactly
+   the framework's definition of a stamp; a second field would be a duplicate
+   version line over the same file, and the two would drift.
+3. Spec 3.A's table says as much: `plans/*/_meta.yaml` -> `schema_version`,
+   status "exists".
+
+Its meaning is UNCHANGED: it is still the plan-folder schema version. The
+framework reads it; it does not redefine it.
+
+CONSEQUENCE PHASE 2 MUST DECIDE — the part a future migration depends on. The
+two version lines are now welded together, so "bump the plan stamp" and
+"declare a new plan-folder schema" are the same act. 4.0.0's registered
+migration widens an `fr_version` CEILING; it does not change the folder shape.
+So Phase 2 picks one of:
+
+(a) Keep plan `current_version=2` and let the fr_version migration be a
+    same-version repair whose idempotence comes from its own predicate ("does
+    the ceiling already admit the installed major?"). Spec 3.B allows this —
+    "migrations are written to be idempotent". Cost: the runner cannot drive it
+    off a version transition, so it needs a notion of a migration that runs at
+    a fixed version.
+
+(b) Bump plan `current_version` to 3 and widen `PlanMeta.schema_version` to
+    `Literal[2, 3]`. Cost: claims a plan-folder schema change that did not
+    happen, and every consumer pinning `Literal[2]` (including older fr and
+    `fr migrate v1-to-v2`) must be revisited.
+
+I did NOT choose for Phase 2 — both are live and the tradeoff is the runner's,
+not the registry's. The registry forecloses neither: `current_version` is a
+single constant in one place, and the readers/writers deliberately operate on
+raw YAML rather than through `PlanMeta`, so they can already read and write a
+`schema_version` of 3 that pydantic would currently reject.
+
+<!-- fr:journal kind=finding scope=plan id=f-journal-stamp-delimiter-collision created=2026-08-30T13:14:26 phase=1 state=fixed -->
+### f-journal-stamp-delimiter-collision · finding [fixed] · The spec's literal journal stamp collides with the entry delimiter and would break every journal (phase 1)
+
+Spec 3.A's table specifies the journal stamp literally as
+`<!-- fr:journal schema=N -->`. That exact string is UNUSABLE: it collides with
+the journal entry delimiter.
+
+`fr/journal/model.py` sets `_DELIM_PREFIX = "<!-- fr:journal "` and
+`parse_journal` treats any line starting with that prefix (and ending ` -->`)
+as an ENTRY header, then requires `kind`, `scope`, `id`, `created`. A stamp
+comment written per the spec matches the prefix, so `_parse_header` returns
+`{"schema": "N"}` and parsing dies with
+`JournalParseError: journal entry missing required field: 'kind'`.
+
+Blast radius had it shipped: every stamped journal becomes unreadable, taking
+`fr journal render` and `fr journal check` with it — including the fail-closed
+open-findings gate, and including this very journal. I would have broken my own
+phase's record.
+
+Resolved in Phase 1 by moving the token one character out of the way:
+
+    <!-- fr:journal-schema=N -->
+
+Space -> hyphen. It keeps everything the spec actually wanted (a header comment
+on line 1, invisible in rendered Markdown, machine-readable) and cannot be
+confused with an entry delimiter, since the prefix requires a space after
+`fr:journal`. Pinned by
+`test_journal_stamp_is_not_mistaken_for_an_entry_delimiter`, which parses a
+journal with a real entry before and after stamping and asserts the entry list
+is unchanged.
+
+The alternative — relaxing `parse_journal` to skip headers without a `kind` —
+was rejected: Phase 1 must not change any existing artifact's parse behaviour,
+and widening the delimiter grammar to tolerate a foreign header makes the
+format looser forever to save one character.
+
+Anyone updating spec 3.A's table should correct the string there too.
+
+<!-- fr:journal kind=finding scope=plan id=f-closed-world-models-reject-a-stamp created=2026-08-30T13:14:30 phase=1 state=fixed -->
+### f-closed-world-models-reject-a-stamp · finding [open] · run/matrix/plan models are extra=forbid: stamping a live file of those kinds breaks parsing (Phase 2 must not) (phase 1)
+
+Three of the five kinds carry a closed-world pydantic model, so writing the new
+stamp into a LIVE file of that kind makes it unparseable by the current fr:
+
+- `RunState` (`fr/run/model.py`) — `extra="forbid"`; fields run, workflow,
+  branch, started, cursor, steps. A `schema_version` key raises `RunStateError`.
+- `Matrix` (`fr/acceptance/model.py`) — `extra="forbid"`; fields org, repo,
+  rows. A `schema_version` key raises `AcceptanceError`, which would take
+  `fr acceptance check` (a CI gate) down.
+- `PlanMeta` (`fr/types.py`) — `extra="forbid"` AND
+  `schema_version: Literal[2]`. Writing 2 is fine; writing 3 raises.
+
+Journals and specs are safe: `parse_journal` ignores non-delimiter lines, and
+`parse_spec` is regex-based over `# Title` / `## Implementation Plans`, so YAML
+front matter passes through untouched (both pinned by tests).
+
+Phase 1 does NOT stamp any live file, so nothing is broken today. The state is
+open because Phase 2 is the first code that can write to a live artifact, and
+it MUST NOT stamp a run or the matrix before those models accept the field.
+
+Why this is not urgent, and why that is by design: journal, run, matrix and
+spec are all registered at `current_version = 1`, and an absent stamp already
+READS as 1. Every existing file of those kinds is therefore already current, so
+a correct runner has no reason to write to them at all. The models only need
+widening when a kind's version actually moves past 1 — at which point the
+same PR must add `schema_version: int = 1` (optional, defaulted) to the model,
+per the standing obligation Phase 7 writes into
+`.claude/rules/artifact-versioning.md`.
+
+RESOLVED in Phase 2 (state flipped by hand — `fr journal add` has no
+open->fixed transition). The runner derives its work list from
+`read_version(path) < kind.current_version`, never from the walk, and no
+schema migration is registered for any version-1 kind. See
+`f-closed-world-stamp-closed-by-construction` for the three tests that pin it.
+
+Concrete instruction for Phase 2: the runner must derive its work list from
+`read_version(kind, path) < kind.current_version`. If it instead stamps
+everything it walks ("normalise on write"), it will brick `fr acceptance check`
+and every run file on the first invocation.
+
+<!-- fr:journal kind=discovery scope=plan id=d-migration-blast-radius-is-one-live-plan created=2026-08-30T13:14:33 phase=1 -->
+### d-migration-blast-radius-is-one-live-plan · discovery · The fr_version migration touches ONE live plan here, not 39 — the other 38 are archived (phase 1)
+
+Spec 1 and the Phase 2 task text both say "39 of 40 plans in this repo carry
+`>=3.x,<4.0.0`", implying the 4.0.0 fr_version-widening migration has a large
+blast radius. Measured on this branch through the registry's own locators:
+
+- LIVE plans (`docs/superpowers/plans/*/_meta.yaml`): 3.
+    - `2026-07-09-multi-backend-git-host-adapters` — `>=3.0.0,<4.0.0`  <- the
+      only one the migration touches
+    - `2026-08-14-workflow-shapes-and-workitem-dispatch` — `>=3.19.0,<5.0.0`
+    - `2026-08-30-artifact-migration-framework` — `>=4.0.0,<5.0.0`
+- ARCHIVED plans (`docs/superpowers/implemented/plans/*/_meta.yaml`): 71, of
+  which 38 carry a `<4.0.0` ceiling (22 at `>=3.0.0`, 14 at `>=3.7.0`, one each
+  at `>=3.16.0` / `>=3.17.0`) and 33 carry no `fr_version` at all.
+
+38 archived + 1 live = the "39". The framework excludes every archived one by
+design (spec 2 non-goals: rewriting them would falsify history), so the real
+blast radius in this repo is exactly ONE plan.
+
+Implications for Phase 2, none of which invalidate the phase:
+
+- The migration is still correct and still worth shipping — it is the proof
+  case for the framework, and a consumer repo mid-upgrade will have many live
+  plans, not one.
+- Do not write a test that asserts "39 plans get migrated" against this repo;
+  it would be measuring the archive, which the runner must never touch. A test
+  like that passing would be evidence of a BUG.
+- The 33 archived plans with no `fr_version` are a useful reminder that
+  "no ceiling" is a real case; the Phase 2 task text already calls for it
+  ("a plan with no fr_version is untouched").
+- Verified empirically: the registry's readers ran clean over all 22 live
+  artifacts in this repo (3 plans at version 2; 11 journals, 1 matrix and 7
+  specs all reading 1 from an absent stamp; 0 runs — no runs/ dir yet), and the
+  writers round-tripped on temp copies of every one of them with no line
+  removed except a stamp being replaced in place.
+
+<!-- fr:journal kind=discovery scope=plan id=d-migration-runner-api created=2026-08-30T13:42:50 phase=2 -->
+### d-migration-runner-api · discovery · Runner registration API: MIGRATIONS, SchemaMigration, Repair, run_migrations (Phases 3, 4, 7 build on it) (phase 2)
+
+Phases 3 (trigger), 4 (atomic commit) and 7 (validator) all call into
+`fr.artifacts.runner`. Its public shape, now fixed:
+
+REGISTERING
+- `MIGRATIONS: MigrationRegistry` — the ONE registry of migrations, shipped in
+  `fr/artifacts/runner.py`. `fr/artifacts/__init__.py` imports
+  `fr.artifacts.fr_version` last, purely for its `MIGRATIONS.register(...)`
+  side effect: a migration nobody imports is a migration that silently never
+  runs, so registration rides on the package import, not on a caller
+  remembering. A new built-in migration adds a module and one import line.
+- `SchemaMigration(kind, from_version, to_version, fn, description="")` —
+  stamp-guarded. `fn(path) -> None` rewrites the BODY only; the runner writes
+  the new stamp itself, after `fn` returns. `__post_init__` rejects a
+  non-forward transition.
+- `Repair(kind, name, applies, fn, description="")` — see the repairs entry.
+- `registry.register(m)` raises `DuplicateMigrationError` (two migrations from
+  the same version, or two repairs with one name) and `UnknownArtifactKindError`
+  at import time for an unregistered kind.
+- `MigrationRegistry(kinds=...)` carries the artifact kinds it operates over,
+  defaulting to `ARTIFACT_KINDS`. That is the ONLY injection point the runner
+  has, and it exists so tests can use synthetic kinds without any second
+  enumeration of kinds appearing outside `registry.py` (Phase 7's tripwire
+  stays satisfiable).
+
+RUNNING
+- `plan_migrations(repo_root, *, registry=None) -> tuple[PlannedAction, ...]` —
+  read-only.
+- `is_stale(repo_root, *, registry=None) -> bool` — short-circuits on the first
+  stale artifact. Built for PHASE 3: the callback runs before every command and
+  must not walk the tree when the answer is available early.
+- `run_migrations(repo_root, *, dry_run=True, registry=None) -> MigrationReport`
+  — DRY-RUN BY DEFAULT. Plans the whole tree, then applies, so a chain gap
+  anywhere raises before anything anywhere is written.
+- `MigrationReport(dry_run, applied, skipped, failed)` with
+  `.changed_paths -> tuple[Path, ...]` (ordered, deduplicated) and `.ok`.
+  PHASE 4 stages exactly `report.changed_paths` — `git add -- <paths>`, never
+  `-A` — and the per-action `summary` / `from_version` / `to_version` /
+  `repair` fields are what its generated commit message should name.
+- `PlannedAction(kind, path, summary, from_version, to_version, repair)`;
+  `from_version is None` <=> it is a repair. `FailedAction(kind, path, summary,
+  error)`.
+
+Registry addition: `iter_paths_of(repo_root, kind)` in `registry.py`, taking
+the kind rather than its name, with `iter_artifact_paths` now delegating. The
+archive exclusion stays in exactly one function.
+
+TWO THINGS PHASE 3 MUST HANDLE
+1. `plan_migrations` / `is_stale` / `run_migrations` RAISE `MigrationChainError`
+   when an artifact sits at a version no registered migration moves. That is
+   deliberate (the phase contract: a gap raises, never skips) but it means the
+   CLI-entry callback must catch it and refuse loudly rather than let a
+   traceback escape from `fr --help`. It cannot currently fire in practice —
+   `PlanMeta.schema_version` is a required `Literal[2]`, so every parseable
+   plan is at 2 and every other kind is at 1 — but an unstamped `_meta.yaml`
+   would trigger it.
+2. A per-artifact failure is NOT an exception: it lands in `report.failed` and
+   the other artifacts still migrate. Only the CLI turns that into exit 2.
+
+<!-- fr:journal kind=discovery scope=plan id=d-repairs-vs-schema-migrations created=2026-08-30T13:43:24 phase=2 -->
+### d-repairs-vs-schema-migrations · discovery · Repairs vs schema migrations: stamp-guarded chain vs predicate-guarded fix, and why 4.0.0's is a repair (phase 2)
+
+Spec §3.B names two shapes; Phase 1 left the choice between them open (see
+`d-plan-stamp-is-schema-version`). Both are now built, and the difference in
+code is small but load-bearing.
+
+SCHEMA MIGRATION — guarded by the stamp
+- `SchemaMigration(kind, from_version, to_version, fn)`.
+- Selected when `kind.read_version(path) < kind.current_version`; the runner
+  resolves a CHAIN (1->2, 2->3, ...) up to `current_version`, and a missing
+  step raises `MigrationChainError` instead of silently skipping.
+- `fn(path)` rewrites the body ONLY. The runner writes the stamp itself, and
+  only after `fn` returns — so a migration that dies mid-write leaves the
+  artifact stale and the next run retries it, rather than marking a
+  half-migrated file as current forever (pinned by
+  `test_a_migration_that_raises_mid_write_is_not_stamped`).
+- Idempotence is free: the new stamp makes the artifact ineligible.
+
+REPAIR — guarded by its own predicate
+- `Repair(kind, name, applies, fn)`, version-INDEPENDENT. It never touches the
+  stamp.
+- Selected when `applies(path)` is True. Idempotence must be BUILT: applying
+  `fn` has to make `applies` False. That is the whole contract, and it is what
+  the acceptance row `migration-is-idempotent` tests from the repair side.
+- A predicate that RAISES is a per-artifact failure, not a crash: it is
+  reported, that artifact is left unmodified, and every other artifact still
+  migrates. This is how "a malformed constraint is reported, not rewritten"
+  falls out of the framework rather than being special-cased in the migration.
+
+ORDERING: all schema migrations for an artifact run before any repair on it. A
+repair inspects the artifact's CURRENT shape, so the shape must be current
+first (`test_schema_migrations_run_before_repairs_on_the_same_artifact`).
+
+RE-READING (spec §4, an agent writing concurrently): the plan pass decides
+nothing that the apply pass trusts. `_apply_to_one` re-reads the stamp before
+every schema step and re-evaluates every predicate before applying it, and
+every `fn` reads the file itself — it is handed a `Path`, never a parsed
+document. An action that has become unnecessary in between is recorded in
+`report.skipped`, not silently dropped.
+
+WHY 4.0.0's ONE MIGRATION IS A REPAIR. Widening a plan's `fr_version` ceiling
+(`<4.0.0` -> `<5.0.0`) changes a constraint, not a shape. A plan's artifact
+stamp IS its `_meta.yaml schema_version`, so expressing the widening as a
+schema migration would bump that to 3, declare a plan-folder shape change that
+did not happen, and force `PlanMeta.schema_version` to `Literal[2, 3]` to
+encode the lie. `test_the_repair_does_not_move_the_plan_stamp` asserts the
+migrated file still validates against `Literal[2]`.
+
+Implementation notes on the repair itself (`fr/artifacts/fr_version.py`):
+- `widen_ceiling(constraint, installed) -> str | None` is pure and separately
+  tested. `None` means "leave it alone", covering three distinct cases: already
+  admits us, no ceiling at all, and — the subtle one — excluded by the FLOOR
+  (`>=5.0.0,<6.0.0` under 4.0.0), where the plan wants a NEWER fr and widening
+  would not admit us anyway. Downgrades are a spec §2 non-goal.
+- It splits the constraint on commas by hand rather than iterating a
+  `SpecifierSet`, which iterates a frozenset and would silently reorder the
+  operator's text.
+- The write is line surgery preserving the quoting style, in the same spirit as
+  the registry's stamp writers: no document round-trips through
+  `yaml.safe_dump`. If the value is not on a rewritable line, it refuses and
+  tells the operator what to write instead.
+
+<!-- fr:journal kind=finding scope=plan id=f-closed-world-stamp-closed-by-construction created=2026-08-30T13:43:52 phase=2 state=fixed -->
+### f-closed-world-stamp-closed-by-construction · finding [fixed] · Closed: the runner cannot stamp a closed-world artifact — its work list is the stamp, never the walk (phase 2)
+
+RESOLVES `f-closed-world-models-reject-a-stamp` (Phase 1, state open). A new
+entry rather than an edit: `fr journal add` silently no-ops on an existing
+`--id`, so re-adding the finding as `fixed` would have changed nothing. The
+original entry stays `open` in the file; this is its disposition, and the plan
+journal should be read as: finding raised in Phase 1, closed here.
+
+WHAT THE FINDING SAID. `RunState`, `Matrix` and `PlanMeta` are all
+`extra="forbid"`, so writing a `schema_version` key into a LIVE run, into
+`matrix.yaml`, or bumping a plan's stamp past 2 makes the file unparseable by
+the current fr — and for the matrix that would take the `fr acceptance check`
+CI gate down. Phase 1 could only assert that a correct Phase 2 would never do
+it. Closing it means proving it.
+
+HOW IT IS CLOSED — three tests, not an assertion.
+
+1. `test_the_shipped_runner_never_writes_to_a_closed_world_artifact` seeds a
+   temp repo with a real run yaml, a real `matrix.yaml`, a journal, a spec and
+   a plan, freezes each file's bytes AND mtime, runs the SHIPPED registry with
+   `dry_run=False`, and asserts every one of them is untouched — then parses
+   the run through `parse_run_state` and the matrix through `load_matrix` to
+   prove the exact failure mode the finding named cannot have happened.
+2. `test_the_shipped_registry_registers_nothing_for_the_version_one_kinds`
+   asserts `MIGRATIONS.schema_migrations(k) == ()` for journal, run, matrix and
+   spec. This is the structural half: those kinds are at `current_version=1`
+   and an absent stamp already READS as 1, so no artifact of those kinds is
+   stale, so the runner has no reason to write to them. A future PR that
+   registers a schema migration for one of them trips this test and is told,
+   in the failure message, that the model must accept `schema_version` first.
+3. `test_this_repos_own_artifacts_plan_only_safe_actions` runs
+   `plan_migrations` over super-fr itself and asserts every planned action is a
+   plan-kind REPAIR and none is under `implemented/`. Deliberately NOT a count:
+   38 of the 39 `<4.0.0` ceilings here are archived, so a count would be
+   measuring the archive the runner must never touch (per
+   `d-migration-blast-radius-is-one-live-plan`).
+
+THE MECHANISM THAT MAKES IT STRUCTURAL, not vigilance. The runner's work list
+comes only from `read_version(path) < kind.current_version` (schema
+migrations) or a repair's predicate. There is no "normalise on write" path —
+the runner never stamps an artifact it did not migrate, and a repair never
+stamps at all. So the closed-world models are safe by construction, not by the
+author remembering.
+
+Verified live: `fr migrate artifacts` (dry-run) against this repo reports
+exactly one action —
+`docs/superpowers/plans/2026-07-09-multi-backend-git-host-adapters/_meta.yaml`,
+the ceiling widening — which is precisely the blast radius Phase 1 measured.
+The standing obligation still stands: the first PR that moves any kind's
+`current_version` past 1 must, in the SAME PR, add an optional defaulted
+`schema_version: int = 1` to that kind's model. Phase 7 writes that into
+`.claude/rules/artifact-versioning.md`.
+
+<!-- fr:journal kind=discovery scope=plan id=d-interactive-predicate-and-exemptions created=2026-08-30T14:13:54 phase=3 -->
+### d-interactive-predicate-and-exemptions · discovery · Context detection is CI-unset AND both streams a TTY; the exemption list is exactly four things (phase 3)
+
+<!-- fr:journal kind=discovery scope=plan id=d-path-scoped-commit-and-message created=2026-08-30T14:25:30 phase=4 -->
+### d-path-scoped-commit-and-message · discovery · Path-scoping the commit, not just the staging: git commit needs the pathspec too, plus the generated message format (phase 4)
+
+`fr.artifacts.commit.commit_migration(repo_root, report, *, fr_version=None)
+-> CommitOutcome(committed, reason, paths, message)`. It never raises for an
+expected outcome; "not a git repo" and "nothing to commit" are answers.
+
+THE TWO GIT MISTAKES IT IS SHAPED TO AVOID. Both pass a clean-tree test, which
+is exactly why the spec spells this out and why every fixture here starts dirty.
+
+1. `git add -A` sweeps the operator's unrelated MODIFIED files into the commit.
+2. A plain `git commit -m` records the WHOLE INDEX, so it sweeps in a file the
+   operator had already STAGED — even when the staging was path-scoped. This is
+   the one that is easy to miss: scoping the `add` is not enough, the COMMIT
+   has to carry the pathspec too.
+
+So the sequence is:
+
+    git add -- <report.changed_paths>
+    git diff --cached --name-only HEAD -- <paths>     # anything to record?
+    git commit -m <generated> -- <paths>
+
+`add` first, so an artifact a migration CREATED is tracked and can be named by
+the pathspec. The pathspec on `commit` makes git build the tree from HEAD plus
+those paths and leave the rest of the index alone — the operator's staged file
+stays staged, and their modified file stays modified and uncommitted.
+
+The emptiness check is against HEAD (`diff --cached --name-only HEAD`), not
+against the index, so the answer does not change when the operator has staged
+something unrelated. When it comes back empty we make NO COMMIT AT ALL — not
+"an empty commit avoided", but the thing that stops an unrelated staged file
+being committed under a migration message.
+
+VERIFIED BY MUTATION, not by reading. Swapping in `git add -A` fails
+`test_an_unrelated_modified_file_stays_modified_and_uncommitted`; dropping the
+pathspec from the commit fails both
+`test_an_unrelated_staged_file_is_not_swept_in` and
+`test_the_commit_contains_only_the_paths_the_migration_rewrote`. Both mutations
+were applied and reverted.
+
+COMMIT MESSAGE FORMAT (`migration_commit_message(report, *, fr_version)`),
+grouped by kind and transition rather than listing files — `git show --stat`
+already lists them, and a consumer repo mid-upgrade migrates dozens of plans at
+once. Groups keep first-seen order, so a deterministic report gives a
+deterministic message.
+
+    chore(fr): migrate 3 artifacts to fr 4.0.0
+
+    - journal: schema 1 -> 2 (2 files)
+    - plan: repair widen-fr-version-ceiling (1 file)
+
+    Migrated automatically at fr CLI entry: the installed fr changed under
+    artifacts written for an older one (artifact migration framework, spec
+    2026-08-30 §3.C/§3.D). Only the rewritten artifact paths are in this
+    commit; unrelated working-tree and staged changes were left alone.
+
+Subject is singular for one artifact ("1 artifact"), plural otherwise; the
+count is `len(report.changed_paths)` (deduped paths), while the per-group count
+is that group's distinct paths.
+
+WHAT IT REFUSES RATHER THAN HANDLES, each returning `committed=False` with a
+reason the gate prints:
+
+- not a git repository -> migrate without committing, no crash (spec §3.D);
+- a repository with NO COMMITS YET -> a pathspec commit has no HEAD to build
+  its tree from, and falling back to a whole-index commit would sweep in
+  whatever was staged. An empty repo is not the case this feature exists for;
+- a changed path OUTSIDE the git toplevel -> refuse. It cannot happen through
+  the registry's locators, but this writes to git history from a callback that
+  fires before an unrelated command, so the precondition is asserted rather
+  than assumed to have been checked upstream;
+- `git add` or `git commit` failing (no user.email, hooks, a lock) -> reported,
+  and the CALLER STILL RUNS THE COMMAND. The files are migrated; refusing there
+  would strand the operator with a migrated tree and a command that never works.
+
+<!-- fr:journal kind=finding scope=plan id=f-live-gate-refused-ci-and-the-suite created=2026-08-30T14:26:03 phase=3 state=fixed -->
+### f-live-gate-refused-ci-and-the-suite · finding [fixed] · Switching the gate on refused this repo CI and 108 of its own tests; both fixed, and agents always land on the non-interactive side (phase 3)
+
+Turning the gate on made the repo's own CI red, and made every agent-driven
+`fr` command refuse. Both were found by running the tooling, not by reasoning.
+
+WHAT HAPPENED. The moment `fr.cli`'s callback went live, my own
+`fr isolation exec -- uv run fr acceptance report` refused:
+
+    fr: artifacts in /workspaces/... were written for a different fr and must be
+    migrated before this command can run.
+    This context is non-interactive (CI is set, or there is no TTY) ...
+
+That is the feature working. But it has two consequences worth writing down.
+
+1. CI WOULD HAVE GONE RED, and not in the phase that caused it.
+   `.github/workflows/acceptance-report.yml` does `uv tool install ./packages/fr`
+   (super-fr self-hosts, deliberately) and then `fr acceptance check`, with
+   `CI=true`. This repo carried exactly one live stale artifact —
+   `docs/superpowers/plans/2026-07-09-multi-backend-git-host-adapters/_meta.yaml`
+   at `fr_version: '>=3.0.0,<4.0.0'` — so that step would have exited 2 on every
+   PR. Note the plan was ALREADY unparseable under 4.0.0 (`PlanSchemaError` at
+   `parser.py`); the gate did not break it, it stopped the breakage being quiet.
+
+   FIXED by dogfooding the framework rather than hand-editing: ran
+   `fr migrate artifacts --yes` from this branch's build. One line,
+   `<4.0.0` -> `<5.0.0`, which is precisely the blast radius Phase 1 measured
+   and Phase 2 predicted. The 38 archived plans with the same ceiling are
+   untouched, as they must be. NOTE FOR THE ORCHESTRATOR: this is the one file
+   in the diff that is not Phase 3/4 code, and it is uncommitted like everything
+   else; it is here because leaving it would ship a repo whose own CI its own
+   `fr` refuses.
+
+2. THE WHOLE TEST SUITE REFUSED — 108 failures, none of them about migration.
+   In-process `CliRunner` tests and `fr` subprocesses inherit the PYTEST
+   process's cwd, so the gate resolved super-fr's own repo root and refused
+   ~100 unrelated CLI tests. Left alone, the suite's result would depend on the
+   repo's own artifact state rather than on the code under test — and it would
+   fail confusingly, in files that have nothing to do with this feature, the
+   next time anyone adds a plan with an old ceiling.
+
+   FIXED with an autouse fixture in `tests/conftest.py` setting
+   `FR_SKIP_MIGRATION=1` for the whole suite — the mechanism's own documented
+   bypass, not a hole cut for tests. `tests/unit/test_migration_trigger.py` and
+   `test_migration_commit.py` `monkeypatch.delenv` it for the invocations that
+   must actually see the gate. Note `CliRunner(env=...)` UPDATES `os.environ`
+   rather than replacing it, so omitting the variable from that dict is not
+   enough; it has to be deleted.
+
+3. AGENTS AND PODS ALWAYS LAND ON THE NON-INTERACTIVE SIDE. `fr isolation exec`,
+   `claude`'s bash tool, hermes pods and CI all lack a TTY, so while any live
+   artifact is stale EVERY fr command in those contexts refuses. That is spec
+   §3.C as designed, and it is not a deadlock: `fr migrate artifacts --yes` is
+   itself exempt from the gate and needs no TTY, so an agent that hits the
+   refusal can unblock itself with exactly the command the refusal names. What
+   an agent cannot do is silently proceed over stale artifacts — which is the
+   point.
+
+CONSEQUENCE FOR PHASES 5-8 AND FOR ANY FUTURE STAMP BUMP: the first PR that
+moves a kind's `current_version` makes every live artifact of that kind stale in
+this repo, which turns CI red until the same PR runs `fr migrate artifacts --yes`
+and commits the result. That obligation belongs in Phase 7's
+`.claude/rules/artifact-versioning.md` alongside the stamp/migration/validator
+trio it already names.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p5-loud-refusal created=2026-08-30T14:41:41 phase=5 -->
+### d-p5-loud-refusal · discovery · Phase 5: discover_plans refuses stale plans loudly, unconditionally non-interactive (phase 5)
+
+discover_plans's PlanSchemaError catch (fr_dispatch/__init__.py:145-149) was
+the swallow: it caught EVERY PlanSchemaError from parse() — both genuinely
+malformed plans and (post-4.0.0) plans whose fr_version ceiling excludes the
+installed major — logged a WARNING, and silently dropped the plan from
+discovery. Fixed uniformly rather than distinguishing "stale" from
+"malformed": both now log ERROR, push metrics.push_failure_total(reason=
+"stale_artifact"), and append a message to a new `failures: list[str] | None`
+outparam (mirroring tick()'s own `failures` accumulator pattern) so the
+caller can fold the count into its own error total. discover_plans gained
+`metrics: MetricsPusher | None = None` (defaults to NullMetrics(), same
+default-injection pattern as tick's `metrics=`).
+
+Predicate decision: did NOT call fr.artifacts.trigger.is_interactive(). The
+daemon never goes through fr's CLI entry point (`ensure_artifacts_current`)
+at all — bridge_cli.py calls fr_dispatch.discover_plans/tick as library
+functions, not `fr <command>` as a subprocess — so there is no argv/env/TTY
+context here to test in the first place. Calling is_interactive() would
+answer a question that doesn't apply to this call site (and would coincidentally
+always return False since stdin/stdout in caplog-captured pytest runs are
+non-tty too, masking the difference between "correctly detected non-interactive"
+and "the predicate literally cannot be reached here"). Refusing
+unconditionally is the correct read of "reuse the predicate, don't grow a
+second answer": the ANSWER (non-interactive => refuse, never migrate, never
+commit) is reused; the mechanism that computes it for CLI entry is a
+different question this call site doesn't need to ask.
+
+bridge_cli.py diff: one new `discover_failures: list[str] = []` per repo
+iteration, `discover_plans(r, gh, metrics=_metrics, failures=discover_failures)`
+in the `_fetch_plans` closure, and `total_errors += len(discover_failures)`
+after the `_gh_rate_limit_guard` call. flock, the bridge-owned checkout sync
+(_pull_managed_repo/_ensure_bridge_checkout), the metrics wire format/reason
+aliases, and _seen_plans.json/_done_closed.json are untouched.
+
+Four test-double call sites needed a signature update (not a behavior change)
+to tolerate the new kwargs: test_bridge_cli.py's spy_discover + two lambdas,
+test_bridge_resilience.py:462, test_bridge_shape_binding.py:105 — all
+`lambda repo, gh: ...` -> `lambda repo, gh, **kw: ...`.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p8-enforce-fr-version created=2026-08-30T14:56:54 phase=8 -->
+### d-p8-enforce-fr-version · discovery · Phase 8: enforce_fr_version scopes the gate to execution, spec.compute_status is the one opt-out (phase 8)
+
+fr.parser.parse gained `enforce_fr_version: bool = True` (keyword-only,
+defaults on -- safety stays default, every existing caller unchanged). The
+guarded block is exactly the pre-existing fr_version SpecifierSet check
+(parser.py, meta.fr_version ceiling vs INSTALLED_FR_VERSION) -- the
+schema_version: Literal[2] pydantic validation of _meta.yaml itself is NOT
+gated by this flag (that is plan-folder SHAPE validation, unrelated to the
+version-ceiling constraint; an archived plan is still a real v2 plan folder,
+just possibly pinned to an fr_version range that predates the installed
+major).
+
+Only one call site passes False: fr.spec.compute_status (spec.py:370, the
+per-plan-ref loop that builds SpecStatus for `fr spec status`). This is
+because spec §2 declares archived plans a non-goal for migration -- they
+record what shipped -- so parse-time enforcement of a stale ceiling there
+was pure noise (PlanSchemaError -> state="Missing" for every archived plan
+whose fr_version excludes 4.0.0, which is all 38 archived plans in this
+repo once any of them carry a ceiling narrower than the current major).
+
+Execution call sites audited and confirmed to still call parse()/pass no
+enforce_fr_version kwarg (default True holds):
+- fr/commands/pickup_cmd.py:29 (`fr pickup`) -- new unit test
+  test_pickup_still_enforces_fr_version (test_v2_pickup.py).
+- fr/commands/common.py build_plan_report (`fr status` AND `fr apply --yes`
+  share this one read->observe->render->diff path by design, per
+  test_status_cmd.py's own docstring: "the two can't drift") -- new unit
+  test test_build_plan_report_still_enforces_fr_version (test_status_cmd.py).
+  Confirms `fr status` (single-plan) is NOT the "read-only status path"
+  the phase brief means -- that is fr.spec.compute_status (spec-level
+  aggregate), a different function entirely; build_plan_report stays
+  execution-scoped because it is apply's own read path.
+- fr_dispatch/__init__.py discover_plans (the bridge daemon, Phase 5's own
+  surface) -- new unit test test_discover_plans_still_enforces_fr_version
+  (test_vk_bridge_discover.py), using an fr_version-excluded fixture
+  (not the generic schema_version:99 fixture Phase 5's test used) to prove
+  this specific gate, not just PlanSchemaError in general, stays enforced
+  here.
+- fr/plan_ops.py, fr/archive.py, fr/migrate.py, fr/parser.py's own
+  parse_strict -- all call parse(plan_dir) with no enforce_fr_version
+  kwarg; left untouched, not separately unit-tested (out of the phase's
+  named execution-path list, and each is a mutation path where enforcement
+  was never in question).
+
+Fixture discipline: both new tests build a plan with `fr_version:
+">=9.0.0,<10.0.0"` and monkeypatch `fr.parser.INSTALLED_FR_VERSION` to
+"3.0.0" (excluded) -- same pattern the pre-existing
+test_parse_enforces_fr_version already used, reused rather than
+reinvented. Confirmed RED before the parser.py/spec.py edit (git stash) --
+both new parser-level and spec-level tests failed exactly as predicted
+(TypeError: unexpected keyword argument; state == "Missing" with a "parse
+error" note) before the fix, and pass after.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p6-cursor-inference created=2026-08-31T09:29:11 phase=6 -->
+### d-p6-cursor-inference · discovery · How the adopted cursor is inferred: the shape, the one rule, PR detection, and the three states the table omits (phase 6)
+
+`fr run adopt <target>` (fr/run/adopt.py) reconstructs a cursor from artifacts
+already on disk. Five inputs, one rule, and three states the spec's table does
+not name.
+
+THE TARGET. A plan folder normally; a SPEC markdown file is also accepted,
+because the table's first row ("spec only") is by definition a state in which
+no plan dir exists to point at — refusing it would make the row unreachable
+through the command that implements the table. Anything else is a loud refusal
+naming both accepted forms.
+
+THE SHAPE. Default `fr-goal`, resolved through `resolve_workflow` (repo >
+shipped), overridable with `--workflow`. Deliberately NOT
+`workflow_for_plan`: that answers the granularity a plan DISPATCHES at and
+defaults to the `unit: phase` sub-shape whose only step is `implement`, so a
+cursor over it could never land on `plan`, `review` or `deliver`. A shape
+missing the inferred step is refused loudly, naming the step, the shape's
+steps and its `unit` — never silently retargeted.
+
+THE CURSOR RULE, one line: the cursor is the inferred step; every step BEFORE
+it is `done`, the cursor and everything after it are `pending`. Marking the
+cursor `running` would claim a dispatch that never happened (and `fr run
+advance` treats `running` as already-dispatched). Nothing here reimplements a
+transition — `_complete_step` in run_cmd stays the only implementation of the
+done/failed cursor asymmetry, and an adopted run advances exactly like a
+started one. `derive_run_id` is imported (lazily, to avoid the cycle
+run_cmd->adopt->run_cmd) rather than re-derived, so an adopted run id is
+byte-identical to a started one's.
+
+WHAT IS OBSERVED, per row:
+- phases: `fr.render.plan_locally_complete` per phase — the SAME offline
+  predicate the archive gate, the `fr status` sweep and the unarchived-plans
+  tripwire use. No third definition of "done".
+- spec: `plan.spec_path` (already lifecycle-resolved by `parse`), so an
+  archived spec resolves to its current location.
+- plan: the repo-relative plan dir.
+
+HOW "PR OPEN" IS DETECTED. Only when a PR URL is NAMED (`--pr <url>`), and
+resolved through `GhClient.pr_status_by_url` via `hostclient.client_for` —
+the protocol method that exists for exactly this question and is implemented
+for GitHub, GitLab and Gitea. So adoption inherits multi-backend support
+instead of shelling out to `gh pr list`, which fr-vk was deliberately moved
+AWAY from (2026-07-09 spec §6).
+
+Rejected: discovering the PR by branch. No adapter in the protocol answers
+"open PRs for head branch", adding one means three adapters plus fakes, and
+the guess has a wrong answer (a phase PR) that looks right.
+
+WHEN IT CANNOT BE DETERMINED OFFLINE: `pr_status_by_url` already fails soft
+(`None` on any not-found/error condition) and `default_pr_state` extends that
+to transport failures, so "cannot tell" is a first-class answer distinct from
+"no PR". It lands the cursor on `review` — the last row observable WITHOUT the
+network — and appends a note explaining why, printed by the CLI but NOT stored
+in the run file (a run file records where the cursor is, not why). Notes travel
+back through a `notes: list[str]` outparam, the same shape `discover_plans`
+uses for `failures`. Failing soft DOWNWARD matters: `review` under-claims by
+one step and `fr run resolve --step review --state done` fixes it in one
+command, while a wrong `deliver` claims the review happened.
+
+THREE STATES THE TABLE DOES NOT COVER, decided here:
+1. A plan folder with NO phase files (a skeleton) is IN FLIGHT -> `implement`.
+   `all([])` is vacuously true, so the naive reading calls an empty plan
+   finished; `completed_unarchived_plans` already guards the same trap with
+   `plan.phases and all(...)` and this agrees with it.
+2. An open PR over a plan whose phases are NOT all complete does NOT reach
+   `deliver`. The last two rows are one observation refined ("all phases
+   complete" PLUS "and there is a PR"), so an open PR over unfinished work is
+   a phase PR, not the delivery; landing on `deliver` would declare the
+   implementation over.
+3. A PR that resolves to MERGED/CLOSED is not an open one -> `review`, with a
+   note naming the observed state.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p6-what-an-adopted-run-records created=2026-08-31T09:29:49 phase=6 -->
+### d-p6-what-an-adopted-run-records · discovery · What an adopted run records: emitted spec/plan for archival, a new StepRecord.items for per-phase state, and why that needs no version bump (phase 6)
+
+An adopted run file is a normal run file — same `fr.run.model` types, same
+`save_run_state`, same path (`docs/superpowers/runs/<run-id>.yaml`). What it
+carries, and why each piece is load-bearing:
+
+EMITTED SPEC AND PLAN, attached to the step the SHAPE says emits them (for the
+shipped fr-goal manifest: `spec` on `brainstorm`, `plan` on `plan`, `pr` on
+`deliver`). This is what makes archival work: `fr.archive` locates a plan's run
+by scanning every step record for `emitted.plan == <plan dir>` (2026-08-14 spec
+§4.B), never by slug, because a run id is `<date>-<flattened-branch>` and a plan
+slug is authored independently. A run adopted without those recordings would be
+a run that never archives with its plan.
+
+FALLBACK, and it is deliberate: if the shape has no step declaring
+`emits: [plan]`, the artifact is recorded on the CURSOR step instead of being
+dropped. Archival depends on the value existing SOMEWHERE in the file; losing
+it to a shape's authoring choice would strand the plan. Same for `spec`/`pr`.
+
+`pr` IS RECORDED ONLY WHEN OBSERVED OPEN. A named-but-unresolvable PR leaves
+`emitted` unset — an artifact recording is a claim, and "the operator typed a
+URL" is not evidence the artifact exists.
+
+PER-PHASE STATE needed a field. `StepRecord` gained `items: dict[str, str] |
+None` — additive, optional, and exactly what spec §4.B's own illustration of
+run state shows (`implement: {state: running, items: {".../phase/1": done}}`);
+Phase 7 built the model without it because nothing wrote one yet. Adoption is
+the first writer: a half-implemented plan whose cursor says `implement` and
+nothing else has lost everything that made the adoption worth having. Keys are
+`phase/<n>`, the plan-relative TAIL of the §4.D identity grammar, not the full
+`<repo>/<spec>/<plan>/phase/<n>` item id — composing that is
+`fr_dispatch.work_item`'s job and `fr` may not import it
+(`tests/unit/test_import_direction.py`); the run file already records WHICH
+plan in `emitted.plan`, so the tail is unambiguous within the run. `items` is
+attached to the step with `for_each: phase` (again shape-driven), falling back
+to the cursor step.
+
+NO ARTIFACT-VERSION BUMP FOLLOWS, and that needed checking rather than
+assuming. The `run` kind sits at `current_version=1` in
+`fr.artifacts.registry`, and `RunState`/`StepRecord` are `extra="forbid"` — the
+exact hazard `f-closed-world-models-reject-a-stamp` raised in Phase 1. Adding a
+field is safe here only because `docs/superpowers/runs/` is NEW in 4.0.0:
+`packages/fr/src/fr/run/model.py` does not exist on origin/main and no released
+fr has ever read a run file, so there is no older reader for a file carrying
+`items` to break. Old files (none in the wild, and none in this repo) still
+parse — the field is optional. Had runs shipped in 3.x this would have required
+`current_version=2`, a schema migration, and `schema_version` on the model
+first.
+
+WHERE THE FILE IS WRITTEN: `repo_root`, directly — NOT through
+`ensure_run_workspace`. `fr run start` enters isolation because a run being
+BORN has no workspace yet; an adopted run describes work already under way, so
+its workspace is wherever those artifacts are. Provisioning a worktree (or
+starting a container) as a side effect of adopting would be the reverse of the
+§4.B rule it superficially resembles: the run belongs with its plan, and the
+plan is here. Adoption refuses rather than overwrite when a run id already
+exists.
+
+<!-- fr:journal kind=decision scope=plan id=d-p6-offer-reports-command-writes created=2026-08-31T09:30:20 phase=6 -->
+### d-p6-offer-reports-command-writes · decision · Offered, not forced: the CLI-entry gate REPORTS the offer and never writes; only `fr run adopt` / `fr migrate artifacts --adopt` create a run (phase 6)
+
+Spec §3.E says adoption is "offered, not forced: the migration reports
+in-flight plans with no run and adopts them in the interactive path". The
+operator's Phase 6 brief adds a constraint that outranks the wording: adoption
+"must never silently create runs during an unrelated command — an operator
+running `fr status` should not discover new tracked files."
+
+Those collide, because the interactive migration path IS an unrelated command:
+`ensure_artifacts_current` fires at CLI entry, before whatever the operator
+typed. Split accordingly, so the OFFER lands in the interactive path while the
+WRITE stays something the operator asked for:
+
+1. `ensure_artifacts_current` (CLI-entry gate) — REPORTS only. After a
+   migration it emits one line naming each in-flight plan with no run plus the
+   exact `fr run adopt <dir>` command, and creates nothing. It reaches the
+   offer only in the interactive arm; the non-interactive refusal exits before
+   it (nothing migrated, so there is no "your fr changed under this work"
+   moment to report an offer in). Pinned by
+   `test_the_gate_creates_no_run_of_its_own` and
+   `test_the_non_interactive_refusal_does_not_reach_the_offer`.
+2. `fr migrate artifacts` — reports the same offer by default (naming both
+   `--adopt` and the per-plan command), and ADOPTS with `--adopt`. `--adopt`
+   without `--yes` is a dry-run listing what it would adopt, like every other
+   fr mutation. A per-plan adoption failure is reported and the rest still
+   happen — a half-adoptable tree must not make the migration look broken.
+3. `fr run adopt` — the explicit single-plan command.
+
+Both surfaces share `adoptable_plans(repo_root)`, so they cannot describe the
+same situation differently. A plan is offered iff: parseable (a malformed or
+version-excluded plan is a different problem and must not wedge the
+migration), live (only `docs/superpowers/plans/` is walked, so archives are
+excluded structurally), NOT complete, and has no run.
+
+"NOT COMPLETE" reuses the repo's existing definition — every phase
+`plan_locally_complete` — the same one `completed_unarchived_plans`, the
+archive gate and the unarchived-plans tripwire use. Spec §3.E's "a cursor over
+completed work is noise" therefore needs no new predicate, and cannot drift
+from the archive's idea of done.
+
+"HAS NO RUN" reuses `fr.archive.find_run_for_plan` (promoted from
+`_find_run_for_plan` for this). It matches on the recorded `emitted.plan`, so
+the offer set self-heals after adoption: adopt a plan and it drops out of the
+offer, WITHOUT any name convention between run ids and plan slugs.
+
+Verified live on this repo: `uv run fr migrate artifacts` (dry-run) prints
+"every artifact is already current" and then offers exactly two plans —
+2026-07-09-multi-backend-git-host-adapters and
+2026-08-30-artifact-migration-framework — while
+2026-08-14-workflow-shapes-and-workitem-dispatch, whose phases are all ticked,
+is correctly not offered. No file was written.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p7-validator-shape created=2026-08-31T10:01:15 phase=7 -->
+### d-p7-validator-shape · discovery · fr validate artifacts: stamp-then-structure, with ArtifactKind.validate as the required extension point (phase 7)
+
+`fr validate artifacts [--kind K]` (fr/artifacts/validate.py + structure.py,
+CLI in commands/validate_cmd.py). Two halves per artifact, in this order and no
+other:
+
+1. THE STAMP, generically, from the registry. Unreadable -> fail. NEWER than
+   this fr -> fail closed naming the upgrade, and STOP: an artifact from the
+   future cannot be checked against a schema that does not know it, and
+   rewriting it is a spec 2 non-goal. OLDER -> fail as stale naming
+   `fr migrate artifacts --yes`, and STOP: validating a v1 file against the v2
+   schema reports the migration's absence as a dozen structural errors, which
+   buries the one line that matters.
+2. THE STRUCTURE, through `ArtifactKind.validate` — a NEW REQUIRED FIELD on the
+   frozen dataclass, which is what makes "every version ships a validator for
+   every kind" structural rather than a promise: a kind cannot be registered
+   without one. This is the extension point Phase 1 forecast, used as forecast.
+
+Per-kind (all in fr/artifacts/structure.py, each `(path) -> list[str]`, every
+message naming a field or quoting a numbered line):
+
+- plan: `_meta.yaml` against `PlanMeta`, then the whole folder through
+  `fr.parser.parse(..., enforce_fr_version=False)` — Phase 8's flag, reused. A
+  ceiling that excludes this fr is a MIGRATION question the stamp check already
+  owns; reporting it again in different words helps nobody.
+- journal: `parse_journal`, plus duplicate entry ids (`fr journal add` is
+  idempotent on --id, so two entries sharing one id can only be a hand edit or
+  a bad splice — and `render --entry` would silently show the first).
+- run: `RunState`, plus the one cross-reference the model does not encode —
+  `cursor` must name a recorded step.
+- matrix: `Matrix`. Ref resolution and staleness stay `fr acceptance check`'s;
+  this is shape only, so the two gates cannot disagree.
+- spec: see the heuristics finding.
+
+Reuse over re-definition: the closed-world kinds go through their own pydantic
+model (the canonical schema, not a copy), the open ones through their own
+parser. `_model_problems` formats pydantic errors as
+"missing required field `rows[3].status`" so a nested row names its index.
+
+The walk is `iter_paths_of` over `ARTIFACT_KINDS`, so validate.py names no kind
+at all — a sixth kind is validated with no edit there. Archives are excluded by
+the same locators the runner uses, pinned by
+test_the_archive_is_never_validated.
+
+Exit codes: 0 valid, 1 invalid (the "lint failure" code cli.py already
+defines), 2 for an unknown --kind. NOT exempt from the CLI-entry migration
+gate: in CI a stale artifact refuses before the validator runs, and both
+failures carry the same instruction.
+
+Measured live on this branch: 22 artifacts (3 plans, 11 journals, 0 runs, 1
+matrix, 7 specs), all valid, under CI=true.
+
+<!-- fr:journal kind=finding scope=plan id=f-p7-heuristics-measured-not-reasoned created=2026-08-31T10:01:16 phase=7 state=fixed -->
+### f-p7-heuristics-measured-not-reasoned · finding [fixed] · Both structural heuristics had false positives on real code; measurement, not reasoning, picked the ones that shipped (phase 7)
+
+Spec-structure validation has no schema to lean on, so the checks had to be
+derived from the corruption this repo actually produced (commit 7ece5a9,
+repaired in de83df5: a splice with `end = text.index("## Implementation
+Plans")` matched an INLINE mention of that heading sitting BEFORE the replaced
+section, so end < start and the tail was re-appended — 638 duplicated lines and
+one heading fused mid-sentence).
+
+FIRST ATTEMPT, REJECTED BY MEASUREMENT. The obvious detector for the fused
+heading is "a `##` marker mid-line". Run over the seven live specs it flagged
+THREE lines, all legitimate prose quoting a heading in backticks — including
+line 76 of the workflow-shapes spec, which is the very inline mention that
+caused the splice. A validator that fails specs for correctly quoting a heading
+is a validator that gets switched off, so the heuristic was dropped rather than
+special-cased.
+
+WHAT SHIPPED, both measured before being written into the code:
+
+1. A heading line with an ODD number of backticks — an inline-code span that
+   never closes. The damaged line was
+   ``## Implementation Plans` into `PlanRef(plan, repo, file, …)`; `PlanMeta` carries``
+   (5 backticks). A legitimate heading quoting code balances them.
+2. A duplicated section heading at level <= 3, outside code fences. Deeper
+   headings (`####` notes) legitimately repeat and are not compared; fenced
+   `# Before` / `# After` blocks are skipped, which is what keeps two ARCHIVED
+   specs from being false positives if the archive were ever validated.
+
+MEASURED: 0 problems across all 7 live specs and 0 across the seeded fixtures;
+15 problems on the real damaged blob (14 duplicated sections + the fused
+heading). The unit test does not depend on git history — it reproduces the
+splice with the same `index()` bug and asserts both signals fire.
+
+SECOND FALSE POSITIVE, in the kinds tripwire.
+tests/unit/test_tripwire_artifact_kinds.py flags a literal collection holding
+>= 3 of the 5 kind names. Its first run flagged
+`fr_dispatch/work_item.py:56: _Level = Literal["run", "spec", "plan", "phase"]`
+— the DECOMPOSITION-UNIT grammar (2026-08-14 spec 4.D), which shares three
+nouns with the artifact kinds by coincidence: a run ITEM is not a run ARTIFACT.
+Fixed by skipping `Literal[...]` slices, with the reasoning in the docstring
+and its own test: a type-level vocabulary is a closed set the type checker
+already enforces, while a runtime collection of kind names is the thing that
+drifts. Raising the threshold to 4 was rejected — a genuine second list naming
+only three kinds is exactly what the tripwire is for.
+
+<!-- fr:journal kind=decision scope=plan id=d-p7-standing-obligation created=2026-08-31T10:01:55 phase=7 -->
+### d-p7-standing-obligation · decision · The rule, the explicit REPO_LOCAL_ONLY_RULES tuple, the CI job and the kinds tripwire — and the two facts that would have become folklore (phase 7)
+
+.claude/rules/artifact-versioning.md turns the framework into a standing
+obligation: any PR changing an artifact's SHAPE ships, in the same PR, a stamp
+bump (registry only), a registered migration (imported by
+fr/artifacts/__init__.py — a migration nobody imports never runs), and a
+structure validator for that kind. It also carries the closed-world corollary
+Phase 1/2 discovered: the first PR to move a kind's `current_version` past 1
+must, in that PR, widen that kind's extra=forbid model with an optional
+defaulted `schema_version`.
+
+It records the two operational facts earlier phases learned by running the
+thing, which would otherwise become folklore:
+
+1. AGENT SESSIONS, PODS AND CI ALWAYS LAND NON-INTERACTIVE. `is_interactive`
+   needs a TTY on BOTH stdin and stdout and treats `CI` as decisive, and
+   `fr isolation exec`, an agent's bash tool, a hermes pod and every runner
+   fail it. So after a version bump the first `fr` command there REFUSES and
+   the agent runs `fr migrate artifacts --yes` itself (that verb is exempt and
+   needs no TTY). The rule says in as many words that this is the operator's
+   deliberate choice — safe by default, one explicit step — and must NOT be
+   "fixed" later by loosening the predicate or adding an agent-detecting
+   exemption.
+2. MOVING `current_version` MAKES THIS REPO'S OWN CI RED until the same PR runs
+   `fr migrate artifacts --yes` and commits the result, because
+   acceptance-report.yml installs fr from the checkout and runs
+   `fr acceptance check` with CI=true. It already happened once on this branch
+   and was fixed by dogfooding the migration rather than hand-editing the file.
+
+WIRING, and the trap in it: `scripts/sync-opencode.py`'s REPO_LOCAL_ONLY_RULES
+is an EXPLICIT TUPLE, not a glob over `.claude/rules/`. A rule not listed there
+never reaches OpenCode and nothing complains — the mirror `--check` compares
+against the same tuple, so it agrees with itself. Added there (now 6
+instruction files); Hermes correctly does NOT get it: sync-hermes.py mirrors
+only the three installer-shipped plugin rules into a consumer's SOUL.md, and
+this is a maintainer rule about super-fr's own artifacts.
+
+CI: a new `validate-artifacts` job in .github/workflows/ci.yml runs
+`uv run fr validate artifacts` over the repo. Its comment names the ordering
+that would otherwise confuse: with CI set, a STALE artifact refuses at the
+migration gate before the validator runs, and both failures carry the same
+instruction. The same assertion also runs in the unit suite
+(test_this_repos_own_artifacts_are_structurally_valid), so it fails locally in
+seconds before it fails in Actions in minutes.
+
+TRIPWIRE: tests/unit/test_tripwire_artifact_kinds.py — an AST scan of
+packages/*/src for a literal set/list/tuple/dict-keys holding >= 3 of the 5
+registered kind names, registry.py excepted. Adding a kind stays a one-module
+edit; a second list is how a kind gets migrated but never validated.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p7-adopt-documented created=2026-08-31T10:01:56 phase=7 -->
+### d-p7-adopt-documented · discovery · fr run adopt is documented in four places now; the explainer renderer path in the rule is stale (re-derived, verified byte-identical) (phase 7)
+
+`fr run adopt` shipped in Phase 6 documented NOWHERE. Closed in four places,
+plus one the phase brief did not name:
+
+- plugins/super-fr/skills/fr-goal/SKILL.md — four lines before "Announce at
+  start", covering what it does (reconstructs a cursor from what is on disk,
+  completed phases included), when it is needed (the version moved under work
+  already in flight), and that adoption is OFFERED (the migration prints the
+  command; `fr migrate artifacts --yes --adopt` does the batch; nothing adopts
+  on your behalf). 109 -> 114 lines against the hard 120-line cap in
+  tests/unit/test_skill_validation.py, so ~6 lines of headroom remain for
+  whoever edits it next.
+- README.md — `adopt` added to the `fr run` verb list in the command table and
+  a line in the Workflow-shapes code block. A `fr validate` row was added to
+  the maintenance table in the same pass (a new user-facing verb with no home).
+- packages/fr/src/fr/commands/skills_cmd.py — the fr-goal skill's verb summary
+  (`fr run {start,advance,resolve,adopt,status,check}`). The COMMANDS half of
+  `fr skills` is introspected from the typer app, so `fr validate` appeared
+  there by itself; the SKILLS half is hand-maintained prose and did not.
+- docs/explainers/01-fr-goal.md + .html — NOT in the brief, but
+  .claude/rules/explainers-currency.md makes a shipped skill's surface change a
+  trigger, and the explainer's "Five commands move it" passage is exactly where
+  a reader would look. One paragraph added, in the page's own voice, framing
+  adopt as the command that CREATES a run rather than moving one.
+
+THE EXPLAINER REGENERATION, since the rule warns the .html is the file that
+actually ships and the .md alone is the failure mode: the rule's documented
+path (`~/.claude/plugins/cache/derio-net--blog-craft/blog-craft/<version>`) is
+DANGLING on this machine — `current` symlinks to 0.21.1, which is not there. The
+renderer is at
+/Users/derio/.claude/plugins/marketplaces/derio-net--blog-craft/tools/render_explainer.py.
+Re-derived rather than hand-editing the HTML, as the rule instructs. Verified
+before trusting it: re-rendering the UNMODIFIED .md reproduced the committed
+.html byte for byte (1028154 bytes, identical), so the diff after the edit is
++8 lines and nothing else. Anyone updating explainers-currency.md should
+correct the path there.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p7-acceptance-sweep created=2026-08-31T10:02:26 phase=7 -->
+### d-p7-acceptance-sweep · discovery · Acceptance sweep: two rows flipped to ci on what the tests actually exercise; every-artifact-declares-its-version stays red on purpose (phase 7)
+
+Three rows examined, two flipped, one deliberately left red.
+
+FLIPPED to ci:
+
+- artifact-structure-validator-per-version (was not-implemented, levels {}).
+  Both halves of the acceptance are now met and both are mechanical rather than
+  promised: "every kind" because `validate` is a REQUIRED field on the frozen
+  ArtifactKind, so a kind cannot be registered without one; "CI runs it over
+  the repo's own artifacts" by the new validate-artifacts job AND by a unit
+  test that runs the same walk over REPO_ROOT. Levels cite
+  test_validate_artifacts.py + test_tripwire_artifact_kinds.py.
+- migration-is-idempotent (was skipped). The notes said explicitly why it was
+  not ci: "the no-second-COMMIT half is Phase 4's and stays unverified until it
+  lands". It landed. Checked what the tests actually exercise before flipping:
+  test_a_report_whose_paths_are_already_committed_makes_no_empty_commit
+  (test_migration_commit.py) re-commits the same report and asserts HEAD is
+  unchanged — that is the second-commit half at the commit layer — and
+  test_a_current_tree_neither_migrates_nor_commits (test_migration_trigger.py)
+  asserts a tree already current never reaches the runner or the committer at
+  all. The no-second-REWRITE half was already pinned both ways (bytes AND mtime
+  on the second run). Test Plan item 7, the same two commands on a live node,
+  stays operator-driven and is named as such in the notes.
+
+LEFT RED, deliberately: every-artifact-declares-its-version stays
+not-implemented. Phase 1 left it red because the generators do not stamp, and
+NOTHING IN THIS PLAN CHANGED THAT: `fr journal add`, `fr run start` /
+`fr run adopt` (save_run_state) and the spec writer all still emit unstamped
+files; only plans carry a stamp, and only because a plan's stamp is its
+pre-existing schema_version. The tempting flip is to argue that "an absent
+stamp READS as version 1" satisfies "declares the version it was written for".
+It does not — that is the framework's READER convention, not a property of the
+generated file — and flipping on that equivalence would be precisely the
+overclaim this row exists to prevent. The unit ref was extended to
+test_validate_artifacts.py, which does strengthen the row's second half in CI
+(an unreadable or newer-than-this-fr stamp now fails on every kind), and the
+notes name what closes the first half: the generators write the stamp, owed at
+the moment a kind's current_version first moves past 1, in the same PR that
+widens that kind's extra=forbid model.
+
+`fr acceptance add` was not used (it errors on a duplicate --id); matrix.yaml
+was edited directly, then `fr acceptance report --deterministic` regenerated
+all three committed renderings and `fr acceptance check` passed — 93 rows,
+{ci: 74, skipped: 14, not-implemented: 5}, exit 0. One YAML trap worth
+recording: a `notes:` value written in PLAIN style dies on the first ": " it
+contains ("mapping values are not allowed here"). The rows that carry colons
+are single-quoted with doubled apostrophes; match that style when hand-editing.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f1 created=2026-08-31T11:02:15 phase=7 state=fixed -->
+### r4-f1 · finding [fixed] · The acceptance matrix carried `levels:` twice, and nothing could see it (phase 7)
+
+Row `every-artifact-declares-its-version` in `docs/acceptance/matrix.yaml`
+declared `levels:` at two places. PyYAML keeps the LAST occurrence and says
+nothing, so the first block — the ref to `tests/unit/test_artifact_registry.py`
+— was silently dropped: absent from all three committed reports, invisible to
+`fr acceptance check`, and invisible to `validate_matrix`, which only ever saw
+the mapping PyYAML handed back.
+
+Fixed in two parts. The row now carries one `levels:` with both refs. And
+`fr.artifacts.structure._StrictLoader` (a `yaml.SafeLoader` subclass overriding
+`construct_mapping`) now raises on any repeated key, at any nesting depth, for
+every YAML-carried kind — plan, run and matrix all go through `_load_mapping`,
+so the detector belongs there rather than in the matrix validator alone.
+
+A duplicate key is the one corruption a schema check structurally cannot see:
+the parser resolves it before the model runs. Structure validation is the only
+layer with a reason to look at the artifact as text. The same defect also
+explains r4-f7 — a duplicate `schema_version` is what makes the stamp reader and
+the stamp writer disagree about which line they mean.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f2 created=2026-08-31T11:02:16 phase=4 state=fixed -->
+### r4-f2 · finding [fixed] · The migration commit swept the operator's own in-flight edit to a migrated artifact (phase 4)
+
+The module exists because in-flight work is a dirty tree — and the one dirty
+file it could not handle was the artifact itself. `commit.py` staged with
+`git add -- <path>`, which stages the WHOLE file, so an operator half-way
+through adding `workflow:` to a stale `_meta.yaml` who typed any `fr` command
+got their unfinished line committed under `chore(fr): migrate ...`.
+
+DECISION: refuse to migrate a file that already has uncommitted changes, rather
+than migrate it and leave it out of the commit.
+
+Both options were live. The second loses because it rewrites a file the
+operator has open and then leaves no sign that it did: the migration sits
+uncommitted in a file they are still typing in, mixed with their own edit, and
+the command proceeds as if nothing happened. The first is consistent with r4-f5
+and with the operator standing preference to refuse when the situation is
+ambiguous — fr cannot know whether that edit is finished. The refusal names the
+file and both ways forward (commit/stash it, or `fr migrate artifacts --yes`),
+and `FR_SKIP_MIGRATION=1` still bypasses everything.
+
+Mechanically: `run_migrations` grew an optional `veto: Callable[[Path], str |
+None]`, and `commit.uncommitted_veto(root)` supplies the policy from one
+`git status --porcelain -z --untracked-files=all` read. The runner stays
+git-agnostic; the gate owns the policy. A vetoed artifact becomes a
+`FailedAction`, not a silent skip, so the gate refuses rather than continuing —
+and the veto is path-scoped, so an unrelated dirty file holds back nothing
+(runner invariant 3).
+
+<!-- fr:journal kind=finding scope=plan id=r4-f3 created=2026-08-31T11:02:17 phase=2 state=fixed -->
+### r4-f3 · finding [fixed] · One empty _meta.yaml made every fr command exit 2, blaming the registry (phase 2)
+
+`_actions_for` wrapped only `kind.read_version` in try/except; `reg.chain(name,
+version)` was called outside it. `plan` sits at `current_version=2` with no
+registered `SchemaMigration`, so ANY `_meta.yaml` reading as version 1 — empty,
+truncated, hand-made, or simply missing `schema_version` — raised
+`MigrationChainError`, which propagated through `is_stale` into the CLI-entry
+gate and became exit 2 for every command, with a message about a chain gap in
+the registry that pointed at the wrong thing entirely.
+
+The discriminator is where the version came from. A gap over a version an
+artifact DECLARES is a registry bug (a shape was bumped without a migration to
+reach it) and stays loud. A gap over a version nobody ever wrote is a data
+problem with one file.
+
+To tell them apart the registry now distinguishes the two. `ArtifactKind`
+carries `read_stamp: Callable[[Path], int | None]` — the version the artifact
+DECLARES, `None` when it declares none — and `read_version` became a method
+over it that still returns `PRE_FRAMEWORK_VERSION` for `None`. Every call site
+is unchanged. `runner._chain_for` is the one place that reads a stamp and asks
+for a chain, used by both the planning and the applying pass, and it turns an
+absent-stamp gap into that artifact `FailedAction` naming the file and saying
+what to check.
+
+Verified against a real tree: `fr migrate artifacts` over a repo with one empty
+`_meta.yaml` now reports
+"FAILED: docs/superpowers/plans/broken/_meta.yaml · declares no version
+(`schema_version` in `_meta.yaml` is absent), so it reads as version 1 — and no
+registered migration moves it to 2. The file may be empty, truncated or
+hand-made", and every other artifact still migrates.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f4 created=2026-08-31T11:02:18 phase=2 state=fixed -->
+### r4-f4 · finding [fixed] · The gate waved through exactly the state it promises to refuse (phase 2)
+
+`trigger.py` promises "refusing rather than running over a tree of unknown
+state". It only ever delivered that for exceptions that ESCAPED — and the
+failures that matter never escape, they are `FailedAction`s.
+`runner.is_stale` did `actions, _ = _actions_for(...)`, discarding them. So an
+unreadable stamp, or a repair predicate that raises, produced a `FailedAction`,
+no `PlannedAction`, `is_stale -> False`, and the command ran.
+
+`is_stale` now answers "not known to be CURRENT", not "has work planned": a
+failure counts as a yes. The interactive path then runs the migration, reports
+the failures, and refuses with exit 2; the non-interactive path refuses as
+before. Pinned by two tests whose fixture is a SINGLE broken plan — with a
+second, healthy-but-stale plan alongside it the old code passed by accident,
+which is how this survived Phase 3.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f5 created=2026-08-31T11:02:19 phase=3 state=fixed -->
+### r4-f5 · finding [fixed] · Read-only commands migrated and committed, and the gate would commit on main (phase 3)
+
+Two halves of one over-reach.
+
+(a) `fr status` is registered as "Read-only plan report (allowlist-safe; never
+mutates)" and could rewrite every stale artifact and create a commit.
+`EXEMPT_COMMANDS` now carries `READ_ONLY_COMMANDS` — `status`, `skills`,
+`isolation`, `init`, `validate` — alongside `migrate`. `validate` is r4-f11 and
+the sharpest of them: interactively the gate migrated and committed BEFORE the
+validator ran, so a human could never see `fr validate artifacts` report a
+stale artifact; only CI, which is non-interactive, ever could. That guts the
+diagnostic. `isolation` and `init` are what an operator reaches for when the
+workspace is not yet in a state to be migrated at all. The list stays pinned
+literally by `test_the_exemption_list_is_exactly_these_things` — this is a
+NARROWING, and the test is what stops it from becoming a habit.
+
+(b) `commit_migration` never looked at the branch, so running `fr` in the base
+clone on `main` produced a local commit on a protected branch, made
+automatically before a command typed for some other reason, which the operator
+then had to notice and undo. `commit.on_default_branch` now answers this and
+both layers refuse: the gate before it migrates anything, and
+`commit_migration` itself as a `CommitOutcome` that did nothing.
+
+"Default branch" resolves as `origin/HEAD` first (the host is the authority, so
+a repo whose trunk is `trunk` is protected as such and a `main` that is not the
+default is not), then `init.defaultBranch`, then the well-known names. The
+floor is deliberate: a local repo with no remote sitting on `main` is still a
+base clone, the predicate is used to REFUSE, and its failure mode should be one
+extra explicit step rather than one surprise commit. `fr migrate artifacts
+--yes` still works anywhere, because you typed it.
+
+All four gate refusals now render through one `_will_not_act_here` helper, so
+they share a vocabulary: what is stale, why fr will not act here, then preview
+/ apply / bypass. Both halves are documented in
+`.claude/rules/artifact-versioning.md` (new section "What the CLI-entry gate
+will and will not do") and mirrored into `.opencode/instructions/`.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f6 created=2026-08-31T11:02:20 phase=1 state=fixed -->
+### r4-f6 · finding [fixed] · Re-stamping a journal ate the blank lines after the stamp (phase 1)
+
+`_JOURNAL_STAMP_RE` ended `\s*$` under `re.MULTILINE`, and `\s` matches `\n`.
+So the match ran past the stamp own line and the re-stamping writer deleted
+every blank line that followed it. Verified by execution: re-stamping
+`"<!-- fr:journal-schema=1 -->\n\n\n# Journal\n"` returned
+`"<!-- fr:journal-schema=1 -->\n# Journal\n"` — two blank lines gone.
+
+That breaks property 3 of the registry module, the one the whole
+write-by-line-surgery design exists to guarantee: "writing a stamp disturbs
+nothing else ... comments, key order, blank lines". Anchored with `[ \t]*`
+throughout, so the pattern cannot leave its own line. Trailing spaces on the
+stamp line are the stamp; the newline is not.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f7 created=2026-08-31T11:02:22 phase=2 state=fixed -->
+### r4-f7 · finding [fixed] · A duplicate schema_version made the migration runner spin forever (phase 2)
+
+`_read_yaml_stamp` parses with `yaml.safe_load` (a duplicate top-level key ->
+the LAST wins) while `_yaml_write_key` rewrites the FIRST matching line. Over a
+`_meta.yaml` carrying `schema_version` twice, `_apply_to_one` re-read the same
+version after every write and never made progress: `while True` with no error
+and no output, `fr <anything>` simply hanging. Reproduced by executing it — the
+test run stopped dead on the fixture.
+
+Both belts, because they fail differently. The loop is now BOUNDED by
+`len(reg.schema_migrations(name)) + 1` (its `else` clause reports a chain that
+does not terminate), and every pass asserts the stamp ACTUALLY MOVED: after
+`write_version`, the stamp is re-read and a value that is not `step.to_version`
+becomes a `FailedAction` naming the likely cause ("the carrier probably
+declares the stamp twice"). Loud beats hung.
+
+r4-f1 closes the other end of the same defect: `fr validate artifacts` now
+fails a duplicate key in any YAML-carried artifact, so the file never reaches
+the runner.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f8 created=2026-08-31T11:02:23 phase=2 state=fixed -->
+### r4-f8 · finding [fixed] · One failure was reported twice and double-counted (phase 2)
+
+Planning added a failure to `failed`, and `_apply_to_one` — which by invariant 2
+re-evaluates every guard rather than trusting the plan — appended an identical
+`FailedAction`. An artifact with both a schema step and a raising repair
+predicate therefore printed twice in the gate output and in `fr migrate
+artifacts`, and inflated `len(report.failed)` in the "N artifact(s) could not
+be migrated" line.
+
+`_distinct` collapses exact duplicates on `(kind, path, summary, error)`,
+first-seen order preserved. Deliberately exact: two DIFFERENT errors on one
+artifact are two failures and both are still reported. Deduplicating on
+`(path, summary)` alone would have hidden a real second problem to fix a
+cosmetic one.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f9 created=2026-08-31T11:02:24 phase=2 state=fixed -->
+### r4-f9 · finding [fixed] · widen_ceiling silently no-opped on every ceiling not spelled < or <= (phase 2)
+
+`widen_ceiling` only ever rewrote `<` / `<=`, so `~=3.19`, `==3.*`, `==3.19.0`
+and `!=4.0.0` — all of which exclude 4.0.0 — produced no candidate,
+`needs_widening -> False`, and the plan was neither migrated nor reported.
+`parse()` kept raising `PlanSchemaError`, `discover_plans` kept swallowing it,
+and dispatch stayed silently stopped for that plan: precisely the failure this
+repair was written to end. Confirmed by execution — all four returned `None`.
+
+Reported, not guessed. Widening `~=3.19` or `==3.*` means inventing what the
+author meant, which this module already refuses to do for a malformed
+constraint. A new `UnwidenableConstraintError` now names the constraint, the
+installed version and the offending specifiers, and tells the operator to edit
+it by hand; the raising predicate makes it that one plan `FailedAction` while
+every other plan still migrates.
+
+The line between "report" and "stay silent" is which bound does the excluding.
+`widen_ceiling` now computes the specifiers that actually exclude the installed
+version: if they are ALL lower bounds, it is a plan asking for a newer fr, and
+that stays silent by design — widening a ceiling would not admit us and
+downgrades are a non-goal (spec 2). `>=5.0.0,<6.0.0` therefore still returns
+`None`, pinned by its own test so the rule cannot be simplified into "raise
+whenever nothing was widened".
+
+<!-- fr:journal kind=finding scope=plan id=r4-f10 created=2026-08-31T11:02:25 phase=6 state=fixed -->
+### r4-f10 · finding [fixed] · Phase progress vanished for exactly the runs where every phase was done (phase 6)
+
+`fr run adopt` printed "N/M phases complete" from
+`state.steps[state.cursor].items`, but `build_run_state` attaches `items` to the
+FAN-OUT step (`for_each: phase`, `implement` in the shipped fr-goal shape).
+Adoption deliberately moves the cursor past it — to `review` when every phase is
+done, to `deliver` when a PR is already open — so `items` was `None` and the
+line disappeared for the two cases where the count is most worth printing.
+
+`_fan_out_items` scans the recorded steps for the one carrying items. At most
+one step fans out, so this needs no knowledge of the workflow step names and
+holds for shapes other than fr-goal.
+
+<!-- fr:journal kind=finding scope=plan id=r4-f11 created=2026-08-31T11:02:26 phase=3 state=fixed -->
+### r4-f11 · finding [fixed] · fr validate artifacts could never report a stale artifact to a human (phase 3)
+
+Folded into r4-f5: `validate` is now in `EXEMPT_COMMANDS`.
+
+Worth its own entry because the failure was not a surprise write, it was a
+missing observation. Interactively the gate migrated and committed BEFORE the
+validator ran, so the only context in which `fr validate artifacts` could ever
+report a stale artifact was CI — which is non-interactive, and therefore
+refuses the command outright. The diagnostic for artifact staleness was
+structurally unable to observe artifact staleness. Verified after the fix: over
+a tree with one empty `_meta.yaml`, `fr validate artifacts` reports
+"stale: written for plan artifact version 1, this fr writes version 2" and
+exits 1, with the tree untouched.
+
+<!-- fr:journal kind=finding scope=plan id=r5-c1 created=2026-09-04T12:17:30 state=fixed -->
+### r5-c1 · finding [fixed] · A detached HEAD got an automatic commit; the code called that unreachable
+
+commit.py asserted that a detached HEAD 'never reaches the automatic commit path anyway'. It does: `git rebase -i` stops detached and `git bisect` runs detached, and both are interactive with a TTY, which is exactly the context the gate migrates and commits in. A commit made then is folded into the operation in progress or orphaned by the next checkout. Fix: GitContext.branch is None for a detached HEAD (distinct from NoRepo), and both commit_migration and the trigger refuse with a message naming rebase/bisect/checked-out-commit and stating that the migrated files are in the working tree, uncommitted. Test: test_migration_commit.py exercises it against a real repo put into detached state with `git checkout --detach`, not a mock.
+
+<!-- fr:journal kind=finding scope=plan id=r5-c2 created=2026-09-04T12:17:32 state=fixed -->
+### r5-c2 · finding [fixed] · Every git failure except 'not a repo' failed OPEN — the gate migrated trees it had never established the state of
+
+_toplevel returned None for ANY non-zero exit or OSError, so 'git is not on PATH', a safe.directory dubious-ownership refusal (routine in a pod with a uid mismatch), and a corrupt object store were all indistinguishable from 'not a git repository' — which the gate treats as PROCEED. The consequences compounded: the default-branch guard evaporated, uncommitted_paths returned an empty set (i.e. 'your tree is clean') and disarmed the co-edited-artifact veto, the reason string told the operator their repo was not a git repository, and from a subdirectory resolve_repo_root fell back to cwd so the gate ran over a SUBTREE while the commit named paths outside it. Fix: one git_context(root) -> GitContext | NoRepo | GitRefusal reads toplevel, branch, default branch and the dirty set ONCE and fails closed on anything but a genuine 'not a git repository'; _dirty_paths raises GitUnavailableError on a non-zero exit; uncommitted_paths raises rather than returning empty; the trigger has a single 'could not establish this repository's git state' refusal and a separate one for the resolve_repo_root-fell-back-to-cwd case. The refusal deliberately does NOT say 'not a git repository'. Tests: git absent from PATH refuses and the message does not contain that phrase; a broken repository refuses; a genuine non-repo still proceeds.
+
+<!-- fr:journal kind=finding scope=plan id=r5-c3 created=2026-09-04T12:17:34 state=fixed -->
+### r5-c3 · finding [fixed] · default_branch trusted init.defaultBranch for a branch that did not exist, and ignored a remote without HEAD
+
+Two ordinary configurations were wrong. A global `init.defaultBranch = main` in a repo that only has `master` reported 'main', so the guard that refuses on the default branch let an automatic commit land on master. And a repo with an origin but no origin/HEAD fell straight through to local names, so a repo whose trunk is `trunk` but which also has a local `main` reported main. Fix: four ordered sources, each answering a strictly weaker question — <remote>/HEAD (ignored when it points at a deleted branch), then refs/remotes/<remote>/{main,master,trunk,develop}, then init.defaultBranch ONLY IF refs/heads/<name> exists (or the repo is unborn, where the configured name IS the branch HEAD points at), then local well-known names. When a remote exists and none resolves it REFUSES rather than guessing, because 'I could not tell which branch is protected' must never read as 'none is'. Folded into git_context so every guard reads one snapshot. Tests cover both configurations.
+
+<!-- fr:journal kind=finding scope=plan id=r5-c4 created=2026-09-04T12:17:35 state=fixed -->
+### r5-c4 · finding [fixed] · Duplicate keys in a plan's NN.yaml were invisible, making the standing rule's promise false
+
+structure.validate_plan strict-loaded only _meta.yaml; phase files reached the parser through yaml.safe_load, which keeps the last occurrence of a duplicate key and says nothing. A 01.yaml declaring `state:` twice therefore lost whichever block PyYAML dropped — silently un-ticking steps an agent had completed — and .claude/rules/artifact-versioning.md's promise that 'a duplicate YAML key in any of the three YAML-carried kinds fails fr validate artifacts' was true of a plan's _meta.yaml and false of the file that actually carries its state. Fix: every NN.yaml in the folder goes through _load_mapping (the strict loader) before parse(). Test in test_validate_artifacts.py; the rule's prose is now true of the file that matters.
+
+<!-- fr:journal kind=finding scope=plan id=r5-c5 created=2026-09-04T12:18:12 state=fixed -->
+### r5-c5 · finding [fixed] · Seven small correctness holes across the migration framework
+
+(1) No git subprocess in commit.py carried a timeout: a pre-commit hook waiting on the network, a gpg prompt with no agent, or a dead NFS mount turned `fr status` into a process that never returned and printed nothing. Every call is now time-boxed (GIT_TIMEOUT_SECONDS, 4x for commit) and TimeoutExpired becomes a refusal naming what hung. (2) _JOURNAL_STAMP_RE was re.MULTILINE, so it matched a stamp quoted anywhere in the file — including inside a fenced code block, which THIS framework's own journal contains; the quoted line declared the journal's version and the writer rewrote the quotation instead of the header. Now anchored to the first non-blank line via _journal_stamp_match. (3) trigger's help check was `any(token in EXEMPT_OPTIONS for token in tokens)`, so `fr journal add --text --help` exempted a repo-writing command on the strength of somebody's entry text; _asks_for_help now refuses the match when the preceding token is a bare option that could be consuming it. (4) Partial success (one artifact migrated and committed, another failed) was a real fourth outcome the docstring and refusal text did not name; both now do. (5) runner.py keyed the apply-time failure half on (path, summary), so an artifact with a schema step AND a repair — where the schema step failed and the repair therefore never ran — reported the repair as 'skipped', i.e. already done, when it had not been attempted; now keyed by PATH. (6) commit.py's rename detection used `code[0] in 'RC'`, which misses ' R' and 'RM'; missing it left the original path unconsumed so the next loop pass read a PATH as a status code, silently shifting every remaining -z entry. Now `'R' in code or 'C' in code`. (7) ci.yml's validate-artifacts comment described the wrong mechanism (fr validate is EXEMPT from the gate; the staleness is reported by the validator's own stamp check), and fr-acceptance-nag.sh swallowed a stale-artifact refusal into a silent exit 0 — it now prints 'acceptance nag skipped: artifacts stale'.
+
+<!-- fr:journal kind=finding scope=plan id=r5-e6 created=2026-09-04T12:18:14 state=fixed -->
+### r5-e6 · finding [fixed] · git_context environment matrix, including the linked worktree that IS fr's own workspace
+
+The primary use case is a linked worktree, whose .git is a FILE — any toplevel or dirty logic that looks for a .git DIRECTORY is broken for every fr isolation workspace — so every question is asked through git rather than by inspecting the filesystem. Handled and tested: linked worktree; bare repo (refused, since there is no working tree to migrate into); nested repo / submodule (the INNER toplevel wins); GIT_DIR / GIT_WORK_TREE / GIT_COMMON_DIR set in the environment (refused outright — git's idea of 'this repository' is then not the directory fr is looking at, and mis-scoping a commit is worse than not making one); an unborn branch from `git init -b main` (init.defaultBranch is trusted there, because the configured name IS what HEAD points at); a default branch containing a slash (`release/main` survives, since only the remote prefix is stripped and only once); a sole remote not named origin (checkout.defaultRemote, else the single remote, else refuse on genuine ambiguity); an origin/HEAD pointing at a deleted branch (ignored, falling through to the well-known remote names). Crucially, LC_ALL=C LANG=C LANGUAGE=C GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 are forced on EVERY git subprocess: this module parses git's stderr to tell 'not a git repository' (proceed) from every other failure (refuse), and under a translated locale that match fails and the whole gate flips back to the fail-open behaviour r5-c2 closed.
+
+<!-- fr:journal kind=finding scope=plan id=r5-e7 created=2026-09-04T12:18:16 state=fixed -->
+### r5-e7 · finding [fixed] · Concurrency and atomicity: an advisory lock, and every artifact write made all-or-nothing
+
+Two agents, or an agent and the operator, can trivially run fr in the same second: both would plan the same work, both apply it, and both try to commit, the second producing a duplicate or an empty commit. New fr/artifacts/atomic.py provides migration_lock — an advisory flock at <git-common-dir>/fr-migrate.lock, in the COMMON dir so every linked worktree of one repository shares it, and never in the working tree so it can never become an artifact. The loser re-checks is_stale and proceeds when the winner has already done the work (blocking would be wrong before every command; refusing outright would be wrong when the race has already resolved itself). An existing index.lock is detected separately and refused by name. Every stamp writer and repair now goes through write_text_atomic (temp file in the SAME directory, fsync, os.replace, original permission bits carried over, newline='' so a CRLF file is not silently normalised) — previously they were path.write_text, which truncates first, so a crash between truncate and write left a truncated _meta.yaml that reads as version 1, and fr would then refuse every command until a human noticed. A read-only file or filesystem becomes a per-artifact failure naming the path rather than an exception. plan_migrations / is_stale / run_migrations now walk kinds in sorted order (_ordered_kinds), so report.changed_paths, the git add pathspec and hence the commit are byte-reproducible for a given tree. The cross-process lock test uses a file barrier with a deadline, not a sleep.
+
+<!-- fr:journal kind=finding scope=plan id=r5-e8 created=2026-09-04T12:18:51 state=fixed -->
+### r5-e8 · finding [fixed] · CI=false made an operator's terminal non-interactive; only one CI marker was read
+
+is_interactive tested `(environ.get('CI') or '').strip()`, so CI=0 and CI=false — a person explicitly saying 'not CI' — both made a real terminal non-interactive, and the gate refused where it should have migrated. Fix: a shared _truthy() with a falsy set of {'', '0', 'false', 'no', 'off'}, applied to CI and to seven more provider markers (GITHUB_ACTIONS, GITLAB_CI, BUILDKITE, JENKINS_URL, TF_BUILD, TEAMCITY_VERSION, CIRCLECI). Every provider sets CI as well, so the extra names are belt-and-braces rather than a fix for a known escape — but the cost of a wrongly-interactive verdict is an unexpected commit in a runner's checkout. Added FR_NON_INTERACTIVE=1 as an explicit opt-out for a wrapper that HAS a TTY but does not want fr writing to git (script/expect, a tmux-driven agent, a pairing session); truthy means non-interactive, falsy means 'no opinion' rather than 'force interactive', so a real CI marker still wins. The list is a module constant pinned literally by test_migration_trigger.py, so adding one means arguing for it in a diff.
+
+<!-- fr:journal kind=finding scope=plan id=r5-e9 created=2026-09-04T12:18:53 state=fixed -->
+### r5-e9 · finding [fixed] · fr migrate artifacts --yes now applies everywhere and commits nowhere
+
+The verb's contract needed stating and enforcing: committing belongs to the CLI-entry gate, which can see that it is interactive, on a branch, and not racing another writer. `fr migrate artifacts --yes` is the operator (or agent) asking explicitly, so it APPLIES in every context the gate refuses — on the default branch, on a detached HEAD, in a pod, in CI — and never commits; it prints the exact `git add -- <paths>` and `git commit` to run instead. That is the load-bearing agent path: an agent's Bash tool is non-interactive, so the gate refuses and the agent runs this verb itself and continues (SKILL.md says so). It does take the same advisory lock the gate does, so an operator running it while an agent's fr is mid-migration cannot double-write. Docstring and `N migrated, not committed.` output updated; tests cover both the interactive-on-default-branch and the non-interactive cases.
+
+<!-- fr:journal kind=finding scope=plan id=r5-e10 created=2026-09-04T12:18:55 state=fixed -->
+### r5-e10 · finding [fixed] · Per-kind stamp edge cases — and two real bugs the yaml-only coverage hid
+
+The YAML carriers (plan, run, matrix) were covered for CRLF, BOM, a leading --- document marker, a missing trailing newline, quoted/float/zero/negative/non-numeric stamps, comment-only keys and matrix anchors. The journal and spec carriers were NOT, and both were broken in the same way — a writer reading the file with a different function than its reader used. (1) _write_journal_stamp used path.read_text() while _read_journal_stamp used read_verbatim(), so a BOM'd journal READ its stamp correctly but the writer saw the BOM as the first character, failed to match the stamp behind it, and PREPENDED A SECOND ONE — leaving a file with two stamps declaring two versions — while read_text's universal-newline mode rewrote every line ending in the file. (2) _FRONT_MATTER_RE required a bare \\n, so a CRLF spec's front matter did not match at all: the stamp read as absent (version 1 forever) and _write_spec_stamp prepended a SECOND --- block above the real one, gaining another on every migration. Both reproduced directly before fixing. Fixes: the journal writer uses read_verbatim + _dominant_newline and restores the BOM; the front-matter regex accepts \\r?\\n; the in-block substitution uses [^\\r\\n]* rather than .*$ so it cannot swallow the carriage return. Five regression tests added. Also confirmed: an artifact stamped NEWER than this fr says 'upgrade fr', never 'the chain has a gap' — the two have opposite fixes — tested at version 99 for every one of the five kinds.
+
+<!-- fr:journal kind=finding scope=plan id=r5-e11 created=2026-09-04T12:18:57 state=fixed -->
+### r5-e11 · finding [fixed] · Validator blind spots: a directory, an unreadable file, non-UTF-8, symlinks, and repo-authored shapes
+
+validate_repo reported only schema problems, and iter_paths_of's is_file() filter meant a locator match that was a DIRECTORY was dropped silently — 'your _meta.yaml is a directory' produced no output at all. An unreadable (permission) or non-UTF-8 artifact escaped as a traceback. A symlinked artifact was validated once per link, reporting every problem twice. Fixes: directories are reported as findings before the file walk; UnicodeDecodeError and OSError are caught in validate_artifact around both read_version and validate, each naming the path; the walk de-duplicates by RESOLVED path so a symlink is followed but its target validated once. Separately, docs/superpowers/workflows/*.yaml is deliberately NOT a registry kind — a repo-authored shape has no stamp, no migration and no current_version, and inventing all three to register it would be wrong — but a repo whose shapes do not parse is broken in exactly the way this command exists to report, so validate_repo runs check_workflow over them and reports under a 'workflow' label. Documented in the module docstring so the non-registration is a stated decision rather than an omission. runs/*.yaml duplicate keys were already covered by the strict loader.
+
+<!-- fr:journal kind=finding scope=plan id=r5-ci1 created=2026-09-04T13:21:15 phase=4 state=fixed -->
+### r5-ci1 · finding [fixed] · Unborn-repo default branch depended on host git config; CI caught what two local envs masked (phase 4)
+
+test_an_unborn_branch_is_reported_as_the_default passed locally and failed on CI: _default_branch answered the unborn case from init.defaultBranch, and this Mac has it set - worse, Apple Git reports it even under GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null (a vendored config outside both overrides), so even the 'isolated' local repro was masked. git init -b <name> writes the branch into .git/HEAD with no config involved, and the branch HEAD points at IS the default by construction - the unborn case now reads symbolic-ref HEAD and consults no config at all. The durable lesson: a git-behaviour test that passes locally proves nothing about config independence on this machine; only CI's runner is clean.

@@ -55,6 +55,31 @@ def _invoke(monkeypatch, tmp_path, gh, argv):
     return CliRunner().invoke(app, argv)
 
 
+def test_build_plan_report_still_enforces_fr_version(tmp_path, monkeypatch):
+    """Phase 8 (spec §3.E.1): `build_plan_report` — the shared parse ->
+    observe -> render -> diff read path `fr status` AND `fr apply` both use
+    — is an execution path (it feeds `fr apply --yes`, not just a read-only
+    display) and must keep enforcing the `fr_version` gate.
+    `enforce_fr_version=False` is reserved for `fr.spec.compute_status`
+    alone. Uses a fixture whose ceiling genuinely excludes the installed
+    version (monkeypatched `INSTALLED_FR_VERSION`)."""
+    from fr.commands.common import build_plan_report
+    from fr.parser import PlanSchemaError
+
+    plan_dir = _plan_repo(tmp_path)
+    meta = (plan_dir / "_meta.yaml").read_text()
+    (plan_dir / "_meta.yaml").write_text(meta + 'fr_version: ">=9.0.0,<10.0.0"\n')
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "3.0.0")
+
+    gh = FakeGhClient()
+    try:
+        build_plan_report(plan_dir, gh)
+    except PlanSchemaError as e:
+        assert "requires fr_version" in str(e)
+    else:
+        raise AssertionError("build_plan_report must still enforce fr_version")
+
+
 def test_status_reports_header_table_and_refusal(tmp_path, monkeypatch):
     plan_dir = _plan_repo(tmp_path, tick=True)
     gh = FakeGhClient()

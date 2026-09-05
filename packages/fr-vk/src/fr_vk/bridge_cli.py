@@ -31,6 +31,7 @@ from typing import IO, Any, cast
 
 from fr import hostclient
 from fr.gh import GhError, _classify_error
+from fr.workflow.resolve import workflow_for_plan
 from fr_dispatch import discover_plans
 from fr_dispatch import tick as _tick
 from fr_dispatch.metrics import MetricsPusher
@@ -449,10 +450,19 @@ def main(argv: list[str] | None = None) -> int:
                     # 2026-07-09-multi-backend-git-host-adapters-design.md §6.
                     gh = hostclient.client_for(bridge_path)
 
+                    # Phase 5: a plan whose artifacts are stale/unparseable
+                    # is now a loud refusal inside `discover_plans` itself
+                    # (error logged, `stale_artifact` metric pushed); this
+                    # outparam is how that refusal reaches this tick's error
+                    # count without discover_plans growing a second return
+                    # shape.
+                    discover_failures: list[str] = []
+
                     def _fetch_plans(r: str = resolved_owner) -> Any:
-                        return discover_plans(r, gh)
+                        return discover_plans(r, gh, metrics=_metrics, failures=discover_failures)
 
                     discovered = _gh_rate_limit_guard(_fetch_plans)
+                    total_errors += len(discover_failures)
                     if discovered is None:
                         # _gh_rate_limit_guard already logged the reason
                         continue
@@ -466,7 +476,21 @@ def main(argv: list[str] | None = None) -> int:
                         plan_slug = plan.dir.name
                         seen_plans_after.add(plan_slug)
                         try:
-                            result = _tick(plan, gh, runner, metrics=_metrics)
+                            # The plan's OWN shape (§4.A.1): no `workflow:`
+                            # key resolves FR_GOAL_PHASE_DISPATCH, i.e. this
+                            # call is byte-for-byte today's behaviour for
+                            # every plan in the wild. A shape that fails to
+                            # resolve raises here, inside the I9 boundary
+                            # below — that plan fails, the daemon does not.
+                            manifest = workflow_for_plan(plan)
+                            result = _tick(
+                                plan,
+                                gh,
+                                runner,
+                                workflow=manifest,
+                                required_capabilities=frozenset(manifest.requires),
+                                metrics=_metrics,
+                            )
                             total_plans_ticked += 1
                             total_synced += result.synced
                             total_errors += result.errors

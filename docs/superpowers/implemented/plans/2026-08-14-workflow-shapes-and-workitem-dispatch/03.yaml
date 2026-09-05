@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Runner protocol v2 and a WorkItem-driven tick
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: RED — tick's failure doctrine, restated against WorkItems
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: create tests/unit/test_tick_workitem.py with a FakeRunner implementing
+      the v2 protocol. Port every behavior the current tick tests pin, expressed in
+      WorkItems: (a) a raising dispatch marks that item failed and leaves the
+      synced stamp UNWRITTEN so the next tick retries; (b) one bad item never
+      aborts the loop; (c) preflight returning a string fails every eligible item
+      with that message and returns synced=0; (d) slot_budget caps dispatches and
+      the rest are counted as deferred; (e) an item already in existing_dispatches
+      skips the backend call but still gets its synced stamp; (f) Issue creation
+      never happens (skip_issue_create stays True).
+      Run: uv run pytest tests/unit/test_tick_workitem.py -q --no-cov
+      Expected: failures — the v2 protocol does not exist yet.
+- number: 2
+  title: GREEN — protocols.py v2
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Rewrite packages/fr-dispatch/src/fr_dispatch/protocols.py: Runner keeps
+      `name`, gains `capabilities: frozenset[str]`, and its methods become
+      preflight(items) -> str | None, refresh(), slot_budget(), existing_dispatches()
+      -> set[str] (item ids), can_dispatch(item) -> bool, dispatch(item) -> None.
+      DELETE dedup_key — identity now lives on the item. Update the docstring to
+      say a runner is duck-typed and every method may raise.
+      Run: uv run mypy packages/fr-dispatch/src
+      Expected: clean (adapters still stale — that is Phase 4).
+  - id: P3.T2.S2
+    text: |-
+      GREEN: rewrite tick() in fr_dispatch/__init__.py to build WorkItems from the
+      plan and iterate those. Keep observe → render → diff → apply(skip_issue_create=True)
+      exactly as-is; keep every try/except boundary and its metric `reason` label;
+      replace the FR_READY/FR_SYNCED label checks with item_state.state_from_labels
+      plus the DISPATCH_STAMP check from Phase 1. Preserve TickResult's fields and
+      the idle-plan skipped=1 convention.
+      Run: uv run pytest tests/unit/test_tick_workitem.py -q --no-cov
+      Expected: all passed.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: delete the now-dead phase-shaped helpers in fr_dispatch/__init__.py
+      and re-run the whole dispatch suite:
+        uv run pytest tests/unit -k "dispatch or tick" -q --no-cov
+      Expected: green. Journal any test that had to be rewritten rather than
+      ported — that is a behavior change worth surfacing at review.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-08-15T17:52:11+00:00'
+      note: 'RED: 24 failed, 6 passed (vacuous) — v2 protocol absent'
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-08-15T17:57:44+00:00'
+      note: 'protocols.py v2: 6 methods, capabilities added, dedup_key deleted; mypy
+        clean over packages/fr-dispatch/src'
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-08-15T17:58:00+00:00'
+      note: tick() iterates WorkItems; 30 passed in tests/unit/test_tick_workitem.py
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-08-15T18:04:08+00:00'
+      note: 'Refactor: eligibility collapsed into _is_dispatchable (shared by tick
+        + discovery); FR_READY/FR_SYNCED imports gone. tests/unit -k ''dispatch or
+        tick'': 100 passed, 13 failed — ALL VkRunner/CncdRunner callers, stale by
+        design (Phase 4). Full suite 1865 passed / 25 failed, same cause.'
+  completion:
+    at: '2026-08-15T18:06:16+00:00'
+    note: null
+    observed_prs: []

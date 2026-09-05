@@ -171,7 +171,15 @@ def test_tick_mcp_failure_does_not_mark_fr_synced_so_next_tick_retries():
     assert result.errors == 1
     assert len(result.failures) == 1
     assert "injected MCP failure" in result.failures[0]
-    assert f"phase {plan.phases[0].phase.number}" in result.failures[0]
+    # Failure strings are prefixed with the item id, not "phase N" (Phase 3
+    # rewrite — see the 2026-08-14 plan journal, p3-tests-rewritten-not-ported):
+    # the loop is unit-agnostic, and the id also names the plan, which a
+    # bare "phase N" never did.
+    from fr_dispatch.work_item import item_id
+
+    phase_n = plan.phases[0].phase.number
+    expected_id = item_id(repo, "fixture-spec-design", plan.meta.plan, phase=phase_n)
+    assert result.failures[0].startswith(f"{expected_id}: ")
 
     add_calls = [c for c in gh.calls if c[0] == "edit_issue_labels" and "fr:synced" in c[1]["add"]]
     assert add_calls == []
@@ -389,3 +397,67 @@ def test_tick_defers_all_when_slot_counting_fails(monkeypatch):
     assert any("slot check failed" in f for f in result.failures)
     # No dispatch reached the backend.
     assert [c for c in mcp.calls if c[0] == "create_issue"] == []
+
+
+# ── unit refusal lives in `can_dispatch` (review r5-a2) ────────────────
+
+
+def test_vk_can_dispatch_refuses_a_non_phase_item() -> None:
+    """`protocols.Runner.can_dispatch` documents itself as the place a
+    unit-limited runner refuses. VK accepted every unit and then died in
+    `dispatch` on `item.payload["plan"]`, which `tick` surfaced as the bare
+    `"<id>: 'plan'"` under `reason=backend_error`."""
+    from fr_dispatch.work_item import WorkItem, item_id, parent_id, run_item_id
+
+    repo = "derio-net/superpowers-for-vk"
+    mcp = FakeMcpClient()
+    mcp.repos = [{"name": "superpowers-for-vk", "git_repo_path": "/repos/superpowers-for-vk"}]
+    runner = VkRunner(mcp, project_id="proj-1")
+
+    phase_iid = item_id(repo, "some-spec", "some-plan", phase=1)
+    phase_item = WorkItem(
+        id=phase_iid,
+        unit="phase",
+        workflow="fr-goal",
+        repo=repo,
+        parent=parent_id(phase_iid),
+        inputs=(),
+        payload={"issue_number": 42},
+        tracking=f"https://github.com/{repo}/issues/42",
+    )
+    run_item = WorkItem(
+        id=run_item_id(repo, "2026-08-31-feat-x"),
+        unit="run",
+        workflow="research",
+        repo=repo,
+        parent=None,
+        inputs=(),
+        payload={"run_id": "2026-08-31-feat-x"},
+        tracking=None,
+    )
+
+    assert runner.can_dispatch(phase_item) is True
+    assert runner.can_dispatch(run_item) is False
+
+
+def test_vk_dispatch_names_the_unit_mismatch_rather_than_raising_keyerror() -> None:
+    import pytest
+    from fr_dispatch.item_graph import PayloadError
+    from fr_dispatch.work_item import WorkItem, run_item_id
+
+    runner = VkRunner(FakeMcpClient(), project_id="proj-1")
+    run_item = WorkItem(
+        id=run_item_id("derio-net/superpowers-for-vk", "2026-08-31-feat-x"),
+        unit="run",
+        workflow="research",
+        repo="derio-net/superpowers-for-vk",
+        parent=None,
+        inputs=(),
+        payload={"run_id": "2026-08-31-feat-x"},
+        tracking=None,
+    )
+
+    with pytest.raises(PayloadError) as e:
+        runner.dispatch(run_item)
+
+    assert "unit 'run'" in str(e.value)

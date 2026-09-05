@@ -33,6 +33,30 @@ from tests.unit.fakes import FakeGhClient
 MINIMAL = Path(__file__).resolve().parents[1] / "unit" / "fixtures" / "v2_plan_minimal"
 
 
+def _phase_item(plan: Any, phase: Any, repo: str, issue_number: int) -> Any:
+    """Build the phase-unit `WorkItem` `_eligible_items` would build for
+    this (plan, phase, repo, issue_number) — the pre-cutover direct-call
+    tests below now go through the v2 `dispatch(item)` seam instead of
+    positional args."""
+    from fr_dispatch.work_item import ArtifactRef, WorkItem, item_id, parent_id
+
+    spec_rel = plan.spec_path or plan.meta.spec
+    spec_slug = Path(spec_rel).stem if spec_rel else "_no-spec"
+    iid = item_id(repo, spec_slug, plan.meta.plan, phase=phase.phase.number)
+    return WorkItem(
+        id=iid,
+        unit="phase",
+        workflow="fr-goal",
+        repo=repo,
+        parent=parent_id(iid),
+        inputs=(
+            ArtifactRef(kind="plan", repo=plan.meta.target_repo, path=str(plan.repo_relative_dir)),
+        ),
+        payload={"plan": plan, "phase": phase, "issue_number": issue_number},
+        tracking=f"https://github.com/{repo}/issues/{issue_number}",
+    )
+
+
 @dataclass
 class StubCncd:
     """Handle the tests use: recorded requests + knobs."""
@@ -91,7 +115,8 @@ def test_dispatch_posts_plan_folder_to_v1_ingest(stub_cncd: StubCncd) -> None:
 
     plan = parse(MINIMAL)
     runner = CncdRunner(base_url=stub_cncd.base_url)
-    runner.dispatch(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
+    item = _phase_item(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
+    runner.dispatch(item)
 
     assert len(stub_cncd.requests) == 1
     req = stub_cncd.requests[0]
@@ -113,6 +138,10 @@ def test_dispatch_posts_plan_folder_to_v1_ingest(stub_cncd: StubCncd) -> None:
     assert body["files"]["_prose.md"] == (MINIMAL / "_prose.md").read_text()
     assert body["files"]["01.yaml"] == (MINIMAL / "01.yaml").read_text()
     assert set(body["files"]) == {"_meta.yaml", "_prose.md", "01.yaml"}
+    # v2 envelope — additive, doesn't disturb any existing key above.
+    assert body["id"] == item.id
+    assert body["unit"] == "phase"
+    assert body["parent"] == item.parent
 
 
 def test_dispatch_raises_cncd_error_on_non_2xx(stub_cncd: StubCncd) -> None:
@@ -122,8 +151,9 @@ def test_dispatch_raises_cncd_error_on_non_2xx(stub_cncd: StubCncd) -> None:
     stub_cncd.respond_status = 500
     plan = parse(MINIMAL)
     runner = CncdRunner(base_url=stub_cncd.base_url)
+    item = _phase_item(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
     with pytest.raises(CncdError, match="500"):
-        runner.dispatch(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
+        runner.dispatch(item)
 
 
 def test_dispatch_raises_cncd_error_when_unreachable() -> None:
@@ -133,8 +163,9 @@ def test_dispatch_raises_cncd_error_when_unreachable() -> None:
     plan = parse(MINIMAL)
     # RFC 5737 TEST-NET address with a tiny timeout — nothing listens there.
     runner = CncdRunner(base_url="http://127.0.0.1:1", timeout=2.0)
+    item = _phase_item(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
     with pytest.raises(CncdError, match="unreachable"):
-        runner.dispatch(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
+        runner.dispatch(item)
 
 
 # ── registry: `fr apply --to cncd` resolves the runner ──────────────

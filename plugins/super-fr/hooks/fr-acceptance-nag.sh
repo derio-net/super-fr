@@ -21,7 +21,22 @@ repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
 command -v fr >/dev/null 2>&1 || exit 0
 
-out=$(cd "$repo_root" && fr acceptance status --brief 2>/dev/null) || exit 0
+# Capture stderr separately: `fr acceptance status` is exempt from the
+# artifact-migration gate, but `fr` still refuses when it cannot establish the
+# repo's state — and swallowing that made the nag disappear with no explanation
+# at the exact moment the operator most needed to know why (review r5-c5).
+err_file=$(mktemp) || exit 0
+out=$(cd "$repo_root" && fr acceptance status --brief 2>"$err_file") || {
+  err=$(cat "$err_file" 2>/dev/null)
+  rm -f "$err_file"
+  case "$err" in
+    *"must be migrated"*|*"migrate artifacts"*)
+      printf 'acceptance nag skipped: artifacts stale — run `fr migrate artifacts --yes`\n'
+      ;;
+  esac
+  exit 0
+}
+rm -f "$err_file"
 [ -n "$out" ] || exit 0
 case "$out" in
   *"no acceptance debt"*) exit 0 ;;
