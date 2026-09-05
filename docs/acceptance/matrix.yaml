@@ -1191,6 +1191,14 @@ rows:
       is routed to fr-isolation; no .worktrees directory is created.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_worktrees_dir.py
+    status: ci
+    notes: 'Rule + tripwire (phase 6): the routing claim itself lives in the rule text
+      plugins/super-fr/rules/fr-worktree-override.md (installed to ~/.claude/rules by
+      install.sh, mirrored to .opencode/instructions and the Hermes SOUL block), and a
+      rule is prose the harness follows, not code a test can execute. The unit tripwire
+      pins what CAN be checked: the rule exists and carries the claim (using-git-worktrees,
+      fr isolation up --branch, never create .worktrees/), git ls-files has no path with a
+      .worktrees or .claude/worktrees component, and .gitignore lists both. Pinned per-PR.'
