@@ -1445,8 +1445,8 @@ rows:
   - id: statusline-shows-bound-workspace
     capability: isolation-traceability
     acceptance: The Claude Code status line shows the session isolation path alongside
-      the checked-out branch and cwd, and lists the repo other worktrees, in under 60
-      ms.
+      the checked-out branch and cwd, and lists the repo other worktrees, well inside one status-line refresh
+      (about 100 ms warm on the operator Mac; 0.5 s CI guard).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
     levels:
@@ -1456,8 +1456,8 @@ rows:
     notes: 'Segment script plugins/super-fr/scripts/fr-statusline-segment.sh (phase 5,
       filed under int because the matrix has no golden level): golden outputs for
       bound / unbound / inside-workspace / non-repo / detached-HEAD / width-bounded
-      shapes via subprocess, a 0.5 s CI timing guard (60 ms warm on the operator
-      Mac), and a trap fr on PATH proving the fr CLI is never invoked. Operator-side
+      shapes via subprocess, a 0.5 s CI timing guard (about 100 ms warm on the operator
+      Mac with a real git first on PATH; see journal 9ecae0965ac4), and a trap fr on PATH proving the fr CLI is never invoked. Operator-side
       wiring (~/.claude/statusline.sh calling the segment) is phase 7.'
   - id: native-worktree-sessions-land-in-fr
     capability: isolation-conformity
