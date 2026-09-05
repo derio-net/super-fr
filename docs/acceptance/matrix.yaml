@@ -1129,9 +1129,24 @@ rows:
       keep the Claude default shape.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_sessions_cmd.py
+      int:
+      - super-fr:tests/unit/test_hooks_worktree.py
+    status: ci
+    notes: 'Unit level (phase 4): fr isolation up --print-path (last non-empty stdout
+      line is the worktree path, human lines on stderr, idempotent for an existing
+      branch+worktree) and fr isolation down --worktree <path> (resolves the workspace
+      by worktree path from any cwd; unknown path exits 2). Hook level (filed under int
+      because the matrix has no hook level): fr-worktree-create.sh (WorktreeCreate ->
+      fr isolation up --repo --branch wt/<name>|<name-with-slash> --session --harness
+      claude --print-path in an fr-enabled repo, FR_ISOLATION_TARGET=worktree exported
+      when no devcontainer profile; agent-* names and non-fr repos reproduce the Claude
+      default <repo>/.claude/worktrees/<name> detached worktree; non-git cwd exits 1)
+      and fr-worktree-remove.sh (WorktreeRemove -> git worktree remove for agent-*,
+      else fr isolation down --worktree, refusal reported on stderr with exit 0)
+      exercised via subprocess against a stub fr that records argv.'
   - id: nested-up-files-under-main-checkout
     capability: isolation-conformity
     acceptance: fr isolation up run from inside any worktree of a repo files the workspace

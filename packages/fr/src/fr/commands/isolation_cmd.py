@@ -158,6 +158,22 @@ def _resolve_single(root: Path, branch: str | None) -> IsolationState:
     return state  # type: ignore[return-value]
 
 
+def _resolve_by_worktree(worktree: Path) -> IsolationState:
+    """Resolve a workspace by its worktree path (`down --worktree`, spec
+    2026-09-04 §5.B.4). `list_states` keys on the git common dir, which resolves
+    from inside the worktree; a non-git or missing path degrades to no states
+    (never a traceback) → clean exit 2."""
+    wt = worktree.resolve()
+    try:
+        states = list_states(wt) if wt.is_dir() else []
+    except IsolationError:
+        states = []
+    matches = [s for s in states if s.worktree.resolve() == wt]
+    if not matches:
+        _fail(IsolationError(f"no isolation workspace at {wt}"))
+    return matches[0]
+
+
 def _refuse_external(target: Target, op: str) -> None:
     """External mode adopts a preparer-managed containment — the worktree-ops
     subcommands (push-check / verify-merge / gc) do not apply. Refuse cleanly
@@ -216,8 +232,19 @@ def up(
     harness: str = typer.Option(
         "unknown", "--harness", help="claude | hermes | opencode | unknown (with --session)."
     ),
+    print_path: bool = typer.Option(
+        False,
+        "--print-path",
+        help="Print ONLY the worktree path on stdout (last line); everything else "
+        "to stderr. For WorktreeCreate hooks.",
+    ),
 ) -> None:
-    """Create worktree + start the profile's devcontainer against it."""
+    """Create worktree + start the profile's devcontainer against it.
+
+    With --print-path (spec 2026-09-04 §5.B.3) the LAST non-empty stdout line
+    is the worktree path — the contract a WorktreeCreate hook relies on — and
+    the human-facing lines move to stderr.
+    """
     try:
         state = _target(repo).up(
             profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch
@@ -228,14 +255,18 @@ def up(
         _fail(err)
         return
     typer.echo(
-        f"isolation up: worktree={state.worktree} profile={state.profile} branch={state.branch}"
+        f"isolation up: worktree={state.worktree} profile={state.profile} branch={state.branch}",
+        err=print_path,
     )
     if os.environ.get("CLAUDECODE"):
         typer.echo(
             "tip: register the worktree as a Claude Code working directory so the "
             "shell cwd persists there (no more `cd <worktree> && …` for host git/gh):\n"
-            f"    /add-dir {state.worktree}"
+            f"    /add-dir {state.worktree}",
+            err=print_path,
         )
+    if print_path:
+        typer.echo(str(state.worktree))
 
 
 @isolation_app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
@@ -384,8 +415,17 @@ def down(
         "--session",
         help="The calling session; excluded from the still-attached warning.",
     ),
+    worktree: Path | None = typer.Option(
+        None,
+        "--worktree",
+        help="Resolve the workspace by its worktree path (WorktreeRemove hooks).",
+    ),
 ) -> None:
     """Stop the container, remove the worktree, drop the state.
+
+    With --worktree <path> (spec 2026-09-04 §5.B.4), resolve the workspace by
+    its worktree path instead of --repo/--branch — the caller (a WorktreeRemove
+    hook) only knows the path and may run from any cwd.
 
     With --branch omitted, resolve to the single active workspace — so bare
     `down` from inside a worktree tears down the workspace the operator actually
@@ -398,11 +438,15 @@ def down(
     workspace is unbound; those other than `--session` are named in a warning
     (never a refusal — liveness is unknowable here).
     """
-    root = _resolve_repo(repo)
-    if all_:
-        _down_all(root, force=force)
-        return
-    state = _resolve_single(root, branch)
+    if worktree is not None:
+        state = _resolve_by_worktree(worktree)
+        root = state.repo_root
+    else:
+        root = _resolve_repo(repo)
+        if all_:
+            _down_all(root, force=force)
+            return
+        state = _resolve_single(root, branch)
     others = [b.session_id for b in state.sessions if b.session_id != session]
     if others:
         typer.echo(

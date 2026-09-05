@@ -248,3 +248,66 @@ def test_down_with_own_session_does_not_warn(tmp_path: Path, repo: Path, fake_ru
     assert res.exit_code == 0, res.output
     assert "still attached" not in res.stderr
     assert not _index(tmp_path, "s9").exists()
+
+
+# ---- phase 4: up --print-path / down --worktree (spec 2026-09-04 §5.A, §5.B.3/4)
+
+
+def _last_nonempty_line(text: str) -> str:
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    return lines[-1] if lines else ""
+
+
+# (a) --print-path: the LAST non-empty stdout line is the worktree path; the
+# human "isolation up:" line moves to stderr.
+def test_up_print_path_last_stdout_line_is_worktree(
+    tmp_path: Path, repo: Path, fake_run: list
+) -> None:
+    res = runner.invoke(
+        app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/p", "--print-path"]
+    )
+    assert res.exit_code == 0, res.output
+    state = load_state(repo, "feat/p")
+    assert state is not None
+    assert _last_nonempty_line(res.stdout) == str(state.worktree)
+    assert Path(_last_nonempty_line(res.stdout)).is_dir()
+    assert "isolation up:" not in res.stdout
+    assert "isolation up:" in res.stderr
+
+
+# (b) idempotent for an existing branch+worktree: same path, exit 0
+def test_up_print_path_twice_same_path(tmp_path: Path, repo: Path, fake_run: list) -> None:
+    argv = ["isolation", "up", "--repo", str(repo), "--branch", "feat/p", "--print-path"]
+    first = runner.invoke(app, argv)
+    assert first.exit_code == 0, first.output
+    second = runner.invoke(app, argv)
+    assert second.exit_code == 0, second.output
+    assert _last_nonempty_line(second.stdout) == _last_nonempty_line(first.stdout)
+
+
+# (c) down --worktree <path> from a cwd OUTSIDE the repo
+def test_down_by_worktree_path_from_outside_repo(
+    tmp_path: Path, repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    res = runner.invoke(
+        app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/p", "--print-path"]
+    )
+    assert res.exit_code == 0, res.output
+    wt = _last_nonempty_line(res.stdout)
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    res = runner.invoke(app, ["isolation", "down", "--worktree", wt])
+    assert res.exit_code == 0, res.output
+    assert load_state(repo, "feat/p") is None
+    assert not Path(wt).exists()
+
+
+# (d) down --worktree on a path with no workspace → exit 2, never a traceback
+def test_down_by_worktree_path_unknown_exits_2(
+    tmp_path: Path, repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    res = runner.invoke(app, ["isolation", "down", "--worktree", "/nonexistent/wt"])
+    assert res.exit_code == 2, res.output
+    assert "no isolation workspace at" in res.output

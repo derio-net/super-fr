@@ -21,6 +21,14 @@ class TestPluginHooks:
         assert [h["command"] for m in events["SessionEnd"] for h in m["hooks"]] == [
             "${CLAUDE_PLUGIN_ROOT}/hooks/fr-session-unbind.sh"
         ]
+        # WorktreeCreate / WorktreeRemove → native Claude worktree sessions land
+        # in fr (§5.B.3 / §5.B.4); no matcher, every worktree name goes through.
+        assert [h["command"] for m in events["WorktreeCreate"] for h in m["hooks"]] == [
+            "${CLAUDE_PLUGIN_ROOT}/hooks/fr-worktree-create.sh"
+        ]
+        assert [h["command"] for m in events["WorktreeRemove"] for h in m["hooks"]] == [
+            "${CLAUDE_PLUGIN_ROOT}/hooks/fr-worktree-remove.sh"
+        ]
         assert {m["matcher"] for m in events["PreToolUse"]} == {
             "Bash",
             "Edit|Write|MultiEdit|NotebookEdit",
