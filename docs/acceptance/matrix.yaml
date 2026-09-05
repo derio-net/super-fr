@@ -1119,9 +1119,16 @@ rows:
       ms.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/unit/test_statusline_segment.py
+    status: ci
+    notes: 'Segment script plugins/super-fr/scripts/fr-statusline-segment.sh (phase 5,
+      filed under int because the matrix has no golden level): golden outputs for
+      bound / unbound / inside-workspace / non-repo / detached-HEAD / width-bounded
+      shapes via subprocess, a 0.5 s CI timing guard (60 ms warm on the operator
+      Mac), and a trap fr on PATH proving the fr CLI is never invoked. Operator-side
+      wiring (~/.claude/statusline.sh calling the segment) is phase 7.'
   - id: native-worktree-sessions-land-in-fr
     capability: isolation-conformity
     acceptance: claude --worktree <name> and EnterWorktree in an fr-enabled repo create
