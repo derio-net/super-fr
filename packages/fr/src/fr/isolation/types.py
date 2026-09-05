@@ -84,6 +84,18 @@ def _git_common_dir(repo_root: Path) -> Path:
     return p if p.is_absolute() else (repo_root / p)
 
 
+def repo_cache_name(repo_root: Path) -> str:
+    """Folder under ~/.cache/fr/worktrees for this repo: the MAIN checkout's
+    basename, resolved through the git common dir, so `up` from inside a
+    linked worktree (native agent worktree, nested fr worktree) files under the
+    repo — never under `agent-…` or a branch slug (spec 2026-09-04 §5.C).
+
+    Bare / `--separate-git-dir` layouts (common dir not named ".git") and
+    non-git paths fall back to the basename of `repo_root` itself."""
+    common = _git_common_dir(repo_root)
+    return common.parent.name if common.name == ".git" else Path(repo_root).name
+
+
 def state_dir(repo_root: Path) -> Path:
     return _git_common_dir(repo_root) / "fr" / "isolation"
 

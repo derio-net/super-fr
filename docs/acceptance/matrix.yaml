@@ -1134,18 +1134,31 @@ rows:
       under the main checkout name.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_repo_key.py
+    status: ci
+    notes: 'Unit level (phase 2): repo_cache_name resolves the main checkout basename
+      for the main checkout, a native agent worktree (<repo>/.claude/worktrees/agent-*)
+      and a nested worktree elsewhere, falling back to the basename outside git; a
+      host-mode `up` launched from inside the agent worktree lands under
+      ~/.cache/fr/worktrees/<main-checkout>/<branch>, never under agent-*. Pinned per-PR.'
   - id: gc-reaps-empty-repo-dirs
     capability: isolation-hygiene
     acceptance: fr isolation gc removes empty repo folders and stale session files from
       the fr cache.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_gc_hygiene.py
+    status: ci
+    notes: 'Unit level (phase 2): gc verdicts `empty-repo-dir` (a child of
+      ~/.cache/fr/worktrees with no subdirectories is removed; files alone do not make
+      it live; populated repo dirs are kept) and `stale-session` (index whose worktree
+      is gone or whose state no longer lists the session is unlinked; a healthy index
+      and its state binding survive), both with `--dry-run` reporting `would-remove`
+      and mutating nothing. Pinned per-PR in host-worktree mode.'
   - id: superpowers-worktree-skill-routed-to-fr
     capability: isolation-conformity
     acceptance: In an fr-enabled repo, a request that would invoke using-git-worktrees

@@ -194,7 +194,8 @@ def up(
     ),
     branch: str = typer.Option(DEFAULT_BRANCH, help="Branch for the worktree."),
     path: Path | None = typer.Option(
-        None, help="Worktree path (default: ~/.cache/fr/worktrees/<repo>/<branch>)."
+        None,
+        help="Worktree path (default: ~/.cache/fr/worktrees/<main-checkout>/<branch>).",
     ),
     base: str | None = typer.Option(
         None,
