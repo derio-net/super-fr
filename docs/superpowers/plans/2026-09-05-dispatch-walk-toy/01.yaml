@@ -4,7 +4,7 @@ phase:
   title: Record the live bridge walk in the toy spec
   tag: agentic
   depends_on: []
-  tracking_issue: null
+  tracking_issue: https://github.com/derio-net/super-fr/issues/447
   acceptance:
   - vk-dispatch-unchanged-after-cutover
 tasks:
