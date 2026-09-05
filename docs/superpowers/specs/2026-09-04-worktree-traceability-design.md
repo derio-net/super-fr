@@ -309,8 +309,9 @@ line in this very session shows `iso: …/feat__worktree-traceability`.
 
 ## Implementation Plans
 
-- `docs/superpowers/plans/2026-09-04-worktree-traceability.md` (to be written
-  by fr-plan).
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-09-04-worktree-traceability | `derio-net/super-fr` | `2026-09-04-worktree-traceability` | — |
 
 ## 8. Acceptance rows (born here; presented at spec review)
 
