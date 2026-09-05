@@ -19,6 +19,25 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/fr-pipeline-sentinel.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/fr-session-bind.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/fr-session-unbind.sh"
+          }
+        ]
       }
     ],
     "PreToolUse": [

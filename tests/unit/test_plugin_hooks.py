@@ -14,7 +14,13 @@ class TestPluginHooks:
     def test_hooks_json_parses(self) -> None:
         data = json.loads((HOOKS_DIR / "hooks.json").read_text())
         events = data["hooks"]
-        assert {m["matcher"] for m in events["PostToolUse"]} == {"Skill"}
+        # Skill → pipeline sentinel; Bash → session bind (spec 2026-09-04 §5.B.1).
+        assert {m["matcher"] for m in events["PostToolUse"]} == {"Skill", "Bash"}
+        # SessionEnd → session unbind (§5.B.2); no matcher, fires for every reason.
+        assert "SessionEnd" in events
+        assert [h["command"] for m in events["SessionEnd"] for h in m["hooks"]] == [
+            "${CLAUDE_PLUGIN_ROOT}/hooks/fr-session-unbind.sh"
+        ]
         assert {m["matcher"] for m in events["PreToolUse"]} == {
             "Bash",
             "Edit|Write|MultiEdit|NotebookEdit",

@@ -1101,13 +1101,17 @@ rows:
       unit:
       - super-fr:tests/unit/test_isolation_sessions.py
       - super-fr:tests/unit/test_isolation_sessions_cmd.py
+      int:
+      - super-fr:tests/unit/test_hooks_session_bind.py
     status: ci
     notes: 'Unit level (phase 1): fr.isolation.sessions attach/detach/detach_all/stale
       index classification, IsolationState.sessions round-trip, and the CLI surface
       (attach, detach, status --session / sessions column, up --session, down unbind +
-      warning) pinned per-PR. The hook level (Claude Code PostToolUse/SessionEnd binding
-      hooks, spec 5.B) lands in phase 3 of the same plan and will be added as a `hook`
-      ref then.'
+      warning) pinned per-PR. Hook level (phase 3, filed under int because the matrix
+      has no hook level): fr-session-bind.sh (PostToolUse Bash -> attach on up/exec
+      with and without a leading cd, detach on down, subagent and non-Bash input
+      ignored) and fr-session-unbind.sh (SessionEnd -> detach, resume kept) exercised
+      via subprocess against a stub fr that records argv.'
   - id: statusline-shows-bound-workspace
     capability: isolation-traceability
     acceptance: The Claude Code status line shows the session isolation path alongside
