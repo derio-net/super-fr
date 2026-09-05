@@ -13,6 +13,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 from .types import (
     IsolationError,
@@ -36,12 +37,12 @@ def session_index_path(session_id: str) -> Path:
     return sessions_dir() / f"{session_id}.json"
 
 
-def read_session_index(session_id: str) -> dict | None:
+def read_session_index(session_id: str) -> dict[str, Any] | None:
     p = session_index_path(session_id)
     if not p.is_file():
         return None
     try:
-        return json.loads(p.read_text())
+        return cast("dict[str, Any]", json.loads(p.read_text()))
     except json.JSONDecodeError:
         return None
 
@@ -146,13 +147,13 @@ def detach_all(state: IsolationState) -> list[str]:
     return ids
 
 
-def stale_session_indexes() -> list[tuple[Path, dict]]:
+def stale_session_indexes() -> list[tuple[Path, dict[str, Any]]]:
     """Index files whose worktree is gone, whose state no longer lists the
     session, or which do not parse. Pure — gc decides what to do."""
     d = sessions_dir()
     if not d.is_dir():
         return []
-    stale: list[tuple[Path, dict]] = []
+    stale: list[tuple[Path, dict[str, Any]]] = []
     for p in sorted(d.glob("*.json")):
         try:
             data = json.loads(p.read_text())
