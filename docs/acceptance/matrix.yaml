@@ -1258,11 +1258,16 @@ rows:
     levels:
       int:
       - super-fr:tests/integration/test_bridge_dispatch_parity.py
-    status: not-implemented
-    notes: 'Spec 4.D/6/8 Test Plan step 3. Executable half lands Phase 4 (test_bridge_dispatch_parity.py
-      — one card per ready phase, zero new cards on a second tick). Row stays
-      not-implemented until the operator''s post-merge live-bridge walk confirms
-      the same against the real board.'
+    status: ci
+    notes: 'Spec 4.D/6/8 Test Plan step 3. Executable half: test_bridge_dispatch_parity.py
+      (one card per ready phase, zero new cards on a second tick), in CI. Live half walked
+      2026-09-07 against the real board with the one-phase fixture plan
+      2026-09-05-dispatch-walk-toy (super-fr#447): the 06:56 UTC bridge tick (fr 4.0.0)
+      created exactly one VK workspace (FFE-249 -> gh#447) and stamped fr:synced; the
+      07:04 tick found 0 discoverable plans and created nothing; the 7 pre-cutover cards
+      were fetched for dedup and none duplicated. Two operational faults found on the way
+      were not dispatch regressions: vk-local logged out since 2026-08-01 (relay/host offline,
+      remote calls 401) and a slot budget of 0 from 8 non-archived finished workspaces.'
   - id: cli-starts-from-a-clean-install
     capability: Release integrity
     acceptance: The fr CLI starts from a clean tool install using only its declared
