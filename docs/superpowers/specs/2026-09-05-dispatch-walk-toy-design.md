@@ -21,6 +21,8 @@ archived; it changes no code.
 ## Walk log
 
 - 2026-09-05: fixture created; awaiting dispatch.
+- 2026-09-07: phase 1 dispatched through the VK bridge after the 4.0.0
+  cutover; this line was written by the runner's agent.
 
 ## Implementation Plans
 
