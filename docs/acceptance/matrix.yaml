@@ -672,9 +672,14 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_debugging_journal.py
     status: skipped
-    notes: SKILL.md wiring (debug-scope add/render, hypothesis/ruled-out trail) content-pinned
+    notes: 'SKILL.md wiring (debug-scope add/render, hypothesis/ruled-out trail) content-pinned
       per-PR; the live debugging walk that records to a debug journal is demonstrated-not-
-      automated (backfill owed).
+      automated (backfill owed). First live walk recorded at
+      journals/debug/2026-09-08-session-unbind-hook-cancelled.md — repro, three ruled-out
+      entries, root-cause and finding all written via `fr journal add --scope debug` as the
+      investigation proceeded, PR body derived from `fr journal render --scope debug`. Kept
+      at skipped rather than flipped to ci because one demonstration is not automation, and
+      the backfill owed here is a harness that runs the walk.'
   - id: fr-journal-scope-keyed
     capability: fr-goal subagent execution
     acceptance: 'The fr journal primitive is scope-keyed (spec|plan|debug) and pipeline-agnostic:
@@ -1446,7 +1451,13 @@ rows:
       has no hook level): fr-session-bind.sh (PostToolUse Bash -> attach on up/exec
       with and without a leading cd, detach on down, subagent and non-Bash input
       ignored) and fr-session-unbind.sh (SessionEnd -> detach, resume kept) exercised
-      via subprocess against a stub fr that records argv.'
+      via subprocess against a stub fr that records argv. The unbind additionally
+      pins the SessionEnd time budget: against a stub fr that blocks 3s, the hook
+      must return inside 1.5s (Claude Code aborts a SessionEnd hook at
+      SESSION_END_HOOK_TIMEOUT_MS_DEFAULT and reports "Hook cancelled"; a plugin
+      cannot raise that floor) and the detach must still land afterwards, so
+      returning early never degrades into dropping the unbind and leaking the
+      binding.'
   - id: statusline-shows-bound-workspace
     capability: isolation-traceability
     acceptance: The Claude Code status line shows the session isolation path alongside
