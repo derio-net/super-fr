@@ -194,7 +194,10 @@ def test_a_plan_with_no_phase_complete_lands_on_implement(tmp_path: Path, repo_r
     assert state.steps["plan"].state == "done"
     assert state.steps["plan-review"].state == "done"
     assert state.steps["implement"].state == "pending"
-    assert state.steps["review"].state == "pending"
+    # The grouped shape has no trailing `review` step — per-phase review
+    # lives inside `implement`'s members.
+    assert "review" not in state.steps
+    assert state.steps["implement"].members == ["implement-phase", "review-phase"]
 
 
 def test_some_phases_complete_lands_on_implement_with_per_phase_state(
@@ -208,30 +211,37 @@ def test_some_phases_complete_lands_on_implement_with_per_phase_state(
 
     assert state.cursor == "implement"
     # Per-phase state lands on the step that fans out per phase (`for_each:
-    # phase`), which for the shipped fr-goal shape is `implement`.
+    # phase`), which for the shipped fr-goal shape is `implement` — keyed on
+    # the first member, since adoption reconstructs implement progress and
+    # never review outcomes.
     assert state.steps["implement"].items == {
-        "phase/1": "done",
-        "phase/2": "done",
-        "phase/3": "pending",
-        "phase/4": "pending",
+        "phase/1/implement-phase": "done",
+        "phase/2/implement-phase": "done",
+        "phase/3/implement-phase": "pending",
+        "phase/4/implement-phase": "pending",
     }
 
 
-def test_all_phases_complete_with_no_pr_lands_on_review(tmp_path: Path, repo_root: Path) -> None:
+def test_all_phases_complete_with_no_pr_lands_on_the_group_with_review_pending(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """The grouped shape has no trailing `review` step, so the inferred
+    `review` cursor lands on the `implement` group instead — implement
+    members done, review members pending, with a note saying why. Fail soft,
+    downward: review outcomes are unobservable from disk."""
     repo, shipped = _repo(tmp_path, repo_root)
     _write_spec(repo)
     plan_dir = _write_plan(repo, phases=3, complete=3)
 
     state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
 
-    assert state.cursor == "review"
-    assert state.steps["implement"].state == "done"
+    assert state.cursor == "implement"
+    assert state.steps["implement"].state == "pending"
     assert state.steps["implement"].items == {
-        "phase/1": "done",
-        "phase/2": "done",
-        "phase/3": "done",
+        "phase/1/implement-phase": "done",
+        "phase/2/implement-phase": "done",
+        "phase/3/implement-phase": "done",
     }
-    assert state.steps["review"].state == "pending"
     assert state.steps["deliver"].state == "pending"
 
 
@@ -251,7 +261,11 @@ def test_an_open_pr_lands_the_cursor_on_deliver(tmp_path: Path, repo_root: Path)
     )
 
     assert state.cursor == "deliver"
-    assert state.steps["review"].state == "done"
+    assert state.steps["implement"].state == "done"
+    assert state.steps["implement"].items == {
+        "phase/1/implement-phase": "done",
+        "phase/2/implement-phase": "done",
+    }
     assert state.steps["deliver"].state == "pending"
     # `deliver` is the step that `emits: [pr]`, so that is where the PR is
     # recorded — even though the step has not run: the artifact demonstrably
@@ -273,17 +287,17 @@ def test_a_merged_or_closed_pr_is_not_an_open_one(tmp_path: Path, repo_root: Pat
         pr_state=lambda _url: "MERGED",
     )
 
-    assert state.cursor == "review"
+    assert state.cursor == "implement"
 
 
-def test_an_undeterminable_pr_state_lands_on_review_and_says_so(
+def test_an_undeterminable_pr_state_lands_on_the_group_and_says_so(
     tmp_path: Path, repo_root: Path
 ) -> None:
     """Offline (or an unresolvable PR) must never be reported as `deliver`.
 
     `pr_status_by_url` fails soft — `None` for every not-found/error
     condition — so "cannot tell" is a real answer, and the conservative row
-    of the table (`review`) is where it lands.
+    (the `implement` group, review members pending) is where it lands.
     """
     repo, shipped = _repo(tmp_path, repo_root)
     _write_spec(repo)
@@ -298,7 +312,7 @@ def test_an_undeterminable_pr_state_lands_on_review_and_says_so(
         pr_state=lambda _url: None,
     )
 
-    assert state.cursor == "review"
+    assert state.cursor == "implement"
     assert state.steps["deliver"].emitted is None
 
 
@@ -406,14 +420,14 @@ def test_cli_adopt_writes_the_run_and_reports_the_cursor(tmp_path: Path, repo_ro
     assert len(runs) == 1
 
 
-def test_cli_adopt_reports_phase_progress_when_the_cursor_is_past_implement(
+def test_cli_adopt_reports_member_progress_when_the_cursor_is_past_flat_implement(
     tmp_path: Path, repo_root: Path
 ) -> None:
-    """r4-f10. The progress line read `state.steps[state.cursor].items`, but
-    `items` hangs off the FAN-OUT step (`implement`). Adoption deliberately
-    lands the cursor on `review` when every phase is done — so the one case
-    where "N/M phases complete" is most worth printing was exactly the case
-    where `items` was `None` and the line disappeared.
+    """r4-f10, regrouped. The progress line read `state.steps[state.cursor].items`,
+    but `items` hangs off the FAN-OUT step (`implement`). Under the flat shape
+    adoption landed the cursor on `review` past it; under the grouped shape the
+    cursor lands ON the group with review members pending — the line now counts
+    member outcomes and labels them honestly, so "3/3" never reads as reviewed.
     """
     repo, shipped = _repo(tmp_path, repo_root)
     _write_spec(repo)
@@ -422,14 +436,16 @@ def test_cli_adopt_reports_phase_progress_when_the_cursor_is_past_implement(
     result = _invoke(repo, shipped, ["run", "adopt", str(plan_dir), "--branch", BRANCH])
 
     assert result.exit_code == 0, result.output
-    assert "review" in result.output, "the cursor moved past the fan-out step"
-    assert "3/3 phases complete" in result.output
+    assert "cursor: implement" in result.output
+    assert "3/3 phase members complete" in result.output
+    assert "review" in result.output, "the fixup note names the pending review members"
 
 
 def test_cli_adopt_still_reports_progress_on_the_fan_out_step(
     tmp_path: Path, repo_root: Path
 ) -> None:
-    """The case that already worked must keep working."""
+    """The case that already worked must keep working — with member keys the
+    count covers implement outcomes and says so."""
     repo, shipped = _repo(tmp_path, repo_root)
     _write_spec(repo)
     plan_dir = _write_plan(repo, phases=4, complete=2)
@@ -437,7 +453,7 @@ def test_cli_adopt_still_reports_progress_on_the_fan_out_step(
     result = _invoke(repo, shipped, ["run", "adopt", str(plan_dir), "--branch", BRANCH])
 
     assert result.exit_code == 0, result.output
-    assert "2/4 phases complete" in result.output
+    assert "2/4 phase members complete" in result.output
 
 
 def test_cli_adopt_exits_two_when_a_run_already_exists(tmp_path: Path, repo_root: Path) -> None:
@@ -814,3 +830,80 @@ def test_adopt_refuses_a_shape_missing_the_inferred_step(tmp_path: Path, repo_ro
 
     with pytest.raises(AdoptError, match="implement"):
         adopt_run(repo, plan_dir, branch=BRANCH, workflow="no-implement", shipped_root=shipped)
+
+
+# --- adopting against a grouped for_each shape (methodology restoration) ---
+
+_GROUPED_SHAPE = """workflow: grouped
+schema: 1
+unit: run
+steps:
+  - id: plan
+    kind: agent
+    emits: [spec, plan]
+  - id: implement
+    kind: agent
+    needs: [plan]
+    for_each: phase
+    emits: [journal:plan]
+    steps:
+      - id: code
+        kind: agent
+        needs: [plan]
+        emits: [journal:plan]
+      - id: peer-review
+        kind: agent
+        needs: [journal:plan]
+        emits: [journal:plan]
+  - id: deliver
+    kind: cli
+    run: "true"
+    needs: [journal:plan]
+"""
+
+
+def _adopt_grouped(repo: Path, shipped: Path, plan_dir: Path):
+    (shipped / "grouped.yaml").write_text(_GROUPED_SHAPE)
+    return adopt_run(repo, plan_dir, branch=BRANCH, workflow="grouped", shipped_root=shipped)
+
+
+def test_adopt_against_a_grouped_shape_keys_items_on_the_first_member(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """Adoption reconstructs implement progress, never review outcomes: a
+    ticked-complete phase proves its implement member, keyed
+    `phase/<n>/<first-member>`; the review members stay pending for the next
+    `advance` to dispatch."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=3, complete=1)
+
+    state = _adopt_grouped(repo, shipped, plan_dir)
+
+    assert state.cursor == "implement"
+    assert state.steps["implement"].items == {
+        "phase/1/code": "done",
+        "phase/2/code": "pending",
+        "phase/3/code": "pending",
+    }
+    assert state.steps["implement"].members == ["code", "peer-review"]
+
+
+def test_adopt_of_an_all_complete_plan_lands_on_the_group_with_review_pending(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """No trailing `review` step exists in a grouped shape, so the inferred
+    `review` cursor would be unadoptable — it lands on the group instead, with
+    the implement members done and the review members pending (fail soft,
+    downward: review outcomes are unobservable from disk)."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2, complete=2)
+
+    state = _adopt_grouped(repo, shipped, plan_dir)
+
+    assert state.cursor == "implement"
+    assert state.steps["implement"].items == {
+        "phase/1/code": "done",
+        "phase/2/code": "done",
+    }

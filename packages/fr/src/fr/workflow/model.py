@@ -51,6 +51,12 @@ class Step(BaseModel):
     # `fr.workflow.check.check_workflow`, not here (a Step alone doesn't
     # know its manifest's `unit`).
     for_each: Literal["phase"] | None = None
+    # Ordered member steps inside a `for_each: phase` scope (the per-phase
+    # implement+review loop). Empty on every pre-nesting manifest, so the flat
+    # shape is the degenerate case. Depth and placement rules (members only
+    # under `for_each`, no member `for_each`/`steps` of its own) are SEMANTIC
+    # checks in `fr.workflow.check.check_workflow`, not here.
+    steps: tuple[Step, ...] = ()
 
 
 class WorkflowManifest(BaseModel):

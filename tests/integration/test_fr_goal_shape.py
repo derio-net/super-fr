@@ -60,11 +60,23 @@ def test_resolve_workflow_finds_the_shipped_fr_goal_manifest() -> None:
 
 
 def test_shipped_manifest_step_order_matches_the_skill_narration() -> None:
+    """Top-level manifest ids match the skill's numbered headers in order —
+    with one nesting-aware allowance: a header naming a MEMBER of the current
+    group (e.g. `review-phase` inside `implement`) is consumed as part of that
+    group rather than as a top-level step. A header naming nothing in the
+    manifest — or a manifest step nothing narrates — still fails."""
     manifest = resolve_workflow("fr-goal", REPO_ROOT, shipped_root=SHIPPED_WORKFLOWS_DIR)
-    manifest_ids = [s.id for s in manifest.steps]
     skill_ids = _skill_step_order()
     assert skill_ids, "SKILL.md has no numbered '### N. <step-id>' headers to compare against"
-    assert manifest_ids == skill_ids
+    remaining = list(skill_ids)
+    for step in manifest.steps:
+        assert remaining and remaining.pop(0) == step.id, (
+            f"manifest step {step.id!r} is not narrated next (remaining headers: {remaining})"
+        )
+        members = [m.id for m in step.steps]
+        while remaining and remaining[0] in members:
+            remaining.pop(0)
+    assert not remaining, f"skill headers narrate nothing in the manifest: {remaining}"
 
 
 def test_a_repo_authored_manifest_overrides_the_shipped_one_wholesale(tmp_path: Path) -> None:

@@ -72,16 +72,28 @@ class StepRecord(BaseModel):
     worth having.
 
     Keys are the plan-relative tail of the §4.D identity grammar
-    (`phase/<n>`), not a full work-item id: composing the full
-    `<repo>/<spec>/<plan>/phase/<n>` is `fr_dispatch.work_item`'s job and
-    `fr` may not import it (`tests/unit/test_import_direction.py`). The run
-    file already records which plan it is about, in `emitted.plan`, so the
-    tail identifies the item unambiguously within the run.
+    (`phase/<n>` for a flat fan-out, `phase/<n>/<member-id>` for a grouped
+    `for_each` with member steps), not a full work-item id: composing the
+    full `<repo>/<spec>/<plan>/phase/<n>` is `fr_dispatch.work_item`'s job
+    and `fr` may not import it (`tests/unit/test_import_direction.py`). The
+    run file already records which plan it is about, in `emitted.plan`, so
+    the tail identifies the item unambiguously within the run.
 
     Additive and optional, so every run file written without it still
     parses; no artifact-version bump follows, because the run kind is new in
     4.0.0 (`fr.artifacts.registry`, `current_version=1`) and no released fr
     has ever read a run file.
+    """
+
+    members: list[str] | None = None
+    """Member-step ids of a grouped `for_each` step, recorded at build.
+
+    Lets `_check_step_drift` tell a member added/removed after `fr run
+    start` from the ordinary case — without it a shape edit inside the nest
+    would advance silently against a step list the cursor was never computed
+    for. Absent (`None`) on grouped steps of pre-existing run files, where
+    the member check is skipped rather than guessed. Additive and optional,
+    same versioning argument as `items` above.
     """
 
 

@@ -218,3 +218,53 @@ def test_step_pydantic_type_is_reachable_directly() -> None:
     step = Step(id="a", kind="cli", run="echo hi")
     assert step.id == "a"
     assert step.kind == "cli"
+
+
+# --- nested steps inside for_each (fr-goal methodology restoration, phase 1) ---
+
+NESTED_MANIFEST = """
+workflow: nested-goal
+schema: 1
+unit: run
+requires: [git]
+steps:
+  - id: plan
+    kind: agent
+    emits: [plan]
+  - id: implement
+    kind: agent
+    needs: [plan]
+    for_each: phase
+    tier: from_phase
+    emits: [journal:plan]
+    steps:
+      - id: implement-phase
+        kind: agent
+        agent: super-fr:fr-phase-executor
+        needs: [plan]
+        emits: [journal:plan]
+      - id: review-phase
+        kind: agent
+        skill: superpowers:requesting-code-review
+        needs: [journal:plan]
+        emits: [journal:plan]
+"""
+
+
+def test_parses_nested_steps_inside_for_each() -> None:
+    """A `for_each: phase` step may carry ordered member steps, each with its
+    own needs/emits — the per-phase implement+review loop."""
+    manifest = parse_manifest(NESTED_MANIFEST)
+    group = next(s for s in manifest.steps if s.id == "implement")
+    assert [m.id for m in group.steps] == ["implement-phase", "review-phase"]
+    review = group.steps[1]
+    assert review.skill == "superpowers:requesting-code-review"
+    assert review.needs == ("journal:plan",)
+    assert review.emits == ("journal:plan",)
+
+
+def test_flat_steps_default_to_no_members() -> None:
+    """The pre-nesting shape parses unchanged — an omitted `steps:` is empty,
+    so every existing manifest is the degenerate case."""
+    manifest = parse_manifest(FULL_MANIFEST)
+    assert all(s.steps == () for s in manifest.steps)

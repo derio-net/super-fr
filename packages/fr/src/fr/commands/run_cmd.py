@@ -32,7 +32,7 @@ import typer
 from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
-from fr.run.adopt import AdoptError, adopt_run
+from fr.run.adopt import AdoptError, adopt_run, plan_phase_numbers
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
@@ -96,10 +96,50 @@ def derive_run_id(branch: str, *, today: _dt.date | None = None) -> str:
 
 
 def _step_by_id(manifest: WorkflowManifest, step_id: str) -> Step:
+    step, _parent = _find_step(manifest, step_id)
+    return step
+
+
+def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | None]:
+    """`(step, parent-group)` for a top-level OR member id — members share the
+    flattened id space `check_workflow` validates, so resolving one must find
+    them too. Parent is `None` for a top-level step."""
     for step in manifest.steps:
         if step.id == step_id:
-            return step
+            return step, None
+        for member in step.steps:
+            if member.id == step_id:
+                return member, step
     raise RunStateError(f"step {step_id!r} not found in workflow {manifest.workflow!r}")
+
+
+def _emitted_plan(state: RunState) -> str | None:
+    """The recorded repo-relative plan path, wherever the shape put it."""
+    for record in state.steps.values():
+        if record.emitted and "plan" in record.emitted:
+            return record.emitted["plan"]
+    return None
+
+
+def _group_phases(repo_root: Path, state: RunState) -> list[int]:
+    """Phase numbers the grouped fan-out iterates over — from the plan on
+    disk, the one source of which phases exist. Fail-closed: a group advanced
+    before its plan is recorded (or against an unparseable plan) names what
+    is missing instead of dispatching against a guessed phase list."""
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        raise RunStateError(
+            "cannot dispatch per-phase members — no plan recorded yet "
+            "(resolve the step that emits `plan` first)"
+        )
+    return plan_phase_numbers(repo_root, plan_rel)
+
+
+def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
+    """Every `phase/<n>/<member>` key of a grouped fan-out, in dispatch
+    order: phase-major, then member order — implement before review, per
+    phase, never the reverse."""
+    return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
 
 
 def _next_step_id(manifest: WorkflowManifest, step_id: str) -> str | None:
@@ -145,21 +185,42 @@ def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
     """
     recorded = set(state.steps)
     current = {s.id for s in manifest.steps}
-    if recorded == current:
-        return
-    added = sorted(current - recorded)
-    removed = sorted(recorded - current)
-    parts = []
-    if added:
-        parts.append(f"added: {', '.join(added)}")
-    if removed:
-        parts.append(f"removed: {', '.join(removed)}")
-    raise RunStateError(
-        f"run {state.run!r} was started against a different version of "
-        f"{state.workflow!r} ({'; '.join(parts)}). A run's cursor is a position in "
-        "a step list; start a new run rather than advancing this one against a "
-        "list it was never computed for."
-    )
+    if recorded != current:
+        added = sorted(current - recorded)
+        removed = sorted(recorded - current)
+        parts = []
+        if added:
+            parts.append(f"added: {', '.join(added)}")
+        if removed:
+            parts.append(f"removed: {', '.join(removed)}")
+        raise RunStateError(
+            f"run {state.run!r} was started against a different version of "
+            f"{state.workflow!r} ({'; '.join(parts)}). A run's cursor is a position in "
+            "a step list; start a new run rather than advancing this one against a "
+            "list it was never computed for."
+        )
+    for step in manifest.steps:
+        if not step.steps:
+            continue
+        record = state.steps.get(step.id)
+        recorded_members = record.members if record is not None else None
+        if recorded_members is None:
+            continue  # pre-nesting run file: top-level ids match, members unknowable
+        current_members = [m.id for m in step.steps]
+        if recorded_members != current_members:
+            added = sorted(set(current_members) - set(recorded_members))
+            removed = sorted(set(recorded_members) - set(current_members))
+            parts = []
+            if added:
+                parts.append(f"added: {', '.join(added)}")
+            if removed:
+                parts.append(f"removed: {', '.join(removed)}")
+            raise RunStateError(
+                f"run {state.run!r} was started against a different version of "
+                f"{state.workflow!r} (step {step.id!r} members changed: {'; '.join(parts)}). "
+                "A run's cursor is a position in a step list; start a new run rather "
+                "than advancing this one against a list it was never computed for."
+            )
 
 
 def _with_step(state: RunState, step_id: str, record: StepRecord) -> RunState:
@@ -213,6 +274,13 @@ def _complete_step(
         exit=exit_code,
         stdout=stdout,
         emitted=dict(emitted) if emitted else None,
+        # A completed grouped step keeps its item history and member list:
+        # `status` still shows what ran, and drift still sees member edits
+        # after the group is done. (Previously items were dropped here, which
+        # is also why an adopted flat fan-out went blind once it completed —
+        # `_fan_out_items` scans every record for exactly this.)
+        items=dict(prior.items) if prior is not None and prior.items else None,
+        members=list(prior.members) if prior is not None and prior.members else None,
     )
     new_state = _with_step(state, step_id, new_record)
     if outcome == "done" and step_id == state.cursor:
@@ -369,7 +437,9 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
     exclusion list stays at exactly the two fields that have a reason.
     `for_each` and `gate` were missing until review fix r2-f4, which made
     the brief unable to express `implement`'s whole purpose (one executor
-    per phase) or the fact that a step is gated at all.
+    per phase) or the fact that a step is gated at all. `steps` carries the
+    member ids of a grouped `for_each` (empty for a flat step) so the
+    harness can see the per-phase loop without re-reading the manifest.
     """
     return {
         "run": state.run,
@@ -383,7 +453,66 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "gate": step.gate,
         "tier": step.tier,
         "for_each": step.for_each,
+        "steps": [m.model_dump(exclude_none=True) for m in step.steps],
     }
+
+
+def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -> dict[str, Any]:
+    """The dispatch brief for one `(phase, member)` unit of a grouped step.
+
+    Same keys as the step brief (so a harness parses one shape) plus `group`
+    (the fan-out step's id) and `item` (the `phase/<n>` unit). `tier` and
+    `for_each` fall back to the group's when the member leaves them unset —
+    the common case, where the group declares the dispatch policy once.
+    """
+    return {
+        "run": state.run,
+        "workflow": state.workflow,
+        "step": member.id,
+        "group": group.id,
+        "item": item,
+        "kind": member.kind,
+        "skill": member.skill,
+        "agent": member.agent,
+        "needs": list(member.needs),
+        "emits": list(member.emits),
+        "gate": member.gate,
+        "tier": member.tier if member.tier is not None else group.tier,
+        "for_each": group.for_each,
+        "steps": [],
+    }
+
+
+def _advance_group(
+    repo_root: Path, state: RunState, manifest: WorkflowManifest, step: Step, record: StepRecord
+) -> None:
+    """Dispatch the next pending `(phase, member)` unit of a grouped step.
+
+    The cursor stays on the group while any unit is outstanding; `resolve`
+    records each unit, and the group completes (cursor advances) only when
+    every expected `phase/<n>/<member>` key is done. A group with nothing
+    pending but no `done` record (every unit resolved before this build
+    learned members) completes here rather than dispatching thin air.
+    """
+    try:
+        phases = _group_phases(repo_root, state)
+    except (RunStateError, AdoptError) as e:
+        err_console.print(f"[red]{step.id}: {e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    expected = _expected_group_items(step, phases)
+    items = dict(record.items or {})
+    pending = next((key for key in expected if items.get(key) != "done"), None)
+    if pending is None:
+        save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
+        console.print(f"{step.id}: done (all {len(expected)} phase members done)")
+        return
+    if record.state != "running":
+        running = record.model_copy(update={"state": "running", "at": _now()})
+        save_run_state(repo_root, _with_step(state, step.id, running))
+    item, _, member_id = pending.rpartition("/")
+    member = next(m for m in step.steps if m.id == member_id)
+    console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
+    console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str) -> str | None:
@@ -517,7 +646,10 @@ def start_cmd(
         )
         raise typer.Exit(2)
 
-    steps = {s.id: StepRecord(state="pending") for s in manifest.steps}
+    steps = {
+        s.id: StepRecord(state="pending", members=[m.id for m in s.steps] or None)
+        for s in manifest.steps
+    }
     state = RunState(
         run=rid,
         workflow=f"{manifest.workflow}@{manifest.schema_version}",
@@ -592,7 +724,10 @@ def adopt_cmd(
     items = _fan_out_items(state)
     if items:
         complete = [k for k, v in items.items() if v == "done"]
-        console.print(f"  {len(complete)}/{len(items)} phases complete")
+        # Grouped fan-out keys (`phase/<n>/<member>`) count member outcomes,
+        # not phases — label them honestly so "3/3" never reads as reviewed.
+        unit = "phase members" if any(k.count("/") >= 2 for k in items) else "phases"
+        console.print(f"  {len(complete)}/{len(items)} {unit} complete")
     for note in notes:
         console.print(f"  {note}", soft_wrap=True)
     console.print(f"  advance it with: fr run advance {state.run}", soft_wrap=True)
@@ -647,6 +782,9 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     console.print(f"cursor: {state.cursor}")
     for step_id, record in state.steps.items():
         console.print(f"  {step_id}: {record.state}")
+        if record.items:
+            for key in sorted(record.items):
+                console.print(f"    {key}: {record.items[key]}")
 
 
 @run_app.command("advance")
@@ -665,7 +803,7 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         state = load_run_state(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
         step = _step_by_id(manifest, state.cursor)
-    except (RunStateError, WorkflowError) as e:
+    except (RunStateError, WorkflowError, AdoptError) as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
 
@@ -714,6 +852,9 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         return
 
     if step.kind == "agent":
+        if step.steps:
+            _advance_group(repo_root, state, manifest, step, record)
+            return
         brief = _build_brief(step, state)
         if record.state != "running":
             new_record = record.model_copy(update={"state": "running", "at": _now()})
@@ -759,6 +900,85 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         raise typer.Exit(1)
 
 
+def _resolve_member(
+    repo_root: Path,
+    state: RunState,
+    manifest: WorkflowManifest,
+    *,
+    member: Step,
+    group: Step,
+    item: str | None,
+    state_value: Literal["done", "failed"],
+    emitted_map: dict[str, str],
+) -> None:
+    """Record one `(phase, member)` outcome on its group's item map.
+
+    The group completes — via the same `_complete_step` cursor asymmetry as
+    every other step — only when every expected `phase/<n>/<member>` key is
+    done; a `failed` unit fails the group at once and holds the cursor, same
+    as a failed step. Whole-group completion (`resolve --step <group>`) stays
+    available for harnesses that do not address members.
+    """
+    if item is None:
+        err_console.print(
+            f"[red]{member.id}: a member outcome must address a phase item — "
+            "pass --item phase/<n>[/red]"
+        )
+        raise typer.Exit(2)
+    grec = state.steps.get(group.id)
+    if grec is None:  # pragma: no cover — drift guarantees top-level records
+        err_console.print(f"[red]{group.id}: no step record in run {state.run!r}[/red]")
+        raise typer.Exit(2)
+    if grec.state == "done":
+        err_console.print(
+            f"[red]{group.id}: already done — re-resolving it does nothing. "
+            "Pass --emitted to amend the artifacts it recorded.[/red]"
+        )
+        raise typer.Exit(2)
+    if grec.state not in ("running", "blocked"):
+        err_console.print(
+            f"[red]{group.id}: not running (state={grec.state!r}) — advance "
+            "the group first, then resolve its members[/red]"
+        )
+        raise typer.Exit(2)
+    try:
+        phases = _group_phases(repo_root, state)
+    except (RunStateError, AdoptError) as e:
+        err_console.print(f"[red]{group.id}: {e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    expected = _expected_group_items(group, phases)
+    key = f"{item}/{member.id}"
+    if key not in expected:
+        err_console.print(
+            f"[red]{key}: not a phase member of {group.id!r} — expected "
+            f"phase/<n> for phases {phases} (from the recorded plan)[/red]"
+        )
+        raise typer.Exit(2)
+    items = dict(grec.items or {})
+    if items.get(key) == "done" and state_value == "done":
+        err_console.print(f"[red]{key}: already recorded done[/red]")
+        raise typer.Exit(2)
+    items[key] = state_value
+    merged_emitted = {**(grec.emitted or {}), **emitted_map}
+    updated = _with_step(
+        state,
+        group.id,
+        grec.model_copy(update={"items": items, "emitted": merged_emitted or None}),
+    )
+    if state_value == "failed":
+        save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
+        console.print(f"{member.id} {item}: failed")
+        return
+    if all(items.get(k) == "done" for k in expected):
+        save_run_state(
+            repo_root, _complete_step(updated, manifest, group.id, "done", emitted=merged_emitted)
+        )
+        console.print(f"{group.id}: done (all {len(expected)} phase members done)")
+        return
+    save_run_state(repo_root, updated)
+    console.print(f"{member.id} {item}: done")
+
+
 @run_app.command("resolve")
 def resolve_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
@@ -766,6 +986,12 @@ def resolve_cmd(
     state_value: str = typer.Option(..., "--state", help="done | failed."),
     emitted: list[str] = typer.Option(
         [], "--emitted", help="'name=path' artifact this step emitted (repeatable)."
+    ),
+    item: str | None = typer.Option(
+        None,
+        "--item",
+        help="Phase item (phase/<n>) this outcome is for — required when --step "
+        "names a member of a grouped `for_each` step.",
     ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
@@ -798,11 +1024,42 @@ def resolve_cmd(
     try:
         state = load_run_state(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
-        step = _step_by_id(manifest, step_id)
-        emitted_map = _parse_emitted(emitted, repo_root, step)
-    except (RunStateError, WorkflowError) as e:
+        step, parent = _find_step(manifest, step_id)
+        # A member validates against its own declared emits, falling back to
+        # the group's; a top-level step always validates against its own —
+        # even when it declares none, so `--emitted` on a non-emitting step
+        # stays refused (rule 3) rather than silently recorded.
+        emits_owner = step if parent is None or step.emits else parent
+        emitted_map = _parse_emitted(emitted, repo_root, emits_owner)
+    except (RunStateError, WorkflowError, AdoptError) as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
+
+    if parent is not None:
+        _resolve_member(
+            repo_root,
+            state,
+            manifest,
+            member=step,
+            group=parent,
+            item=item,
+            state_value=state_value,  # type: ignore[arg-type]  # validated below
+            emitted_map=emitted_map,
+        )
+        return
+    if item is not None:
+        if step.steps:
+            members = ", ".join(m.id for m in step.steps)
+            err_console.print(
+                f"[red]{step_id}: a group outcome must address a member step "
+                f"({members}) — pass --step <member> --item phase/<n>[/red]"
+            )
+        else:
+            err_console.print(
+                f"[red]{step_id}: --item is only for members of a grouped "
+                "`for_each` step — {step_id!r} has no members[/red]"
+            )
+        raise typer.Exit(2)
 
     record = state.steps.get(step_id)
     if record is None:
