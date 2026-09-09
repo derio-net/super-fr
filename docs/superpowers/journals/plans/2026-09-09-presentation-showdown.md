@@ -9,3 +9,8 @@
 ### 80269b644688 · decision · Instrument: runbook + half-1 deck skeleton
 
 experiment/runbook.md (metrics, correction schema, recording runbook; SPARK-4 placeholders pending). docs/presentation/super-fr-showdown.md skeleton: half 1 full, half 2 pending recordings, neutral comparison table.
+
+<!-- fr:journal kind=decision scope=plan id=ca0284dfab55 created=2026-09-09T17:00:40 -->
+### ca0284dfab55 · decision · Half-1 deck finished ahead of experiment
+
+docs/presentation/super-fr-showdown.md: half 1 complete (12 slides), half 2 preview + empty table. Run stays parked at record-compare pending operator prep.
