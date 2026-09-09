@@ -97,6 +97,28 @@ class StepRecord(BaseModel):
     """
 
 
+class PhaseAccounting(BaseModel):
+    """V1 context accounting (fr-goal methodology restoration): what a
+    dispatched `(phase, member)` unit is about to re-read.
+
+    Sizes, not tokens — no harness offers a token API, so V1 measures the
+    context fr itself assembles (journal, composed handoff, spec + plan
+    bytes) and `fr run status` renders token figures explicitly labeled as
+    estimates. Keyed like `items` (`phase/<n>` flat, `phase/<n>/<member>`
+    grouped). Additive and optional: pre-accounting runs parse with
+    `accounting=None`, same versioning argument as `items`/`members`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    at: str | None = None
+    journal_entries: int = 0
+    journal_lines: int = 0
+    handoff_chars: int = 0
+    spec_bytes: int = 0
+    plan_bytes: int = 0
+
+
 class RunState(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -106,6 +128,7 @@ class RunState(BaseModel):
     started: str  # ISO 8601; kept as a string for round-trip stability
     cursor: str  # the step id currently active (running/blocked) or next-up
     steps: dict[str, StepRecord]
+    accounting: dict[str, PhaseAccounting] | None = None
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

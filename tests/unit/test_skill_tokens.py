@@ -21,6 +21,14 @@ def test_fr_plan_names_the_skeleton_mandate() -> None:
     assert "skeleton" in t.lower()
 
 
+def test_fr_plan_names_phase_granularity_guidance() -> None:
+    """The cost consequence of phase count is stated where phases are
+    authored — with the live numbers behind it (`fr run status`)."""
+    t = FR_PLAN.read_text()
+    assert "4–6 phases" in t
+    assert "fr run status" in t
+
+
 def test_fr_plan_names_refactor_or_justify() -> None:
     t = FR_PLAN.read_text()
     assert "no-refactor-because" in t

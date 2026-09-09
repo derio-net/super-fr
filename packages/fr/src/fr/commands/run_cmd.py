@@ -32,10 +32,18 @@ import typer
 from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
+from fr.journal.model import (
+    JournalEntry,
+    JournalParseError,
+    compose_handoff,
+    parse_journal,
+    resolve_journal_read_path,
+)
 from fr.run.adopt import AdoptError, adopt_run, plan_phase_numbers
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
+    PhaseAccounting,
     RunState,
     RunStateError,
     StepRecord,
@@ -140,6 +148,76 @@ def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     order: phase-major, then member order — implement before review, per
     phase, never the reverse."""
     return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
+
+
+def _accounting_snapshot(
+    repo_root: Path, state: RunState, phase_n: int, depends_on: tuple[int, ...] = ()
+) -> PhaseAccounting:
+    """What the dispatched unit is about to re-read (V1 context accounting).
+
+    Measured, not metered: journal entries/lines, the composed handoff's
+    chars, spec + plan bytes — the context fr itself assembles. Never a gate:
+    anything unreadable here degrades to zeros rather than refusing the
+    dispatch (observability must not break execution).
+    """
+    from fr.parser import PlanSchemaError, parse
+
+    plan_rel = _emitted_plan(state)
+    spec_rel: str | None = None
+    for record in state.steps.values():
+        if record.emitted and "spec" in record.emitted:
+            spec_rel = record.emitted["spec"]
+    spec_bytes = 0
+    if spec_rel is not None:
+        try:
+            candidate = repo_root / spec_rel
+            spec_bytes = candidate.stat().st_size if candidate.is_file() else 0
+        except OSError:
+            spec_bytes = 0
+    plan_bytes = 0
+    slug = ""
+    if plan_rel is not None:
+        slug = plan_rel.rstrip("/").rsplit("/", 1)[-1]
+        try:
+            plan_bytes = sum(
+                f.stat().st_size for f in (repo_root / plan_rel).rglob("*") if f.is_file()
+            )
+        except OSError:
+            plan_bytes = 0
+        try:
+            plan = parse(repo_root / plan_rel)
+            depends_on = next(
+                (p.phase.depends_on for p in plan.phases if p.phase.number == phase_n),
+                depends_on,
+            )
+        except (PlanSchemaError, OSError):
+            pass
+    entries: list[JournalEntry] = []
+    journal_lines = 0
+    if slug:
+        jpath = resolve_journal_read_path(repo_root, "plan", slug)
+        if jpath.is_file():
+            try:
+                text = jpath.read_text()
+            except OSError:
+                text = ""
+            if text:
+                journal_lines = len(text.splitlines())
+                try:
+                    entries = parse_journal(text)
+                except JournalParseError:
+                    entries = []
+    handoff_chars = len(
+        compose_handoff(entries, phase=phase_n, scope="plan", slug=slug, depends_on=depends_on)
+    )
+    return PhaseAccounting(
+        at=_now(),
+        journal_entries=len(entries),
+        journal_lines=journal_lines,
+        handoff_chars=handoff_chars,
+        spec_bytes=spec_bytes,
+        plan_bytes=plan_bytes,
+    )
 
 
 def _next_step_id(manifest: WorkflowManifest, step_id: str) -> str | None:
@@ -506,11 +584,15 @@ def _advance_group(
         save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
         console.print(f"{step.id}: done (all {len(expected)} phase members done)")
         return
-    if record.state != "running":
-        running = record.model_copy(update={"state": "running", "at": _now()})
-        save_run_state(repo_root, _with_step(state, step.id, running))
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
+    phase_n = int(item.rsplit("/", 1)[-1])
+    snaps = dict(state.accounting or {})
+    snaps[pending] = _accounting_snapshot(repo_root, state, phase_n)
+    if record.state != "running":
+        running = record.model_copy(update={"state": "running", "at": _now()})
+        state = _with_step(state, step.id, running)
+    save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
     console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
     console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
 
@@ -785,6 +867,20 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         if record.items:
             for key in sorted(record.items):
                 console.print(f"    {key}: {record.items[key]}")
+    if state.accounting:
+        console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
+        total = 0
+        for key in sorted(state.accounting):
+            snap = state.accounting[key]
+            chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
+            total += chars
+            console.print(
+                f"    {key}: journal {snap.journal_entries} entries/"
+                f"{snap.journal_lines} lines, handoff {snap.handoff_chars} chars, "
+                f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
+                f"(~{chars // 4} tok est)"
+            )
+        console.print(f"    total: {total} chars (~{total // 4} tok est)")
 
 
 @run_app.command("advance")

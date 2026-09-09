@@ -24,3 +24,8 @@ The fr-goal §5 brief (pickup + spec + handoff) and executor handoff pointer wer
 ### p3-review-comment · finding [fixed] · review-phase P3: wrong read-resolve comment (phase 3)
 
 The handoff comment claimed the plan read-resolves; only the journal does (the plan lookup is active-only, correctly — archived plans need no handoffs). Fixed the comment. State: fixed.
+
+<!-- fr:journal kind=discovery scope=plan id=p4t3-order-slip created=2026-09-09T10:29:48 phase=4 -->
+### p4t3-order-slip · discovery · P4.T3 order inversion noted (phase 4)
+
+The granularity token test was written after its prose (should have been RED first). The test still guards future edits; noted as a process slip, not repeated. no-refactor-because: prose rewrap only.

@@ -1682,8 +1682,17 @@ def _started_grouped_with_plan(repo: Path, shipped: Path) -> str:
     result = _invoke(
         repo,
         shipped,
-        ["run", "resolve", "r1", "--step", "plan", "--state", "done",
-         "--emitted", f"plan=docs/superpowers/plans/{slug}"],
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "plan",
+            "--state",
+            "done",
+            "--emitted",
+            f"plan=docs/superpowers/plans/{slug}",
+        ],
     )
     assert result.exit_code == 0, result.output
     return f"docs/superpowers/plans/{slug}"
@@ -1716,8 +1725,9 @@ def test_resolve_member_items_completes_the_group_in_order(tmp_path: Path) -> No
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
 
     first = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
-                        "--state", "done"]
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
     )
     assert first.exit_code == 0, first.output
     mid = load_run_state(repo, "r1")
@@ -1726,8 +1736,9 @@ def test_resolve_member_items_completes_the_group_in_order(tmp_path: Path) -> No
     assert mid.cursor == "implement"
 
     second = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "peer-review",
-                        "--item", "phase/1", "--state", "done"]
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "peer-review", "--item", "phase/1", "--state", "done"],
     )
     assert second.exit_code == 0, second.output
     done = load_run_state(repo, "r1")
@@ -1745,8 +1756,9 @@ def test_resolve_member_failed_fails_the_group_and_holds_the_cursor(
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
 
     result = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
-                        "--state", "failed"]
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "failed"],
     )
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
@@ -1767,8 +1779,21 @@ def test_resolve_member_with_an_artifact_neither_member_nor_group_emits_is_refus
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
 
     result = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
-                        "--state", "done", "--emitted", "spec=docs/spec.md"]
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=docs/spec.md",
+        ],
     )
     assert result.exit_code == 2, result.output
     assert "does not emit 'spec'" in result.output
@@ -1783,16 +1808,26 @@ def test_resolve_on_a_step_with_no_emits_still_refuses_emitted(tmp_path: Path) -
     _write_shape(
         shipped,
         "quiet",
-        "workflow: quiet\nschema: 1\nunit: run\n"
-        "steps:\n  - id: quiet\n    kind: agent\n",
+        "workflow: quiet\nschema: 1\nunit: run\nsteps:\n  - id: quiet\n    kind: agent\n",
     )
     (repo / "docs" / "spec.md").write_text("# spec\n")
     _invoke(repo, shipped, ["run", "start", "quiet", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
     result = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "quiet", "--state", "done",
-                        "--emitted", "spec=docs/spec.md"]
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "quiet",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=docs/spec.md",
+        ],
     )
     assert result.exit_code == 2, result.output
     assert "does not emit 'spec'" in result.output
@@ -1806,8 +1841,9 @@ def test_resolve_unknown_member_is_refused(tmp_path: Path) -> None:
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
 
     result = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "ghost", "--item", "phase/1",
-                        "--state", "done"]
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "ghost", "--item", "phase/1", "--state", "done"],
     )
     assert result.exit_code == 2, result.output
     assert "ghost" in result.output
@@ -1821,8 +1857,9 @@ def test_resolve_member_for_an_unknown_phase_is_refused(tmp_path: Path) -> None:
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
 
     result = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/9",
-                        "--state", "done"]
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/9", "--state", "done"],
     )
     assert result.exit_code == 2, result.output
     assert "phase/9" in result.output
@@ -1849,11 +1886,125 @@ def test_status_shows_group_items(tmp_path: Path) -> None:
     _started_grouped_with_plan(repo, shipped)
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
     _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
-                        "--state", "done"]
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
     )
 
     result = _invoke(repo, shipped, ["run", "status", "r1"])
 
     assert result.exit_code == 0, result.output
     assert "phase/1/code" in result.output
+
+
+# --- V1 context accounting: advance records, status reports (phase 4) ---
+
+
+def _seed_journal(repo: Path, shipped: Path) -> None:
+    from fr.journal.model import journal_path
+
+    slug = "2026-05-09-fixture-minimal"
+    _invoke(
+        repo,
+        shipped,
+        [
+            "journal",
+            "add",
+            "--scope",
+            "plan",
+            "--slug",
+            slug,
+            "--kind",
+            "discovery",
+            "--title",
+            "a find",
+            "--body",
+            "details",
+            "--phase",
+            "1",
+            "--id",
+            "d1",
+        ],
+    )
+    _invoke(
+        repo,
+        shipped,
+        [
+            "journal",
+            "add",
+            "--scope",
+            "plan",
+            "--slug",
+            slug,
+            "--kind",
+            "finding",
+            "--title",
+            "a bug",
+            "--body",
+            "broken",
+            "--phase",
+            "1",
+            "--state",
+            "open",
+            "--id",
+            "f1",
+        ],
+    )
+    return journal_path(repo, "plan", slug)
+
+
+def test_advance_records_a_context_snapshot_for_the_dispatched_unit(
+    tmp_path: Path,
+) -> None:
+    """What the dispatched executor is about to re-read — journal size, the
+    composed handoff size, spec + plan bytes — recorded under the unit's key."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    journal = _seed_journal(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    assert snap.journal_entries == 2
+    assert snap.journal_lines == len(journal.read_text().splitlines())
+    assert snap.handoff_chars > 0
+    assert snap.spec_bytes >= 0
+    assert snap.plan_bytes > 0
+
+
+def test_advance_is_idempotent_over_the_snapshot(tmp_path: Path) -> None:
+    """Re-dispatching the same unit (advance while running) refreshes the one
+    snapshot rather than stacking them."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    accounting = load_run_state(repo, "r1").accounting
+
+    assert list(accounting) == ["phase/1/code"]
+
+
+def test_status_reports_snapshots_and_a_total(tmp_path: Path) -> None:
+    """Per-unit context sizes plus a running total — estimates labeled as
+    estimates (no harness token API in V1)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "phase/1/code" in result.output
+    assert "journal 2 entries" in result.output
+    assert "total" in result.output
+    assert "est" in result.output
