@@ -29,3 +29,18 @@ The handoff comment claimed the plan read-resolves; only the journal does (the p
 ### p4t3-order-slip · discovery · P4.T3 order inversion noted (phase 4)
 
 The granularity token test was written after its prose (should have been RED first). The test still guards future edits; noted as a process slip, not repeated. no-refactor-because: prose rewrap only.
+
+<!-- fr:journal kind=discovery scope=plan id=p5t3-reorder created=2026-09-09T10:58:47 phase=5 -->
+### p5t3-reorder · discovery · P5.T3 reorder: contract norms prose landed in Phase 2 (phase 5)
+
+The five executor norms and their token tripwires were written with the Phase 2 prose batch (same reason as P3.T3: one tripwire sweep across all four files). Verified above: all five norm tokens asserted and passing. P5.T3's remaining content is this verification. no-refactor-because: prose already exact.
+
+<!-- fr:journal kind=discovery scope=plan id=p5t4s2-clean created=2026-09-09T11:02:25 phase=5 -->
+### p5t4s2-clean · discovery · P5.T4.S2 toy walk clean, no findings to fix (phase 5)
+
+The 3-phase grouped walk passed first try (after a test-only spec-table fix): per-phase brief order, write-claim refusal, deliver cursor, 6 accounting snapshots, journal check clean. No product findings; nothing to fix. no-refactor-because: verification-only step.
+
+<!-- fr:journal kind=finding scope=plan id=p5-review-retry-mark created=2026-09-09T11:11:28 phase=5 state=fixed -->
+### p5-review-retry-mark · finding [fixed] · review-phase P5: stale failed mark on retry (phase 5)
+
+Self-review of the Phase 5 diff: setdefault left a retried failed unit reading failed while outstanding. Unconditional running mark on dispatch. State: fixed.

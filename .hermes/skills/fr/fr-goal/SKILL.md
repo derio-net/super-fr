@@ -91,8 +91,8 @@ structured result — the handoff IS the context. Model = phase `tier` via `fr m
 where spec/plan are invisible and writes are denied, yet the dispatch succeeds, so the run looks
 healthy while nothing happens. The two isolations don't compose. (Contrast §2's cross-repo agents,
 which *keep* the flag — each starts a fresh pipeline in a different repo; these share this one's
-workspace.) Hermes `delegate_task(goal, context)` carries the brief in `context`, serial; child
-loads `fr-execute`.
+workspace.) Hermes `delegate_task(goal, context)` carries the brief in `context`, serial; child loads
+`fr-execute`. An executor that both returns and messages: keep the return, log the drop, move on (#461).
 
 ### 6. review-phase — per phase, inside the loop, then push (never a PR)
 After each `implement-phase` return, run `review-phase`: `superpowers:requesting-code-review` over

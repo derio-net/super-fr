@@ -40,6 +40,11 @@ def test_inline_fallback_documented() -> None:
     assert "inline" in _text().lower()
 
 
+def test_duplicate_report_rule_documented() -> None:
+    """An executor that both returns and messages: the return wins (#461)."""
+    assert "keep the return" in _text()
+
+
 # --- methodology restoration: the skill must narrate what the shape enforces ---
 
 

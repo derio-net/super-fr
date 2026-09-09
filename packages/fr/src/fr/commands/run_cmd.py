@@ -589,9 +589,15 @@ def _advance_group(
     phase_n = int(item.rsplit("/", 1)[-1])
     snaps = dict(state.accounting or {})
     snaps[pending] = _accounting_snapshot(repo_root, state, phase_n)
-    if record.state != "running":
-        running = record.model_copy(update={"state": "running", "at": _now()})
-        state = _with_step(state, step.id, running)
+    items = dict(record.items or {})
+    # The write-claim: this unit is now outstanding. A resolve for any OTHER
+    # unit while it is running is a second writer — refused in `_resolve_member`.
+    # Unconditional (not setdefault): a retried failed unit is running again,
+    # not still failed.
+    items[pending] = "running"
+    if record.state != "running" or record.items != items:
+        record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
+        state = _with_step(state, step.id, record)
     save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
     console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
     console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
@@ -1053,6 +1059,16 @@ def _resolve_member(
     items = dict(grec.items or {})
     if items.get(key) == "done" and state_value == "done":
         err_console.print(f"[red]{key}: already recorded done[/red]")
+        raise typer.Exit(2)
+    # One writer at a time: any OTHER outstanding unit means a second writer
+    # is active (a finished executor still writing, or the orchestrator
+    # alongside it) — resolve the running unit first instead of interleaving.
+    running = sorted(k for k, v in items.items() if v == "running" and k != key)
+    if running:
+        err_console.print(
+            f"[red]{key}: refused — {running[0]} is still running. The worktree "
+            "has exactly one writer; resolve the running unit first.[/red]"
+        )
         raise typer.Exit(2)
     items[key] = state_value
     merged_emitted = {**(grec.emitted or {}), **emitted_map}

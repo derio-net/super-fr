@@ -2008,3 +2008,59 @@ def test_status_reports_snapshots_and_a_total(tmp_path: Path) -> None:
     assert "journal 2 entries" in result.output
     assert "total" in result.output
     assert "est" in result.output
+
+
+# --- write-claim: one writer at a time (phase 5, contract runtime) ---
+
+
+def test_advance_marks_the_dispatched_unit_running(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+
+    state = load_run_state(repo, "r1")
+    assert state.steps["implement"].items == {"phase/1/code": "running"}
+
+
+def test_resolve_while_another_unit_is_running_is_refused(tmp_path: Path) -> None:
+    """A finished executor that keeps writing, or an orchestrator writing
+    alongside it, shows up here as two outstanding units — the second resolve
+    is refused naming the first, instead of interleaving silently."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code, marks running
+
+    result = _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "peer-review",
+                        "--item", "phase/1", "--state", "done"]
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "phase/1/code" in result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["implement"].state == "running"
+    assert state.cursor == "implement"
+
+
+def test_serial_resolves_still_flow(tmp_path: Path) -> None:
+    """The refusal above must not break the ordinary serial discipline:
+    resolve the running unit first, then the next dispatches."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+    assert _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
+                        "--state", "done"]
+    ).exit_code == 0
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches peer-review
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "peer-review"

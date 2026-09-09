@@ -62,9 +62,8 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 
 ## Rules
 
-- TDD (`superpowers:test-driven-development`): red → green → refactor — or a recorded
-  `no-refactor-because:` (task id) in the plan journal. No speculative generality; no
-  silent skipping.
+- TDD (`superpowers:test-driven-development`): red → green → refactor — or a recorded `no-refactor-because:`
+  (task id) in the plan journal. No speculative generality; no silent skipping.
 - **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a
   separate `REFACTOR + quality gate` **task** for larger ones. Omit only with justification;
   `fr plan self-review` enforces it (single-step tasks, manual phases, ticked tasks exempt).
@@ -79,11 +78,12 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 - **Acceptance linkage:** a phase that advances a matrix row carries
   `acceptance: [row-ids]` in its header. `fr plan self-review` errors when the
   spec has a Test Plan but zero linked rows (matrix present) and on unknown
-  ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when
-  decomposition exposes a missed business acceptance — flagged as an
-  addition, defended at PR time, never ironed over.
+  ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when decomposition exposes a missed
+  business acceptance — flagged as an addition, defended at PR time, never ironed over.
 - No placeholders: every step has actual code, commands, expected output.
-- Bite-sized steps: 2-5 minutes each.
+- Bite-sized steps: 2-5 minutes each. Prefer 4–6 phases: every additional phase re-reads the
+  accumulated handoff, so cost grows superlinearly with phase count (`fr run status` shows the
+  per-phase accounting).
 - Use BEGIN/END markers for full-file embeds, not nested fences.
 - **Cross-repo completeness:** If the spec lists multiple plans across repos,
   write ALL of them before offering the execution handoff. For each target
