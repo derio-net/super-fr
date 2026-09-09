@@ -38,3 +38,24 @@ def test_tiering_via_fr_models() -> None:
 def test_inline_fallback_documented() -> None:
     """A blocked dispatch must fall back to inline — never hard-fail."""
     assert "inline" in _text().lower()
+
+
+# --- methodology restoration: the skill must narrate what the shape enforces ---
+
+
+def test_nested_per_phase_review_loop_narrated() -> None:
+    """The grouped `implement` loop is the mechanism; prose without it is
+    what drifted."""
+    t = _text()
+    assert "review-phase" in t
+    assert "fr journal handoff" in t
+
+
+def test_phase_one_skeleton_mandate_narrated() -> None:
+    assert "skeleton" in _text().lower()
+
+
+def test_refactor_or_justify_narrated() -> None:
+    t = _text()
+    assert "no-refactor-because" in t
+    assert "red → green → refactor" in t

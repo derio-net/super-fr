@@ -60,8 +60,8 @@ take the PR out of draft.
    The `Depends on:` line surfaces blockers — if any blocker phase is not
    yet `Complete`, stop and report.
 
-2. **Implement.** Delegate to `superpowers:executing-plans` (or
-   `superpowers:subagent-driven-development` for parallel-friendly phases).
+2. **Implement** (`superpowers:executing-plans`, parallel phases: `subagent-driven-development`):
+   end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal.
 
 3. **Tick steps as you complete them:**
    ```bash

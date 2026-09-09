@@ -31,24 +31,43 @@ dispatch, so this should be unreachable; super-fr#420.)
 - the **plan dir** and **phase number** (`fr pickup <plan-dir> --phase N` gives
   the phase's tasks + steps);
 - the **spec** path;
-- the **journal handoff** — decisions, prior discoveries, and open findings,
-  rendered by `fr journal render` — which stands in for the orchestrator's
-  conversation history you do not inherit.
+- the **journal handoff** — the curated current state for this phase, composed by
+  `fr journal handoff --scope plan --slug <plan-slug> --phase N` (open findings and
+  relevant decisions/discoveries in full, unrelated fixed history collapsed) — which
+  stands in for the orchestrator's conversation history you do not inherit. The raw
+  `fr journal render` is the escape hatch, not the default: if the handoff is missing
+  anything you need to implement the phase, STOP and say so — do not guess (the
+  completeness of that handoff is the contract).
 
 ## What you do
 
-1. Read the phase scope, the spec, and the journal handoff. If the handoff is
-   missing anything you need to implement the phase, STOP and say so — do not
-   guess (the completeness of that handoff is the contract).
+1. Read the phase scope, the spec, and the journal handoff.
 2. Implement the phase **TDD** via `superpowers:test-driven-development` /
-   `fr-execute`: red → green → optional refactor, one task at a time. Run every
-   command through `fr isolation exec -- …` against the shared workspace.
+   `fr-execute`: red → green → refactor per task, one task at a time — or record
+   `no-refactor-because: P<n>.T<m>` in the plan journal when there is nothing to
+   clean. Run every command through `fr isolation exec -- …` against the shared
+   workspace.
 3. Tick steps and complete the phase with `fr plan edit` exactly as `fr-execute`
    prescribes. **Never open a PR** — the orchestrator owns delivery.
 4. Append what you learned to the plan journal as you go:
    `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding …`
    (findings carry `--state open|fixed|refuted`). This is the durable record
    the orchestrator reviews and the PR body is derived from.
+
+## Contract — the worktree has exactly one writer
+
+- **Single writer.** Phases run serially on one shared branch; "phase complete"
+  releases the worktree, orchestrator included. Never write while another writer
+  holds it.
+- **Tests never touch the repo under test.** Sandbox every test that needs a git
+  repo in a particular state (fr offers a ready-made assertion for this). A green
+  suite that mutates the checkout is a failure, not a pass.
+- **Attribute your own side effects.** Before reporting a repository change you did
+  not intend, check whether your own run caused it.
+- **Captures, never constructions.** A fixture for an external system is a capture
+  of the real thing, taken once — never built from a guess alongside the parser.
+- **The return value is the only reporting channel.** Report the structured result
+  back; do not also send it as a message (super-fr#461).
 
 ## What you return
 

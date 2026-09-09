@@ -65,18 +65,18 @@ pipeline from `plan` onward — one plan, one PR per repo.
 
 ### 3. plan — fr-plan, then review it
 Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the design). Keep
-TDD-shaped steps; fr-plan tags each phase a `tier`. `fr plan self-review` must pass and
-phases must read back against the spec. fr-plan's agentic-purity gate collects manual work
-into `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
-PR ships it unimplemented, operator pushes to the same PR);
-**front-load only when agentic work depends on it** (plan + review, open
-a spec+plan PR, pause for the operator's go). Multi-repo `depends_on` is within-plan only.
-Resolve with `--emitted plan=<path>`.
+TDD-shaped steps (red → green → refactor, or a `no-refactor-because:` journal justification);
+fr-plan tags each phase a `tier`. Phase 1 is the walking skeleton — CI green on a trivial test,
+minimum runtime exercised, external fixtures captured never constructed. `fr plan self-review`
+must pass and phases must read back against the spec. fr-plan's agentic-purity gate collects manual
+work into `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
+PR ships it unimplemented, operator pushes to the same PR); **front-load only when agentic work
+depends on it** (plan + review, open a spec+plan PR, pause for the operator's go). Multi-repo
+`depends_on` is within-plan only. Resolve with `--emitted plan=<path>`.
 
 ### 4. plan-review
 `fr run advance` runs `fr plan self-review {{ artifacts.plan }}` — deterministic, exit code
-is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli`
-steps self-complete).
+is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli` steps self-complete).
 
 ### 5. implement — grouped per-phase loop, journal-fed, TDD
 The run's workspace is the working copy (`fr isolation exec`); spec/plan aren't on main yet,
