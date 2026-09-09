@@ -42,8 +42,8 @@ the check finds, then continue.
 
 The journey itself is written down. A **workflow shape** is a small YAML file
 that lists the steps of a run — brainstorm, review the spec, plan, review the
-plan, implement, review, deliver — and `fr-goal` reads that file rather than
-containing the sequence in its own prose. Asking for `fr-goal` with no argument
+plan, implement (with a review running inside every phase), deliver — and `fr-goal`
+reads that file rather than containing the sequence in its own prose. Asking for `fr-goal` with no argument
 runs the shape described in this article: feature delivery, test first. Naming
 one, as in `fr-goal ux-research`, runs a different shape. A project can write
 shapes of its own, or replace a shipped one by saving a file of the same name
@@ -400,8 +400,9 @@ updated only when there is honest test evidence
 (`plugins/super-fr/skills/fr-goal/SKILL.md:81-95`,
 `plugins/super-fr/skills/fr-execute/SKILL.md:79-82`).
 
-At each completed phase, or after all implementation for a small plan, the
-agent reviews the spec, plan, and code together. It fixes every valid finding
+At each completed phase the agent reviews the spec, plan, and code together — the
+review is part of every phase iteration, not a single pass at the end. It fixes every
+valid finding
 with tests. It may reject a finding only with explicit, factual reasoning;
 silent dismissal is not allowed. Each finding is recorded as open, fixed, or
 refuted, and that durable list — not anyone's memory of the review — is what

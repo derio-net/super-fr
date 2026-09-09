@@ -19,6 +19,12 @@
 #    writes the run file inside the worktree. As a step it moved the
 #    ground out from under the run — the run file stayed in the base
 #    clone while every later step ran in the worktree.
+#
+# `implement` is a GROUPED `for_each`: `implement-phase` + `review-phase`
+# run inside every phase iteration, so review-and-fix is enforced per phase
+# by the cursor, not by prose. There is deliberately NO trailing single
+# `review` step — it is what the loop replaces. Runs started against the
+# flat shape hit manifest drift (by design) and start a new run.
 workflow: fr-goal
 schema: 1
 description: TDD feature delivery, goal to reviewed PR.
@@ -55,12 +61,18 @@ steps:
     for_each: phase
     tier: from_phase
     emits: [journal:plan]
-
-  - id: review
-    kind: agent
-    skill: superpowers:requesting-code-review
-    needs: [spec, plan]
-    emits: [journal:plan]
+    steps:
+      - id: implement-phase
+        kind: agent
+        agent: super-fr:fr-phase-executor
+        needs: [spec, plan]
+        tier: from_phase
+        emits: [journal:plan]
+      - id: review-phase
+        kind: agent
+        skill: superpowers:requesting-code-review
+        needs: [spec, plan, journal:plan]
+        emits: [journal:plan]
 
   - id: deliver
     kind: agent

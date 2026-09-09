@@ -142,7 +142,8 @@ def create_cmd(
 
     --phases-file YAML shape:
       - {number, title, tag (agentic|manual), depends_on: [N,...],
-         tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
+          skeleton (bool, walking-skeleton marker for the first agentic phase),
+          tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
       - ...
 
     --prose-file is the plan's narrative markdown. If omitted, a
@@ -163,6 +164,7 @@ def create_cmd(
                     depends_on=tuple(p.get("depends_on") or ()),
                     tasks=tuple(p.get("tasks") or ()),
                     acceptance=tuple(p.get("acceptance") or ()),
+                    skeleton=bool(p.get("skeleton", False)),
                 )
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"

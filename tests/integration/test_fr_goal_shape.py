@@ -60,11 +60,23 @@ def test_resolve_workflow_finds_the_shipped_fr_goal_manifest() -> None:
 
 
 def test_shipped_manifest_step_order_matches_the_skill_narration() -> None:
+    """Top-level manifest ids match the skill's numbered headers in order —
+    with one nesting-aware allowance: a header naming a MEMBER of the current
+    group (e.g. `review-phase` inside `implement`) is consumed as part of that
+    group rather than as a top-level step. A header naming nothing in the
+    manifest — or a manifest step nothing narrates — still fails."""
     manifest = resolve_workflow("fr-goal", REPO_ROOT, shipped_root=SHIPPED_WORKFLOWS_DIR)
-    manifest_ids = [s.id for s in manifest.steps]
     skill_ids = _skill_step_order()
     assert skill_ids, "SKILL.md has no numbered '### N. <step-id>' headers to compare against"
-    assert manifest_ids == skill_ids
+    remaining = list(skill_ids)
+    for step in manifest.steps:
+        assert remaining and remaining.pop(0) == step.id, (
+            f"manifest step {step.id!r} is not narrated next (remaining headers: {remaining})"
+        )
+        members = [m.id for m in step.steps]
+        while remaining and remaining[0] in members:
+            remaining.pop(0)
+    assert not remaining, f"skill headers narrate nothing in the manifest: {remaining}"
 
 
 def test_a_repo_authored_manifest_overrides_the_shipped_one_wholesale(tmp_path: Path) -> None:
@@ -266,3 +278,197 @@ def test_the_implement_steps_brief_tells_a_harness_to_fan_out_per_phase(tmp_path
     _fr(root, ["run", "resolve", "r1", "--step", "plan-review", "--state", "done"])  # refused
     state = load_run_state(root, "r1")
     assert state.steps["plan-review"].state == "pending", "a cli step is never resolved by hand"
+
+
+# ---------------------------------------------------------------------------
+# The grouped shape walks end to end (methodology restoration, phase 5):
+# implement → review inside every phase iteration, then deliver.
+# ---------------------------------------------------------------------------
+
+
+def _toy_plan(root: Path) -> str:
+    """A 3-phase toy plan that passes its own gates: skeleton-marked phase 1,
+    single-step tasks (refactor-exempt), no Test Plan (no linkage needed)."""
+    from fr.plan_ops import PhaseSpec, create
+
+    slug = "2026-09-09-toy-walk"
+    create(
+        repo_root=root,
+        slug=slug,
+        spec="docs/spec.md",
+        target_repo="derio-net/super-fr",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=n,
+                title=f"Phase {n}",
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": f"P{n}.T1.S1", "text": "Run the checks"}],
+                    },
+                ),
+                skeleton=(n == 1),
+            )
+            for n in (1, 2, 3)
+        ],
+        prose="# toy\n",
+    )
+    return f"docs/superpowers/plans/{slug}"
+
+
+def _walk_brief(output: str) -> dict:
+    return json.loads(output[output.index("{") :])
+
+
+def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path) -> None:
+    """The operator-visible proof: review fires inside every phase iteration
+    (the next brief after an implement return is that phase's review, never
+    the next phase's implement), the write-claim refuses interleaving, and
+    the run reaches `deliver` with per-unit accounting behind it."""
+    root = _workspace(tmp_path, "feat/walk")
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "spec.md").write_text(
+        "# spec\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+    plan_rel = _toy_plan(root)
+
+    assert _fr(root, ["run", "start", "fr-goal", "--branch", "feat/walk", "--run-id", "r1"])
+    _fr(root, ["run", "advance", "r1"])  # brainstorm: gate + brief
+    assert (
+        _fr(
+            root,
+            [
+                "run",
+                "resolve",
+                "r1",
+                "--step",
+                "brainstorm",
+                "--state",
+                "done",
+                "--emitted",
+                "spec=docs/spec.md",
+            ],
+        ).exit_code
+        == 0
+    )
+    _fr(root, ["run", "advance", "r1"])  # spec-review brief
+    assert (
+        _fr(root, ["run", "resolve", "r1", "--step", "spec-review", "--state", "done"]).exit_code
+        == 0
+    )
+    _fr(root, ["run", "advance", "r1"])  # plan brief
+    assert (
+        _fr(
+            root,
+            [
+                "run",
+                "resolve",
+                "r1",
+                "--step",
+                "plan",
+                "--state",
+                "done",
+                "--emitted",
+                f"plan={plan_rel}",
+            ],
+        ).exit_code
+        == 0
+    )
+    # plan-review EXECUTES the real self-review: the skeleton-marked,
+    # single-step toy plan passes it.
+    assert _fr(root, ["run", "advance", "r1"]).exit_code == 0
+    assert load_run_state(root, "r1").cursor == "implement"
+
+    seen: list[tuple[str, str]] = []
+    for n in (1, 2, 3):
+        for member in ("implement-phase", "review-phase"):
+            out = _fr(root, ["run", "advance", "r1"])
+            assert out.exit_code == 0, out.output
+            brief = _walk_brief(out.output)
+            assert (brief["step"], brief["item"]) == (member, f"phase/{n}"), out.output
+            seen.append((member, f"phase/{n}"))
+            if n == 1 and member == "implement-phase":
+                # The write-claim, live: resolving the review while the
+                # implement is still outstanding is a second writer.
+                clash = _fr(
+                    root,
+                    [
+                        "run",
+                        "resolve",
+                        "r1",
+                        "--step",
+                        "review-phase",
+                        "--item",
+                        "phase/1",
+                        "--state",
+                        "done",
+                    ],
+                )
+                assert clash.exit_code == 2, clash.output
+                assert "phase/1/implement-phase" in clash.output
+            assert (
+                _fr(
+                    root,
+                    [
+                        "run",
+                        "resolve",
+                        "r1",
+                        "--step",
+                        member,
+                        "--item",
+                        f"phase/{n}",
+                        "--state",
+                        "done",
+                    ],
+                ).exit_code
+                == 0
+            )
+
+    assert seen == [
+        ("implement-phase", "phase/1"),
+        ("review-phase", "phase/1"),
+        ("implement-phase", "phase/2"),
+        ("review-phase", "phase/2"),
+        ("implement-phase", "phase/3"),
+        ("review-phase", "phase/3"),
+    ]
+    state = load_run_state(root, "r1")
+    assert state.cursor == "deliver"
+    assert state.steps["implement"].state == "done"
+    assert len(state.accounting or {}) == 6
+
+    out = _fr(root, ["run", "advance", "r1"])  # deliver brief
+    assert out.exit_code == 0, out.output
+    assert _walk_brief(out.output)["step"] == "deliver"
+    assert (
+        _fr(
+            root,
+            [
+                "run",
+                "resolve",
+                "r1",
+                "--step",
+                "deliver",
+                "--state",
+                "done",
+                "--emitted",
+                "pr=https://example.com/pr/1",
+            ],
+        ).exit_code
+        == 0
+    )
+    done = load_run_state(root, "r1")
+    assert done.cursor == "deliver"
+    assert done.steps["deliver"].state == "done"
+
+    # The toy journal carries no findings — the freshness gate is clean.
+    assert (
+        _fr(
+            root, ["journal", "check", "--scope", "plan", "--slug", "2026-09-09-toy-walk"]
+        ).exit_code
+        == 0
+    )

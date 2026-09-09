@@ -380,3 +380,139 @@ class TestReadsResolveArchivedLocation:
             app, ["journal", "check", "--scope", "spec", "--slug", "2026-07-24-arch"]
         )
         assert res.exit_code != 0, res.output
+
+
+class TestHandoff:
+    """`fr journal handoff` — the curated executor brief (methodology
+    restoration): dependency-scoped composition over the raw journal."""
+
+    def _write_plan(self, root: Path, slug: str = "H") -> Path:
+        from fr.plan_ops import PhaseSpec, create
+
+        (root / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
+        create(
+            repo_root=root,
+            slug=slug,
+            spec=None,
+            target_repo="derio-net/test",
+            fr_version=">=3.0.0,<5.0.0",
+            phases=[
+                PhaseSpec(number=1, title="One", tasks=()),
+                PhaseSpec(number=2, title="Two", depends_on=(1,), tasks=()),
+            ],
+            prose="# x\n",
+        )
+        return root / "docs" / "superpowers" / "plans" / slug
+
+    def _write_journal(self, root: Path, slug: str = "H") -> None:
+        from fr.journal.model import JournalEntry, journal_path, serialize_entry
+
+        def e(eid, kind, title, body, phase=None, state=None):
+            return serialize_entry(
+                JournalEntry(
+                    kind=kind,  # type: ignore[arg-type]
+                    scope="plan",  # type: ignore[arg-type]
+                    id=eid,
+                    created="2026-09-09T00:00:00",
+                    phase=phase,
+                    title=title,
+                    body=body,
+                    state=state,  # type: ignore[arg-type]
+                )
+            )
+
+        path = journal_path(root, "plan", slug)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "# Journal: H\n\n"
+            + e("o9", "finding", "Open elsewhere", "actionable anywhere", phase=9, state="open")
+            + "\n"
+            + e("d1", "decision", "Dep decision", "why we did it", phase=1)
+            + "\n"
+            + e("d5", "decision", "Far decision", "unrelated rationale", phase=5)
+            + "\n"
+            + e("f5", "finding", "Fixed elsewhere", "ancient detail", phase=5, state="fixed")
+        )
+
+    def _handoff(self, phase: str = "2", extra: list | None = None):
+        argv = ["journal", "handoff", "--scope", "plan", "--slug", "H", "--phase", phase]
+        return runner.invoke(app, argv + (extra or []))
+
+    def test_handoff_composes_dependency_scoped_brief(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root)
+        self._write_journal(root)
+
+        res = self._handoff()
+
+        assert res.exit_code == 0, res.output
+        assert "actionable anywhere" in res.output  # open: full
+        assert "why we did it" in res.output  # dep decision: full
+        assert "Far decision" in res.output  # far: collapsed, title kept
+        assert "unrelated rationale" not in res.output
+        assert "Fixed elsewhere" in res.output
+        assert "ancient detail" not in res.output
+        assert "fr journal render --scope plan --slug H" in res.output
+
+    def test_handoff_missing_journal_fails_open(self, tmp_path: Path, monkeypatch) -> None:
+        from fr.journal.model import journal_path
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root)
+        # `create` seeds a plan journal — remove it: a journal never written
+        # is nothing to curate (empty output, exit 0).
+        journal_path(root, "plan", "H").unlink()
+
+        res = self._handoff()
+
+        assert res.exit_code == 0, res.output
+        assert res.output.strip() == ""
+
+    def test_handoff_malformed_journal_fails_closed(self, tmp_path: Path, monkeypatch) -> None:
+        """Unlike `render` (PR-body feed, fail-open), the handoff feeds an
+        executor brief — a silently-empty handoff makes the executor guess."""
+        from fr.journal.model import journal_path
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root)
+        path = journal_path(root, "plan", "H")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("<!-- fr:journal broken header -->\n")
+
+        res = self._handoff()
+
+        assert res.exit_code == 2, res.output
+
+    def test_handoff_missing_plan_fails_closed(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_journal(root)
+
+        res = self._handoff()
+
+        assert res.exit_code == 2, res.output
+        assert "H" in res.output
+
+    def test_handoff_unknown_phase_is_refused(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root)
+        self._write_journal(root)
+
+        res = self._handoff(phase="9")
+
+        assert res.exit_code == 2, res.output
+        assert "phase 9" in res.output
+
+    def test_handoff_refuses_non_plan_scope(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(
+            app, ["journal", "handoff", "--scope", "spec", "--slug", "S", "--phase", "1"]
+        )
+
+        assert res.exit_code == 2, res.output

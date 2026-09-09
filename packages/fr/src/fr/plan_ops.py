@@ -110,6 +110,9 @@ class PhaseSpec:
     tasks: tuple[TaskSpec, ...] = ()
     # Acceptance-matrix row ids (2026-07-04 spec) — emitted only when set.
     acceptance: tuple[str, ...] = ()
+    # Walking-skeleton marker — emitted only when set (same byte-stability
+    # rule as `acceptance`).
+    skeleton: bool = False
 
 
 def create(
@@ -289,6 +292,9 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
     if ps.acceptance:
         # Omitted when empty so pre-acceptance plans stay byte-stable.
         phase_header["acceptance"] = list(ps.acceptance)
+    if ps.skeleton:
+        # Omitted when unset so pre-marker plans stay byte-stable.
+        phase_header["skeleton"] = True
     return {
         "schema_version": 2,
         "phase": phase_header,
@@ -819,6 +825,9 @@ def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[Rewo
 # agentic phase must be fully agent-completable. The note either names a
 # later phase ("Executed in Phase 5") or uses a defer-phrase.
 _PHASE_REF_NOTE_RE = re.compile(r"[Pp]hase\s+(\d+)")
+_TASK_ID_RE = re.compile(r"p\d+\.t\d+")
+"""Task ids (`P<n>.T<m>`) inside journal justifications — matched casefolded,
+so `P1.T1`, `p1.t1` and a trailing comma all resolve; uppercased at use."""
 _DEFER_PHRASES = ("defer", "executed in", "moved to")
 
 # Part 2 of the gate: manual-operation language in a pending agentic step.
@@ -949,6 +958,14 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
 
     # Acceptance linkage (2026-07-04 acceptance-matrix spec, decision 2).
     issues.extend(_acceptance_link_issues(plan))
+
+    # Walking-skeleton gate (fr-goal methodology restoration): the first
+    # agentic phase is the delivery-infrastructure smoke.
+    issues.extend(_skeleton_issues(plan))
+
+    # Refactor-or-justify gate (fr-goal methodology restoration): every
+    # multi-step task ends red → green → refactor, or records why not.
+    issues.extend(_refactor_issues(plan))
 
     # Same-repo-form spec that doesn't resolve locally (#248): almost always a
     # malformed cross-repo ref missing the `owner/repo:` prefix, which apply's
@@ -1129,3 +1146,190 @@ def _has_cycle(graph: dict[int, set[int]], start: int) -> bool:
                 return True
             stack.append((dep, ancestors | {dep}))
     return False
+
+
+def _skeleton_issues(plan: Plan) -> list[ReviewIssue]:
+    """Walking-skeleton gate (fr-goal methodology restoration): the FIRST
+    agentic phase is the delivery-infrastructure smoke, so verification lands
+    before the expensive part. Later work builds on verified ground — a
+    skeleton marker anywhere else is a mis-scoped plan.
+
+    The marker is `skeleton: true` on the phase header (additive, defaulted,
+    omitted when unset — the `acceptance`/`tier` precedent). The one override
+    is an explicit operator decision at spec scope, ided
+    `skeleton-override-<plan-slug>`: plans with no runtime to smoke (docs,
+    framework internals exercised by the existing suite) say so on the
+    record instead of marking a phase dishonestly.
+    """
+    first: int | None = None
+    marked: list[int] = []
+    for ph in plan.phases:
+        if ph.phase.tag != "agentic":
+            continue
+        if first is None:
+            first = ph.phase.number
+        if ph.phase.skeleton:
+            marked.append(ph.phase.number)
+    if first is None:
+        return []  # no agentic phase: nothing to build on, nothing to smoke
+    out: list[ReviewIssue] = []
+    misplaced = [n for n in marked if n != first]
+    if misplaced:
+        out.append(
+            ReviewIssue(
+                severity="error",
+                message=(
+                    f"phase {misplaced[0]} carries the skeleton marker, but phase "
+                    f"{first} is the first agentic phase — the walking skeleton "
+                    f"belongs there; later work builds on verified ground."
+                ),
+            )
+        )
+    if first not in marked and not _skeleton_overridden(plan):
+        out.append(
+            ReviewIssue(
+                severity="error",
+                message=(
+                    f"phase {first} is the first agentic phase but carries no "
+                    f"skeleton marker — mark it (`skeleton: true` in the phase "
+                    f"header) so CI smokes before the expensive phases, or log "
+                    f"an operator override: `fr journal add --scope spec "
+                    f"--slug <spec-slug> --kind decision "
+                    f"--id skeleton-override-{plan.meta.plan} --title <why> "
+                    f"--body <why-no-smoke-applies>`."
+                ),
+            )
+        )
+    if marked and plan.meta.fr_version:
+        # Same floor probe as `acceptance:` (#352 review): a plan that marks a
+        # skeleton while its fr_version admits a pre-marker fr passes here and
+        # dies on a raw "extra field" pydantic error over there.
+        from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
+        try:
+            if SpecifierSet(plan.meta.fr_version).contains("4.1.1", prereleases=True):
+                out.append(
+                    ReviewIssue(
+                        severity="warn",
+                        message=(
+                            "a phase marks the skeleton but fr_version "
+                            f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
+                            "floor it at '>=4.2.0,<5.0.0'."
+                        ),
+                    )
+                )
+        except InvalidSpecifier:
+            pass  # the parser already fails loud on malformed constraints
+    return out
+
+
+def _skeleton_overridden(plan: Plan) -> bool:
+    """True iff the spec-scope journal carries the override decision for this
+    plan. Missing/unparseable journal (or a repo-less plan) is not an override
+    — the gate fails closed toward marking the skeleton; the journal's own
+    `fr journal check` owns malformed files."""
+    from fr.journal.model import (
+        JournalParseError,
+        parse_journal,
+        resolve_journal_read_path,
+        spec_journal_slug,
+    )
+
+    root = plan.repo_root
+    spec = plan.meta.spec
+    if root is None or not spec or spec in ("none", "null", "—", "-"):
+        return False
+    if is_cross_repo_spec(spec):
+        # A cross-repo spec keeps its journal in its own repo — nothing local
+        # to consult, so no local override.
+        return False
+    stem = spec.rsplit("/", 1)[-1]
+    if not stem.endswith(".md"):
+        return False
+    # Read-resolve (active else archived), like `render`/`check`: the override
+    # outlives the spec it was logged against.
+    path = resolve_journal_read_path(root, "spec", spec_journal_slug(stem[: -len(".md")]))
+    if not path.is_file():
+        return False
+    try:
+        entries = parse_journal(path.read_text())
+    except JournalParseError:
+        return False
+    want = f"skeleton-override-{plan.meta.plan}"
+    return any(e.kind == "decision" and e.id == want for e in entries)
+
+
+def _refactor_issues(plan: Plan) -> list[ReviewIssue]:
+    """Refactor-or-justify gate (fr-goal methodology restoration): a task that
+    ran red → green ends with a refactor step, or records a
+    `no-refactor-because:` justification in the plan journal.
+
+    Three exemptions, each with a reason: manual phases (runbook work has
+    nothing to extract), single-step tasks (fr-plan omits the refactor step
+    when there is nothing to clean — a trivial task carries no empty one),
+    and fully-ticked tasks (done is done; historical and mid-flight plans
+    must not retro-error, the same exemption the purity gate gives completed
+    steps). A missing/unparseable journal is not a justification — the
+    journal's own `fr journal check` owns malformed files.
+    """
+    out: list[ReviewIssue] = []
+    justifications = _refactor_justifications(plan)
+    for ph in plan.phases:
+        if ph.phase.tag != "agentic":
+            continue
+        n = ph.phase.number
+        for task in ph.tasks:
+            if len(task.steps) < 2:
+                continue
+            states = ph.state.steps
+            if all(
+                (states.get(s.id) is not None and states[s.id].state == "x") for s in task.steps
+            ):
+                continue
+            if any("refactor" in s.text.casefold() for s in task.steps):
+                continue
+            task_id = f"P{n}.T{task.number}"
+            if task_id in justifications:
+                continue
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} task {task_id} has no refactor step and no "
+                        f"no-refactor-because justification — add a refactor step "
+                        f"or record one: `fr journal add --scope plan "
+                        f"--slug {plan.meta.plan} --kind discovery "
+                        f"--title 'no-refactor-because {task_id}' --body <reason>`."
+                    ),
+                )
+            )
+    return out
+
+
+def _refactor_justifications(plan: Plan) -> set[str]:
+    """Task ids (`P<n>.T<m>`) with a recorded `no-refactor-because`
+    justification: a plan-scope discovery/decision whose title or body
+    carries both the marker and the id."""
+    from fr.journal.model import JournalParseError, parse_journal, resolve_journal_read_path
+
+    root = plan.repo_root
+    if root is None:
+        return set()
+    # Read-resolve (active else archived), like the skeleton override: a
+    # justification outlives the plan it was logged against.
+    path = resolve_journal_read_path(root, "plan", plan.meta.plan)
+    if not path.is_file():
+        return set()
+    try:
+        entries = parse_journal(path.read_text())
+    except JournalParseError:
+        return set()
+    found: set[str] = set()
+    for e in entries:
+        if e.kind not in ("discovery", "decision"):
+            continue
+        hay = f"{e.title}\n{e.body}".casefold()
+        if "no-refactor-because" not in hay:
+            continue
+        found.update(m.group(0).upper() for m in _TASK_ID_RE.finditer(hay))
+    return found

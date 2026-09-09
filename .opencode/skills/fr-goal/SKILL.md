@@ -65,53 +65,53 @@ pipeline from `plan` onward — one plan, one PR per repo.
 
 ### 3. plan — fr-plan, then review it
 Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the design). Keep
-TDD-shaped steps; fr-plan tags each phase a `tier`. `fr plan self-review` must pass and
-phases must read back against the spec. fr-plan's agentic-purity gate collects manual work
-into `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
-PR ships it unimplemented, operator pushes to the same PR);
-**front-load only when agentic work depends on it** (plan + review, open
-a spec+plan PR, pause for the operator's go). Multi-repo `depends_on` is within-plan only.
-Resolve with `--emitted plan=<path>`.
+TDD-shaped steps (red → green → refactor, or a `no-refactor-because:` journal justification);
+fr-plan tags each phase a `tier`. Phase 1 is the walking skeleton — CI green on a trivial test,
+minimum runtime exercised, external fixtures captured never constructed. `fr plan self-review`
+must pass and phases must read back against the spec. fr-plan's agentic-purity gate collects manual
+work into `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
+PR ships it unimplemented, operator pushes to the same PR); **front-load only when agentic work
+depends on it** (plan + review, open a spec+plan PR, pause for the operator's go). Multi-repo
+`depends_on` is within-plan only. Resolve with `--emitted plan=<path>`.
 
 ### 4. plan-review
 `fr run advance` runs `fr plan self-review {{ artifacts.plan }}` — deterministic, exit code
-is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli`
-steps self-complete).
+is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli` steps self-complete).
 
-### 5. implement — one subagent per phase, journal-fed, TDD
+### 5. implement — grouped per-phase loop, journal-fed, TDD
 The run's workspace is the working copy (`fr isolation exec`); spec/plan aren't on main yet,
-so NOT dispatched (`fr apply --yes` refuses). Per phase in dependency order, dispatch ONE
-phase-executor, brief = `fr pickup` + spec + `fr journal render --scope plan`: TDD
-(`superpowers:test-driven-development`), journals discoveries/findings (`fr journal add`),
-ticks steps / completes the phase, returns a structured result — the journal IS the handoff.
-Model = phase `tier` via `fr models resolve --harness <h>` (unbound → set at step 1);
-blocked → run inline; never a manual phase. **Harness — dispatch:** Claude Code uses the
-`fr-phase-executor` Agent **without `isolation: "worktree"`** — not "needn't", **mustn't**
-(#420, hook-refused): the flag cuts a *second* worktree from main where spec/plan are
-invisible and writes are denied, yet the dispatch succeeds, so the run looks healthy while
-nothing happens. The two isolations don't compose. (Contrast §2's cross-repo agents, which *keep* the flag — each starts a fresh pipeline in a different repo; these share this one's workspace.) Hermes calls `delegate_task(goal,
-context)` with the brief in `context`, serial; child loads `fr-execute`. **Push the branch
-ONLY — never open the PR**: opening here reorders `deliver` ahead of `review`, orphaning
-fixes onto a merged branch (#320, 3×). Resolve `implement` done only once every phase lands.
+so NOT dispatched (`fr apply --yes` refuses). `implement` is a grouped `for_each`: per phase in
+dependency order, dispatch ONE phase-executor for `implement-phase` — brief = `fr pickup` + spec
++ `fr journal handoff --scope plan --phase N`: TDD (`superpowers:test-driven-development`),
+journals discoveries/findings (`fr journal add`), ticks steps / completes the phase, returns a
+structured result — the handoff IS the context. Model = phase `tier` via `fr models resolve
+--harness <h>` (unbound → set at step 1); blocked → run inline; never a manual phase.
+**Harness — dispatch:** Claude Code uses the `fr-phase-executor` Agent without `isolation: "worktree"`
+— not "needn't", **mustn't** (#420, hook-refused): the flag cuts a *second* worktree from main
+where spec/plan are invisible and writes are denied, yet the dispatch succeeds, so the run looks
+healthy while nothing happens. The two isolations don't compose. (Contrast §2's cross-repo agents,
+which *keep* the flag — each starts a fresh pipeline in a different repo; these share this one's
+workspace.) Hermes `delegate_task(goal, context)` carries the brief in `context`, serial; child loads
+`fr-execute`. An executor that both returns and messages: keep the return, log the drop, move on (#461).
 
-### 6. review — fix everything found
-After each milestone (completed phase, or full implementation for small plans), invoke
-`superpowers:requesting-code-review` over spec + plan + code. Fix every finding with tests;
-a wrong one gets refuting reasoning (`superpowers:receiving-code-review`), never a silent
-drop. Record each as a plan-scope `finding` (`--state open|fixed|refuted`) — `deliver`
-derives the PR body from this durable list.
+### 6. review-phase — per phase, inside the loop, then push (never a PR)
+After each `implement-phase` return, run `review-phase`: `superpowers:requesting-code-review` over
+spec + plan + code; fix every finding with tests (a wrong one gets refuting reasoning via
+`superpowers:receiving-code-review`, never a silent drop); record each as a plan-scope `finding`
+(`--state open|fixed|refuted`) — the next phase's handoff includes them, `deliver` derives the PR
+body from the durable list. **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
 
 ### 7. deliver — one PR per repo, all artifacts aboard
-Verify first (`superpowers:verification-before-completion`): full test-suite output,
-self-review pass, steps ticked, `fr journal check
---scope plan` clean. Open the **draft** PR ("Draft" = do not merge):
-summary + spec/plan paths; findings + fixes (+ refutations) and decisions via `fr journal
-render --scope plan --section findings`/`decisions`; the back-loaded manual phase marked
-"unimplemented — operator pushes to this PR"; the Test Plan verbatim ("post-merge —
+Verify first (`superpowers:verification-before-completion`): full test-suite output, self-review
+pass, steps ticked, `fr journal check --scope plan` clean. Open the **draft** PR ("Draft" = do not merge):
+summary + spec/plan paths; findings + fixes (+ refutations) and decisions via
+`fr journal render --scope plan --section findings`/`decisions`; the back-loaded manual phase
+marked "unimplemented — operator pushes to this PR"; the Test Plan verbatim ("post-merge —
 operator-driven"); acceptance debt (`fr acceptance status`) and rows-added-since-brainstorm
-(`fr acceptance check --added-since origin/main`), each with a one-line defense. Mergeable
-ONLY now (after step 6's fixes): `gh pr ready` — never say "ready to merge" before this.
-Resolve `deliver` done; nothing follows it. Stop; the operator merges.
+(`fr acceptance check --added-since origin/main`), each with a one-line defense. The body carries a
+Ready-checklist guard (CI green, explicit review ok, no commits since the ok). ONLY when all three
+hold: `gh pr ready`, remove the guard — never say "ready to merge" before this, never self-merge,
+never flip it manually. Resolve `deliver` done; nothing follows it. Stop; the operator merges.
 
 ### Post-merge close-out
 When the operator reports the merge: **first verify it reached `main`** via `fr isolation

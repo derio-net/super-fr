@@ -10,11 +10,13 @@ exists: duplicate step ids, a `kind: cli` step with no `run:` command,
 needs/emits graph, a capability name outside the closed set, and a
 `for_each` that contradicts its manifest's `unit`.
 
-`check_workflow` is pure — no I/O, no exit codes. `fr workflow check`
-(`fr.commands.workflow_cmd`) is the one place a `WorkflowError` (parse-time)
-and this module's error list (semantic) are reported through the same
-exit-1 shape, so an operator never has to know which layer a given shape
-failed at.
+Nested `for_each` groups (the per-phase implement+review loop) are checked
+in the same pass over a flattened id space: member ids share the duplicate
+namespace with top-level ids, a member's `needs` resolve against earlier
+siblings plus everything the group's own `needs` already proved available,
+and cycles are detected across the flattened graph. The group boundary is
+the downstream contract — a member's `emits` feed later siblings, but only
+the group's `emits` feed later top-level steps.
 """
 
 from __future__ import annotations
@@ -26,43 +28,86 @@ from fr.workflow.model import Step, WorkflowManifest
 __all__ = ["check_workflow"]
 
 
+def _flatten(steps: tuple[Step, ...]) -> list[tuple[Step, Step | None]]:
+    """Every step as `(step, parent)` — parent `None` for top-level steps."""
+    flat: list[tuple[Step, Step | None]] = []
+    for step in steps:
+        flat.append((step, None))
+        for member in step.steps:
+            flat.append((member, step))
+    return flat
+
+
 def check_workflow(manifest: WorkflowManifest) -> list[str]:
     """Every problem with `manifest`, as human-readable strings. Empty = clean."""
+    flat = _flatten(manifest.steps)
     errors: list[str] = []
-    errors.extend(_duplicate_step_ids(manifest.steps))
-    errors.extend(_cli_steps_without_a_command(manifest.steps))
+    errors.extend(_duplicate_step_ids(flat))
+    errors.extend(_cli_steps_without_a_command(flat))
+    errors.extend(_nest_placement(manifest.steps))
     errors.extend(_dangling_needs(manifest.steps, manifest.unit))
-    errors.extend(_cycles(manifest.steps))
+    errors.extend(_cycles(flat))
     errors.extend(_unknown_capabilities(manifest.requires))
     errors.extend(_for_each_unit_conflicts(manifest))
     return errors
 
 
-def _duplicate_step_ids(steps: tuple[Step, ...]) -> list[str]:
+def _duplicate_step_ids(flat: list[tuple[Step, Step | None]]) -> list[str]:
+    """Duplicate ids across the flattened space — a member colliding with a
+    top-level id (or a sibling) would make the run cursor ambiguous."""
     seen: set[str] = set()
     errors: list[str] = []
-    for step in steps:
+    for step, _parent in flat:
         if step.id in seen:
             errors.append(f"duplicate step id: {step.id!r}")
         seen.add(step.id)
     return errors
 
 
-def _cli_steps_without_a_command(steps: tuple[Step, ...]) -> list[str]:
+def _cli_steps_without_a_command(flat: list[tuple[Step, Step | None]]) -> list[str]:
     """`kind: cli` with no `run:` is a step that cannot do anything.
 
     `Step.run` is optional because `agent` steps have none, so the schema
     alone cannot express "cli implies run". Left unchecked it is worse than
     a crash: `advance` rendered `""`, `subprocess.run("", shell=True)` exited
-    0, and the run reported a green step that executed nothing and moved the
+    0, and the run reported a green step that did nothing and moved the
     cursor on. `fr run advance` refuses it at runtime too — an authored
     manifest is caught here, a hand-built `WorkflowManifest` there.
     """
     return [
         f"step {step.id!r} is kind: cli but declares no `run:` command"
-        for step in steps
+        for step, _parent in flat
         if step.kind == "cli" and not (step.run or "").strip()
     ]
+
+
+def _nest_placement(steps: tuple[Step, ...]) -> list[str]:
+    """Nesting is one level deep under a `for_each` step, nothing more.
+
+    Members on a step without `for_each` have no fan-out to iterate inside;
+    a member with its own `for_each` (or `steps`) would fan out per phase of
+    itself — the same nonsense `_for_each_unit_conflicts` rejects for
+    `unit: phase` shapes, one level down.
+    """
+    errors: list[str] = []
+    for step in steps:
+        if step.steps and step.for_each is None:
+            errors.append(
+                f"step {step.id!r} declares member steps but no `for_each:` — "
+                "members only iterate inside a fan-out scope"
+            )
+        for member in step.steps:
+            if member.for_each is not None:
+                errors.append(
+                    f"step {member.id!r} sets for_each: {member.for_each!r} inside "
+                    f"step {step.id!r} — nesting is one level deep"
+                )
+            if member.steps:
+                errors.append(
+                    f"step {member.id!r} declares member steps inside step "
+                    f"{step.id!r} — nesting is one level deep"
+                )
+    return errors
 
 
 def _dangling_needs(steps: tuple[Step, ...], unit: str) -> list[str]:
@@ -83,12 +128,34 @@ def _dangling_needs(steps: tuple[Step, ...], unit: str) -> list[str]:
     for step in steps:
         for artifact in step.needs:
             if artifact not in emitted_so_far:
-                errors.append(f"step {step.id!r} needs {artifact!r} but no earlier step emits it")
+                errors.append(_need_error(step.id, artifact))
         emitted_so_far.update(step.emits)
+        # A member's `needs` resolve against earlier siblings plus everything
+        # the group's own (already validated) `needs` proved available — the
+        # group boundary is the downstream contract, so only the group's
+        # `emits` feed later top-level steps, never a member's.
+        for member in step.steps:
+            for artifact in member.needs:
+                if artifact not in emitted_so_far:
+                    errors.append(_need_error(member.id, artifact))
+            emitted_so_far.update(member.emits)
+        emitted_so_far.difference_update(_member_only_emits(step))
     return errors
 
 
-def _cycles(steps: tuple[Step, ...]) -> list[str]:
+def _need_error(step_id: str, artifact: str) -> str:
+    return f"step {step_id!r} needs {artifact!r} but no earlier step emits it"
+
+
+def _member_only_emits(step: Step) -> set[str]:
+    """Artifacts a member emits that the group does not re-emit — visible to
+    later siblings while the group is being walked, withdrawn afterwards so
+    the group boundary stays the downstream contract."""
+    group_emits = set(step.emits)
+    return {a for m in step.steps for a in m.emits} - group_emits
+
+
+def _cycles(flat: list[tuple[Step, Step | None]]) -> list[str]:
     """A cycle in the needs/emits graph, independent of list order.
 
     Builds edges producer -> consumer for every (artifact, step) pair where
@@ -97,15 +164,16 @@ def _cycles(steps: tuple[Step, ...]) -> list[str]:
     only ever report as one-sided "dangling" errors, never name as a cycle.
     Reports at most one cycle (deterministic — steps and neighbours are
     walked in sorted-id order); a validator's job is "reject", not
-    "enumerate every cycle".
+    "enumerate every cycle". Members share the flattened id space, so a
+    cyclic nest is caught the same way.
     """
     emitters: dict[str, list[str]] = {}
-    for step in steps:
+    for step, _parent in flat:
         for artifact in step.emits:
             emitters.setdefault(artifact, []).append(step.id)
 
-    graph: dict[str, set[str]] = {step.id: set() for step in steps}
-    for step in steps:
+    graph: dict[str, set[str]] = {step.id: set() for step, _parent in flat}
+    for step, _parent in flat:
         for artifact in step.needs:
             for producer in emitters.get(artifact, ()):
                 if producer != step.id:

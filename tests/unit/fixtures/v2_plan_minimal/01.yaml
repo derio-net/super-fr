@@ -5,6 +5,7 @@ phase:
   tag: agentic
   depends_on: []
   tracking_issue: null
+  skeleton: true
 tasks:
   - number: 1
     title: Fixture task

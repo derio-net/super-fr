@@ -44,7 +44,7 @@ import datetime as _dt
 import re
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from fr.parser import Plan, PlanSchemaError, parse
@@ -69,6 +69,7 @@ __all__ = [
     "adoption_offer_lines",
     "default_pr_state",
     "infer_adoption",
+    "plan_phase_numbers",
 ]
 
 DEFAULT_WORKFLOW = "fr-goal"
@@ -212,6 +213,23 @@ def _fan_out_step(manifest: WorkflowManifest) -> str | None:
     return None
 
 
+def plan_phase_numbers(repo_root: Path, plan_rel: str) -> list[int]:
+    """Sorted phase numbers of the plan at repo-relative `plan_rel`.
+
+    The grouped `for_each` cursor (`fr.commands.run_cmd`) enumerates its
+    expected `phase/<n>/<member>` items from here — the plan on disk is the
+    one source of which phases exist, so a phase added mid-run is a new item,
+    not a silent skip. Raises `AdoptError` naming the path when the plan
+    cannot be parsed (fail-closed, like every other unreadable-artifact path
+    in this package).
+    """
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError as e:
+        raise AdoptError(f"{plan_rel} is not a parseable plan: {e}") from e
+    return sorted(p.phase.number for p in plan.phases)
+
+
 def build_run_state(
     manifest: WorkflowManifest,
     adoption: Adoption,
@@ -235,14 +253,36 @@ def build_run_state(
     and losing it to a shape's authoring choice would strand the plan.
     """
     ids = [s.id for s in manifest.steps]
-    if adoption.cursor not in ids:
+    group_id = _fan_out_step(manifest)
+    group = next((s for s in manifest.steps if s.id == group_id), None)
+    grouped = group is not None and bool(group.steps)
+    cursor = adoption.cursor
+    if cursor == "review" and "review" not in ids and grouped:
+        # A grouped shape has no trailing `review` step — per-phase review
+        # lives INSIDE the fan-out. An all-complete plan would otherwise be
+        # unadoptable ("no step 'review'"), so the cursor lands on the group
+        # with the review members still pending; the next `advance` dispatches
+        # them. Fail soft, downward, per `infer_adoption`'s doctrine.
+        assert group is not None
+        cursor = group.id
+        adoption = replace(
+            adoption,
+            cursor=cursor,
+            notes=adoption.notes
+            + (
+                "every phase is implement-complete but the shape reviews "
+                f"per phase inside {cursor!r} — the cursor lands there with "
+                "the review members pending.",
+            ),
+        )
+    if cursor not in ids:
         raise AdoptError(
-            f"workflow {manifest.workflow!r} has no step {adoption.cursor!r} — the "
+            f"workflow {manifest.workflow!r} has no step {cursor!r} — the "
             f"observed state infers that cursor (steps: {', '.join(ids)}). A `unit: "
             f"{manifest.unit}` shape is not a run-level shape; adopt against a "
             f"`unit: run` shape such as {DEFAULT_WORKFLOW!r}."
         )
-    cursor_index = ids.index(adoption.cursor)
+    cursor_index = ids.index(cursor)
 
     emitted: dict[str, dict[str, str]] = {}
     for artifact, value in (("spec", adoption.spec), ("plan", adoption.plan), ("pr", adoption.pr)):
@@ -251,13 +291,24 @@ def build_run_state(
         target = _step_emitting(manifest, artifact) or adoption.cursor
         emitted.setdefault(target, {})[artifact] = value
 
-    items_step = (_fan_out_step(manifest) or adoption.cursor) if adoption.phases else None
+    items_step = (group_id or cursor) if adoption.phases else None
+    if grouped and adoption.phases:
+        # Adoption reconstructs implement progress, never review outcomes: a
+        # ticked-complete phase proves its implement member, so the items key
+        # on the FIRST member and the review members stay pending for the next
+        # `advance` to dispatch.
+        assert group is not None
+        first = group.steps[0].id
+        items_map = {f"{key}/{first}": value for key, value in adoption.phases.items()}
+    else:
+        items_map = dict(adoption.phases)
 
     steps = {
         step.id: StepRecord(
             state="done" if index < cursor_index else "pending",
             emitted=emitted.get(step.id) or None,
-            items=dict(adoption.phases) if step.id == items_step else None,
+            items=dict(items_map) if step.id == items_step else None,
+            members=[m.id for m in step.steps] or None,
         )
         for index, step in enumerate(manifest.steps)
     }

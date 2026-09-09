@@ -1715,3 +1715,98 @@ rows:
       the bridge''s discover_plans (test_discover_plans_still_enforces_fr_version), each
       using a fixture whose fr_version ceiling genuinely excludes a monkeypatched installed
       version.'
+  - id: goal-per-phase-review-loop
+    capability: fr-goal-methodology
+    acceptance: After each implemented phase, a review runs and its findings are fixed
+      before the next phase starts.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_model.py
+      - super-fr:tests/unit/test_workflow_check.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: 'Nested for_each members (implement-phase + review-phase) with per-unit
+      sub-cursor (resolve --step <member> --item phase/<n>); shipped fr-goal.yaml carries
+      the loop; the 3-phase toy walk proves brief order implement,review per phase to
+      deliver.'
+  - id: goal-phase-one-skeleton-smoke
+    capability: fr-goal-methodology
+    acceptance: Phase 1 leaves a walking skeleton with green CI on a trivial test, exercised
+      on the declared minimum runtime.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py
+      - super-fr:tests/unit/test_skill_tokens.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: 'skeleton: true header marker (additive, byte-stable) enforced by fr plan
+      self-review with error severity; override is a spec-scope
+      skeleton-override-<plan-slug> decision. The toy walk plan-review executes the real
+      self-review against a skeleton-marked plan.'
+  - id: goal-refactor-or-justify
+    capability: fr-goal-methodology
+    acceptance: Every task ends with a refactor or a recorded no-refactor justification
+      enforced by self-review.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py
+      - super-fr:tests/unit/test_skill_tokens.py
+    status: ci
+    notes: 'Multi-step agentic tasks require a refactor step or a no-refactor-because plan-journal
+      justification (single-step, manual, and fully-ticked tasks exempt); reverses the #342
+      optional-silence.'
+  - id: goal-explicit-handoff
+    capability: fr-goal-cost
+    acceptance: A phase executor receives a curated handoff with unrelated fixed findings
+      collapsed and the raw journal on demand.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_skill_tokens.py
+    status: ci
+    notes: 'fr journal handoff --scope plan --slug <s> --phase N composes dependency-scoped
+      sections (open full, unrelated fixed one-line each, raw pointer always); fail-closed on
+      malformed journal or missing plan, fail-open only when nothing was written.'
+  - id: goal-cost-visible
+    capability: fr-goal-cost
+    acceptance: fr run status shows per-phase context accounting and running totals
+      without any harness token API.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_state.py
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'PhaseAccounting snapshots (journal entries/lines, handoff chars, spec+plan bytes)
+      recorded at dispatch; status renders per-unit lines plus a labeled-estimate total. V2
+      transcript parsing stays a deferred follow-up.'
+  - id: goal-executor-contract
+    capability: fr-goal-safety
+    acceptance: Tests never mutate the repo under test, the worktree has one writer
+      at a time, and the return value is the only reporting channel.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_support.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_skill_tokens.py
+      - super-fr:tests/unit/test_fr_goal_journal.py
+    status: ci
+    notes: 'fr.test_support.assert_no_repo_mutation for generated tests; running item marks
+      plus resolve-time refusal enforce the single writer at the cursor; five contract norms
+      in prose with token tripwires; return-only reporting rule in fr-goal.'

@@ -116,6 +116,14 @@ class PhaseHeader(BaseModel):
     # byte-stable; adding it is a deliberate extra=forbid schema bump (see the
     # module docstring's "must update your fr_version" note).
     tier: Literal["mechanical", "standard", "hard"] | None = None
+    # Walking-skeleton marker (fr-goal methodology restoration): the FIRST
+    # agentic phase of a plan is the delivery-infrastructure smoke (CI green
+    # on a trivial test, minimum runtime exercised, external fixtures
+    # captured) — verification before the expensive part. Same additive
+    # treatment as `acceptance`/`tier`: optional, defaulted, omitted from
+    # dumps when unset, so pre-marker plans stay byte-stable and parse on
+    # older readers.
+    skeleton: bool = False
 
 
 class StepState(BaseModel):

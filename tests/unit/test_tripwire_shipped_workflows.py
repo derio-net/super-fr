@@ -86,3 +86,28 @@ def test_the_packaged_dir_is_reachable_through_importlib_resources() -> None:
     assert {p.name for p in found.glob("*.yaml")} == {
         p.name for p in SHIPPED_WORKFLOWS_DIR.glob("*.yaml")
     }
+
+
+# ── the shipped fr-goal shape reviews per phase, not once at the end ──
+#
+# Methodology restoration (phase 1): `implement` is a grouped `for_each`
+# carrying implement → review members, so the run cursor enforces
+# review-and-fix inside every phase iteration. A trailing single `review`
+# step is the flat shape this replaces.
+
+
+def _shipped_fr_goal():
+    return parse_manifest((SHIPPED_WORKFLOWS_DIR / "fr-goal.yaml").read_text())
+
+
+def test_shipped_fr_goal_reviews_inside_the_phase_iteration() -> None:
+    manifest = _shipped_fr_goal()
+
+    assert check_workflow(manifest) == []
+    group = next(s for s in manifest.steps if s.id == "implement")
+    assert group.for_each == "phase"
+    assert [m.id for m in group.steps] == ["implement-phase", "review-phase"]
+    assert group.steps[1].needs == ("spec", "plan", "journal:plan")
+    assert "review" not in [s.id for s in manifest.steps], (
+        "the trailing single review step is replaced by the per-phase member"
+    )

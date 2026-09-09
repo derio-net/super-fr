@@ -1,0 +1,89 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Explicit journal handoff verb
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - goal-explicit-handoff
+tasks:
+- number: 1
+  title: Dependency-scoped collapse rule
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in tests/unit/test_journal_model.py (or a new test_journal_handoff.py) add tests on a synthetic journal: open findings + dependency-tagged decisions/discoveries render in full, fixed/refuted findings from non-dependency phases collapse to one line each, and a raw-render pointer is always present; run and confirm failure.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement the collapse/compose rule in packages/fr/src/fr/journal/model.py (pure function over parsed entries + the phase's depends_on set); re-run — green.
+  - id: P3.T1.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 2
+  title: fr journal handoff CLI verb
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: in tests/unit/test_journal_cmd.py add tests for `fr journal handoff --scope plan --slug <s> --phase N` covering the collapse output and fail-open on a missing journal (empty handoff, exit 0, like render); run and confirm failure.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement the `handoff` command in packages/fr/src/fr/commands/journal_cmd.py on top of the model rule; re-run — green.
+  - id: P3.T2.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 3
+  title: Rewire the executor brief to the handoff
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: extend the skill token tests with guards that fr-goal §5 and fr-phase-executor.md name `fr journal handoff` as the brief source and reserve raw `fr journal render` for the executor-STOP path; run and confirm failure.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: update plugins/super-fr/skills/fr-goal/SKILL.md §5 and plugins/super-fr/agents/fr-phase-executor.md inputs (handoff completeness is the contract: missing anything → STOP, do not guess); re-run — green.
+  - id: P3.T3.S3
+    text: |-
+      Tick steps and complete the phase via `fr plan edit`; refactor or record `no-refactor-because:` in the plan journal; full suite green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-09T09:53:09+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-09T09:53:18+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-09T09:56:11+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-09T10:04:24+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-09T10:04:30+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-09T10:04:39+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-09T10:05:24+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-09T10:05:41+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-09-09T10:06:04+00:00'
+      note: null
+  completion:
+    at: '2026-09-09T10:06:49+00:00'
+    note: null
+    observed_prs: []

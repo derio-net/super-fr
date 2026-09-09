@@ -1010,3 +1010,284 @@ def test_self_review_resolves_slug_form_spec(tmp_path):
     (plan_dir / "_meta.yaml").write_text(meta)
     issues = self_review(parse(plan_dir))
     assert any("does not resolve under the repo root" in i.message for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# fr plan self-review — walking-skeleton gate (methodology restoration)
+
+
+def _skeleton_plan(tmp_path, *, skeleton_on=()):
+    """Scaffold a two-agentic-phase plan, marking `skeleton: True` on the
+    phases in `skeleton_on`. Returns the plan dir."""
+    from fr.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    slug = "2026-09-09-skeleton"
+    create(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=1,
+                title="Build",
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": "P1.T1.S1", "text": "Run the test suite"}],
+                    },
+                ),
+                skeleton=1 in skeleton_on,
+            ),
+            PhaseSpec(
+                number=2,
+                title="More",
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": "P2.T1.S1", "text": "Run the test suite"}],
+                    },
+                ),
+                skeleton=2 in skeleton_on,
+            ),
+        ],
+        prose="# x\n",
+    )
+    return repo / "docs" / "superpowers" / "plans" / slug
+
+
+def _skeleton_issues(plan_dir):
+    from fr.parser import parse
+    from fr.plan_ops import self_review
+
+    return [i for i in self_review(parse(plan_dir)) if "skeleton" in i.message]
+
+
+def test_self_review_errors_when_first_agentic_phase_is_not_a_skeleton(tmp_path):
+    issues = _skeleton_issues(_skeleton_plan(tmp_path))
+
+    assert any(i.severity == "error" and "phase 1" in i.message for i in issues), issues
+
+
+def test_self_review_passes_skeleton_gate_when_phase_1_marked(tmp_path):
+    issues = _skeleton_issues(_skeleton_plan(tmp_path, skeleton_on=(1,)))
+
+    assert all(i.severity != "error" for i in issues), issues
+    # ...but the fr_version floor probe still warns: this plan admits a
+    # pre-skeleton fr while marking a skeleton.
+    assert any("floor it at" in i.message for i in issues), issues
+
+
+def test_self_review_errors_when_skeleton_marks_a_later_phase(tmp_path):
+    """The marker belongs on the FIRST agentic phase — later work builds on
+    verified ground, so a skeleton anywhere else is a mis-scoped plan."""
+    issues = _skeleton_issues(_skeleton_plan(tmp_path, skeleton_on=(2,)))
+
+    assert any("phase 2" in i.message for i in issues), issues
+
+
+def test_self_review_errors_when_first_phase_is_manual_only(tmp_path):
+    """No agentic phase at all means nothing to build on — the gate stays
+    silent (there is no implementation to verify early)."""
+    from fr.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    create(
+        repo_root=repo,
+        slug="2026-09-09-manual-only",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=1,
+                title="Hands",
+                tag="manual",
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": "P1.T1.S1", "text": "Rotate the secret"}],
+                    },
+                ),
+            ),
+        ],
+        prose="# x\n",
+    )
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-09-09-manual-only"
+
+    assert _skeleton_issues(plan_dir) == []
+
+
+def test_skeleton_override_decision_in_spec_journal_silences_the_gate(tmp_path):
+    """The only override is an explicit operator decision logged at spec
+    scope: a `decision` entry ided `skeleton-override-<plan-slug>`."""
+    from fr.journal.model import journal_path
+
+    plan_dir = _skeleton_plan(tmp_path)
+    repo = plan_dir.parents[3]
+    journal = journal_path(repo, "spec", "2026-05-10-test-spec")
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text(
+        "# Journal: 2026-05-10-test-spec\n\n"
+        "<!-- fr:journal kind=decision scope=spec "
+        "id=skeleton-override-2026-09-09-skeleton created=2026-09-09T00:00:00 -->\n"
+        "### skeleton-override-2026-09-09-skeleton · decision · Skeleton N/A here\n\n"
+        "Pure docs change; no runtime to smoke.\n"
+    )
+
+    assert _skeleton_issues(plan_dir) == []
+
+
+def test_skeleton_override_survives_spec_archival(tmp_path):
+    """The override outlives the spec it was logged against: an archived
+    spec-scope journal still silences the gate."""
+    import shutil
+
+    from fr.journal.model import archived_journal_path, journal_path
+
+    plan_dir = _skeleton_plan(tmp_path)
+    repo = plan_dir.parents[3]
+    active = journal_path(repo, "spec", "2026-05-10-test-spec")
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text(
+        "# Journal: 2026-05-10-test-spec\n\n"
+        "<!-- fr:journal kind=decision scope=spec "
+        "id=skeleton-override-2026-09-09-skeleton created=2026-09-09T00:00:00 -->\n"
+        "### skeleton-override-2026-09-09-skeleton · decision · Skeleton N/A here\n\n"
+        "Pure docs change; no runtime to smoke.\n"
+    )
+    archived = archived_journal_path(repo, "spec", "2026-05-10-test-spec")
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(active), str(archived))
+
+    assert _skeleton_issues(plan_dir) == []
+
+
+def test_create_writes_skeleton_marker_only_when_set(tmp_path):
+    """Byte-stability: plans that predate the marker carry no `skeleton:` key,
+    so an old reader never meets a key it cannot parse."""
+    from fr.parser import parse
+
+    marked = parse(_skeleton_plan(tmp_path, skeleton_on=(1,)))
+    assert marked.phases[0].phase.skeleton is True
+    assert "skeleton: true" in (marked.dir / "01.yaml").read_text()
+    # ...while the unmarked sibling phase of the SAME plan parses False and
+    # carries no key at all.
+    assert marked.phases[1].phase.skeleton is False
+    assert "skeleton" not in (marked.dir / "02.yaml").read_text()
+
+
+# ---------------------------------------------------------------------------
+# fr plan self-review — refactor-or-justify gate (methodology restoration)
+
+
+def _refactor_plan(tmp_path, *, step_texts=(), tag="agentic", ticked=False):
+    """Scaffold a one-phase plan whose single task carries `step_texts`
+    (default: a red+green pair with no refactor). Returns the plan dir."""
+    from fr.plan_ops import PhaseSpec, create, tick
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    slug = "2026-09-09-refactor"
+    texts = step_texts or ("RED: add the test", "GREEN: implement it")
+    plan_dir = repo / "docs" / "superpowers" / "plans" / slug
+    create(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=1,
+                title="Build",
+                tag=tag,
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [
+                            {"id": f"P1.T1.S{i + 1}", "text": text} for i, text in enumerate(texts)
+                        ],
+                    },
+                ),
+                skeleton=True,
+            ),
+        ],
+        prose="# x\n",
+    )
+    if ticked:
+        for i in range(len(texts)):
+            tick(plan_dir, f"P1.T1.S{i + 1}", state="x")
+    return plan_dir
+
+
+def _refactor_issues(plan_dir):
+    from fr.parser import parse
+    from fr.plan_ops import self_review
+
+    return [i for i in self_review(parse(plan_dir)) if "no-refactor-because" in i.message]
+
+
+def test_self_review_errors_on_multi_step_task_without_refactor(tmp_path):
+    issues = _refactor_issues(_refactor_plan(tmp_path))
+
+    assert any(i.severity == "error" and "P1.T1" in i.message for i in issues), issues
+
+
+def test_self_review_passes_task_with_a_refactor_step(tmp_path):
+    plan_dir = _refactor_plan(
+        tmp_path,
+        step_texts=("RED: add the test", "GREEN: implement it", "Refactor: extract it"),
+    )
+
+    assert _refactor_issues(plan_dir) == []
+
+
+def test_self_review_passes_single_step_task_without_refactor(tmp_path):
+    """A one-step task is trivial — fr-plan omits the refactor step when
+    there is nothing to clean, and so does this gate."""
+    plan_dir = _refactor_plan(tmp_path, step_texts=("Run the test suite",))
+
+    assert _refactor_issues(plan_dir) == []
+
+
+def test_self_review_passes_fully_ticked_task_without_refactor(tmp_path):
+    """Done is done: a fully-ticked task already proved its shape, so
+    historical plans (and mid-flight ones) do not retro-error."""
+    plan_dir = _refactor_plan(tmp_path, ticked=True)
+
+    assert _refactor_issues(plan_dir) == []
+
+
+def test_self_review_exempts_manual_phases_from_the_refactor_gate(tmp_path):
+    plan_dir = _refactor_plan(tmp_path, tag="manual")
+
+    assert _refactor_issues(plan_dir) == []
+
+
+def test_journal_justification_silences_the_refactor_gate(tmp_path):
+    """The recorded alternative to a refactor step: a plan-scope
+    discovery/decision carrying `no-refactor-because` and the task id."""
+    from fr.journal.model import journal_path
+
+    plan_dir = _refactor_plan(tmp_path)
+    repo = plan_dir.parents[3]
+    journal = journal_path(repo, "plan", "2026-09-09-refactor")
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text(
+        "# Journal: 2026-09-09-refactor\n\n"
+        "<!-- fr:journal kind=discovery scope=plan "
+        "id=p1t1-norefactor created=2026-09-09T00:00:00 phase=1 -->\n"
+        "### p1t1-norefactor · discovery · no-refactor-because P1.T1\n\n"
+        "Two-line glue; nothing to extract.\n"
+    )
+
+    assert _refactor_issues(plan_dir) == []

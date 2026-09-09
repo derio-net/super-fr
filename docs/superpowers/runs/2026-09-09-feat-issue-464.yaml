@@ -1,0 +1,31 @@
+run: 2026-09-09-feat-issue-464
+workflow: fr-goal@1
+branch: feat/issue-464
+started: '2026-09-09T08:41:05+00:00'
+cursor: implement
+steps:
+  brainstorm:
+    state: done
+    emitted:
+      spec: docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+  spec-review:
+    state: done
+  plan:
+    state: done
+    emitted:
+      plan: docs/superpowers/plans/2026-09-09-fr-goal-methodology-restoration
+  plan-review:
+    state: done
+  implement:
+    state: running
+    at: '2026-09-09T08:41:19+00:00'
+    items:
+      phase/1: pending
+      phase/2: pending
+      phase/3: pending
+      phase/4: pending
+      phase/5: pending
+  review:
+    state: pending
+  deliver:
+    state: pending

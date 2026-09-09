@@ -127,3 +127,25 @@ def test_pending_step_has_no_null_padding_in_dump() -> None:
     text = dump_run_state(state)
     assert "review:" in text
     assert "null" not in text
+
+
+# --- V1 context accounting (methodology restoration, phase 4) ---
+
+
+def test_accounting_round_trips_and_defaults_to_absent() -> None:
+    """Per-item context snapshots ride the run file (additive, defaulted —
+    every pre-accounting run still parses with `accounting=None`)."""
+    from fr.run.model import PhaseAccounting
+
+    snap = PhaseAccounting(
+        at="2026-09-09T00:00:01Z",
+        journal_entries=12,
+        journal_lines=180,
+        handoff_chars=2100,
+        spec_bytes=8400,
+        plan_bytes=12500,
+    )
+    state = _sample_state().model_copy(update={"accounting": {"phase/1/code": snap}})
+    assert parse_run_state(dump_run_state(state)) == state
+    assert _sample_state().accounting is None
+    assert "accounting" not in dump_run_state(_sample_state())

@@ -38,3 +38,37 @@ def test_tiering_via_fr_models() -> None:
 def test_inline_fallback_documented() -> None:
     """A blocked dispatch must fall back to inline — never hard-fail."""
     assert "inline" in _text().lower()
+
+
+def test_duplicate_report_rule_documented() -> None:
+    """An executor that both returns and messages: the return wins (#461)."""
+    assert "keep the return" in _text()
+
+
+def test_ready_checklist_guard_documented() -> None:
+    """The PR body carries a Ready-checklist guard; only the orchestrator
+    flips it to ready, on explicit review ok — never manual, never early."""
+    t = _text()
+    assert "Ready-checklist" in t
+    assert "review ok" in t
+
+
+# --- methodology restoration: the skill must narrate what the shape enforces ---
+
+
+def test_nested_per_phase_review_loop_narrated() -> None:
+    """The grouped `implement` loop is the mechanism; prose without it is
+    what drifted."""
+    t = _text()
+    assert "review-phase" in t
+    assert "fr journal handoff" in t
+
+
+def test_phase_one_skeleton_mandate_narrated() -> None:
+    assert "skeleton" in _text().lower()
+
+
+def test_refactor_or_justify_narrated() -> None:
+    t = _text()
+    assert "no-refactor-because" in t
+    assert "red → green → refactor" in t

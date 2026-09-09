@@ -1,0 +1,90 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Skeleton mandate, refactor gate, and skill prose
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - goal-phase-one-skeleton-smoke
+  - goal-refactor-or-justify
+tasks:
+- number: 1
+  title: Phase-1 walking-skeleton self-review rule
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_v2_plan_ops.py add tests that self-review refuses a plan whose first agentic phase is not the walking skeleton (no CI smoke / minimum-runtime exercise / real-system capture marker) and passes one carrying an explicit operator-override decision; run and confirm failure.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement the skeleton rule in packages/fr/src/fr/plan_ops.py with a named error and the override path (override = spec-scope decision logged via `fr journal add`); re-run — green.
+  - id: P2.T1.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 2
+  title: Refactor-or-justify justification gate
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_v2_plan_ops.py add a test that self-review refuses a task with neither a refactor step nor a `no-refactor-because:` justification; run and confirm failure.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement the justification check in packages/fr/src/fr/plan_ops.py; re-run — green.
+  - id: P2.T2.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 3
+  title: Skill prose plus token tripwires
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: extend tests/unit/test_fr_goal_journal.py (or a new test_skill_tokens.py) with substring guards for the nested loop, the Phase-1 skeleton mandate, and the `no-refactor-because` + `red → green → refactor` tokens across plugins/super-fr/skills/fr-goal/SKILL.md, plugins/super-fr/skills/fr-plan/SKILL.md, plugins/super-fr/skills/fr-execute/SKILL.md, and plugins/super-fr/agents/fr-phase-executor.md; run and confirm failure.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: update the four prose files (fr-goal §§3–6 narrate the nested loop + skeleton; fr-plan gains skeleton + 4–6-phase granularity guidance; fr-execute + fr-phase-executor gain refactor-or-justify); re-run — green.
+  - id: P2.T3.S3
+    text: |-
+      Tick steps and complete the phase via `fr plan edit`; refactor or record `no-refactor-because:` in the plan journal; full suite green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-09T09:29:06+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-09T09:29:10+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-09T09:29:14+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-09T09:31:49+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-09T09:31:53+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-09T09:31:57+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-09T09:37:59+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-09T09:38:03+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-09T09:38:07+00:00'
+      note: null
+  completion:
+    at: '2026-09-09T09:38:11+00:00'
+    note: null
+    observed_prs: []

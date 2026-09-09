@@ -294,3 +294,111 @@ def test_an_installed_plugin_still_beats_the_wheel_copy(tmp_path: Path) -> None:
     manifest = resolve_workflow("fr-goal", tmp_path, shipped_root=shipped)
 
     assert [s.id for s in manifest.steps] == ["only"]
+
+
+# --- nested for_each groups (fr-goal methodology restoration, phase 1) ---
+
+_CLEAN_NEST = (
+    "workflow: x\nschema: 1\nunit: run\n"
+    "steps:\n"
+    "  - id: plan\n    kind: agent\n    emits: [plan]\n"
+    "  - id: implement\n    kind: agent\n    needs: [plan]\n"
+    "    for_each: phase\n    emits: [journal:plan]\n"
+    "    steps:\n"
+    "      - id: implement-phase\n        kind: agent\n"
+    "        needs: [plan]\n        emits: [journal:plan]\n"
+    "      - id: review-phase\n        kind: agent\n"
+    "        needs: [journal:plan]\n        emits: [journal:plan]\n"
+)
+
+
+def test_clean_nested_group_has_no_errors() -> None:
+    assert check_workflow(_manifest(_CLEAN_NEST)) == []
+
+
+def test_nested_member_with_unsatisfied_needs_is_dangling() -> None:
+    """`review-phase` needs an artifact no earlier member (or step) emits —
+    the error names the member, not the group."""
+    manifest = _manifest(
+        "workflow: x\nschema: 1\nunit: run\n"
+        "steps:\n"
+        "  - id: implement\n    kind: agent\n"
+        "    for_each: phase\n"
+        "    steps:\n"
+        "      - id: review-phase\n        kind: agent\n"
+        "        needs: [ghost]\n"
+    )
+    errors = check_workflow(manifest)
+    assert any("ghost" in e and "review-phase" in e for e in errors)
+
+
+def test_cyclic_nest_is_refused() -> None:
+    manifest = _manifest(
+        "workflow: x\nschema: 1\nunit: run\n"
+        "steps:\n"
+        "  - id: implement\n    kind: agent\n"
+        "    for_each: phase\n"
+        "    steps:\n"
+        "      - id: m-a\n        kind: agent\n"
+        "        needs: [y]\n        emits: [x]\n"
+        "      - id: m-b\n        kind: agent\n"
+        "        needs: [x]\n        emits: [y]\n"
+    )
+    errors = check_workflow(manifest)
+    assert any("cycle" in e.lower() for e in errors)
+
+
+def test_member_with_for_each_is_refused() -> None:
+    """Nesting is one level deep: a member may not fan out again."""
+    manifest = _manifest(
+        "workflow: x\nschema: 1\nunit: run\n"
+        "steps:\n"
+        "  - id: implement\n    kind: agent\n"
+        "    for_each: phase\n"
+        "    steps:\n"
+        "      - id: m-a\n        kind: agent\n"
+        "        for_each: phase\n"
+    )
+    errors = check_workflow(manifest)
+    assert any("m-a" in e and "for_each" in e for e in errors)
+
+
+def test_members_on_a_step_without_for_each_are_refused() -> None:
+    manifest = _manifest(
+        "workflow: x\nschema: 1\nunit: run\n"
+        "steps:\n"
+        "  - id: solo\n    kind: agent\n"
+        "    steps:\n"
+        "      - id: m-a\n        kind: agent\n"
+    )
+    errors = check_workflow(manifest)
+    assert any("solo" in e for e in errors)
+
+
+def test_duplicate_ids_across_nest_are_reported() -> None:
+    manifest = _manifest(
+        "workflow: x\nschema: 1\nunit: run\n"
+        "steps:\n"
+        "  - id: dup\n    kind: agent\n"
+        "  - id: implement\n    kind: agent\n"
+        "    for_each: phase\n"
+        "    steps:\n"
+        "      - id: dup\n        kind: agent\n"
+    )
+    errors = check_workflow(manifest)
+    assert any("duplicate" in e and "'dup'" in e for e in errors)
+
+
+def test_resolve_keeps_nested_members_intact(tmp_path: Path) -> None:
+    """Resolution is manifest-level: a grouped shape resolves through the
+    repo > shipped order with its members untouched."""
+    from fr.workflow.resolve import resolve_workflow
+
+    shipped = tmp_path / "shipped"
+    shipped.mkdir()
+    (shipped / "grouped.yaml").write_text(_CLEAN_NEST)
+
+    manifest = resolve_workflow("grouped", tmp_path, shipped_root=shipped)
+
+    group = next(s for s in manifest.steps if s.id == "implement")
+    assert [m.id for m in group.steps] == ["implement-phase", "review-phase"]
