@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Executor contract runtime guards and end-to-end verification
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  tracking_issue: null
+  acceptance:
+  - goal-executor-contract
+  - goal-per-phase-review-loop
+tasks:
+- number: 1
+  title: Worktree write-claim
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: add tests (tests/unit/test_run_state.py or a new test_write_claim.py) that `fr run` records the current writer and a second claimant is refused with a named error — covering the finished-executor + orchestrator race; run and confirm failure.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: implement the lightweight write-claim in packages/fr/src/fr/run/model.py + run_cmd.py (record only, no daemon, no locking beyond refusal); re-run — green.
+  - id: P5.T1.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 2
+  title: Sandbox assertion helper and duplicate-report detection
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: add tests that a new `fr` sandbox assertion helper detects a repo mutation in a fixture checkout, and that an executor message + return both present keeps the return and logs the drop; run and confirm failure.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: implement the helper (next to the journal/test-support code) and the duplicate-report rule in the fr-goal narration plus any orchestrator-side helper; re-run — green.
+  - id: P5.T2.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 3
+  title: Contract norms in prose plus token tripwires
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      RED: extend the skill token tests to require the five norms in plugins/super-fr/agents/fr-phase-executor.md and plugins/super-fr/skills/fr-execute/SKILL.md: single writer (phase-complete releases the worktree, orchestrator included), tests never write to the repo under test, self-attribution of side effects, external captures over constructions, return-value-is-the-only-reporting-channel; run and confirm failure.
+  - id: P5.T3.S2
+    text: |-
+      GREEN: write the five norms into both prose files; re-run — green.
+  - id: P5.T3.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 4
+  title: Toy-walk end-to-end verification
+  steps:
+  - id: P5.T4.S1
+    text: |-
+      Run a 3-phase toy goal walk (reuse the 2026-09-05-dispatch-walk-toy fixture pattern) and record: review fired per phase with findings fixed before the next phase started, phase 1 left CI green on a trivial test, `fr run status` showed per-phase accounting, and executor returns were the only reporting channel; file gaps as plan-journal findings.
+  - id: P5.T4.S2
+    text: |-
+      Fix every toy-walk finding with tests (wrong findings get refuting reasoning, never a silent drop); re-run the walk until clean and the full suite is green.
+  - id: P5.T4.S3
+    text: |-
+      Tick all steps, complete the phase via `fr plan edit`, flip the six linked acceptance rows with test refs, and run `fr plan self-review <plan-dir>` — must pass.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,112 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Nested implement+review loop in the workflow shape
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - goal-per-phase-review-loop
+tasks:
+- number: 1
+  title: Model nested steps inside for_each
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_workflow_model.py add a test parsing a manifest whose for_each: phase step contains nested implement + review steps, each with its own needs/emits; run `uv run pytest -q --no-cov tests/unit/test_workflow_model.py` and confirm the new test fails (no nested-steps field exists yet).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: extend the Step schema in packages/fr/src/fr/workflow/model.py with an optional nested step list for for_each scopes (flat `implement (for_each)` with no nesting still parses unchanged); re-run the test file — green.
+  - id: P1.T1.S3
+    text: |-
+      Refactor the new schema parsing for duplication/naming, or record `no-refactor-because:` with the reason in the plan journal via `fr journal add --scope plan --slug 2026-09-09-fr-goal-methodology-restoration --kind discovery --title <t> --body <reason>`; full suite `uv run pytest -q --no-cov` stays green.
+- number: 2
+  title: Validate nesting in workflow check and resolve
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_workflow_check.py add tests that a review step nested without `needs: [implement]`, a nest referencing an unknown step, and a cyclic nest are all refused; run the file and confirm the new tests fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement nest validation in packages/fr/src/fr/workflow/check.py and nested resolution in packages/fr/src/fr/workflow/resolve.py (repo > shipped order unchanged); re-run — green.
+  - id: P1.T2.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 3
+  title: Track a per-phase sub-cursor in fr run
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_run_state.py (plus test_run_cli.py if needed) add tests that `fr run advance`/`resolve` move a per-phase sub-cursor so implement and review resolve independently and a manifest-drift diff still names added/removed steps; run and confirm failure.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement sub-cursor tracking in packages/fr/src/fr/run/model.py and packages/fr/src/fr/commands/run_cmd.py using additive, defaulted fields only (no shape change per the artifact-versioning rule); re-run — green.
+  - id: P1.T3.S3
+    text: |-
+      Refactor or record `no-refactor-because:` in the plan journal; full suite stays green.
+- number: 4
+  title: Ship implement-then-review-per-phase fr-goal shape
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_tripwire_shipped_workflows.py add a test that the shipped fr-goal manifest carries implement → review inside the phase iteration and still passes `fr workflow check`; run and confirm failure (current manifest has the trailing single review).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: rewrite packages/fr/src/fr/workflows/fr-goal.yaml to nest implement + review inside the per-phase iteration (keep step ids stable so in-flight runs adopt cleanly) and mirror the narration in plugins/super-fr/skills/fr-goal/SKILL.md §5–§6; re-run — green.
+  - id: P1.T4.S3
+    text: |-
+      Tick steps and complete the phase: `fr plan edit <plan-dir> --tick P1.T4.S1 --state x` (etc.) then `fr plan edit <plan-dir> --complete-phase 1`; refactor or record `no-refactor-because:` in the plan journal; full suite green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

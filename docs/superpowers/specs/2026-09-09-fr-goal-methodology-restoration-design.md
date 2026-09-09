@@ -268,6 +268,7 @@ returns are the only reporting channel.
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
 | TBD (`fr plan create` fills this) | `derio-net/super-fr` | TBD | — |
+| 2026-09-09-fr-goal-methodology-restoration | `derio-net/super-fr` | `2026-09-09-fr-goal-methodology-restoration` | — |
 
 ## 8. Acceptance rows (born here; presented at spec review)
 
