@@ -1720,7 +1720,7 @@ rows:
     acceptance: After each implemented phase, a review runs and its findings are fixed
       before the next phase starts.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-09-fr-goal-methodology-restoration-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_workflow_model.py
@@ -1739,7 +1739,7 @@ rows:
     acceptance: Phase 1 leaves a walking skeleton with green CI on a trivial test, exercised
       on the declared minimum runtime.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-09-fr-goal-methodology-restoration-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py
@@ -1756,7 +1756,7 @@ rows:
     acceptance: Every task ends with a refactor or a recorded no-refactor justification
       enforced by self-review.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-09-fr-goal-methodology-restoration-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py
@@ -1770,7 +1770,7 @@ rows:
     acceptance: A phase executor receives a curated handoff with unrelated fixed findings
       collapsed and the raw journal on demand.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-09-fr-goal-methodology-restoration-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_model.py
@@ -1785,7 +1785,7 @@ rows:
     acceptance: fr run status shows per-phase context accounting and running totals
       without any harness token API.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-09-fr-goal-methodology-restoration-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_state.py
@@ -1799,7 +1799,7 @@ rows:
     acceptance: Tests never mutate the repo under test, the worktree has one writer
       at a time, and the return value is the only reporting channel.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-09-fr-goal-methodology-restoration-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_test_support.py

@@ -467,3 +467,87 @@ def test_no_spec_sweep_flag_skips_sweep(tmp_path, monkeypatch):
     assert (sp / "specs" / "2026-05-25-bm-design.md").is_file()
     assert not (sp / "implemented" / "specs" / "2026-05-25-bm-design.md").exists()
     assert "spec sweep skipped" in result.output
+
+
+# --- --sweep-only: re-run the spec sweep with no plan dir ---
+
+
+def _strand_plan(repo: Path, slug: str) -> None:
+    """Simulate a prior run's plan move, committed: the plan already lives
+    under implemented/plans/ (as when a TBD stub blocked the spec sweep, was
+    removed afterwards, and no CLI could finish the job)."""
+    import subprocess
+
+    src = repo / "docs" / "superpowers" / "plans" / slug
+    dst = repo / "docs" / "superpowers" / "implemented" / "plans" / slug
+    subprocess.run(["git", "-C", str(repo), "mv", str(src), str(dst)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "strand",
+            "--allow-empty",
+        ],
+        check=True,
+    )
+
+
+def test_sweep_only_archives_stranded_eligible_spec(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _add_plan(repo, "2026-05-25-bookmarks", ticked=True, spec_name="2026-05-25-bm-design.md")
+    _add_spec(
+        repo,
+        "2026-05-25-bm-design.md",
+        # Row already points at the ARCHIVED plan — the stranded state.
+        [("bm", "derio-net/test", "docs/superpowers/implemented/plans/2026-05-25-bookmarks")],
+    )
+    _git_seed(repo)
+    # Seed AFTER the fixture so the tree is clean (moves stage changes).
+    _strand_plan(repo, "2026-05-25-bookmarks")
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--sweep-only"])
+
+    assert result.exit_code == 0, result.output
+    sp = repo / "docs" / "superpowers"
+    assert (sp / "implemented" / "specs" / "2026-05-25-bm-design.md").is_file()
+    assert not (sp / "specs" / "2026-05-25-bm-design.md").exists()
+
+
+def test_sweep_only_leaves_ineligible_spec_with_a_note(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _add_plan(repo, "2026-05-25-bookmarks", ticked=True, spec_name="2026-05-25-bm-design.md")
+    _add_plan(repo, "2026-06-01-active", ticked=False, spec_name="2026-05-25-bm-design.md")
+    _add_spec(
+        repo,
+        "2026-05-25-bm-design.md",
+        [
+            ("bm", "derio-net/test", "docs/superpowers/implemented/plans/2026-05-25-bookmarks"),
+            ("second", "derio-net/test", "docs/superpowers/plans/2026-06-01-active"),
+        ],
+    )
+    _git_seed(repo)
+    _strand_plan(repo, "2026-05-25-bookmarks")
+
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--sweep-only"])
+
+    assert result.exit_code == 0, result.output
+    assert (repo / "docs" / "superpowers" / "specs" / "2026-05-25-bm-design.md").is_file()
+
+
+def test_sweep_only_refuses_plan_dir_and_all_and_force(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _git_seed(repo)
+    for argv in (
+        ["archive", "--sweep-only", "docs/superpowers/plans/x"],
+        ["archive", "--sweep-only", "--all"],
+        ["archive", "--sweep-only", "--force"],
+        ["archive", "--sweep-only", "--no-spec-sweep"],
+    ):
+        result = _invoke(monkeypatch, repo, FakeGhClient(), argv)
+        assert result.exit_code == 2, (argv, result.output)

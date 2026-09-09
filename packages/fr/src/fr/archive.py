@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ArchiveError",
+    "SpecSweepResult",
     "archive_plan_dir",
     "completed_unarchived_plans",
     "find_run_for_plan",

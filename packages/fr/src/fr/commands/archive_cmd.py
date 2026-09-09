@@ -17,7 +17,13 @@ from typing import TYPE_CHECKING
 import typer
 from rich.console import Console
 
-from fr.archive import ArchiveError, archive_plan_dir, paths_dirty, spec_archive_sweep
+from fr.archive import (
+    ArchiveError,
+    SpecSweepResult,
+    archive_plan_dir,
+    paths_dirty,
+    spec_archive_sweep,
+)
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError
 from fr.render import archive_gate
@@ -37,6 +43,27 @@ def _make_gh_client() -> GhClient:
     return client_for(Path.cwd())
 
 
+def _report_sweep(repo_root: Path, sweep: SpecSweepResult) -> bool:
+    """Print a sweep result, repair refs in passing, report moves.
+
+    Shared by the post-move sweep and `--sweep-only`: the move and the ref
+    normalization land in the same operator commit (2026-06-06
+    spec-path-repair). Returns whether anything moved.
+    """
+    moved = bool(sweep.moves)
+    for m in sweep.moves:
+        typer.echo(f"  archived spec: {m.src} -> {m.dst}")
+    for n in sweep.notes:
+        typer.echo(f"  note: {n}")
+    if moved:
+        repair = repair_repo(repo_root, write=True)
+        for r in repair.rewrites:
+            typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
+        for w in repair.warnings:
+            err_console.print(f"[yellow]warning:[/yellow] {w}")
+    return moved
+
+
 def archive_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(
@@ -52,6 +79,13 @@ def archive_command(
         "--no-spec-sweep",
         help="Archive the plan(s) but skip the spec-archival sweep for this run.",
     ),
+    sweep_only: bool = typer.Option(
+        False,
+        "--sweep-only",
+        help="Only re-run the spec-archival sweep (no plan dir, no --all). For specs "
+        "stranded live by an earlier run — e.g. a TBD slice removed after the plan "
+        "moved, when no plan path can name the work anymore.",
+    ),
 ) -> None:
     """Move a finished plan to implemented/plans/ (and its spec when ready).
 
@@ -60,9 +94,26 @@ def archive_command(
     Sliced specs: to keep a spec from being swept while a decided-but-unbuilt
     slice is still pending, add a plan row with a `pending` (or `tbd`) File cell
     for that slice. `--no-spec-sweep` is the per-run escape that skips the sweep
-    entirely.
+    entirely. `--sweep-only` is the inverse: just the sweep, for finishing a
+    close-out whose plan moves already landed.
     """
     require_migrated_layout()
+    if sweep_only:
+        for conflicting, name in (
+            (plan_dir is not None, "plan_dir"),
+            (all_plans, "--all"),
+            (force, "--force"),
+            (no_spec_sweep, "--no-spec-sweep"),
+        ):
+            if conflicting:
+                err_console.print(f"--sweep-only takes no {name} — it only re-runs the sweep")
+                raise typer.Exit(2)
+        repo_root = resolve_repo_root()
+        if _report_sweep(repo_root, spec_archive_sweep(repo_root, _make_gh_client())):
+            typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+        else:
+            typer.echo("spec sweep: nothing eligible to move.")
+        return
     if all_plans and plan_dir is not None:
         err_console.print("--all and plan_dir are mutually exclusive")
         raise typer.Exit(2)
@@ -154,12 +205,7 @@ def archive_command(
     # archive paths must agree (review finding, 2026-06-06).
     specs_moved = False
     if (archived or all_plans) and not no_spec_sweep:
-        sweep = spec_archive_sweep(repo_root, gh)
-        specs_moved = bool(sweep.moves)
-        for m in sweep.moves:
-            typer.echo(f"  archived spec: {m.src} -> {m.dst}")
-        for n in sweep.notes:
-            typer.echo(f"  note: {n}")
+        specs_moved = _report_sweep(repo_root, spec_archive_sweep(repo_root, gh))
     elif (archived or all_plans) and no_spec_sweep:
         typer.echo("  (spec sweep skipped)")
 
