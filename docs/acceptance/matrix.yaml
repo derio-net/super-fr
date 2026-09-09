@@ -1715,3 +1715,72 @@ rows:
       the bridge''s discover_plans (test_discover_plans_still_enforces_fr_version), each
       using a fixture whose fr_version ceiling genuinely excludes a monkeypatched installed
       version.'
+  - id: goal-per-phase-review-loop
+    capability: fr-goal-methodology
+    acceptance: After each implemented phase, a review runs and its findings are fixed
+      before the next phase starts.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_model.py
+    status: not-implemented
+    notes: 'Restores per-phase review-and-fix lost in #390/#442; nested loop makes it
+      reusable across shapes.'
+  - id: goal-phase-one-skeleton-smoke
+    capability: fr-goal-methodology
+    acceptance: Phase 1 leaves a walking skeleton with green CI on a trivial test, exercised
+      on the declared minimum runtime.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_model.py
+    status: not-implemented
+    notes: Moves verification before the expensive part; external fixtures are captures,
+      never constructions.
+  - id: goal-refactor-or-justify
+    capability: fr-goal-methodology
+    acceptance: Every task ends with a refactor or a recorded no-refactor justification
+      enforced by self-review.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_model.py
+    status: not-implemented
+    notes: 'Restores the explicit refactor beat lost when #342 made it optional-silence.'
+  - id: goal-explicit-handoff
+    capability: fr-goal-cost
+    acceptance: A phase executor receives a curated handoff with unrelated fixed findings
+      collapsed and the raw journal on demand.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+    status: not-implemented
+    notes: Dependency-scoped explicit sections beat global collapse and recency windows.
+  - id: goal-cost-visible
+    capability: fr-goal-cost
+    acceptance: fr run status shows per-phase context accounting and running totals
+      without any harness token API.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_state.py
+    status: not-implemented
+    notes: V1 visibility without blocking on harness transcript APIs; V2 adds real tokens
+      per harness.
+  - id: goal-executor-contract
+    capability: fr-goal-safety
+    acceptance: Tests never mutate the repo under test, the worktree has one writer
+      at a time, and the return value is the only reporting channel.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-09-fr-goal-methodology-restoration-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_phase_executor_agent.py
+    status: not-implemented
+    notes: 'Closes #464 items 6-9 at docs + tripwire + cheap-runtime levels.'
