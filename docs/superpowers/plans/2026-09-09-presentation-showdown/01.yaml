@@ -1,0 +1,38 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Demo repo and dual-run environment prep
+  tag: manual
+  depends_on: []
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Prepare demo repo and verify dev environment twice over
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Confirm demo repo checkout and devcontainer profile build for run A
+  - id: P1.T1.S2
+    text: |-
+      Confirm identical devcontainer profile build for run B and record Terra version string
+  - id: P1.T1.S3
+    text: |-
+      Fill SPARK-4 brief into experiment/prompts/goal.md placeholder and acceptance checklist
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
