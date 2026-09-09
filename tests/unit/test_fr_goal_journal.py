@@ -45,6 +45,14 @@ def test_duplicate_report_rule_documented() -> None:
     assert "keep the return" in _text()
 
 
+def test_ready_checklist_guard_documented() -> None:
+    """The PR body carries a Ready-checklist guard; only the orchestrator
+    flips it to ready, on explicit review ok — never manual, never early."""
+    t = _text()
+    assert "Ready-checklist" in t
+    assert "review ok" in t
+
+
 # --- methodology restoration: the skill must narrate what the shape enforces ---
 
 

@@ -102,16 +102,16 @@ spec + plan + code; fix every finding with tests (a wrong one gets refuting reas
 body from the durable list. **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
 
 ### 7. deliver — one PR per repo, all artifacts aboard
-Verify first (`superpowers:verification-before-completion`): full test-suite output,
-self-review pass, steps ticked, `fr journal check
---scope plan` clean. Open the **draft** PR ("Draft" = do not merge):
+Verify first (`superpowers:verification-before-completion`): full test-suite output, self-review
+pass, steps ticked, `fr journal check --scope plan` clean. Open the **draft** PR ("Draft" = do not merge):
 summary + spec/plan paths; findings + fixes (+ refutations) and decisions via
 `fr journal render --scope plan --section findings`/`decisions`; the back-loaded manual phase
 marked "unimplemented — operator pushes to this PR"; the Test Plan verbatim ("post-merge —
 operator-driven"); acceptance debt (`fr acceptance status`) and rows-added-since-brainstorm
-(`fr acceptance check --added-since origin/main`), each with a one-line defense. Mergeable
-ONLY now (after step 6's fixes): `gh pr ready` — never say "ready to merge" before this.
-Resolve `deliver` done; nothing follows it. Stop; the operator merges.
+(`fr acceptance check --added-since origin/main`), each with a one-line defense. The body carries a
+Ready-checklist guard (CI green, explicit review ok, no commits since the ok). ONLY when all three
+hold: `gh pr ready`, remove the guard — never say "ready to merge" before this, never self-merge,
+never flip it manually. Resolve `deliver` done; nothing follows it. Stop; the operator merges.
 
 ### Post-merge close-out
 When the operator reports the merge: **first verify it reached `main`** via `fr isolation
