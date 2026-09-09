@@ -25,7 +25,7 @@ for half 2, model pin, correction budget. Unanswered = stop, never default.
 
 Turn the spec into a plan: demo-feature shortlist (2–4 phase scope, CLI + tests,
 no secrets), identical seed prompt file (`experiment/prompts/goal.md`),
-correction budget (e.g. max 3 clarifications per run, timestamped), branch hygiene
+correction budget (unlimited but logged — every clarification timestamped per run), branch hygiene
 (two fresh branches from same `origin/HEAD`).
 
 ## 3. design-review
