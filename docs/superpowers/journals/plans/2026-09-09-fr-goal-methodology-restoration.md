@@ -44,3 +44,13 @@ The 3-phase grouped walk passed first try (after a test-only spec-table fix): pe
 ### p5-review-retry-mark · finding [fixed] · review-phase P5: stale failed mark on retry (phase 5)
 
 Self-review of the Phase 5 diff: setdefault left a retried failed unit reading failed while outstanding. Unconditional running mark on dispatch. State: fixed.
+
+<!-- fr:journal kind=discovery scope=plan id=tool-version-discovery created=2026-09-09T11:52:34 phase=5 -->
+### tool-version-discovery · discovery · Orchestration ran on tool fr 4.1.1, verification on worktree 4.2.0 (phase 5)
+
+Discovery during review: workspace fr resolves to the tool-installed 4.1.1, not the worktree build. All plan/journal/acceptance/run orchestration therefore ran on stable pre-change tooling (desirable while building new tooling); every new behavior was verified under pytest against worktree code, and deliver gates re-run here on uv run fr 4.2.0. Consequence: this run's own cursor (fr-goal@1 flat) will drift-refuse against the new grouped shape — correct behavior, demonstrated live below.
+
+<!-- fr:journal kind=discovery scope=plan id=own-run-drift-demo created=2026-09-09T11:52:59 phase=5 -->
+### own-run-drift-demo · discovery · Own run drift-refuses against the new shape, as designed (phase 5)
+
+Resolving implement on run 2026-09-09-feat-issue-464 (started fr-goal@1 flat) under the grouped shape refuses with removed: review. Correct: the cursor was computed for a step list that no longer exists. Plan-phase completion states (all 5 complete via fr plan edit) are the durable progress record; the run file stays as history. Live demonstration that flat-to-grouped migration refuses instead of silently advancing.

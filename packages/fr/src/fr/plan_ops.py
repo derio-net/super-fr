@@ -1214,7 +1214,7 @@ def _skeleton_issues(plan: Plan) -> list[ReviewIssue]:
                         message=(
                             "a phase marks the skeleton but fr_version "
                             f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
-                            "floor it at '>=4.1.2,<5.0.0'."
+                            "floor it at '>=4.2.0,<5.0.0'."
                         ),
                     )
                 )

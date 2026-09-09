@@ -150,6 +150,42 @@ def test_create_phases_file_passes_acceptance(tmp_path: Path, monkeypatch) -> No
     assert doc["phase"]["acceptance"] == ["row-a"]
 
 
+def test_create_phases_file_passes_skeleton(tmp_path: Path, monkeypatch) -> None:
+    """`--phases-file` accepts `skeleton: true` — and omits the key when
+    unset, so pre-marker plans stay byte-stable for old readers."""
+    repo = _repo(tmp_path)
+    _spec(repo)
+    phases_file = tmp_path / "phases.yaml"
+    phases_file.write_text(
+        "- number: 1\n  title: One\n  skeleton: true\n"
+        "  tasks:\n    - number: 1\n      title: t\n"
+        "      steps:\n        - id: P1.T1.S1\n          text: s\n"
+        "- number: 2\n  title: Two\n"
+        "  tasks:\n    - number: 1\n      title: t\n"
+        "      steps:\n        - id: P2.T1.S1\n          text: s\n"
+    )
+    monkeypatch.chdir(repo)
+    result = runner.invoke(
+        app,
+        [
+            "plan",
+            "create",
+            "--slug",
+            "2026-07-04-toy",
+            "--target-repo",
+            "derio-net/own",
+            "--spec",
+            "docs/superpowers/specs/2026-07-04-toy.md",
+            "--phases-file",
+            str(phases_file),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-07-04-toy"
+    assert yaml.safe_load((plan_dir / "01.yaml").read_text())["phase"]["skeleton"] is True
+    assert "skeleton" not in (plan_dir / "02.yaml").read_text()
+
+
 # ── T2: self-review lints ──────────────────────────────────────────────────
 
 
