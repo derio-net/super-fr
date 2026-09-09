@@ -227,3 +227,54 @@ def _title_from_heading(text: str, entry_id: str) -> str:
                 title = title[: title.rindex(" (phase ")]
             return title
     return ""
+
+
+def _handoff_line(entry: JournalEntry) -> str:
+    """One-line collapse of an entry: id, kind, state, title, phase."""
+    state_bit = f" [{entry.state}]" if entry.state is not None else ""
+    phase_bit = f" (phase {entry.phase})" if entry.phase is not None else " (unphased)"
+    return f"- {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
+
+
+def compose_handoff(
+    entries: list[JournalEntry],
+    *,
+    phase: int,
+    scope: str,
+    slug: str,
+    depends_on: tuple[int, ...] = (),
+) -> str:
+    """Compose the curated executor handoff for `phase` from parsed `entries`.
+
+    Dependency-scoped, not recency-scoped: an entry is *relevant* when it is
+    open (actionable anywhere), untagged (global), or tagged to this phase or
+    one it depends on. Relevant entries render in full; everything else
+    collapses to one line each, so a phase-10 executor stops re-reading 39
+    fixed findings in full. Empty sections are omitted; the raw-render
+    pointer is always present, so the full file is one command away.
+
+    Pure — no I/O. `fr journal handoff` resolves the journal and the plan's
+    `depends_on`, then calls this.
+    """
+    relevant = {phase, *depends_on}
+    open_findings: list[str] = []
+    context: list[str] = []
+    collapsed: list[str] = []
+    for e in entries:
+        if e.kind == "finding" and e.state == "open":
+            open_findings.append(serialize_entry(e))
+        elif e.phase is None or e.phase in relevant:
+            context.append(serialize_entry(e))
+        else:
+            collapsed.append(_handoff_line(e))
+    parts = [f"# Handoff (phase {phase})"]
+    if open_findings:
+        parts.append("## Open findings\n\n" + "\n".join(open_findings))
+    if context:
+        parts.append("## Relevant context\n\n" + "\n".join(context))
+    if collapsed:
+        parts.append("## Earlier history\n\n" + "\n".join(collapsed))
+    parts.append(
+        f"## Full journal\n\nRaw render: `fr journal render --scope {scope} --slug {slug}`"
+    )
+    return "\n\n".join(parts) + "\n"

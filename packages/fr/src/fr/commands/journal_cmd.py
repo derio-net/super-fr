@@ -155,3 +155,66 @@ def check(
             + ", ".join(e.id for e in open_findings)
         )
         raise typer.Exit(1)
+
+
+@journal_app.command("handoff")
+def handoff(
+    scope: str = typer.Option(..., "--scope", help="plan (only plan journals have phases)."),
+    slug: str = typer.Option(..., "--slug", help="Journal slug (plan slug for scope=plan)."),
+    phase: int = typer.Option(..., "--phase", help="Phase number to compose the handoff for."),
+    plan_dir: str | None = typer.Option(
+        None,
+        "--plan-dir",
+        help="Plan folder (default docs/superpowers/plans/<slug>); the phase's "
+        "depends_on comes from here.",
+    ),
+) -> None:
+    """Compose the curated executor handoff for one phase (fail-closed).
+
+    Unlike `render` (PR-body feed, fail-open), the handoff feeds an executor
+    brief — a silently-empty handoff makes the executor guess, so a missing
+    plan, an unknown phase, or a malformed journal is exit 2 naming what is
+    wrong. Only a journal that was never written is empty (exit 0, no output):
+    there is nothing to curate yet.
+    """
+    from fr.journal.model import compose_handoff
+    from fr.parser import PlanSchemaError, parse
+
+    if scope != "plan":
+        err_console.print(
+            f"[red]handoff needs --scope plan (got {scope!r}) — only plan journals "
+            "have phases to compose for[/red]"
+        )
+        raise typer.Exit(2)
+    root = resolve_repo_root()
+    # Read-resolve so a handoff still composes after the journal was archived
+    # alongside its spec/plan.
+    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    if not path.exists():
+        return  # fail-open: nothing written yet, nothing to curate
+    try:
+        entries = _load(path)
+    except JournalParseError as e:
+        err_console.print(f"[red]journal parse error:[/red] {e}")
+        raise typer.Exit(2) from e
+    plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
+    try:
+        plan = parse(plan_path)
+    except (PlanSchemaError, OSError) as e:
+        err_console.print(
+            f"[red]cannot compose a dependency-scoped handoff: plan {plan_path} "
+            f"is not parseable ({e})[/red]"
+        )
+        raise typer.Exit(2) from e
+    headers = [p.phase for p in plan.phases if p.phase.number == phase]
+    if not headers:
+        known = sorted(p.phase.number for p in plan.phases)
+        err_console.print(
+            f"[red]phase {phase} is not a phase of plan {slug} (phases: {known})[/red]"
+        )
+        raise typer.Exit(2)
+    depends_on = tuple(headers[0].depends_on)
+    # Emit RAW — this feeds a dispatch brief. A Rich console would treat `[...]`
+    # in a title/body (Markdown links, `[PR #12]`) as markup and drop it, same
+    # reason `render` echoes raw.
+    typer.echo(compose_handoff(entries, phase=phase, scope=scope, slug=slug, depends_on=depends_on))

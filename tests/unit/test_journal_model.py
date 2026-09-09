@@ -338,3 +338,112 @@ class TestResolveJournalReadPath:
         resolved = resolve_journal_read_path(tmp_path, "spec", "missing")
         assert resolved == journal_path(tmp_path, "spec", "missing")
         assert not resolved.exists()
+
+
+class TestHandoff:
+    """`compose_handoff` — the curated executor brief (methodology
+    restoration): open findings and dependency-relevant entries in full,
+    unrelated fixed history collapsed to one line each, raw pointer always
+    present."""
+
+    def _entries(self):
+        return [
+            _entry(
+                id="o1",
+                kind="finding",
+                state="open",
+                phase=9,
+                title="Open elsewhere",
+                body="actionable anywhere",
+            ),
+            _entry(
+                id="f-dep",
+                kind="finding",
+                state="fixed",
+                phase=1,
+                title="Fixed on dep",
+                body="relevant history",
+            ),
+            _entry(
+                id="f-old",
+                kind="finding",
+                state="fixed",
+                phase=5,
+                title="Fixed elsewhere",
+                body="ancient detail " * 20,
+            ),
+            _entry(
+                id="d-dep", kind="decision", phase=1, title="Dep decision", body="why we did it"
+            ),
+            _entry(
+                id="d-far",
+                kind="decision",
+                phase=5,
+                title="Far decision",
+                body="unrelated rationale",
+            ),
+            _entry(
+                id="d-any",
+                kind="decision",
+                phase=None,
+                title="Global decision",
+                body="applies to all",
+            ),
+            _entry(
+                id="v-dep", kind="discovery", phase=2, title="Dep discovery", body="trap to avoid"
+            ),
+            _entry(
+                id="v-far", kind="discovery", phase=5, title="Far discovery", body="unrelated note"
+            ),
+        ]
+
+    def test_open_findings_render_in_full(self) -> None:
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "actionable anywhere" in out
+
+    def test_dependency_scoped_entries_render_in_full(self) -> None:
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "relevant history" in out
+        assert "why we did it" in out
+        assert "trap to avoid" in out
+        assert "applies to all" in out
+
+    def test_unrelated_fixed_history_collapses_to_one_line_each(self) -> None:
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "Far decision" in out
+        assert "unrelated rationale" not in out
+        assert "Far discovery" in out
+        assert "unrelated note" not in out
+        assert "Fixed elsewhere" in out
+        assert "ancient detail" not in out
+
+    def test_collapsed_lines_carry_state_and_phase(self) -> None:
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "f-old" in out and "fixed" in out and "phase 5" in out
+
+    def test_raw_pointer_is_always_present(self) -> None:
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "fr journal render --scope plan --slug s" in out
+
+    def test_empty_journal_composes_to_pointer_only(self) -> None:
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff([], phase=1, scope="plan", slug="s")
+
+        assert "fr journal render --scope plan --slug s" in out
+        assert "Open" not in out
