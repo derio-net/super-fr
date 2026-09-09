@@ -2036,8 +2036,9 @@ def test_resolve_while_another_unit_is_running_is_refused(tmp_path: Path) -> Non
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code, marks running
 
     result = _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "peer-review",
-                        "--item", "phase/1", "--state", "done"]
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "peer-review", "--item", "phase/1", "--state", "done"],
     )
 
     assert result.exit_code == 2, result.output
@@ -2055,10 +2056,14 @@ def test_serial_resolves_still_flow(tmp_path: Path) -> None:
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
     _started_grouped_with_plan(repo, shipped)
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
-    assert _invoke(
-        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
-                        "--state", "done"]
-    ).exit_code == 0
+    assert (
+        _invoke(
+            repo,
+            shipped,
+            ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+        ).exit_code
+        == 0
+    )
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches peer-review
 
