@@ -1,245 +1,392 @@
 ---
 marp: true
 theme: default
-title: "super-fr: every ceremony was a scar"
+paginate: true
+size: 16:9
 ---
 
-# super-fr: every ceremony was a scar
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Inter:wght@400;600;700&display=swap');
 
-Half 1: the pain → the mechanism (finished) · Half 2: the receipts, live later (preview)
+:root {
+  --color-background: #0d1117;
+  --color-foreground: #c9d1d9;
+  --color-heading: #58a6ff;
+  --color-accent: #7ee787;
+  --color-code-bg: #161b22;
+  --color-border: #30363d;
+}
 
-Cold-start friendly: no superpowers knowledge assumed.
-Stance: **the ceremony earns its keep** — each piece exists because the
-un-ceremonied version failed. Half 2 measures it.
+section {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: 'Inter', sans-serif;
+  font-size: 22px;
+  padding: 52px 56px;
+  border-left: 4px solid var(--color-accent);
+}
 
-- **Say:**
-  - "This talk has two halves. First: why super-fr looks the way it does — every awkward piece was a real failure first."
-  - "Second, later: the same feature built twice, fr-goal vs vanilla, same model, measured. I believe the ceremony pays. The numbers get a vote too."
+h1, h2, h3 {
+  font-family: 'Fira Code', monospace;
+  font-weight: 700;
+  color: var(--color-heading);
+}
 
----
+h1 { font-size: 46px; }
+h1::before { content: '# '; color: var(--color-accent); }
+h2 { font-size: 34px; margin-bottom: 28px; padding-bottom: 10px; border-bottom: 2px solid var(--color-border); }
+h2::before { content: '## '; color: var(--color-accent); }
 
-## Orientation: what superpowers (and openspec) gave us
+ul, ol { padding-left: 30px; }
+li { margin-bottom: 8px; }
+li::marker { color: var(--color-accent); }
+strong { color: var(--color-accent); }
 
-Both plugins supply what raw prompting lacks: **structure** — brainstorm a design,
-write a plan, execute it, review. Openspec is the heavier, spec-artifact-driven
-cousin; superpowers is the leaner loop (brainstorming, test-driven-development,
-requesting/reviewing code review, finishing a branch). I settled on superpowers
-as the base because lean composes — and then kept hitting the same gaps using it
-for real features.
+pre {
+  background-color: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+code {
+  background-color: var(--color-code-bg);
+  color: var(--color-accent);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.88em;
+}
+pre code { background-color: transparent; padding: 0; color: var(--color-foreground); }
 
-- **Say:**
-  - "If you've never used either: they turn 'build X' from one giant prompt into stages with artifacts. That alone fixes 'the model forgot the design halfway through.'"
-  - "Openspec leans on change-proposals; superpowers leans on a tight brainstorm→TDD→review loop. I picked superpowers because there was less to fight when I started bolting things on."
-  - "Everything after this slide is a gap I actually hit, in order."
+table { font-size: 17px; }
+blockquote { font-size: 21px; border-left: 3px solid var(--color-accent); }
 
----
+header { font-size: 14px; color: #8b949e; font-family: 'Fira Code', monospace; }
+header strong { color: #58a6ff; }
 
-## Scar 1: two features at once was impossible
+footer { font-size: 13px; color: #6e7681; font-family: 'Fira Code', monospace; }
+footer::before { content: '// '; color: var(--color-accent); }
 
-Working on multiple features meant one checkout, stashed halves, stray state —
-and any brainstorm that died left litter in the base repo. So: **mandatory
-worktree isolation**. `fr isolation up --branch <b>` cuts a worktree at
-`~/.cache/fr/worktrees/<repo>/<branch>` from fresh `origin/<default>`, plus the
-repo's devcontainer. Reads/edits on the host worktree; every command via
-`fr isolation exec -- …`. Then the env problem surfaced: runs need tools AND
-secrets without leaking them — hence **profiles** (`.devcontainer/<profile>/`)
-with a host-side secrets env-file per profile, least-privilege default.
+section.title-slide {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  justify-content: center;
+}
+section.part-model,
+section.part-scars,
+section.part-run,
+section.title-slide {
+  --h1-color: #fff;
+  color: white;
+}
+section.part-model h1, section.part-scars h1, section.part-run h1 { color: #fff; }
+section.part-model { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%); }
+section.part-scars { background: linear-gradient(135deg, #064e3b 0%, #047857 100%); }
+section.part-run { background: linear-gradient(135deg, #3d1e5c 0%, #5a2d8e 100%); }
+</style>
 
-- **Say:**
-  - "The first scar. I couldn't hold two features in my head because the repo couldn't hold them either."
-  - "There is no unisolated fallback — that word 'mandatory' is doing work. A brainstorm that dies leaves the base pristine."
-  - "Backstops, not a security boundary: `.fr-isolation` marker, the edit hook, the bash guard. Escapes exist and are documented."
-- **Ref:** `plugins/super-fr/skills/fr-isolation/SKILL.md`, `plugins/super-fr/hooks/fr-isolation-required.sh`
+<!-- _class: lead title-slide -->
+<!-- footer: "" -->
 
----
+# super-fr: from prompt to reviewed PR
 
-## Scar 2: nothing tested what the user was promised
+## Half 1 - shapes, scars, and your first run
 
-Unit tests passed and the feature still didn't do the thing. The missing layer
-was **high-level acceptance**: concrete "operator can X" claims with evidence.
-So the **acceptance matrix** (`docs/acceptance/matrix.yaml`): rows born at
-brainstorm time (`fr acceptance add`, never hand-edited), starting at
-`not-implemented`, flipped up (`skipped → ci/scheduled`) only with test
-evidence, `failing` breaking CI by design. Plan phases link rows
-(`acceptance: [ids]`); self-review errors on Test-Plan specs with zero links.
+**Audience**: daily AI users, new to fr
+**Goal**: you leave ready to run it
+**When**: September 2026
 
-- **Say:**
-  - "Green suite, broken promise. I needed a layer that says what the user can do now — and refuses to be called done without proof."
-  - "Rows are presented with a one-line defense at brainstorm close. Silent row creation is not agreement on scope."
-  - "The debt stays visible in the PR. That's the point — it's embarrassing by design."
-- **Ref:** `fr acceptance {init,add,check,status,report}`, `.github/workflows/acceptance-report.yml`
-
----
-
-## Scar 3: drift, and building the wrong thing confidently
-
-Two related failures: the build wandered from the design (drift), and the design
-was wrong but executed flawlessly. Three mechanisms answer them: the **walking
-skeleton** (first agentic phase proves the hardest integration early or the plan
-is fiction), **actual TDD with a refactoring step** (failing test → implement →
-refactor-or-`no-refactor-because`), and **review after each phase**
-(`requesting-code-review` over spec + plan + code; every finding fixed with
-tests or refuted with reasoning — recorded `open|fixed|refuted`, never silently
-dropped).
-
-- **Say:**
-  - "Drift is what happens when the plan is a rumor. The skeleton makes phase one prove the plan touches reality."
-  - "'Actual TDD' is a dig at myself — I was writing tests after. The refactor step being explicit is what made it real."
-  - "Review-per-phase, not review-at-end: a finding at the end is a rewrite; a finding per phase is a fix."
-- **Ref:** `plugins/super-fr/skills/fr-execute/SKILL.md`, `plugins/super-fr/skills/fr-goal/SKILL.md`
-
----
-
-## Scar 4: the markdown plan didn't survive contact
-
-The original superpowers plan was one markdown file: unmergeable, untickable by
-tooling, position kept in the model's head. So I broke it up: **plan-as-folder**
-(`docs/superpowers/plans/<slug>/` — `_meta.yaml`, `_prose.md`, one `NN.yaml`
-per phase, step ids `P1.T1.S1`) — plus a **durable run cursor**
-(`docs/superpowers/runs/<run-id>.yaml` via `fr run start/advance/resolve`).
-`fr plan self-review` runs as a deterministic gate: dependency cycles, manual
-work hiding in agentic phases, unknown acceptance IDs, unresolvable shape refs —
-exit code decides, nobody judges "looks fine."
-
-- **Say:**
-  - "A plan the tooling can't read is a wish. Per-phase files also kill the parallel-merge conflict."
-  - "The cursor is the other half: failed step holds position, the file rides the branch into the PR, so the reviewer sees the journey."
-  - "Self-review before any token burns on implementation — orchestration bugs are cheapest here."
-- **Ref:** `plugins/super-fr/workflows/fr-goal.yaml`, `packages/fr/src/fr/commands/run_cmd.py`
+<!--
+Talk track:
+- Two halves today. Half 1 is yours to use on Monday: the mental model, why each piece exists, then the exact path to a first run.
+- Half 2, later: the same feature built twice, fr-goal versus vanilla, measured. I believe the ceremony pays. The numbers get a vote too.
+- No superpowers knowledge assumed. Everything is on these slides or one link away.
+-->
 
 ---
 
-## Scar 5: the session rotted as it grew
+<!-- header: "" -->
 
-Long runs compacted, forgot, and bled context across phases. Answer: **one
-subagent per phase, journal-fed** — `fr pickup` plus the spec plus
-`fr journal render --scope plan` is the whole handoff; discoveries are written
-down phase by phase, and acceptance rows flip only on evidence. Phase difficulty
-routes the model: per-phase `tier` (`mechanical|standard|hard`) resolved via
-`fr models` (repo override > user, per harness). And the one hard lesson (#420):
-the phase executor must NOT get its own worktree — a second worktree cut from
-`main` can't see the spec/plan, writes get denied, yet dispatch succeeds, so the
-run looks healthy while doing nothing.
+# Questions this talk answers
 
-- **Say:**
-  - "Session creep is the silent killer of long runs. The journal is the handoff — phases don't remember, they read."
-  - "Tiers are honesty about difficulty: don't burn the big model on mechanical work, don't starve the hard phase."
-  - "#420 is my favorite scar: the run was green and nothing happened. Two isolations don't compose."
-- **Ref:** `plugins/super-fr/agents/fr-phase-executor.md`, `plugins/super-fr/hooks/fr-phase-executor-guard.sh`
+1. **What is the pipeline** - where does each step live and who runs it
+2. **Why so many steps** - which real failure each ceremony prevents
+3. **How do I start** - profiles, first goal, acceptance rows, next moves
+
+<!--
+Talk track:
+- Three promises. One: a mental model you can hold in your head, the shape and the cursor.
+- Two: honesty about cost. Every mechanism here slowed something down to prevent something worse. You get the failure stories, not just the features.
+- Three: runnable. Install, profile interview, first goal, acceptance rows. If the wifi holds there may be a live command or two.
+-->
 
 ---
 
-## The frame that holds the scars: workflow shapes (the core idea)
+<!-- _class: lead title-slide -->
+<!-- header: "" -->
+<!-- footer: "" -->
 
-Every mechanism above is a step; the **shape** is the list of steps, as data.
-`plugins/super-fr/workflows/fr-goal.yaml` — 6 steps plus 2 grouped children
-under `implement`. `kind: cli` executes (exit code = verdict);
-`kind: agent` never executes — it prints a dispatch brief you fulfill, then
-`fr run resolve`. `gate: operator` is the one promised stop. `needs`/`emits`
-wire the artifacts. `fr workflow check` rejects dup ids, command-less `cli`
-(which would exit-0 doing nothing), dangling `needs`, cycles, unknown
-capabilities. A repo overrides wholesale (`docs/superpowers/workflows/<name>.yaml`
-— never merged; half-mine/half-shipped fails invisibly). This very deck runs on
-one: `presentation-showdown`.
+# Agenda
 
-- **Say:**
-  - "This is the slide I'd save if the projector died. Everything so far is a step; the shape is what turns steps into a pipeline you can validate, resolve, and re-run."
-  - "The engine is a plain program with no path to an LLM — every judgment call happens on the far side of a visible handoff."
-  - "Thesis in one line: the ceremony is not overhead, it's the scar tissue — and it's data, so it's checkable."
-- **Ref:** `packages/fr/src/fr/workflow/{model,check,resolve}.py`
+### Part 1: the mental model
+Shapes, cursor, isolation - the three ideas everything hangs on
 
----
+### Part 2: scars as proof
+Five failures, five mechanisms, each earned the hard way
 
-## fr-goal end to end (what the shape runs)
+### Part 3: run it
+Your first goal, end to end, plus where to go next
 
-Brainstorm → ONE batched Q&A (≤4, recommended-first, unanswered = stop) → spec →
-spec-review → plan → `plan self-review` → per-phase TDD executors → per-phase
-review → draft PR → `gh pr ready` only when green → operator merges (never
-self-merged) → `verify-merge` (content-presence, squash-safe) → post-merge Test
-Plan walked through together → archive + teardown. Manual work
-(secrets/UI/deploys) rides `[manual]` phases: back-loaded by default (ships
-unimplemented, operator pushes to the same PR), front-loaded only when agentic
-work depends on it. Two more scars inside: #320 (PRs opened before review left
-fixes orphaned on merged branches — hence draft-first + push guard) and the
-merge-race guard (draft state + post-merge content verification).
-
-- **Say:**
-  - "One operator touchpoint on the happy path. Everything else is the agent working the shape."
-  - "Manual phases are labeled, not hidden. That's a moral position disguised as a schema field."
-  - "The agent never merges. Merge is yours, and the Test Plan after it is driven together."
-- **Ref:** `plugins/super-fr/skills/fr-goal/SKILL.md`, `docs/explainers/01-fr-goal.md`
+<!--
+Talk track:
+- Shapes first, scars second. The model gives scars somewhere to hang. Then we get practical.
+- Part 1 is the only abstract part. Survive it and the rest is stories plus commands.
+-->
 
 ---
 
-## Standalone skills (same discipline, smaller scope)
+<!-- _header: "" -->
+<!-- _class: lead part-model -->
 
-- **`fr-brainstorming`** — interactive design-in-isolation with section approvals
-  (under fr-goal it obeys the batched contract instead). Ends presenting
-  acceptance rows with defenses.
-- **`fr-debugging`** — Iron-Law debugging in isolation (reuse the feature
-  workspace if found mid-goal, else fresh `fix/<slug>` from `origin/<default>`).
-  Debug journal flushed as-you-go (`repro/hypothesis/ruled-out/root-cause`);
-  two hard stops only: no confident hypothesis, or 3 failed fixes → question the
-  architecture. ONE fix-PR, body rendered from the journal.
-- **`fr-plan` / `fr-execute` / `fr-init` / `fr-progress`** — authoring, single-phase
-  execution, first-run profile interview, read-only status/drift audit.
+# Part 1: the mental model
 
-- **Say:**
-  - "You don't always need the whole pipeline. The skills are the pipeline's steps, usable alone, same isolation."
-  - "Debugging's journal is the one I'd steal for any workflow: the rejected-hypothesis trail is what compaction eats first."
+**Shapes, cursor, isolation - hold these three and the rest clicks**
+
+<!--
+Talk track:
+- Three ideas. The pipeline is a data file. Progress is a file on your branch. Work happens outside your checkout. That is nearly the whole talk.
+-->
 
 ---
 
-## Integrations in 4 minutes (cut candidate)
+<!-- header: "**Mental model** > Scars > Run it" -->
 
-- **Claude Code:** full hook surface (edit gate, bash guard, executor guard,
-  push guard, session bind/unbind, worktree create/remove, acceptance nag),
-  4 rules, executor agent, status-line segment, `derio-net--super-fr`
-  marketplace (the bare org name is retired — two repos evicted each other).
-- **OpenCode:** TS port of the edit guard (`tool.execute.before`) — known gap,
-  bash ungated; skills/instructions mirrored by `sync-opencode.py` with CI
-  tripwires. Never hand-edit generated files.
-- **Hermes:** skills + SOUL rules block + shell-hook guards (edits AND bash),
-  `delegate_task(goal, context)` carrying the journal-fed brief; no shipped
-  model bindings — first run asks, `fr models set` persists.
-- **Git servers + runners:** `gh`/`glab`/`tea` behind `detect_backend()`;
-  `fr apply` dry-run by default; reachability gate (on `origin/HEAD`);
-  `fr:ready → fr:in-progress → fr:pr-ready → (closed)` + `fr:blocked`,
-  `fr:synced`, `manual`; `fr-vk` / `fr-cncd` runners via the `fr-dispatch`
-  protocol.
+## Pipeline as data
 
-- **Say:**
-  - "If time dies, this is the slide that dies. One line each: Claude is the reference harness, OpenCode is edit-gated with a known bash gap, Hermes dispatches through context, git servers are a detected backend, not a rewrite."
-  - "The install rule that matters: version bump on any shipped behavior change, or clients cache-stall."
+```yaml
+- id: brainstorm
+  kind: agent
+  skill: super-fr:fr-brainstorming
+  gate: operator
+  emits: [spec]
+- id: plan-review
+  kind: cli
+  run: fr plan self-review {{ artifacts.plan }}
+```
 
----
+- `kind: cli` runs, exit code is the verdict
+- `kind: agent` briefs, you work, then `fr run resolve`
+- `gate: operator` stops until a person answers
 
-## Half 2 preview: the receipts (recordings pending)
-
-Same seed prompt (`experiment/prompts/goal.md`, SPARK-4-derived), same pinned
-model (Terra, default effort), unlimited-but-logged corrections, two fresh
-branches from same `origin/HEAD`: fr-goal vs vanilla plan/execute. asciinema →
-HyperFrames side-by-side, chapters at Q&A / spec / plan / implement / review /
-PR. Runbook: `experiment/runbook.md`.
-
-- **Say:**
-  - "Half 2 is the audit. Same prompt, same model, every nudge logged — then we count."
-  - "I come in believing the ceremony pays. The table gets to disagree with me."
+<!--
+Talk track:
+- This is a real fragment of fr-goal.yaml. A shape is an ordered list of steps plus what each step needs and emits.
+- Cli steps are deterministic, nobody interprets them. Agent steps never execute inside fr, it prints a brief, you do the work, you resolve. The gate is the one promised stop.
+- Consequence: the engine is a plain program with no path to a language model. Every judgment happens on the far side of a visible handoff.
+- Full file: plugins/super-fr/workflows/fr-goal.yaml, six steps plus two grouped children under implement.
+-->
 
 ---
 
-## The comparison — empty until measured
+<!-- header: "**Mental model** > Scars > Run it" -->
 
-| Metric | fr-goal | Vanilla |
-|---|---|---|
-| Acceptance rows passed | … | … |
-| Wall time / operator time | … | … |
-| Tokens in/out, $ | … | … |
-| Tests added, coverage Δ | … | … |
-| Lint / typecheck clean? | … | … |
-| Findings fixed / refuted / missed | … | … |
-| Artifacts (spec/plan/journal/run) | … | … |
+## Shape graph
 
-My position: **the ceremony earns its keep** — each row above should favor the
-run that can't lose the design, the evidence, or its place. If a row doesn't,
-that's a scar I haven't earned yet — and a shape change with its own migration.
+```mermaid
+flowchart TD
+    B[brainstorm] --> SR[spec-review]
+    SR --> P[plan]
+    P --> PR[plan-review]
+    PR --> I[implement x N phases]
+    I --> R[review]
+    R --> D[deliver]
+```
+
+- One operator gate: the batched questions
+- One deterministic gate: `plan self-review`
+- Fan-out: one executor per phase, then review
+
+<!--
+Talk track:
+- Walk the graph left to right. Brainstorm ends in one question round, that is the single operator gate on the happy path.
+- Plan-review is the deterministic gate, a command whose exit code decides. Implement fans out per phase, each executor briefed from the journal.
+- Review then deliver close it. Draft pull request first, marked ready only when green. Merge is always yours.
+-->
+
+---
+
+<!-- header: "**Mental model** > Scars > Run it" -->
+
+## Runs live in their workspace
+
+```bash
+fr run start fr-goal --branch feat/thing
+fr run advance <run-id>   # cli runs, agent briefs
+fr run resolve <run-id> --step <id> --state done
+```
+
+- Run file lives on the branch, rides into the PR
+- Failed step holds the cursor, nothing slides past
+- Workspace first: worktree plus devcontainer, then the run
+
+<!--
+Talk track:
+- Start validates the shape before provisioning anything, then creates the worktree and container, then writes the run file inside the workspace. A run is born where it works.
+- Advance on a cli step runs it. On an agent step it prints the brief and waits. Resolve is the only way past running.
+- Isolation in one breath: reads and edits on the host worktree, every command through fr isolation exec, secrets host-side per profile. No unisolated fallback, documented escapes only.
+-->
+
+---
+
+<!-- _header: "" -->
+<!-- _class: lead part-scars -->
+
+# Part 2: scars as proof
+
+**Each mechanism below was a failure first**
+
+<!--
+Talk track:
+- Origin story, fast. I picked superpowers as the base because it was the leanest loop. Then real features kept breaking in the same five ways. Each scar below is one of those ways plus what it became.
+-->
+
+---
+
+<!-- header: "Mental model > **Scars** > Run it" -->
+
+## One question round
+
+- Agent studies the code first, then asks once, max four
+- Recommended options first, unanswered means stop
+- Spec and plan reviews become fix passes, not approvals
+
+> Dripped interruptions and guessed scope die here
+
+<!--
+Talk track:
+- Scar: decisions arrived one at a time across days, and anything unanswered got guessed. So exploration first, then a single batched round. Four questions max forces the agent to rank what is truly operator-owned.
+- Unanswered is a stop, never a default. After that the agent owes you no more approvals, it owes you fix passes.
+- Post-merge test plan and model-per-tier questions ride the same round when relevant.
+-->
+
+---
+
+<!-- header: "Mental model > **Scars** > Run it" -->
+
+## Proof, not promises
+
+| Status | Meaning |
+|---|---|
+| `not-implemented` | Claimed, nothing yet |
+| `skipped` | Proven once, not in CI |
+| `ci` / `scheduled` | Automated, cannot drift |
+| `failing` | Red by design, blocks CI |
+
+- Rows born at brainstorm, one-line defense each
+- Phases link rows, self-review enforces it
+
+<!--
+Talk track:
+- Scar: suite green, feature not doing the thing. So acceptance rows in docs/acceptance/matrix.yaml, one operator-can-X per row, flipped up only with test evidence.
+- Rows are presented with defenses at brainstorm close. Silent creation is not agreement on scope.
+- The plan links phases to rows and the gate errors on unlinked test-plan specs. Debt stays visible in the pull request, embarrassing by design.
+-->
+
+---
+
+<!-- header: "Mental model > **Scars** > Run it" -->
+
+## Plans a tool can read
+
+- Folder per plan: `_meta.yaml`, `_prose.md`, one file per phase
+- Step ids `P1.T1.S1`, dependencies explicit
+- `fr plan self-review`: cycles, hidden manual work, bad links
+
+> Manual work ships labeled `[manual]`, never smuggled in
+
+<!--
+Talk track:
+- Scar: the single markdown plan, unmergeable, position kept in the model's head. Per-phase files also kill merge conflicts.
+- Self-review runs before any token burns on implementation: dependency cycles, manual work hiding in agentic phases, unknown acceptance ids.
+- Manual phases back-load by default, the pull request ships them unimplemented and you push to the same branch. Front-load only when agentic work genuinely depends.
+-->
+
+---
+
+<!-- header: "Mental model > **Scars** > Run it" -->
+
+## Loop until reviewed
+
+- One executor per phase, briefed from the journal
+- Failing test, implement, refactor, per-phase review
+- Draft PR first, ready only when green
+
+> Fixes orphaned on merged branches and silent no-op runs both bit us
+
+<!--
+Talk track:
+- Scar tissue, two of them. Fixes pushed after a premature merge landed on dead branches, so now draft first and the push guard refuses merged-branch pushes.
+- And the healthy-looking run that did nothing: a phase executor in a second worktree cut from main cannot see the spec, so the no-worktree carve-out is enforced by a hook, not by prose.
+- Review findings are fixed with tests or refuted with reasoning, recorded open, fixed, or refuted. The pull request body is rendered from that list.
+-->
+
+---
+
+<!-- _header: "" -->
+<!-- _class: lead part-run -->
+
+# Part 3: run it
+
+**From zero to first reviewed pull request**
+
+<!--
+Talk track:
+- Theory over. This part is a checklist you can follow Monday. Four moves plus pointers.
+-->
+
+---
+
+<!-- header: "Mental model > Scars > **Run it**" -->
+
+## First goal in four moves
+
+```bash
+curl -fsSL .../bootstrap.sh | bash   # install fr plus plugins
+fr-init                               # interview, scaffold a profile
+/fr-goal <what you want>              # answer once, then watch
+fr acceptance status                  # flip rows as evidence lands
+```
+
+- Standalone when small: `fr-brainstorming`, `fr-debugging`, `fr-plan`
+- Custom pipeline: your own `workflows/<name>.yaml`, validated by check
+- Scale out: `fr apply --to <runner>` fans merged phases to agents
+
+<!--
+Talk track:
+- Move one installs everything and wires the harness you have. Move two is the only interview in the system and it exists because isolation without a profile is a hard stop, not a degraded mode.
+- Move three is the whole talk in one command. Answer the round, then the shape drives.
+- Move four keeps you honest. Standalone skills cover the small jobs. A custom shape is a yaml file plus check. Dispatch is for merged plans with per-phase pull requests.
+- Repos resolve runners and git hosts the same way everywhere, one CLI surface per harness.
+-->
+
+---
+
+<!-- header: "Mental model > Scars > **Run it**" -->
+
+## Takeaways
+
+1. **Pipeline is data** - shapes validate, resolve, and re-run
+2. **Progress is a file** - cursor on the branch, failure holds still
+3. **Work is isolated** - worktree plus container, no fallback
+4. **Done means proven** - acceptance rows plus review findings
+
+Next: half 2 measures all of this, same prompt twice, counted live
+
+<!--
+Talk track:
+- Four sentences to carry out. If you remember nothing else: data, file, isolation, proof.
+- My position, stated plainly: the ceremony earns its keep. Each row of ceremony exists because the un-ceremonied version failed on a real feature.
+- Half 2 is the audit. Same seed prompt, same pinned model, every nudge logged, side-by-side recording. The table gets to disagree with me.
+- Thank you. Questions, then your first goal whenever you are ready.
+-->
