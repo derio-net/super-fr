@@ -220,7 +220,19 @@ Talk track:
 
 ## Shape graph
 
-![w:880px center](diagrams/shape.svg)
+<div style="display:flex; align-items:stretch; justify-content:center; gap:0; margin-top:18px; font-family:'Fira Code',monospace; font-size:15px;">
+<div style="background:#161b22; border:2px solid #7ee787; border-radius:8px; padding:10px 12px; text-align:center;">brainstorm<br/><span style="color:#8b949e; font-size:12px;">gate: operator</span></div>
+<div style="align-self:center; color:#58a6ff; padding:0 6px;">→</div>
+<div style="background:#161b22; border:2px solid #30363d; border-radius:8px; padding:10px 12px; text-align:center;">spec-review</div>
+<div style="align-self:center; color:#58a6ff; padding:0 6px;">→</div>
+<div style="background:#161b22; border:2px solid #30363d; border-radius:8px; padding:10px 12px; text-align:center;">plan</div>
+<div style="align-self:center; color:#58a6ff; padding:0 6px;">→</div>
+<div style="background:#161b22; border:2px solid #58a6ff; border-radius:8px; padding:10px 12px; text-align:center;">plan-review<br/><span style="color:#8b949e; font-size:12px;">cli gate</span></div>
+<div style="align-self:center; color:#58a6ff; padding:0 6px;">→</div>
+<div style="background:#161b22; border:2px solid #7ee787; border-radius:8px; padding:10px 12px; text-align:center;">implement<br/><span style="color:#8b949e; font-size:12px;">× N phases</span></div>
+<div style="align-self:center; color:#58a6ff; padding:0 6px;">→</div>
+<div style="background:#161b22; border:2px solid #30363d; border-radius:8px; padding:10px 12px; text-align:center;">review → deliver</div>
+</div>
 
 - One operator gate: the batched questions
 - One deterministic gate: `plan self-review`
