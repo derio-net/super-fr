@@ -60,7 +60,34 @@ code {
 }
 pre code { background-color: transparent; padding: 0; color: var(--color-foreground); }
 
-table { font-size: 17px; }
+/* highlight.js tokens - github-dark palette for the dark stage */
+.hljs-attr { color: #79c0ff; }
+.hljs-string, .hljs-string .hljs-subst { color: #a5d6ff; }
+.hljs-bullet, .hljs-number, .hljs-literal { color: #79c0ff; }
+.hljs-keyword, .hljs-selector-tag { color: #ff7b72; }
+.hljs-comment, .hljs-quote { color: #8b949e; font-style: italic; }
+.hljs-title, .hljs-section, .hljs-name { color: #7ee787; }
+.hljs-variable, .hljs-template-variable { color: #ffa657; }
+.hljs-type, .hljs-built_in { color: #ffa657; }
+.hljs-symbol, .hljs-meta { color: #79c0ff; }
+.hljs-addition { color: #aff5b4; }
+.hljs-deletion { color: #ffdcd7; }
+.hljs-emphasis { font-style: italic; }
+
+table { font-size: 17px; border-collapse: collapse; }
+th {
+  background-color: var(--color-code-bg);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  padding: 8px 14px;
+  font-family: 'Fira Code', monospace;
+}
+td {
+  border: 1px solid var(--color-border);
+  padding: 8px 14px;
+  color: var(--color-foreground);
+}
+tr:nth-child(even) td { background-color: rgba(22, 27, 34, 0.6); }
 blockquote { font-size: 21px; border-left: 3px solid var(--color-accent); }
 
 header { font-size: 14px; color: #8b949e; font-family: 'Fira Code', monospace; }
@@ -193,15 +220,7 @@ Talk track:
 
 ## Shape graph
 
-```mermaid
-flowchart TD
-    B[brainstorm] --> SR[spec-review]
-    SR --> P[plan]
-    P --> PR[plan-review]
-    PR --> I[implement x N phases]
-    I --> R[review]
-    R --> D[deliver]
-```
+![w:880px center](diagrams/shape.svg)
 
 - One operator gate: the batched questions
 - One deterministic gate: `plan self-review`
