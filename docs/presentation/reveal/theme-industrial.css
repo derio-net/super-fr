@@ -84,10 +84,13 @@
 .reveal .crumb { font-family: 'Fira Code', monospace; font-size: 0.55em; color: var(--muted); margin-bottom: 0.6em; }
 .reveal .crumb strong { color: var(--yellow); }
 
-/* Split layout: text column + portrait image side by side. */
-.reveal section.split { display: flex; gap: 4%; align-items: center; }
+/* Split layout: text column + portrait image side by side.
+   !important because reveal.js sets display inline per slide state. */
+.reveal section.split { display: flex !important; gap: 4%; align-items: center; }
 .reveal .split .col { width: 62%; flex: none; }
 .reveal .split img.side { width: 34%; max-height: 84vh; object-fit: contain; }
+.reveal section.title { display: flex !important; flex-direction: column; justify-content: flex-start; padding-top: 6vh; }
+.reveal ul li, .reveal ol li { font-size: 0.82em; }
 .reveal ol { margin-left: 1.1em; }
 .reveal pre.chain { white-space: pre-wrap; word-break: break-word; }
 .reveal .divider { text-align: center; }
