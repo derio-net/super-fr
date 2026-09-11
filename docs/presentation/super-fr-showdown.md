@@ -101,34 +101,32 @@ section.title-slide {
   justify-content: center;
 }
 section.part-model,
-section.part-scars,
+section.part-upgrades,
 section.part-run,
 section.title-slide {
   --h1-color: #fff;
   color: white;
 }
-section.part-model h1, section.part-scars h1, section.part-run h1 { color: #fff; }
+section.part-model h1, section.part-upgrades h1, section.part-run h1 { color: #fff; }
 section.part-model { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%); }
-section.part-scars { background: linear-gradient(135deg, #064e3b 0%, #047857 100%); }
+section.part-upgrades { background: linear-gradient(135deg, #064e3b 0%, #047857 100%); }
 section.part-run { background: linear-gradient(135deg, #3d1e5c 0%, #5a2d8e 100%); }
 </style>
 
-<!-- _class: lead title-slide -->
 <!-- footer: "" -->
+<!-- _header: "" -->
 
-# super-fr: three evolutions
+![bg](diagrams/factory-line.png)
 
-## Vanilla prompts, superpowers discipline, fr-goal autonomy
+# Delivering more robust code safely using custom skills. A personal experiment extending the Superpowers skill
 
-**Audience**: daily AI users, new to fr
-**Goal**: you leave ready to run it
-**When**: September 2026
+## From one prompt to a reviewed pull request — the machinery in between
 
 <!--
 Talk track:
-- Two halves today. Half 1 is yours to use on Monday: the mental model, why each piece exists, then the exact path to a first run.
-- Half 2, later: the same feature built twice, fr-goal versus vanilla, measured. I believe the ceremony pays. The numbers get a vote too.
-- No superpowers knowledge assumed. Everything is on these slides or one link away.
+- Same chassis, three stations. Left: hand tools and taped-up notes. Middle: one robot, a half-built fence, a clipboard. Right: the full line, conveyor, scanner gate, control booth.
+- This talk walks that floor left to right. What each station added, what failure paid for it, what it costs. Then you get the keys to run station three yourself.
+- No superpowers knowledge assumed. Half 2, later, takes the finished car to the test track.
 -->
 
 ---
@@ -167,7 +165,7 @@ Your first goal plus where to go next
 
 <!--
 Talk track:
-- Shapes first, scars second. The model gives scars somewhere to hang. Then we get practical.
+- Shapes first, upgrades second. The model gives each upgrade somewhere to hang. Then we get practical.
 - Part 1 is the only abstract part. Survive it and the rest is stories plus commands.
 -->
 
@@ -260,7 +258,7 @@ Talk track:
 ---
 
 <!-- _header: "" -->
-<!-- _class: lead part-scars -->
+<!-- _class: lead part-upgrades -->
 
 # Upgrades, each justified
 
@@ -314,7 +312,7 @@ Talk track:
 
 <!--
 Talk track:
-- Scar: decisions arrived one at a time across days, and anything unanswered got guessed. So exploration first, then a single batched round. Four questions max forces the agent to rank what is truly operator-owned.
+- Before: decisions arrived one at a time across days, and anything unanswered got guessed. So exploration first, then a single batched round. Four questions max forces the agent to rank what is truly operator-owned.
 - Unanswered is a stop, never a default. After that the agent owes you no more approvals, it owes you fix passes.
 - Post-merge test plan and model-per-tier questions ride the same round when relevant.
 -->
@@ -337,7 +335,7 @@ Talk track:
 
 <!--
 Talk track:
-- Scar: suite green, feature not doing the thing. So acceptance rows in docs/acceptance/matrix.yaml, one operator-can-X per row, flipped up only with test evidence.
+- Before: suite green, feature not doing the thing. So acceptance rows in docs/acceptance/matrix.yaml, one operator-can-X per row, flipped up only with test evidence.
 - Rows are presented with defenses at brainstorm close. Silent creation is not agreement on scope.
 - The plan links phases to rows and the gate errors on unlinked test-plan specs. Debt stays visible in the pull request, embarrassing by design.
 -->
@@ -356,7 +354,7 @@ Talk track:
 
 <!--
 Talk track:
-- Scar: the single markdown plan, unmergeable, position kept in the model's head. Per-phase files also kill merge conflicts.
+- Before: the single markdown plan, unmergeable, position kept in the model's head. Per-phase files also kill merge conflicts.
 - Self-review runs before any token burns on implementation: dependency cycles, manual work hiding in agentic phases, unknown acceptance ids.
 - Manual phases back-load by default, the pull request ships them unimplemented and you push to the same branch. Front-load only when agentic work genuinely depends.
 -->
@@ -375,7 +373,7 @@ Talk track:
 
 <!--
 Talk track:
-- Scar tissue, two of them. Fixes pushed after a premature merge landed on dead branches, so now draft first and the push guard refuses merged-branch pushes.
+- Two lessons in one slide. Fixes pushed after a premature merge landed on dead branches, so now draft first and the push guard refuses merged-branch pushes.
 - And the healthy-looking run that did nothing: a phase executor in a second worktree cut from main cannot see the spec, so the no-worktree carve-out is enforced by a hook, not by prose.
 - Review findings are fixed with tests or refuted with reasoning, recorded open, fixed, or refuted. The pull request body is rendered from that list.
 -->
@@ -433,7 +431,7 @@ Talk track:
 
 ---
 
-<!-- header: "Stages > Scars > **Run it**" -->
+<!-- header: "Stages > Upgrades > **Run it**" -->
 
 ## First goal in four moves
 
@@ -458,7 +456,7 @@ Talk track:
 
 ---
 
-<!-- header: "Stages > Scars > **Run it**" -->
+<!-- header: "Stages > Upgrades > **Run it**" -->
 
 ## Takeaways
 
