@@ -497,10 +497,11 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes</code></pre>
 <div class="col">
 <div class="crumb">Stages &gt; Upgrades &gt; <strong>Run it</strong></div>
 <h2>First goal in four moves</h2>
-<pre><code>curl -fsSL .../bootstrap.sh | bash   # install fr plus plugins
-fr-init                               # interview, scaffold a profile
-/fr-goal &lt;what you want&gt;              # answer once, then watch
-fr acceptance status                  # flip rows as evidence lands</code></pre>
+<pre><code class="nohighlight">curl -fsSL .../bootstrap.sh | bash   # install
+fr-init                               # profile interview
+/fr-goal &lt;want&gt;                       # answer once, watch
+fr acceptance status                  # flip rows on evidence
+</code></pre>
 <ul>
 <li>Standalone when small: <code>fr-brainstorming</code>, <code>fr-debugging</code>, <code>fr-plan</code></li>
 <li>Custom pipeline: your own <code>workflows/&lt;name&gt;.yaml</code>, validated by check</li>
@@ -522,7 +523,7 @@ fr acceptance status                  # flip rows as evidence lands</code></pre>
 <li><strong>Work is isolated</strong> — worktree plus container, no fallback</li>
 <li><strong>Done means proven</strong> — acceptance rows plus review findings</li>
 </ol>
-<p>Next: the test track — one annotated fr-goal run, narrated live</p>
+<p class="closer">Next: the test track — one annotated fr-goal run, narrated live</p>
 </div>
 <aside class="notes">Four sentences to carry out. If you remember nothing else: data, file, isolation, proof. My position, stated plainly: the ceremony earns its keep. Each row of ceremony exists because the un-ceremonied version failed on a real feature. Half 2 is the test track: one annotated fr-goal run, narrated over the recording. Thank you. Questions, then your first goal whenever you are ready.</aside>
 <img class="side" src="../diagrams/testtrack.png" alt="">
