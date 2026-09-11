@@ -247,16 +247,17 @@ Talk track:
 idea ──▶ brainstorm ──▶ write plan ──▶ worktree ──▶ execute+TDD ──▶ verify→review→fix ──▶ finish
 ```
 
-- `brainstorming` ends in an approved spec, no code before it
-- `writing-plans` yields a zero-context plan, reviewer loop included
-- Iron laws: failing test first, evidence before any claim
+- Idea in, approved spec out: no code before sign-off
+- Spec in, zero-context plan out, then two executor options
+- Iron laws inside: failing test first, evidence before any claim
+- Review is double-sided, finishing gates on green with 4 options
+- **Gaps remain**: one markdown plan, session memory, opt-in fence
 
 <!--
 Talk track:
-- Station two. Same job, now with structure: brainstorming produces a spec markdown and refuses code until the design is approved. Writing-plans produces a plan markdown a fresh session could execute.
-- Execution picks subagent-driven or inline, test-driven-development runs the red-green-refactor loop inside, verification-before-completion forbids completion claims without a fresh full-command run.
-- Review is double-sided: requesting dispatches a SHA-scoped review, receiving bans performative agreement and demands verification. Finishing offers four options and cleans up the worktree.
-- Gaps remain, and they are the next slide deck: one markdown plan, session memory doing the carrying, worktree as a sidecar.
+- Station two, the serious version of station one. Brainstorming ends in a spec markdown and refuses code until the design is approved, with a reviewer loop on top. Writing-plans turns it into steps a fresh session could execute, then offers subagent-driven or inline execution.
+- Inside: test-driven-development runs red-green-refactor, verification-before-completion forbids completion claims without a fresh full-command run. Reviewing is double-sided, requesting dispatches SHA-scoped reviews, receiving bans performative agreement. Finishing verifies tests first, offers exactly four options, cleans up the worktree.
+- The honest limit, and it is the whole rest of this talk: the plan is one markdown file no tool can read, progress lives in session memory, and the worktree fence is opt-in per task. Everything after this slide is one of those three growing up.
 -->
 
 ---
