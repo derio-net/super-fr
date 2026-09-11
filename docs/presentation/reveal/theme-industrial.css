@@ -92,7 +92,9 @@
 .reveal .slides>section.title { height: 100%; display: flex !important; flex-direction: column; justify-content: flex-start !important; padding-top: 6vh; }
 .reveal h2 + ol, .reveal h2 + ul, .reveal h2 + pre { margin-top: 0.45em; }
 .reveal .title .topblock { margin-bottom: auto; background: linear-gradient(rgba(16,18,22,0.88), rgba(16,18,22,0)); padding: 0 0 3vh; }
-.reveal ul li, .reveal ol li { font-size: 0.72em; }
+.reveal ul li, .reveal ol li { font-size: 0.64em; }
+.reveal pre { font-size: 0.55em; }
+.reveal .closer { font-size: 0.7em; }
 .reveal ol { margin-left: 1.1em; }
 .reveal pre.chain { white-space: pre-wrap; word-break: break-word; }
 .reveal .divider { text-align: center; }
