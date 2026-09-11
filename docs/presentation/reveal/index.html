@@ -48,7 +48,8 @@
 </section>
 
 <!-- 3 vanilla -->
-<section data-markdown class="split" data-background-image="../diagrams/st1-bay.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -65,11 +66,14 @@ prompt ──▶ plan in chat ──▶ code in base
 - **No plan artifact**: conventions restated every single task
 - Human owns merge, secrets, production impact
 </textarea>
+</div>
+<img class="side" src="../diagrams/st1-bay.png" alt="">
 <aside class="notes">This is the usual case, and it is already smart. Copilot plus Terra is a strong general teammate: outcome-oriented prompts, repository exploration, multi-file edits, terminal validation, three session modes up to full autopilot. Two honest limits, straight from its own description. One: no plan artifact survives the session, so every task restates conventions, checks, and constraints from scratch. Repetition is the tax. Two: it validates what you name and ships what you approve. Teammate, not owner. The merge, the secrets, the production judgment stay human, and nothing on disk records the journey. This slide is the baseline the next two stations upgrade.</aside>
 </section>
 
 <!-- 4 superpowers -->
-<section data-markdown class="split" data-background-image="../diagrams/st2-cell.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -86,11 +90,14 @@ idea ──▶ brainstorm ──▶ write plan ──▶ worktree
 - Review is double-sided, finishing gates on green with 4 options
 - **Gaps remain**: one markdown plan, session memory, opt-in fence
 </textarea>
+</div>
+<img class="side" src="../diagrams/st2-cell.png" alt="">
 <aside class="notes">Station two, the serious version of station one. Brainstorming ends in a spec markdown and refuses code until the design is approved, with a reviewer loop on top. Writing-plans turns it into steps a fresh session could execute, then offers subagent-driven or inline execution. Inside: test-driven-development runs red-green-refactor, verification-before-completion forbids completion claims without a fresh full-command run. Reviewing is double-sided, requesting dispatches SHA-scoped reviews, receiving bans performative agreement. Finishing verifies tests first, offers exactly four options, cleans up the worktree. The honest limit, and it is the whole rest of this talk: the plan is one markdown file no tool can read, progress lives in session memory, and the worktree fence is opt-in per task. Everything after this slide is one of those three growing up.</aside>
 </section>
 
 <!-- 5 fr-goal -->
-<section data-markdown class="split" data-background-image="../diagrams/st3-line.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -105,6 +112,8 @@ brainstorm ──▶ spec-review ──▶ plan
 - Run file on the branch, failed step holds the cursor
 - Workspace first: worktree plus container, then the run
 </textarea>
+</div>
+<img class="side" src="../diagrams/st3-line.png" alt="">
 <aside class="notes">Station three. Same silhouette as station two, new species: the pipeline is a yaml manifest that validates, the cursor is a file on your branch that survives compaction, and isolation is a mandatory cell, not a sidecar fence. Cli steps execute with exit code as verdict. Agent steps print a brief, you work, you resolve. The single operator gate is the batched question round. Everything after this slide is one super-fr addition presented as the upgrade it is: what superpowers lacked, what failure paid for it, what it costs.</aside>
 </section>
 
@@ -136,7 +145,8 @@ What superpowers lacked, the failure that paid, what it costs
 
 <!-- 8 isolation + D1 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-cage.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -148,6 +158,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/8/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-cage.png" alt="">
 <aside class="notes">Upgrade one, the cage. Superpowers had using-git-worktrees as an opt-in sidecar. Here isolation is mandatory: worktree plus devcontainer before anything else, every command through the exec bridge, secrets host-side per profile. A brainstorm that dies leaves the base pristine. That sentence alone is worth the profile-setup interview on first run.</aside>
 </section>
 <section data-markdown>
@@ -171,7 +183,8 @@ fr isolation down --branch feat/thing
 
 <!-- 9 recipe + D2 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-recipe.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -183,6 +196,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/9/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-recipe.png" alt="">
 <aside class="notes">Upgrade two, the recipe. Superpowers' pipeline lived in skill prose. Here it is data: a shape is an ordered list of steps plus what each step needs and emits. Cli steps are deterministic, nobody interprets them. Agent steps never execute inside fr, it prints a brief, you do the work, you resolve. The gate is the one promised stop. Consequence: the engine is a plain program with no path to a language model. Full file: plugins/super-fr/workflows/fr-goal.yaml, six steps plus two grouped children under implement.</aside>
 </section>
 <section data-markdown>
@@ -212,7 +227,8 @@ steps:
 
 <!-- 10 conveyor + D3 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-conveyor.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -224,6 +240,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/10/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-conveyor.png" alt="">
 <aside class="notes">Upgrade three, the conveyor. Superpowers kept position in chat and checkboxes. The run file is a cursor on your branch: advance runs cli steps and briefs agent ones, resolve is the only way past running. Start validates the shape before provisioning anything, then writes the run inside the workspace. Failure holds the cursor instead of sliding past it.</aside>
 </section>
 <section data-markdown>
@@ -252,7 +270,8 @@ steps:
 
 <!-- 11 Q&A + D4 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-cord.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -264,6 +283,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/11/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-cord.png" alt="">
 <aside class="notes">Upgrade four, the cord. Before: decisions arrived one at a time across days, and anything unanswered got guessed. So exploration first, then a single batched round. Four questions max forces the agent to rank what is truly operator-owned. Unanswered is a stop, never a default. After that the agent owes you no more approvals, it owes you fix passes. Post-merge test plan and model-per-tier questions ride the same round when relevant.</aside>
 </section>
 <section data-markdown>
@@ -286,7 +307,8 @@ fr run resolve 2026-09-09-feat-presentation-showdown \
 
 <!-- 12 acceptance + D5 + D13 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-gate.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -298,6 +320,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/12/1) · [spec diff ↓](#/12/2)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-gate.png" alt="">
 <aside class="notes">Upgrade five, the gate. Before: suite green, feature not doing the thing. So acceptance rows in docs/acceptance/matrix.yaml, one operator-can-X per row, flipped up only with test evidence. Rows are presented with defenses at brainstorm close. Silent creation is not agreement on scope. The plan links phases to rows and the gate errors on unlinked test-plan specs. Debt stays visible in the pull request, embarrassing by design.</aside>
 </section>
 <section data-markdown>
@@ -340,7 +364,8 @@ super-fr adds: Test Plan section (post-merge, operator-driven),
 
 <!-- 13 plans + D6 + D14 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-bay.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -353,6 +378,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/13/1) · [plan diff ↓](#/13/2)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-bay.png" alt="">
 <aside class="notes">Upgrade six, the build sheet. Before: the single markdown plan, unmergeable, position kept in the model's head. Per-phase files also kill merge conflicts. Self-review runs before any token burns on implementation: dependency cycles, manual work hiding in agentic phases, unknown acceptance ids. Manual phases back-load by default, the pull request ships them unimplemented and you push to the same branch. Front-load only when agentic work genuinely depends.</aside>
 </section>
 <section data-markdown>
@@ -399,7 +426,8 @@ super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
 
 <!-- 14 robots + D7 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-robots.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -411,6 +439,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/14/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-robots.png" alt="">
 <aside class="notes">Upgrade seven, the robots. Superpowers already had subagent-driven execution and the iron TDD loop. What changed is the handoff: pickup plus spec plus journal render, discoveries stamped per phase, acceptance rows flipped only on evidence. Tiers route the model per phase, and the one hard rule is enforced by a hook: the executor never gets its own worktree, because a second worktree cannot see the spec and the run looks healthy while doing nothing.</aside>
 </section>
 <section data-markdown>
@@ -434,7 +464,8 @@ Demo: details redacted (not accessed; not cleared).
 
 <!-- 15 review + D8 + D9 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-audit.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -446,6 +477,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/15/1) · [deviations ↓](#/15/2)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-audit.png" alt="">
 <aside class="notes">Upgrade eight, the audit. Two lessons in one slide. Fixes pushed after a premature merge landed on dead branches, so now draft first and the push guard refuses merged-branch pushes. And the healthy-looking run that did nothing: a phase executor in a second worktree cut from main cannot see the spec, so the no-worktree carve-out is enforced by a hook, not by prose. Review findings are fixed with tests or refuted with reasoning, recorded open, fixed, or refuted. The pull request body is rendered from that list.</aside>
 </section>
 <section data-markdown>
@@ -484,7 +517,8 @@ Open findings (follow-ups, not blockers):
 </section>
 
 <!-- 16 paperwork -->
-<section data-markdown class="split" data-background-image="../diagrams/up-paperwork.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -495,12 +529,15 @@ Stages &gt; **Upgrades** &gt; Run it
 - Comments are explicit mutations, drift rewrites the body
 
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-paperwork.png" alt="">
 <aside class="notes">Upgrade nine, the paperwork. A vanilla agent writes whatever summary occurs to it. Superpowers fixed the template. Here the body is rendered from durable lists: findings and refutations, manual phases marked unimplemented, the test plan verbatim, acceptance debt with defenses. Tracking issues get the same treatment: bodies re-rendered on drift, comments only as explicit mutations like dispatched-in-error. Nothing narrates itself.</aside>
 </section>
 
 <!-- 17 docks + D10 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-docks.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -512,6 +549,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/17/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-docks.png" alt="">
 <aside class="notes">Upgrade ten, the docks. One backend switch instead of a rewrite per forge, dry-run default so every mutation previews first, labels projecting issue state. Harnesses are the sister plants: Claude is the reference with full hook surface, OpenCode ports the edit guard with a documented bash gap, Hermes carries the brief in delegate context. Same CLI everywhere.</aside>
 </section>
 <section data-markdown>
@@ -533,7 +572,8 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 
 <!-- 18 crossplant + D11 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-crossplant.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -546,6 +586,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/18/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-crossplant.png" alt="">
 <aside class="notes">Upgrade eleven, the group order. A feature touching three repos gets one coordinating spec with an Implementation Plans table, and one plan, branch, and pull request per repo. This session owns its repo outright. Each other repo gets a dispatched agent with its own worktree running the same pipeline from planning onward. Dependencies between plants live in the spec and the merge order, never in a phase's local wiring. Read-only reach extends here too: remote phase files resolve for status, while each repo's journal stays in its own building. Dispatch of cross-repo phases is explicitly not yet wired, and the tool says so instead of pretending.</aside>
 </section>
 <section data-markdown>
@@ -567,7 +609,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 <!-- 19 archive + D12 -->
 <section>
-<section data-markdown class="split" data-background-image="../diagrams/up-archive.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; **Upgrades** &gt; Run it
 
@@ -579,6 +622,8 @@ Stages &gt; **Upgrades** &gt; Run it
 
 [detail ↓](#/19/1)
 </textarea>
+</div>
+<img class="side" src="../diagrams/up-archive.png" alt="">
 <aside class="notes">Upgrade twelve, the vault. At this org's volume the plans folder is a work queue, not history. Archive refuses incomplete work and dirty trees, moves plan plus journal plus run as one unit, sweeps fully-implemented specs. Garbage collection is content-matched: merged workspaces reap, open ones stay, unattended runners never leak. Done means archived.</aside>
 </section>
 <section data-markdown>
@@ -609,7 +654,8 @@ From zero to first reviewed pull request
 </section>
 
 <!-- 21 first goal -->
-<section data-markdown class="split" data-background-image="../diagrams/crib.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; Upgrades &gt; **Run it**
 
@@ -626,11 +672,14 @@ fr acceptance status                  # flip rows as evidence lands
 - Custom pipeline: your own `workflows/&lt;name&gt;.yaml`, validated by check
 - Scale out: `fr apply --to &lt;runner&gt;` fans merged phases to agents
 </textarea>
+</div>
+<img class="side" src="../diagrams/crib.png" alt="">
 <aside class="notes">Move one installs everything and wires the harness you have. Move two is the only interview in the system and it exists because isolation without a profile is a hard stop, not a degraded mode. Move three is the whole talk in one command. Answer the round, then the shape drives. Move four keeps you honest. Standalone skills cover the small jobs. A custom shape is a yaml file plus check. Dispatch is for merged plans with per-phase pull requests. Repos resolve runners and git hosts the same way everywhere, one CLI surface per harness.</aside>
 </section>
 
 <!-- 22 takeaways -->
-<section data-markdown class="split" data-background-image="../diagrams/testtrack.png" data-background-size="contain" data-background-position="right">
+<section data-markdown class="split">
+<div class="col">
 <textarea data-template>
 Stages &gt; Upgrades &gt; **Run it**
 
@@ -643,6 +692,8 @@ Stages &gt; Upgrades &gt; **Run it**
 
 Next: the test track — one annotated fr-goal run, narrated live
 </textarea>
+</div>
+<img class="side" src="../diagrams/testtrack.png" alt="">
 <aside class="notes">Four sentences to carry out. If you remember nothing else: data, file, isolation, proof. My position, stated plainly: the ceremony earns its keep. Each row of ceremony exists because the un-ceremonied version failed on a real feature. Half 2 is the test track: one annotated fr-goal run, narrated over the recording. Thank you. Questions, then your first goal whenever you are ready.</aside>
 </section>
 

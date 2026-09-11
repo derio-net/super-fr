@@ -27,7 +27,7 @@
 }
 .reveal h1 { font-size: 1.5em; line-height: 1.25; }
 .reveal h2 {
-  font-size: 1.15em;
+  font-size: 1.05em;
   border-bottom: 2px solid var(--border);
   padding-bottom: 0.3em;
 }
@@ -79,18 +79,20 @@
   font-style: normal;
 }
 .reveal a { color: var(--go); }
-.reveal .nav { margin-top: 0.8em; font-size: 0.7em; }
+.reveal .nav { margin-top: 0.8em; font-size: 0.55em; }
 .reveal .nav a { text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.25em 0.7em; }
-.reveal .crumb { font-family: 'Fira Code', monospace; font-size: 0.55em; color: var(--muted); margin-bottom: 0.6em; }
+.reveal .crumb { font-family: 'Fira Code', monospace; font-size: 0.42em; color: var(--muted); margin-bottom: 0.6em; }
 .reveal .crumb strong { color: var(--yellow); }
 
 /* Split layout: markdown-generated children stay left of the portrait.
    No flex wrappers needed — the background image owns the right side. */
-.reveal section.split > *:not(aside) { max-width: 62%; }
+.reveal section.split { display: flex !important; gap: 5%; align-items: center; }
+.reveal .split .col { width: 58%; flex: none; }
+.reveal .split img.side { width: 34%; max-height: 76vh; object-fit: contain; }
 .reveal .slides>section.title { height: 100%; display: flex !important; flex-direction: column; justify-content: flex-start !important; padding-top: 6vh; }
 .reveal h2 + ol, .reveal h2 + ul, .reveal h2 + pre { margin-top: 0.45em; }
 .reveal .title .topblock { margin-bottom: auto; background: linear-gradient(rgba(16,18,22,0.88), rgba(16,18,22,0)); padding: 0 0 3vh; }
-.reveal ul li, .reveal ol li { font-size: 0.82em; }
+.reveal ul li, .reveal ol li { font-size: 0.72em; }
 .reveal ol { margin-left: 1.1em; }
 .reveal pre.chain { white-space: pre-wrap; word-break: break-word; }
 .reveal .divider { text-align: center; }
