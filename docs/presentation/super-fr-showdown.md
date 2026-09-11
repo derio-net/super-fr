@@ -160,14 +160,14 @@ Talk track:
 
 # Agenda
 
-### Part 1: From "vanilla" to super-fr
-Incremental improvements, paid in tokens
+### Part 1: From "vanilla" via superpowers to super-fr
+Incremental improvements, paid in frustration and tokens
 
 ### Part 2: Demo
 Where it pays out
 
 ### Part 3: Run it yourself
-Your first goal
+Your first `/fr-goal`
 
 <!--
 Talk track:
@@ -215,7 +215,7 @@ Talk track:
 
 ## Vanilla cycle
 
-![bg right:30%](diagrams/st1-bay.png)
+![bg right:30% contain](diagrams/st1-bay.png)
 
 ```
 prompt ──▶ plan in chat ──▶ code in base ──▶ eyeball ──▶ push?
@@ -241,7 +241,7 @@ Talk track:
 
 ## Superpowers run
 
-![bg right:30%](diagrams/st2-cell.png)
+![bg right:30% contain](diagrams/st2-cell.png)
 
 ```
 idea ──▶ brainstorm ──▶ write plan ──▶ worktree ──▶ execute+TDD ──▶ verify→review→fix ──▶ finish
@@ -266,7 +266,7 @@ Talk track:
 
 ## fr-goal run
 
-![bg right:30%](diagrams/st3-line.png)
+![bg right:30% contain](diagrams/st3-line.png)
 
 ```
 brainstorm ──▶ spec-review ──▶ plan ──▶ plan-review ──▶ implement ×N ──▶ review ──▶ deliver
@@ -322,7 +322,7 @@ Talk track:
 
 ## The cage
 
-![bg right:30%](diagrams/up-cage.png)
+![bg right:30% contain](diagrams/up-cage.png)
 
 - Sidecar fence became a mandatory cell: worktree plus container
 - Secrets stay outside, least-privilege profile by default
@@ -342,7 +342,7 @@ Talk track:
 
 ## Pipeline as data
 
-![bg right:30%](diagrams/up-recipe.png)
+![bg right:30% contain](diagrams/up-recipe.png)
 
 ```yaml
 - id: brainstorm
@@ -373,7 +373,7 @@ Talk track:
 
 ## The conveyor
 
-![bg right:30%](diagrams/up-conveyor.png)
+![bg right:30% contain](diagrams/up-conveyor.png)
 
 ```bash
 fr run advance <id>   # cli runs, agent briefs
@@ -398,7 +398,7 @@ Talk track:
 
 ## One question round
 
-![bg right:30%](diagrams/up-cord.png)
+![bg right:30% contain](diagrams/up-cord.png)
 
 - Agent studies the code first, then asks once, max four
 - Recommended options first, unanswered means stop
@@ -419,7 +419,7 @@ Talk track:
 
 ## Proof, not promises
 
-![bg right:30%](diagrams/up-gate.png)
+![bg right:30% contain](diagrams/up-gate.png)
 
 | Status | Meaning |
 |---|---|
@@ -444,7 +444,7 @@ Talk track:
 
 ## Plans a tool can read
 
-![bg right:30%](diagrams/up-bay.png)
+![bg right:30% contain](diagrams/up-bay.png)
 
 - Folder per plan: `_meta.yaml`, `_prose.md`, one file per phase
 - Step ids `P1.T1.S1`, dependencies explicit
@@ -465,7 +465,7 @@ Talk track:
 
 ## Robots with travelers
 
-![bg right:30%](diagrams/up-robots.png)
+![bg right:30% contain](diagrams/up-robots.png)
 
 - One executor per phase, briefed from the journal
 - Failing test, implement, refactor - the traveler gets stamped
@@ -485,7 +485,7 @@ Talk track:
 
 ## Loop until reviewed
 
-![bg right:30%](diagrams/up-audit.png)
+![bg right:30% contain](diagrams/up-audit.png)
 
 - Per-phase review, findings fixed with tests or formally refuted
 - Draft PR first, ready only when green, never self-merged
@@ -506,7 +506,7 @@ Talk track:
 
 ## Shipping paperwork
 
-![bg right:30%](diagrams/up-paperwork.png)
+![bg right:30% contain](diagrams/up-paperwork.png)
 
 - Bodies rendered from the journal, not written freehand
 - Findings, refutations, manual work, test plan, debt - all aboard
@@ -526,7 +526,7 @@ Talk track:
 
 ## Docks and sister plants
 
-![bg right:30%](diagrams/up-docks.png)
+![bg right:30% contain](diagrams/up-docks.png)
 
 - `gh`, `glab`, `tea` behind one backend switch, dry-run by default
 - Reachability gate: runners check out main, so the plan must be on it
@@ -546,7 +546,7 @@ Talk track:
 
 ## The vault
 
-![bg right:30%](diagrams/up-archive.png)
+![bg right:30% contain](diagrams/up-archive.png)
 
 - Gated mover: only complete phases leave the work queue
 - Plans, journals, runs file together under `implemented/`
@@ -580,7 +580,7 @@ Talk track:
 
 ## First goal in four moves
 
-![bg right:30%](diagrams/crib.png)
+![bg right:30% contain](diagrams/crib.png)
 
 ```bash
 curl -fsSL .../bootstrap.sh | bash   # install fr plus plugins
@@ -607,7 +607,7 @@ Talk track:
 
 ## Takeaways
 
-![bg right:30%](diagrams/testtrack.png)
+![bg right:30% contain](diagrams/testtrack.png)
 
 1. **Pipeline is data** - shapes validate, resolve, and re-run
 2. **Progress is a file** - cursor on the branch, failure holds still
