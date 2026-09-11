@@ -596,12 +596,12 @@ Talk track:
 3. **Work is isolated** - worktree plus container, no fallback
 4. **Done means proven** - acceptance rows plus review findings
 
-Next: the test track - full comparison or annotated playback, still open
+Next: the test track - one annotated fr-goal run, narrated live
 
 <!--
 Talk track:
 - Four sentences to carry out. If you remember nothing else: data, file, isolation, proof.
 - My position, stated plainly: the ceremony earns its keep. Each row of ceremony exists because the un-ceremonied version failed on a real feature.
-- Half 2 is the test track. Full side-by-side comparison or one annotated session playback - deliberately undecided, the slot will decide.
+- Half 2 is the test track: one annotated fr-goal run, narrated over the recording. No full comparison - the hour is better spent on one run you can see clearly.
 - Thank you. Questions, then your first goal whenever you are ready.
 -->
