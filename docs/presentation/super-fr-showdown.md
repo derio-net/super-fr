@@ -768,7 +768,7 @@ tasks:
 ### 293fbe90d058 - decision - Outline gate answered
 
 Model: OpenAI Terra default effort both runs.
-Demo: SPARK-4 (not accessed; not cleared).
+Demo: details redacted (not accessed; not cleared).
 ```
 
 - Machine-tagged entries, rendered raw into briefs and bodies

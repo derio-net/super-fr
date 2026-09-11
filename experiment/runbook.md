@@ -3,10 +3,10 @@
 Model pinned BOTH runs: OpenAI Terra, default effort. Record exact version
 string here at record time: `TERRA_VERSION=<pending>`.
 
-## Seed prompt (pending SPARK-4 brief)
+## Seed prompt (pending operator brief)
 
 - Template: `experiment/prompts/goal.md` (placeholder — operator fills from
-  SPARK-4 during repo prep; board contents never enter uncleared sessions).
+  the demo ticket during repo prep; board contents never enter uncleared sessions).
 - Same file feeds BOTH runs verbatim. Vanilla run gets no additional context.
 
 ## Correction log schema (unlimited but logged)
