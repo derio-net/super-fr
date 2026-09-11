@@ -140,17 +140,17 @@ Talk track:
 
 <!-- header: "" -->
 
-# Questions this talk answers
+# What is this talk really about
 
-1. **What changes** - vanilla, superpowers, fr-goal side by side
-2. **Why each upgrade** - the failure that paid for it
-3. **How do I start** - profiles, first goal, acceptance rows
+1. **Structure and best practices** over free form discussion
+2. **Agentic safety* and autonomy** towards a goal
+3. **High feature throughput** in local development
 
 <!--
 Talk track:
-- Three promises. One: a mental model you can hold in your head, the shape and the cursor.
-- Two: honesty about cost. Every mechanism here slowed something down to prevent something worse. You get the failure stories, not just the features.
-- Three: runnable. Install, profile interview, first goal, acceptance rows. If the wifi holds there may be a live command or two.
+- Three claims, increasing ambition. One: structure beats chat. A pipeline with artifacts outperforms free-form discussion every time the work outlives the session.
+- Two: safety and autonomy together, not traded. The asterisk is honest: these are discipline backstops with documented escapes, not a security boundary. Autonomy inside the cage, never outside it.
+- Three: throughput is the scoreboard. A thousand merged PRs in four months is what the first two buy you in local development.
 -->
 
 ---
