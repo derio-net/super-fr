@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Marp deck build
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Build half-and-half slide deck
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Draft half 1 slides covering fr-goal features, standalone skills, custom flows, integrations
+  - id: P4.T1.S2
+    text: |-
+      Draft half 2 slides embedding side-by-side recording and evidence table closing on the ceremony question
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

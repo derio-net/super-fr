@@ -1,0 +1,39 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Experiment protocol and instrumentation
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Freeze protocol and capture harness
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write seed prompt template and correction-log schema with unlimited-but-logged budget
+  - id: P2.T1.S2
+    text: |-
+      Write metrics capture runbook covering time, tokens, cost, tests, lint, review findings
+  - id: P2.T1.S3
+    text: |-
+      Write asciinema and HyperFrames recording runbook with chapter marks
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

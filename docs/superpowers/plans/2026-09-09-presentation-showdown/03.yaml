@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Dual runs and neutral comparison
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Record both runs and fill comparison from measurements only
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Record fr-goal run and vanilla plan-execute run with identical seed prompt
+  - id: P3.T1.S2
+    text: |-
+      Fill comparison table strictly from measured evidence with no presumed winner
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

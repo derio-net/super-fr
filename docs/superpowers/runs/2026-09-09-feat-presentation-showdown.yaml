@@ -1,0 +1,30 @@
+run: 2026-09-09-feat-presentation-showdown
+workflow: presentation-showdown@1
+branch: feat/presentation-showdown
+started: '2026-09-09T14:21:04+00:00'
+cursor: record-compare
+steps:
+  outline:
+    state: done
+    at: '2026-09-09T14:28:58+00:00'
+    emitted:
+      spec: docs/superpowers/specs/2026-09-09-presentation-showdown-design.md
+  experiment-design:
+    state: done
+    at: '2026-09-09T14:32:30+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-09-presentation-showdown
+  design-review:
+    state: done
+    at: '2026-09-09T14:32:30+00:00'
+    exit: 0
+    stdout: 'self-review passed
+
+      '
+  instrument:
+    state: done
+    at: '2026-09-09T14:35:00+00:00'
+  record-compare:
+    state: pending
+  deliver-deck:
+    state: pending
