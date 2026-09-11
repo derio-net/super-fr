@@ -17,7 +17,7 @@ tasks:
       Confirm identical devcontainer profile build for run B and record Terra version string
   - id: P1.T1.S3
     text: |-
-      Fill SPARK-4 brief into experiment/prompts/goal.md placeholder and acceptance checklist
+      Fill demo-ticket brief into experiment/prompts/goal.md placeholder and acceptance checklist
 state:
   steps:
     P1.T1.S1:

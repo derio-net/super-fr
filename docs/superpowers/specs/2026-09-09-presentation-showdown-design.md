@@ -14,7 +14,7 @@ it, given increasing model capabilities?**
 - Audience/slot: dev team, 30–45 min.
 - Harness: OpenCode. Model pinned on BOTH runs: **OpenAI Terra, default effort**
   (record exact version string at record time).
-- Demo feature: **SPARK-4** (`https://jira.gebit.de/browse/SPARK-4`). NOT
+- Demo feature: a ticket from the operator's board (details redacted). NOT
   accessed in this session — the driving model is not cleared for that board.
   Contents to be briefed in by the operator (or a cleared session) before
   `experiment-design`.
@@ -35,7 +35,7 @@ dry-run apply, reachability gate, label lifecycle, VK/CNCD runners).
 
 ## Half 2 — scope
 
-Same seed prompt file (`experiment/prompts/goal.md`, SPARK-4 derived without
+Same seed prompt file (`experiment/prompts/goal.md`, derived from the redacted ticket without
 exposing board contents here), two fresh branches from same `origin/HEAD`,
 vanilla = plan mode + execute, no `fr-*`. Instrumentation per
 `workflows/presentation-showdown.md` §4. Comparison table filled from
@@ -49,6 +49,6 @@ measurements only.
 
 ## Open items
 
-- SPARK-4 brief (operator-provided, outside this session).
+- Demo brief (operator-provided, outside this session).
 - Exact Terra version string at record time.
 - Session-log export path for OpenCode token/$ accounting.
