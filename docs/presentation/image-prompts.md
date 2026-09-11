@@ -150,6 +150,17 @@ records vault beside the line: compact rolling shelving with plain
 unlabeled boxes, a small conveyor feeding finished folders from the line
 into the vault — ONLY one open drawer carries a bright green halo.
 
+## `up-crossplant.png` — cross-repo specs
+
+Dark industrial complex, flat technical illustration, palette
+near-black `#0d1117` with blue `#58a6ff` and green `#7ee787` lights, no
+people, no readable text. PORTRAIT 3:4 composition, edges falling to
+pure `#0d1117`. A central planning office overlooking two factory halls
+through a glass wall: wall boards with abstract charts, glowing link
+lines running from the office down to each hall's line — ONLY the link
+lines and one wall board carry a bright green halo, halls in normal
+light with their own small status boards.
+
 ## `crib.png` — run it
 
 Dark industrial workshop, flat technical illustration, palette
