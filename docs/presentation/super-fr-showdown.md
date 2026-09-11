@@ -161,14 +161,17 @@ Talk track:
 
 # Agenda
 
-### Stages 1-3: the evolutions
-Vanilla, then superpowers, then fr-goal - same job, three species
+### Stations 1-3: the evolutions
+Honest vanilla, then superpowers, then fr-goal
 
-### Then: justified upgrades
-Each super-fr addition with the failure that paid for it
+### Street cred
+1000+ merged PRs across 15 repos, one annotated body
 
-### Close: run it
-Your first goal plus where to go next
+### Eleven upgrades, each justified
+Cage, recipe, conveyor, cord, gate, bay, robots, sheet, audit, docks, archive
+
+### Close: run it, then the open ending
+Your first goal, plus comparison-or-playback, undecided
 
 <!--
 Talk track:
@@ -187,7 +190,7 @@ Talk track:
 
 <!--
 Talk track:
-- Meet Charmander. You prompt, the model plans in chat, codes in your checkout, you eyeball it and push.
+- Station one. You prompt, the model plans in chat, codes in your checkout, you eyeball it and push.
 - Nothing here is wrong at small scale. Everything here breaks at the second concurrent feature: the plan lives in chat history, the half-done state lives in your checkout, done means it looked right.
 - Keep this slide in mind. Every later stage is a response to something on it.
 -->
@@ -198,7 +201,7 @@ Talk track:
 
 ## Vanilla cycle
 
-![bg right:24%](diagrams/charmander.png)
+![bg right:30%](diagrams/st1-bay.png)
 
 ```
 prompt ──▶ plan in chat ──▶ code in base ──▶ eyeball ──▶ push?
@@ -212,7 +215,7 @@ prompt ──▶ plan in chat ──▶ code in base ──▶ eyeball ──▶
 Talk track:
 - Four boxes and a question mark. The plan is a rumor the chat tells itself. Your checkout holds finished work and half-thoughts side by side.
 - Verification is eyeballing. There is no gate that can say no.
-- This is the baseline the next two evolutions upgrade. Charmander is beloved and completely unequipped.
+- This is the baseline the next two stations upgrade. Beloved, and completely unequipped.
 -->
 
 ---
@@ -221,7 +224,7 @@ Talk track:
 
 ## Superpowers run
 
-![bg right:22%](diagrams/charmeleon.png)
+![bg right:30%](diagrams/st2-cell.png)
 
 ```
 idea ──▶ brainstorm ──▶ write plan ──▶ worktree ──▶ execute+TDD ──▶ verify→review→fix ──▶ finish
@@ -233,7 +236,7 @@ idea ──▶ brainstorm ──▶ write plan ──▶ worktree ──▶ exec
 
 <!--
 Talk track:
-- Charmeleon. Same job, now with structure: brainstorming produces a spec markdown and refuses code until the design is approved. Writing-plans produces a plan markdown a fresh session could execute.
+- Station two. Same job, now with structure: brainstorming produces a spec markdown and refuses code until the design is approved. Writing-plans produces a plan markdown a fresh session could execute.
 - Execution picks subagent-driven or inline, test-driven-development runs the red-green-refactor loop inside, verification-before-completion forbids completion claims without a fresh full-command run.
 - Review is double-sided: requesting dispatches a SHA-scoped review, receiving bans performative agreement and demands verification. Finishing offers four options and cleans up the worktree.
 - Gaps remain, and they are the next slide deck: one markdown plan, session memory doing the carrying, worktree as a sidecar.
@@ -245,7 +248,7 @@ Talk track:
 
 ## fr-goal run
 
-![bg right:22%](diagrams/charizard.png)
+![bg right:30%](diagrams/st3-line.png)
 
 ```
 brainstorm ──▶ spec-review ──▶ plan ──▶ plan-review ──▶ implement ×N ──▶ review ──▶ deliver
@@ -257,9 +260,28 @@ brainstorm ──▶ spec-review ──▶ plan ──▶ plan-review ──▶ 
 
 <!--
 Talk track:
-- Charizard. Same shape as Charmeleon, new species: the pipeline is a yaml manifest that validates, the cursor is a file on your branch that survives compaction, and isolation is mandatory worktree plus devcontainer, not a sidecar.
+- Station three. Same silhouette as station two, new species: the pipeline is a yaml manifest that validates, the cursor is a file on your branch that survives compaction, and isolation is a mandatory cell, not a sidecar fence.
 - Cli steps execute with exit code as verdict. Agent steps print a brief, you work, you resolve. The single operator gate is the batched question round.
 - Everything after this slide is one super-fr addition presented as the upgrade it is: what superpowers lacked, what failure paid for it, what it costs.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
+## Street cred
+
+- **1000+ merged PRs** across **15 repos**, May to September 2026
+- Roughly two thirds of sampled bodies carry pipeline markers
+- Example: `super-fr#449` — Why, spec/plan/journal links, What ships
+
+> Acceptance rows, verification log, journaled deviations, open findings
+
+<!--
+Talk track:
+- Street cred, honestly labeled. A thousand merged pull requests in four months across fifteen repos of one org, and about two thirds of the bodies I sampled reference the spec, the plan, or the journal.
+- Pull request 449 is the anatomy slide: Why, links to spec plan journal, what ships, acceptance rows all flipped to ci, verification output, deviations from the plan with journal hashes, open findings that are follow-ups not blockers, and an operator rollout phase.
+- Caveat I will not skip: not every one of those thousand ran this pipeline. The claim is that the org ships at this rate with this workflow available, and the bodies show the discipline spreading.
 -->
 
 ---
@@ -280,7 +302,29 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
+## The cage
+
+![bg right:30%](diagrams/up-cage.png)
+
+- Sidecar fence became a mandatory cell: worktree plus container
+- Secrets stay outside, least-privilege profile by default
+- Dead brainstorms leave the base checkout pristine
+
+> Superpowers fenced opt-in tasks - here the fence is the floor
+
+<!--
+Talk track:
+- Upgrade one, the cage. Superpowers had using-git-worktrees as an opt-in sidecar. Here isolation is mandatory: worktree plus devcontainer before anything else, every command through the exec bridge, secrets host-side per profile.
+- A brainstorm that dies leaves the base pristine. That sentence alone is worth the profile-setup interview on first run.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
 ## Pipeline as data
+
+![bg right:30%](diagrams/up-recipe.png)
 
 ```yaml
 - id: brainstorm
@@ -309,7 +353,34 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
+## The conveyor
+
+![bg right:30%](diagrams/up-conveyor.png)
+
+```bash
+fr run advance <id>   # cli runs, agent briefs
+fr run resolve <id> --step <s> --state done
+```
+
+- Run file rides the branch into the pull request
+- Failed step holds position, nothing slides past
+- A run is born in its workspace, never in the base
+
+> Chat memory became a position you can point at
+
+<!--
+Talk track:
+- Upgrade three, the conveyor. Superpowers kept position in chat and checkboxes. The run file is a cursor on your branch: advance runs cli steps and briefs agent ones, resolve is the only way past running.
+- Start validates the shape before provisioning anything, then writes the run inside the workspace. Failure holds the cursor instead of sliding past it.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
 ## One question round
+
+![bg right:30%](diagrams/up-cord.png)
 
 - Agent studies the code first, then asks once, max four
 - Recommended options first, unanswered means stop
@@ -329,6 +400,8 @@ Talk track:
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
 ## Proof, not promises
+
+![bg right:30%](diagrams/up-gate.png)
 
 | Status | Meaning |
 |---|---|
@@ -353,6 +426,8 @@ Talk track:
 
 ## Plans a tool can read
 
+![bg right:30%](diagrams/up-bay.png)
+
 - Folder per plan: `_meta.yaml`, `_prose.md`, one file per phase
 - Step ids `P1.T1.S1`, dependencies explicit
 - `fr plan self-review`: cycles, hidden manual work, bad links
@@ -370,11 +445,33 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Loop until reviewed
+## Robots with travelers
+
+![bg right:30%](diagrams/up-robots.png)
 
 - One executor per phase, briefed from the journal
-- Failing test, implement, refactor, per-phase review
-- Draft PR first, ready only when green
+- Failing test, implement, refactor - the traveler gets stamped
+- Tier-matched tools: light joints, light robots
+
+> Subagents stopped remembering and started reading
+
+<!--
+Talk track:
+- Upgrade seven, the robots. Superpowers already had subagent-driven execution and the iron TDD loop. What changed is the handoff: pickup plus spec plus journal render, discoveries stamped per phase, acceptance rows flipped only on evidence.
+- Tiers route the model per phase, and the one hard rule is enforced by a hook: the executor never gets its own worktree, because a second worktree cannot see the spec and the run looks healthy while doing nothing.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
+## Loop until reviewed
+
+![bg right:30%](diagrams/up-audit.png)
+
+- Per-phase review, findings fixed with tests or formally refuted
+- Draft PR first, ready only when green, never self-merged
+- Verify arrival on main before archive and teardown
 
 > Fixes orphaned on merged branches and silent no-op runs both bit us
 
@@ -389,37 +486,60 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Small jobs, same discipline
+## Shipping paperwork
 
-- `fr-brainstorming`: design in isolation, approvals included
-- `fr-debugging`: Iron Law, journaled trail, one fix-PR
-- `fr-plan`, `fr-init`, `fr-progress`: authoring, setup, drift audit
+![bg right:30%](diagrams/up-paperwork.png)
 
-> Not every job needs the pipeline - but every job keeps isolation
+- Bodies rendered from the journal, not written freehand
+- Findings, refutations, manual work, test plan, debt - all aboard
+- Comments are explicit mutations, drift rewrites the body
+
+> Vanilla writes prose - here the paper trail writes the PR
 
 <!--
 Talk track:
-- Upgrade in miniature: the pipeline's steps usable alone. Brainstorming keeps section approvals when standalone, debugging reuses the feature workspace when the bug surfaces mid-goal.
-- The debugging journal is the idea I would steal for any workflow: rejected hypotheses written down before compaction eats them.
+- Upgrade nine, the paperwork. A vanilla agent writes whatever summary occurs to it. Superpowers fixed the template. Here the body is rendered from durable lists: findings and refutations, manual phases marked unimplemented, the test plan verbatim, acceptance debt with defenses.
+- Tracking issues get the same treatment: bodies re-rendered on drift, comments only as explicit mutations like dispatched-in-error. Nothing narrates itself.
 -->
 
 ---
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Same CLI, every harness
+## Docks and sister plants
 
-- Claude Code: full hook surface plus executor and push guards
-- OpenCode: edit guard ported, bash ungated - known gap
-- Hermes: context-carried briefs, no shipped model bindings
-- Git servers: `gh`, `glab`, `tea` behind one backend switch
+![bg right:30%](diagrams/up-docks.png)
 
-> `fr run` is a CLI surface, not a prompt - every harness drives it alike
+- `gh`, `glab`, `tea` behind one backend switch, dry-run by default
+- Reachability gate: runners check out main, so the plan must be on it
+- Claude, OpenCode, Hermes drive the same `fr run` surface
+
+> One dock design, every building - learn the CLI once
 
 <!--
 Talk track:
-- If time dies, this slide dies first. One line each: Claude is the reference, OpenCode has a documented bash gap, Hermes dispatches through context, git hosts are detected backends.
-- The point for Monday: learn the CLI once, it follows you across harnesses.
+- Upgrade ten, the docks. One backend switch instead of a rewrite per forge, dry-run default so every mutation previews first, labels projecting issue state.
+- Harnesses are the sister plants: Claude is the reference with full hook surface, OpenCode ports the edit guard with a documented bash gap, Hermes carries the brief in delegate context. Same CLI everywhere.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
+## The vault
+
+![bg right:30%](diagrams/up-archive.png)
+
+- Gated mover: only complete phases leave the work queue
+- Plans, journals, runs file together under `implemented/`
+- Content-matched GC reaps merged workspaces, never open ones
+
+> At a thousand PRs, done means archived or it never happened
+
+<!--
+Talk track:
+- Upgrade eleven, the vault. At this org's volume the plans folder is a work queue, not history. Archive refuses incomplete work and dirty trees, moves plan plus journal plus run as one unit, sweeps fully-implemented specs.
+- Garbage collection is content-matched: merged workspaces reap, open ones stay, unattended runners never leak. Done means archived.
 -->
 
 ---
@@ -441,6 +561,8 @@ Talk track:
 <!-- header: "Stages > Upgrades > **Run it**" -->
 
 ## First goal in four moves
+
+![bg right:30%](diagrams/crib.png)
 
 ```bash
 curl -fsSL .../bootstrap.sh | bash   # install fr plus plugins
@@ -467,17 +589,19 @@ Talk track:
 
 ## Takeaways
 
+![bg right:30%](diagrams/testtrack.png)
+
 1. **Pipeline is data** - shapes validate, resolve, and re-run
 2. **Progress is a file** - cursor on the branch, failure holds still
 3. **Work is isolated** - worktree plus container, no fallback
 4. **Done means proven** - acceptance rows plus review findings
 
-Next: half 2 measures all of this, same prompt twice, counted live
+Next: the test track - full comparison or annotated playback, still open
 
 <!--
 Talk track:
 - Four sentences to carry out. If you remember nothing else: data, file, isolation, proof.
 - My position, stated plainly: the ceremony earns its keep. Each row of ceremony exists because the un-ceremonied version failed on a real feature.
-- Half 2 is the audit. Same seed prompt, same pinned model, every nudge logged, side-by-side recording. The table gets to disagree with me.
+- Half 2 is the test track. Full side-by-side comparison or one annotated session playback - deliberately undecided, the slot will decide.
 - Thank you. Questions, then your first goal whenever you are ready.
 -->
