@@ -100,6 +100,11 @@ section.title-slide {
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
   justify-content: center;
 }
+section.title h1 { font-size: 34px; text-shadow: 0 2px 14px rgba(0,0,0,0.95); }
+section.title h1::before { content: none; }
+section.title h2 { font-size: 23px; border-bottom: none; text-shadow: 0 2px 10px rgba(0,0,0,0.95); }
+section.title h2::before { content: none; }
+section.title { border-left: none; }
 section.part-model,
 section.part-upgrades,
 section.part-run,
@@ -115,6 +120,7 @@ section.part-run { background: linear-gradient(135deg, #3d1e5c 0%, #5a2d8e 100%)
 
 <!-- footer: "" -->
 <!-- _header: "" -->
+<!-- _class: title -->
 
 ![bg](diagrams/factory-line.png)
 
