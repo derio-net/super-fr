@@ -269,7 +269,7 @@ Talk track:
 ![bg right:30% contain](diagrams/st3-line.png)
 
 ```
-brainstorm ──▶ spec-review ──▶ plan ──▶ plan-review ──▶ implement ×N ──▶ review ──▶ deliver
+brainstorm ──▶ spec-review ──▶ plan ──▶ plan-review ──▶ implement+review ×N ──▶ deliver
 ```
 
 - Shape is data: `kind: cli` runs, `kind: agent` briefs, `gate` stops
@@ -320,15 +320,13 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## The cage
+## Isolation
 
 ![bg right:30% contain](diagrams/up-cage.png)
 
 - Sidecar fence became a mandatory cell: worktree plus container
 - Secrets stay outside, least-privilege profile by default
 - Dead brainstorms leave the base checkout pristine
-
-> Superpowers fenced opt-in tasks - here the fence is the floor
 
 <!--
 Talk track:
@@ -371,7 +369,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## The conveyor
+## Run cursor
 
 ![bg right:30% contain](diagrams/up-conveyor.png)
 
@@ -384,8 +382,6 @@ fr run resolve <id> --step <s> --state done
 - Failed step holds position, nothing slides past
 - A run is born in its workspace, never in the base
 
-> Chat memory became a position you can point at
-
 <!--
 Talk track:
 - Upgrade three, the conveyor. Superpowers kept position in chat and checkboxes. The run file is a cursor on your branch: advance runs cli steps and briefs agent ones, resolve is the only way past running.
@@ -396,15 +392,13 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## One question round
+## One batched Q&A
 
 ![bg right:30% contain](diagrams/up-cord.png)
 
 - Agent studies the code first, then asks once, max four
 - Recommended options first, unanswered means stop
 - Spec and plan reviews become fix passes, not approvals
-
-> Dripped interruptions and guessed scope die here
 
 <!--
 Talk track:
@@ -417,7 +411,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Proof, not promises
+## Acceptance matrix
 
 ![bg right:30% contain](diagrams/up-gate.png)
 
@@ -442,7 +436,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Plans a tool can read
+## Plan folders, labeled manual work
 
 ![bg right:30% contain](diagrams/up-bay.png)
 
@@ -450,7 +444,6 @@ Talk track:
 - Step ids `P1.T1.S1`, dependencies explicit
 - `fr plan self-review`: cycles, hidden manual work, bad links
 
-> Manual work ships labeled `[manual]`, never smuggled in
 
 <!--
 Talk track:
@@ -463,7 +456,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Robots with travelers
+## Phase executors, journal handoff
 
 ![bg right:30% contain](diagrams/up-robots.png)
 
@@ -471,7 +464,6 @@ Talk track:
 - Failing test, implement, refactor - the traveler gets stamped
 - Tier-matched tools: light joints, light robots
 
-> Subagents stopped remembering and started reading
 
 <!--
 Talk track:
@@ -483,7 +475,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Loop until reviewed
+## Review loop, guarded delivery
 
 ![bg right:30% contain](diagrams/up-audit.png)
 
@@ -491,7 +483,6 @@ Talk track:
 - Draft PR first, ready only when green, never self-merged
 - Verify arrival on main before archive and teardown
 
-> Fixes orphaned on merged branches and silent no-op runs both bit us
 
 <!--
 Talk track:
@@ -504,7 +495,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Shipping paperwork
+## PR bodies from the journal
 
 ![bg right:30% contain](diagrams/up-paperwork.png)
 
@@ -512,7 +503,6 @@ Talk track:
 - Findings, refutations, manual work, test plan, debt - all aboard
 - Comments are explicit mutations, drift rewrites the body
 
-> Vanilla writes prose - here the paper trail writes the PR
 
 <!--
 Talk track:
@@ -524,7 +514,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Docks and sister plants
+## Git backends, harness ports
 
 ![bg right:30% contain](diagrams/up-docks.png)
 
@@ -532,7 +522,6 @@ Talk track:
 - Reachability gate: runners check out main, so the plan must be on it
 - Claude, OpenCode, Hermes drive the same `fr run` surface
 
-> One dock design, every building - learn the CLI once
 
 <!--
 Talk track:
@@ -544,7 +533,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## One order, many plants
+## Multi-repo specs
 
 ![bg right:30% contain](diagrams/up-crossplant.png)
 
@@ -553,7 +542,6 @@ Talk track:
 - Cross-repo deps live in the spec and PR order, never in wiring
 - Remote phases readable from here, journals stay home
 
-> Superpowers plans are single-plant - here the order spans the group
 
 <!--
 Talk track:
@@ -566,7 +554,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## The vault
+## Archiving
 
 ![bg right:30% contain](diagrams/up-archive.png)
 
@@ -574,7 +562,6 @@ Talk track:
 - Plans, journals, runs file together under `implemented/`
 - Content-matched GC reaps merged workspaces, never open ones
 
-> At a thousand PRs, done means archived or it never happened
 
 <!--
 Talk track:
@@ -645,3 +632,216 @@ Talk track:
 - Half 2 is the test track: one annotated fr-goal run, narrated over the recording. No full comparison - the hour is better spent on one run you can see clearly.
 - Thank you. Questions, then your first goal whenever you are ready.
 -->
+
+---
+
+<!-- _header: "" -->
+<!-- _class: lead part-run -->
+
+# Deep dives
+
+**Backup slides - jump by number, not part of the linear flow**
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D1 - isolation commands
+
+```bash
+fr isolation up --branch feat/thing --profile dev
+fr isolation exec --branch feat/thing -- uv run pytest -q
+fr isolation status
+fr isolation down --branch feat/thing
+```
+
+- Worktree plus container, secrets host-side per profile
+- Refuses teardown while the pull request is open
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D2 - shape fragment, real file
+
+```yaml
+workflow: fr-goal
+schema: 1
+unit: run
+requires: [git, tests, scm]
+steps:
+  - id: brainstorm
+    kind: agent
+    skill: super-fr:fr-brainstorming
+    gate: operator
+    emits: [spec, journal:spec]
+```
+
+- Source: `plugins/super-fr/workflows/fr-goal.yaml`
+- `implement` is a grouped `for_each`, review enforced per phase
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D3 - run file, real run
+
+```yaml
+run: 2026-09-09-feat-presentation-showdown
+workflow: presentation-showdown@1
+cursor: record-compare
+steps:
+  outline: {state: done}
+  experiment-design: {state: done}
+  design-review: {state: done, exit: 0}
+  instrument: {state: done}
+  record-compare: {state: pending}
+```
+
+- This deck's own run, committed on its branch
+- Failed steps hold the cursor, pending steps wait
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D4 - answering the gate
+
+```bash
+fr run resolve 2026-09-09-feat-presentation-showdown \
+  --step outline --state done \
+  --emitted spec=docs/superpowers/specs/2026-09-09-design.md
+```
+
+- Emitted paths must exist and be repo-relative
+- Unanswered gates stop the run, never default it
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D5 - matrix row anatomy
+
+```yaml
+# status: ci | scheduled | skipped | not-implemented | failing
+rows:
+  - id: session-workspace-binding
+    capability: Isolation
+    acceptance: bound workspace shown in status line
+    origin: [super-fr:docs/superpowers/specs/2026-09-04-design.md]
+    levels: {int: [super-fr:tests/int/test_x.py]}
+    status: ci
+```
+
+- Schema from `docs/acceptance/matrix.yaml`, rows appended by CLI only
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D6 - phase file, real plan
+
+```yaml
+schema_version: 2
+phase:
+  number: 2
+  title: Experiment protocol and instrumentation
+  tag: agentic
+  depends_on: [1]
+tasks:
+  - number: 1
+    title: Freeze protocol and capture harness
+    steps:
+      - {id: P2.T1.S1, text: Write seed prompt template}
+```
+
+- One file per phase, explicit dependencies, tickable steps
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D7 - journal entry, real run
+
+```markdown
+<!-- fr:journal kind=decision scope=spec id=293fbe90d058 -->
+### 293fbe90d058 - decision - Outline gate answered
+
+Model: OpenAI Terra default effort both runs.
+Demo: SPARK-4 (not accessed; not cleared).
+```
+
+- Machine-tagged entries, rendered raw into briefs and bodies
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D8 - acceptance evidence, PR 449
+
+```text
+Six rows born with the spec, all now ci:
+session-workspace-binding, statusline-shows-bound-workspace, ...
+fr acceptance check: 99 rows OK.
+pytest: 2685 passed, 84 skipped. ruff clean.
+```
+
+- Source: `derio-net/super-fr#449`, the annotated example
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D9 - deviations, PR 449
+
+```text
+Deviations from the plan text (all journaled):
+- down runs detach_all after teardown, not before (7656ab55c62c)
+- Acceptance levels are unit|api|int|ui (62c39ba6fb84)
+Open findings (follow-ups, not blockers):
+- d028f3cc945a Hermes has no session bind transport yet.
+```
+
+- Drift disclosed with hashes, never silently absorbed
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D10 - docks in two commands
+
+```bash
+fr apply docs/superpowers/plans/2026-09-09-x          # dry-run preview
+fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
+```
+
+- Backend resolves per repo: config key, remote host, default
+- Labels: `fr:ready` to `fr:pr-ready`, `manual` never routed
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D11 - cross-repo table, real spec
+
+```markdown
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-09-09-presentation-showdown | `derio-net/super-fr` | `2026-09-09-presentation-showdown` | — |
+```
+
+- Cross-repo form: `owner/repo:path`, one plan per repo
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D12 - the vault, real contents
+
+```text
+docs/superpowers/implemented/
+  audits/ journals/ plans/ specs/
+  plans/2026-04-12-vk-cli-p2-dispatch ...
+```
+
+- Gated mover only: complete phases, clean tree, one unit
