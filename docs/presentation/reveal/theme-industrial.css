@@ -89,7 +89,8 @@
 .reveal section.split { display: flex !important; gap: 4%; align-items: center; }
 .reveal .split .col { width: 62%; flex: none; }
 .reveal .split img.side { width: 34%; max-height: 84vh; object-fit: contain; }
-.reveal section.title { display: flex !important; flex-direction: column; justify-content: flex-start; padding-top: 6vh; }
+.reveal .slides>section.title { display: flex !important; flex-direction: column; justify-content: flex-start !important; padding-top: 6vh; }
+.reveal h2 + ol, .reveal h2 + ul, .reveal h2 + pre { margin-top: 0.45em; }
 .reveal .title .topblock { margin-bottom: auto; background: linear-gradient(rgba(16,18,22,0.88), rgba(16,18,22,0)); padding: 0 0 3vh; }
 .reveal ul li, .reveal ol li { font-size: 0.82em; }
 .reveal ol { margin-left: 1.1em; }
