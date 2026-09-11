@@ -544,6 +544,28 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
+## One order, many plants
+
+![bg right:30% contain](diagrams/up-crossplant.png)
+
+- Coordinating spec names one plan per repo (`owner/repo:path`)
+- This line builds one repo, each other repo gets its own agent
+- Cross-repo deps live in the spec and PR order, never in wiring
+- Remote phases readable from here, journals stay home
+
+> Superpowers plans are single-plant - here the order spans the group
+
+<!--
+Talk track:
+- Upgrade eleven, the group order. A feature touching three repos gets one coordinating spec with an Implementation Plans table, and one plan, branch, and pull request per repo.
+- This session owns its repo outright. Each other repo gets a dispatched agent with its own worktree running the same pipeline from planning onward. Dependencies between plants live in the spec and the merge order, never in a phase's local wiring.
+- Read-only reach extends here too: remote phase files resolve for status, while each repo's journal stays in its own building. Dispatch of cross-repo phases is explicitly not yet wired, and the tool says so instead of pretending.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
 ## The vault
 
 ![bg right:30% contain](diagrams/up-archive.png)
@@ -556,7 +578,7 @@ Talk track:
 
 <!--
 Talk track:
-- Upgrade eleven, the vault. At this org's volume the plans folder is a work queue, not history. Archive refuses incomplete work and dirty trees, moves plan plus journal plus run as one unit, sweeps fully-implemented specs.
+- Upgrade twelve, the vault. At this org's volume the plans folder is a work queue, not history. Archive refuses incomplete work and dirty trees, moves plan plus journal plus run as one unit, sweeps fully-implemented specs.
 - Garbage collection is content-matched: merged workspaces reap, open ones stay, unattended runners never leak. Done means archived.
 -->
 
