@@ -221,15 +221,18 @@ Talk track:
 prompt ──▶ plan in chat ──▶ code in base ──▶ eyeball ──▶ push?
 ```
 
-- Plan lives in chat, dies with compaction
-- Half-done state lives in your checkout
-- Done means it looked right to someone tired
+- Outcome in, approach out: explores, asks on real decisions
+- Three modes: interactive, plan-to-approve, autopilot
+- Validates what you name, reruns on failure
+- **No plan artifact**: conventions restated every single task
+- Human owns merge, secrets, production impact
 
 <!--
 Talk track:
-- Four boxes and a question mark. The plan is a rumor the chat tells itself. Your checkout holds finished work and half-thoughts side by side.
-- Verification is eyeballing. There is no gate that can say no.
-- This is the baseline the next two stations upgrade. Beloved, and completely unequipped.
+- This is the usual case, and it is already smart. Copilot plus Terra is a strong general teammate: outcome-oriented prompts, repository exploration, multi-file edits, terminal validation, three session modes up to full autopilot.
+- Two honest limits, straight from its own description. One: no plan artifact survives the session, so every task restates conventions, checks, and constraints from scratch. Repetition is the tax.
+- Two: it validates what you name and ships what you approve. Teammate, not owner. The merge, the secrets, the production judgment stay human, and nothing on disk records the journey.
+- This slide is the baseline the next two stations upgrade.
 -->
 
 ---
