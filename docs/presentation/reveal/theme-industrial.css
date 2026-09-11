@@ -84,10 +84,15 @@
 .reveal .crumb { font-family: 'Fira Code', monospace; font-size: 0.55em; color: var(--muted); margin-bottom: 0.6em; }
 .reveal .crumb strong { color: var(--yellow); }
 
-/* Split layout: text column leaves room for the right-side portrait. */
-.reveal .col { width: 64%; }
+/* Split layout: text column + portrait image side by side. */
+.reveal section.split { display: flex; gap: 4%; align-items: center; }
+.reveal .split .col { width: 62%; flex: none; }
+.reveal .split img.side { width: 34%; max-height: 84vh; object-fit: contain; }
+.reveal ol { margin-left: 1.1em; }
+.reveal pre.chain { white-space: pre-wrap; word-break: break-word; }
 .reveal .divider { text-align: center; }
 .reveal .divider h1 { color: #fff; }
 .reveal .divider p { color: rgba(255,255,255,0.85); }
 .reveal .title h1 { font-size: 1.35em; text-shadow: 0 2px 14px rgba(0,0,0,0.95); }
 .reveal .title h2 { font-size: 0.85em; border: none; text-shadow: 0 2px 10px rgba(0,0,0,0.95); }
+.reveal section.title { justify-content: flex-start; padding-top: 6vh; }
