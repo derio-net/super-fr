@@ -9,12 +9,15 @@ size: 16:9
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Inter:wght@400;600;700&display=swap');
 
 :root {
-  --color-background: #0d1117;
-  --color-foreground: #c9d1d9;
-  --color-heading: #58a6ff;
-  --color-accent: #7ee787;
-  --color-code-bg: #161b22;
-  --color-border: #30363d;
+  --color-background: #101216;
+  --color-foreground: #d8d6d0;
+  --color-heading: #f5b301;
+  --color-accent: #f5b301;
+  --color-go: #35d07f;
+  --color-code-bg: #1a1d22;
+  --color-border: #3a3d44;
+  --font-default: 'Inter', sans-serif;
+  --font-code: 'Fira Code', 'Consolas', 'Monaco', monospace;
 }
 
 section {
@@ -91,13 +94,13 @@ tr:nth-child(even) td { background-color: rgba(22, 27, 34, 0.6); }
 blockquote { font-size: 21px; border-left: 3px solid var(--color-accent); }
 
 header { font-size: 14px; color: #8b949e; font-family: 'Fira Code', monospace; }
-header strong { color: #58a6ff; }
+header strong { color: #f5b301; }
 
 footer { font-size: 13px; color: #6e7681; font-family: 'Fira Code', monospace; }
 footer::before { content: '// '; color: var(--color-accent); }
 
 section.title-slide {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  background: linear-gradient(135deg, #17181c 0%, #2b2e34 60%, #17181c 100%);
   justify-content: center;
 }
 section.title h1 { font-size: 34px; text-shadow: 0 2px 14px rgba(0,0,0,0.95); }
@@ -114,9 +117,9 @@ section.title-slide {
   color: white;
 }
 section.part-model h1, section.part-upgrades h1, section.part-run h1 { color: #fff; }
-section.part-model { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%); }
-section.part-upgrades { background: linear-gradient(135deg, #064e3b 0%, #047857 100%); }
-section.part-run { background: linear-gradient(135deg, #3d1e5c 0%, #5a2d8e 100%); }
+section.part-model { background: linear-gradient(135deg, #1c1e22 0%, #3a3e45 100%); }
+section.part-upgrades { background: linear-gradient(135deg, #4a3408 0%, #8a6410 100%); }
+section.part-run { background: linear-gradient(135deg, #0e2e1f 0%, #1d5c3a 100%); }
 </style>
 
 <!-- footer: "" -->
@@ -131,9 +134,7 @@ section.part-run { background: linear-gradient(135deg, #3d1e5c 0%, #5a2d8e 100%)
 
 <!--
 Talk track:
-- Same chassis, three stations. Left: hand tools and taped-up notes. Middle: one robot, a half-built fence, a clipboard. Right: the full line, conveyor, scanner gate, control booth.
-- This talk walks that floor left to right. What each station added, what failure paid for it, what it costs. Then you get the keys to run station three yourself.
-- No superpowers knowledge assumed. Half 2, later, takes the finished car to the test track.
+
 -->
 
 ---
@@ -143,14 +144,12 @@ Talk track:
 # What is this talk really about
 
 1. **Structure and best practices** over free form discussion
-2. **Agentic safety* and autonomy** towards a goal
+2. **Agentic safety\* and autonomy** towards a goal
 3. **High feature throughput** in local development
 
 <!--
 Talk track:
-- Three claims, increasing ambition. One: structure beats chat. A pipeline with artifacts outperforms free-form discussion every time the work outlives the session.
-- Two: safety and autonomy together, not traded. The asterisk is honest: these are discipline backstops with documented escapes, not a security boundary. Autonomy inside the cage, never outside it.
-- Three: throughput is the scoreboard. A thousand merged PRs in four months is what the first two buy you in local development.
+
 -->
 
 ---
@@ -161,17 +160,32 @@ Talk track:
 
 # Agenda
 
-### Stations 1-3: the evolutions
-Honest vanilla, then superpowers, then fr-goal
+### Part 1: From "vanilla" to super-fr
+Incremental improvements, paid in tokens
 
-### Street cred
+### Part 2: Demo
+Where it pays out
+
+### Part 3: Run it yourself
+Your first goal
+
+<!--
+Talk track:
+
+-->
+
+---
+
+<!-- _class: lead title-slide -->
+<!-- header: "" -->
+<!-- footer: "" -->
+
+# Stats
+
+### 
 1000+ merged PRs across 15 repos, one annotated body
 
-### Eleven upgrades, each justified
-Cage, recipe, conveyor, cord, gate, bay, robots, sheet, audit, docks, archive
 
-### Close: run it, then the open ending
-Your first goal, plus comparison-or-playback, undecided
 
 <!--
 Talk track:
