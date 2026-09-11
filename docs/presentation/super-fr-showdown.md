@@ -104,7 +104,7 @@ section.title h1 { font-size: 34px; text-shadow: 0 2px 14px rgba(0,0,0,0.95); }
 section.title h1::before { content: none; }
 section.title h2 { font-size: 23px; border-bottom: none; text-shadow: 0 2px 10px rgba(0,0,0,0.95); }
 section.title h2::before { content: none; }
-section.title { border-left: none; display: flex; flex-direction: column; justify-content: flex-start; padding: 8px 56px 56px; }
+section.title { border-left: none; display: flex; flex-direction: column; justify-content: flex-start; padding: 64px 56px 56px; }
 section.title h1 { margin-top: 0; }
 section.part-model,
 section.part-upgrades,
@@ -125,9 +125,9 @@ section.part-run { background: linear-gradient(135deg, #3d1e5c 0%, #5a2d8e 100%)
 
 ![bg](diagrams/factory-line.png)
 
-# Delivering more robust code safely using custom skills. A personal experiment extending the Superpowers skill
+# Delivering more robust code safely using custom skills
 
-## From one prompt to a reviewed pull request — the machinery in between
+## A personal experiment in overengineering the Superpowers skill
 
 <!--
 Talk track:
