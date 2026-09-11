@@ -116,9 +116,9 @@ section.part-run { background: linear-gradient(135deg, #3d1e5c 0%, #5a2d8e 100%)
 <!-- _class: lead title-slide -->
 <!-- footer: "" -->
 
-# super-fr: from prompt to reviewed PR
+# super-fr: three evolutions
 
-## Half 1 - shapes, scars, and your first run
+## Vanilla prompts, superpowers discipline, fr-goal autonomy
 
 **Audience**: daily AI users, new to fr
 **Goal**: you leave ready to run it
@@ -137,9 +137,9 @@ Talk track:
 
 # Questions this talk answers
 
-1. **What is the pipeline** - where does each step live and who runs it
-2. **Why so many steps** - which real failure each ceremony prevents
-3. **How do I start** - profiles, first goal, acceptance rows, next moves
+1. **What changes** - vanilla, superpowers, fr-goal side by side
+2. **Why each upgrade** - the failure that paid for it
+3. **How do I start** - profiles, first goal, acceptance rows
 
 <!--
 Talk track:
@@ -156,14 +156,14 @@ Talk track:
 
 # Agenda
 
-### Part 1: the mental model
-Shapes, cursor, isolation - the three ideas everything hangs on
+### Stages 1-3: the evolutions
+Vanilla, then superpowers, then fr-goal - same job, three species
 
-### Part 2: scars as proof
-Five failures, five mechanisms, each earned the hard way
+### Then: justified upgrades
+Each super-fr addition with the failure that paid for it
 
-### Part 3: run it
-Your first goal, end to end, plus where to go next
+### Close: run it
+Your first goal plus where to go next
 
 <!--
 Talk track:
@@ -176,18 +176,104 @@ Talk track:
 <!-- _header: "" -->
 <!-- _class: lead part-model -->
 
-# Part 1: the mental model
+# Stage 1: vanilla prompts
 
-**Shapes, cursor, isolation - hold these three and the rest clicks**
+**One checkout, one chat, no artifacts - fast until the second feature**
 
 <!--
 Talk track:
-- Three ideas. The pipeline is a data file. Progress is a file on your branch. Work happens outside your checkout. That is nearly the whole talk.
+- Meet Charmander. You prompt, the model plans in chat, codes in your checkout, you eyeball it and push.
+- Nothing here is wrong at small scale. Everything here breaks at the second concurrent feature: the plan lives in chat history, the half-done state lives in your checkout, done means it looked right.
+- Keep this slide in mind. Every later stage is a response to something on it.
 -->
 
 ---
 
-<!-- header: "**Mental model** > Scars > Run it" -->
+<!-- header: "**Stages** > Upgrades > Run it" -->
+
+## Vanilla cycle
+
+![bg right:24%](diagrams/charmander.png)
+
+```
+prompt ──▶ plan in chat ──▶ code in base ──▶ eyeball ──▶ push?
+```
+
+- Plan lives in chat, dies with compaction
+- Half-done state lives in your checkout
+- Done means it looked right to someone tired
+
+<!--
+Talk track:
+- Four boxes and a question mark. The plan is a rumor the chat tells itself. Your checkout holds finished work and half-thoughts side by side.
+- Verification is eyeballing. There is no gate that can say no.
+- This is the baseline the next two evolutions upgrade. Charmander is beloved and completely unequipped.
+-->
+
+---
+
+<!-- header: "**Stages** > Upgrades > Run it" -->
+
+## Superpowers run
+
+![bg right:22%](diagrams/charmeleon.png)
+
+```
+idea ──▶ brainstorm ──▶ write plan ──▶ worktree ──▶ execute+TDD ──▶ verify→review→fix ──▶ finish
+```
+
+- `brainstorming` ends in an approved spec, no code before it
+- `writing-plans` yields a zero-context plan, reviewer loop included
+- Iron laws: failing test first, evidence before any claim
+
+<!--
+Talk track:
+- Charmeleon. Same job, now with structure: brainstorming produces a spec markdown and refuses code until the design is approved. Writing-plans produces a plan markdown a fresh session could execute.
+- Execution picks subagent-driven or inline, test-driven-development runs the red-green-refactor loop inside, verification-before-completion forbids completion claims without a fresh full-command run.
+- Review is double-sided: requesting dispatches a SHA-scoped review, receiving bans performative agreement and demands verification. Finishing offers four options and cleans up the worktree.
+- Gaps remain, and they are the next slide deck: one markdown plan, session memory doing the carrying, worktree as a sidecar.
+-->
+
+---
+
+<!-- header: "**Stages** > Upgrades > Run it" -->
+
+## fr-goal run
+
+![bg right:22%](diagrams/charizard.png)
+
+```
+brainstorm ──▶ spec-review ──▶ plan ──▶ plan-review ──▶ implement ×N ──▶ review ──▶ deliver
+```
+
+- Shape is data: `kind: cli` runs, `kind: agent` briefs, `gate` stops
+- Run file on the branch, failed step holds the cursor
+- Workspace first: worktree plus container, then the run
+
+<!--
+Talk track:
+- Charizard. Same shape as Charmeleon, new species: the pipeline is a yaml manifest that validates, the cursor is a file on your branch that survives compaction, and isolation is mandatory worktree plus devcontainer, not a sidecar.
+- Cli steps execute with exit code as verdict. Agent steps print a brief, you work, you resolve. The single operator gate is the batched question round.
+- Everything after this slide is one super-fr addition presented as the upgrade it is: what superpowers lacked, what failure paid for it, what it costs.
+-->
+
+---
+
+<!-- _header: "" -->
+<!-- _class: lead part-scars -->
+
+# Upgrades, each justified
+
+**What superpowers lacked, the failure that paid, what it costs**
+
+<!--
+Talk track:
+- The evolutions showed the what. These next slides show the why, one upgrade at a time. Each follows the same shape: what superpowers lacked, the failure that paid for the addition, what it costs you.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
 
 ## Pipeline as data
 
@@ -216,66 +302,7 @@ Talk track:
 
 ---
 
-<!-- header: "**Mental model** > Scars > Run it" -->
-
-## Shape graph
-
-`brainstorm` → `spec-review` → `plan` → `plan-review` → `implement ×N` → `review` → `deliver`
-
-- Green gates: **operator** after brainstorm, **cli** at plan-review
-- Fan-out lives at implement, one executor per phase
-
-- One operator gate: the batched questions
-- One deterministic gate: `plan self-review`
-- Fan-out: one executor per phase, then review
-
-<!--
-Talk track:
-- Walk the graph left to right. Brainstorm ends in one question round, that is the single operator gate on the happy path.
-- Plan-review is the deterministic gate, a command whose exit code decides. Implement fans out per phase, each executor briefed from the journal.
-- Review then deliver close it. Draft pull request first, marked ready only when green. Merge is always yours.
--->
-
----
-
-<!-- header: "**Mental model** > Scars > Run it" -->
-
-## Runs live in their workspace
-
-```bash
-fr run start fr-goal --branch feat/thing
-fr run advance <run-id>   # cli runs, agent briefs
-fr run resolve <run-id> --step <id> --state done
-```
-
-- Run file lives on the branch, rides into the PR
-- Failed step holds the cursor, nothing slides past
-- Workspace first: worktree plus devcontainer, then the run
-
-<!--
-Talk track:
-- Start validates the shape before provisioning anything, then creates the worktree and container, then writes the run file inside the workspace. A run is born where it works.
-- Advance on a cli step runs it. On an agent step it prints the brief and waits. Resolve is the only way past running.
-- Isolation in one breath: reads and edits on the host worktree, every command through fr isolation exec, secrets host-side per profile. No unisolated fallback, documented escapes only.
--->
-
----
-
-<!-- _header: "" -->
-<!-- _class: lead part-scars -->
-
-# Part 2: scars as proof
-
-**Each mechanism below was a failure first**
-
-<!--
-Talk track:
-- Origin story, fast. I picked superpowers as the base because it was the leanest loop. Then real features kept breaking in the same five ways. Each scar below is one of those ways plus what it became.
--->
-
----
-
-<!-- header: "Mental model > **Scars** > Run it" -->
+<!-- header: "Stages > **Upgrades** > Run it" -->
 
 ## One question round
 
@@ -294,7 +321,7 @@ Talk track:
 
 ---
 
-<!-- header: "Mental model > **Scars** > Run it" -->
+<!-- header: "Stages > **Upgrades** > Run it" -->
 
 ## Proof, not promises
 
@@ -317,7 +344,7 @@ Talk track:
 
 ---
 
-<!-- header: "Mental model > **Scars** > Run it" -->
+<!-- header: "Stages > **Upgrades** > Run it" -->
 
 ## Plans a tool can read
 
@@ -336,7 +363,7 @@ Talk track:
 
 ---
 
-<!-- header: "Mental model > **Scars** > Run it" -->
+<!-- header: "Stages > **Upgrades** > Run it" -->
 
 ## Loop until reviewed
 
@@ -355,10 +382,47 @@ Talk track:
 
 ---
 
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
+## Small jobs, same discipline
+
+- `fr-brainstorming`: design in isolation, approvals included
+- `fr-debugging`: Iron Law, journaled trail, one fix-PR
+- `fr-plan`, `fr-init`, `fr-progress`: authoring, setup, drift audit
+
+> Not every job needs the pipeline - but every job keeps isolation
+
+<!--
+Talk track:
+- Upgrade in miniature: the pipeline's steps usable alone. Brainstorming keeps section approvals when standalone, debugging reuses the feature workspace when the bug surfaces mid-goal.
+- The debugging journal is the idea I would steal for any workflow: rejected hypotheses written down before compaction eats them.
+-->
+
+---
+
+<!-- header: "Stages > **Upgrades** > Run it" -->
+
+## Same CLI, every harness
+
+- Claude Code: full hook surface plus executor and push guards
+- OpenCode: edit guard ported, bash ungated - known gap
+- Hermes: context-carried briefs, no shipped model bindings
+- Git servers: `gh`, `glab`, `tea` behind one backend switch
+
+> `fr run` is a CLI surface, not a prompt - every harness drives it alike
+
+<!--
+Talk track:
+- If time dies, this slide dies first. One line each: Claude is the reference, OpenCode has a documented bash gap, Hermes dispatches through context, git hosts are detected backends.
+- The point for Monday: learn the CLI once, it follows you across harnesses.
+-->
+
+---
+
 <!-- _header: "" -->
 <!-- _class: lead part-run -->
 
-# Part 3: run it
+# Run it
 
 **From zero to first reviewed pull request**
 
@@ -369,7 +433,7 @@ Talk track:
 
 ---
 
-<!-- header: "Mental model > Scars > **Run it**" -->
+<!-- header: "Stages > Scars > **Run it**" -->
 
 ## First goal in four moves
 
@@ -394,7 +458,7 @@ Talk track:
 
 ---
 
-<!-- header: "Mental model > Scars > **Run it**" -->
+<!-- header: "Stages > Scars > **Run it**" -->
 
 ## Takeaways
 
