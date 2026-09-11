@@ -845,3 +845,35 @@ docs/superpowers/implemented/
 ```
 
 - Gated mover only: complete phases, clean tree, one unit
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D13 - spec, superpowers vs super-fr
+
+```text
+superpowers: design doc + commit, reviewer loop x3, user reads file
+super-fr adds: Test Plan section (post-merge, operator-driven),
+  Implementation Plans table (one row per repo),
+  acceptance rows born here with one-line defenses
+```
+
+- Same path, same name form - the additions are sections, not files
+- Test Plan agreed in the batched Q&A, driven together after merge
+
+---
+
+<!-- header: "Deep dives" -->
+
+## D14 - plan, superpowers vs super-fr
+
+```text
+superpowers: # Feature Implementation Plan, checkbox steps,
+  2-5 minute granularity, reviewer loop, then handoff choice
+super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
+  P1.T1.S1 ids, tier + acceptance per phase, self-review gate
+```
+
+- Checkboxes a session ticks became state a CLI validates
+- Manual phases labeled, cross-repo refs in canonical form
