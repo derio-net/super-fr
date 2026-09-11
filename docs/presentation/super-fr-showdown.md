@@ -287,7 +287,7 @@ Talk track:
 
 <!-- header: "Stages > **Upgrades** > Run it" -->
 
-## Street cred
+## Feature velocity
 
 - **1000+ merged PRs** across **15 repos**, May to September 2026
 - Roughly two thirds of sampled bodies carry pipeline markers
