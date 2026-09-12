@@ -123,7 +123,7 @@ def test_tick_survives_mcp_init_timeout(
 
     from fr_vk import bridge_cli
 
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
     monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [])
 
@@ -163,7 +163,7 @@ def test_missing_binaries_still_systemexit2(
     of `main()` (a missing install is an operator error, not a flaky tick)."""
     from fr_vk import bridge_cli
 
-    monkeypatch.setenv("VK_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
+    monkeypatch.setenv("FR_BRIDGE_LOCK_PATH", str(tmp_path / "lock"))
     monkeypatch.setattr(bridge_cli, "_SEEN_PLANS_PATH", tmp_path / "seen.json")
     monkeypatch.setattr(bridge_cli, "_configured_repos", lambda: [])
     monkeypatch.setattr(bridge_cli.shutil, "which", lambda name: None)
