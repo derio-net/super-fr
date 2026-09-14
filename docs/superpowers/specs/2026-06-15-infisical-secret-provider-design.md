@@ -1,7 +1,8 @@
 # Pluggable secret providers — Infisical runtime injection for fr isolation
 
 **Date:** 2026-06-15
-**Status:** Approved design (revised after code review) — ready for planning (`fr-plan`).
+**Status:** Approved design (revised after code review); re-integrated onto the
+4.x isolation targets 2026-09-14 — see "Re-integration addendum" and "Test Plan".
 **Source:** operator brainstorm session 2026-06-14/15 (rtk/secrets investigation).
 **Target repo:** derio-net/super-fr (package: `fr`, module `fr.isolation`).
 **Related:** `docs/superpowers/specs/2026-06-14-rtk-isolation-incorporation-design.md`
@@ -431,3 +432,93 @@ plugs in without rework.
   HTTP auth, route the agent's requests through a credential broker so the value
   never enters the agent env at all — a parallel injection mode behind the same
   seam, evaluated once its maturity is confirmed.
+
+## Re-integration addendum (2026-09-14)
+
+The branch implementing this spec sat unmerged while `fr isolation` moved from
+3.3 to 4.3. Line references above describe the tree as of 2026-06-15. This
+addendum records what changed when the work was rebased, and it overrides the
+sections above wherever they disagree.
+
+**Three isolation modes, injection in one.** `fr isolation` now has three
+targets: `LocalWorktreeDevcontainerTarget` (the docker substrate this spec
+designs for), `HostWorktreeTarget` (a linked worktree with the host process env,
+used on docker-less pods), and `ExternalTarget` (a preparer-built containment
+fr adopts). Operator decision 2026-09-14: the `infisical` provider is wired into
+the devcontainer target only. In the other two modes `fr isolation exec
+--secret` raises an actionable `IsolationError` and runs nothing. Both modes
+already carry their credentials (ESO-injected env on the pods, or whatever the
+preparer placed inside), so wrapping a command there would mean running
+`infisical run` outside the container boundary this design depends on.
+
+**`Target.exec` takes the requested keys.** The protocol signature becomes
+`exec(state, argv, keys: Sequence[str] = ())`. An empty `keys` keeps every
+mode's existing behavior.
+
+**The provider protocol has four methods, not two.** Besides `up_prepare` and
+`exec_wrap`, `SecretProvider` carries `post_exec(ctx)` (runs in a `finally`
+after every exec, success or abort) and `cleanup(ctx)` (runs at `down`). §3
+already required cleanup on abnormal exit; these are the methods that deliver
+it.
+
+**Per-exec token files replace the single shared file.** §3 asked for
+serialization "or per-exec token-file names". The original branch shipped
+neither, only a comment, so two concurrent `--secret` execs on one workspace
+would overwrite each other's token. The scaffold now bind-mounts a **directory**,
+`~/.cache/fr/run-tokens/<repo>/<profile>/` (host, `0700`), to
+`/run/fr-secrets/` (container). Each secret-bearing exec writes its token to a
+uniquely named `0600` file there, the wrapper reads that exact file, and
+`post_exec` unlinks it. `cleanup` removes whatever remains in the directory.
+Mounting a directory also avoids a Docker trap: a single-file bind mount keeps
+pointing at the old inode when the file is replaced.
+
+**Where `down` runs cleanup.** In 4.x, `down` is a shared tail: PR guard, then
+`_teardown_container`, then verified worktree removal. The provider's `cleanup`
+runs inside the devcontainer target's `_teardown_container`. That is after the
+open-PR guard (a refused `down` changes nothing) and before the worktree, which
+holds the profile config the provider reads, is removed. `HostWorktreeTarget`
+already overrides that hook with a no-op, so nothing leaks into host mode.
+
+**The env-file ensure follows main.** `EnvFileProvider.up_prepare` uses the
+post-#408 behavior: a `devcontainer.json` that still mounts the legacy vk
+secrets path raises (pointing at `fr init migrate`), and every ensured file is
+hardened to `0600` with `0700` parent directories.
+
+**The scaffold composes with multi-backend installs.** `postCreateCommand` is
+the base install, then the forge CLI install for gitlab/gitea, then the Infisical
+CLI install for an infisical profile. Each step is appended, never substituted.
+
+## Test Plan
+
+Every item runs without a live Infisical except item 6. Item numbers match the
+acceptance-matrix rows listed in brackets.
+
+1. **Back-compat default** [`secret-provider-envfile-default`]. A profile with no
+   `secret_provider` resolves to `EnvFileProvider`. `up_prepare` creates the
+   mounted env-file at `0600` and refuses a legacy vk mount. `exec_wrap` returns
+   an empty wrap.
+2. **Scaffold** [`secret-provider-scaffold-infisical`]. `fr init scaffold
+   --secret-provider infisical` writes the `infisical:` block with the default
+   auth env-var names, omits `--env-file`, mounts the token directory, appends
+   the CLI install after any forge-CLI install, and prints the TTL reminder. An
+   env-file profile is unchanged.
+3. **On-demand injection** [`secret-provider-infisical-on-demand`]. On the
+   devcontainer target, `exec --secret KEY` puts `infisical run --projectId …
+   --env … --path … --` ahead of the user command and keeps the command intact
+   at the tail. Without `--secret`, nothing is minted and nothing is wrapped. An
+   undeclared key raises before any mint, and the CLI exits 2 having run
+   nothing.
+4. **Nothing secret on argv; tokens are per-exec** [`secret-provider-no-secret-on-argv`].
+   The minted token and the UA client secret appear in no assembled argv (host
+   mint or `devcontainer exec`), and no `--remote-env` is added. Two wraps
+   produce two distinct `0600` token files. `post_exec` removes the file for its
+   own exec, whether the command returned or raised. `down` runs `cleanup`.
+5. **Mode scope** [`secret-provider-mode-scope`]. `HostWorktreeTarget.exec` and
+   `ExternalTarget.exec` with non-empty `keys` raise `IsolationError` naming
+   devcontainer mode and run nothing. With empty `keys` they behave as before.
+   The CLI maps the refusal to exit 2.
+6. **Live smoke, operator-driven** [`secret-provider-live-infisical-smoke`].
+   With a real read-only, short-TTL Universal-Auth identity and the two host env
+   vars set: `fr isolation exec --secret KEY -- printenv KEY` prints the value,
+   the same command without `--secret` prints nothing, and the token directory
+   is empty afterwards.

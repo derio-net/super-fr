@@ -1827,3 +1827,69 @@ rows:
     notes: 'Fallback-gone unit tests landed this PR (#276): test_isolation.py pins
       profiles_config/state-dir fr-only + the legacy-vk-mount hard error;
       test_bridge_cli.py pins bridge_env reading only FR_BRIDGE_*. Run in CI.'
+  - id: secret-provider-envfile-default
+    capability: Isolation secret providers
+    acceptance: 'A profile with no secret_provider keeps the ambient env-file model:
+      the mounted env-file is ensured 0600, a legacy vk mount is refused, and no command
+      is wrapped'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_secrets_provider.py
+    status: ci
+    notes: Back-compat default pinned per-PR.
+  - id: secret-provider-scaffold-infisical
+    capability: Isolation secret providers
+    acceptance: fr init scaffold --secret-provider infisical writes the infisical coordinates
+      block, omits the --env-file mount, composes the in-container CLI install after
+      any forge-CLI install, and prints the identity TTL / least-privilege reminder
+    origin:
+    - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_scaffold_infisical.py
+    status: ci
+    notes: Scaffold shape pinned per-PR.
+  - id: secret-provider-infisical-on-demand
+    capability: Isolation secret providers
+    acceptance: fr isolation exec --secret KEY on an infisical devcontainer profile
+      runs the command under a path-scoped infisical run; without --secret nothing is
+      minted; an undeclared key fails before any mint
+    origin:
+    - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
+    levels: {}
+    status: not-implemented
+    notes: Wiring tests carried from the original PR are red after the 4.x rebase; the
+      re-integration phase flips this to ci.
+  - id: secret-provider-no-secret-on-argv
+    capability: Isolation secret providers
+    acceptance: No Universal-Auth client secret or minted token appears on any host
+      or container argv, and each secret-bearing exec gets its own 0600 token-file that
+      is removed when the command returns or aborts
+    origin:
+    - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
+    levels: {}
+    status: not-implemented
+    notes: Per-exec token files close the concurrent-exec race the original PR left
+      as a NOTE; the re-integration phase flips this to ci.
+  - id: secret-provider-mode-scope
+    capability: Isolation secret providers
+    acceptance: In host-worktree and external isolation modes, fr isolation exec --secret
+      refuses with an actionable error instead of running unwrapped
+    origin:
+    - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
+    levels: {}
+    status: not-implemented
+    notes: Operator decision 2026-09-14 (devcontainer-only); the re-integration phase
+      flips this to ci.
+  - id: secret-provider-live-infisical-smoke
+    capability: Isolation secret providers
+    acceptance: Against a real read-only short-TTL Universal-Auth identity, exec --secret
+      injects a declared key, the key is absent without --secret, and no token persists
+      afterwards
+    origin:
+    - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
+    levels: {}
+    status: not-implemented
+    notes: Operator-owned [manual] phase; needs a live Infisical identity on the host.
