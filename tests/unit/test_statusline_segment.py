@@ -4,9 +4,9 @@ The segment answers two questions for a status line: which branch is this
 session working on, and is it inside an fr-isolation workspace? ``--format
 plain`` (the default) prints exactly three plain lines:
 
-1. the state — ``fr`` | ``none``;
-2. ``branch: <b>`` | ``no branch``;
-3. ``worktree: <abs path>`` | ``no fr-isolation``.
+1. the state — ``fr`` or ``none``;
+2. ``branch: <b>`` or ``no branch``;
+3. ``worktree: <abs path>`` or ``no fr-isolation``.
 
 Input is Claude Code status-line JSON on stdin, or ``--cwd <dir>``, which
 reads NO stdin (Hermes runs the command without JSON). ``--format ansi``
@@ -27,6 +27,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -117,6 +118,9 @@ def _plain(res: subprocess.CompletedProcess[str]) -> tuple[str, str, str]:
 
 
 NONE = ("none", "no branch", "no fr-isolation")
+GREEN = "\x1b[32m"
+PURPLE = "\x1b[35m"
+RESET = "\x1b[0m"
 
 
 # cwd is not a git repo: the "none" rows, exit 0.
@@ -129,3 +133,148 @@ def test_not_a_git_repo(world: World, tmp_path: Path) -> None:
 # cwd does not exist at all: still the "none" rows, exit 0.
 def test_missing_cwd(world: World, tmp_path: Path) -> None:
     assert _plain(world.run(tmp_path / "nope")) == NONE
+
+
+# Bound session from the base clone: the binding wins.
+def test_bound_from_base_clone(world: World) -> None:
+    world.bind()
+    assert _plain(world.run(world.repo)) == ("fr", "branch: feat/x", f"worktree: {world.featx}")
+
+
+# A binding wins even when the cwd is not a repo.
+def test_bound_from_non_repo_cwd(world: World, tmp_path: Path) -> None:
+    world.bind()
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert _plain(world.run(plain)) == ("fr", "branch: feat/x", f"worktree: {world.featx}")
+
+
+# A stale binding (worktree directory gone) falls back to the cwd rule.
+def test_stale_binding_ignored(world: World) -> None:
+    world.bind()
+    shutil.rmtree(world.featx)
+    assert _plain(world.run(world.repo)) == ("none", "branch: main", "no fr-isolation")
+
+
+# Unbound base clone: the cwd branch, no fr, other sessions' workspaces NOT named.
+def test_unbound_base_clone(world: World) -> None:
+    assert _plain(world.run(world.repo)) == ("none", "branch: main", "no fr-isolation")
+
+
+# Unbound, cwd inside the fr workspace (and in a subdirectory of it).
+def test_unbound_inside_fr_workspace(world: World) -> None:
+    expected = ("fr", "branch: feat/x", f"worktree: {world.featx}")
+    assert _plain(world.run(world.featx, sid=None)) == expected
+    sub = world.featx / "sub"
+    sub.mkdir()
+    assert _plain(world.run(sub, sid=None)) == expected
+
+
+# A subdirectory of the base clone still resolves the repo.
+def test_base_clone_subdirectory(world: World) -> None:
+    sub = world.repo / "sub"
+    sub.mkdir()
+    assert _plain(world.run(sub)) == ("none", "branch: main", "no fr-isolation")
+
+
+# A plain linked worktree is not fr.
+def test_plain_linked_worktree(world: World) -> None:
+    assert _plain(world.run(world.blog)) == ("none", "branch: docs/blog", "no fr-isolation")
+
+
+# A native detached agent worktree: no branch, not fr.
+def test_detached_agent_worktree(world: World) -> None:
+    agent = world.repo / ".claude" / "worktrees" / "agent-1"
+    _git(world.repo, "worktree", "add", "-q", "--detach", str(agent))
+    assert _plain(world.run(agent)) == NONE
+
+
+def test_missing_session_id_is_unbound(world: World) -> None:
+    world.bind()
+    assert _plain(world.run(world.repo, sid=None)) == ("none", "branch: main", "no fr-isolation")
+
+
+def test_unknown_session_id_is_unbound(world: World) -> None:
+    world.bind()
+    assert _plain(world.run(world.repo, sid="sess-gone"))[0] == "none"
+
+
+# A path-like session id never escapes the sessions dir.
+def test_path_like_session_id_is_unbound(world: World) -> None:
+    world.bind()
+    assert _plain(world.run(world.repo, sid="../sessions/sess-1"))[0] == "none"
+
+
+# --cwd reads no stdin: a stdin left OPEN must not hang.
+def test_cwd_flag_reads_no_stdin(world: World) -> None:
+    proc = subprocess.Popen(
+        ["bash", str(SCRIPT), "--cwd", str(world.featx)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=world.env(),
+    )
+    try:
+        assert proc.wait(timeout=5) == 0
+        assert proc.stdout is not None
+        out = proc.stdout.read()
+    finally:
+        assert proc.stdin is not None
+        proc.stdin.close()
+        proc.kill()
+    assert out == f"fr\nbranch: feat/x\nworktree: {world.featx}\n"
+
+
+def test_ansi_colours(world: World) -> None:
+    world.bind()
+    assert world.run(world.repo, "sess-1", "--format", "ansi").stdout == (
+        f"{GREEN}branch: feat/x{RESET}\n{GREEN}worktree: {world.featx}{RESET}\n"
+    )
+    assert world.run(world.repo, None, "--format", "ansi").stdout == (
+        f"{PURPLE}branch: main{RESET}\n{PURPLE}no fr-isolation{RESET}\n"
+    )
+
+
+def test_oneline(world: World, tmp_path: Path) -> None:
+    world.bind()
+    assert world.run(world.repo, "sess-1", "--format", "oneline").stdout == "fr:feat/x\n"
+    assert world.run(world.repo, None, "--format", "oneline").stdout == "main\n"
+    out = world.run(world.blog, None, "--cwd", str(tmp_path), "--format", "oneline").stdout
+    assert out == "no branch\n"
+    assert len(out.strip()) <= 40
+    assert "\x1b" not in out
+
+
+def test_unknown_format_falls_back_to_plain(world: World) -> None:
+    assert _plain(world.run(world.repo, None, "--format", "bogus"))[0] == "none"
+
+
+# Timing guard: CI gets a generous 0.5 s so a slow runner never flakes, but a
+# stray fr call (4 s) fails.
+def test_runs_well_under_budget(world: World) -> None:
+    world.bind()
+    world.run(world.repo)  # warm caches
+    t0 = time.perf_counter()
+    _plain(world.run(world.repo))
+    assert time.perf_counter() - t0 < 0.5
+
+
+# The script must never reach for the fr CLI: a trap fr first on PATH must not
+# be invoked (and would blow the timing budget if it were).
+def test_never_invokes_fr(world: World, tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    trap = bin_dir / "fr"
+    trap.write_text('#!/bin/bash\necho TRAPPED >> "$FR_TRAP"\nexit 1\n')
+    trap.chmod(0o755)
+    log = tmp_path / "trap.log"
+    world.bind()
+    _plain(
+        world.run(
+            world.repo,
+            PATH=f"{bin_dir}:{os.environ.get('PATH', '')}",
+            FR_TRAP=str(log),
+        )
+    )
+    assert not log.exists()
