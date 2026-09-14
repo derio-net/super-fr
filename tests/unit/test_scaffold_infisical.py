@@ -87,6 +87,7 @@ def test_scaffold_infisical_profile(repo: Path) -> None:
         in mount
     )
     assert ".token" not in mount
+    assert mount.endswith(",readonly")  # the container only reads its token (W1)
     # CLI install composed onto the baseline, not overwriting it.
     assert POST_CREATE in cfg["postCreateCommand"]
     assert "infisical" in cfg["postCreateCommand"]

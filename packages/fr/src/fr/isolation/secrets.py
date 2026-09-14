@@ -148,6 +148,14 @@ def contain_token_dir(candidate: Path, origin: str) -> Path:
     components deep, and with no symlink anywhere in those three components
     (a link would make `iterdir()` truncate the files it points at). Anything
     else is an actionable IsolationError naming `origin` and the layout."""
+    if ".." in Path(candidate).parts:
+        # Refused BEFORE normalisation (W2): normpath collapses `..` lexically
+        # while the kernel resolves it through symlinks, so fr and docker could
+        # disagree about which directory the mount names.
+        raise IsolationError(
+            f"refusing token dir {candidate} (from {origin}): `..` is not allowed anywhere in "
+            f"the path — it must be exactly {TOKEN_LAYOUT}."
+        )
     root = Path(os.path.normpath(token_root()))
     norm = Path(os.path.normpath(candidate))
     try:
@@ -225,7 +233,9 @@ def _substitute(value: str, worktree: Path) -> str:
         name, default = m.group(2), m.group(3)
         if name == "HOME":
             return str(_home())
-        return os.environ.get(name, default if default is not None else "")
+        # `env[name] || default` (W3): a variable that is set but EMPTY takes
+        # the default, as a JS `||` does; no default → "" like a shell.
+        return os.environ.get(name) or (default if default is not None else "")
 
     return _VAR.sub(repl, value)
 
@@ -522,13 +532,24 @@ class InfisicalProvider:
 def _truncate_and_unlink(tf: Path) -> None:
     """Best-effort truncate, then unlink (missing is fine). Not a forensic
     shred — the token is short-TTL; this only keeps it out of a casual read of
-    a file that outlived its exec."""
+    a file that outlived its exec.
+
+    Host-side defence (W1): the token dir is bind-mounted into the container
+    (read-only by the scaffold, but a hand-edited mount may not be), and code
+    in there knows the per-exec file name. It could swap the file for a symlink
+    to any host file this user can write, or for a FIFO. So the truncate opens
+    with O_NOFOLLOW (ELOOP on a link — never truncate through it) and
+    O_NONBLOCK (ENXIO on a reader-less FIFO — never hang), swallows every
+    OSError, and the unlink removes the entry itself, never a target."""
     try:
-        if tf.is_file():
-            tf.write_text("")
+        fd = os.open(tf, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK)
+        os.close(fd)
     except OSError:
-        pass
-    tf.unlink(missing_ok=True)
+        pass  # ELOOP, ENXIO, ENOENT, EISDIR, … — the unlink below still applies
+    try:
+        tf.unlink(missing_ok=True)
+    except OSError as e:  # a planted directory, a permission oddity — never raise from a finally
+        print(f"warning: could not remove token file {tf}: {e}", file=sys.stderr)
 
 
 def remove_token_dir(d: Path) -> None:
@@ -552,10 +573,9 @@ def remove_token_dir(d: Path) -> None:
         print(f"warning: refusing to remove token dir: {e}", file=sys.stderr)
         return
     for p in d.iterdir():
-        if p.is_symlink():
-            continue  # never truncate through a link; rmtree unlinks the link itself
-        if p.is_file():
-            _truncate_and_unlink(p)
+        if p.is_symlink() or p.is_dir():
+            continue  # rmtree unlinks a link itself (never its target) and walks real subdirs
+        _truncate_and_unlink(p)  # regular file, FIFO, whatever was planted: O_NOFOLLOW|O_NONBLOCK
     shutil.rmtree(d, ignore_errors=True)
 
 
