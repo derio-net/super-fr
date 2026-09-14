@@ -62,7 +62,9 @@ The STE instructions exist as one text. Two carriers deliver it:
 1. a forced plugin output style, for the Claude Code main thread;
 2. a shipped rule, for subagents, OpenCode and Hermes.
 
-A test makes the two bodies identical. Thus the carriers cannot drift apart.
+In both files, the shared text is between the lines `<!-- ste-shared:start -->`
+and `<!-- ste-shared:end -->`. A test makes the two marked blocks identical.
+Thus the carriers cannot drift apart.
 
 ## 4. Operator decisions (asked once, 2026-09-14)
 
@@ -85,7 +87,7 @@ A test makes the two bodies identical. Thus the carriers cannot drift apart.
 The text has these sections. The wording is final in the plan, not here.
 
 - **Scope.** Apply to every reply and to all text written for a person: status
-  updates, PR bodies, journal entries, commit message bodies, subagent results.
+  updates, skill announcements, PR bodies, journal entries, subagent results.
   Do not apply to code, commands, paths, identifiers, quoted output, or quoted
   words of the operator. Copy those exactly.
 - **Words.** Use common words. Use one word for one meaning, and use the same
@@ -154,11 +156,13 @@ subagents. The line also covers harnesses where it does not load.
 
 1. The style file exists, and its frontmatter has `force-for-plugin: true` and
    `keep-coding-instructions: true`.
-2. The style body and the rule body (after the header) are identical.
+2. Both files have exactly one `ste-shared` marker pair, and the two marked
+   blocks are identical.
 3. The shared text contains each section heading of §5.A, including the
    Insight-block override.
-4. The text contains no forbidden filler word from its own list, outside the
-   quoted examples. (This keeps the text consistent with itself.)
+4. Remove every double-quoted string from the shared text. The remaining text
+   contains no filler word from the "Words" list. (This keeps the text
+   consistent with itself.)
 5. `fr-phase-executor.md` refers to `ste-output-tone`.
 
 ### F. Release
@@ -177,6 +181,9 @@ The PR body records this under the explainers-currency rule.
   plugin. Accepted.
 - **Another plugin that forces a style loads first.** Then our style does not
   apply, but the rule still does. The Test Plan checks the real result.
+- **The installed Claude Code does not support `force-for-plugin`.** Then the
+  style is only selectable in `/config`, but the rule still applies. Test Plan
+  step 2 finds this condition.
 - **Hook context asks for longer replies.** The shared text cancels that
   permission explicitly (§5.A, Insight blocks).
 - **Short sentences can remove necessary detail.** The text keeps all content

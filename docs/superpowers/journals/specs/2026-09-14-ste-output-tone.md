@@ -24,3 +24,8 @@ Post-merge: operator updates plugin, restarts, runs one fr skill, checks the rep
 ### d5-no-dictionary · decision · No ASD dictionary; paraphrased writing rules only
 
 Agent decision, not operator-owned: ASD-STE100 Issue 9 is free to obtain but permits reproduction only with ASD written authority. The style paraphrases the STE writing-rule principles and does not ship the approved-word list or verbatim rule text.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-09-14T21:38:09 -->
+### spec-review-1 · review · Spec review: 4 findings, all fixed
+
+Checked against Q&A d1-d4 and the codebase. All named files and tests exist; fr validate artifacts and fr acceptance check pass. R1 scope creep: §5.A listed commit message bodies, not in d1 — removed. R2 ambiguous identity test: 'after the header' had no boundary — added ste-shared start/end markers (§3, §5.E.2). R3 filler test matched its own quoted examples — test strips double-quoted strings first (§5.E.4). R4 missing risk: Claude Code without force-for-plugin support — added to §6, detected by Test Plan step 2.
