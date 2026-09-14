@@ -198,42 +198,44 @@ fr isolation exec --secret DEPLOY_KEY [--secret REGISTRY_TOKEN] -- ./deploy.sh
 - The value is injected into the command's subprocess env and **never printed**
   — it does not reach stdout, the transcript, or logs.
 
-**Token conveyance — off all argv (corrected after review).** At `up`, the
-`infisical` provider creates a `0600` host **token-file** and bind-mounts it
-into the container at a fixed path (e.g. `/run/fr/infisical.token`). On a
-secret-bearing exec under `universal-auth`, fr mints a fresh token host-side and
-writes it into that file; the wrapped command runs under a shell that reads it
-into the environment without it touching argv, e.g.:
+**Token conveyance — off all argv.** The shipped model is the one the
+re-integration addendum describes (it supersedes the single-file design this
+section originally carried): the scaffold bind-mounts a **per-workspace host
+directory**, `~/.cache/fr/run-tokens/<repo>/<profile>/${localWorkspaceFolderBasename}`
+(`0700`), to `/run/fr-secrets/` in the container, and the provider resolves that
+host directory *from the committed mount* at runtime. On a secret-bearing exec
+under `universal-auth`, fr validates the profile, mints a fresh token host-side,
+writes it to a uniquely named `0600` file in that directory, and runs the command
+under a shell that reads exactly that file into the environment:
 
 ```
-devcontainer exec … -- sh -lc 'INFISICAL_TOKEN="$(cat /run/fr/infisical.token)" \
-   infisical run --projectId <id> --env <env> --path <path> -- <cmd>'
+devcontainer exec … -- sh -lc 'INFISICAL_TOKEN="$(cat /run/fr-secrets/<uuid>.token)" \
+   exec infisical run --projectId <id> --env <env> --path <path> -- env -u INFISICAL_TOKEN "$@"'
 ```
 
-The token is never a command-line argument on the host *or* in the container; it
-lives only in the `0600` host file (rewritten per request) and the container
-process env. For `kubernetes-auth`, `mint_token` returns `None` and the CLI
-authenticates via the pod ServiceAccount — no token-file, no host step.
+The token is never a command-line argument on the host *or* in the container,
+the user command does not inherit it (`env -u`), and the file is removed when
+the command returns or aborts. For `kubernetes-auth`, `mint_token` returns
+`None`, no file is written, and the script sets no `INFISICAL_TOKEN` at all.
 
 Flow:
 
 - **`up`** — `provider.up_prepare()`. `env-file`: ensure file. `infisical`:
-  validate config + both CLI touchpoints; create the `0600` token-file + mount;
-  persist no secret.
-- **`exec` without `--secret`** — plain `devcontainer exec -- <cmd>`; zero
-  Infisical calls.
-- **`exec --secret …`** — fail-fast key check → mint (universal-auth) → write
-  token-file → run the wrapped command. `infisical run` **resolves secrets once
-  at command start**, so the token need only be valid for the *fetch*, not the
-  whole command (a long `./deploy.sh` is unaffected once started). Parallel
-  execs each mint independently; the per-request token-file write must be
-  serialized per workspace (or use per-exec token-file names) to avoid a race.
-- **`down`** — shred the token-file (`0600`, best-effort `shred`/unlink). App
-  secrets were never materialized on the host; no token persists in the
-  container.
+  validate config + the host CLI touchpoint; ensure the workspace's `0700`
+  token directory (the mount source); persist no secret.
+- **`exec` without `--secret`** — plain `devcontainer exec -- <cmd>`; the
+  profile config is not even read.
+- **`exec --secret …`** — fail-fast key check → config validation → mint
+  (universal-auth) → write the per-exec file → run the wrapped command →
+  `post_exec` removes that file (in a `finally`). `infisical run` **resolves
+  secrets once at command start**, so the token need only be valid for the
+  *fetch*. Parallel execs each mint into their own file — no shared-file race.
+- **`down`** — `cleanup` removes the workspace's token directory (after the
+  container is verified gone); the teardown also removes it unconditionally,
+  even when the profile config is unreadable, and gc does the same for orphans.
 
-Cleanup of the token-file is owned by the `infisical` provider and MUST run on
-abnormal exit (exception / SIGINT) too, not only clean `down`.
+Cleanup is owned by the `infisical` provider and MUST run on abnormal exit
+(exception / SIGINT) too, not only clean `down`.
 
 ### 4. Config schema (`fr-profiles.yaml`)
 
@@ -520,5 +522,6 @@ acceptance-matrix rows listed in brackets.
 6. **Live smoke, operator-driven** [`secret-provider-live-infisical-smoke`].
    With a real read-only, short-TTL Universal-Auth identity and the two host env
    vars set: `fr isolation exec --secret KEY -- printenv KEY` prints the value,
-   the same command without `--secret` prints nothing, and the token directory
-   is empty afterwards.
+   the same command without `--secret` prints nothing, `INFISICAL_TOKEN` is
+   absent in the child (`exec --secret KEY -- sh -c 'printenv INFISICAL_TOKEN'`
+   prints nothing), and the workspace's token directory is empty afterwards.

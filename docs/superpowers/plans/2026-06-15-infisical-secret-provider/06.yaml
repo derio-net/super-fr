@@ -29,9 +29,12 @@ tasks:
       secret keys. Scaffold an infisical profile
       (`fr init scaffold --secret-provider infisical …`), run `fr isolation up`
       in devcontainer mode, then run a real
-      `fr isolation exec --secret <KEY> -- printenv <KEY>` and confirm three
+      `fr isolation exec --secret <KEY> -- printenv <KEY>` and confirm four
       things: the value is printed; the same command without `--secret` prints
-      nothing; `~/.cache/fr/run-tokens/<repo>/<profile>/` is empty afterwards.
+      nothing; `fr isolation exec --secret <KEY> -- sh -c 'printenv INFISICAL_TOKEN'`
+      prints nothing (the token is unset in the child); and this workspace's
+      `~/.cache/fr/run-tokens/<repo>/<profile>/<worktree-basename>/` is empty
+      afterwards.
       Record the results with
       `fr plan edit <plan-dir> --complete-phase 6 --note "<what was verified>"`,
       and flip the `secret-provider-live-infisical-smoke` acceptance row to
