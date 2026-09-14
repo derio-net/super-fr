@@ -174,3 +174,8 @@ no-refactor-because: P4.T1, P4.T2, P4.T3 — docs, mirrors and matrix rows only;
 ### review-p4 · review · Review p4: docs, mirrors and acceptance rows correct; no findings (phase 4)
 
 Checked 6e22a38. SKILL.md and both mirrors are byte-identical, 120 lines, no HTML entities (the executor's report rendering showed &lt;/&gt;, the files do not). Word diff: only the v1 wiring snippet removed and the three harness bullets added; the dropped real-git hint is covered by fr-statusline-claude.sh itself. Matrix: statusline-harness-neutral-segment not-implemented -> ci citing test_statusline_segment.py; statusline-shows-bound-workspace cites both test files with v2 notes. README and 2026-09-04 spec pointer correct. Gates: journal check, plan self-review, acceptance report --check and check all rc=0. Noted for follow-up (not fixed here): the 04.yaml acceptance command lacks --deterministic (journal p4-acceptance-deterministic); five SKILL.md files now sit at the 120-line tripwire (p4-skill-120-reflow).
+
+<!-- fr:journal kind=discovery scope=plan id=p5-manual-back-loaded created=2026-09-14T23:33:31 phase=5 -->
+### p5-manual-back-loaded · discovery · Phase 5 is [manual] and back-loaded: ships unimplemented, operator-driven post-merge (phase 5)
+
+No agentic phase depends on it. The run's grouped for_each still lists phase/5; fr run resolve offers only done|failed and failed would wedge the cursor, so both phase/5 members are resolved done with this entry as the record. Steps P5.T1.S1-S2 stay unticked until the operator updates the plugin, rewires ~/.claude/statusline.sh (or points statusLine.command / a symlink at fr-statusline-claude.sh) and checks the footer in a bound, an unbound base-clone and a non-repo session.
