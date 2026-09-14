@@ -124,3 +124,23 @@ Host /bin/bash -n rc=0; shellcheck 0.11.0 rc=0 (host only, the container has non
 ### p3-no-refactor · decision · no-refactor-because: P3.T1 (phase 3)
 
 no-refactor-because: P3.T1 — the script is the plan's verbatim GREEN block, and shellcheck and bash 3.2 checks are clean with nothing to extract. The only structural change (fixture name=world registration) was made at S1 to keep lint clean, see p3-shared-world-fixture.
+
+<!-- fr:journal kind=finding scope=plan id=review-p3-symlink created=2026-09-14T23:15:58 phase=3 state=fixed -->
+### review-p3-symlink · finding [fixed] · Review p3: script found the segment via dirname of BASH_SOURCE, so a symlinked status line lost both rows (phase 3)
+
+Host smoke through a symlink printed a bare separator on line 2 and an empty line 3. Fix: portable readlink loop (bash 3.2, no readlink -f) resolves the real file before locating fr-statusline-segment.sh. RED/GREEN: test_symlinked_script_finds_segment.
+
+<!-- fr:journal kind=finding scope=plan id=review-p3-missing-segment created=2026-09-14T23:16:01 phase=3 state=fixed -->
+### review-p3-missing-segment · finding [fixed] · Review p3: missing or silent segment produced a bare separator and an empty third line (phase 3)
+
+Fix: fall back to purple 'no branch' / 'no fr-isolation' rows when the segment prints nothing. RED/GREEN: test_missing_segment_degrades_to_none_rows (script copied alone).
+
+<!-- fr:journal kind=finding scope=plan id=review-p3-float-percent created=2026-09-14T23:16:04 phase=3 state=fixed -->
+### review-p3-float-percent · finding [fixed] · Review p3: percentages trimmed with ${x%.*} broke on exponent floats (1e-07 under jq 1.7) (phase 3)
+
+Container/CI jq 1.7 renders 1e-07 as '1e-07'; [ -ge ] then errored to stderr and the colour was lost. Fix: floor numeric percentages inside jq (non-numbers -> empty). RED/GREEN: test_non_integer_percentages_are_floored (stderr must be empty; 1e-07 -> 0%, 99.99999 -> 99% red).
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-09-14T23:16:06 phase=3 -->
+### review-p3 · review · Review p3: reference status line reviewed; 3 findings fixed with tests (phase 3)
+
+Checked d133a2d against spec 5.B. Fixture name='world' import pattern is sound (avoids ruff F811). cwd ~-shortening only under HOME; size 0 and null rate_limits omit cleanly. Post-fix: 25 status-line tests pass in the container, ruff clean, host /bin/bash 3.2 -n and shellcheck 0.11.0 clean, symlink smoke under bash 3.2 prints green bound rows with no stderr in ~275 ms (operator's current statusline.sh: 465-500 ms).

@@ -22,9 +22,20 @@ BLUE=$'\033[34m'
 GREEN=$'\033[32m'
 YELLOW=$'\033[33m'
 RED=$'\033[31m'
+PURPLE=$'\033[35m'
 RESET=$'\033[0m'
 SEP="${DIM} | ${RESET}"
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# The segment lives beside the REAL file, so follow symlinks first (a user may
+# link ~/.claude/statusline.sh here). Plain readlink loop: bash 3.2 and older
+# macOS have no `readlink -f`.
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir=$(cd -P "$(dirname "$src")" && pwd)
+  src=$(readlink "$src")
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+here=$(cd -P "$(dirname "$src")" && pwd)
 
 _pct_color() {
   if [ "$1" -ge 75 ]; then printf '%s' "$RED"
@@ -42,9 +53,9 @@ model="" size="" used="" five="" seven="" cwd=""
   printf '%s' "$data" | jq -r '
     (.model.display_name // "" | sub("^Claude "; "")),
     (.context_window.context_window_size // "" | tostring),
-    (.context_window.used_percentage // "" | tostring),
-    (.rate_limits.five_hour.used_percentage // "" | tostring),
-    (.rate_limits.seven_day.used_percentage // "" | tostring),
+    (.context_window.used_percentage | if type == "number" then floor | tostring else "" end),
+    (.rate_limits.five_hour.used_percentage | if type == "number" then floor | tostring else "" end),
+    (.rate_limits.seven_day.used_percentage | if type == "number" then floor | tostring else "" end),
     (.workspace.current_dir // .cwd // "")' 2>/dev/null || true
 )
 
@@ -73,6 +84,9 @@ fi
 rows=$(printf '%s' "$data" | bash "$here/fr-statusline-segment.sh" --format ansi 2>/dev/null)
 b_row=$(printf '%s\n' "$rows" | sed -n '1p')
 w_row=$(printf '%s\n' "$rows" | sed -n '2p')
+# Segment missing or silent: the "none" rows, never a bare separator.
+[ -n "$b_row" ] || b_row="${PURPLE}no branch${RESET}"
+[ -n "$w_row" ] || w_row="${PURPLE}no fr-isolation${RESET}"
 
 case "$cwd" in
 "$HOME" | "$HOME"/*) cwd_short="~${cwd#"$HOME"}" ;;
