@@ -15,24 +15,30 @@ import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, ClassVar
 
 from fr._hosts import detect_backend
-from fr.isolation.secrets import ensure_mounted_env_file
+from fr.isolation.secrets import ProfileContext, SecretProvider, provider_for
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
     delete_state,
     list_states,
+    profiles_config,
     repo_cache_name,
     resolve_profile,
     save_state,
 )
+
+# The SecretProvider seam (spec 2026-06-15): the devcontainer target builds ONE
+# provider per call site from the profile's `fr-profiles.yaml` entry. Injectable
+# like the Runner so the lifecycle is unit-testable without a live Infisical.
+ProviderFactory = Callable[[ProfileContext], SecretProvider]
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
@@ -317,6 +323,7 @@ class LocalWorktreeDevcontainerTarget:
         repo_root: Path,
         runner: Runner = subprocess_runner,
         gc_spawner: GcSpawner = _noop_gc_spawn,
+        provider_factory: ProviderFactory = provider_for,
     ):
         # resolve() — the mount target must match the realpath git bakes
         # into the worktree's gitdir pointer (symlinked /tmp on macOS etc.).
@@ -325,6 +332,25 @@ class LocalWorktreeDevcontainerTarget:
         self.repo_root = _main_worktree_root(Path(repo_root).resolve())
         self.run = runner
         self._gc_spawner = gc_spawner
+        self._provider_factory = provider_factory
+
+    # ---------- secret provider seam ----------
+
+    def _profile_context(self, profile: str, worktree: Path) -> ProfileContext:
+        """The provider's view of one profile, read from the WORKTREE's
+        committed `fr-profiles.yaml` (the worktree is cut from the committed
+        tree, so that is the config the devcontainer actually runs with)."""
+        entry = profiles_config(worktree).get("profiles", {}).get(profile, {}) or {}
+        return ProfileContext(
+            repo=self.repo_root.name,
+            profile=profile,
+            keys=tuple(str(k) for k in entry.get("secrets", []) or []),
+            config=entry,
+            worktree=worktree,
+        )
+
+    def _provider(self, ctx: ProfileContext) -> SecretProvider:
+        return self._provider_factory(ctx)
 
     # ---------- lifecycle ----------
 
@@ -382,7 +408,10 @@ class LocalWorktreeDevcontainerTarget:
                     f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
                     "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
                 )
-        self._ensure_mounted_env_file(config)
+        # Host-side secret setup is the provider's (env-file: ensure the mounted
+        # env-file; infisical: the 0700 token directory — no secret at up).
+        ctx = self._profile_context(name, worktree)
+        self._provider(ctx).up_prepare(ctx)
         # Resolve the shared common dir, not <repo_root>/.git: correct even if
         # repo_root is a worktree (a gitfile), independent of normalization (#292).
         git_dir = _git_common_dir(self.repo_root)
@@ -411,19 +440,43 @@ class LocalWorktreeDevcontainerTarget:
         self._spawn_gc()
         return state
 
-    def exec(self, state: IsolationState, argv: list[str]) -> int:
+    def exec(self, state: IsolationState, argv: list[str], keys: Sequence[str] = ()) -> int:
         config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
-        result = self.run(
-            [
-                "devcontainer",
-                "exec",
-                f"--workspace-folder={state.worktree}",
-                f"--config={config}",
-                *argv,
-            ],
-            cwd=state.worktree,
-            capture=False,
-        )
+        ctx = self._profile_context(state.profile, state.worktree)
+        # Fail fast on an undeclared key BEFORE anything is minted: the
+        # profile's `secrets:` list is the allow-list for `--secret`.
+        undeclared = [k for k in keys if k not in ctx.keys]
+        if undeclared:
+            raise IsolationError(
+                f"secret(s) not declared for profile {state.profile!r}: "
+                f"{', '.join(undeclared)} — declare them under `secrets:` in "
+                ".devcontainer/fr-profiles.yaml (fr init scaffold --secret KEY)."
+            )
+        provider = self._provider(ctx)
+        wrap = provider.exec_wrap(ctx, want_secrets=bool(keys))
+        # `--remote-env` is host-ps-visible, so it carries ONLY the wrap's
+        # declared non-secret env (empty for both shipped providers). The
+        # secret itself never rides argv — infisical reads its token from the
+        # bind-mounted per-exec file inside the container.
+        remote_env = [f"--remote-env={k}={v}" for k, v in wrap.exec_env.items()]
+        try:
+            result = self.run(
+                [
+                    "devcontainer",
+                    "exec",
+                    f"--workspace-folder={state.worktree}",
+                    f"--config={config}",
+                    *remote_env,
+                    *wrap.argv_prefix,
+                    *argv,
+                ],
+                cwd=state.worktree,
+                capture=False,
+            )
+        finally:
+            # Success OR abort: the token is consumed at command start, so it
+            # must not outlive the exec (review finding C2).
+            provider.post_exec(ctx)
         return result.returncode
 
     def restart(self, state: IsolationState, force: bool = False) -> str:
@@ -790,7 +843,12 @@ class LocalWorktreeDevcontainerTarget:
 
     def _teardown_container(self, state: IsolationState) -> None:
         """Stop + rm the devcontainer and reclaim its image, verifying the
-        post-condition. Overridden to a no-op by docker-less modes."""
+        post-condition. Overridden to a no-op by docker-less modes.
+
+        Runs the secret provider's `cleanup` first — after the open-PR guard
+        (a refused `down` changes nothing) and while the worktree, which holds
+        the profile config the provider reads, still exists."""
+        self._cleanup_secrets(state)
         # A FAILED `docker ps` (daemon unreachable) must NOT be read as "no
         # container" — that path would `delete_state()` while a container may
         # still be running once the daemon recovers, the exact #354 leak. So the
@@ -1492,14 +1550,16 @@ class LocalWorktreeDevcontainerTarget:
         )
         return result.returncode == 0
 
-    def _ensure_mounted_env_file(self, config: Path) -> None:
-        """Ensure the env-file the profile's devcontainer.json mounts exists.
-
-        Delegates to the shared `secrets.ensure_mounted_env_file` so the
-        EnvFileProvider and this target use one implementation (mount-following,
-        #272). Phase 3 routes this through the provider seam entirely.
-        """
-        ensure_mounted_env_file(config, self.repo_root.name)
+    def _cleanup_secrets(self, state: IsolationState) -> None:
+        """Provider `cleanup` at teardown (spec §3: nothing secret survives
+        `down`). Best-effort: an unreadable profile config must not block the
+        docker teardown — the per-exec token files are already gone via
+        `post_exec`, and T2 adds the unconditional token-dir removal."""
+        try:
+            ctx = self._profile_context(state.profile, state.worktree)
+            self._provider(ctx).cleanup(ctx)
+        except Exception as e:  # never block the docker teardown on the provider
+            print(f"warning: secret provider cleanup skipped: {e}", file=sys.stderr)
 
     def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:
         return self.run(

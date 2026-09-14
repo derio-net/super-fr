@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -239,7 +240,12 @@ class Target(Protocol):
         no_fetch: bool = False,
     ) -> IsolationState: ...
 
-    def exec(self, state: IsolationState, argv: list[str]) -> int: ...
+    def exec(self, state: IsolationState, argv: list[str], keys: Sequence[str] = ()) -> int:
+        """Run `argv` in the workspace. `keys` names the declared secrets the
+        command needs (`fr isolation exec --secret KEY`); empty keeps every
+        mode's plain passthrough. Only the devcontainer target honours a
+        non-empty `keys` — the other modes refuse (re-integration addendum)."""
+        ...
 
     def restart(self, state: IsolationState, force: bool = False) -> str: ...
 
