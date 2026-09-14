@@ -99,3 +99,28 @@ Host /bin/bash 3.2, Xcode git first: bound ~77 ms, unbound in repo ~100 ms, non-
 ### review-p2 · review · Review p2: resolution logic sound; host smoke on real sessions matches d3/d4 (phase 2)
 
 Checked 9b2f370 against spec 5.A: quoted paths (worktree with a space renders), path-like session ids dropped, stale binding falls through to cwd rule, --cwd skips stdin, physical-path compare, bash 3.2 syntax only. Host smoke: this session (index 8427b705 bound to feat/statusline-session-branch by fr run start) -> fr rows in green even from the willikins cwd, as d3 intends; a bound Flexible Health index -> green rows; cwd in the workspace without a sid -> fr rows. Branch CI run 34894525072: only the pre-existing unarchived-plans tripwire fails (1 failed, 2892 passed).
+
+<!-- fr:journal kind=decision scope=plan id=p3-shared-world-fixture created=2026-09-14T23:00:46 phase=3 -->
+### p3-shared-world-fixture · decision · P3.T1.S1: world fixture shared by import, registered as name=world to avoid F811 (phase 3)
+
+tests/ is a package (tests/__init__.py, tests/unit/__init__.py), so tests/unit/test_statusline_claude.py imports the fixture from tests/unit/test_statusline_segment.py; no _statusline_world.py and no conftest were needed. The plan's verbatim import (World, world, _git) fails CI lint: ruff F811 'Redefinition of unused world' on every test whose parameter is named world. Fix: the segment fixture is now @pytest.fixture(name="world") on a function named world_fixture, and the claude tests import world_fixture (noqa: F401). Tests still request 'world'. The fixture stays defined in one place. pytest 9.0.3 resolves it (segment tests: 19 passed). ruff check and ruff format --check are clean on both files.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-red created=2026-09-14T23:00:49 phase=3 -->
+### p3-red · discovery · P3.T1.S1 RED confirmed: all 3 golden tests fail because the script does not exist (phase 3)
+
+Container run of tests/unit/test_statusline_claude.py + test_statusline_segment.py: '3 failed, 19 passed in 3.83s'. All three claude tests (test_full_payload_unbound, test_bound_rows_are_green, test_minimal_payload_outside_home) failed with rc=127 'bash: .../plugins/super-fr/scripts/fr-statusline-claude.sh: No such file or directory'. None failed on fixture lookup.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-green created=2026-09-14T23:02:01 phase=3 -->
+### p3-green · discovery · P3.T1.S2 GREEN: fr-statusline-claude.sh created verbatim, 3 claude + 19 segment tests pass (phase 3)
+
+Created plugins/super-fr/scripts/fr-statusline-claude.sh verbatim from the step, chmod +x (worktree mode -rwxr-xr-x). Container run of tests/unit/test_statusline_claude.py + tests/unit/test_statusline_segment.py: '22 passed in 3.60s', rc=0.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-gate created=2026-09-14T23:09:37 phase=3 -->
+### p3-gate · discovery · P3.T1.S3 gate: bash 3.2 clean, shellcheck clean, host smoke 3 lines, ruff clean, full suite only known failures (phase 3)
+
+Host /bin/bash -n rc=0; shellcheck 0.11.0 rc=0 (host only, the container has none); no mapfile/readarray/declare -A/case-conversion expansions. Host smoke with PATH=/bin first, so the inner 'bash' call to the segment is also 3.2.57: a payload with model, context_window, rate_limits and workspace.current_dir=<this workspace> printed 3 lines, rc=0: line 1 'Opus 5 (1M context) | ctx:8% of 1M | 5h:62% 7d:80%', line 2 green 'branch: feat/statusline-session-branch' + blue '~/.cache/fr/worktrees/super-fr/feat__statusline-session-branch', line 3 green 'worktree: /Users/<user>/.cache/fr/worktrees/super-fr/feat__statusline-session-branch'. Manifests: git grep fr-statusline-segment.sh over plugins/*/.claude-plugin, install.sh and scripts/install.sh has no matches (rc=1), and plugin.json has no file list, so scripts/ ships as a tree and needs no update. The repo root has no install.sh; scripts/install.sh exists. ruff check and ruff format --check over packages/ tests/ give rc=0. Container full suite: '2 failed, 2907 passed, 85 skipped in 369.76s', rc=1, coverage 91.41%. Both failures are known and not caused by this phase: tests/unit/test_tripwire_unarchived_plans.py::test_no_merged_but_unarchived_plans and tests/integration/test_install_bridge.py::test_install_bridge_flag_writes_wrapper. The load timeout in test_bridge_entry_point did not happen.
+
+<!-- fr:journal kind=decision scope=plan id=p3-no-refactor created=2026-09-14T23:09:41 phase=3 -->
+### p3-no-refactor · decision · no-refactor-because: P3.T1 (phase 3)
+
+no-refactor-because: P3.T1 — the script is the plan's verbatim GREEN block, and shellcheck and bash 3.2 checks are clean with nothing to extract. The only structural change (fixture name=world registration) was made at S1 to keep lint clean, see p3-shared-world-fixture.
