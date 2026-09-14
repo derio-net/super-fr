@@ -444,6 +444,141 @@ def test_teardown_keeps_token_dir_until_the_container_is_verified_gone(
     assert st.worktree.exists()
 
 
+def _committed_profile(repo: Path, mount_source: str) -> None:
+    d = repo / ".devcontainer" / "sec"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "devcontainer.json").write_text(
+        json.dumps(
+            {
+                "image": "x",
+                "runArgs": [
+                    "--mount",
+                    f"type=bind,source={mount_source},target={CONTAINER_TOKEN_DIR}",
+                ],
+            }
+        )
+    )
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(PROFILES_YAML)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "p"],
+        check=True,
+    )
+
+
+def test_down_with_home_as_mount_source_deletes_nothing_in_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verification V1: a committed (PR-reachable) mount whose source is $HOME
+    must never make `down` truncate the dotfiles in $HOME. The workspace is
+    brought up through a spy provider (the real one refuses at up_prepare —
+    provider tests cover that) and torn down with the REAL infisical provider."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    _committed_profile(repo, "${localEnv:HOME}")
+    st = LocalWorktreeDevcontainerTarget(
+        repo, runner=FakeRunner(), provider_factory=lambda c: _SpyProvider()
+    ).up(profile=None, branch="feat/s")
+    home = tmp_path / "home"
+    (home / ".bashrc").write_text("sentinel")
+    before = sorted(p.name for p in home.iterdir())
+
+    LocalWorktreeDevcontainerTarget(
+        repo, runner=FakeRunner(), provider_factory=_infisical_factory
+    ).down(st, force=True)
+
+    assert (home / ".bashrc").read_text() == "sentinel"
+    assert sorted(p.name for p in home.iterdir()) == before
+    assert not st.worktree.exists()  # the teardown itself completed
+
+
+def test_down_follows_a_mount_that_differs_from_the_canonical_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verification V8: the committed mount names `other-clone`; `down` removes
+    THAT dir and leaves a canonical-layout sibling (keyed on the runtime repo
+    name) alone."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    _write_infisical_profile(repo, "other-clone")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "p"],
+        check=True,
+    )
+    target = LocalWorktreeDevcontainerTarget(
+        repo, runner=FakeRunner(), provider_factory=_infisical_factory
+    )
+    st = target.up(profile=None, branch="feat/x")
+    mounted = canonical_token_dir("other-clone", "sec", st.worktree)
+    assert mounted.is_dir()
+    sibling = canonical_token_dir(repo.name, "sec", st.worktree)
+    sibling.mkdir(parents=True)
+    (sibling / "keep.token").write_text("x")
+
+    target.down(st, force=True)
+
+    assert not mounted.exists()
+    assert (sibling / "keep.token").read_text() == "x"
+
+
+def test_gc_orphan_token_glob_skips_empty_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verification V2: a docker label path of `/` has an empty basename and
+    parent name — the pattern would be `*/`, matching every repo dir."""
+    from fr.isolation.local import GcWorkspace
+
+    repo, _docker, target, _up = _gc_env(tmp_path, monkeypatch)
+    live = canonical_token_dir(repo.name, "dev", tmp_path / "feat__live")
+    live.mkdir(parents=True)
+    (live / "live.token").write_text("tok")
+
+    target._reap_orphan_tokens(GcWorkspace(worktree=Path("/"), container_id="c", state=None))
+
+    assert (live / "live.token").read_text() == "tok"
+
+
+def test_gc_orphan_token_glob_escapes_metacharacters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verification V2: a worktree basename with glob metacharacters must match
+    only itself — `feat__[x]` unescaped would match `feat__x` (a live sibling)."""
+    repo, docker, target, _up = _gc_env(tmp_path, monkeypatch)
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / repo.name / "feat__[x]"
+    docker.docker_labels = [("cOrph", str(gone))]
+    orphan = canonical_token_dir(repo.name, "dev", gone)
+    orphan.mkdir(parents=True)
+    (orphan / "left.token").write_text("tok")
+    live = canonical_token_dir(repo.name, "dev", tmp_path / "feat__x")
+    live.mkdir(parents=True)
+    (live / "live.token").write_text("tok")
+
+    target.gc()
+
+    assert not orphan.exists()
+    assert (live / "live.token").read_text() == "tok"
+
+
+def test_gc_label_orphan_leaves_tokens_when_the_container_survives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verification V3: like m2 for `down` — tokens go only once the container
+    is confirmed absent. A `docker rm` that did not take leaves the dir alone."""
+    repo, docker, target, _up = _gc_env(
+        tmp_path, monkeypatch, fail_on="rm", stdout={"docker": "cOrph running"}
+    )
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / repo.name / "feat__gone"
+    docker.docker_labels = [("cOrph", str(gone))]
+    d = canonical_token_dir(repo.name, "dev", gone)
+    d.mkdir(parents=True)
+    (d / "left.token").write_text("tok")
+
+    target.gc()
+
+    assert (d / "left.token").read_text() == "tok"  # container still present → left alone
+
+
 def test_gc_stale_state_reap_removes_the_orphan_token_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
