@@ -1858,10 +1858,15 @@ rows:
       minted; an undeclared key fails before any mint
     origin:
     - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
-    levels: {}
-    status: not-implemented
-    notes: Wiring tests carried from the original PR are red after the 4.x rebase; the
-      re-integration phase flips this to ci.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_secrets_wiring.py
+      - super-fr:tests/unit/test_secrets_infisical.py
+    status: ci
+    notes: 'Re-integrated onto the 4.x devcontainer target (phase 5): exec prefixes
+      infisical run --projectId/--env/--path with the user command intact at the tail,
+      no --secret mints nothing, an undeclared key raises before any mint and the CLI
+      exits 2 having run nothing.'
   - id: secret-provider-no-secret-on-argv
     capability: Isolation secret providers
     acceptance: No Universal-Auth client secret or minted token appears on any host
@@ -1869,20 +1874,30 @@ rows:
       is removed when the command returns or aborts
     origin:
     - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
-    levels: {}
-    status: not-implemented
-    notes: Per-exec token files close the concurrent-exec race the original PR left
-      as a NOTE; the re-integration phase flips this to ci.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_secrets_infisical.py
+      - super-fr:tests/unit/test_secrets_wiring.py
+      - super-fr:tests/unit/test_scaffold_infisical.py
+    status: ci
+    notes: 'Per-exec token files (phase 5): the UA client secret travels via env and the
+      minted token via a uuid-named 0600 file in a 0700 bind-mounted directory, never
+      argv or --remote-env; two wraps write two files; post_exec removes only its own
+      file on return or abort; down removes the directory unconditionally.'
   - id: secret-provider-mode-scope
     capability: Isolation secret providers
     acceptance: In host-worktree and external isolation modes, fr isolation exec --secret
       refuses with an actionable error instead of running unwrapped
     origin:
     - super-fr:docs/superpowers/specs/2026-06-15-infisical-secret-provider-design.md
-    levels: {}
-    status: not-implemented
-    notes: Operator decision 2026-09-14 (devcontainer-only); the re-integration phase
-      flips this to ci.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_secrets_mode_scope.py
+    status: ci
+    notes: 'Operator decision 2026-09-14 (devcontainer-only), shipped in phase 5:
+      HostWorktreeTarget.exec and ExternalTarget.exec raise IsolationError naming
+      devcontainer mode and never call the runner; empty keys run unchanged; the CLI
+      maps the refusal to exit 2 under FR_ISOLATION_TARGET=worktree.'
   - id: secret-provider-live-infisical-smoke
     capability: Isolation secret providers
     acceptance: Against a real read-only short-TTL Universal-Auth identity, exec --secret
