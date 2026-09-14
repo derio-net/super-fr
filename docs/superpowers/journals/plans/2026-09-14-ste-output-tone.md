@@ -14,3 +14,13 @@ no-refactor-because: P4.T1 is a one-line text change in the agent definition plu
 ### no-refactor-P4T2 · decision · no-refactor-because: P4.T2 (phase 4)
 
 no-refactor-because: P4.T2 is a generated version bump and matrix data edits; no code changes.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-09-14T22:27:47 phase=1 -->
+### review-p1 · review · Phase 1 review: no findings (phase 1)
+
+Reviewed 915942a against plan P1 and spec §5.B/§5.E.1. Style frontmatter, marker pair and test match the plan text exactly. The 80 skips in the gate run are pre-existing per-skill parametrised cases, not caused by output-styles/. Reviewed inline, not via requesting-code-review: 46 lines copied verbatim from the reviewed plan.
+
+<!-- fr:journal kind=discovery scope=plan id=upstream-is-main created=2026-09-14T22:28:00 phase=1 -->
+### upstream-is-main · discovery · Branch upstream is origin/main (phase 1)
+
+fr isolation up set feat/ste-output-tone to track origin/main. A bare git push targets main. Always push with: git push -u origin feat/ste-output-tone.
