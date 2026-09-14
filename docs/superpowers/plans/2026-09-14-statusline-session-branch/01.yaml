@@ -144,12 +144,14 @@ state:
       ticked_at: '2026-09-14T19:59:22+00:00'
       note: null
     P1.T1.S3:
-      state: '-'
-      ticked_at: '2026-09-14T20:39:14+00:00'
-      note: 'bash -n ok; commit made; full-suite gate rc=1 (3 failures not caused
-        by this phase: unarchived-plan tripwire on origin/main, container bridge install
-        env, load timeout flake). Orchestrator decides the gate; see plan journal.'
+      state: x
+      ticked_at: '2026-09-14T20:41:26+00:00'
+      note: 'Gate accepted at review: full suite 3 failed / 2886 passed. Only CI-relevant
+        failure is test_no_merged_but_unarchived_plans, already failing on origin/main
+        (CI run 34828373985, unarchived 2026-07-24-remove-vk-legacy-fallbacks). test_install_bridge
+        passes in CI (container uv tool env only); bridge entry-point timeout passed
+        in isolation. Coverage 91.41%.'
   completion:
-    at: null
+    at: '2026-09-14T20:41:28+00:00'
     note: null
     observed_prs: []

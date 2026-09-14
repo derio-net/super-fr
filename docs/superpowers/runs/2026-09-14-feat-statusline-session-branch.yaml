@@ -2,7 +2,7 @@ run: 2026-09-14-feat-statusline-session-branch
 workflow: fr-goal@1
 branch: feat/statusline-session-branch
 started: '2026-09-14T19:04:17+00:00'
-cursor: plan
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -13,14 +13,32 @@ steps:
     state: done
     at: '2026-09-14T19:20:01+00:00'
   plan:
-    state: running
-    at: '2026-09-14T19:20:15+00:00'
+    state: done
+    at: '2026-09-14T19:38:56+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-14-statusline-session-branch
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-14T19:39:21+00:00'
+    exit: 0
+    stdout: 'self-review passed
+
+      '
   implement:
-    state: pending
+    state: running
+    at: '2026-09-14T19:39:46+00:00'
+    items:
+      phase/1/implement-phase: running
     members:
     - implement-phase
     - review-phase
   deliver:
     state: pending
+accounting:
+  phase/1/implement-phase:
+    at: '2026-09-14T19:39:46+00:00'
+    journal_entries: 0
+    journal_lines: 1
+    handoff_chars: 127
+    spec_bytes: 12360
+    plan_bytes: 32074

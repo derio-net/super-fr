@@ -29,3 +29,18 @@ P1.T1.S3 full suite (devcontainer): `3 failed, 2886 passed, 85 skipped in 2095.7
 ### c48ecd9911fa · finding [open] · Full-suite gate rc=1: bridge install env failure + load timeout (not this phase) (phase 1)
 
 The other two S3 failures come from the environment. (1) `tests/integration/test_install_bridge.py::test_install_bridge_flag_writes_wrapper` fails every time: `ERROR: /home/vscode/.local/share/uv/tools/fr/bin/python cannot import fr_vk.bridge — bridge wrapper not installed`. The container uv tool env for fr lacks fr-vk; the fix is `uv tool install --force --with packages/fr-vk packages/fr` in the container. (2) `tests/integration/test_bridge_entry_point.py::test_python_dash_m_dry_run_exits_zero` hit `subprocess.TimeoutExpired ... after 30 seconds` during the full run (host load average 5-11, three fr containers) and PASSED on a targeted rerun, so it is a flake. Neither test touches the statusline segment or its test. Rerun of the three: `2 failed, 1 passed`.
+
+<!-- fr:journal kind=finding scope=plan id=review-p1-suite-gate created=2026-09-14T22:41:36 phase=1 state=refuted -->
+### review-p1-suite-gate · finding [refuted] · Review p1: full-suite rc=1 is not caused by phase 1 (phase 1)
+
+Verified at review. origin/main CI run 34828373985 (b257d34) fails only tests/unit/test_tripwire_unarchived_plans.py (plan 2026-07-24-remove-vk-legacy-fallbacks complete but unarchived on main) - pre-existing, out of scope for this PR, noted for the PR body. test_install_bridge passes in CI; its failure is the container's uv tool env lacking fr_vk.bridge. test_bridge_entry_point hit a 30 s timeout under host load and passed in isolation. Supersedes executor entries 1a97c378d1be and c48ecd9911fa.
+
+<!-- fr:journal kind=finding scope=plan id=review-p1-header-wording created=2026-09-14T22:41:38 phase=1 state=open -->
+### review-p1-header-wording · finding [open] · Review p1: segment header writes plain output as 'fr | none' (ambiguous, spec review fixed the same wording) (phase 1)
+
+Fix in phase 2 P2.T1.S3 when the header is rewritten to describe rules 1-2: spell each line as alternatives (state fr or none; branch: <b> or no branch; worktree: <path> or no fr-isolation).
+
+<!-- fr:journal kind=finding scope=plan id=review-p1-time-import created=2026-09-14T22:41:41 phase=1 state=open -->
+### review-p1-time-import · finding [open] · Review p1: 'import time' removed with the v1 timing test; phase 2 must re-add it (phase 1)
+
+Executor removed the unused import so ruff passes. P2.T1.S1 restores test_runs_well_under_budget and must re-add 'import time'. Also re-confirm shellcheck-style unused-variable warnings (executor entry 9881719eb4a1) disappear once phase 2 uses session_id and cwd.
