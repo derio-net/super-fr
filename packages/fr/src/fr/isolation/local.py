@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import errno
 import fcntl
+import glob
 import json
 import os
 import shutil
@@ -23,13 +24,13 @@ from typing import IO, Any, ClassVar
 
 from fr._hosts import detect_backend
 from fr.isolation.secrets import (
-    TOKEN_DIR_ROOT,
     ProfileContext,
     SecretProvider,
     canonical_token_dir,
     provider_for,
     remove_token_dir,
     resolve_token_dir,
+    token_root,
 )
 from fr.isolation.types import (
     IsolationError,
@@ -973,7 +974,10 @@ class LocalWorktreeDevcontainerTarget:
                 self._label_reap(rec.container_id)
                 if rec.state is not None:  # dangling state file, if any
                     delete_state(rec.state.repo_root, rec.state.branch)
-                self._reap_orphan_tokens(rec)
+                # Tokens only once the container is confirmed gone (V3): a
+                # surviving container still bind-mounts that dir.
+                if not self._container_present(rec.container_id):
+                    self._reap_orphan_tokens(rec)
                 return GcAction(wt, None, "orphan", "reaped", rec.container_id)
             except Exception as e:  # reap is best-effort; never abort the sweep
                 return GcAction(wt, None, "orphan", "reap-failed", str(e))
@@ -1614,12 +1618,27 @@ class LocalWorktreeDevcontainerTarget:
                 st = rec.state
                 remove_token_dir(canonical_token_dir(st.repo_root.name, st.profile, st.worktree))
                 return
-            root = _home().joinpath(*TOKEN_DIR_ROOT) / rec.worktree.parent.name
-            if root.is_dir():
-                for d in root.glob(f"*/{rec.worktree.name}"):
-                    remove_token_dir(d)
+            repo_name, base = rec.worktree.parent.name, rec.worktree.name
+            if not repo_name or not base:
+                return  # a label path like `/` would glob `*/` — every repo dir (V2)
+            # Both names are literal path components: escape them so a
+            # metacharacter in a basename matches only itself, and contain every
+            # match (canonical_token_dir refuses anything odd) before removal.
+            pattern = f"{glob.escape(repo_name)}/*/{glob.escape(base)}"
+            for d in token_root().glob(pattern):
+                remove_token_dir(canonical_token_dir(repo_name, d.parent.name, d))
         except Exception:
             pass
+
+    def _container_present(self, container_id: str) -> bool:
+        """Is this container still known to docker? Fails CLOSED: a query that
+        errors reads as present, so orphan token cleanup (V3) never runs ahead
+        of a teardown that did not verifiably complete — the same rule `down`
+        follows for the workspace token dir."""
+        result = self.run(
+            ["docker", "ps", "--all", f"--filter=id={container_id}", "--format={{.ID}}"]
+        )
+        return result.returncode != 0 or bool((result.stdout or "").strip())
 
     def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:
         return self.run(
