@@ -34,3 +34,8 @@ Fixed in 92a3d8a (INFISICAL_INSTALL keeps stderr); survived the rebase (scaffold
 ### june-M1-mint-error-stdout · finding [fixed] · M1: a mint failure could echo stdout, which holds the token (phase 4)
 
 Fixed in 92a3d8a (error surfaces stderr only); survived the rebase (secrets.py _subprocess_mint).
+
+<!-- fr:journal kind=discovery scope=plan id=p5-down-verifies-worktree-removal created=2026-09-14T16:49:19 phase=5 -->
+### p5-down-verifies-worktree-removal · discovery · 4.x down verifies git worktree remove, so the carried bare-dir down fixture raises after cleanup ran (phase 5)
+
+The Phase 3 test_down_runs_provider_cleanup built IsolationState over a plain tmp directory (no git). In 4.x _down_worktree_tail raises IsolationError when git worktree remove fails and the path still exists, so the test failed even though provider.cleanup had already run. Rewrote it as test_up_and_down_run_provider_up_prepare_and_cleanup over a real repo + worktree (make_repo + up via FakeRunner), which also proves up_prepare fires at up. Any fixture that reaches down in 4.x needs a real linked worktree.

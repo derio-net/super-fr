@@ -16,7 +16,7 @@ from fr.isolation.secrets import (
     InfisicalProvider,
     ProfileContext,
     UniversalAuth,
-    host_token_file,
+    host_token_dir,
 )
 from fr.isolation.types import IsolationError, IsolationState
 from typer.testing import CliRunner
@@ -120,34 +120,61 @@ def test_exec_secret_uses_no_remote_env(tmp_path: Path, monkeypatch: pytest.Monk
     assert "--remote-env" not in call
 
 
+class _TokenDirWatcher(FakeRunner):
+    """Snapshots the host token dir's contents AT exec time, so a test can
+    prove the token existed while the command ran and is gone afterwards."""
+
+    def __init__(self, token_dir: Path, fail: bool = False) -> None:
+        super().__init__()
+        self.token_dir = token_dir
+        self.fail = fail
+        self.seen: list[str] = []
+
+    def __call__(self, argv, cwd=None, check=False, capture=True):
+        if argv[0] == "devcontainer":
+            self.seen = [p.read_text() for p in self.token_dir.iterdir()]
+            if self.fail:
+                raise RuntimeError("boom")  # simulate the exec aborting mid-run
+        return super().__call__(argv, cwd=cwd, check=check, capture=capture)
+
+
 def test_exec_clears_token_after_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_CID", "id")
     monkeypatch.setenv("FR_CSEC", "secret-val")
     repo, _, st = _setup(tmp_path, monkeypatch)
+    d = host_token_dir("repo", "sec")
+    watcher = _TokenDirWatcher(d)
     target = LocalWorktreeDevcontainerTarget(
-        repo, runner=FakeRunner(), provider_factory=_infisical_factory
+        repo, runner=watcher, provider_factory=_infisical_factory
     )
     target.exec(st, ["pytest"], keys=["DEPLOY_KEY"])
-    # post_exec truncated the token-file after the command returned.
-    assert host_token_file("repo", "sec").read_text() == ""
+    assert watcher.seen == ["tok-secret"]  # exactly one per-exec file, live during the run
+    assert list(d.iterdir()) == []  # post_exec unlinked it after the command returned
 
 
 def test_exec_clears_token_on_abort(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_CID", "id")
     monkeypatch.setenv("FR_CSEC", "secret-val")
     repo, _, st = _setup(tmp_path, monkeypatch)
-
-    class _Boom:
-        def __call__(self, argv, cwd=None, check=False, capture=True):
-            raise RuntimeError("boom")  # simulate the exec aborting mid-run
-
+    d = host_token_dir("repo", "sec")
+    watcher = _TokenDirWatcher(d, fail=True)
     target = LocalWorktreeDevcontainerTarget(
-        repo, runner=_Boom(), provider_factory=_infisical_factory
+        repo, runner=watcher, provider_factory=_infisical_factory
     )
     with pytest.raises(RuntimeError):
         target.exec(st, ["pytest"], keys=["DEPLOY_KEY"])
-    # finally → post_exec cleared the token even though the run aborted.
-    assert host_token_file("repo", "sec").read_text() == ""
+    assert watcher.seen == ["tok-secret"]
+    assert list(d.iterdir()) == []  # finally → post_exec ran even though the exec aborted
+
+
+def test_exec_without_secret_mints_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, _, st = _setup(tmp_path, monkeypatch)  # FR_CID/FR_CSEC deliberately unset
+    fr_ = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=fr_, provider_factory=_infisical_factory)
+    assert target.exec(st, ["pytest"]) == 0
+    (call,) = fr_.argv_for("devcontainer")
+    assert "infisical" not in " ".join(call)  # no wrap
+    assert not host_token_dir("repo", "sec").exists()  # no mint, no file
 
 
 class _SpyProvider:
@@ -186,6 +213,33 @@ def test_up_and_down_run_provider_up_prepare_and_cleanup(
 
     assert spy.events == ["up_prepare", "cleanup"]
     assert not st.worktree.exists()
+
+
+@pytest.mark.parametrize("config", ["missing", "corrupt"])
+def test_down_removes_token_dir_even_when_profile_config_is_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: str
+) -> None:
+    """Review finding I1: with the REAL provider_for, a missing fr-profiles.yaml
+    falls back to env-file (whose cleanup is a no-op) and a corrupt one raises
+    — either way the provider path would skip the token dir. The devcontainer
+    teardown removes host_token_dir(repo, profile) unconditionally."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["sec"], default="sec")  # no secret_provider key
+    target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
+    st = target.up(profile=None, branch="feat/s")
+    cfg = st.worktree / ".devcontainer" / "fr-profiles.yaml"
+    if config == "missing":
+        cfg.unlink()
+    else:
+        cfg.write_text("profiles: [unclosed\n")
+    d = host_token_dir("repo", "sec")
+    d.mkdir(parents=True)
+    (d / "leftover.token").write_text("tok-old")  # a crash left a token behind
+
+    target.down(st, force=True)
+
+    assert not d.exists()
+    assert not st.worktree.exists()  # the teardown itself was not blocked
 
 
 def test_cli_secret_undeclared_exits_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
