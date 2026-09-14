@@ -1,7 +1,8 @@
 schema_version: 2
 phase:
   number: 5
-  title: Re-integrate onto the 4.x isolation targets + per-exec token files + docs, bump
+  title: Re-integrate onto the 4.x isolation targets + per-exec token files + docs,
+    bump
   tag: agentic
   depends_on:
   - 1
@@ -16,7 +17,8 @@ phase:
   tier: hard
 tasks:
 - number: 1
-  title: Wire the provider into the devcontainer target; refuse --secret elsewhere, test-first
+  title: Wire the provider into the devcontainer target; refuse --secret elsewhere,
+    test-first
   steps:
   - id: P5.T1.S1
     text: |
@@ -147,12 +149,12 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-14T16:44:47+00:00'
       note: null
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-14T16:48:05+00:00'
       note: null
     P5.T1.S3:
       state: ' '

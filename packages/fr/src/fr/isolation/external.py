@@ -22,10 +22,12 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from fr.isolation.hostworktree import SECRET_NEEDS_DEVCONTAINER
 from fr.isolation.local import GcAction, Runner, subprocess_runner
 from fr.isolation.types import (
     IsolationError,
@@ -196,9 +198,14 @@ class ExternalTarget:
         if result.returncode != 0:
             raise IsolationError(f"git switch failed: {result.stderr}")
 
-    def exec(self, state: IsolationState, argv: list[str]) -> int:
+    def exec(self, state: IsolationState, argv: list[str], keys: Sequence[str] = ()) -> int:
         """Plain subprocess in the checkout, inherited env — no container boundary
-        crossed. capture=False streams output live, matching exec passthrough."""
+        crossed. capture=False streams output live, matching exec passthrough.
+
+        `--secret` is devcontainer-only (re-integration addendum): the preparer
+        already placed the credentials inside; refuse before running anything."""
+        if keys:
+            raise IsolationError(SECRET_NEEDS_DEVCONTAINER.format(mode="external"))
         return self.run(argv, cwd=state.worktree, capture=False).returncode
 
     def restart(self, state: IsolationState, force: bool = False) -> str:

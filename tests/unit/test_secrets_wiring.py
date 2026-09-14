@@ -1,6 +1,6 @@
-"""Phase 3: SecretProvider wired into the local Target (up/exec/down) + the
-`fr isolation exec --secret` CLI. The provider_factory seam (like the Runner
-seam) lets these run without a live Infisical."""
+"""Phase 3/5: SecretProvider wired into the devcontainer Target (up/exec/down)
++ the `fr isolation exec --secret` CLI. The provider_factory seam (like the
+Runner seam) lets these run without a live Infisical."""
 
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ from fr.isolation.secrets import (
 )
 from fr.isolation.types import IsolationError, IsolationState
 from typer.testing import CliRunner
+
+from tests.unit.test_isolation import make_repo
 
 runner = CliRunner()
 
@@ -166,16 +168,24 @@ class _SpyProvider:
         self.events.append("cleanup")
 
 
-def test_down_runs_provider_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    repo, _, st = _setup(tmp_path, monkeypatch)
+def test_up_and_down_run_provider_up_prepare_and_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A REAL repo + worktree: 4.x `down` verifies `git worktree remove`, so the
+    # 3.x bare-directory fixture would raise after cleanup already ran.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path, ["sec"], default="sec")
     spy = _SpyProvider()
     target = LocalWorktreeDevcontainerTarget(
         repo, runner=FakeRunner(), provider_factory=lambda c: spy
     )
 
+    st = target.up(profile=None, branch="feat/s")
+    assert spy.events == ["up_prepare"]
     target.down(st, force=True)
 
-    assert "cleanup" in spy.events
+    assert spy.events == ["up_prepare", "cleanup"]
+    assert not st.worktree.exists()
 
 
 def test_cli_secret_undeclared_exits_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
