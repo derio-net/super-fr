@@ -2,12 +2,16 @@ run: 2026-09-14-feat-statusline-session-branch
 workflow: fr-goal@1
 branch: feat/statusline-session-branch
 started: '2026-09-14T19:04:17+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: pending
+    state: done
+    at: '2026-09-14T19:17:33+00:00'
+    emitted:
+      spec: docs/superpowers/specs/2026-09-14-statusline-session-branch-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-14T19:17:40+00:00'
   plan:
     state: pending
   plan-review:

@@ -24,3 +24,8 @@ Operator: option 1 and the same colour rule. Native .claude/worktrees/agent-* an
 ### d5-harness-reality · decision · d5 Harness versions: neutral core + Claude Code wiring; Hermes one-line adapter pending hermes-agent#109596; OpenCode documented gap
 
 Research 2026-09-14: OpenCode has no status-line hook (anomalyco/opencode#37464, #30295 open; ocstatusline has no command widget). Hermes custom status-bar command is PR NousResearch/hermes-agent#109596, open, first line only, 40 chars. Decision (agent, flagged to operator): ship the harness-neutral segment with a oneline format, a Claude Code reference status line, a Hermes adapter documented against the pending key without writing it into config.snippet.yaml, and document the OpenCode gap with the upstream issue.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-09-14T19:19:49 -->
+### spec-review-1 · review · Spec review: 3 findings fixed (plain line-1 wording, --session-id YAGNI, Hermes path)
+
+Checked against Q&A d1-d5 and codebase. Verified: sync-hermes.py/sync-opencode.py exist; journal 9ecae0965ac4 exists; acceptance row statusline-shows-bound-workspace exists; README line 230 and the three SKILL.md copies (plugin, .hermes, .opencode) are the only doc consumers; no other code consumes the v1 segment output. Findings: (1) plain output line 1 written as 'fr | none' read as literal text - rewritten as alternatives with an example; (2) --session-id flag had no consumer - dropped; (3) section C used <install-dir> but fr hermes install copies only plugins/super-fr/hooks/ to ~/.hermes/super-fr-hooks/, not scripts/ - path now names a super-fr checkout, installer unchanged until hermes-agent#109596 ships.

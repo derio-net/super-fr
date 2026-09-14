@@ -124,8 +124,9 @@ to show it. The core reads files and runs one `git` call; it never runs the
 - Default: Claude Code status-line JSON on stdin. Fields used:
   `session_id`, `workspace.current_dir // cwd`.
 - `--cwd <dir>`: use this cwd and do **not** read stdin (Hermes runs the
-  command with no JSON). `--session-id <id>` sets the session id with
-  `--cwd`.
+  command with no JSON). There is no session id in this mode, so rule A.1
+  never fires; no harness passes a session id without JSON, so no
+  `--session-id` flag is added (YAGNI).
 - `--format plain|ansi|oneline` (default `plain`).
 
 **Resolution (first match wins).**
@@ -146,11 +147,13 @@ to show it. The core reads files and runs one `git` call; it never runs the
 
 **Output.**
 
-- `plain` — exactly three lines:
+- `plain` — exactly three lines. Line 1 is the state, either `fr` or
+  `none`. Line 2 is either `branch: <b>` or `no branch`. Line 3 is either
+  `worktree: <abs path>` or `no fr-isolation`. Example:
   ```
-  fr | none
-  branch: <b> | no branch
-  worktree: <abs path> | no fr-isolation
+  fr
+  branch: feat/x
+  worktree: /Users/me/.cache/fr/worktrees/acme/feat__x
   ```
 - `ansi` — exactly two lines, rows 2–3 of `plain`, each wrapped in green
   (`\033[32m`) when `fr`, purple (`\033[35m`) when `none`, and reset.
@@ -182,12 +185,15 @@ The fr-isolation skill documents, for when hermes-agent#109596 ships:
 display:
   status_bar:
     fields: [..., custom]
-    custom_command: "bash <install-dir>/fr-statusline-segment.sh --format oneline --cwd ."
+    custom_command: "bash <super-fr checkout>/plugins/super-fr/scripts/fr-statusline-segment.sh --format oneline --cwd ."
 ```
 
 Hermes runs the command in the session cwd, so rule A.2 applies (Hermes has
-no bind transport, so rule A.1 never fires there). `config.snippet.yaml` is
-not changed: `fr hermes install` must not write a key Hermes does not read.
+no bind transport, so rule A.1 never fires there). The path names a super-fr
+checkout because `fr hermes install` copies only `plugins/super-fr/hooks/`
+(to `~/.hermes/super-fr-hooks/`), not `scripts/`. `config.snippet.yaml` and
+the installer are not changed: `fr hermes install` must not write a key
+Hermes does not read, and copying `scripts/` can wait until the key ships.
 
 ### D. OpenCode (docs only)
 
