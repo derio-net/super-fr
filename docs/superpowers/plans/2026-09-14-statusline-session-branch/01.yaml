@@ -136,17 +136,19 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-14T19:49:57+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-14T19:59:22+00:00'
       note: null
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-09-14T20:39:14+00:00'
+      note: 'bash -n ok; commit made; full-suite gate rc=1 (3 failures not caused
+        by this phase: unarchived-plan tripwire on origin/main, container bridge install
+        env, load timeout flake). Orchestrator decides the gate; see plan journal.'
   completion:
     at: null
     note: null
