@@ -270,7 +270,71 @@ def test_uncontained_source_fails_closed_at_up_exec_and_cleanup(home: Path, tmp_
     assert minter.calls == []
     prov.cleanup(ctx)  # best-effort: no raise, no damage
     assert (home / ".bashrc").read_text() == "sentinel"
-    assert sorted(p.name for p in home.iterdir()) == [".bashrc"] or (home / ".cache").exists()
+    assert sorted(p.name for p in home.iterdir()) == [".bashrc"]  # nothing created, nothing gone
+
+
+# ---- host-side writes never follow what the container planted (W1) ----
+
+
+def _planted(home: Path, tmp_path: Path) -> tuple[InfisicalProvider, ProfileContext, Path]:
+    """A wrapped exec whose token file the container then replaces."""
+    prov = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter()))
+    ctx = _ctx(tmp_path)
+    prov.exec_wrap(ctx, want_secrets=True)
+    tf = prov._token_path
+    assert tf is not None and tf.is_file()
+    tf.unlink()
+    return prov, ctx, tf
+
+
+def test_post_exec_never_truncates_through_a_planted_symlink(home: Path, tmp_path: Path) -> None:
+    prov, ctx, tf = _planted(home, tmp_path)
+    sentinel = tmp_path / "authorized_keys"
+    sentinel.write_text("ssh-ed25519 AAAA operator")
+    tf.symlink_to(sentinel)
+
+    prov.post_exec(ctx)
+
+    assert sentinel.read_text() == "ssh-ed25519 AAAA operator"  # not emptied through the link
+    assert not tf.exists() and not tf.is_symlink()  # the link itself is gone
+
+
+def test_post_exec_never_blocks_on_a_planted_fifo(home: Path, tmp_path: Path) -> None:
+    import os
+    import threading
+
+    prov, ctx, tf = _planted(home, tmp_path)
+    os.mkfifo(tf)
+
+    t = threading.Thread(target=prov.post_exec, args=(ctx,), daemon=True)
+    t.start()
+    t.join(timeout=5)
+
+    assert not t.is_alive(), "post_exec blocked on a reader-less FIFO"
+    assert not tf.exists()
+
+
+def test_remove_token_dir_survives_planted_fifo_and_symlink_children(
+    home: Path, tmp_path: Path
+) -> None:
+    import os
+    import threading
+
+    d = _dir(tmp_path)
+    d.mkdir(parents=True)
+    victim = tmp_path / "zshrc"
+    victim.write_text("keep")
+    (d / "a.token").symlink_to(victim)
+    os.mkfifo(d / "b.token")
+    (d / "c.token").write_text("tok")
+
+    t = threading.Thread(target=remove_token_dir, args=(d,), daemon=True)
+    t.start()
+    t.join(timeout=5)
+
+    assert not t.is_alive()
+    assert victim.read_text() == "keep"
+    assert not d.exists()
 
 
 def test_symlinked_token_dir_is_refused_and_its_target_untouched(
@@ -331,6 +395,30 @@ def test_resolve_token_dir_supports_localenv_default_values(
     assert resolve_token_dir(cfg, tmp_path) == root / "fallback-repo" / "admin" / tmp_path.name
     monkeypatch.setenv("FR_TEST_UNSET", "set-repo")
     assert resolve_token_dir(cfg, tmp_path) == root / "set-repo" / "admin" / tmp_path.name
+    # Set but EMPTY takes the default too — `env[name] || default` (W3).
+    monkeypatch.setenv("FR_TEST_UNSET", "")
+    assert resolve_token_dir(cfg, tmp_path) == root / "fallback-repo" / "admin" / tmp_path.name
+
+
+def test_resolve_token_dir_refuses_dotdot_even_when_it_normalizes_inside(
+    home: Path, tmp_path: Path
+) -> None:
+    # Lexically this collapses to the legit layout; the kernel would resolve the
+    # `..` through whatever `myrepo` really is. Refused outright (W2).
+    cfg = _cfg_with_source(
+        tmp_path,
+        "${localEnv:HOME}/.cache/fr/run-tokens/myrepo/../myrepo/admin/${localWorkspaceFolderBasename}",
+    )
+    with pytest.raises(IsolationError, match=r"\.\."):
+        resolve_token_dir(cfg, tmp_path)
+
+
+def test_resolve_token_dir_accepts_the_readonly_mount_option(home: Path, tmp_path: Path) -> None:
+    # The scaffold appends `,readonly` (W1); a bare option must not break parsing,
+    # and a mount without it (nothing is merged yet) keeps working.
+    for suffix in (",readonly", ""):
+        cfg = _write_profile(tmp_path, mount=f"{MOUNT}{suffix}")
+        assert resolve_token_dir(cfg, tmp_path) == _dir(tmp_path)
 
 
 def test_canonical_token_dir_is_contained_too(home: Path, tmp_path: Path) -> None:

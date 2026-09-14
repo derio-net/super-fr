@@ -183,11 +183,14 @@ def scaffold_profile(
         # this mount at runtime (review I2), so the name baked here is the
         # source of truth even in a differently named clone.
         post_create = f"{post_create}; {INFISICAL_INSTALL}"
+        # READ-ONLY (W1): the container only ever reads its token. A read-write
+        # mount would let code inside it swap the per-exec file for a symlink
+        # or FIFO that host-side cleanup then acted on.
         run_args = [
             "--mount",
             f"type=bind,source=${{localEnv:HOME}}/.cache/fr/run-tokens/"
             f"{repo_root.name}/{profile}/${{localWorkspaceFolderBasename}},"
-            f"target={CONTAINER_TOKEN_DIR}",
+            f"target={CONTAINER_TOKEN_DIR},readonly",
         ]
     else:
         run_args = [
