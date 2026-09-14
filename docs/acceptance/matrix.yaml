@@ -709,8 +709,9 @@ rows:
       Test Plan item 1 (real Hermes install).
   - id: hermes-rules-soul-block
     capability: Hermes Agent compatibility
-    acceptance: super-fr's three shipped rules reach a Hermes user via a managed, reversible
-      ~/.hermes/SOUL.md block.
+    acceptance: super-fr's five shipped rules (fr-isolation-required, fr-plan-override,
+      fr-worktree-override, no-claude-p-batch, ste-output-tone) reach a Hermes user
+      via a managed, reversible ~/.hermes/SOUL.md block.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
     levels:
@@ -1858,27 +1859,36 @@ rows:
       English style, and the operator selects nothing.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm 2026-09-14. Target: unit test pins force-for-plugin frontmatter;
-      operator walk (Test Plan steps 1-4) confirms the live reply.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ste_output_tone.py
+    status: skipped
+    notes: 'Unit pins the text in CI; live reply check is the post-merge operator walk
+      (spec §7).'
   - id: ste-rule-reaches-every-harness
     capability: output-tone
-    acceptance: The STE rule installs for Claude Code, OpenCode and Hermes, and it reaches
-      the phase executor.
+    acceptance: The STE rule installs for Claude Code and Hermes, loads in OpenCode sessions
+      inside this repo, and reaches the phase executor.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm 2026-09-14. Target: install/opencode/hermes drift tripwires
-      plus test_ste_output_tone.py.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ste_output_tone.py
+      - super-fr:tests/unit/test_install_copies_rules.py
+      - super-fr:tests/unit/test_tripwire_opencode_instructions_sync.py
+      - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py
+    status: ci
+    notes: 'No installer delivers .opencode/instructions to consumer machines (pre-existing
+      gap for every shipped rule); consumer delivery is a follow-up.'
   - id: ste-insight-blocks-kept-short
     capability: output-tone
     acceptance: When another plugin asks for Insight blocks, the blocks stay, written
       in STE, and replies do not get longer.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm 2026-09-14. Target: unit test pins the override text;
-      behaviour is operator-walk only (Test Plan step 4).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ste_output_tone.py
+    status: skipped
+    notes: 'Unit pins the text in CI; live reply check is the post-merge operator walk
+      (spec §7).'
