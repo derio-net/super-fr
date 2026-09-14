@@ -47,6 +47,7 @@ SHIPPED_RULE_NAMES = (
     "fr-plan-override",
     "fr-worktree-override",
     "no-claude-p-batch",
+    "ste-output-tone",
 )
 SOUL_D_MIRROR = REPO_ROOT / ".hermes" / "SOUL.d" / "super-fr-rules.md"
 SOUL_BLOCK_START = "<!-- super-fr:rules START -->"

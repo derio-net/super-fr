@@ -99,3 +99,8 @@ Fix: 'Write one instruction in each sentence' reworded to 'Give only one instruc
 ### d113930ed739 · discovery · Parametrized filler/length tests over STYLE and RULE (phase 3)
 
 During P3.T1.S3 refactor, parametrized test_shared_text_uses_no_filler_outside_quoted_examples and test_no_shared_sentence_exceeds_the_description_limit over (STYLE, RULE) since the rule's shared block is identical to the style's. Moved RULE's definition next to STYLE at the top of the file. 10 tests pass (8 base + 2 new parametrize cases). Small, no separate commit needed.
+
+<!-- fr:journal kind=discovery scope=plan id=cf0f14f90a5b created=2026-09-14T22:57:32 phase=3 -->
+### cf0f14f90a5b · discovery · test_install_sh.py lives under tests/integration/, not tests/unit/ (phase 3)
+
+P3.T2.S3 names tests/unit/test_install_sh.py; the file is actually tests/integration/test_install_sh.py (tests/unit/test_hermes_install_cmd.py is correct). Ran the integration path instead: uv run pytest tests/integration/test_install_sh.py tests/unit/test_hermes_install_cmd.py -q --no-cov -> 43 passed.

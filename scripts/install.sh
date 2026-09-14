@@ -93,7 +93,8 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   echo "Uninstalling super-fr extras..."
   rm -f "$RULES_DIR/fr-plan-override.md" "$RULES_DIR/vk-plan-override.md"
   rm -f "$RULES_DIR/fr-worktree-override.md"
-  echo "  Removed fr/vk plan-override and fr-worktree-override rules"
+  rm -f "$RULES_DIR/ste-output-tone.md"
+  echo "  Removed fr/vk plan-override, fr-worktree-override and ste-output-tone rules"
   if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
     if jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
       jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
@@ -509,6 +510,8 @@ cp "$PLUGIN_ROOT/plugins/super-fr/rules/no-claude-p-batch.md" "$RULES_DIR/no-cla
 echo "  Installed $RULES_DIR/no-claude-p-batch.md (#328 batch-LLM convention)"
 cp "$PLUGIN_ROOT/plugins/super-fr/rules/fr-worktree-override.md" "$RULES_DIR/fr-worktree-override.md"
 echo "  Installed $RULES_DIR/fr-worktree-override.md (worktree-skill routing)"
+cp "$PLUGIN_ROOT/plugins/super-fr/rules/ste-output-tone.md" "$RULES_DIR/ste-output-tone.md"
+echo "  Installed $RULES_DIR/ste-output-tone.md (Simplified Technical English tone)"
 
 # 7a. Allowlist the fr-phase-executor subagent in the org agent-worktree hook.
 # fr-goal dispatches each plan phase to this narrow, serial, already-isolated

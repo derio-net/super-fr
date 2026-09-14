@@ -107,8 +107,9 @@ and a CI tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
-  `fr-plan-override.md`, `no-claude-p-batch.md`), plus the THREE
-  repo-local-only rules with no plugin counterpart —
+  `fr-plan-override.md`, `no-claude-p-batch.md`, `fr-worktree-override.md`,
+  `ste-output-tone.md`), plus the THREE repo-local-only rules with no plugin
+  counterpart —
   `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`
   and `.claude/rules/explainers-currency.md` (still *sources*, edit them
   directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
