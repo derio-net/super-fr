@@ -139,3 +139,48 @@ Pre-existing matrix text drift (five shipped rules now). Deferred to P4.T2.S2, w
 ### r3-m6-uninstall-gap · finding [refuted] · M6 --uninstall misses fr-isolation-required and no-claude-p-batch (phase 3)
 
 Pre-existing, tracked as open finding a3228f0cb118 in plan 2026-09-04-worktree-traceability. Out of scope here; this plan's own rule has its uninstall line.
+
+<!-- fr:journal kind=decision scope=plan id=r3-m6-hermes-row-text-done created=2026-09-14T23:21:01 phase=4 -->
+### r3-m6-hermes-row-text-done · decision · r3-m6 closed: hermes-rules-soul-block lists five rules (phase 4)
+
+Deferred r3-m6 item done in P4.T2.S2 (aec12da): the row text now names five shipped rules, matching SHIPPED_RULES in test_tripwire_hermes_rules_sync.py. Confirmed by the phase 4 review.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m8-issue created=2026-09-14T23:21:03 phase=4 state=refuted -->
+### r4-m8-issue · finding [refuted] · M8 File a GitHub issue for OpenCode consumer delivery: not done here (phase 4)
+
+Filing an issue is an outward action the operator did not ask for. The follow-up is listed in the PR body (and in the matrix note); the operator can file it.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m1-executor-harness-claim created=2026-09-14T23:22:33 phase=4 state=fixed -->
+### r4-m1-executor-harness-claim · finding [fixed] · M1 Spec §5.D claimed the executor line covers other harnesses (phase 4)
+
+The agent file exists only in Claude Code; Hermes delegate_task loads fr-execute. Spec §5.D now says the line restates the rule in the executor's return contract, and names a pointer in fr-execute as the Hermes follow-up.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m2-spec-wording created=2026-09-14T23:22:36 phase=4 state=fixed -->
+### r4-m2-spec-wording · finding [fixed] · M2 Spec §5.D wording lagged the implementation (phase 4)
+
+Spec §5.D now says 'the result and every journal entry', matching fr-phase-executor.md.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m3-spec-row-table created=2026-09-14T23:22:39 phase=4 state=fixed -->
+### r4-m3-spec-row-table · finding [fixed] · M3 Spec §8 table drifted from the matrix rows (phase 4)
+
+Row wording aligned to matrix.yaml; levels for the two skipped rows now read 'unit (text) + operator walk'.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m4-skipped-notes created=2026-09-14T23:22:41 phase=4 state=fixed -->
+### r4-m4-skipped-notes · finding [fixed] · M4 Skipped-row notes lost the Test Plan step numbers (phase 4)
+
+ste-style-forced-in-claude-code notes cite Test Plan steps 1-4; ste-insight-blocks-kept-short cites step 4. Reports regenerated; fr acceptance report --check in sync.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m5-hermes-install-evidence created=2026-09-14T23:22:43 phase=4 state=fixed -->
+### r4-m5-hermes-install-evidence · finding [fixed] · M5 ci row had no Hermes install-level evidence (phase 4)
+
+Added super-fr:tests/unit/test_hermes_install_cmd.py (applies the SOUL.md block) to ste-rule-reaches-every-harness levels.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m6-long-line created=2026-09-14T23:22:45 phase=4 state=fixed -->
+### r4-m6-long-line · finding [fixed] · M6 168-character line in fr-phase-executor.md (phase 4)
+
+Wrapped to match the file's ~85-character lines.
+
+<!-- fr:journal kind=finding scope=plan id=r4-m7-executor-test created=2026-09-14T23:22:48 phase=4 state=fixed -->
+### r4-m7-executor-test · finding [fixed] · M7 Executor test raised IndexError on a renamed heading (phase 4)
+
+Test asserts the return heading exists first, normalizes whitespace, and also pins 'every journal entry'.

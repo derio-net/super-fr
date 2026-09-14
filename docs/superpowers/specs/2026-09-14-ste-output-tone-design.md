@@ -157,9 +157,12 @@ missing:
 ### D. Phase executor
 
 `plugins/super-fr/agents/fr-phase-executor.md`, section "What you return": add
-one line that tells the agent to write the result in STE, as the
-`ste-output-tone` rule specifies. The rule already loads in Claude Code
-subagents. The line also covers harnesses where it does not load.
+one line that tells the agent to write the result and every journal entry in
+STE, as the `ste-output-tone` rule specifies. The rule already loads in Claude
+Code subagents, so the line restates it in the executor's return contract. The
+agent file exists only in Claude Code: Hermes `delegate_task` loads
+`fr-execute`, not this file. STE results on Hermes would need a pointer in
+`fr-execute` (a follow-up, not part of this spec; phase 4 review).
 
 ### E. Tests (new)
 
@@ -243,6 +246,6 @@ Post-merge (operator-driven):
 
 | id | capability | acceptance | level |
 |---|---|---|---|
-| `ste-style-forced-in-claude-code` | output-tone | With super-fr enabled, Claude Code replies use the STE style, and the operator selects nothing. | unit + operator walk |
+| `ste-style-forced-in-claude-code` | output-tone | With super-fr enabled, Claude Code replies use the Simplified Technical English style, and the operator selects nothing. | unit (text) + operator walk |
 | `ste-rule-reaches-every-harness` | output-tone | The STE rule installs for Claude Code and Hermes, loads in OpenCode sessions inside this repo, and reaches the phase executor. | unit + tripwire |
-| `ste-insight-blocks-kept-short` | output-tone | When another plugin asks for Insight blocks, the blocks stay, in STE, and replies do not get longer. | operator walk |
+| `ste-insight-blocks-kept-short` | output-tone | When another plugin asks for Insight blocks, the blocks stay, written in STE, and replies do not get longer. | unit (text) + operator walk |

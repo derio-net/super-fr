@@ -132,5 +132,8 @@ EXECUTOR = REPO_ROOT / "plugins/super-fr/agents/fr-phase-executor.md"
 
 
 def test_phase_executor_returns_in_ste() -> None:
-    returns = EXECUTOR.read_text().split("## What you return", 1)[1]
+    text = EXECUTOR.read_text()
+    assert "## What you return" in text, "fr-phase-executor.md lost its return section"
+    returns = re.sub(r"\s+", " ", text.split("## What you return", 1)[1])
     assert "ste-output-tone" in returns
+    assert "every journal entry" in returns

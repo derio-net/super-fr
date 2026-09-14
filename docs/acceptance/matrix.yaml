@@ -1863,8 +1863,8 @@ rows:
       unit:
       - super-fr:tests/unit/test_ste_output_tone.py
     status: skipped
-    notes: 'Unit pins the text in CI; live reply check is the post-merge operator walk
-      (spec §7).'
+    notes: 'Unit pins the forced-style frontmatter and the text in CI; live reply check
+      is the post-merge operator walk (spec §7, Test Plan steps 1-4).'
   - id: ste-rule-reaches-every-harness
     capability: output-tone
     acceptance: The STE rule installs for Claude Code and Hermes, loads in OpenCode sessions
@@ -1877,6 +1877,7 @@ rows:
       - super-fr:tests/unit/test_install_copies_rules.py
       - super-fr:tests/unit/test_tripwire_opencode_instructions_sync.py
       - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py
+      - super-fr:tests/unit/test_hermes_install_cmd.py
     status: ci
     notes: 'No installer delivers .opencode/instructions to consumer machines (pre-existing
       gap for every shipped rule); consumer delivery is a follow-up.'
@@ -1890,5 +1891,5 @@ rows:
       unit:
       - super-fr:tests/unit/test_ste_output_tone.py
     status: skipped
-    notes: 'Unit pins the text in CI; live reply check is the post-merge operator walk
-      (spec §7).'
+    notes: 'Unit pins the Insight override text in CI; live reply length is the post-merge
+      operator walk (spec §7, Test Plan step 4).'
