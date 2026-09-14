@@ -238,6 +238,8 @@ New plugin rule, installed by `scripts/install.sh` next to
 
 ### E. Status line — plugin-shipped segment + operator script
 
+> Superseded by `2026-09-14-statusline-session-branch-design.md` (contract v2).
+
 super-fr ships `plugins/super-fr/scripts/fr-statusline-segment.sh`: reads the
 status-line JSON on stdin, looks up `~/.cache/fr/sessions/<session_id>.json`,
 and prints two lines (either may be empty):
