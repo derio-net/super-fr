@@ -19,6 +19,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -130,6 +131,43 @@ CONTAINER_TOKEN_DIR = "/run/fr-secrets"
 TOKEN_DIR_ROOT = (".cache", "fr", "run-tokens")
 
 
+TOKEN_LAYOUT = "~/.cache/fr/run-tokens/<repo>/<profile>/<workspace>"
+
+
+def token_root() -> Path:
+    return _home().joinpath(*TOKEN_DIR_ROOT)
+
+
+def contain_token_dir(candidate: Path, origin: str) -> Path:
+    """The ONLY way a token-dir path becomes usable (verification V1).
+
+    `remove_token_dir` truncates and removes whatever it is pointed at, and the
+    mount source it is derived from is committed, PR-reachable text — so the
+    resolved path must be exactly ``<root>/<repo>/<profile>/<workspace>``:
+    lexically under ``~/.cache/fr/run-tokens`` after `..` collapsing, three
+    components deep, and with no symlink anywhere in those three components
+    (a link would make `iterdir()` truncate the files it points at). Anything
+    else is an actionable IsolationError naming `origin` and the layout."""
+    root = Path(os.path.normpath(token_root()))
+    norm = Path(os.path.normpath(candidate))
+    try:
+        rel = norm.relative_to(root)
+    except ValueError:
+        rel = None
+    if rel is None or len(rel.parts) != 3 or any(p in ("", ".", "..") for p in rel.parts):
+        raise IsolationError(
+            f"refusing token dir {candidate} (from {origin}): it must be exactly "
+            f"{TOKEN_LAYOUT} — three components under ~/.cache/fr/run-tokens, nothing else. "
+            "fr truncates and removes that directory at down, so no other path may be named."
+        )
+    if os.path.realpath(norm) != os.path.join(os.path.realpath(root), *rel.parts):
+        raise IsolationError(
+            f"refusing token dir {candidate} (from {origin}): a path component is a symlink — "
+            f"the token dir must be a real directory under {TOKEN_LAYOUT}."
+        )
+    return norm
+
+
 def canonical_token_dir(repo: str, profile: str, worktree: Path) -> Path:
     """The scaffold's layout for one WORKSPACE's token dir:
     ``~/.cache/fr/run-tokens/<repo>/<profile>/<worktree-basename>`` (0700,
@@ -139,8 +177,12 @@ def canonical_token_dir(repo: str, profile: str, worktree: Path) -> Path:
     This is the FALLBACK spelling — used when the mount cannot be read (an
     unreadable devcontainer.json, a worktree that is already gone). Live code
     paths resolve the dir from the committed mount instead (`resolve_token_dir`).
+    Contained like every other spelling (an empty basename or a `..` refuses).
     """
-    return _home().joinpath(*TOKEN_DIR_ROOT) / repo / profile / worktree.name
+    return contain_token_dir(
+        token_root() / repo / profile / worktree.name,
+        f"canonical layout {repo!r}/{profile!r}/{worktree.name!r}",
+    )
 
 
 def token_mount_source(config: Path) -> str | None:
@@ -162,8 +204,12 @@ def token_mount_source(config: Path) -> str | None:
     return None
 
 
+# `${localEnv:VAR}`, `${localEnv:VAR:default}` (verification V7),
+# `${localWorkspaceFolderBasename}`, `${localWorkspaceFolder}` — the variables
+# the devcontainer CLI substitutes in runArgs.
 _VAR = re.compile(
-    r"\$\{(localEnv:([A-Za-z_][A-Za-z0-9_]*)|localWorkspaceFolderBasename|localWorkspaceFolder)\}"
+    r"\$\{(localEnv:([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?"
+    r"|localWorkspaceFolderBasename|localWorkspaceFolder)\}"
 )
 
 
@@ -176,8 +222,10 @@ def _substitute(value: str, worktree: Path) -> str:
             return worktree.name
         if m.group(1) == "localWorkspaceFolder":
             return str(worktree)
-        name = m.group(2)
-        return str(_home()) if name == "HOME" else os.environ.get(name, "")
+        name, default = m.group(2), m.group(3)
+        if name == "HOME":
+            return str(_home())
+        return os.environ.get(name, default if default is not None else "")
 
     return _VAR.sub(repl, value)
 
@@ -199,7 +247,13 @@ def resolve_token_dir(config: Path, worktree: Path) -> Path:
             "profile (the mount is per workspace: "
             "~/.cache/fr/run-tokens/<repo>/<profile>/${localWorkspaceFolderBasename})."
         )
-    return Path(_substitute(src, worktree))
+    resolved = _substitute(src, worktree)
+    if "${" in resolved:
+        raise IsolationError(
+            f"refusing token dir from mount source {src!r}: it carries a variable fr does not "
+            f"resolve ({resolved!r}); the source must resolve to {TOKEN_LAYOUT}."
+        )
+    return contain_token_dir(Path(resolved), f"mount source {src!r}")
 
 
 def _ensure_token_dir(d: Path) -> None:
@@ -387,10 +441,14 @@ class InfisicalProvider:
     def up_prepare(self, ctx: ProfileContext) -> None:
         inf = validate_infisical_config(ctx)
         self.validate(ctx)
-        if inf["auth"]["method"] == "universal-auth":
-            # The mount SOURCE must exist before `devcontainer up` (docker does
-            # not create bind sources); NO secret at up.
-            _ensure_token_dir(resolve_token_dir(_devcontainer_config(ctx), ctx.worktree))
+        config = _devcontainer_config(ctx)
+        # The mount SOURCE must exist before `devcontainer up` (docker does not
+        # create bind sources) — whenever the profile declares the mount,
+        # whatever the auth method (verification V4: the scaffold always writes
+        # it). universal-auth additionally REQUIRES it, since that is where the
+        # host token travels. NO secret at up.
+        if inf["auth"]["method"] == "universal-auth" or token_mount_source(config) is not None:
+            _ensure_token_dir(resolve_token_dir(config, ctx.worktree))
 
     def exec_wrap(self, ctx: ProfileContext, want_secrets: bool) -> ExecWrap:
         if not want_secrets:
@@ -407,15 +465,17 @@ class InfisicalProvider:
         # fr-profiles.yaml, which is PR/branch-reachable, so an un-quoted value
         # would be a shell-injection vector into the privileged in-container
         # shell (where the token is live). The user command rides "$@", never
-        # interpolated. `env -u INFISICAL_TOKEN` strips the token from the
-        # child's env: `infisical run` injects the fetched secrets AND its own
-        # INFISICAL_TOKEN, which the user command must not be able to reuse.
+        # interpolated. `env -u INFISICAL_TOKEN -- "$@"` strips the token from
+        # the child's env: `infisical run` injects the fetched secrets AND its
+        # own INFISICAL_TOKEN, which the user command must not be able to reuse.
+        # The `--` ends env's operand parsing so a command starting with
+        # NAME=VALUE or -x is executed, not read as an assignment/option.
         run = (
             "infisical run "
             f"--projectId {shlex.quote(str(inf['project_id']))} "
             f"--env {shlex.quote(str(inf['env']))} "
             f"--path {shlex.quote(str(inf['path']))} -- "
-            'env -u INFISICAL_TOKEN "$@"'
+            'env -u INFISICAL_TOKEN -- "$@"'
         )
         if token is None or token_dir is None:
             # In-pod auth (kubernetes-auth): no host token, so no file to read
@@ -427,9 +487,11 @@ class InfisicalProvider:
         # Create 0600 from the first byte — never a window where the file is
         # readable at the umask default before a chmod.
         fd = os.open(tf, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        # Remember the path BEFORE writing (verification V5): a write that fails
+        # halfway still leaves a file post_exec must remove.
+        self._token_path = tf
         with os.fdopen(fd, "w") as fh:
             fh.write(token)
-        self._token_path = tf
         # The token is read from THIS exec's mounted file INTO the env
         # in-container, so it never appears on any argv (host or container).
         token_path = shlex.quote(f"{CONTAINER_TOKEN_DIR}/{name}")
@@ -473,10 +535,25 @@ def remove_token_dir(d: Path) -> None:
     """Truncate every file in a token dir and remove it. Idempotent; never
     raises on an absent dir. Exposed so the devcontainer teardown and gc can
     call it UNCONDITIONALLY — independent of which provider the (possibly
-    unreadable) profile config resolves to (review finding I1)."""
+    unreadable) profile config resolves to (review finding I1).
+
+    Defence in depth (verification V1): callers are expected to hand it a
+    contained path, but it re-checks — a symlinked dir or a path outside
+    ``TOKEN_LAYOUT`` is refused as a logged no-op, and symlinked children are
+    never truncated through (rmtree removes the link itself, not its target)."""
+    if d.is_symlink():
+        print(f"warning: refusing to remove token dir {d}: it is a symlink", file=sys.stderr)
+        return
     if not d.is_dir():
         return
+    try:
+        contain_token_dir(d, f"path {d}")
+    except IsolationError as e:
+        print(f"warning: refusing to remove token dir: {e}", file=sys.stderr)
+        return
     for p in d.iterdir():
+        if p.is_symlink():
+            continue  # never truncate through a link; rmtree unlinks the link itself
         if p.is_file():
             _truncate_and_unlink(p)
     shutil.rmtree(d, ignore_errors=True)

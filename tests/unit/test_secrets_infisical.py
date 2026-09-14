@@ -29,6 +29,7 @@ from fr.isolation.secrets import (
     ProfileContext,
     UniversalAuth,
     canonical_token_dir,
+    remove_token_dir,
     resolve_token_dir,
 )
 from fr.isolation.types import IsolationError
@@ -215,6 +216,181 @@ def test_cleanup_falls_back_to_canonical_dir_when_mount_unreadable(
     assert not d.exists()
 
 
+# ---- containment of the resolved dir (verification V1 / V7) ----
+
+
+def _cfg_with_source(worktree: Path, source: str) -> Path:
+    return _write_profile(worktree, mount=f"type=bind,source={source},target={CONTAINER_TOKEN_DIR}")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "${localEnv:HOME}",  # $HOME itself — `down` would empty every dotfile
+        "${localEnv:HOME}/.cache/fr/run-tokens/../../..",  # `..` escape from the root
+        "${localEnv:HOME}/.cache/fr/run-tokens/repo/admin",  # wrong depth (the old shared layout)
+        "${localEnv:HOME}/.cache/fr/run-tokens/r/p/w/deeper",  # too deep
+        "${localEnv:FR_TEST_UNSET}/.cache/fr/run-tokens/r/p/w",  # unset var → resolves under /
+        "${localEnv:HOME}/.config/fr/secrets/myrepo",  # the operator's env files
+        "${bogus}/x",  # an unknown variable must never pass through as a literal
+    ],
+)
+def test_resolve_token_dir_refuses_uncontained_sources(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    monkeypatch.delenv("FR_TEST_UNSET", raising=False)
+    cfg = _cfg_with_source(tmp_path, source)
+    with pytest.raises(IsolationError) as ei:
+        resolve_token_dir(cfg, tmp_path)
+    msg = str(ei.value)
+    assert source in msg  # names the offending source …
+    assert "run-tokens/<repo>/<profile>/<workspace>" in msg  # … and the required layout
+
+
+def test_uncontained_source_fails_closed_at_up_exec_and_cleanup(home: Path, tmp_path: Path) -> None:
+    """The HOME-as-source case end to end: nothing minted, nothing created, and
+    cleanup (which must not raise) falls back to the contained canonical dir —
+    the sentinel dotfile in the fake HOME survives every call."""
+    _cfg_with_source(tmp_path, "${localEnv:HOME}")
+    home.mkdir(parents=True, exist_ok=True)
+    (home / ".bashrc").write_text("sentinel")
+    ctx = ProfileContext(
+        repo="myrepo",
+        profile="admin",
+        keys=("DEPLOY_KEY",),
+        config=INFISICAL_CFG,
+        worktree=tmp_path,
+    )
+    minter = _FakeMinter()
+    prov = InfisicalProvider(auth=UniversalAuth(minter=minter), validate=lambda c: None)
+    with pytest.raises(IsolationError):
+        prov.up_prepare(ctx)
+    with pytest.raises(IsolationError):
+        prov.exec_wrap(ctx, want_secrets=True)
+    assert minter.calls == []
+    prov.cleanup(ctx)  # best-effort: no raise, no damage
+    assert (home / ".bashrc").read_text() == "sentinel"
+    assert sorted(p.name for p in home.iterdir()) == [".bashrc"] or (home / ".cache").exists()
+
+
+def test_symlinked_token_dir_is_refused_and_its_target_untouched(
+    home: Path, tmp_path: Path
+) -> None:
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (target / "precious").write_text("keep")
+    d = _dir(tmp_path)
+    d.parent.mkdir(parents=True)
+    d.symlink_to(target)
+    cfg = _write_profile(tmp_path)  # the legit MOUNT — but its dir is a symlink on disk
+
+    with pytest.raises(IsolationError, match="symlink"):
+        resolve_token_dir(cfg, tmp_path)
+    remove_token_dir(d)  # defence in depth: refuses, no raise
+
+    assert d.is_symlink() and (target / "precious").read_text() == "keep"
+
+
+def test_remove_token_dir_refuses_paths_outside_the_root(
+    home: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "f").write_text("x")
+    remove_token_dir(outside)
+    assert (outside / "f").read_text() == "x" and outside.is_dir()
+    assert "refus" in capsys.readouterr().err
+
+
+def test_remove_token_dir_never_truncates_through_symlinked_children(
+    home: Path, tmp_path: Path
+) -> None:
+    d = _dir(tmp_path)
+    d.mkdir(parents=True)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep")
+    (d / "link.token").symlink_to(victim)
+    (d / "real.token").write_text("tok")
+    remove_token_dir(d)
+    assert victim.read_text() == "keep"
+    assert not d.exists()
+
+
+def test_resolve_token_dir_supports_localenv_default_values(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `${localEnv:VAR:default}` is devcontainer-CLI syntax; host-side resolution
+    # must agree with the CLI on both branches (verification V7).
+    monkeypatch.delenv("FR_TEST_UNSET", raising=False)
+    cfg = _cfg_with_source(
+        tmp_path,
+        "${localEnv:HOME}/.cache/fr/run-tokens/${localEnv:FR_TEST_UNSET:fallback-repo}/admin/"
+        "${localWorkspaceFolderBasename}",
+    )
+    root = home / ".cache" / "fr" / "run-tokens"
+    assert resolve_token_dir(cfg, tmp_path) == root / "fallback-repo" / "admin" / tmp_path.name
+    monkeypatch.setenv("FR_TEST_UNSET", "set-repo")
+    assert resolve_token_dir(cfg, tmp_path) == root / "set-repo" / "admin" / tmp_path.name
+
+
+def test_canonical_token_dir_is_contained_too(home: Path, tmp_path: Path) -> None:
+    with pytest.raises(IsolationError):
+        canonical_token_dir("..", "admin", tmp_path)
+    with pytest.raises(IsolationError):
+        canonical_token_dir("myrepo", "admin", Path("/"))  # empty basename
+
+
+# ---- kubernetes-auth up (verification V4) / partial write (V5) ----
+
+K8S_CFG = {
+    **INFISICAL_CFG,
+    "infisical": {**INFISICAL_CFG["infisical"], "auth": {"method": "kubernetes-auth"}},
+}
+
+
+def test_up_prepare_creates_the_mount_dir_for_kubernetes_auth_too(
+    home: Path, tmp_path: Path
+) -> None:
+    # The scaffold always writes the mount, so docker needs the source to exist
+    # whatever the auth method — otherwise `devcontainer up` fails.
+    prov = InfisicalProvider(auth=KubernetesAuth(), validate=lambda c: None)
+    prov.up_prepare(_ctx(tmp_path, config=K8S_CFG))
+    assert _dir(tmp_path).is_dir()
+    assert stat.S_IMODE(_dir(tmp_path).stat().st_mode) == 0o700
+
+
+def test_up_prepare_kubernetes_auth_without_a_mount_is_fine(home: Path, tmp_path: Path) -> None:
+    prov = InfisicalProvider(auth=KubernetesAuth(), validate=lambda c: None)
+    prov.up_prepare(_ctx(tmp_path, config=K8S_CFG, mount=None))  # no host token → no mount needed
+    assert not _dir(tmp_path).exists()
+
+
+def test_partially_written_token_is_removed_by_post_exec(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _FailingWriter:
+        def __init__(self, fd: int) -> None:
+            self.fd = fd
+
+        def __enter__(self) -> _FailingWriter:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            secrets_mod.os.close(self.fd)
+
+        def write(self, s: str) -> int:
+            raise OSError("disk full")
+
+    monkeypatch.setattr(secrets_mod.os, "fdopen", lambda fd, *a, **k: _FailingWriter(fd))
+    prov = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter()))
+    ctx = _ctx(tmp_path)
+    with pytest.raises(OSError):
+        prov.exec_wrap(ctx, want_secrets=True)
+    assert prov._token_path is not None  # remembered BEFORE the write, so …
+    prov.post_exec(ctx)
+    assert list(_dir(tmp_path).iterdir()) == []  # … the partial file is gone
+
+
 # ---- config validation BEFORE mint (review I3) ----
 
 
@@ -288,7 +464,9 @@ def test_exec_wrap_unsets_token_for_the_user_command(home: Path, tmp_path: Path)
         _ctx(tmp_path), want_secrets=True
     )
     script = wrap.argv_prefix[2]
-    assert script.endswith('-- env -u INFISICAL_TOKEN "$@"')
+    # `--` ends env's own operand parsing so a user command starting with
+    # NAME=VALUE or -x is not eaten as an env assignment/option (verification V6).
+    assert script.endswith('-- env -u INFISICAL_TOKEN -- "$@"')
     assert wrap.argv_prefix[:2] == ("sh", "-lc") and wrap.argv_prefix[3] == "fr-secret-wrap"
 
 
@@ -307,7 +485,7 @@ def test_kubernetes_auth_wrap_has_no_token_file_and_no_assignment(
     )  # no mount needed
     script = wrap.argv_prefix[2]
     assert "cat " not in script and "INFISICAL_TOKEN=" not in script
-    assert "infisical run" in script and script.endswith('-- env -u INFISICAL_TOKEN "$@"')
+    assert "infisical run" in script and script.endswith('-- env -u INFISICAL_TOKEN -- "$@"')
     assert prov._token_path is None
     assert not _dir(tmp_path).exists()
 
