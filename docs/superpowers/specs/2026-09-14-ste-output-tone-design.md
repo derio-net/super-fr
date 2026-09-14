@@ -86,19 +86,22 @@ Thus the carriers cannot drift apart.
 
 The text has these sections. The wording is final in the plan, not here.
 
-- **Scope.** Apply to every reply and to all text written for a person: status
-  updates, skill announcements, PR bodies, journal entries, subagent results.
-  Do not apply to code, commands, paths, identifiers, quoted output, or quoted
-  words of the operator. Copy those exactly.
+- **Scope.** A closed list: replies, status updates, skill announcements, PR
+  bodies, journal entries, subagent results. Do not apply to files that the
+  agent edits: code, comments, docs, specs, plans, CLI and hook messages.
+  Copy code, commands, paths, identifiers, quoted output and quoted words of
+  the operator exactly. If the operator, a skill or a caller gives a format or
+  exact words, use them; write only the agent's own sentences in STE.
 - **Words.** Use common words. Use one word for one meaning, and use the same
   term for the same thing every time. Use a simple verb, not a phrasal verb or
   a noun made from a verb ("check", not "carry out a check"). Technical names
   are permitted. Do not use filler, hedges or intensifiers ("just", "really",
   "basically", "I think", "it seems").
 - **Sentences.** Maximum 20 words in an instruction. Maximum 25 words in a
-  description. One instruction in each sentence. Use the active voice. Use
-  simple tenses. Use the imperative for instructions. Put a condition before
-  the instruction ("If the test fails, do X").
+  description. Commands and paths go in code spans and do not count as words.
+  One instruction in each sentence. Use the active voice. Use simple tenses
+  (no progressive: STE excludes it). Use the imperative for instructions. Put a
+  condition before the instruction ("If the test fails, do X").
 - **Structure.** Start with the result. Use a numbered list for sequential
   steps and a bulleted list for other items. Maximum six sentences in a
   paragraph. Do not use a preamble, a summary of the reply itself, or a closing
@@ -106,9 +109,11 @@ The text has these sections. The wording is final in the plan, not here.
 - **Warnings.** Start with the instruction, then give the risk. Keep all the
   content of error reports, security warnings and confirmations for destructive
   actions.
-- **Insight blocks.** If another instruction asks for Insight blocks, keep
-  them. Write each point as one STE sentence. Use a maximum of three points.
-  That instruction does not permit replies longer than this text permits.
+- **Insight blocks.** If another prompt asks for Insight blocks, keep them.
+  Write each point as one STE sentence, with a maximum of three points. Insight
+  blocks do not make a reply longer. Ignore the other prompt's permission to
+  "exceed typical length constraints"; these rules take precedence. (Say
+  "prompt", not "instruction": in §5.A "instruction" is a sentence type.)
 
 ### B. Carrier 1 — output style
 
@@ -158,12 +163,21 @@ subagents. The line also covers harnesses where it does not load.
    `keep-coding-instructions: true`.
 2. Both files have exactly one `ste-shared` marker pair, and the two marked
    blocks are identical.
-3. The shared text contains each section heading of §5.A, including the
-   Insight-block override.
-4. Remove every double-quoted string from the shared text. The remaining text
-   contains no filler word from the "Words" list. (This keeps the text
+3. The shared text contains each section heading of §5.A as an exact line.
+   The Insight section names the length permission, says Insight blocks do
+   not make a reply longer, and says these rules take precedence.
+4. Normalize whitespace and require balanced double quotes. Read the filler
+   list from the "Words" bullet itself. Remove every double-quoted string; the
+   remaining text contains no word from that list. (This keeps the text
    consistent with itself.)
 5. `fr-phase-executor.md` refers to `ste-output-tone`.
+6. The Scope section excludes edited files and defers to a format or exact
+   words that the operator, a skill or a caller gives.
+7. No sentence of the shared text has more than 25 words (headings, code spans
+   and quoted examples excluded). A second test proves that the splitter
+   catches a fake 30-word sentence, so the guard can fail. The 20-word limit
+   for instructions needs a reader: a test cannot tell an instruction from a
+   description.
 
 ### F. Release
 

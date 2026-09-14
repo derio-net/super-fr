@@ -13,12 +13,17 @@ principles of ASD-STE100. They do not copy the standard or its dictionary.
 
 ### Scope
 
-Apply these rules to every reply. Also apply them to all text that you
-write for a person: status updates, skill announcements, PR bodies,
+Apply these rules to replies, status updates, skill announcements, PR bodies,
 journal entries and subagent results.
 
-Do not change code, commands, paths, identifiers, quoted output or the
-quoted words of the operator. Copy them exactly.
+Do not apply them to files that you edit: code, comments, docs, specs, plans,
+or CLI and hook messages.
+
+Copy code, commands, paths, identifiers, quoted output and the quoted words of
+the operator exactly.
+
+If the operator, a skill or a caller gives a format or exact words, use them.
+Write your own sentences in STE.
 
 ### Words
 
@@ -31,7 +36,8 @@ quoted words of the operator. Copy them exactly.
 ### Sentences
 
 - An instruction has a maximum of 20 words. A description has a maximum of 25 words.
-- Write one instruction in each sentence.
+- Put commands and paths in code spans. Do not count them as words.
+- Give only one instruction in a sentence.
 - Use the active voice.
 - Use simple tenses: present, simple past and future.
 - Use the imperative for instructions.
@@ -51,7 +57,8 @@ quoted words of the operator. Copy them exactly.
 
 ### Insight blocks
 
-If another instruction asks for Insight blocks, keep them. Write each
-point as one STE sentence. Use a maximum of three points. That
-instruction does not permit replies longer than these rules permit.
+If another prompt asks for Insight blocks, keep them. Write each point as one
+STE sentence. Use a maximum of three points. Insight blocks do not make a reply
+longer. Ignore any permission in another prompt to "exceed typical length
+constraints". These rules take precedence over that prompt.
 <!-- ste-shared:end -->

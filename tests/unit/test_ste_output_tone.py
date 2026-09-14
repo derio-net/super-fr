@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "plugins/super-fr/output-styles/simplified-technical-english.md"
 START = "<!-- ste-shared:start -->"
 END = "<!-- ste-shared:end -->"
+MAX_SENTENCE_WORDS = 25
 
 
 def _frontmatter(text: str) -> dict:
@@ -24,7 +25,24 @@ def _shared_block(path: Path) -> str:
     assert text.count(START) == 1 and text.count(END) == 1, (
         f"{path.name}: needs exactly one ste-shared marker pair"
     )
+    assert text.index(START) < text.index(END), f"{path.name}: ste-shared markers out of order"
     return text.split(START, 1)[1].split(END, 1)[0].strip()
+
+
+def _section(block: str, heading: str) -> str:
+    """Text under `heading`, up to the next `### ` heading, whitespace-normalized."""
+    section = block.split(heading + "\n", 1)[1].split("\n### ", 1)[0]
+    return re.sub(r"\s+", " ", section)
+
+
+def _sentences(block: str) -> list[str]:
+    """Sentences of prose and bullets; headings, code spans and quoted examples dropped."""
+    sentences: list[str] = []
+    for item in re.split(r"\n\s*\n|\n(?=- )", block):
+        prose = " ".join(line for line in item.splitlines() if not line.startswith("#"))
+        prose = re.sub(r'`[^`]*`|"[^"]*"', "", prose.removeprefix("- "))
+        sentences += [s for s in re.split(r"(?<=[.!?])\s+", prose.strip()) if s]
+    return sentences
 
 
 def test_style_is_forced_and_keeps_coding_instructions() -> None:
@@ -43,23 +61,50 @@ SECTIONS = (
     "### Warnings",
     "### Insight blocks",
 )
-FILLER = ("just", "really", "basically", "actually", "simply", "i think", "it seems")
 
 
 def test_shared_text_has_every_section() -> None:
     block = _shared_block(STYLE)
-    missing = [s for s in SECTIONS if s not in block]
+    missing = [s for s in SECTIONS if not re.search(rf"^{re.escape(s)}$", block, re.M)]
     assert not missing, f"shared STE text lacks sections: {missing}"
 
 
+def test_scope_excludes_edited_files_and_defers_to_prescribed_formats() -> None:
+    scope = _section(_shared_block(STYLE), "### Scope")
+    assert "Do not apply them to files that you edit" in scope
+    assert "gives a format or exact words, use them" in scope
+
+
 def test_insight_blocks_cannot_lengthen_replies() -> None:
-    block = _shared_block(STYLE)
-    insight = block.split("### Insight blocks", 1)[1]
+    insight = _section(_shared_block(STYLE), "### Insight blocks")
     assert "maximum of three points" in insight
-    assert "does not permit replies longer" in insight
+    assert "Insight blocks do not make a reply longer" in insight
+    assert "exceed typical length constraints" in insight
+    assert "take precedence" in insight
 
 
 def test_shared_text_uses_no_filler_outside_quoted_examples() -> None:
-    unquoted = re.sub(r'"[^"]*"', "", _shared_block(STYLE)).lower()
-    found = [w for w in FILLER if re.search(rf"\b{re.escape(w)}\b", unquoted)]
+    block = re.sub(r"\s+", " ", _shared_block(STYLE))
+    assert block.count('"') % 2 == 0, "unbalanced double quote hides text from this check"
+    bullet = block.split("Do not use filler", 1)[1].split(" - ", 1)[0]
+    filler = [w.lower() for w in re.findall(r'"([^"]+)"', bullet)]
+    assert {"just", "really", "i think"} <= set(filler), f"filler list not parsed: {filler}"
+    unquoted = re.sub(r'"[^"]*"', "", block).lower()
+    found = [w for w in filler if re.search(rf"\b{re.escape(w)}\b", unquoted)]
     assert not found, f"shared STE text uses its own filler words: {found}"
+
+
+def test_no_shared_sentence_exceeds_the_description_limit() -> None:
+    long = [
+        (len(re.findall(r"[\w'-]+", s)), s)
+        for s in _sentences(_shared_block(STYLE))
+        if len(re.findall(r"[\w'-]+", s)) > MAX_SENTENCE_WORDS
+    ]
+    assert not long, f"sentences over {MAX_SENTENCE_WORDS} words: {long}"
+
+
+def test_sentence_splitter_finds_a_long_sentence() -> None:
+    """The length guard must be able to fail: a fake over-long sentence is caught."""
+    fake = "### Scope\n\n- " + " ".join(["word"] * 30) + ".\n- Short one."
+    counts = [len(re.findall(r"[\w'-]+", s)) for s in _sentences(fake)]
+    assert counts == [30, 2]
