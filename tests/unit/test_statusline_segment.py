@@ -83,8 +83,10 @@ class World:
         )
 
 
-@pytest.fixture
-def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
+# Registered as ``world``; the function name differs so other modules can import
+# the fixture (test_statusline_claude.py) without F811 on their ``world`` params.
+@pytest.fixture(name="world")
+def world_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
     home = tmp_path.resolve() / "home"
     repo = home / "Docs" / "acme"
     repo.mkdir(parents=True)
