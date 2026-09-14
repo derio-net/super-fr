@@ -94,3 +94,8 @@ Fix: 'Put commands and paths in code spans. Do not count them as words.' The sen
 ### r2-m7-licence-wording · finding [fixed] · M7 One sentence close to ASD rule wording (phase 2)
 
 Fix: 'Write one instruction in each sentence' reworded to 'Give only one instruction in a sentence.'
+
+<!-- fr:journal kind=discovery scope=plan id=d113930ed739 created=2026-09-14T22:51:49 phase=3 -->
+### d113930ed739 · discovery · Parametrized filler/length tests over STYLE and RULE (phase 3)
+
+During P3.T1.S3 refactor, parametrized test_shared_text_uses_no_filler_outside_quoted_examples and test_no_shared_sentence_exceeds_the_description_limit over (STYLE, RULE) since the rule's shared block is identical to the style's. Moved RULE's definition next to STYLE at the top of the file. 10 tests pass (8 base + 2 new parametrize cases). Small, no separate commit needed.

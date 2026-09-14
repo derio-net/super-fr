@@ -5,10 +5,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "plugins/super-fr/output-styles/simplified-technical-english.md"
+RULE = REPO_ROOT / "plugins/super-fr/rules/ste-output-tone.md"
 START = "<!-- ste-shared:start -->"
 END = "<!-- ste-shared:end -->"
 MAX_SENTENCE_WORDS = 25
@@ -83,8 +85,9 @@ def test_insight_blocks_cannot_lengthen_replies() -> None:
     assert "take precedence" in insight
 
 
-def test_shared_text_uses_no_filler_outside_quoted_examples() -> None:
-    block = re.sub(r"\s+", " ", _shared_block(STYLE))
+@pytest.mark.parametrize("path", [STYLE, RULE])
+def test_shared_text_uses_no_filler_outside_quoted_examples(path: Path) -> None:
+    block = re.sub(r"\s+", " ", _shared_block(path))
     assert block.count('"') % 2 == 0, "unbalanced double quote hides text from this check"
     bullet = block.split("Do not use filler", 1)[1].split(" - ", 1)[0]
     filler = [w.lower() for w in re.findall(r'"([^"]+)"', bullet)]
@@ -94,10 +97,11 @@ def test_shared_text_uses_no_filler_outside_quoted_examples() -> None:
     assert not found, f"shared STE text uses its own filler words: {found}"
 
 
-def test_no_shared_sentence_exceeds_the_description_limit() -> None:
+@pytest.mark.parametrize("path", [STYLE, RULE])
+def test_no_shared_sentence_exceeds_the_description_limit(path: Path) -> None:
     long = [
         (len(re.findall(r"[\w'-]+", s)), s)
-        for s in _sentences(_shared_block(STYLE))
+        for s in _sentences(_shared_block(path))
         if len(re.findall(r"[\w'-]+", s)) > MAX_SENTENCE_WORDS
     ]
     assert not long, f"sentences over {MAX_SENTENCE_WORDS} words: {long}"
@@ -108,3 +112,10 @@ def test_sentence_splitter_finds_a_long_sentence() -> None:
     fake = "### Scope\n\n- " + " ".join(["word"] * 30) + ".\n- Short one."
     counts = [len(re.findall(r"[\w'-]+", s)) for s in _sentences(fake)]
     assert counts == [30, 2]
+
+
+def test_rule_block_is_identical_to_style_block() -> None:
+    assert _shared_block(RULE) == _shared_block(STYLE), (
+        "rules/ste-output-tone.md and the output style must carry the same "
+        "ste-shared text — copy the style block into the rule"
+    )
