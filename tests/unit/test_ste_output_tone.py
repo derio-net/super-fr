@@ -126,3 +126,11 @@ def test_rule_block_is_identical_to_style_block() -> None:
         "rules/ste-output-tone.md and the output style must carry the same "
         "ste-shared text — copy the style block into the rule"
     )
+
+
+EXECUTOR = REPO_ROOT / "plugins/super-fr/agents/fr-phase-executor.md"
+
+
+def test_phase_executor_returns_in_ste() -> None:
+    returns = EXECUTOR.read_text().split("## What you return", 1)[1]
+    assert "ste-output-tone" in returns
