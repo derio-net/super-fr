@@ -1,0 +1,24 @@
+run: 2026-09-14-feat-ste-output-tone
+workflow: fr-goal@1
+branch: feat/ste-output-tone
+started: '2026-09-14T18:59:44+00:00'
+cursor: spec-review
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-14T19:33:12+00:00'
+    emitted:
+      spec: docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: pending

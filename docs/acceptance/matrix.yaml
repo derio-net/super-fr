@@ -1852,3 +1852,33 @@ rows:
       (test_cwd_flag_reads_no_stdin, test_oneline, test_never_invokes_fr). Hermes custom_command
       wiring is docs-only until NousResearch/hermes-agent#109596 ships; OpenCode has
       no status-line hook (anomalyco/opencode#37464).
+  - id: ste-style-forced-in-claude-code
+    capability: output-tone
+    acceptance: With super-fr enabled, Claude Code replies use the Simplified Technical
+      English style, and the operator selects nothing.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm 2026-09-14. Target: unit test pins force-for-plugin frontmatter;
+      operator walk (Test Plan steps 1-4) confirms the live reply.'
+  - id: ste-rule-reaches-every-harness
+    capability: output-tone
+    acceptance: The STE rule installs for Claude Code, OpenCode and Hermes, and it reaches
+      the phase executor.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm 2026-09-14. Target: install/opencode/hermes drift tripwires
+      plus test_ste_output_tone.py.'
+  - id: ste-insight-blocks-kept-short
+    capability: output-tone
+    acceptance: When another plugin asks for Insight blocks, the blocks stay, written
+      in STE, and replies do not get longer.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm 2026-09-14. Target: unit test pins the override text;
+      behaviour is operator-walk only (Test Plan step 4).'
