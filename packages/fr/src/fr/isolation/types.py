@@ -21,6 +21,17 @@ class IsolationError(Exception):
     """User-facing isolation failure; CLI maps it to exit 2."""
 
 
+# Shared by the two docker-less targets (host-worktree, external): `--secret`
+# is devcontainer-only (spec 2026-06-15, re-integration addendum). `{mode}` is
+# filled with the refusing mode's name.
+SECRET_NEEDS_DEVCONTAINER = (
+    "--secret requires devcontainer isolation mode — this workspace runs in "
+    "{mode} mode, where the environment already carries its own credentials and "
+    "fr has no container boundary to inject into. Drop --secret, or unset "
+    "FR_ISOLATION_TARGET and `fr isolation up` a devcontainer workspace."
+)
+
+
 class SessionBinding(BaseModel):
     """One agent session attached to a workspace (spec 2026-09-04 §5.A)."""
 

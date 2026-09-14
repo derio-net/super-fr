@@ -70,6 +70,26 @@ def scaffold(
     if backend not in ("github", "gitlab", "gitea"):
         typer.echo(f"error: --backend must be one of github, gitlab, gitea; got {backend!r}")
         raise typer.Exit(2)
+    if secret_provider not in ("env-file", "infisical"):
+        typer.echo(
+            f"error: --secret-provider must be one of env-file, infisical; got {secret_provider!r}"
+        )
+        raise typer.Exit(2)
+    infisical_flags = [
+        flag
+        for flag, val in (
+            ("--infisical-project", infisical_project),
+            ("--infisical-env", infisical_env),
+            ("--infisical-path", infisical_path),
+        )
+        if val is not None
+    ]
+    if secret_provider == "env-file" and infisical_flags:
+        typer.echo(
+            f"error: {', '.join(infisical_flags)} only apply with --secret-provider infisical "
+            "(the profile would silently keep the env-file model)."
+        )
+        raise typer.Exit(2)
     try:
         infisical = None
         if secret_provider == "infisical":

@@ -20,15 +20,14 @@ from pathlib import Path
 from typing import Any
 
 from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
-from fr.isolation.types import IsolationError, IsolationState, save_state
+from fr.isolation.types import (
+    SECRET_NEEDS_DEVCONTAINER,
+    IsolationError,
+    IsolationState,
+    save_state,
+)
 
 _EXTERNAL = "environment is externally managed — restart/inspect the host, not fr"
-SECRET_NEEDS_DEVCONTAINER = (
-    "--secret requires devcontainer isolation mode — this workspace runs in "
-    "{mode} mode, where the environment already carries its own credentials and "
-    "fr has no container boundary to inject into. Drop --secret, or unset "
-    "FR_ISOLATION_TARGET and `fr isolation up` a devcontainer workspace."
-)
 
 
 class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):

@@ -3,16 +3,24 @@
 No live Infisical, no network: the token mint goes through an injected
 `TokenMinter` seam. The headline invariant is that no secret material (the UA
 client-secret or the minted token) ever lands on a command-line argv.
+
+The host token directory FOLLOWS THE MOUNT the profile's devcontainer.json
+declares (review I2) and is per-workspace (review I1): every test writes the
+profile's devcontainer.json under the ctx worktree, and `_dir(worktree)` is
+where that mount resolves.
 """
 
 from __future__ import annotations
 
+import json
 import shlex
 import stat
+import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
+from fr.isolation import secrets as secrets_mod
 from fr.isolation.secrets import (
     CONTAINER_TOKEN_DIR,
     ExecWrap,
@@ -20,7 +28,8 @@ from fr.isolation.secrets import (
     KubernetesAuth,
     ProfileContext,
     UniversalAuth,
-    host_token_dir,
+    canonical_token_dir,
+    resolve_token_dir,
 )
 from fr.isolation.types import IsolationError
 
@@ -38,15 +47,37 @@ INFISICAL_CFG = {
     },
 }
 
+# The mount `fr init scaffold --secret-provider infisical` writes: host dir is
+# per (repo, profile, workspace basename), container dir is fixed.
+MOUNT = (
+    "type=bind,source=${localEnv:HOME}/.cache/fr/run-tokens/myrepo/admin/"
+    f"${{localWorkspaceFolderBasename}},target={CONTAINER_TOKEN_DIR}"
+)
 
-def _ctx(worktree: Path) -> ProfileContext:
+
+def _write_profile(worktree: Path, mount: str | None = MOUNT, profile: str = "admin") -> Path:
+    d = worktree / ".devcontainer" / profile
+    d.mkdir(parents=True, exist_ok=True)
+    cfg: dict = {"image": "x"}
+    if mount is not None:
+        cfg["runArgs"] = ["--mount", mount]
+    p = d / "devcontainer.json"
+    p.write_text(json.dumps(cfg) + "\n")
+    return p
+
+
+def _ctx(
+    worktree: Path, config: Mapping = INFISICAL_CFG, mount: str | None = MOUNT
+) -> ProfileContext:
+    _write_profile(worktree, mount=mount)
     return ProfileContext(
-        repo="myrepo",
-        profile="admin",
-        keys=("DEPLOY_KEY",),
-        config=INFISICAL_CFG,
-        worktree=worktree,
+        repo="myrepo", profile="admin", keys=("DEPLOY_KEY",), config=config, worktree=worktree
     )
+
+
+def _dir(worktree: Path) -> Path:
+    """Where MOUNT resolves for this worktree — the canonical scaffold layout."""
+    return canonical_token_dir("myrepo", "admin", worktree)
 
 
 class _FakeMinter:
@@ -61,12 +92,18 @@ class _FakeMinter:
         return self.token
 
 
+@pytest.fixture()
+def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_CID", "client-id-xyz")
+    monkeypatch.setenv("FR_CSEC", "super-secret-value")
+    return tmp_path / "home"
+
+
 # ---- UniversalAuth (host-side mint) ----
 
 
-def test_universal_auth_mints_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("FR_CID", "client-id-xyz")
-    monkeypatch.setenv("FR_CSEC", "super-secret-value")
+def test_universal_auth_mints_from_env(home: Path, tmp_path: Path) -> None:
     minter = _FakeMinter()
     token = UniversalAuth(minter=minter).mint_token(_ctx(tmp_path))
     assert token == "tok-abc"
@@ -79,8 +116,7 @@ def test_universal_auth_mints_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert "super-secret-value" in env.values()
 
 
-def test_universal_auth_missing_env_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("FR_CID", "client-id-xyz")
+def test_universal_auth_missing_env_raises(home: Path, monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("FR_CSEC", raising=False)
     with pytest.raises(IsolationError) as ei:
         UniversalAuth(minter=_FakeMinter()).mint_token(_ctx(tmp_path))
@@ -91,13 +127,135 @@ def test_kubernetes_auth_returns_none(tmp_path: Path) -> None:
     assert KubernetesAuth().mint_token(_ctx(tmp_path)) is None
 
 
+# ---- _subprocess_mint hardening (review m4) ----
+
+
+def test_subprocess_mint_missing_binary_is_isolation_error(monkeypatch) -> None:
+    def _run(*a, **kw):
+        raise FileNotFoundError("infisical")
+
+    monkeypatch.setattr(secrets_mod.subprocess, "run", _run)
+    with pytest.raises(IsolationError, match="infisical"):
+        secrets_mod._subprocess_mint(["infisical", "login"], {})
+
+
+def test_subprocess_mint_timeout_is_isolation_error(monkeypatch) -> None:
+    def _run(argv, **kw):
+        assert kw.get("timeout")  # a timeout is always passed
+        raise subprocess.TimeoutExpired(argv, kw["timeout"])
+
+    monkeypatch.setattr(secrets_mod.subprocess, "run", _run)
+    with pytest.raises(IsolationError, match="timed out"):
+        secrets_mod._subprocess_mint(["infisical", "login"], {})
+
+
+def test_subprocess_mint_empty_stdout_is_isolation_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        secrets_mod.subprocess,
+        "run",
+        lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout="  \n", stderr=""),
+    )
+    with pytest.raises(IsolationError, match="no token"):
+        secrets_mod._subprocess_mint(["infisical", "login"], {})
+
+
+# ---- token dir resolution (review I1 / I2) ----
+
+
+@pytest.mark.parametrize("form", ["separate", "equals"])
+def test_resolve_token_dir_follows_mount_and_substitutes_variables(
+    home: Path, tmp_path: Path, form: str
+) -> None:
+    # The mount names a DIFFERENT repo dir than the runtime target would compute
+    # (scaffolded from a clone called `other-clone`): the mount wins.
+    mount = (
+        "type=bind,source=${localEnv:HOME}/.cache/fr/run-tokens/other-clone/admin/"
+        f"${{localWorkspaceFolderBasename}},target={CONTAINER_TOKEN_DIR}"
+    )
+    wt = tmp_path / "feat__x"
+    d = wt / ".devcontainer" / "admin"
+    d.mkdir(parents=True)
+    run_args = ["--mount", mount] if form == "separate" else [f"--mount={mount}"]
+    cfg = d / "devcontainer.json"
+    cfg.write_text(json.dumps({"image": "x", "runArgs": run_args}))
+
+    assert resolve_token_dir(cfg, wt) == home / ".cache/fr/run-tokens/other-clone/admin/feat__x"
+
+
+def test_resolve_token_dir_missing_mount_is_actionable(home: Path, tmp_path: Path) -> None:
+    cfg = _write_profile(tmp_path, mount=None)
+    with pytest.raises(IsolationError) as ei:
+        resolve_token_dir(cfg, tmp_path)
+    msg = str(ei.value)
+    assert CONTAINER_TOKEN_DIR in msg and "fr init scaffold" in msg
+
+
+def test_exec_wrap_missing_mount_raises_before_mint(home: Path, tmp_path: Path) -> None:
+    minter = _FakeMinter()
+    with pytest.raises(IsolationError, match=CONTAINER_TOKEN_DIR):
+        InfisicalProvider(auth=UniversalAuth(minter=minter)).exec_wrap(
+            _ctx(tmp_path, mount=None), want_secrets=True
+        )
+    assert minter.calls == []  # nothing minted → nothing to leak
+
+
+def test_up_prepare_missing_mount_raises(home: Path, tmp_path: Path) -> None:
+    prov = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter()), validate=lambda c: None)
+    with pytest.raises(IsolationError, match=CONTAINER_TOKEN_DIR):
+        prov.up_prepare(_ctx(tmp_path, mount=None))
+
+
+def test_cleanup_falls_back_to_canonical_dir_when_mount_unreadable(
+    home: Path, tmp_path: Path
+) -> None:
+    d = _dir(tmp_path)
+    d.mkdir(parents=True)
+    (d / "left.token").write_text("tok")
+    InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter())).cleanup(_ctx(tmp_path, mount=None))
+    assert not d.exists()
+
+
+# ---- config validation BEFORE mint (review I3) ----
+
+
+def _without(cfg: Mapping, *path: str) -> dict:
+    out: dict = json.loads(json.dumps(cfg))
+    node = out
+    for key in path[:-1]:
+        node = node[key]
+    del node[path[-1]]
+    return out
+
+
+@pytest.mark.parametrize(
+    ("cfg", "needle"),
+    [
+        (_without(INFISICAL_CFG, "infisical", "path"), "path"),
+        (_without(INFISICAL_CFG, "infisical"), "infisical"),
+        (_without(INFISICAL_CFG, "infisical", "auth", "client_secret_env"), "client_secret_env"),
+        (
+            {**INFISICAL_CFG, "infisical": {**INFISICAL_CFG["infisical"], "auth": {"method": "x"}}},
+            "x",
+        ),
+    ],
+)
+def test_exec_wrap_validates_config_before_mint(
+    home: Path, tmp_path: Path, cfg: Mapping, needle: str
+) -> None:
+    minter = _FakeMinter()
+    with pytest.raises(IsolationError) as ei:
+        InfisicalProvider(auth=UniversalAuth(minter=minter)).exec_wrap(
+            _ctx(tmp_path, config=cfg), want_secrets=True
+        )
+    assert needle in str(ei.value)
+    assert minter.calls == []  # validated BEFORE the mint — no token ever existed
+    assert not _dir(tmp_path).exists() or list(_dir(tmp_path).iterdir()) == []
+
+
 # ---- InfisicalProvider ----
 
 
-def test_infisical_exec_wrap_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("FR_CID", "client-id-xyz")
-    monkeypatch.setenv("FR_CSEC", "super-secret-value")
+def test_infisical_exec_wrap_shape(home: Path, tmp_path: Path) -> None:
     minter = _FakeMinter(token="tok-abc")
     prov = InfisicalProvider(auth=UniversalAuth(minter=minter))
     ctx = _ctx(tmp_path)
@@ -113,9 +271,9 @@ def test_infisical_exec_wrap_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     # on argv and not handed through exec_env either.
     assert "tok-abc" not in flat
     assert "tok-abc" not in " ".join(wrap.exec_env.values())
-    # The token WAS minted and written to ONE 0600 file in the 0700 host dir,
-    # and the script reads exactly that file under the container mount.
-    d = host_token_dir("myrepo", "admin")
+    # The token WAS minted and written to ONE 0600 file in the 0700 host dir the
+    # mount resolves to, and the script reads exactly that file under the mount.
+    d = _dir(tmp_path)
     (tf,) = list(d.iterdir())
     assert tf.read_text() == "tok-abc"
     assert stat.S_IMODE(tf.stat().st_mode) == 0o600
@@ -123,15 +281,41 @@ def test_infisical_exec_wrap_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert f"{CONTAINER_TOKEN_DIR}/{tf.name}" in flat
 
 
-def test_two_wraps_write_two_distinct_token_files(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_exec_wrap_unsets_token_for_the_user_command(home: Path, tmp_path: Path) -> None:
+    # `infisical run` hands its env to the child, INFISICAL_TOKEN included — the
+    # user command must not be able to reuse the token for its TTL (review m5).
+    wrap = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter())).exec_wrap(
+        _ctx(tmp_path), want_secrets=True
+    )
+    script = wrap.argv_prefix[2]
+    assert script.endswith('-- env -u INFISICAL_TOKEN "$@"')
+    assert wrap.argv_prefix[:2] == ("sh", "-lc") and wrap.argv_prefix[3] == "fr-secret-wrap"
+
+
+def test_kubernetes_auth_wrap_has_no_token_file_and_no_assignment(
+    home: Path, tmp_path: Path
 ) -> None:
+    # In-pod auth: no host mint, so the script must NOT cat a never-written file
+    # and must NOT set INFISICAL_TOKEN="" (that would shadow the pod's auth).
+    cfg = {
+        **INFISICAL_CFG,
+        "infisical": {**INFISICAL_CFG["infisical"], "auth": {"method": "kubernetes-auth"}},
+    }
+    prov = InfisicalProvider(auth=KubernetesAuth())
+    wrap = prov.exec_wrap(
+        _ctx(tmp_path, config=cfg, mount=None), want_secrets=True
+    )  # no mount needed
+    script = wrap.argv_prefix[2]
+    assert "cat " not in script and "INFISICAL_TOKEN=" not in script
+    assert "infisical run" in script and script.endswith('-- env -u INFISICAL_TOKEN "$@"')
+    assert prov._token_path is None
+    assert not _dir(tmp_path).exists()
+
+
+def test_two_wraps_write_two_distinct_token_files(home: Path, tmp_path: Path) -> None:
     # Two concurrent `--secret` execs must never share a file (the race the
     # original branch left as a NOTE). One provider per exec is the Target's
     # contract; assert it with two instances.
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("FR_CID", "id")
-    monkeypatch.setenv("FR_CSEC", "sec")
     ctx = _ctx(tmp_path)
     a = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter("tok-a")))
     b = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter("tok-b")))
@@ -139,7 +323,7 @@ def test_two_wraps_write_two_distinct_token_files(
     wrap_a = a.exec_wrap(ctx, want_secrets=True)
     wrap_b = b.exec_wrap(ctx, want_secrets=True)
 
-    files = sorted(host_token_dir("myrepo", "admin").iterdir())
+    files = sorted(_dir(tmp_path).iterdir())
     assert len(files) == 2
     assert {f.read_text() for f in files} == {"tok-a", "tok-b"}
     assert all(stat.S_IMODE(f.stat().st_mode) == 0o600 for f in files)
@@ -149,18 +333,13 @@ def test_two_wraps_write_two_distinct_token_files(
         assert not any(tok in a for a in wrap.argv_prefix)
 
 
-def test_post_exec_unlinks_only_its_own_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("FR_CID", "id")
-    monkeypatch.setenv("FR_CSEC", "sec")
+def test_post_exec_unlinks_only_its_own_file(home: Path, tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     a = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter("tok-a")))
     b = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter("tok-b")))
     a.exec_wrap(ctx, want_secrets=True)
     b.exec_wrap(ctx, want_secrets=True)
-    d = host_token_dir("myrepo", "admin")
+    d = _dir(tmp_path)
 
     a.post_exec(ctx)
 
@@ -171,42 +350,31 @@ def test_post_exec_unlinks_only_its_own_file(
     a.post_exec(ctx)  # idempotent — a second call is a no-op, never raises
 
 
-def test_post_exec_without_wrap_is_a_noop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def test_post_exec_without_wrap_is_a_noop(home: Path, tmp_path: Path) -> None:
     prov = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter()))
     prov.post_exec(_ctx(tmp_path))  # no exec happened — nothing to unlink
 
 
-def test_infisical_exec_wrap_no_secrets_does_not_mint(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def test_infisical_exec_wrap_no_secrets_does_not_mint(home: Path, tmp_path: Path) -> None:
     minter = _FakeMinter()
     prov = InfisicalProvider(auth=UniversalAuth(minter=minter))
     assert prov.exec_wrap(_ctx(tmp_path), want_secrets=False) == ExecWrap()
     assert minter.calls == []  # no mint when no secrets requested
 
 
-def test_infisical_up_prepare_creates_empty_0700_token_dir(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def test_infisical_up_prepare_creates_empty_0700_token_dir(home: Path, tmp_path: Path) -> None:
     prov = InfisicalProvider(
         auth=UniversalAuth(minter=_FakeMinter()),
         validate=lambda ctx: None,  # touchpoint checks injected as no-op here
     )
     prov.up_prepare(_ctx(tmp_path))
-    d = host_token_dir("myrepo", "admin")
+    d = _dir(tmp_path)
     assert d.is_dir()
     assert list(d.iterdir()) == []  # mount source exists; NO secret at up
     assert stat.S_IMODE(d.stat().st_mode) == 0o700
 
 
-def test_infisical_up_prepare_fails_when_touchpoint_missing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-
+def test_infisical_up_prepare_fails_when_touchpoint_missing(home: Path, tmp_path: Path) -> None:
     def _boom(ctx: ProfileContext) -> None:
         raise IsolationError("infisical CLI not found in image")
 
@@ -216,17 +384,12 @@ def test_infisical_up_prepare_fails_when_touchpoint_missing(
     assert "infisical CLI" in str(ei.value)
 
 
-def test_infisical_cleanup_removes_every_leftover_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("FR_CID", "id")
-    monkeypatch.setenv("FR_CSEC", "sec")
+def test_infisical_cleanup_removes_every_leftover_file(home: Path, tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     # Two execs whose post_exec never ran (a crash mid-exec) + a stray file.
     InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter("t1"))).exec_wrap(ctx, True)
     InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter("t2"))).exec_wrap(ctx, True)
-    d = host_token_dir("myrepo", "admin")
+    d = _dir(tmp_path)
     (d / "stray").write_text("x")
     assert len(list(d.iterdir())) == 3
 
@@ -236,25 +399,17 @@ def test_infisical_cleanup_removes_every_leftover_file(
     InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter())).cleanup(ctx)  # idempotent
 
 
-def test_infisical_exec_wrap_quotes_config_values(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_infisical_exec_wrap_quotes_config_values(home: Path, tmp_path: Path) -> None:
     # A malicious `path` must NOT inject into the in-container shell — shlex.quote
     # neutralizes it (the value comes from PR/branch-reachable fr-profiles.yaml).
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("FR_CID", "id")
-    monkeypatch.setenv("FR_CSEC", "sec")
     evil = "/fr/x; touch /tmp/pwned"
     cfg = {**INFISICAL_CFG, "infisical": {**INFISICAL_CFG["infisical"], "path": evil}}
-    ctx = ProfileContext(
-        repo="myrepo", profile="admin", keys=("DEPLOY_KEY",), config=cfg, worktree=tmp_path
-    )
     wrap = InfisicalProvider(auth=UniversalAuth(minter=_FakeMinter())).exec_wrap(
-        ctx, want_secrets=True
+        _ctx(tmp_path, config=cfg), want_secrets=True
     )
     script = wrap.argv_prefix[2]  # the `sh -lc` script
     assert shlex.quote(evil) in script  # quoted → the `;` is inert
     assert "--path /fr/x; touch" not in script  # never the raw, injectable form
     # The per-exec container path is quoted too (defensive; the name is ours).
-    (tf,) = list(host_token_dir("myrepo", "admin").iterdir())
+    (tf,) = list(_dir(tmp_path).iterdir())
     assert shlex.quote(f"{CONTAINER_TOKEN_DIR}/{tf.name}") in script
