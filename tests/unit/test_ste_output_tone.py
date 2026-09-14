@@ -74,6 +74,7 @@ def test_shared_text_has_every_section() -> None:
 def test_scope_excludes_edited_files_and_defers_to_prescribed_formats() -> None:
     scope = _section(_shared_block(STYLE), "### Scope")
     assert "Do not apply them to files that you edit" in scope
+    assert "Do not apply them to commit messages" in scope
     assert "gives a format or exact words, use them" in scope
 
 
@@ -114,8 +115,14 @@ def test_sentence_splitter_finds_a_long_sentence() -> None:
     assert counts == [30, 2]
 
 
+def _raw_block(path: Path) -> str:
+    """Bytes between the markers, unstripped: whitespace drift must fail identity."""
+    _shared_block(path)  # marker count and order checks
+    return path.read_text().split(START, 1)[1].split(END, 1)[0]
+
+
 def test_rule_block_is_identical_to_style_block() -> None:
-    assert _shared_block(RULE) == _shared_block(STYLE), (
+    assert _raw_block(RULE) == _raw_block(STYLE), (
         "rules/ste-output-tone.md and the output style must carry the same "
         "ste-shared text — copy the style block into the rule"
     )

@@ -39,7 +39,11 @@ The operator gets this without any setting change.
   every CLAUDE.md level, including user rules. Source:
   https://code.claude.com/docs/en/sub-agents. `fr-phase-executor` is a subagent.
 - **OpenCode and Hermes have no output styles.** OpenCode reads
-  `.opencode/instructions/*.md` by glob (`opencode.json`). Hermes reads the
+  `.opencode/instructions/*.md` by glob, but only through this repo's own
+  `opencode.json`. No installer delivers `.opencode/instructions` to consumer
+  machines (`scripts/install.sh` copies OpenCode skills and commands only).
+  This gap is older than this spec and applies to every shipped rule. Consumer
+  delivery is a follow-up, not part of this spec (phase 3 review). Hermes reads the
   managed rules block in `~/.hermes/SOUL.md`, built from
   `SHIPPED_RULE_NAMES` in `scripts/sync-hermes.py`.
 - **The explanatory plugin is a hook, not a style.**
@@ -60,7 +64,8 @@ The operator gets this without any setting change.
 The STE instructions exist as one text. Two carriers deliver it:
 
 1. a forced plugin output style, for the Claude Code main thread;
-2. a shipped rule, for subagents, OpenCode and Hermes.
+2. a shipped rule, for subagents and Hermes, and for OpenCode sessions inside
+   this repo (§2: no installer delivers OpenCode instructions to consumers).
 
 In both files, the shared text is between the lines `<!-- ste-shared:start -->`
 and `<!-- ste-shared:end -->`. A test makes the two marked blocks identical.
@@ -88,7 +93,8 @@ The text has these sections. The wording is final in the plan, not here.
 
 - **Scope.** A closed list: replies, status updates, skill announcements, PR
   bodies, journal entries, subagent results. Do not apply to files that the
-  agent edits: code, comments, docs, specs, plans, CLI and hook messages.
+  agent edits: code, comments, docs, specs, plans, CLI and hook messages. Do
+  not apply to commit messages.
   Copy code, commands, paths, identifiers, quoted output and quoted words of
   the operator exactly. If the operator, a skill or a caller gives a format or
   exact words, use them; write only the agent's own sentences in STE.
@@ -202,8 +208,11 @@ The PR body records this under the explainers-currency rule.
   permission explicitly (§5.A, Insight blocks).
 - **Short sentences can remove necessary detail.** The text keeps all content
   of errors and warnings, and it permits lists for complex information.
-- **Token cost.** The text adds approximately 600 input tokens to each request.
-  The prompt cache absorbs most of the cost.
+- **Token cost.** In the Claude Code main thread, both carriers load: the style
+  (about 400 words) and the rule in `~/.claude/rules/` (about 460 words). This
+  adds approximately 1,100 input tokens to each request. The copies are
+  identical, so behaviour does not change. The prompt cache absorbs most of the
+  cost. Subagents load only the rule.
 
 ## 7. Test Plan
 
@@ -235,5 +244,5 @@ Post-merge (operator-driven):
 | id | capability | acceptance | level |
 |---|---|---|---|
 | `ste-style-forced-in-claude-code` | output-tone | With super-fr enabled, Claude Code replies use the STE style, and the operator selects nothing. | unit + operator walk |
-| `ste-rule-reaches-every-harness` | output-tone | The STE rule installs for Claude Code, OpenCode and Hermes, and it reaches the phase executor. | unit + tripwire |
+| `ste-rule-reaches-every-harness` | output-tone | The STE rule installs for Claude Code and Hermes, loads in OpenCode sessions inside this repo, and reaches the phase executor. | unit + tripwire |
 | `ste-insight-blocks-kept-short` | output-tone | When another plugin asks for Insight blocks, the blocks stay, in STE, and replies do not get longer. | operator walk |

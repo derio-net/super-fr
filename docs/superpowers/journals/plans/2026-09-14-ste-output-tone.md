@@ -104,3 +104,38 @@ During P3.T1.S3 refactor, parametrized test_shared_text_uses_no_filler_outside_q
 ### cf0f14f90a5b · discovery · test_install_sh.py lives under tests/integration/, not tests/unit/ (phase 3)
 
 P3.T2.S3 names tests/unit/test_install_sh.py; the file is actually tests/integration/test_install_sh.py (tests/unit/test_hermes_install_cmd.py is correct). Ran the integration path instead: uv run pytest tests/integration/test_install_sh.py tests/unit/test_hermes_install_cmd.py -q --no-cov -> 43 passed.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i1-opencode-consumers created=2026-09-14T23:07:13 phase=3 state=fixed -->
+### r3-i1-opencode-consumers · finding [fixed] · I1 OpenCode instructions never reach consumer machines (phase 3)
+
+Verified: scripts/install.sh (lines 535-558) copies OpenCode skills and commands only; no installer delivers .opencode/instructions, so the rule loads in OpenCode only inside this repo (opencode.json). Pre-existing gap, affects every shipped rule. Fixed by narrowing the claim: spec §2, §3 and the §8 row now say OpenCode gets the rule only inside this repo; phase 4 narrows the matrix row text before any status flip. Consumer delivery is listed as a follow-up in the PR body.
+
+<!-- fr:journal kind=finding scope=plan id=r3-m2-token-cost created=2026-09-14T23:07:17 phase=3 state=fixed -->
+### r3-m2-token-cost · finding [fixed] · M2 Token cost understated (phase 3)
+
+Main thread loads both carriers (style ~400 words + rule ~460 words), ~1,100 input tokens, not 600. Spec §6 corrected.
+
+<!-- fr:journal kind=finding scope=plan id=r3-m3-rule-header-paths created=2026-09-14T23:07:21 phase=3 state=fixed -->
+### r3-m3-rule-header-paths · finding [fixed] · M3 Rule header named repo paths in every session (phase 3)
+
+The globally installed rule header named plugins/ and docs/superpowers/ paths that do not exist in consumer repos. Header cut to: plugin also sends this text as an output style; output styles do not reach subagents or other harnesses; licence note.
+
+<!-- fr:journal kind=finding scope=plan id=r3-m4-commit-messages created=2026-09-14T23:07:24 phase=3 state=fixed -->
+### r3-m4-commit-messages · finding [fixed] · M4 Commit messages neither in nor out of scope (phase 3)
+
+Added 'Do not apply them to commit messages.' to both carriers (consistent with d1 and spec-review R1), spec §5.A updated. TDD: scope test asserted it first (1 failed, 9 passed), then green.
+
+<!-- fr:journal kind=finding scope=plan id=r3-m5-identity-strip created=2026-09-14T23:07:27 phase=3 state=fixed -->
+### r3-m5-identity-strip · finding [fixed] · M5 Identity test compared stripped blocks (phase 3)
+
+Added _raw_block: the identity test compares the unstripped bytes between the markers, after the marker count/order checks.
+
+<!-- fr:journal kind=decision scope=plan id=r3-m6-hermes-row-text created=2026-09-14T23:07:30 phase=3 -->
+### r3-m6-hermes-row-text · decision · M6 hermes-rules-soul-block row says three shipped rules (phase 3)
+
+Pre-existing matrix text drift (five shipped rules now). Deferred to P4.T2.S2, which edits matrix.yaml anyway.
+
+<!-- fr:journal kind=finding scope=plan id=r3-m6-uninstall-gap created=2026-09-14T23:07:33 phase=3 state=refuted -->
+### r3-m6-uninstall-gap · finding [refuted] · M6 --uninstall misses fr-isolation-required and no-claude-p-batch (phase 3)
+
+Pre-existing, tracked as open finding a3228f0cb118 in plan 2026-09-04-worktree-traceability. Out of scope here; this plan's own rule has its uninstall line.

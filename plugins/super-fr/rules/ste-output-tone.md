@@ -1,10 +1,7 @@
 # ste-output-tone — Simplified Technical English replies (shipped rule)
 
-super-fr delivers one tone text through two carriers. In Claude Code, the
-forced output style `plugins/super-fr/output-styles/simplified-technical-english.md`
-carries it. This rule carries the same text to subagents, OpenCode and
-Hermes, because output styles do not reach them. A test keeps the two
-texts identical. Spec: `docs/superpowers/specs/2026-09-14-ste-output-tone-design.md`.
+The super-fr plugin also sends this text as an output style. Output styles do
+not reach subagents or other harnesses, so this rule carries the same text.
 
 The ASD-STE100 standard permits reproduction only with written authority
 from ASD. Thus this text paraphrases its principles and ships no dictionary.
@@ -21,7 +18,7 @@ Apply these rules to replies, status updates, skill announcements, PR bodies,
 journal entries and subagent results.
 
 Do not apply them to files that you edit: code, comments, docs, specs, plans,
-or CLI and hook messages.
+or CLI and hook messages. Do not apply them to commit messages.
 
 Copy code, commands, paths, identifiers, quoted output and the quoted words of
 the operator exactly.

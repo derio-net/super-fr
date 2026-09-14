@@ -17,7 +17,7 @@ Apply these rules to replies, status updates, skill announcements, PR bodies,
 journal entries and subagent results.
 
 Do not apply them to files that you edit: code, comments, docs, specs, plans,
-or CLI and hook messages.
+or CLI and hook messages. Do not apply them to commit messages.
 
 Copy code, commands, paths, identifiers, quoted output and the quoted words of
 the operator exactly.
