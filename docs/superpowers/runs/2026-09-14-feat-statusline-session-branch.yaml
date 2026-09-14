@@ -1,0 +1,21 @@
+run: 2026-09-14-feat-statusline-session-branch
+workflow: fr-goal@1
+branch: feat/statusline-session-branch
+started: '2026-09-14T19:04:17+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: pending
