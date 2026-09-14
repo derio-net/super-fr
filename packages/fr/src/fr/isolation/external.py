@@ -27,9 +27,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fr.isolation.hostworktree import SECRET_NEEDS_DEVCONTAINER
 from fr.isolation.local import GcAction, Runner, subprocess_runner
 from fr.isolation.types import (
+    SECRET_NEEDS_DEVCONTAINER,
     IsolationError,
     IsolationState,
     _git_common_dir,

@@ -23,11 +23,13 @@ from typing import IO, Any, ClassVar
 
 from fr._hosts import detect_backend
 from fr.isolation.secrets import (
+    TOKEN_DIR_ROOT,
     ProfileContext,
     SecretProvider,
-    host_token_dir,
+    canonical_token_dir,
     provider_for,
     remove_token_dir,
+    resolve_token_dir,
 )
 from fr.isolation.types import (
     IsolationError,
@@ -386,7 +388,11 @@ class LocalWorktreeDevcontainerTarget:
         return state
 
     def exec(self, state: IsolationState, argv: list[str], keys: Sequence[str] = ()) -> int:
-        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
+        if not keys:
+            # Back-compat (review m1): a plain exec never reads fr-profiles.yaml
+            # or builds a provider — a malformed profile config must not break
+            # the exec that worked before secret providers existed.
+            return self._devcontainer_exec(state, (), argv)
         ctx = self._profile_context(state.profile, state.worktree)
         # Fail fast on an undeclared key BEFORE anything is minted: the
         # profile's `secrets:` list is the allow-list for `--secret`.
@@ -398,30 +404,37 @@ class LocalWorktreeDevcontainerTarget:
                 ".devcontainer/fr-profiles.yaml (fr init scaffold --secret KEY)."
             )
         provider = self._provider(ctx)
-        wrap = provider.exec_wrap(ctx, want_secrets=bool(keys))
-        # `--remote-env` is host-ps-visible, so it carries ONLY the wrap's
-        # declared non-secret env (empty for both shipped providers). The
-        # secret itself never rides argv — infisical reads its token from the
-        # bind-mounted per-exec file inside the container.
-        remote_env = [f"--remote-env={k}={v}" for k, v in wrap.exec_env.items()]
         try:
-            result = self.run(
-                [
-                    "devcontainer",
-                    "exec",
-                    f"--workspace-folder={state.worktree}",
-                    f"--config={config}",
-                    *remote_env,
-                    *wrap.argv_prefix,
-                    *argv,
-                ],
-                cwd=state.worktree,
-                capture=False,
-            )
+            # exec_wrap is INSIDE the try (review I3): if it fails after the
+            # mint wrote a token, post_exec still removes it.
+            wrap = provider.exec_wrap(ctx, want_secrets=True)
+            # `--remote-env` is host-ps-visible, so it carries ONLY the wrap's
+            # declared non-secret env (empty for both shipped providers). The
+            # secret itself never rides argv — infisical reads its token from
+            # the bind-mounted per-exec file inside the container.
+            remote_env = [f"--remote-env={k}={v}" for k, v in wrap.exec_env.items()]
+            return self._devcontainer_exec(state, (*remote_env, *wrap.argv_prefix), argv)
         finally:
             # Success OR abort: the token is consumed at command start, so it
             # must not outlive the exec (review finding C2).
             provider.post_exec(ctx)
+
+    def _devcontainer_exec(
+        self, state: IsolationState, prefix: Sequence[str], argv: Sequence[str]
+    ) -> int:
+        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
+        result = self.run(
+            [
+                "devcontainer",
+                "exec",
+                f"--workspace-folder={state.worktree}",
+                f"--config={config}",
+                *prefix,
+                *argv,
+            ],
+            cwd=state.worktree,
+            capture=False,
+        )
         return result.returncode
 
     def restart(self, state: IsolationState, force: bool = False) -> str:
@@ -644,10 +657,11 @@ class LocalWorktreeDevcontainerTarget:
         """Stop + rm the devcontainer and reclaim its image, verifying the
         post-condition. Overridden to a no-op by docker-less modes.
 
-        Runs the secret provider's `cleanup` first — after the open-PR guard
-        (a refused `down` changes nothing) and while the worktree, which holds
-        the profile config the provider reads, still exists."""
-        self._cleanup_secrets(state)
+        Runs the secret provider's `cleanup` LAST — after the container is
+        verified gone (a teardown that raises keeps the workspace, whose
+        container still bind-mounts the token dir; review m2) and while the
+        worktree, which holds the profile config the provider reads, still
+        exists (the worktree removal follows in `_down_worktree_tail`)."""
         # A FAILED `docker ps` (daemon unreachable) must NOT be read as "no
         # container" — that path would `delete_state()` while a container may
         # still be running once the daemon recovers, the exact #354 leak. So the
@@ -676,6 +690,9 @@ class LocalWorktreeDevcontainerTarget:
                     "status`); retry `fr isolation down` once docker recovers."
                 )
             self._reclaim_image(image)
+        # Only once the container is verified gone (or was never there) may the
+        # token dir it bind-mounted be removed (review m2).
+        self._cleanup_secrets(state)
 
     def _spawn_gc(self) -> None:
         """Fire the opportunistic background sweep — best-effort, never raises
@@ -749,6 +766,7 @@ class LocalWorktreeDevcontainerTarget:
                 self._label_reap(rec.container_id)
                 if rec.state is not None:  # dangling state file, if any
                     delete_state(rec.state.repo_root, rec.state.branch)
+                self._reap_orphan_tokens(rec)
                 return GcAction(wt, None, "orphan", "reaped", rec.container_id)
             except Exception as e:  # reap is best-effort; never abort the sweep
                 return GcAction(wt, None, "orphan", "reap-failed", str(e))
@@ -821,6 +839,7 @@ class LocalWorktreeDevcontainerTarget:
             return GcAction(wt, state.branch, "orphan", "would-reap", "stale state record")
         try:
             delete_state(state.repo_root, state.branch)
+            self._reap_orphan_tokens(rec)
             return GcAction(wt, state.branch, "orphan", "reaped", "stale state record")
         except Exception as e:  # per-workspace; never abort the host-wide sweep
             return GcAction(wt, state.branch, "orphan", "reap-failed", str(e))
@@ -1317,17 +1336,49 @@ class LocalWorktreeDevcontainerTarget:
 
     def _cleanup_secrets(self, state: IsolationState) -> None:
         """Provider `cleanup` at teardown (spec §3: nothing secret survives
-        `down`), plus an UNCONDITIONAL removal of the workspace's token dir
-        (review finding I1): an unreadable / missing profile config would make
-        `provider_for` fall back to env-file (or raise) and skip the infisical
-        cleanup, leaving an aborted exec's token on the host. Best-effort — a
-        provider error never blocks the docker teardown."""
+        `down`), plus an UNCONDITIONAL removal of this workspace's token dir
+        (June review finding I1): an unreadable / missing profile config would
+        make `provider_for` fall back to env-file (or raise) and skip the
+        infisical cleanup, leaving an aborted exec's token on the host.
+        Best-effort throughout — nothing here may block the teardown."""
         try:
             ctx = self._profile_context(state.profile, state.worktree)
             self._provider(ctx).cleanup(ctx)
-        except Exception as e:  # never block the docker teardown on the provider
+        except Exception as e:  # never block the teardown on the provider
             print(f"warning: secret provider cleanup skipped: {e}", file=sys.stderr)
-        remove_token_dir(host_token_dir(self.repo_root.name, state.profile))
+        try:
+            remove_token_dir(self._workspace_token_dir(state))
+        except Exception as e:
+            print(f"warning: token dir removal skipped: {e}", file=sys.stderr)
+
+    def _workspace_token_dir(self, state: IsolationState) -> Path:
+        """This workspace's host token dir: from the committed mount when the
+        devcontainer.json is readable (review I2), else the canonical scaffold
+        layout `~/.cache/fr/run-tokens/<main-checkout>/<profile>/<worktree-basename>`."""
+        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
+        try:
+            return resolve_token_dir(config, state.worktree)
+        except IsolationError:
+            return canonical_token_dir(self.repo_root.name, state.profile, state.worktree)
+
+    def _reap_orphan_tokens(self, rec: GcWorkspace) -> None:
+        """gc (review m3): the worktree is gone, so the mount cannot be read —
+        use the canonical layout. With a state record the dir is exact; without
+        one the profile is unknown, so every `<repo-cache-name>/*/<basename>`
+        match is reaped (the default cache layout files worktrees under the
+        repo's cache name, which is also the canonical token-dir key). Best
+        effort: a failure here never aborts the sweep."""
+        try:
+            if rec.state is not None:
+                st = rec.state
+                remove_token_dir(canonical_token_dir(st.repo_root.name, st.profile, st.worktree))
+                return
+            root = _home().joinpath(*TOKEN_DIR_ROOT) / rec.worktree.parent.name
+            if root.is_dir():
+                for d in root.glob(f"*/{rec.worktree.name}"):
+                    remove_token_dir(d)
+        except Exception:
+            pass
 
     def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:
         return self.run(

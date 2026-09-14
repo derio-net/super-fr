@@ -99,6 +99,13 @@ POST_CREATE = (
 # Appended to postCreate for infisical-provider profiles (no devcontainer
 # feature exists for the Infisical CLI). The operator verifies it on the first
 # real run (see the manual phase / the spec's identity-side TTL note).
+#
+# KNOWN v1 LIMITATION (review m8, recorded as refuted): this is an UNPINNED
+# `curl | sudo bash` of Infisical's apt setup script. Unlike glab/tea, Infisical
+# publishes no checksummed static release artifact for that apt bootstrap that
+# fr could pin a digest against; the .deb it installs is signed by their apt
+# repo key, which is the trust anchor here. Revisit when a pinnable artifact
+# (a versioned tarball + published SHA256 that works on the base image) exists.
 INFISICAL_INSTALL = (
     "curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash; "
     "sudo apt-get install -y infisical || true"
@@ -169,12 +176,18 @@ def scaffold_profile(
         # (composed after any forge-CLI install, never overwriting it), and
         # bind-mount the 0700 host token DIRECTORY the provider writes one 0600
         # per-exec token file into (a directory mount also follows replaced
-        # files, which a single-file bind mount does not).
+        # files, which a single-file bind mount does not). Per WORKSPACE via
+        # ${localWorkspaceFolderBasename} (review I1): two worktrees on one
+        # profile must never share a dir that one `down` rips out from under
+        # the other's live container. The provider resolves the host dir FROM
+        # this mount at runtime (review I2), so the name baked here is the
+        # source of truth even in a differently named clone.
         post_create = f"{post_create}; {INFISICAL_INSTALL}"
         run_args = [
             "--mount",
             f"type=bind,source=${{localEnv:HOME}}/.cache/fr/run-tokens/"
-            f"{repo_root.name}/{profile},target={CONTAINER_TOKEN_DIR}",
+            f"{repo_root.name}/{profile}/${{localWorkspaceFolderBasename}},"
+            f"target={CONTAINER_TOKEN_DIR}",
         ]
     else:
         run_args = [
@@ -218,6 +231,17 @@ def scaffold_profile(
             "export FR_INFISICAL_CLIENT_ID / FR_INFISICAL_CLIENT_SECRET on the host.",
             file=sys.stderr,
         )
+        leftover = env_file_path(repo_root, profile)
+        if leftover.is_file():
+            # Re-scaffolded from env-file (review m8): the host env-file still
+            # holds plaintext values nothing mounts any more. Warn; never delete
+            # operator data.
+            print(
+                f"warning: {leftover} still exists from this profile's env-file days and may "
+                "hold plaintext secret values that nothing mounts any more — review and "
+                "delete it yourself (fr never removes operator secrets).",
+                file=sys.stderr,
+            )
     else:
         _ensure_env_placeholders(
             env_file_path(repo_root, profile), repo_root.name, profile, secrets

@@ -280,9 +280,11 @@ def exec(  # noqa: A001 - typer command name
         [],
         "--secret",
         "-s",
-        help="Declared secret KEY this command needs (repeatable). Devcontainer mode "
-        "only: an infisical profile fetches it on demand for this one exec; the "
-        "value never touches argv or the terminal. An undeclared key fails fast.",
+        help="Run this command with the profile's Infisical secrets (devcontainer mode, "
+        "secret_provider: infisical). Injects EVERYTHING under the profile's Infisical "
+        "path for this one exec — KEY is checked against the profile's declared "
+        "`secrets:` (undeclared → exit 2, nothing minted), it does not narrow the set. "
+        "Values never touch argv or the terminal. Repeatable.",
     ),
 ) -> None:
     """Run a command inside the isolation container (exit code passthrough)."""

@@ -1,9 +1,14 @@
 """Phase 3/5: SecretProvider wired into the devcontainer Target (up/exec/down)
 + the `fr isolation exec --secret` CLI. The provider_factory seam (like the
-Runner seam) lets these run without a live Infisical."""
+Runner seam) lets these run without a live Infisical.
+
+Token dirs are per-workspace and follow the profile's mount (review I1/I2):
+`~/.cache/fr/run-tokens/<repo>/<profile>/<worktree-basename>`."""
 
 from __future__ import annotations
 
+import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -12,16 +17,18 @@ from fr.cli import app
 from fr.commands import isolation_cmd
 from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from fr.isolation.secrets import (
+    CONTAINER_TOKEN_DIR,
     ExecWrap,
     InfisicalProvider,
     ProfileContext,
     UniversalAuth,
-    host_token_dir,
+    canonical_token_dir,
 )
 from fr.isolation.types import IsolationError, IsolationState
 from typer.testing import CliRunner
 
-from tests.unit.test_isolation import make_repo
+from tests.unit.test_isolation import FakeRunner as DockerFakeRunner
+from tests.unit.test_isolation import _gc_env, make_repo
 
 runner = CliRunner()
 
@@ -40,6 +47,15 @@ class FakeRunner:
         return [c for c in self.calls if c[0] == binary]
 
 
+class _RecordingMinter:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, argv, env) -> str:
+        self.calls += 1
+        return "tok-secret"
+
+
 def _fake_mint(argv, env) -> str:
     return "tok-secret"
 
@@ -48,31 +64,68 @@ def _infisical_factory(ctx: ProfileContext) -> InfisicalProvider:
     return InfisicalProvider(auth=UniversalAuth(minter=_fake_mint), validate=lambda c: None)
 
 
+def _mount(repo: str, profile: str) -> str:
+    return (
+        f"type=bind,source=${{localEnv:HOME}}/.cache/fr/run-tokens/{repo}/{profile}/"
+        f"${{localWorkspaceFolderBasename}},target={CONTAINER_TOKEN_DIR}"
+    )
+
+
+PROFILES_YAML = (
+    "default: sec\n"
+    "profiles:\n"
+    "  sec:\n"
+    "    secret_provider: infisical\n"
+    "    secrets: [DEPLOY_KEY]\n"
+    "    infisical:\n"
+    "      project_id: p1\n"
+    "      env: prod\n"
+    "      path: /fr/x\n"
+    "      auth:\n"
+    "        method: universal-auth\n"
+    "        client_id_env: FR_CID\n"
+    "        client_secret_env: FR_CSEC\n"
+)
+
+
+def _write_infisical_profile(
+    root: Path, repo_name: str, profiles_yaml: str = PROFILES_YAML
+) -> None:
+    d = root / ".devcontainer" / "sec"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "devcontainer.json").write_text(
+        json.dumps({"image": "x", "runArgs": ["--mount", _mount(repo_name, "sec")]})
+    )
+    (root / ".devcontainer" / "fr-profiles.yaml").write_text(profiles_yaml)
+
+
 def _setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, IsolationState]:
+    """A bare (non-git) repo dir + worktree dir carrying an infisical profile —
+    enough for exec, which never touches git."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo = tmp_path / "repo"
     repo.mkdir()
     wt = tmp_path / "wt"
-    d = wt / ".devcontainer" / "sec"
-    d.mkdir(parents=True)
-    (d / "devcontainer.json").write_text('{"image": "x"}')
-    (wt / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "default: sec\n"
-        "profiles:\n"
-        "  sec:\n"
-        "    secret_provider: infisical\n"
-        "    secrets: [DEPLOY_KEY]\n"
-        "    infisical:\n"
-        "      project_id: p1\n"
-        "      env: prod\n"
-        "      path: /fr/x\n"
-        "      auth:\n"
-        "        method: universal-auth\n"
-        "        client_id_env: FR_CID\n"
-        "        client_secret_env: FR_CSEC\n"
-    )
+    _write_infisical_profile(wt, "repo")
     st = IsolationState(repo_root=repo, branch="feat/s", worktree=wt, profile="sec", created_at="t")
     return repo, wt, st
+
+
+def _token_dir(tmp_path: Path) -> Path:
+    return canonical_token_dir("repo", "sec", tmp_path / "wt")
+
+
+def _infisical_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A REAL git repo with a committed infisical profile, for up/down tests."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    _write_infisical_profile(repo, repo.name)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "p"],
+        check=True,
+    )
+    return repo
 
 
 def test_exec_with_secret_prefixes_infisical_run_and_hides_token(
@@ -142,7 +195,7 @@ def test_exec_clears_token_after_run(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("FR_CID", "id")
     monkeypatch.setenv("FR_CSEC", "secret-val")
     repo, _, st = _setup(tmp_path, monkeypatch)
-    d = host_token_dir("repo", "sec")
+    d = _token_dir(tmp_path)
     watcher = _TokenDirWatcher(d)
     target = LocalWorktreeDevcontainerTarget(
         repo, runner=watcher, provider_factory=_infisical_factory
@@ -156,7 +209,7 @@ def test_exec_clears_token_on_abort(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("FR_CID", "id")
     monkeypatch.setenv("FR_CSEC", "secret-val")
     repo, _, st = _setup(tmp_path, monkeypatch)
-    d = host_token_dir("repo", "sec")
+    d = _token_dir(tmp_path)
     watcher = _TokenDirWatcher(d, fail=True)
     target = LocalWorktreeDevcontainerTarget(
         repo, runner=watcher, provider_factory=_infisical_factory
@@ -167,6 +220,64 @@ def test_exec_clears_token_on_abort(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert list(d.iterdir()) == []  # finally → post_exec ran even though the exec aborted
 
 
+class _LeakyProvider:
+    """exec_wrap mints (writes a file) and THEN fails — the shape of a KeyError
+    on a half-written profile after the token hit disk (review I3)."""
+
+    def __init__(self, token_dir: Path) -> None:
+        self.token_dir = token_dir
+        self.events: list[str] = []
+
+    def up_prepare(self, ctx: ProfileContext) -> None: ...
+
+    def exec_wrap(self, ctx: ProfileContext, want_secrets: bool) -> ExecWrap:
+        self.token_dir.mkdir(parents=True, exist_ok=True)
+        (self.token_dir / "x.token").write_text("tok")
+        raise KeyError("path")
+
+    def post_exec(self, ctx: ProfileContext) -> None:
+        self.events.append("post_exec")
+        shutil.rmtree(self.token_dir, ignore_errors=True)
+
+    def cleanup(self, ctx: ProfileContext) -> None: ...
+
+
+def test_exec_wrap_failure_after_mint_still_runs_post_exec(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _, st = _setup(tmp_path, monkeypatch)
+    d = _token_dir(tmp_path)
+    leaky = _LeakyProvider(d)
+    fr_ = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=fr_, provider_factory=lambda c: leaky)
+    with pytest.raises(KeyError):
+        target.exec(st, ["pytest"], keys=["DEPLOY_KEY"])
+    assert leaky.events == ["post_exec"]  # exec_wrap is INSIDE the try/finally
+    assert not d.exists()
+    assert fr_.argv_for("devcontainer") == []
+
+
+def test_exec_secret_with_incomplete_infisical_block_raises_before_mint_and_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FR_CID", "id")
+    monkeypatch.setenv("FR_CSEC", "secret-val")
+    repo, wt, st = _setup(tmp_path, monkeypatch)
+    _write_infisical_profile(wt, "repo", PROFILES_YAML.replace("      path: /fr/x\n", ""))
+    minter = _RecordingMinter()
+    fr_ = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(
+        repo,
+        runner=fr_,
+        provider_factory=lambda c: InfisicalProvider(auth=UniversalAuth(minter=minter)),
+    )
+    with pytest.raises(IsolationError, match="path"):
+        target.exec(st, ["pytest"], keys=["DEPLOY_KEY"])
+    assert minter.calls == 0
+    assert fr_.argv_for("devcontainer") == []
+    assert not _token_dir(tmp_path).exists()
+
+
 def test_exec_without_secret_mints_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo, _, st = _setup(tmp_path, monkeypatch)  # FR_CID/FR_CSEC deliberately unset
     fr_ = FakeRunner()
@@ -174,7 +285,30 @@ def test_exec_without_secret_mints_nothing(tmp_path: Path, monkeypatch: pytest.M
     assert target.exec(st, ["pytest"]) == 0
     (call,) = fr_.argv_for("devcontainer")
     assert "infisical" not in " ".join(call)  # no wrap
-    assert not host_token_dir("repo", "sec").exists()  # no mint, no file
+    assert not _token_dir(tmp_path).exists()  # no mint, no file
+
+
+@pytest.mark.parametrize(
+    "yaml_text",
+    [
+        "profiles: [unclosed\n",
+        "profiles: null\n",
+        "default: sec\nprofiles:\n  sec:\n    secret_provider: vaultt\n",
+    ],
+)
+def test_plain_exec_never_reads_the_profile_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, yaml_text: str
+) -> None:
+    """Back-compat (review m1): without --secret, exec must not parse
+    fr-profiles.yaml or build a provider — a malformed file, a null `profiles:`
+    or a typo'd secret_provider must not break the exec that worked before."""
+    repo, wt, st = _setup(tmp_path, monkeypatch)
+    (wt / ".devcontainer" / "fr-profiles.yaml").write_text(yaml_text)
+    fr_ = FakeRunner()
+    target = LocalWorktreeDevcontainerTarget(repo, runner=fr_)  # the REAL provider_for
+    assert target.exec(st, ["echo", "hi"]) == 0
+    (call,) = fr_.argv_for("devcontainer")
+    assert call[-2:] == ["echo", "hi"]
 
 
 class _SpyProvider:
@@ -215,14 +349,61 @@ def test_up_and_down_run_provider_up_prepare_and_cleanup(
     assert not st.worktree.exists()
 
 
+def test_down_of_one_workspace_leaves_sibling_workspace_tokens(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review I1: two workspaces on ONE profile each own a token dir; tearing A
+    down must not touch B's dir (B's container has it bind-mounted and may have
+    an exec in flight)."""
+    repo = _infisical_repo(tmp_path, monkeypatch)
+    target = LocalWorktreeDevcontainerTarget(
+        repo, runner=FakeRunner(), provider_factory=_infisical_factory
+    )
+    a = target.up(profile=None, branch="feat/a")
+    b = target.up(profile=None, branch="feat/b")
+    dir_a = canonical_token_dir(repo.name, "sec", a.worktree)
+    dir_b = canonical_token_dir(repo.name, "sec", b.worktree)
+    assert dir_a.is_dir() and dir_b.is_dir() and dir_a != dir_b  # up_prepare, per workspace
+    (dir_b / "inflight.token").write_text("tok-b")
+
+    target.down(a, force=True)
+
+    assert not dir_a.exists()
+    assert (dir_b / "inflight.token").read_text() == "tok-b"  # B untouched
+
+
+def test_up_prepare_follows_the_committed_mount_not_the_runtime_repo_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review I2: the mount was baked with the scaffold-time repo name
+    (`other-clone`); the runtime target's repo_root is `repo`. The host dir the
+    provider prepares must be the one the container will actually bind-mount."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    _write_infisical_profile(repo, "other-clone")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "p"],
+        check=True,
+    )
+    target = LocalWorktreeDevcontainerTarget(
+        repo, runner=FakeRunner(), provider_factory=_infisical_factory
+    )
+    st = target.up(profile=None, branch="feat/x")
+    assert canonical_token_dir("other-clone", "sec", st.worktree).is_dir()
+    assert not canonical_token_dir("repo", "sec", st.worktree).exists()
+
+
 @pytest.mark.parametrize("config", ["missing", "corrupt"])
 def test_down_removes_token_dir_even_when_profile_config_is_unreadable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: str
 ) -> None:
-    """Review finding I1: with the REAL provider_for, a missing fr-profiles.yaml
-    falls back to env-file (whose cleanup is a no-op) and a corrupt one raises
-    — either way the provider path would skip the token dir. The devcontainer
-    teardown removes host_token_dir(repo, profile) unconditionally."""
+    """Review finding I1 (June): with the REAL provider_for, a missing
+    fr-profiles.yaml falls back to env-file (whose cleanup is a no-op) and a
+    corrupt one raises — either way the provider path would skip the token dir.
+    The devcontainer teardown removes this workspace's canonical token dir
+    unconditionally (the mount is unreadable too — an env-file devcontainer.json
+    — so the canonical layout is the fallback)."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo = make_repo(tmp_path, ["sec"], default="sec")  # no secret_provider key
     target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
@@ -232,7 +413,7 @@ def test_down_removes_token_dir_even_when_profile_config_is_unreadable(
         cfg.unlink()
     else:
         cfg.write_text("profiles: [unclosed\n")
-    d = host_token_dir("repo", "sec")
+    d = canonical_token_dir("repo", "sec", st.worktree)
     d.mkdir(parents=True)
     (d / "leftover.token").write_text("tok-old")  # a crash left a token behind
 
@@ -240,6 +421,65 @@ def test_down_removes_token_dir_even_when_profile_config_is_unreadable(
 
     assert not d.exists()
     assert not st.worktree.exists()  # the teardown itself was not blocked
+
+
+def test_teardown_keeps_token_dir_until_the_container_is_verified_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review m2: if `docker rm` fails verification the workspace is KEPT (state
+    intact, container still up) — its bind-mount source must still exist."""
+    repo = _infisical_repo(tmp_path, monkeypatch)
+    docker = DockerFakeRunner(fail_on="rm", stdout={"docker": "cid running"})
+    target = LocalWorktreeDevcontainerTarget(
+        repo, runner=docker, provider_factory=_infisical_factory
+    )
+    st = target.up(profile=None, branch="feat/s")
+    d = canonical_token_dir(repo.name, "sec", st.worktree)
+    assert d.is_dir()
+
+    with pytest.raises(IsolationError, match="still present"):
+        target.down(st, force=True)
+
+    assert d.is_dir()  # not removed ahead of a teardown that did not complete
+    assert st.worktree.exists()
+
+
+def test_gc_stale_state_reap_removes_the_orphan_token_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review m3: a worktree removed out of band leaves its token dir behind;
+    retiring the stale state record also reaps that dir (canonical layout — the
+    mount cannot be read once the worktree is gone)."""
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch)
+    wt = up("feat/gone")
+    d = canonical_token_dir(repo.name, "dev", wt)
+    d.mkdir(parents=True)
+    (d / "left.token").write_text("tok")
+    shutil.rmtree(wt)
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/gone"]
+
+    assert action.action == "reaped"
+    assert not d.exists()
+
+
+def test_gc_label_orphan_reap_removes_the_orphan_token_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review m3, the other orphan path: a container found only by docker label
+    (worktree AND state gone). Without a state record the profile is unknown, so
+    every `<repo>/<profile>/<worktree-basename>` match under the canonical root is reaped."""
+    repo, docker, target, _up = _gc_env(tmp_path, monkeypatch)
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / repo.name / "feat__gone"
+    docker.docker_labels = [("cOrph", str(gone))]
+    d = canonical_token_dir(repo.name, "dev", gone)
+    d.mkdir(parents=True)
+    (d / "left.token").write_text("tok")
+
+    actions = [a for a in target.gc() if a.verdict == "orphan"]
+
+    assert actions and actions[0].action == "reaped"
+    assert not d.exists()
 
 
 def test_cli_secret_undeclared_exits_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
