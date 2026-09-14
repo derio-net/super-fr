@@ -1,0 +1,120 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Rule carrier and harness wiring — Claude Code, OpenCode, Hermes
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - ste-rule-reaches-every-harness
+tasks:
+- number: 1
+  title: Rule file with an identical shared block
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: append to tests/unit/test_ste_output_tone.py:
+      BEGIN append
+      RULE = REPO_ROOT / "plugins/super-fr/rules/ste-output-tone.md"
+
+
+      def test_rule_block_is_identical_to_style_block() -> None:
+          assert _shared_block(RULE) == _shared_block(STYLE), (
+              "rules/ste-output-tone.md and the output style must carry the same "
+              "ste-shared text — copy the style block into the rule"
+          )
+      END append
+      Run `uv run pytest tests/unit/test_ste_output_tone.py -q --no-cov`.
+      Expected: 1 failed (rule file missing), 4 passed.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: create plugins/super-fr/rules/ste-output-tone.md. Its content is
+      this header, then a blank line, then the marker lines and the block copied
+      byte for byte from the style file (from `<!-- ste-shared:start -->` to
+      `<!-- ste-shared:end -->` inclusive):
+      BEGIN header
+      # ste-output-tone — Simplified Technical English replies (shipped rule)
+
+      super-fr delivers one tone text through two carriers. In Claude Code, the
+      forced output style `plugins/super-fr/output-styles/simplified-technical-english.md`
+      carries it. This rule carries the same text to subagents, OpenCode and
+      Hermes, because output styles do not reach them. A test keeps the two
+      texts identical. Spec: `docs/superpowers/specs/2026-09-14-ste-output-tone-design.md`.
+
+      The ASD-STE100 standard permits reproduction only with written authority
+      from ASD. Thus this text paraphrases its principles and ships no dictionary.
+      END header
+      Run the same pytest command. Expected: 5 passed.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: none needed — the test is the single source of the identity
+      check. Confirm `uv run ruff check tests/unit/test_ste_output_tone.py` passes.
+- number: 2
+  title: Install, OpenCode and Hermes wiring
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: in tests/unit/test_tripwire_hermes_rules_sync.py add
+      "ste-output-tone" to SHIPPED_RULES and change "the four *shipped* plugin
+      rules (...)" in the docstring to list five, including ste-output-tone. Run
+      `uv run pytest tests/unit/test_install_copies_rules.py
+      tests/unit/test_tripwire_opencode_instructions_sync.py
+      tests/unit/test_tripwire_hermes_rules_sync.py -q --no-cov`.
+      Expected failures: install (ste-output-tone.md not installed), OpenCode
+      instructions drift, Hermes canonical-rules set mismatch.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: (a) scripts/install.sh, section "# 7. Rules": after the
+      fr-worktree-override.md echo line add
+      `cp "$PLUGIN_ROOT/plugins/super-fr/rules/ste-output-tone.md" "$RULES_DIR/ste-output-tone.md"`
+      and `echo "  Installed $RULES_DIR/ste-output-tone.md (Simplified Technical English tone)"`.
+      In the `--uninstall` block add `rm -f "$RULES_DIR/ste-output-tone.md"` after
+      the fr-worktree-override rm line, and change its echo to
+      "  Removed fr/vk plan-override, fr-worktree-override and ste-output-tone rules".
+      (b) scripts/sync-hermes.py: add "ste-output-tone" to SHIPPED_RULE_NAMES.
+      (c) Run `uv run scripts/sync-opencode.py` and `uv run scripts/sync-hermes.py`.
+      Re-run the three tests from S1. Expected: all pass.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: AGENTS.md, section "Skills/rules: canonical source vs. generated
+      mirrors": the canonical rule list reads "(currently `fr-isolation-required.md`,
+      `fr-plan-override.md`, `no-claude-p-batch.md`)" — make it list all five
+      shipped rules, adding `fr-worktree-override.md` and `ste-output-tone.md`.
+      Run `uv run scripts/sync-opencode.py --check` and
+      `uv run scripts/sync-hermes.py --check` (both in sync), and
+      `uv run pytest tests/unit/test_install_sh.py tests/unit/test_hermes_install_cmd.py -q --no-cov`.
+      Commit: `feat(rules): ship ste-output-tone rule to every harness` (rule,
+      install.sh, sync-hermes.py, tripwire test, .opencode/instructions,
+      .hermes/SOUL.d, AGENTS.md).
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

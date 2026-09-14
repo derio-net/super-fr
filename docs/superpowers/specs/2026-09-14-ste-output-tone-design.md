@@ -214,6 +214,7 @@ Post-merge (operator-driven):
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-09-14-ste-output-tone | `derio-net/super-fr` | `2026-09-14-ste-output-tone` | — |
 
 ## 8. Acceptance rows (born here; presented at spec review)
 

@@ -1,0 +1,116 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Phase executor line, minor release, acceptance rows, full gate
+  tag: agentic
+  tier: mechanical
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - ste-style-forced-in-claude-code
+  - ste-rule-reaches-every-harness
+  - ste-insight-blocks-kept-short
+tasks:
+- number: 1
+  title: Phase executor returns in STE
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: append to tests/unit/test_ste_output_tone.py:
+      BEGIN append
+      EXECUTOR = REPO_ROOT / "plugins/super-fr/agents/fr-phase-executor.md"
+
+
+      def test_phase_executor_returns_in_ste() -> None:
+          returns = EXECUTOR.read_text().split("## What you return", 1)[1]
+          assert "ste-output-tone" in returns
+      END append
+      Run `uv run pytest tests/unit/test_ste_output_tone.py -q --no-cov`.
+      Expected: 1 failed, 5 passed.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: in plugins/super-fr/agents/fr-phase-executor.md, replace the last
+      line "Keep the prose minimal; the journal holds the detail." with
+      "Keep the prose minimal; the journal holds the detail. Write the result
+      and every journal entry in Simplified Technical English, as the
+      `ste-output-tone` rule specifies." Run the same pytest command, then
+      `uv run pytest tests/unit/test_phase_executor_agent.py tests/unit/test_tripwire_phase_executor_worktree.py -q --no-cov`.
+      Expected: all pass.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: none — a one-line text change. Commit:
+      `feat(agents): phase executor reports in STE`.
+- number: 2
+  title: Minor version bump and acceptance rows
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Run `uv run python scripts/bump-version.py minor` (expected 4.3.0 ->
+      4.4.0; it runs uv sync and checks `uv run fr --version`). Then
+      `uv run --no-project python scripts/bump-version.py --check`.
+      Commit the changed manifests and uv.lock: `chore(release): 4.4.0`.
+  - id: P4.T2.S2
+    text: |-
+      Use the Edit tool on docs/acceptance/matrix.yaml (fr acceptance add
+      refuses an existing id). Copy the `levels` shape of an existing `ci` row.
+      ste-rule-reaches-every-harness: status ci; levels unit =
+      super-fr:tests/unit/test_ste_output_tone.py,
+      super-fr:tests/unit/test_install_copies_rules.py,
+      super-fr:tests/unit/test_tripwire_opencode_instructions_sync.py,
+      super-fr:tests/unit/test_tripwire_hermes_rules_sync.py.
+      ste-style-forced-in-claude-code and ste-insight-blocks-kept-short: status
+      skipped; levels unit = super-fr:tests/unit/test_ste_output_tone.py; notes
+      end with "Unit pins the text in CI; live reply check is the post-merge
+      operator walk (spec §7)."
+      Run `fr acceptance report --deterministic`, then `fr acceptance check`
+      (expected: OK, no failing rows). Commit:
+      `docs(acceptance): STE output tone rows`.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: none — data edits only. Confirm `git status` shows a clean tree.
+- number: 3
+  title: REFACTOR + quality gate
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Run the CI gate from ci.yml in order: `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run pytest -q` (foreground, full, with coverage), `fr validate artifacts`.
+      Expected: all pass. If ruff format changed files, commit
+      `style: ruff format`. Record the pytest summary line in the phase result.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
