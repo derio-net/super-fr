@@ -163,8 +163,11 @@ to show it. The core reads files and runs one `git` call; it never runs the
   `<branch>` when `none` (`no branch` spelled out). No ANSI.
 
 **Budget.** Bound path: 1 `jq` (stdin) + 1 `jq` (index). cwd path: 1 `jq`
-(stdin) + 1 `git` + at most 1 `jq` (state files). Well under the old
-~100 ms. The CI timing guard stays at 0.5 s.
+(stdin) + 1 `git` + at most 1 `jq` (state files). Measured on the operator
+Mac (2026-09-14, /bin/bash 3.2, Xcode git first on PATH): bound ~77 ms,
+unbound in a repo ~100 ms, non-repo ~65 ms, against v1's 120–155 ms for the
+same unbound session. Process start dominates (`bash` and `jq` each
+~36 ms). The CI timing guard stays at 0.5 s.
 
 ### B. Claude Code reference status line (`plugins/super-fr/scripts/fr-statusline-claude.sh`)
 
