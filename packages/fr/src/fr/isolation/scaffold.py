@@ -18,7 +18,7 @@ from pathlib import Path
 import yaml
 
 from fr._hosts import HostBackend
-from fr.isolation.secrets import CONTAINER_TOKEN_PATH
+from fr.isolation.secrets import CONTAINER_TOKEN_DIR
 from fr.isolation.types import IsolationError, harden_secret_file, secrets_env_file
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
@@ -167,12 +167,14 @@ def scaffold_profile(
     if is_infisical:
         # No host secrets env-file. Append the in-container Infisical CLI install
         # (composed after any forge-CLI install, never overwriting it), and
-        # bind-mount the 0600 host token-file the provider writes per request.
+        # bind-mount the 0700 host token DIRECTORY the provider writes one 0600
+        # per-exec token file into (a directory mount also follows replaced
+        # files, which a single-file bind mount does not).
         post_create = f"{post_create}; {INFISICAL_INSTALL}"
         run_args = [
             "--mount",
             f"type=bind,source=${{localEnv:HOME}}/.cache/fr/run-tokens/"
-            f"{repo_root.name}/{profile}.token,target={CONTAINER_TOKEN_PATH}",
+            f"{repo_root.name}/{profile},target={CONTAINER_TOKEN_DIR}",
         ]
     else:
         run_args = [

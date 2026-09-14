@@ -22,7 +22,13 @@ from pathlib import Path
 from typing import IO, Any, ClassVar
 
 from fr._hosts import detect_backend
-from fr.isolation.secrets import ProfileContext, SecretProvider, provider_for
+from fr.isolation.secrets import (
+    ProfileContext,
+    SecretProvider,
+    host_token_dir,
+    provider_for,
+    remove_token_dir,
+)
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -1311,14 +1317,17 @@ class LocalWorktreeDevcontainerTarget:
 
     def _cleanup_secrets(self, state: IsolationState) -> None:
         """Provider `cleanup` at teardown (spec §3: nothing secret survives
-        `down`). Best-effort: an unreadable profile config must not block the
-        docker teardown — the per-exec token files are already gone via
-        `post_exec`, and T2 adds the unconditional token-dir removal."""
+        `down`), plus an UNCONDITIONAL removal of the workspace's token dir
+        (review finding I1): an unreadable / missing profile config would make
+        `provider_for` fall back to env-file (or raise) and skip the infisical
+        cleanup, leaving an aborted exec's token on the host. Best-effort — a
+        provider error never blocks the docker teardown."""
         try:
             ctx = self._profile_context(state.profile, state.worktree)
             self._provider(ctx).cleanup(ctx)
         except Exception as e:  # never block the docker teardown on the provider
             print(f"warning: secret provider cleanup skipped: {e}", file=sys.stderr)
+        remove_token_dir(host_token_dir(self.repo_root.name, state.profile))
 
     def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:
         return self.run(

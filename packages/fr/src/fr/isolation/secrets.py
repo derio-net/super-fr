@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
+from uuid import uuid4
 
 from fr.isolation.types import IsolationError, _home, harden_secret_file
 
@@ -110,15 +111,25 @@ class EnvFileProvider:
 
 # ── Infisical provider (docker substrate; universal-auth) ──────────────────
 
-# The container path the scaffold bind-mounts the host token-file to.
-CONTAINER_TOKEN_PATH = "/run/fr-secrets/infisical.token"
+# The container DIRECTORY the scaffold bind-mounts the host token dir to. A
+# directory, not a file: each secret-bearing exec gets its own uniquely named
+# token file inside it (no shared-file race between concurrent execs), and a
+# single-file bind mount would keep pointing at the old inode once the file is
+# replaced.
+CONTAINER_TOKEN_DIR = "/run/fr-secrets"
 
 
-def host_token_file(repo: str, profile: str) -> Path:
-    """Host path for the per-workspace Infisical token-file (0600). The scaffold
-    bind-mounts this to ``CONTAINER_TOKEN_PATH``; the provider writes the minted
-    short-TTL token here per request and shreds it on cleanup."""
-    return _home() / ".cache" / "fr" / "run-tokens" / repo / f"{profile}.token"
+def host_token_dir(repo: str, profile: str) -> Path:
+    """Host directory (0700) holding the per-exec Infisical token files (0600)
+    for one workspace. The scaffold bind-mounts it to ``CONTAINER_TOKEN_DIR``;
+    `exec_wrap` writes one file per exec, `post_exec` unlinks that file, and
+    `cleanup` removes the directory."""
+    return _home() / ".cache" / "fr" / "run-tokens" / repo / profile
+
+
+def _ensure_token_dir(d: Path) -> None:
+    d.mkdir(parents=True, exist_ok=True)
+    d.chmod(0o700)  # self-heals loose perms on every call
 
 
 # Mint seam: run the host-side mint, return the access token. Injected in tests
@@ -214,30 +225,38 @@ def _default_validate(ctx: ProfileContext) -> None:
 class InfisicalProvider:
     """On-demand, path-scoped runtime secret provider. App-secret values are
     fetched in-container by `infisical run`; the only thing conveyed from the
-    host is a short-TTL token via a 0600 bind-mounted token-file (off all argv)."""
+    host is a short-TTL token via a 0600 file in a bind-mounted 0700 directory
+    (off all argv).
+
+    Instance state: `exec_wrap` remembers the per-exec token path it wrote so
+    `post_exec` can unlink exactly that file. The Target builds ONE provider
+    per exec (`provider_factory(ctx)` inside `exec`), so two concurrent execs
+    never share an instance — that is the assumption this relies on."""
 
     auth: InfisicalAuth
     validate: Callable[[ProfileContext], None] = _default_validate
+    _token_path: Path | None = field(default=None, init=False, repr=False)
 
     def up_prepare(self, ctx: ProfileContext) -> None:
         self.validate(ctx)
-        tf = host_token_file(ctx.repo, ctx.profile)
-        tf.parent.mkdir(parents=True, exist_ok=True)
-        tf.write_text("")  # mount target exists; NO secret persisted at up
-        tf.chmod(0o600)
+        # The mount SOURCE must exist before `devcontainer up`; NO secret at up.
+        _ensure_token_dir(host_token_dir(ctx.repo, ctx.profile))
 
     def exec_wrap(self, ctx: ProfileContext, want_secrets: bool) -> ExecWrap:
         if not want_secrets:
             return ExecWrap()
         token = self.auth.mint_token(ctx)
+        name = f"{uuid4().hex}.token"  # unique per exec: no shared-file race
         if token is not None:  # universal-auth host mint; k8s self-auths in-pod
-            # NOTE: a single token-file per (repo, profile). Concurrent
-            # `--secret` execs on one workspace would race on it; serialize or
-            # use per-exec filenames if that becomes real (rework candidate).
-            tf = host_token_file(ctx.repo, ctx.profile)
-            tf.parent.mkdir(parents=True, exist_ok=True)
-            tf.write_text(token)
-            tf.chmod(0o600)
+            d = host_token_dir(ctx.repo, ctx.profile)
+            _ensure_token_dir(d)
+            tf = d / name
+            # Create 0600 from the first byte — never a window where the file
+            # is readable at the umask default before a chmod.
+            fd = os.open(tf, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write(token)
+            self._token_path = tf
         inf = ctx.config["infisical"]
         # shlex.quote every interpolated value — these come from the committed
         # fr-profiles.yaml, which is PR/branch-reachable, so an un-quoted value
@@ -250,29 +269,48 @@ class InfisicalProvider:
             f"--env {shlex.quote(str(inf['env']))} "
             f"--path {shlex.quote(str(inf['path']))} --"
         )
-        # The token is read from the mounted file INTO the env in-container, so it
-        # never appears on any argv (host or container). $0 / "$@" pass the user
-        # command through verbatim.
-        script = f'INFISICAL_TOKEN="$(cat {shlex.quote(CONTAINER_TOKEN_PATH)})" exec {run} "$@"'
+        # The token is read from THIS exec's mounted file INTO the env
+        # in-container, so it never appears on any argv (host or container).
+        # $0 / "$@" pass the user command through verbatim.
+        token_path = shlex.quote(f"{CONTAINER_TOKEN_DIR}/{name}")
+        script = f'INFISICAL_TOKEN="$(cat {token_path})" exec {run} "$@"'
         return ExecWrap(argv_prefix=("sh", "-lc", script, "fr-secret-wrap"), exec_env={})
 
     def post_exec(self, ctx: ProfileContext) -> None:
-        # Clear the minted token after the command returns (or aborts) — the
+        # Remove THIS exec's token once the command returns (or aborts) — the
         # fetch happens at command START, so the token is no longer needed.
-        # TRUNCATE, not unlink: the file stays bind-mounted for the next exec;
-        # down() does the full unlink.
-        tf = host_token_file(ctx.repo, ctx.profile)
-        if tf.is_file():
-            tf.write_text("")
+        # Other execs' files are theirs to remove; idempotent.
+        tf, self._token_path = self._token_path, None
+        if tf is not None:
+            _shred(tf)
 
     def cleanup(self, ctx: ProfileContext) -> None:
-        tf = host_token_file(ctx.repo, ctx.profile)
+        # `down`: whatever an aborted exec left behind goes too, directory
+        # included (the bind mount's source no longer needs to exist).
+        remove_token_dir(host_token_dir(ctx.repo, ctx.profile))
+
+
+def _shred(tf: Path) -> None:
+    """Best-effort overwrite, then unlink (missing is fine)."""
+    try:
         if tf.is_file():
-            try:
-                tf.write_text("")  # best-effort shred before unlink
-            except OSError:
-                pass
-        tf.unlink(missing_ok=True)
+            tf.write_text("")
+    except OSError:
+        pass
+    tf.unlink(missing_ok=True)
+
+
+def remove_token_dir(d: Path) -> None:
+    """Shred every file in a token dir and remove it. Idempotent; never raises
+    on an absent dir. Exposed so the devcontainer teardown can call it
+    UNCONDITIONALLY — independent of which provider the (possibly unreadable)
+    profile config resolves to (review finding I1)."""
+    if not d.is_dir():
+        return
+    for p in d.iterdir():
+        if p.is_file():
+            _shred(p)
+    shutil.rmtree(d, ignore_errors=True)
 
 
 def provider_for(ctx: ProfileContext) -> SecretProvider:

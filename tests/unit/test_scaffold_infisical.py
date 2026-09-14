@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 from fr.cli import app
-from fr.isolation.scaffold import CONTAINER_TOKEN_PATH, POST_CREATE
+from fr.isolation.scaffold import CONTAINER_TOKEN_DIR, POST_CREATE
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -75,9 +75,12 @@ def test_scaffold_infisical_profile(repo: Path) -> None:
     cfg = _devcontainer(repo, "sec")
     run_args = cfg["runArgs"]
     assert "--env-file" not in run_args  # no host secrets file for infisical
+    # The host token DIRECTORY is bind-mounted (per-exec files land inside it;
+    # a single-file mount would pin the replaced file's old inode).
     mount = next(a for a in run_args if a.startswith("type=bind"))
-    assert f"target={CONTAINER_TOKEN_PATH}" in mount
-    assert "run-tokens/myrepo/sec.token" in mount
+    assert f"target={CONTAINER_TOKEN_DIR}" in mount
+    assert "source=${localEnv:HOME}/.cache/fr/run-tokens/myrepo/sec," in mount
+    assert ".token" not in mount
     # CLI install composed onto the baseline, not overwriting it.
     assert POST_CREATE in cfg["postCreateCommand"]
     assert "infisical" in cfg["postCreateCommand"]
