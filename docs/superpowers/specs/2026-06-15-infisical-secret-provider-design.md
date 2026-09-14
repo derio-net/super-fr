@@ -495,7 +495,12 @@ host directory must be exactly `~/.cache/fr/run-tokens/<repo>/<profile>/<workspa
 — three components under the root, no `..`, no unresolved variable, no symlink
 in the path — or fr refuses at `up`, `exec` and `down`; `remove_token_dir`
 re-checks and never truncates through a symlinked child. The alternative was a
-`down` that empties whatever directory a PR-reachable file named.
+`down` that empties whatever directory a PR-reachable file named. The mount is
+**read-only**: the container only reads its token, and a writable mount would
+let code inside it replace the per-exec file with a symlink or FIFO for the
+host-side cleanup to act on. The host truncates with `O_NOFOLLOW|O_NONBLOCK`
+regardless, so a hand-edited writable mount degrades to a no-op, not a
+host-file wipe.
 
 **Known limitations.**
 
