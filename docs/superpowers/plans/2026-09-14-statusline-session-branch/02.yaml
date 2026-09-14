@@ -1,0 +1,192 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Segment resolution rules and formats — binding, cwd fr workspace, detached,
+    --cwd, ansi, oneline
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - statusline-harness-neutral-segment
+  - statusline-shows-bound-workspace
+tasks:
+- number: 1
+  title: RED golden cases, GREEN resolution, REFACTOR
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED: append to tests/unit/test_statusline_segment.py (add
+      `WT = "home/.cache/fr/worktrees/acme/feat__x"` expectations built from
+      `world.featx`; GREEN = "\x1b[32m", PURPLE = "\x1b[35m", RESET = "\x1b[0m"):
+
+          # bound session from the base clone: the binding wins
+          def test_bound_from_base_clone(world):
+              world.bind()
+              assert _plain(world.run(world.repo)) == ("fr", "branch: feat/x", f"worktree: {world.featx}")
+
+          # a binding wins even when the cwd is not a repo
+          def test_bound_from_non_repo_cwd(world, tmp_path):
+              world.bind(); plain = tmp_path / "plain"; plain.mkdir()
+              assert _plain(world.run(plain)) == ("fr", "branch: feat/x", f"worktree: {world.featx}")
+
+          # stale binding (worktree dir gone) falls back to the cwd rule
+          def test_stale_binding_ignored(world):
+              world.bind(); shutil.rmtree(world.featx)
+              assert _plain(world.run(world.repo)) == ("none", "branch: main", "no fr-isolation")
+
+          # unbound base clone: cwd branch, no fr, other sessions' workspaces NOT named
+          def test_unbound_base_clone(world):
+              assert _plain(world.run(world.repo)) == ("none", "branch: main", "no fr-isolation")
+
+          # unbound, cwd inside the fr workspace (and a subdirectory of it)
+          def test_unbound_inside_fr_workspace(world):
+              assert _plain(world.run(world.featx, sid=None)) == ("fr", "branch: feat/x", f"worktree: {world.featx}")
+              sub = world.featx / "sub"; sub.mkdir()
+              assert _plain(world.run(sub, sid=None)) == ("fr", "branch: feat/x", f"worktree: {world.featx}")
+
+          # subdirectory of the base clone still resolves the repo
+          def test_base_clone_subdirectory(world):
+              sub = world.repo / "sub"; sub.mkdir()
+              assert _plain(world.run(sub)) == ("none", "branch: main", "no fr-isolation")
+
+          # plain linked worktree is not fr
+          def test_plain_linked_worktree(world):
+              assert _plain(world.run(world.blog)) == ("none", "branch: docs/blog", "no fr-isolation")
+
+          # native detached agent worktree: no branch, not fr
+          def test_detached_agent_worktree(world):
+              agent = world.repo / ".claude" / "worktrees" / "agent-1"
+              _git(world.repo, "worktree", "add", "-q", "--detach", str(agent))
+              assert _plain(world.run(agent)) == NONE
+
+          def test_missing_session_id_is_unbound(world):
+              world.bind()
+              assert _plain(world.run(world.repo, sid=None)) == ("none", "branch: main", "no fr-isolation")
+
+          def test_unknown_session_id_is_unbound(world):
+              world.bind()
+              assert _plain(world.run(world.repo, sid="sess-gone"))[0] == "none"
+
+          # a path-like session id never escapes the sessions dir
+          def test_path_like_session_id_is_unbound(world):
+              world.bind()
+              assert _plain(world.run(world.repo, sid="../sessions/sess-1"))[0] == "none"
+
+          # --cwd reads no stdin: stdin left OPEN must not hang
+          def test_cwd_flag_reads_no_stdin(world):
+              proc = subprocess.Popen(["bash", str(SCRIPT), "--cwd", str(world.featx)],
+                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                  text=True, env=world.env())
+              try:
+                  assert proc.wait(timeout=5) == 0
+                  out = proc.stdout.read()
+              finally:
+                  proc.stdin.close(); proc.kill()
+              assert out == f"fr\nbranch: feat/x\nworktree: {world.featx}\n"
+
+          def test_ansi_colours(world):
+              world.bind()
+              assert world.run(world.repo, "sess-1", "--format", "ansi").stdout == (
+                  f"{GREEN}branch: feat/x{RESET}\n{GREEN}worktree: {world.featx}{RESET}\n")
+              assert world.run(world.repo, None, "--format", "ansi").stdout == (
+                  f"{PURPLE}branch: main{RESET}\n{PURPLE}no fr-isolation{RESET}\n")
+
+          def test_oneline(world, tmp_path):
+              world.bind()
+              assert world.run(world.repo, "sess-1", "--format", "oneline").stdout == "fr:feat/x\n"
+              assert world.run(world.repo, None, "--format", "oneline").stdout == "main\n"
+              out = world.run(world.blog, None, "--cwd", str(tmp_path), "--format", "oneline").stdout
+              assert out == "no branch\n" and len(out.strip()) <= 40 and "\x1b" not in out
+
+          def test_unknown_format_falls_back_to_plain(world):
+              assert _plain(world.run(world.repo, None, "--format", "bogus"))[0] == "none"
+
+      Restore the v1 timing guard (`test_runs_well_under_budget`, 0.5 s,
+      bound case) and the trap test (`test_never_invokes_fr`) adapted to
+      `_plain`. Run the pytest command from P1.T1.S1. Expected: the new
+      cases fail (skeleton always prints the none rows); NONE-shaped cases pass.
+  - id: P2.T1.S2
+    text: |
+      GREEN: replace the `# (resolution rules: phase 2)` line in
+      plugins/super-fr/scripts/fr-statusline-segment.sh with:
+
+      BEGIN resolution block
+      sessions_dir="${FR_SESSIONS_DIR:-$HOME/.cache/fr/sessions}"
+      case "$session_id" in */* | .*) session_id="" ;; esac
+
+      # 1. Bound session: one index read; a binding whose worktree is gone is stale.
+      if [ -n "$session_id" ] && [ -f "$sessions_dir/$session_id.json" ]; then
+        b_branch=""
+        b_wt=""
+        { IFS= read -r b_branch; IFS= read -r b_wt; } < <(
+          jq -r '(.branch // ""), (.worktree // "")' "$sessions_dir/$session_id.json" 2>/dev/null || true
+        )
+        if [ -n "$b_wt" ] && [ -d "$b_wt" ]; then
+          state=fr
+          branch="$b_branch"
+          worktree="$b_wt"
+        fi
+      fi
+
+      # 2. cwd in a repo: one git call (absolute paths, so a subdirectory cwd works).
+      if [ "$state" = none ] && [ -n "${cwd:-}" ] && [ -d "$cwd" ]; then
+        toplevel=""
+        common=""
+        head=""
+        { IFS= read -r toplevel; IFS= read -r common; IFS= read -r head; } < <(
+          git -C "$cwd" --no-optional-locks rev-parse --path-format=absolute \
+            --show-toplevel --git-common-dir --symbolic-full-name HEAD 2>/dev/null || true
+        )
+        if [ -n "$toplevel" ] && [ -n "$common" ]; then
+          # refs/heads/<b> is a branch; "HEAD" is detached (or unborn) -> no branch.
+          case "$head" in refs/heads/?*) branch="${head#refs/heads/}" ;; esac
+          if [ -d "$common/fr/isolation" ]; then
+            # One jq over every workspace state file; compare physical paths.
+            while IFS= read -r wt; do
+              [ -n "$wt" ] && [ -d "$wt" ] || continue
+              if [ "$(cd "$wt" 2>/dev/null && pwd -P)" = "$toplevel" ]; then
+                state=fr
+                worktree="$toplevel"
+                break
+              fi
+            done < <(jq -rn 'inputs.worktree // empty' "$common"/fr/isolation/*.json 2>/dev/null || true)
+          fi
+        fi
+      fi
+      END resolution block
+
+      Run the pytest command. Expected: all segment tests pass. If
+      `--path-format=absolute` is unsupported by the container git
+      (< 2.31), journal it and fall back to prefixing a relative common dir
+      with the ABSOLUTE cwd (`cd "$cwd" && pwd -P`), not the toplevel.
+  - id: P2.T1.S3
+    text: |
+      REFACTOR + quality gate: `bash -n` and (when present) `shellcheck`
+      on the segment (the container has no shellcheck; journal that); update
+      the header comment to describe rules 1–2 exactly as implemented.
+      Prove the v1 contract is gone: `git grep -n 'iso:\|worktrees (' --
+      plugins/super-fr/scripts/fr-statusline-segment.sh tests/unit/test_statusline_segment.py`
+      prints nothing. The operator Mac runs /bin/bash 3.2 and Apple git
+      2.50 (both verified 2026-09-14): keep the script free of bash-4
+      syntax. Re-run the segment tests (all pass) and commit
+      `feat(statusline): v2 resolution — binding, fr workspace cwd, formats`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

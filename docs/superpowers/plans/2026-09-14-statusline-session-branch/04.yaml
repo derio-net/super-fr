@@ -1,0 +1,105 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Docs, harness wiring and acceptance rows
+  tag: agentic
+  tier: mechanical
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - statusline-harness-neutral-segment
+  - statusline-shows-bound-workspace
+tasks:
+- number: 1
+  title: fr-isolation skill — status-line wiring for every harness, mirrors regenerated
+  steps:
+  - id: P4.T1.S1
+    text: |
+      In plugins/super-fr/skills/fr-isolation/SKILL.md "Session bindings",
+      replace everything from `Hermes has no bind transport yet. Status line:`
+      through the end of the indented four-line code block with:
+
+      BEGIN SKILL.md replacement
+      Hermes has no bind transport yet.
+
+      **Status line** (spec 2026-09-14): `scripts/fr-statusline-segment.sh`
+      answers "which branch, and is this session in fr-isolation?" — shell+jq+git,
+      never fr. Input: status-line JSON on stdin, or `--cwd <dir>` (no stdin). A
+      live binding wins; else the cwd's branch, `fr` when the cwd's toplevel is
+      an fr workspace. `--format plain` (state `fr`/`none`, `branch: <b>`/`no
+      branch`, `worktree: <path>`/`no fr-isolation`), `ansi` (the two rows, green
+      when fr, purple when not), `oneline` (`fr:<branch>`/`<branch>`, 40-char
+      slot). The v1 `iso:` hint and worktree gauge are gone.
+
+      - **Claude Code:** set `statusLine.command` to
+        `bash ~/.claude/plugins/cache/derio-net--super-fr/super-fr/current/scripts/fr-statusline-claude.sh`,
+        or in your own script: `rows=$(printf '%s' "$data" | bash <scripts>/fr-statusline-segment.sh --format ansi)`,
+        line 2 = row 1 + ` | ~/cwd`, line 3 = row 2.
+      - **Hermes:** pending NousResearch/hermes-agent#109596 —
+        `display.status_bar.fields: [..., custom]`, `custom_command: "bash <super-fr checkout>/plugins/super-fr/scripts/fr-statusline-segment.sh --format oneline --cwd ."`
+        (`fr hermes install` copies hooks only, not scripts).
+      - **OpenCode:** no status-line hook (anomalyco/opencode#37464); run
+        `--format oneline --cwd <dir>` from a tmux/herdr status bar.
+      END SKILL.md replacement
+
+      Regenerate mirrors: `fr isolation exec --branch feat/statusline-session-branch -- bash -c 'uv run python scripts/sync-hermes.py && uv run python scripts/sync-opencode.py'`
+      (check each script's --help for the write flag if the default is check-only).
+      Run `uv run pytest -q --no-cov tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_tripwire_opencode_skills_sync.py`
+      in the workspace. Expected: pass.
+- number: 2
+  title: README and the 2026-09-04 spec pointer
+  steps:
+  - id: P4.T2.S1
+    text: |
+      README.md "Isolation": replace the sentence starting
+      "`fr isolation status` lists the sessions holding each workspace; the shipped"
+      through `(wiring in the fr-isolation skill, "Session bindings").` with:
+      "`fr isolation status` lists the sessions holding each workspace. The
+      shipped `plugins/super-fr/scripts/fr-statusline-segment.sh` prints the
+      branch this session works on and its fr-isolation worktree (green when
+      fr, purple when not); `fr-statusline-claude.sh` is a ready-made Claude
+      Code status line (wiring for every harness in the fr-isolation skill,
+      "Session bindings")."
+      In docs/superpowers/specs/2026-09-04-worktree-traceability-design.md,
+      directly under the `### E. Status line — plugin-shipped segment + operator script`
+      heading add the line: "> Superseded by `2026-09-14-statusline-session-branch-design.md` (contract v2)."
+- number: 3
+  title: Acceptance matrix rows and reports
+  steps:
+  - id: P4.T3.S1
+    text: |
+      Edit docs/acceptance/matrix.yaml:
+      - row `statusline-shows-bound-workspace`: acceptance = "The Claude Code
+        status line shows the branch this session works on and its
+        fr-isolation worktree path (or no fr-isolation), green when fr and
+        purple when not, well inside one status-line refresh (0.5 s CI
+        guard)."; origin += `super-fr:docs/superpowers/specs/2026-09-14-statusline-session-branch-design.md`;
+        levels.int += `super-fr:tests/unit/test_statusline_claude.py`; notes
+        rewritten for v2 (segment rules + reference script; operator wiring
+        is the manual phase 5).
+      - row `statusline-harness-neutral-segment`: status `ci`, levels
+        `int: [super-fr:tests/unit/test_statusline_segment.py]`, notes keep the
+        Hermes/OpenCode caveat and add "--cwd/oneline covered by golden tests".
+      Then `fr isolation exec --branch feat/statusline-session-branch -- bash -c 'fr acceptance report && fr acceptance check && fr acceptance report --check; echo rc=$?'`
+      Expected: rc=0. Finally run the full suite:
+      `fr isolation exec --branch feat/statusline-session-branch -- bash -c 'uv run pytest -q > /tmp/full.log 2>&1; echo rc=$?; tail -3 /tmp/full.log'`
+      Expected rc=0. Commit `docs(statusline): v2 wiring for every harness + acceptance rows`.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

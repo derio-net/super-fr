@@ -1,0 +1,181 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Claude Code reference status line — fr-statusline-claude.sh with golden tests
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - statusline-shows-bound-workspace
+tasks:
+- number: 1
+  title: RED golden lines, GREEN script, REFACTOR
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED: create tests/unit/test_statusline_claude.py (skip without jq).
+      Reuse the segment fixture by importing it:
+      `from tests.unit.test_statusline_segment import World, world, _git  # noqa: F401`
+      (if tests/ is not importable as a package, copy the fixture into a
+      new tests/unit/_statusline_world.py and import it from both files —
+      do not duplicate it inline). SCRIPT = REPO_ROOT/"plugins"/"super-fr"/"scripts"/"fr-statusline-claude.sh".
+      Colours: BOLD="\x1b[1m", DIM="\x1b[2m", CYAN="\x1b[36m", BLUE="\x1b[34m",
+      GREEN="\x1b[32m", YELLOW="\x1b[33m", RED="\x1b[31m", PURPLE="\x1b[35m",
+      RESET="\x1b[0m", SEP=f"{DIM} | {RESET}". `run(payload)` = subprocess
+      with world.env() and input=json.dumps(payload); stdout must be exactly
+      three lines.
+
+          FULL = {"model": {"display_name": "Claude Opus 5"},
+                  "context_window": {"context_window_size": 1000000, "used_percentage": 8},
+                  "rate_limits": {"five_hour": {"used_percentage": 62.4},
+                                  "seven_day": {"used_percentage": 80}}}
+
+          def test_full_payload_unbound(world):
+              l1, l2, l3 = lines(run(world, {**FULL, "session_id": "sess-1",
+                  "workspace": {"current_dir": str(world.repo)}}))
+              assert l1 == (f"{BOLD}{CYAN}Opus 5{RESET} {DIM}(1M context){RESET}{SEP}"
+                            f"{DIM}ctx:{RESET}{GREEN}8%{RESET}{DIM} of 1M{RESET}{SEP}"
+                            f"{DIM}5h:{RESET}{YELLOW}62%{RESET} {DIM}7d:{RESET}{RED}80%{RESET}")
+              assert l2 == f"{PURPLE}branch: main{RESET}{SEP}{BLUE}~/Docs/acme{RESET}"
+              assert l3 == f"{PURPLE}no fr-isolation{RESET}"
+
+          def test_bound_rows_are_green(world):
+              world.bind()
+              _, l2, l3 = lines(run(world, {**FULL, "session_id": "sess-1",
+                  "workspace": {"current_dir": str(world.repo)}}))
+              assert l2 == f"{GREEN}branch: feat/x{RESET}{SEP}{BLUE}~/Docs/acme{RESET}"
+              assert l3 == f"{GREEN}worktree: {world.featx}{RESET}"
+
+          def test_minimal_payload_outside_home(world, tmp_path):
+              plain = tmp_path / "plain"; plain.mkdir()
+              l1, l2, l3 = lines(run(world, {"model": {"display_name": "Claude Sonnet 5"},
+                  "workspace": {"current_dir": str(plain)}}))
+              assert l1 == f"{BOLD}{CYAN}Sonnet 5{RESET}"
+              assert l2 == f"{PURPLE}no branch{RESET}{SEP}{BLUE}{plain}{RESET}"
+              assert l3 == f"{PURPLE}no fr-isolation{RESET}"
+
+      Note `plain` lives under tmp_path, outside world.home, so it stays
+      absolute. Run `fr isolation exec --branch feat/statusline-session-branch -- uv run pytest -q --no-cov tests/unit/test_statusline_claude.py`.
+      Expected: fails — the script does not exist.
+  - id: P3.T1.S2
+    text: |
+      GREEN: create plugins/super-fr/scripts/fr-statusline-claude.sh (chmod +x):
+
+      BEGIN plugins/super-fr/scripts/fr-statusline-claude.sh
+      #!/bin/bash
+      # fr-statusline-claude.sh — Claude Code status line on the fr segment (spec 2026-09-14 §5.B).
+      #
+      # settings.json:
+      #   "statusLine": {"type": "command",
+      #     "command": "bash ~/.claude/plugins/cache/derio-net--super-fr/super-fr/current/scripts/fr-statusline-claude.sh"}
+      #
+      # Line 1: model (context size) | ctx:NN% of X | 5h:NN% 7d:NN%   (parts omitted when absent)
+      # Line 2: branch: <b> | ~/cwd      (branch green when fr, purple when not)
+      # Line 3: worktree: <path> | no fr-isolation   (same colour)
+      data=$(cat)
+
+      # A real git first on PATH: Apple's /usr/bin/git shim adds ~30 ms per call
+      # (journal 9ecae0965ac4). Harmless when the path does not exist.
+      [ -x /Applications/Xcode.app/Contents/Developer/usr/bin/git ] &&
+        PATH="/Applications/Xcode.app/Contents/Developer/usr/bin:$PATH"
+
+      DIM=$'\033[2m'
+      BOLD=$'\033[1m'
+      CYAN=$'\033[36m'
+      BLUE=$'\033[34m'
+      GREEN=$'\033[32m'
+      YELLOW=$'\033[33m'
+      RED=$'\033[31m'
+      RESET=$'\033[0m'
+      SEP="${DIM} | ${RESET}"
+      here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+      _pct_color() {
+        if [ "$1" -ge 75 ]; then printf '%s' "$RED"
+        elif [ "$1" -ge 50 ]; then printf '%s' "$YELLOW"
+        else printf '%s' "$GREEN"; fi
+      }
+      _size() {
+        if [ "$1" -ge 1000000 ]; then printf '%sM' "$(($1 / 1000000))"
+        else printf '%sk' "$(($1 / 1000))"; fi
+      }
+
+      model="" size="" used="" five="" seven="" cwd=""
+      { IFS= read -r model; IFS= read -r size; IFS= read -r used
+        IFS= read -r five; IFS= read -r seven; IFS= read -r cwd; } < <(
+        printf '%s' "$data" | jq -r '
+          (.model.display_name // "" | sub("^Claude "; "")),
+          (.context_window.context_window_size // "" | tostring),
+          (.context_window.used_percentage // "" | tostring),
+          (.rate_limits.five_hour.used_percentage // "" | tostring),
+          (.rate_limits.seven_day.used_percentage // "" | tostring),
+          (.workspace.current_dir // .cwd // "")' 2>/dev/null || true
+      )
+
+      line1="${BOLD}${CYAN}${model}${RESET}"
+      has_size=0
+      case "$size" in '' | *[!0-9]*) ;; *) [ "$size" -gt 0 ] && has_size=1 ;; esac
+      [ "$has_size" -eq 1 ] && line1="${line1} ${DIM}($(_size "$size") context)${RESET}"
+      if [ -n "$used" ]; then
+        u=${used%.*}
+        ctx="${DIM}ctx:${RESET}$(_pct_color "$u")${u}%${RESET}"
+        [ "$has_size" -eq 1 ] && ctx="${ctx}${DIM} of $(_size "$size")${RESET}"
+        line1="${line1}${SEP}${ctx}"
+      fi
+      rate=""
+      if [ -n "$five" ]; then
+        f=${five%.*}
+        rate="${DIM}5h:${RESET}$(_pct_color "$f")${f}%${RESET}"
+      fi
+      if [ -n "$seven" ]; then
+        s=${seven%.*}
+        [ -n "$rate" ] && rate="${rate} "
+        rate="${rate}${DIM}7d:${RESET}$(_pct_color "$s")${s}%${RESET}"
+      fi
+      [ -n "$rate" ] && line1="${line1}${SEP}${rate}"
+
+      rows=$(printf '%s' "$data" | bash "$here/fr-statusline-segment.sh" --format ansi 2>/dev/null)
+      b_row=$(printf '%s\n' "$rows" | sed -n '1p')
+      w_row=$(printf '%s\n' "$rows" | sed -n '2p')
+
+      case "$cwd" in
+      "$HOME" | "$HOME"/*) cwd_short="~${cwd#"$HOME"}" ;;
+      *) cwd_short="$cwd" ;;
+      esac
+      line2="$b_row"
+      [ -n "$cwd_short" ] && line2="${line2}${SEP}${BLUE}${cwd_short}${RESET}"
+
+      printf '%s\n%s\n%s\n' "$line1" "$line2" "$w_row"
+      END plugins/super-fr/scripts/fr-statusline-claude.sh
+
+      Run the pytest command. Expected: 3 passed. Also re-run
+      tests/unit/test_statusline_segment.py (still green).
+  - id: P3.T1.S3
+    text: |
+      REFACTOR + quality gate: `bash -n` / `shellcheck` (when present) on
+      fr-statusline-claude.sh; check it runs under macOS /bin/bash 3.2
+      syntax (no `mapfile`, no `${var,,}`, no associative arrays). Confirm
+      the plugin ships scripts/ as a tree (no manifest lists files
+      individually: `git grep -n fr-statusline-segment.sh -- plugins/*/.claude-plugin install.sh`
+      returns nothing to update). Commit
+      `feat(statusline): Claude Code reference status line`.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

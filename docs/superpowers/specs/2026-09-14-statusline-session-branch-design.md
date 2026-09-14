@@ -136,7 +136,9 @@ to show it. The core reads files and runs one `git` call; it never runs the
    index `branch` (if empty: `no branch`), worktree = index `worktree`.
    A binding whose worktree is gone is ignored (stale, §6).
 2. **cwd in a repo.** One call:
-   `git -C <cwd> rev-parse --show-toplevel --git-common-dir --symbolic-full-name HEAD`.
+   `git -C <cwd> rev-parse --path-format=absolute --show-toplevel --git-common-dir --symbolic-full-name HEAD`
+   (`--path-format=absolute`, git ≥ 2.31, keeps the common dir right when the
+   cwd is a subdirectory; the operator Mac has Apple git 2.50).
    Branch = `X` when HEAD prints `refs/heads/X`; `no branch` when it prints
    `HEAD` (detached, or an unborn branch). The state is `fr` when a
    `<common>/fr/isolation/*.json` file has a `worktree` equal (physical
@@ -261,7 +263,9 @@ bound session and in a plain base-clone session.
 
 ## Implementation Plans
 
-_(filled by fr-plan)_
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-14-statusline-session-branch | `derio-net/super-fr` | `2026-09-14-statusline-session-branch` | — |
 
 ## 8. Acceptance rows (born here; presented at spec review)
 
