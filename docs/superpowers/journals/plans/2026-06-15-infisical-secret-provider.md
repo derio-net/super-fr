@@ -159,3 +159,33 @@ The per-workspace key is the worktree basename, so two workspaces of one repo an
 ### verify-p5-limit-renamed-clone-gc · decision · Known limitation: the gc fallback does not find orphan token dirs of a renamed clone (phase 5)
 
 When a workspace config is gone the gc fallback keys on the current checkout name, so an orphan token dir left by a clone renamed after scaffolding is not found. Accepted for v1: the dir is normally empty because each exec removes its own file. Recorded in the spec re-integration addendum under Known limitations.
+
+<!-- fr:journal kind=finding scope=plan id=verify2-p5-W1 created=2026-09-14T18:54:34 phase=5 state=fixed -->
+### verify2-p5-W1 · finding [fixed] · W1: post_exec truncation followed a symlink or FIFO the container planted (phase 5)
+
+The token-dir bind mount was read-write and the container knows the per-exec file name, so code inside it could swap the file for a symlink to a host file this user can write (authorized_keys, zshrc): is_file() followed the link and write_text emptied the target; a FIFO could block post_exec. Fix, two layers: (1) the scaffold mount ends in ,readonly — token_mount_source already ignores bare options, so a mount without it (nothing merged yet) still parses; (2) _truncate_and_unlink now opens with O_WRONLY|O_TRUNC|O_NOFOLLOW|O_NONBLOCK, closes, swallows OSError (ELOOP, ENXIO, ...) and unlinks the entry itself (unlink wrapped best-effort); remove_token_dir routes every non-symlink, non-dir child through the same call, so no host-side write inside the token dir follows a link. Proven by tests/unit/test_secrets_infisical.py::test_post_exec_never_truncates_through_a_planted_symlink, ::test_post_exec_never_blocks_on_a_planted_fifo (thread-bounded), ::test_remove_token_dir_survives_planted_fifo_and_symlink_children, ::test_resolve_token_dir_accepts_the_readonly_mount_option, tests/unit/test_scaffold_infisical.py::test_scaffold_infisical_profile (mount ends in ,readonly).
+
+<!-- fr:journal kind=finding scope=plan id=verify2-p5-W2 created=2026-09-14T18:54:35 phase=5 state=fixed -->
+### verify2-p5-W2 · finding [fixed] · W2: .. was collapsed lexically before containment (phase 5)
+
+normpath collapses .. lexically while the kernel resolves it through symlinks, so fr and docker could disagree about the directory. Fix: contain_token_dir refuses any .. component in the candidate before normalising (covers mount-resolved and canonical spellings). Proven by tests/unit/test_secrets_infisical.py::test_resolve_token_dir_refuses_dotdot_even_when_it_normalizes_inside (a source that normalises to the legit layout is still refused) plus the existing .. escape case.
+
+<!-- fr:journal kind=finding scope=plan id=verify2-p5-W3 created=2026-09-14T18:54:37 phase=5 state=fixed -->
+### verify2-p5-W3 · finding [fixed] · W3: localEnv default with a set-but-empty variable (phase 5)
+
+Chose env[name] || default: a variable that is set but empty takes the default, matching JS || semantics; no default still yields the empty string like a shell. UNCONFIRMED against the devcontainer CLI source — @devcontainers/cli is installed neither in the container nor at a discoverable host path (npm root -g, fnm, homebrew, ~/.npm-global searched), so this is pinned by the phase-6 live smoke: if the CLI resolves a set-but-empty variable to the empty string, the host dir and the container mount would diverge and devcontainer up fails loudly on the missing bind source. Proven by tests/unit/test_secrets_infisical.py::test_resolve_token_dir_supports_localenv_default_values (unset, set, set-empty).
+
+<!-- fr:journal kind=finding scope=plan id=verify2-p5-W4 created=2026-09-14T18:54:39 phase=5 state=fixed -->
+### verify2-p5-W4 · finding [fixed] · W4: one refused glob match stopped the whole orphan token reap (phase 5)
+
+_reap_orphan_tokens wrapped the loop in a single try. Fix: matches are visited in sorted order, each in its own try that logs and continues. Proven by tests/unit/test_secrets_wiring.py::test_gc_orphan_token_reap_continues_past_a_refused_match (a symlinked profile dir aaa/<base> is refused and its target untouched; dev/<base> after it is reaped).
+
+<!-- fr:journal kind=finding scope=plan id=verify2-p5-W5 created=2026-09-14T18:54:40 phase=5 state=fixed -->
+### verify2-p5-W5 · finding [fixed] · W5: vacuous or-clause in the HOME-source test (phase 5)
+
+test_uncontained_source_fails_closed_at_up_exec_and_cleanup ended with ... or (home / .cache).exists(), which could not fail. Now asserts the fake HOME contains exactly .bashrc afterwards.
+
+<!-- fr:journal kind=decision scope=plan id=verify2-p5-toctou-residual created=2026-09-14T18:54:42 phase=5 -->
+### verify2-p5-toctou-residual · decision · Accepted residual: check-then-rmtree TOCTOU in remove_token_dir at teardown (phase 5)
+
+remove_token_dir contains and symlink-checks the dir, then truncates children and calls rmtree; a same-user host process could swap the dir between the check and the rmtree. Accepted: the container is verified gone before teardown cleanup runs, so only a same-user host process is in a position to race it (and such a process already has every permission the race would grant), and rmtree uses an fd-based walk that does not follow nested links. No code change.
