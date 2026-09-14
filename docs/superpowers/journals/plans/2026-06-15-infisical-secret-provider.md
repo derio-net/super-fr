@@ -10,20 +10,20 @@ P5.T3 changes skill prose, regenerated mirrors, matrix rows, version manifests a
 
 fr-profiles.yaml is PR-reachable. Fixed in 92a3d8a with shlex.quote on all three values plus a metacharacter-path test; survived the 4.x rebase (secrets.py).
 
-<!-- fr:journal kind=finding scope=plan id=june-C2-token-lingers created=2026-09-14T16:40:12 phase=4 state=open -->
-### june-C2-token-lingers · finding [open] · C2 (critical): the minted token lingered in the token-file until down (phase 4)
+<!-- fr:journal kind=finding scope=plan id=june-C2-token-lingers created=2026-09-14T16:40:12 phase=4 state=fixed -->
+### june-C2-token-lingers · finding [fixed] · C2 (critical): the minted token lingered in the token-file until down (phase 4)
 
-Fix in 92a3d8a had two halves: SecretProvider.post_exec (survived, secrets.py) and the Target wrapping exec in try/finally to call it (dropped — lived in local.py, which the rebase took from main). Re-implemented by P5.T1.S2; verified by test_exec_clears_token_after_run / _on_abort.
+Fix in 92a3d8a had two halves: SecretProvider.post_exec (survived, secrets.py) and the Target wrapping exec in try/finally to call it (dropped — lived in local.py, which the rebase took from main). Re-implemented by P5.T1.S2; verified by test_exec_clears_token_after_run / _on_abort. Fixed in phase 5 (272c00a + b397a96): `LocalWorktreeDevcontainerTarget.exec` runs the devcontainer exec inside `try/finally: provider.post_exec(ctx)`, and with per-exec files post_exec unlinks the token — proven by tests/unit/test_secrets_wiring.py::test_exec_clears_token_after_run and ::test_exec_clears_token_on_abort (the token dir holds exactly one file during the run and is empty after, on return and on abort).
 
-<!-- fr:journal kind=finding scope=plan id=june-I1-defensive-unlink created=2026-09-14T16:40:14 phase=4 state=open -->
-### june-I1-defensive-unlink · finding [open] · I1: down must clear the token even when the worktree profile config is unreadable (phase 4)
+<!-- fr:journal kind=finding scope=plan id=june-I1-defensive-unlink created=2026-09-14T16:40:14 phase=4 state=fixed -->
+### june-I1-defensive-unlink · finding [fixed] · I1: down must clear the token even when the worktree profile config is unreadable (phase 4)
 
-provider_for falls back to env-file on an unreadable config, so provider cleanup would be skipped. The 92a3d8a defensive unlink lived in local.py and was dropped by the rebase. With per-exec files (P5.T2) it becomes: the devcontainer _teardown_container removes host_token_dir(repo, profile) unconditionally.
+provider_for falls back to env-file on an unreadable config, so provider cleanup would be skipped. The 92a3d8a defensive unlink lived in local.py and was dropped by the rebase. With per-exec files (P5.T2) it becomes: the devcontainer _teardown_container removes host_token_dir(repo, profile) unconditionally. Fixed in phase 5 (b397a96): `_teardown_container` → `_cleanup_secrets` calls `remove_token_dir(host_token_dir(repo, profile))` after the best-effort, never-blocking provider cleanup — proven by tests/unit/test_secrets_wiring.py::test_down_removes_token_dir_even_when_profile_config_is_unreadable[missing|corrupt], which uses the real provider_for.
 
-<!-- fr:journal kind=finding scope=plan id=june-I2-no-remote-env created=2026-09-14T16:40:15 phase=4 state=open -->
-### june-I2-no-remote-env · finding [open] · I2: an infisical exec must add no --remote-env (argv-visible on the host) (phase 4)
+<!-- fr:journal kind=finding scope=plan id=june-I2-no-remote-env created=2026-09-14T16:40:15 phase=4 state=fixed -->
+### june-I2-no-remote-env · finding [fixed] · I2: an infisical exec must add no --remote-env (argv-visible on the host) (phase 4)
 
-test_exec_secret_uses_no_remote_env is carried but red until the wiring returns in P5.T1.S2.
+test_exec_secret_uses_no_remote_env is carried but red until the wiring returns in P5.T1.S2. Fixed in phase 5 (272c00a): `exec` emits `--remote-env` only for `wrap.exec_env`, which is empty for the infisical wrap (the token rides the bind-mounted per-exec file) — proven by tests/unit/test_secrets_wiring.py::test_exec_secret_uses_no_remote_env and ::test_exec_with_secret_prefixes_infisical_run_and_hides_token.
 
 <!-- fr:journal kind=finding scope=plan id=june-I3-install-stderr created=2026-09-14T16:40:16 phase=4 state=fixed -->
 ### june-I3-install-stderr · finding [fixed] · I3: the Infisical CLI install swallowed stderr (phase 4)
