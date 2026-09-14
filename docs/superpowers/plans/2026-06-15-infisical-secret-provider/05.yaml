@@ -1,33 +1,149 @@
 schema_version: 2
 phase:
   number: 5
-  title: '[manual] Operator: provision Infisical identity + real end-to-end smoke'
-  tag: manual
+  title: Re-integrate onto the 4.x isolation targets + per-exec token files + docs, bump
+  tag: agentic
   depends_on:
+  - 1
+  - 2
+  - 3
   - 4
   tracking_issue: null
+  acceptance:
+  - secret-provider-infisical-on-demand
+  - secret-provider-no-secret-on-argv
+  - secret-provider-mode-scope
+  tier: hard
 tasks:
 - number: 1
-  title: Operator-only Infisical setup and live verification
+  title: Wire the provider into the devcontainer target; refuse --secret elsewhere, test-first
   steps:
   - id: P5.T1.S1
     text: |
-      MANUAL (operator). In Infisical: create a machine identity with
-      **Universal Auth**, scoped **read-only** to the target project + path, and
-      configure a **short Access-Token TTL** on the identity (fr cannot set TTL
-      at mint time — this is the platform-side control the spec relies on).
-      Record its client-id/secret into the host env vars the profile names
-      (`FR_INFISICAL_CLIENT_ID` / `FR_INFISICAL_CLIENT_SECRET`), via the
-      operator's keyring/shell — never committed.
+      RED. Read the spec's "Re-integration addendum" first. The rebase took main's
+      side of packages/fr/src/fr/isolation/local.py and
+      packages/fr/src/fr/commands/isolation_cmd.py, so the 7 tests carried in
+      tests/unit/test_secrets_wiring.py fail today; run them and confirm that.
+      Then add tests (same file, or a new tests/unit/test_secrets_mode_scope.py):
+      - `HostWorktreeTarget.exec(state, argv, keys=["K"])` and
+        `ExternalTarget.exec(state, argv, keys=["K"])` raise `IsolationError`
+        whose message names devcontainer mode, and the runner is never called.
+      - The same two targets with `keys=()` still run argv unchanged.
+      - CLI: with `FR_ISOLATION_TARGET=worktree`, `fr isolation exec --secret K
+        -- echo hi` exits 2 and runs nothing.
+      Keep the existing CLI test for an undeclared key (exit 2, no devcontainer
+      exec). Run the files and confirm RED.
   - id: P5.T1.S2
     text: |
-      MANUAL (operator). Create the Infisical project/env/path and the declared
-      secret keys. Scaffold an infisical profile
-      (`fr init scaffold --secret-provider infisical …`), `fr isolation up`, then
-      run a real `fr isolation exec --secret <KEY> -- printenv <KEY>` (or a real
-      consumer) and confirm: the value is injected, it is NOT present without
-      `--secret`, and no token persists after the command. Record results with
-      `fr plan edit <plan-dir> --complete-phase 5 --note "<what was verified>"`.
+      GREEN, following the addendum.
+      - `types.Target.exec` gains `keys: Sequence[str] = ()`.
+      - `LocalWorktreeDevcontainerTarget.__init__` gains a
+        `provider_factory: Callable[[ProfileContext], SecretProvider] = provider_for`
+        seam next to `gc_spawner`, plus a `_profile_context(profile, worktree)`
+        helper that reads `profiles_config(worktree)`.
+      - `up`: replace `self._ensure_mounted_env_file(config)` with the
+        provider's `up_prepare(ctx)`. Delete `_ensure_mounted_env_file` if
+        nothing else calls it; grep the tests before deleting.
+      - `exec`: fail fast on keys missing from `ctx.keys` (before any mint), build
+        the wrap, emit `--remote-env` only for `wrap.exec_env`, and run inside
+        `try/finally: provider.post_exec(ctx)`.
+      - `_teardown_container` (devcontainer target only): run
+        `provider.cleanup(ctx)` before the existing docker teardown.
+        `HostWorktreeTarget` keeps its no-op override.
+      - `HostWorktreeTarget.exec` and `ExternalTarget.exec`: raise
+        `IsolationError("--secret requires devcontainer isolation mode …")` when
+        `keys` is non-empty.
+      - `isolation_cmd.exec`: add a repeatable `--secret/-s` option; call
+        `_target_or_exit(repo).exec(state, argv, keys=secret)` and map
+        `IsolationError` to `_fail` (exit 2).
+      pytest green on the touched test files plus tests/unit/test_isolation*.py.
+  - id: P5.T1.S3
+    text: |
+      Refactor; `uv run ruff check packages/ tests/`, `uv run ruff format
+      packages/ tests/`, `uv run mypy packages/fr/src`. Record journal findings
+      for anything that surprised you. Commit
+      `feat(isolation): wire SecretProvider into the 4.x targets; --secret is devcontainer-only (TDD)`.
+- number: 2
+  title: Per-exec token files (close the concurrent-exec race), test-first
+  steps:
+  - id: P5.T2.S1
+    text: |
+      RED in tests/unit/test_secrets_infisical.py and tests/unit/test_scaffold_infisical.py:
+      - Two `exec_wrap(ctx, want_secrets=True)` calls, on two provider instances
+        or one, write two distinct token files under
+        `host_token_dir(repo, profile)`, each `0600`, with the directory `0700`.
+      - Each wrap's shell script reads its own file under the container token
+        directory (`/run/fr-secrets/<name>`), and the token value is in no argv
+        element.
+      - `post_exec` unlinks that exec's file only; a second exec's file survives
+        until its own `post_exec`.
+      - `cleanup` removes every file left in the directory.
+      - The scaffold for an infisical profile bind-mounts the host token
+        DIRECTORY `${localEnv:HOME}/.cache/fr/run-tokens/<repo>/<profile>` to
+        the container directory; no single-file mount remains.
+      Update the carried tests that assert the old single-file path. Run and
+      confirm RED.
+  - id: P5.T2.S2
+    text: |
+      GREEN in packages/fr/src/fr/isolation/secrets.py and scaffold.py. Replace
+      `CONTAINER_TOKEN_PATH` / `host_token_file` with
+      `CONTAINER_TOKEN_DIR = "/run/fr-secrets"` and `host_token_dir(repo,
+      profile)`. `InfisicalProvider.up_prepare` ensures the directory at `0700`.
+      `exec_wrap` writes the token to a unique name (e.g. `uuid4().hex +
+      ".token"`), created `0600`, and remembers that path on the instance for
+      `post_exec`. The Target builds one provider per exec, so instance state is
+      safe; document that assumption in a comment. Keep `shlex.quote` on every
+      interpolated value, including the per-exec path. Also delete the stale
+      `# NOTE: a single token-file per (repo, profile)` comment. pytest green.
+  - id: P5.T2.S3
+    text: |
+      Refactor; lint/format/mypy as in P5.T1.S3; commit
+      `fix(isolation): per-exec Infisical token files — no shared-file race (TDD)`.
+- number: 3
+  title: Docs, generated mirrors, acceptance flips, version bump, full gate
+  steps:
+  - id: P5.T3.S1
+    text: |
+      Document within the 120-line cap that tests/unit/test_skill_validation.py
+      enforces. Both files are at exactly 120 lines, so compress existing prose
+      to make room; never exceed the cap.
+      - plugins/super-fr/skills/fr-isolation/SKILL.md: `fr isolation exec
+        --secret KEY` — devcontainer mode only, on-demand, path-scoped, value
+        never printed, per-exec token, undeclared key fails fast.
+      - plugins/super-fr/skills/fr-init/SKILL.md: the `--secret-provider
+        infisical --infisical-project/--infisical-env/--infisical-path` scaffold
+        example and the identity-side TTL / least-privilege reminder.
+      Then regenerate the mirrors: `uv run --no-project python
+      scripts/sync-opencode.py` and `uv run --no-project python
+      scripts/sync-hermes.py` (check each script's --help for the write flag).
+      Confirm tests/unit/test_tripwire_opencode_skills_sync.py,
+      tests/unit/test_tripwire_hermes_skills_sync.py and
+      tests/unit/test_skill_validation.py pass.
+  - id: P5.T3.S2
+    text: |
+      Flip the three acceptance rows this phase advances
+      (`secret-provider-infisical-on-demand`, `secret-provider-no-secret-on-argv`,
+      `secret-provider-mode-scope`) to `status: ci`, add their `levels.unit` test
+      refs, and rewrite their notes. `fr acceptance add` rejects an existing id,
+      so edit the rows in docs/acceptance/matrix.yaml directly, then run `uv run fr acceptance
+      report --deterministic` and `uv run fr acceptance check`. Both must pass.
+  - id: P5.T3.S3
+    text: |
+      Minor bump (new CLI flag, new provider, new scaffold options — user-visible
+      workflow additions): `uv run python scripts/bump-version.py minor`. main is
+      4.3.0, so expect 4.4.0. Verify `uv run python scripts/bump-version.py
+      --check` and `uv run fr --version`. Commit the version manifests + uv.lock
+      together: `chore: bump version 4.3.0 -> 4.4.0 (secret providers)`.
+  - id: P5.T3.S4
+    text: |
+      FULL gate: `uv run ruff check packages/ tests/ && uv run ruff format --check
+      packages/ tests/ && uv run mypy packages/fr/src packages/fr-dispatch/src
+      packages/fr-vk/src packages/fr-cncd/src && uv run pytest -q --no-cov`.
+      Known pre-existing red, not this phase's to fix:
+      tests/unit/test_tripwire_unarchived_plans.py flags main's
+      `2026-07-24-remove-vk-legacy-fallbacks` plan (#408 merged unarchived).
+      Report it in the phase result; fix everything else red. Commit fixes only if
+      any were needed.
 state:
   steps:
     P5.T1.S1:
@@ -35,6 +151,38 @@ state:
       ticked_at: null
       note: null
     P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S4:
       state: ' '
       ticked_at: null
       note: null

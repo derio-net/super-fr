@@ -42,11 +42,20 @@ placeholder; the real k8s delivery is ESO→Secret→env per the frank design.
    install (composed, not overwriting `postCreateCommand`), `--env-file`
    omitted for infisical profiles, the TTL/least-privilege reminder; document
    `--secret` in the skills; bump the version (touches `packages/`).
-5. **[manual] Operator Infisical provisioning + live smoke** — create the
+5. **Re-integration onto 4.x (added 2026-09-14)** — phases 1–4 were written
+   against fr 3.3. The rebase onto 4.3 kept their seam, provider, scaffold and
+   tests, but the Target wiring conflicted with the three-target split and was
+   deliberately left out, so the carried wiring tests start RED. This phase
+   rebuilds the wiring on the devcontainer target and refuses `--secret` in
+   host-worktree/external mode (operator decision). It also replaces the shared
+   token-file with per-exec files, which closes the concurrent-exec race phase 2
+   only commented on. It then documents `--secret` within the skill line cap,
+   regenerates mirrors, flips the acceptance rows, and bumps 4.3.0 → 4.4.0.
+6. **[manual] Operator Infisical provisioning + live smoke** — create the
    read-only, short-TTL UA identity, populate the host env vars, and verify a
    real `fr isolation exec --secret` end-to-end. Back-loaded: nothing agentic
    depends on it; the PR ships with this phase marked for the operator (the
-   stubs in phases 1–4 cannot exercise a live Infisical).
+   stubs in phases 1–5 cannot exercise a live Infisical).
 
 ## Testing
 
