@@ -560,6 +560,31 @@ def test_gc_orphan_token_glob_escapes_metacharacters(
     assert (live / "live.token").read_text() == "tok"
 
 
+def test_gc_orphan_token_reap_continues_past_a_refused_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """W4: matches are visited in sorted order, each in its own try. `aaa/<base>`
+    is reached through a symlinked profile dir (refused by containment, target
+    untouched); `dev/<base>` after it must still be reaped."""
+    repo, docker, target, _up = _gc_env(tmp_path, monkeypatch)
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / repo.name / "feat__gone"
+    docker.docker_labels = [("cOrph", str(gone))]
+    elsewhere = tmp_path / "elsewhere" / gone.name
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "precious").write_text("keep")
+    root = tmp_path / "home" / ".cache" / "fr" / "run-tokens" / repo.name
+    root.mkdir(parents=True)
+    (root / "aaa").symlink_to(elsewhere.parent)  # refused: a symlink in the path
+    good = canonical_token_dir(repo.name, "dev", gone)
+    good.mkdir(parents=True)
+    (good / "left.token").write_text("tok")
+
+    target.gc()
+
+    assert (elsewhere / "precious").read_text() == "keep" and (root / "aaa").is_symlink()
+    assert not good.exists()
+
+
 def test_gc_label_orphan_leaves_tokens_when_the_container_survives(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

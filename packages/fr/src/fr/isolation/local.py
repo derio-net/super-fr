@@ -1384,8 +1384,13 @@ class LocalWorktreeDevcontainerTarget:
             # metacharacter in a basename matches only itself, and contain every
             # match (canonical_token_dir refuses anything odd) before removal.
             pattern = f"{glob.escape(repo_name)}/*/{glob.escape(base)}"
-            for d in token_root().glob(pattern):
-                remove_token_dir(canonical_token_dir(repo_name, d.parent.name, d))
+            # sorted: a stable order, so one refused match (a symlinked profile
+            # dir, say) is skipped and every later match is still reaped (W4).
+            for d in sorted(token_root().glob(pattern)):
+                try:
+                    remove_token_dir(canonical_token_dir(repo_name, d.parent.name, d))
+                except Exception as e:
+                    print(f"warning: orphan token dir {d} skipped: {e}", file=sys.stderr)
         except Exception:
             pass
 
