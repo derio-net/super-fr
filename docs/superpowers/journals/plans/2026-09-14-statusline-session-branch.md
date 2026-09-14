@@ -179,3 +179,8 @@ Checked 6e22a38. SKILL.md and both mirrors are byte-identical, 120 lines, no HTM
 ### p5-manual-back-loaded · discovery · Phase 5 is [manual] and back-loaded: ships unimplemented, operator-driven post-merge (phase 5)
 
 No agentic phase depends on it. The run's grouped for_each still lists phase/5; fr run resolve offers only done|failed and failed would wedge the cursor, so both phase/5 members are resolved done with this entry as the record. Steps P5.T1.S1-S2 stay unticked until the operator updates the plugin, rewires ~/.claude/statusline.sh (or points statusLine.command / a symlink at fr-statusline-claude.sh) and checks the footer in a bound, an unbound base-clone and a non-repo session.
+
+<!-- fr:journal kind=decision scope=plan id=deliver-version-bump created=2026-09-14T23:35:40 -->
+### deliver-version-bump · decision · Deliver: minor bump 4.3.0 -> 4.4.0
+
+AGENTS.md 'Release / version bumping': plugins/*/skills/** changed (fr-isolation SKILL.md), so a bump is mandatory; the installer caches by version. Minor, not patch: user-visible additions (reference status line fr-statusline-claude.sh; segment --cwd and --format plain|ansi|oneline). Not major: the only break is the segment's v1 two-line stdout, consumed by the operator's own ~/.claude/statusline.sh (rewired in manual phase 5); AGENTS.md reserves major for breaking CLI/plan-schema changes.
