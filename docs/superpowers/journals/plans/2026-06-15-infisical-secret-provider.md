@@ -109,3 +109,53 @@ Spec section 3 Token conveyance and Flow rewritten to the per-workspace director
 ### review-p5-m10 · finding [fixed] · m10: SECRET_NEEDS_DEVCONTAINER lived in hostworktree.py and was imported by external.py (phase 5)
 
 Moved the shared refusal message to isolation/types.py next to IsolationError; hostworktree.py and external.py import it from there. Covered by tests/unit/test_secrets_mode_scope.py (both refusals still name devcontainer mode).
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V1 created=2026-09-14T18:10:16 phase=5 state=fixed -->
+### verify-p5-V1 · finding [fixed] · V1: the resolved token dir had no containment (phase 5)
+
+resolve_token_dir substituted a PR-reachable mount source and remove_token_dir then truncated every top-level file and rmtree-d the result, so source=${localEnv:HOME} would empty every dotfile at down, an unset variable resolved under /, run-tokens/../../.. escaped the root, a secrets/<repo> target emptied the operator env-files, and a symlinked dir truncated the files it pointed at. Fix: contain_token_dir (used by resolve_token_dir, canonical_token_dir and, in depth, remove_token_dir) requires the normalized path to be lexically under ~/.cache/fr/run-tokens, exactly three components deep, with no . / .. / empty component and no symlink in those components (realpath comparison); any leftover ${ after substitution is refused; remove_token_dir refuses symlinked dirs and out-of-root paths as a logged no-op and skips symlinked children. Proven by tests/unit/test_secrets_infisical.py::test_resolve_token_dir_refuses_uncontained_sources[7 sources], ::test_uncontained_source_fails_closed_at_up_exec_and_cleanup, ::test_symlinked_token_dir_is_refused_and_its_target_untouched, ::test_remove_token_dir_refuses_paths_outside_the_root, ::test_remove_token_dir_never_truncates_through_symlinked_children, ::test_canonical_token_dir_is_contained_too, tests/unit/test_secrets_wiring.py::test_down_with_home_as_mount_source_deletes_nothing_in_home; the legit mount keeps working (::test_resolve_token_dir_follows_mount_and_substitutes_variables and the exec/down suites).
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V2 created=2026-09-14T18:10:24 phase=5 state=fixed -->
+### verify-p5-V2 · finding [fixed] · V2: the gc orphan glob was unguarded (phase 5)
+
+_reap_orphan_tokens built */<basename> from the docker label path; a label of / gave */ (every repo dir on Python 3.11+) and a basename with glob metacharacters matched siblings. Fix: return when the repo or basename component is empty, glob.escape both, and route every match through canonical_token_dir (containment) before remove_token_dir. Proven by tests/unit/test_secrets_wiring.py::test_gc_orphan_token_glob_skips_empty_names and ::test_gc_orphan_token_glob_escapes_metacharacters.
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V3 created=2026-09-14T18:10:31 phase=5 state=fixed -->
+### verify-p5-V3 · finding [fixed] · V3: label-orphan token reap ran before the container was confirmed gone (phase 5)
+
+Same ordering m2 fixed for down. Fix: _container_present re-queries docker ps --all --filter=id=<cid> (fails closed: a query error reads as present) and _reap_orphan_tokens runs only when the container is absent; otherwise the tokens are left. Proven by tests/unit/test_secrets_wiring.py::test_gc_label_orphan_leaves_tokens_when_the_container_survives (rm fails, dir kept) and ::test_gc_label_orphan_reap_removes_the_orphan_token_dir (absent, dir reaped).
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V4 created=2026-09-14T18:10:38 phase=5 state=fixed -->
+### verify-p5-V4 · finding [fixed] · V4: kubernetes-auth up no longer created the mount source (phase 5)
+
+up_prepare created the dir only for universal-auth while the scaffold always writes the mount, so devcontainer up failed on a missing bind source for a kubernetes-auth profile. Fix: the (contained) dir is ensured whenever the mount is present, whatever the auth method; universal-auth still requires the mount. Proven by tests/unit/test_secrets_infisical.py::test_up_prepare_creates_the_mount_dir_for_kubernetes_auth_too and ::test_up_prepare_kubernetes_auth_without_a_mount_is_fine.
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V5 created=2026-09-14T18:10:44 phase=5 state=fixed -->
+### verify-p5-V5 · finding [fixed] · V5: a token write that failed halfway left the partial file behind (phase 5)
+
+_token_path was set after fh.write, so post_exec had nothing to remove. Fix: set immediately after os.open succeeds. Proven by tests/unit/test_secrets_infisical.py::test_partially_written_token_is_removed_by_post_exec (fdopen returns a writer that raises).
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V6 created=2026-09-14T18:10:50 phase=5 state=fixed -->
+### verify-p5-V6 · finding [fixed] · V6: env -u INFISICAL_TOKEN parsed a NAME=VALUE or -x user command as its own operand (phase 5)
+
+Fix: both scripts end in env -u INFISICAL_TOKEN -- "$@"; shape tests updated. Proven by tests/unit/test_secrets_infisical.py::test_exec_wrap_unsets_token_for_the_user_command and ::test_kubernetes_auth_wrap_has_no_token_file_and_no_assignment.
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V7 created=2026-09-14T18:10:59 phase=5 state=fixed -->
+### verify-p5-V7 · finding [fixed] · V7: ${localEnv:VAR:default} was not parsed (phase 5)
+
+Implemented rather than refused: _VAR accepts the default form and _substitute uses the default when the variable is unset, matching the devcontainer CLI. Proven by tests/unit/test_secrets_infisical.py::test_resolve_token_dir_supports_localenv_default_values (unset -> default, set -> value).
+
+<!-- fr:journal kind=finding scope=plan id=verify-p5-V8 created=2026-09-14T18:11:05 phase=5 state=fixed -->
+### verify-p5-V8 · finding [fixed] · V8: no test proved down follows a non-canonical mount (phase 5)
+
+Added tests/unit/test_secrets_wiring.py::test_down_follows_a_mount_that_differs_from_the_canonical_layout: the committed mount names other-clone, down removes that dir and leaves the canonical-layout sibling keyed on the runtime repo name intact.
+
+<!-- fr:journal kind=decision scope=plan id=verify-p5-limit-shared-basename created=2026-09-14T18:11:15 phase=5 -->
+### verify-p5-limit-shared-basename · decision · Known limitation: custom --path workspaces sharing a basename share a token dir (phase 5)
+
+The per-workspace key is the worktree basename, so two workspaces of one repo and profile created with custom --path values that share a basename still share a token dir. Accepted for v1: nothing in the repo passes --path today and the default cache layout (~/.cache/fr/worktrees/<repo>/<branch-slug>) makes basenames unique per repo. Recorded in the spec re-integration addendum under Known limitations.
+
+<!-- fr:journal kind=decision scope=plan id=verify-p5-limit-renamed-clone-gc created=2026-09-14T18:11:20 phase=5 -->
+### verify-p5-limit-renamed-clone-gc · decision · Known limitation: the gc fallback does not find orphan token dirs of a renamed clone (phase 5)
+
+When a workspace config is gone the gc fallback keys on the current checkout name, so an orphan token dir left by a clone renamed after scaffolding is not found. Accepted for v1: the dir is normally empty because each exec removes its own file. Recorded in the spec re-integration addendum under Known limitations.

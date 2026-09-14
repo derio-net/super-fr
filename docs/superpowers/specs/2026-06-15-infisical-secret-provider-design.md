@@ -490,6 +490,25 @@ hardened to `0600` with `0700` parent directories.
 the base install, then the forge CLI install for gitlab/gitea, then the Infisical
 CLI install for an infisical profile. Each step is appended, never substituted.
 
+**The token dir is contained.** Whatever the committed mount says, the resolved
+host directory must be exactly `~/.cache/fr/run-tokens/<repo>/<profile>/<workspace>`
+— three components under the root, no `..`, no unresolved variable, no symlink
+in the path — or fr refuses at `up`, `exec` and `down`; `remove_token_dir`
+re-checks and never truncates through a symlinked child. The alternative was a
+`down` that empties whatever directory a PR-reachable file named.
+
+**Known limitations.**
+
+1. *Shared basename with a custom `--path`.* The per-workspace key is the
+   worktree basename, so two workspaces of one repo and profile created with
+   custom `--path` values that share a basename still share a token dir. Nothing
+   in the repo passes `--path` today, and the default cache layout
+   (`~/.cache/fr/worktrees/<repo>/<branch-slug>`) makes basenames unique per repo.
+2. *Renamed clones in the gc fallback.* When a workspace's config is gone, the gc
+   fallback keys on the current checkout name. An orphan token dir left by a clone
+   that was renamed after scaffolding is not found. It is normally empty, because
+   each exec removes its own file.
+
 ## Test Plan
 
 Every item runs without a live Infisical except item 6. Item numbers match the
