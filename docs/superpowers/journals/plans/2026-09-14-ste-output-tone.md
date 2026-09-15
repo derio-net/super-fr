@@ -229,3 +229,8 @@ Found before dispatch: the _create_plan fixture has no skeleton marker, so self-
 ### 2bbe0d69c345 · discovery · complete-phase 6 warns on not-implemented acceptance rows (phase 6)
 
 fr plan edit --complete-phase 6 prints a warning that journal-add-warns-on-long-prose and plan-self-review-warns-on-long-prose are still not-implemented. Expected: those rows are satisfied by phase 7 (wiring the lint into fr journal add and fr plan self-review), not phase 6 (the lint module itself). No action taken in phase 6.
+
+<!-- fr:journal kind=finding scope=plan id=p8-plan-fr-goal-line-cap created=2026-09-15T21:06:21 phase=8 state=fixed -->
+### p8-plan-fr-goal-line-cap · finding [fixed] · Plan 08: fr-goal reflow instruction would break the line cap (phase 8)
+
+Found by a dry run before dispatch. The reporting contract adds 2 lines to fr-goal, which is at the 120-line cap. Reflowing only the §2 paragraph, as the step said, gives 121 lines. Reflowing the Interactive touchpoints paragraph as well gives 120. P8.T1.S2(a) now names both paragraphs.
