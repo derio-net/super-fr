@@ -51,6 +51,8 @@ placeholder; the real k8s delivery is ESO→Secret→env per the frank design.
    token-file with per-exec files, which closes the concurrent-exec race phase 2
    only commented on. It then documents `--secret` within the skill line cap,
    regenerates mirrors, flips the acceptance rows, and bumps 4.3.0 → 4.4.0.
+   Main then released 4.4.0 itself (status line v2, #473), so the branch was
+   re-bumped to 4.5.0 when it merged main on 2026-09-15.
 6. **[manual] Operator Infisical provisioning + live smoke** — create the
    read-only, short-TTL UA identity, populate the host env vars, and verify a
    real `fr isolation exec --secret` end-to-end. Back-loaded: nothing agentic

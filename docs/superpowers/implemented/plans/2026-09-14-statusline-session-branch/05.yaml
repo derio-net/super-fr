@@ -1,0 +1,51 @@
+schema_version: 2
+phase:
+  number: 5
+  title: '[manual] Operator rollout — update the plugin, rewire ~/.claude/statusline.sh,
+    eyeball the footer'
+  tag: manual
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - statusline-shows-bound-workspace
+tasks:
+- number: 1
+  title: Operator rollout (post-merge)
+  steps:
+  - id: P5.T1.S1
+    text: |
+      After merge: update the super-fr plugin so
+      `~/.claude/plugins/cache/derio-net--super-fr/super-fr/current/scripts/`
+      contains the v2 segment and `fr-statusline-claude.sh`. Then either
+      point `statusLine.command` at `fr-statusline-claude.sh`, or rewire
+      `~/.claude/statusline.sh`: replace its segment block and lines 2–3 with
+      `rows=$(printf '%s' "$data" | bash "$segment" --format ansi)`, line 2 =
+      row 1 + SEP + cwd, line 3 = row 2 (drop the `iso_line` / `wt_line`
+      handling and the stale dev-checkout fallback path).
+  - id: P5.T1.S2
+    text: |
+      Look at the footer in (a) a session bound to an fr workspace — green
+      `branch: <feat>` and `worktree: <full path>`; (b) a plain base-clone
+      session — purple `branch: main` and `no fr-isolation`; (c) a session in
+      a non-repo directory — purple `no branch` / `no fr-isolation`.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-15T17:45:38+00:00'
+      note: '2026-09-15: operator updated super-fr plugin to 4.4.0 (cache current
+        -> 4.4.0); ~/.claude/statusline.sh replaced by a symlink to current/scripts/fr-statusline-claude.sh
+        (old script backed up to statusline.sh.bak-1789493782).'
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-09-15T17:45:49+00:00'
+      note: '2026-09-15: operator confirmed the live footer looks good. Pre-check
+        renders via bash ~/.claude/statusline.sh: bound session green branch/worktree
+        rows; unbound willikins base clone purple branch row + no fr-isolation; /tmp
+        purple no branch + no fr-isolation.'
+  completion:
+    at: '2026-09-15T17:50:17+00:00'
+    note: 'Operator rollout done 2026-09-15: plugin 4.4.0, status line symlinked to
+      fr-statusline-claude.sh, footer confirmed by the operator (journal p5-operator-verified).'
+    observed_prs: []
