@@ -184,3 +184,8 @@ Wrapped to match the file's ~85-character lines.
 ### r4-m7-executor-test · finding [fixed] · M7 Executor test raised IndexError on a renamed heading (phase 4)
 
 Test asserts the return heading exists first, normalizes whitespace, and also pins 'every journal entry'.
+
+<!-- fr:journal kind=finding scope=plan id=rebase-workflow-check-hermetic created=2026-09-15T19:12:54 state=fixed -->
+### rebase-workflow-check-hermetic · finding [fixed] · test_cli_all_fails_when_nothing_is_discoverable was not hermetic
+
+Found in the deliver gate and again after the rebase on 9ac7679. shipped_workflow_dirs always appends the marketplace clone under HOME, so on a machine with super-fr installed the test finds fr-goal and fails; CI has no clone and passed. Fix: the test sets HOME to an empty temp directory. Product code unchanged.

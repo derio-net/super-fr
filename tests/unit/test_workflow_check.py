@@ -243,6 +243,10 @@ def test_cli_all_fails_when_nothing_is_discoverable(tmp_path: Path, monkeypatch)
     empty_shipped.mkdir()
     # Defeat the wheel-internal copy too, or there is no "nothing" to test.
     monkeypatch.setattr(resolve_mod, "packaged_shipped_workflows_dir", lambda: None)
+    # And the marketplace clone: `shipped_workflow_dirs` always appends
+    # `~/.claude/plugins/marketplaces/...`, so on a machine with super-fr
+    # installed it finds `fr-goal` and this passed only in CI.
+    monkeypatch.setenv("HOME", str(tmp_path / "empty-home"))
 
     result = _invoke(None, repo, empty_shipped, ["workflow", "check", "--all"])
 
