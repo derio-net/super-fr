@@ -238,8 +238,9 @@ The shared-block markers stay: the tests use them to find the text.
 - `docs/acceptance/matrix.yaml` — `hermes-rules-soul-block` names four shipped
   rules again.
 
-The rule was never released: 4.4.0 is not on `main`. No consumer machine has
-it, so no uninstall cleanup is needed.
+The rule was never released. `main` shipped 4.4.0 from a different PR (#473),
+without this rule. No consumer machine has it, so no uninstall cleanup is
+needed.
 
 ### F. Tests (new)
 
@@ -261,8 +262,9 @@ it, so no uninstall cleanup is needed.
 
 ### G. Release
 
-4.4.0 stays (minor): new warnings, a new opt-in style, and changed skill
-behaviour. No second bump is needed; 4.4.0 is not released.
+Minor bump to **4.5.0**: new warnings, a new opt-in style, and changed skill
+behaviour. `main` already released 4.4.0 (#473), so this branch needs its own
+bump.
 
 ## 6. Risks and mitigations
 
