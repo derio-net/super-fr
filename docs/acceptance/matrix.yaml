@@ -709,8 +709,9 @@ rows:
       Test Plan item 1 (real Hermes install).
   - id: hermes-rules-soul-block
     capability: Hermes Agent compatibility
-    acceptance: super-fr's three shipped rules reach a Hermes user via a managed, reversible
-      ~/.hermes/SOUL.md block.
+    acceptance: super-fr's four shipped rules (fr-isolation-required, fr-plan-override,
+      fr-worktree-override, no-claude-p-batch) reach a Hermes user via a managed,
+      reversible ~/.hermes/SOUL.md block.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
     levels:
@@ -1852,3 +1853,53 @@ rows:
       (test_cwd_flag_reads_no_stdin, test_oneline, test_never_invokes_fr). Hermes custom_command
       wiring is docs-only until NousResearch/hermes-agent#109596 ships; OpenCode has
       no status-line hook (anomalyco/opencode#37464).
+  - id: ste-style-opt-in
+    capability: output-tone
+    acceptance: An operator can select a Simplified Technical English output style in
+      /config, and super-fr never forces a style.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit test pins
+      the frontmatter without force-for-plugin; operator walk (Test Plan step 2).'
+  - id: fr-goal-reports-result-and-next-step
+    capability: output-tone
+    acceptance: During fr-goal and fr-debugging runs, the operator gets updates only
+      at gates, blocks and delivery, each as the result then the next step.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit test pins
+      the skill text; operator walk and re-measure (Test Plan steps 3-4).'
+  - id: acceptance-rows-presented-as-table
+    capability: output-tone
+    acceptance: New acceptance rows reach the operator as one short table, not a paragraph
+      per row.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit test pins
+      fr-brainstorming and fr-acceptance text.'
+  - id: journal-add-warns-on-long-prose
+    capability: output-tone
+    acceptance: fr journal add warns, without failing, when an entry has a sentence
+      over 25 words or a filler word.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit tests on fr.prose_lint
+      and the journal add command.'
+  - id: plan-self-review-warns-on-long-prose
+    capability: output-tone
+    acceptance: fr plan self-review warns, without failing, on long sentences and filler
+      words in pending steps, the plan prose and its spec.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit tests on self_review
+      prose issues and the exit code.'

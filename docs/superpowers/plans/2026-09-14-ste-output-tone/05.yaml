@@ -1,0 +1,129 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Repurpose — opt-in STE style; remove the rule, its wiring and the executor
+    line
+  tag: agentic
+  tier: mechanical
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - ste-style-opt-in
+tasks:
+- number: 1
+  title: The STE style is opt-in
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: in tests/unit/test_ste_output_tone.py, replace the whole function
+      test_style_is_forced_and_keeps_coding_instructions with:
+      BEGIN replacement
+      def test_style_is_opt_in_and_keeps_coding_instructions() -> None:
+          fm = _frontmatter(STYLE.read_text())
+          assert fm["name"] == "Simplified Technical English"
+          assert "force-for-plugin" not in fm, "super-fr must never force an output style (spec d7)"
+          assert fm["keep-coding-instructions"] is True
+          assert _shared_block(STYLE)
+      END replacement
+      Run `uv run pytest tests/unit/test_ste_output_tone.py -q --no-cov`.
+      Expected: 1 failed (force-for-plugin is present).
+  - id: P5.T1.S2
+    text: |-
+      GREEN: in plugins/super-fr/output-styles/simplified-technical-english.md,
+      delete the frontmatter line `force-for-plugin: true`. Keep every other line.
+      Run the same pytest command. Expected: all pass.
+  - id: P5.T1.S3
+    text: |-
+      REFACTOR: run `uv run ruff format tests/unit/test_ste_output_tone.py` and
+      `uv run ruff check tests/unit/test_ste_output_tone.py`. Both pass.
+      Commit: `feat(style): make the STE output style opt-in`.
+- number: 2
+  title: Remove the ste-output-tone rule and its wiring
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: edit the tests first.
+      (a) tests/unit/test_ste_output_tone.py: delete the RULE constant, the
+      _raw_block helper, test_rule_block_is_identical_to_style_block, the
+      EXECUTOR constant and test_phase_executor_returns_in_ste. On the two tests
+      decorated with `@pytest.mark.parametrize("path", [STYLE, RULE])`, remove the
+      decorator and the `path` parameter, and use STYLE in the body. Remove
+      `import pytest` if nothing uses it.
+      (b) tests/unit/test_tripwire_hermes_rules_sync.py: remove "ste-output-tone"
+      from SHIPPED_RULES. In the module docstring, change "the five *shipped*
+      plugin rules (fr-isolation-required, fr-plan-override,
+      fr-worktree-override, no-claude-p-batch, ste-output-tone)" to "the four
+      *shipped* plugin rules (fr-isolation-required, fr-plan-override,
+      fr-worktree-override, no-claude-p-batch)".
+      Run `uv run pytest tests/unit/test_ste_output_tone.py
+      tests/unit/test_tripwire_hermes_rules_sync.py -q --no-cov`.
+      Expected: test_canonical_rules_are_exactly_the_shipped_rules fails.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: remove the carrier and its wiring.
+      (a) `git rm plugins/super-fr/rules/ste-output-tone.md`.
+      (b) scripts/install.sh: delete the two lines
+      `cp "$PLUGIN_ROOT/plugins/super-fr/rules/ste-output-tone.md" "$RULES_DIR/ste-output-tone.md"`
+      and the `echo "  Installed $RULES_DIR/ste-output-tone.md ..."` line after it.
+      In the `--uninstall` block, delete `rm -f "$RULES_DIR/ste-output-tone.md"`.
+      Change its echo back to `echo "  Removed fr/vk plan-override and fr-worktree-override rules"`.
+      (c) scripts/sync-hermes.py: remove "ste-output-tone" from SHIPPED_RULE_NAMES.
+      (d) Run `uv run scripts/sync-opencode.py` and `uv run scripts/sync-hermes.py`.
+      They delete .opencode/instructions/ste-output-tone.md and rewrite
+      .hermes/SOUL.d/super-fr-rules.md.
+      (e) plugins/super-fr/agents/fr-phase-executor.md: the last paragraph must
+      read only `Keep the prose minimal; the journal holds the detail.`
+      Delete the STE sentence and its wrapped second line.
+      (f) AGENTS.md, section "Skills/rules: canonical source vs. generated
+      mirrors": in the list `fr-isolation-required.md`, `fr-plan-override.md`,
+      `no-claude-p-batch.md`, `fr-worktree-override.md`, `ste-output-tone.md`,
+      delete `ste-output-tone.md` and fix the punctuation so the list ends at
+      `fr-worktree-override.md`).
+      (g) docs/acceptance/matrix.yaml, row hermes-rules-soul-block: set its
+      acceptance to "super-fr's four shipped rules (fr-isolation-required,
+      fr-plan-override, fr-worktree-override, no-claude-p-batch) reach a Hermes
+      user via a managed, reversible ~/.hermes/SOUL.md block." Use the Edit tool.
+      Do not change its status, levels or notes.
+      Run `uv run pytest tests/unit/test_ste_output_tone.py
+      tests/unit/test_tripwire_hermes_rules_sync.py tests/unit/test_install_copies_rules.py
+      tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_hermes_install_cmd.py
+      tests/unit/test_phase_executor_agent.py -q --no-cov`. Expected: all pass.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR + check: run `uv run scripts/sync-opencode.py --check`,
+      `uv run scripts/sync-hermes.py --check`, `fr acceptance report --deterministic`
+      and `fr acceptance check`. All exit 0.
+      Run `git grep -n ste-output-tone -- plugins scripts tests AGENTS.md .opencode .hermes`.
+      Expected: no output.
+      Commit: `refactor(rules): remove the ste-output-tone rule and its wiring`.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-15T18:36:23+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-09-15T18:36:34+00:00'
+      note: null
+    P5.T1.S3:
+      state: x
+      ticked_at: '2026-09-15T18:36:42+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-09-15T18:42:03+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-09-15T18:42:12+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-09-15T18:42:22+00:00'
+      note: null
+  completion:
+    at: '2026-09-15T18:42:35+00:00'
+    note: null
+    observed_prs: []
