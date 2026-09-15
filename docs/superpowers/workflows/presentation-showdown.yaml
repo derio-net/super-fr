@@ -1,0 +1,44 @@
+# Repo-authored shape for the half-and-half deck + fair-fight experiment.
+# Resolves via docs/superpowers/workflows/presentation-showdown.yaml (wholesale
+# override order — no shipped shape of this name exists). Human companion prose
+# lives in presentation-showdown.md beside this file; fr only reads this YAML.
+#
+# Neutral by contract: no step presumes fr-goal wins. The closing step asks
+# "is the ceremony worth it at current model capability?" and the comparison
+# table is filled from measured runs, not asserted.
+workflow: presentation-showdown
+schema: 1
+description: Build the fr-goal showdown deck and run the fair-fight experiment.
+unit: run
+requires: [git]
+steps:
+  - id: outline
+    kind: agent
+    skill: super-fr:fr-brainstorming
+    gate: operator
+    emits: [spec, journal:spec]
+
+  - id: experiment-design
+    kind: agent
+    skill: super-fr:fr-plan
+    needs: [spec]
+    emits: [plan, journal:plan]
+
+  - id: design-review
+    kind: cli
+    run: fr plan self-review {{ artifacts.plan }}
+
+  - id: instrument
+    kind: agent
+    needs: [spec, plan]
+    emits: [journal:plan]
+
+  - id: record-compare
+    kind: agent
+    needs: [spec, plan]
+    emits: [journal:plan]
+
+  - id: deliver-deck
+    kind: agent
+    needs: [spec, plan]
+    emits: [pr]
