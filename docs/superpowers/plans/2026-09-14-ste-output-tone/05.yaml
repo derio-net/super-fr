@@ -1,7 +1,8 @@
 schema_version: 2
 phase:
   number: 5
-  title: Repurpose — opt-in STE style; remove the rule, its wiring and the executor line
+  title: Repurpose — opt-in STE style; remove the rule, its wiring and the executor
+    line
   tag: agentic
   tier: mechanical
   depends_on:
@@ -99,16 +100,16 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-15T18:36:23+00:00'
       note: null
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-15T18:36:34+00:00'
       note: null
     P5.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-15T18:36:42+00:00'
       note: null
     P5.T2.S1:
       state: ' '

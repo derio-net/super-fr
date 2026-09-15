@@ -47,10 +47,10 @@ def _sentences(block: str) -> list[str]:
     return sentences
 
 
-def test_style_is_forced_and_keeps_coding_instructions() -> None:
+def test_style_is_opt_in_and_keeps_coding_instructions() -> None:
     fm = _frontmatter(STYLE.read_text())
     assert fm["name"] == "Simplified Technical English"
-    assert fm["force-for-plugin"] is True
+    assert "force-for-plugin" not in fm, "super-fr must never force an output style (spec d7)"
     assert fm["keep-coding-instructions"] is True
     assert _shared_block(STYLE)
 
