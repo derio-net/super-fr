@@ -22,26 +22,27 @@
 </section>
 
 <!-- 1 questions -->
-<section>
-<h2>What is this talk really about</h2>
-<ol>
-<li><strong>Structure and best practices</strong> over free form discussion</li>
-<li><strong>Agentic safety* and autonomy</strong> towards a goal</li>
-<li><strong>High feature throughput</strong> in local development</li>
-</ol>
-<aside class="notes">Three claims, increasing ambition. One: structure beats chat. A pipeline with artifacts outperforms free-form discussion every time the work outlives the session. Two: safety and autonomy together, not traded. The asterisk is honest: these are discipline backstops with documented escapes, not a security boundary. Autonomy inside the cage, never outside it. Three: throughput is the scoreboard. A thousand merged PRs in four months is what the first two buy you in local development.</aside>
+<section data-markdown>
+## What is this talk really about
+
+1. **Structure and best practices** over free form discussion
+2. **Agentic safety* and autonomy** towards a goal
+3. **High feature throughput** in local development
+
+<aside class="notes"></aside>
 </section>
 
 <!-- 2 agenda -->
-<section>
-<h2>Agenda</h2>
-<ul>
-<li><strong>Stations 1–3</strong> — honest vanilla, superpowers, fr-goal</li>
-<li><strong>Feature velocity</strong> — 1000+ merged PRs, one annotated body</li>
-<li><strong>Twelve upgrades</strong> — cage to archive, each justified</li>
-<li><strong>Close</strong> — your first goal, then the test track</li>
-</ul>
-<aside class="notes">Shapes first, upgrades second. The model gives each upgrade somewhere to hang. Then we get practical.</aside>
+<section data-markdown>
+## Agenda
+
+- **Three stations:** just the agent and its harness / superpowers / super-fr
+- **Twelve upgrades** towards fr-goal
+- **Example run** — an annotated test track
+- **Quickstart:** installation and your first goal
+- **Discussion**
+
+<aside class="notes"></aside>
 </section>
 
 <!-- 3 vanilla -->
@@ -50,7 +51,7 @@
 <div class="crumb"><strong>Stages</strong> &gt; Upgrades &gt; Run it</div>
 <h2>Vanilla cycle</h2>
 <pre class="chain"><code class="nohighlight">prompt ──▶ plan in chat ──▶ code in base
-──▶ eyeball ──▶ push?</code></pre>
+──▶ eyeball ──▶ commit + push</code></pre>
 <ul>
 <li>Outcome in, approach out: explores, asks on real decisions</li>
 <li>Three modes: interactive, plan-to-approve, autopilot</li>
@@ -69,7 +70,7 @@
 <div class="crumb"><strong>Stages</strong> &gt; Upgrades &gt; Run it</div>
 <h2>Superpowers run</h2>
 <pre class="chain"><code class="nohighlight">idea ──▶ brainstorm ──▶ write plan ──▶ worktree
-──▶ execute+TDD ──▶ verify→review→fix ──▶ finish</code></pre>
+──▶ execute plan + TDD ──▶ verify→review→fix ──▶ finish</code></pre>
 <ul>
 <li>Idea in, approved spec out: no code before sign-off</li>
 <li>Spec in, zero-context plan out, then two executor options</li>
@@ -102,20 +103,25 @@
 <!-- 6 street cred -->
 <section>
 <div class="crumb"><strong>Stages</strong> &gt; Upgrades &gt; Run it</div>
-<h2>Feature velocity</h2>
-<ul>
-<li><strong>1000+ merged PRs</strong> across <strong>15 repos</strong>, May to September 2026</li>
-<li>Roughly two thirds of sampled bodies carry pipeline markers</li>
-<li>Example: <code>super-fr#449</code> — Why, spec/plan/journal links, What ships</li>
-</ul>
-<blockquote>Acceptance rows, verification log, journaled deviations, open findings</blockquote>
+<section data-markdown>
+## Feature velocity
+
+- **1000+ merged PRs** across **15 repos**, May to September 2026
+- Roughly two thirds of sampled bodies carry pipeline markers
+- Example: `super-fr#449` — Why, spec/plan/journal links, What ships
+
+> Acceptance rows, verification log, journaled deviations, open findings
+
 <aside class="notes">Feature velocity, honestly labeled. A thousand merged pull requests in four months across fifteen repos of one org, and about two thirds of the bodies I sampled reference the spec, the plan, or the journal. Pull request 449 is the anatomy slide: Why, links to spec plan journal, what ships, acceptance rows all flipped to ci, verification output, deviations from the plan with journal hashes, open findings that are follow-ups not blockers, and an operator rollout phase. Caveat I will not skip: not every one of those thousand ran this pipeline. The claim is that the org ships at this rate with this workflow available, and the bodies show the discipline spreading.</aside>
+</section>
 </section>
 
 <!-- 7 upgrades divider -->
-<section class="divider">
-<h1>Upgrades, each justified</h1>
-<p>What superpowers lacked, the failure that paid, what it costs</p>
+<section class="divider" data-markdown>
+# Upgrades, each justified
+
+What superpowers lacked, the failure that paid, what it costs
+
 <aside class="notes">The evolutions showed the what. These next slides show the why, one upgrade at a time. Each follows the same shape: what superpowers lacked, the failure that paid for the addition, what it costs you.</aside>
 </section>
 
@@ -135,14 +141,19 @@
 <aside class="notes">Upgrade one, the cage. Superpowers had using-git-worktrees as an opt-in sidecar. Here isolation is mandatory: worktree plus devcontainer before anything else, every command through the exec bridge, secrets host-side per profile. A brainstorm that dies leaves the base pristine. That sentence alone is worth the profile-setup interview on first run.</aside>
 <img class="side" src="../diagrams/up-cage.png" alt="">
 </section>
-<section>
-<h2>D1 — isolation commands</h2>
-<pre><code>fr isolation up --branch feat/thing --profile dev
+<section data-markdown>
+## D1 — isolation commands
+
+```
+fr isolation up --branch feat/thing --profile dev
 fr isolation exec --branch feat/thing -- uv run pytest -q
 fr isolation status
-fr isolation down --branch feat/thing</code></pre>
-<ul><li>Worktree plus container, secrets host-side per profile</li>
-<li>Refuses teardown while the pull request is open</li></ul>
+fr isolation down --branch feat/thing
+```
+
+- Worktree plus container, secrets host-side per profile
+- Refuses teardown while the pull request is open
+
 <p class="nav"><a href="#/8/0">↑ back</a></p>
 </section>
 </section>
@@ -163,9 +174,11 @@ fr isolation down --branch feat/thing</code></pre>
 <aside class="notes">Upgrade two, the recipe. Superpowers' pipeline lived in skill prose. Here it is data: a shape is an ordered list of steps plus what each step needs and emits. Cli steps are deterministic, nobody interprets them. Agent steps never execute inside fr, it prints a brief, you do the work, you resolve. The gate is the one promised stop. Consequence: the engine is a plain program with no path to a language model. Full file: plugins/super-fr/workflows/fr-goal.yaml, six steps plus two grouped children under implement.</aside>
 <img class="side" src="../diagrams/up-recipe.png" alt="">
 </section>
-<section>
-<h2>D2 — shape fragment, real file</h2>
-<pre><code class="language-yaml">workflow: fr-goal
+<section data-markdown>
+## D2 — shape fragment, real file
+
+```yaml
+workflow: fr-goal
 schema: 1
 unit: run
 requires: [git, tests, scm]
@@ -174,9 +187,12 @@ steps:
     kind: agent
     skill: super-fr:fr-brainstorming
     gate: operator
-    emits: [spec, journal:spec]</code></pre>
-<ul><li>Source: <code>plugins/super-fr/workflows/fr-goal.yaml</code></li>
-<li><code>implement</code> is a grouped <code>for_each</code>, review enforced per phase</li></ul>
+    emits: [spec, journal:spec]
+```
+
+- Source: `plugins/super-fr/workflows/fr-goal.yaml`
+- `implement` is a grouped `for_each`, review enforced per phase
+
 <p class="nav"><a href="#/9/0">↑ back</a></p>
 </section>
 </section>
@@ -197,9 +213,11 @@ steps:
 <aside class="notes">Upgrade three, the conveyor. Superpowers kept position in chat and checkboxes. The run file is a cursor on your branch: advance runs cli steps and briefs agent ones, resolve is the only way past running. Start validates the shape before provisioning anything, then writes the run inside the workspace. Failure holds the cursor instead of sliding past it.</aside>
 <img class="side" src="../diagrams/up-conveyor.png" alt="">
 </section>
-<section>
-<h2>D3 — run file, real run</h2>
-<pre><code class="language-yaml">run: 2026-09-09-feat-presentation-showdown
+<section data-markdown>
+## D3 — run file, real run
+
+```yaml
+run: 2026-09-09-feat-presentation-showdown
 workflow: presentation-showdown@1
 cursor: record-compare
 steps:
@@ -207,9 +225,12 @@ steps:
   experiment-design: {state: done}
   design-review: {state: done, exit: 0}
   instrument: {state: done}
-  record-compare: {state: pending}</code></pre>
-<ul><li>This deck's own run, committed on its branch</li>
-<li>Failed steps hold the cursor, pending steps wait</li></ul>
+  record-compare: {state: pending}
+```
+
+- This deck's own run, committed on its branch
+- Failed steps hold the cursor, pending steps wait
+
 <p class="nav"><a href="#/10/0">↑ back</a></p>
 </section>
 </section>
@@ -230,13 +251,18 @@ steps:
 <aside class="notes">Upgrade four, the cord. Before: decisions arrived one at a time across days, and anything unanswered got guessed. So exploration first, then a single batched round. Four questions max forces the agent to rank what is truly operator-owned. Unanswered is a stop, never a default. After that the agent owes you no more approvals, it owes you fix passes. Post-merge test plan and model-per-tier questions ride the same round when relevant.</aside>
 <img class="side" src="../diagrams/up-cord.png" alt="">
 </section>
-<section>
-<h2>D4 — answering the gate</h2>
-<pre><code>fr run resolve 2026-09-09-feat-presentation-showdown \
+<section data-markdown>
+## D4 — answering the gate
+
+```
+fr run resolve 2026-09-09-feat-presentation-showdown \
   --step outline --state done \
-  --emitted spec=docs/superpowers/specs/2026-09-09-design.md</code></pre>
-<ul><li>Emitted paths must exist and be repo-relative</li>
-<li>Unanswered gates stop the run, never default it</li></ul>
+  --emitted spec=docs/superpowers/specs/2026-09-09-design.md
+```
+
+- Emitted paths must exist and be repo-relative
+- Unanswered gates stop the run, never default it
+
 <p class="nav"><a href="#/11/0">↑ back</a></p>
 </section>
 </section>
@@ -257,26 +283,36 @@ steps:
 <aside class="notes">Upgrade five, the gate. Before: suite green, feature not doing the thing. So acceptance rows in docs/acceptance/matrix.yaml, one operator-can-X per row, flipped up only with test evidence. Rows are presented with defenses at brainstorm close. Silent creation is not agreement on scope. The plan links phases to rows and the gate errors on unlinked test-plan specs. Debt stays visible in the pull request, embarrassing by design.</aside>
 <img class="side" src="../diagrams/up-gate.png" alt="">
 </section>
-<section>
-<h2>D5 — matrix row anatomy</h2>
-<pre><code class="language-yaml"># status: ci | scheduled | skipped | not-implemented | failing
+<section data-markdown>
+## D5 — matrix row anatomy
+
+```yaml
+# status: ci | scheduled | skipped | not-implemented | failing
 rows:
   - id: session-workspace-binding
     capability: Isolation
     acceptance: bound workspace shown in status line
     origin: [super-fr:docs/superpowers/specs/2026-09-04-design.md]
-    status: ci</code></pre>
-<ul><li>Schema from <code>docs/acceptance/matrix.yaml</code>, rows appended by CLI only</li></ul>
+    status: ci
+```
+
+- Schema from `docs/acceptance/matrix.yaml`, rows appended by CLI only
+
 <p class="nav"><a href="#/12/0">↑ back</a></p>
 </section>
-<section>
-<h2>D13 — spec, superpowers vs super-fr</h2>
-<pre><code>superpowers: design doc + commit, reviewer loop x3, user reads file
+<section data-markdown>
+## D13 — spec, superpowers vs super-fr
+
+```
+superpowers: design doc + commit, reviewer loop x3, user reads file
 super-fr adds: Test Plan section (post-merge, operator-driven),
   Implementation Plans table (one row per repo),
-  acceptance rows born here with one-line defenses</code></pre>
-<ul><li>Same path, same name form — the additions are sections, not files</li>
-<li>Test Plan agreed in the batched Q&amp;A, driven together after merge</li></ul>
+  acceptance rows born here with one-line defenses
+```
+
+- Same path, same name form — the additions are sections, not files
+- Test Plan agreed in the batched Q&A, driven together after merge
+
 <p class="nav"><a href="#/12/0">↑ back</a></p>
 </section>
 </section>
@@ -298,9 +334,11 @@ super-fr adds: Test Plan section (post-merge, operator-driven),
 <aside class="notes">Upgrade six, the build sheet. Before: the single markdown plan, unmergeable, position kept in the model's head. Per-phase files also kill merge conflicts. Self-review runs before any token burns on implementation: dependency cycles, manual work hiding in agentic phases, unknown acceptance ids. Manual phases back-load by default, the pull request ships them unimplemented and you push to the same branch. Front-load only when agentic work genuinely depends.</aside>
 <img class="side" src="../diagrams/up-bay.png" alt="">
 </section>
-<section>
-<h2>D6 — phase file, real plan</h2>
-<pre><code class="language-yaml">schema_version: 2
+<section data-markdown>
+## D6 — phase file, real plan
+
+```yaml
+schema_version: 2
 phase:
   number: 2
   title: Experiment protocol and instrumentation
@@ -310,18 +348,26 @@ tasks:
   - number: 1
     title: Freeze protocol and capture harness
     steps:
-      - {id: P2.T1.S1, text: Write seed prompt template}</code></pre>
-<ul><li>One file per phase, explicit dependencies, tickable steps</li></ul>
+      - {id: P2.T1.S1, text: Write seed prompt template}
+```
+
+- One file per phase, explicit dependencies, tickable steps
+
 <p class="nav"><a href="#/13/0">↑ back</a></p>
 </section>
-<section>
-<h2>D14 — plan, superpowers vs super-fr</h2>
-<pre><code>superpowers: # Feature Implementation Plan, checkbox steps,
+<section data-markdown>
+## D14 — plan, superpowers vs super-fr
+
+```
+superpowers: # Feature Implementation Plan, checkbox steps,
   2-5 minute granularity, reviewer loop, then handoff choice
 super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
-  P1.T1.S1 ids, tier + acceptance per phase, self-review gate</code></pre>
-<ul><li>Checkboxes a session ticks became state a CLI validates</li>
-<li>Manual phases labeled, cross-repo refs in canonical form</li></ul>
+  P1.T1.S1 ids, tier + acceptance per phase, self-review gate
+```
+
+- Checkboxes a session ticks became state a CLI validates
+- Manual phases labeled, cross-repo refs in canonical form
+
 <p class="nav"><a href="#/13/0">↑ back</a></p>
 </section>
 </section>
@@ -342,14 +388,19 @@ super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
 <aside class="notes">Upgrade seven, the robots. Superpowers already had subagent-driven execution and the iron TDD loop. What changed is the handoff: pickup plus spec plus journal render, discoveries stamped per phase, acceptance rows flipped only on evidence. Tiers route the model per phase, and the one hard rule is enforced by a hook: the executor never gets its own worktree, because a second worktree cannot see the spec and the run looks healthy while doing nothing.</aside>
 <img class="side" src="../diagrams/up-robots.png" alt="">
 </section>
-<section>
-<h2>D7 — journal entry, real run</h2>
-<pre><code>&lt;!-- fr:journal kind=decision scope=spec id=293fbe90d058 --&gt;
+<section data-markdown>
+## D7 — journal entry, real run
+
+```
+<!-- fr:journal kind=decision scope=spec id=293fbe90d058 -->
 ### 293fbe90d058 — decision — Outline gate answered
 
 Model: OpenAI Terra default effort both runs.
-Demo: details redacted (not accessed; not cleared).</code></pre>
-<ul><li>Machine-tagged entries, rendered raw into briefs and bodies</li></ul>
+Demo: details redacted (not accessed; not cleared).
+```
+
+- Machine-tagged entries, rendered raw into briefs and bodies
+
 <p class="nav"><a href="#/14/0">↑ back</a></p>
 </section>
 </section>
@@ -370,23 +421,33 @@ Demo: details redacted (not accessed; not cleared).</code></pre>
 <aside class="notes">Upgrade eight, the audit. Two lessons in one slide. Fixes pushed after a premature merge landed on dead branches, so now draft first and the push guard refuses merged-branch pushes. And the healthy-looking run that did nothing: a phase executor in a second worktree cut from main cannot see the spec, so the no-worktree carve-out is enforced by a hook, not by prose. Review findings are fixed with tests or refuted with reasoning, recorded open, fixed, or refuted. The pull request body is rendered from that list.</aside>
 <img class="side" src="../diagrams/up-audit.png" alt="">
 </section>
-<section>
-<h2>D8 — acceptance evidence, PR 449</h2>
-<pre><code>Six rows born with the spec, all now ci:
+<section data-markdown>
+## D8 — acceptance evidence, PR 449
+
+```
+Six rows born with the spec, all now ci:
 session-workspace-binding, statusline-shows-bound-workspace, ...
 fr acceptance check: 99 rows OK.
-pytest: 2685 passed, 84 skipped. ruff clean.</code></pre>
-<ul><li>Source: <code>derio-net/super-fr#449</code>, the annotated example</li></ul>
+pytest: 2685 passed, 84 skipped. ruff clean.
+```
+
+- Source: `derio-net/super-fr#449`, the annotated example
+
 <p class="nav"><a href="#/15/0">↑ back</a></p>
 </section>
-<section>
-<h2>D9 — deviations, PR 449</h2>
-<pre><code>Deviations from the plan text (all journaled):
+<section data-markdown>
+## D9 — deviations, PR 449
+
+```
+Deviations from the plan text (all journaled):
 - down runs detach_all after teardown, not before (7656ab55c62c)
 - Acceptance levels are unit|api|int|ui (62c39ba6fb84)
 Open findings (follow-ups, not blockers):
-- d028f3cc945a Hermes has no session bind transport yet.</code></pre>
-<ul><li>Drift disclosed with hashes, never silently absorbed</li></ul>
+- d028f3cc945a Hermes has no session bind transport yet.
+```
+
+- Drift disclosed with hashes, never silently absorbed
+
 <p class="nav"><a href="#/15/0">↑ back</a></p>
 </section>
 </section>
@@ -422,12 +483,17 @@ Open findings (follow-ups, not blockers):
 <aside class="notes">Upgrade ten, the docks. One backend switch instead of a rewrite per forge, dry-run default so every mutation previews first, labels projecting issue state. Harnesses are the sister plants: Claude is the reference with full hook surface, OpenCode ports the edit guard with a documented bash gap, Hermes carries the brief in delegate context. Same CLI everywhere.</aside>
 <img class="side" src="../diagrams/up-docks.png" alt="">
 </section>
-<section>
-<h2>D10 — docks in two commands</h2>
-<pre><code>fr apply docs/superpowers/plans/2026-09-09-x          # dry-run preview
-fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes</code></pre>
-<ul><li>Backend resolves per repo: config key, remote host, default</li>
-<li>Labels: <code>fr:ready</code> to <code>fr:pr-ready</code>, <code>manual</code> never routed</li></ul>
+<section data-markdown>
+## D10 — docks in two commands
+
+```
+fr apply docs/superpowers/plans/2026-09-09-x          # dry-run preview
+fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
+```
+
+- Backend resolves per repo: config key, remote host, default
+- Labels: `fr:ready` to `fr:pr-ready`, `manual` never routed
+
 <p class="nav"><a href="#/17/0">↑ back</a></p>
 </section>
 </section>
@@ -449,12 +515,17 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes</code></pre>
 <aside class="notes">Upgrade eleven, the group order. A feature touching three repos gets one coordinating spec with an Implementation Plans table, and one plan, branch, and pull request per repo. This session owns its repo outright. Each other repo gets a dispatched agent with its own worktree running the same pipeline from planning onward. Dependencies between plants live in the spec and the merge order, never in a phase's local wiring. Read-only reach extends here too: remote phase files resolve for status, while each repo's journal stays in its own building. Dispatch of cross-repo phases is explicitly not yet wired, and the tool says so instead of pretending.</aside>
 <img class="side" src="../diagrams/up-crossplant.png" alt="">
 </section>
-<section>
-<h2>D11 — cross-repo table, real spec</h2>
-<pre><code>| Plan | Repo | File | Depends on |
+<section data-markdown>
+## D11 — cross-repo table, real spec
+
+```
+| Plan | Repo | File | Depends on |
 |---|---|---|---|
-| 2026-09-09-presentation-showdown | `derio-net/super-fr` | `2026-09-09-presentation-showdown` | — |</code></pre>
-<ul><li>Cross-repo form: <code>owner/repo:path</code>, one plan per repo</li></ul>
+| 2026-09-09-presentation-showdown | `derio-net/super-fr` | `2026-09-09-presentation-showdown` | — |
+```
+
+- Cross-repo form: `owner/repo:path`, one plan per repo
+
 <p class="nav"><a href="#/18/0">↑ back</a></p>
 </section>
 </section>
@@ -475,20 +546,27 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes</code></pre>
 <aside class="notes">Upgrade twelve, the vault. At this org's volume the plans folder is a work queue, not history. Archive refuses incomplete work and dirty trees, moves plan plus journal plus run as one unit, sweeps fully-implemented specs. Garbage collection is content-matched: merged workspaces reap, open ones stay, unattended runners never leak. Done means archived.</aside>
 <img class="side" src="../diagrams/up-archive.png" alt="">
 </section>
-<section>
-<h2>D12 — the vault, real contents</h2>
-<pre><code>docs/superpowers/implemented/
+<section data-markdown>
+## D12 — the vault, real contents
+
+```
+docs/superpowers/implemented/
   audits/ journals/ plans/ specs/
-  plans/2026-04-12-vk-cli-p2-dispatch ...</code></pre>
-<ul><li>Gated mover only: complete phases, clean tree, one unit</li></ul>
+  plans/2026-04-12-vk-cli-p2-dispatch ...
+```
+
+- Gated mover only: complete phases, clean tree, one unit
+
 <p class="nav"><a href="#/19/0">↑ back</a></p>
 </section>
 </section>
 
 <!-- 20 run divider -->
-<section class="divider">
-<h1>Run it</h1>
-<p>From zero to first reviewed pull request</p>
+<section class="divider" data-markdown>
+# Run it
+
+From zero to first reviewed pull request
+
 <aside class="notes">Theory over. This part is a checklist you can follow Monday. Four moves plus pointers.</aside>
 </section>
 
@@ -535,12 +613,13 @@ fr acceptance status                  # flip rows on evidence
 <script src="vendor/reveal/plugin/notes.js"></script>
 <script src="vendor/reveal/plugin/highlight.js"></script>
 <script src="vendor/reveal/plugin/zoom.js"></script>
+<script src="vendor/reveal/plugin/markdown.js"></script>
 <script>
 Reveal.initialize({
   hash: true,
   slideNumber: true,
   transition: 'slide',
-  plugins: [ RevealNotes, RevealHighlight, RevealZoom ]
+  plugins: [ RevealNotes, RevealHighlight, RevealZoom, RevealMarkdown ]
 });
 </script>
 </body>
