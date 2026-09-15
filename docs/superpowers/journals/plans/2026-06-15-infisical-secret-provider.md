@@ -189,3 +189,8 @@ test_uncontained_source_fails_closed_at_up_exec_and_cleanup ended with ... or (h
 ### verify2-p5-toctou-residual · decision · Accepted residual: check-then-rmtree TOCTOU in remove_token_dir at teardown (phase 5)
 
 remove_token_dir contains and symlink-checks the dir, then truncates children and calls rmtree; a same-user host process could swap the dir between the check and the rmtree. Accepted: the container is verified gone before teardown cleanup runs, so only a same-user host process is in a position to race it (and such a process already has every permission the race would grant), and rmtree uses an fd-based walk that does not follow nested links. No code change.
+
+<!-- fr:journal kind=discovery scope=plan id=ci-4-5-0-bump-test-ceiling created=2026-09-15T18:24:48 phase=5 -->
+### ci-4-5-0-bump-test-ceiling · discovery · 4.5.0 bump broke a test pinning a <4.5.0 ceiling (phase 5)
+
+After merging main (4.4.0, #473) the branch re-bumped to 4.5.0. CI then failed tests/unit/test_plan_workflow_binding.py::test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4: its explicit --fr-version >=4.0.0,<4.5.0 no longer admits the installed fr, so plan create refuses it. The test is about keeping an explicit floor-at-4 constraint verbatim; the ceiling was incidental. Widened to <5.0.0 so it no longer breaks on the next minor bump.
