@@ -184,3 +184,8 @@ No agentic phase depends on it. The run's grouped for_each still lists phase/5; 
 ### deliver-version-bump · decision · Deliver: minor bump 4.3.0 -> 4.4.0
 
 AGENTS.md 'Release / version bumping': plugins/*/skills/** changed (fr-isolation SKILL.md), so a bump is mandatory; the installer caches by version. Minor, not patch: user-visible additions (reference status line fr-statusline-claude.sh; segment --cwd and --format plain|ansi|oneline). Not major: the only break is the segment's v1 two-line stdout, consumed by the operator's own ~/.claude/statusline.sh (rewired in manual phase 5); AGENTS.md reserves major for breaking CLI/plan-schema changes.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-operator-verified created=2026-09-15T19:46:12 phase=5 -->
+### p5-operator-verified · discovery · Phase 5 done: plugin 4.4.0 installed, status line symlinked, operator confirmed the footer (phase 5)
+
+Post-merge (PR #473, merge 96745de, release v4.4.0). Plugin cache current -> 4.4.0. ~/.claude/statusline.sh is now a symlink to ~/.claude/plugins/cache/derio-net--super-fr/super-fr/current/scripts/fr-statusline-claude.sh; settings.json unchanged (bash ~/.claude/statusline.sh). Renders: bound session green rows; unbound base clone purple branch + no fr-isolation; non-repo purple no branch + no fr-isolation. Operator: 'looks good'.
