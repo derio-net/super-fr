@@ -4,6 +4,9 @@ Spec: `docs/superpowers/specs/2026-09-14-ste-output-tone-design.md`.
 
 ## Goal
 
+> Superseded by the 2026-09-15 revision below: the forced style and the rule
+> are removed, and the plan now starts from the chattiness problem.
+
 Make agent replies and skill-prescribed text use Simplified Technical English
 (ASD-STE100 principles, no dictionary). Two carriers deliver one shared text:
 a forced plugin output style (Claude Code main thread) and a shipped rule

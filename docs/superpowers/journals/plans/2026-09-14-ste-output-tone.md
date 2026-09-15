@@ -189,3 +189,38 @@ Test asserts the return heading exists first, normalizes whitespace, and also pi
 ### rebase-workflow-check-hermetic · finding [fixed] · test_cli_all_fails_when_nothing_is_discoverable was not hermetic
 
 Found in the deliver gate and again after the rebase on 9ac7679. shipped_workflow_dirs always appends the marketplace clone under HOME, so on a machine with super-fr installed the test finds fr-goal and fails; CI has no clone and passed. Fix: the test sets HOME to an empty temp directory. Product code unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=r5-i1-version-clash created=2026-09-15T20:52:08 phase=5 state=fixed -->
+### r5-i1-version-clash · finding [fixed] · I1 Branch version 4.4.0 clashes with released main (phase 5)
+
+Verified: origin/main 9bb2248 is 4.4.0, released as v4.4.0 by PR 473. After a rebase this branch would carry no bump. Fixed in the rebase commit that follows: bump-version minor to 4.5.0, and spec §5.E and §5.G no longer claim 4.4.0 is unreleased.
+
+<!-- fr:journal kind=finding scope=plan id=r5-m1-test-docstring created=2026-09-15T20:52:10 phase=5 state=fixed -->
+### r5-m1-test-docstring · finding [fixed] · M1 Test docstring named a removed rule carrier (phase 5)
+
+tests/unit/test_ste_output_tone.py line 1 now says the opt-in STE output style.
+
+<!-- fr:journal kind=finding scope=plan id=r5-m2-tripwire-docstring created=2026-09-15T20:52:12 phase=5 state=fixed -->
+### r5-m2-tripwire-docstring · finding [fixed] · M2 Hermes tripwire docstring re-wrapped (phase 5)
+
+Rejoined the line; the file is identical to origin/main.
+
+<!-- fr:journal kind=finding scope=plan id=r5-m3-style-subagent-scope created=2026-09-15T20:52:14 phase=5 state=fixed -->
+### r5-m3-style-subagent-scope · finding [fixed] · M3 Opt-in style claimed subagent results (phase 5)
+
+Output styles do not reach subagents. The Scope sentence now lists replies, status updates, skill announcements, PR bodies and journal entries. The filler tripwire reads only the Words section.
+
+<!-- fr:journal kind=finding scope=plan id=r5-m4-prose-goal created=2026-09-15T20:52:16 phase=5 state=fixed -->
+### r5-m4-prose-goal · finding [fixed] · M4 Plan prose Goal still described the forced style (phase 5)
+
+Added a superseded note that points to the 2026-09-15 revision section.
+
+<!-- fr:journal kind=finding scope=plan id=r5-m5-m6-no-action created=2026-09-15T20:52:17 phase=5 state=refuted -->
+### r5-m5-m6-no-action · finding [refuted] · M5 and M6: no action (phase 5)
+
+M5: phase 8 step P8.T2.S1 already moves ste-style-opt-in to skipped with a unit ref. M6: the title re-wrap by fr plan edit is harmless.
+
+<!-- fr:journal kind=finding scope=plan id=p7-plan-exit-code-test created=2026-09-15T20:52:19 phase=5 state=fixed -->
+### p7-plan-exit-code-test · finding [fixed] · Plan 07: exit-code test assumed a clean fixture (phase 5)
+
+Found before dispatch: the _create_plan fixture has no skeleton marker, so self-review exits 1 without any prose. The planned test asserted exit 0. The test now compares against the clean plan's exit code. Spec §5.F wording updated.

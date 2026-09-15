@@ -168,20 +168,22 @@ tasks:
           assert any("spec " in w for w in _prose_warnings(plan_dir))
 
 
-      def test_prose_warnings_do_not_fail_the_command(tmp_path: Path) -> None:
+      def test_prose_warnings_do_not_change_the_exit_code(tmp_path: Path) -> None:
+          """The fixture plan has a non-prose error (no skeleton marker), so compare
+          against the clean plan's exit code instead of asserting 0."""
           plan_dir = _plan(tmp_path)
+          runner = CliRunner()
+          baseline = runner.invoke(app, ["plan", "self-review", str(plan_dir)])
           (plan_dir / "_prose.md").write_text(f"# Plan\n\n{LONG}\n")
-          result = CliRunner().invoke(app, ["plan", "self-review", str(plan_dir)])
+          result = runner.invoke(app, ["plan", "self-review", str(plan_dir)])
+          assert "prose lint" not in baseline.output
           assert "prose lint" in result.output
-          assert result.exit_code == 0, result.output
+          assert result.exit_code == baseline.exit_code, result.output
       END tests/unit/test_self_review_prose.py
-      Before you run it, read _create_plan: if its step text differs from what
-      test_a_pending_step_with_a_long_sentence_warns expects, change only the
-      test's file manipulation, and keep the assertions.
+      _create_plan writes the step as the single line `text: s`, so the file
+      manipulation in test_a_pending_step_with_a_long_sentence_warns is valid.
       Run `uv run pytest tests/unit/test_self_review_prose.py -q --no-cov`.
-      Expected: the clean-plan test passes; the other four fail. If the exit-code
-      test fails for another reason (for example an unrelated error issue from
-      the fixture), journal a discovery and make the fixture clean.
+      Expected: the clean-plan test passes; the other four fail.
   - id: P7.T2.S2
     text: |-
       GREEN: in packages/fr/src/fr/plan_ops.py, add this function after _workflow_issues:

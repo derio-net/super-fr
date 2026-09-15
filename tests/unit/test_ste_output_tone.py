@@ -1,4 +1,4 @@
-"""Spec 2026-09-14-ste-output-tone: the STE output style and its rule carrier."""
+"""Spec 2026-09-14-ste-output-tone: the opt-in STE output style."""
 
 from __future__ import annotations
 

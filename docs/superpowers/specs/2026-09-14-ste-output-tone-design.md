@@ -252,7 +252,8 @@ it, so no uninstall cleanup is needed.
   and exits 0; a clean entry prints nothing; an idempotent re-add prints
   nothing; output stops after five lines.
 - `tests/unit/test_self_review_prose.py`: warnings for a pending step, for
-  `_prose.md` and for the spec; a ticked step is exempt; the exit code stays 0.
+  `_prose.md` and for the spec; a ticked step is exempt; prose warnings do not
+  change the exit code.
 - `tests/unit/test_reporting_contract.py`: fr-goal and fr-debugging contain the
   contract sentence; fr-brainstorming and fr-acceptance contain the table form;
   fr-goal no longer contains "say what you tried".

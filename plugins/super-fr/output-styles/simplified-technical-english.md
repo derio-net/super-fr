@@ -12,8 +12,8 @@ principles of ASD-STE100. They do not copy the standard or its dictionary.
 
 ### Scope
 
-Apply these rules to replies, status updates, skill announcements, PR bodies,
-journal entries and subagent results.
+Apply these rules to replies, status updates, skill announcements, PR bodies
+and journal entries.
 
 Do not apply them to files that you edit: code, comments, docs, specs, plans,
 or CLI and hook messages. Do not apply them to commit messages.
