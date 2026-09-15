@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
-from fr.prose_lint import MAX_SENTENCE_WORDS, lint_prose
+from fr.prose_lint import FILLER_WORDS, MAX_SENTENCE_WORDS, lint_prose
 
 LONG = " ".join(["word"] * 30) + "."
 
@@ -73,3 +76,27 @@ def test_filler_matches_whole_words_only() -> None:
 def test_a_two_word_filler_matches_across_a_line_break() -> None:
     issues = lint_prose("I\nthink it works.")
     assert [i.excerpt for i in issues] == ["I think"]
+
+
+STYLE = (
+    Path(__file__).resolve().parents[2]
+    / "plugins/super-fr/output-styles/simplified-technical-english.md"
+)
+
+
+def test_filler_words_match_the_ste_style_list() -> None:
+    """The lint and the opt-in style name the same filler words (spec §5.C)."""
+    text = " ".join(STYLE.read_text().split())
+    bullet = text.split("Do not use filler", 1)[1].split(" - ", 1)[0]
+    quoted = [w.lower() for w in re.findall(r'"([^"]+)"', bullet)]
+    assert quoted == [w.lower() for w in FILLER_WORDS]
+
+
+def test_the_filler_tripwire_can_fail(monkeypatch) -> None:
+    import fr.prose_lint as lint
+
+    monkeypatch.setattr(lint, "FILLER_WORDS", ("just",))
+    text = " ".join(STYLE.read_text().split())
+    bullet = text.split("Do not use filler", 1)[1].split(" - ", 1)[0]
+    quoted = [w.lower() for w in re.findall(r'"([^"]+)"', bullet)]
+    assert quoted != [w.lower() for w in lint.FILLER_WORDS]
