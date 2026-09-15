@@ -381,11 +381,11 @@ def test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4(
         "--workflow",
         "fr-goal-phase-dispatch",
         "--fr-version",
-        ">=4.0.0,<4.5.0",
+        ">=4.0.0,<5.0.0",
     )
 
     assert result.exit_code == 0, result.output
-    assert "fr_version: '>=4.0.0,<4.5.0'" in _meta_text(repo)
+    assert "fr_version: '>=4.0.0,<5.0.0'" in _meta_text(repo)
 
 
 def test_plan_create_leaves_fr_version_alone_without_the_flag(

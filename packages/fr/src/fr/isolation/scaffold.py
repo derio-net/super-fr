@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 
 from fr._hosts import HostBackend
+from fr.isolation.secrets import CONTAINER_TOKEN_DIR
 from fr.isolation.types import IsolationError, harden_secret_file, secrets_env_file
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
@@ -95,6 +96,21 @@ POST_CREATE = (
     "uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true"
 )
 
+# Appended to postCreate for infisical-provider profiles (no devcontainer
+# feature exists for the Infisical CLI). The operator verifies it on the first
+# real run (see the manual phase / the spec's identity-side TTL note).
+#
+# KNOWN v1 LIMITATION (review m8, recorded as refuted): this is an UNPINNED
+# `curl | sudo bash` of Infisical's apt setup script. Unlike glab/tea, Infisical
+# publishes no checksummed static release artifact for that apt bootstrap that
+# fr could pin a digest against; the .deb it installs is signed by their apt
+# repo key, which is the trust anchor here. Revisit when a pinnable artifact
+# (a versioned tarball + published SHA256 that works on the base image) exists.
+INFISICAL_INSTALL = (
+    "curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash; "
+    "sudo apt-get install -y infisical || true"
+)
+
 
 def env_file_path(repo_root: Path, profile: str) -> Path:
     return secrets_env_file(repo_root.name, profile)
@@ -111,6 +127,8 @@ def scaffold_profile(
     commit: bool = True,
     backend: HostBackend = "github",
     host: str | None = None,
+    secret_provider: str = "env-file",
+    infisical: dict[str, str] | None = None,
 ) -> Path:
     """Write the profile and (by default) commit it. Returns the devcontainer.json path.
 
@@ -150,9 +168,35 @@ def scaffold_profile(
     post_create = POST_CREATE
     host_post_create = HOST_CLI_POST_CREATE.get(backend)
     if host_post_create:
-        post_create = f"{POST_CREATE}; {host_post_create}"
+        post_create = f"{post_create}; {host_post_create}"
 
-    env_file = env_file_path(repo_root, profile)
+    is_infisical = secret_provider == "infisical"
+    if is_infisical:
+        # No host secrets env-file. Append the in-container Infisical CLI install
+        # (composed after any forge-CLI install, never overwriting it), and
+        # bind-mount the 0700 host token DIRECTORY the provider writes one 0600
+        # per-exec token file into (a directory mount also follows replaced
+        # files, which a single-file bind mount does not). Per WORKSPACE via
+        # ${localWorkspaceFolderBasename} (review I1): two worktrees on one
+        # profile must never share a dir that one `down` rips out from under
+        # the other's live container. The provider resolves the host dir FROM
+        # this mount at runtime (review I2), so the name baked here is the
+        # source of truth even in a differently named clone.
+        post_create = f"{post_create}; {INFISICAL_INSTALL}"
+        # READ-ONLY (W1): the container only ever reads its token. A read-write
+        # mount would let code inside it swap the per-exec file for a symlink
+        # or FIFO that host-side cleanup then acted on.
+        run_args = [
+            "--mount",
+            f"type=bind,source=${{localEnv:HOME}}/.cache/fr/run-tokens/"
+            f"{repo_root.name}/{profile}/${{localWorkspaceFolderBasename}},"
+            f"target={CONTAINER_TOKEN_DIR},readonly",
+        ]
+    else:
+        run_args = [
+            "--env-file",
+            f"${{localEnv:HOME}}/.config/fr/secrets/{repo_root.name}/{profile}.env",
+        ]
     config = {
         "name": f"{repo_root.name} — {profile}",
         "image": BASE_IMAGE,
@@ -164,17 +208,47 @@ def scaffold_profile(
         # layout. Pairs with the base-.git mount that `fr isolation up` adds.
         "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
         "workspaceFolder": "${localWorkspaceFolder}",
-        "runArgs": [
-            "--env-file",
-            f"${{localEnv:HOME}}/.config/fr/secrets/{repo_root.name}/{profile}.env",
-        ],
+        "runArgs": run_args,
         "customizations": {"fr": {"profile": profile, "purpose": purpose}},
     }
     profile_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
-    _update_profiles_yaml(repo_root, profile, purpose, secrets, unknown, default, backend, host)
-    _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
+    _update_profiles_yaml(
+        repo_root,
+        profile,
+        purpose,
+        secrets,
+        unknown,
+        default,
+        backend=backend,
+        host=host,
+        secret_provider=secret_provider,
+        infisical=infisical,
+    )
+    if is_infisical:
+        print(
+            f"reminder: profile {profile!r} uses Infisical (Universal Auth). Create a "
+            "machine identity scoped READ-ONLY to the project/path with a SHORT "
+            "Access-Token TTL (set on the identity — fr cannot set it at mint time), and "
+            "export FR_INFISICAL_CLIENT_ID / FR_INFISICAL_CLIENT_SECRET on the host.",
+            file=sys.stderr,
+        )
+        leftover = env_file_path(repo_root, profile)
+        if leftover.is_file():
+            # Re-scaffolded from env-file (review m8): the host env-file still
+            # holds plaintext values nothing mounts any more. Warn; never delete
+            # operator data.
+            print(
+                f"warning: {leftover} still exists from this profile's env-file days and may "
+                "hold plaintext secret values that nothing mounts any more — review and "
+                "delete it yourself (fr never removes operator secrets).",
+                file=sys.stderr,
+            )
+    else:
+        _ensure_env_placeholders(
+            env_file_path(repo_root, profile), repo_root.name, profile, secrets
+        )
     include_validator_wrapper = False
     if plans_dir_exists(repo_root):
         try:
@@ -240,12 +314,31 @@ def _update_profiles_yaml(
     default: bool,
     backend: HostBackend = "github",
     host: str | None = None,
+    secret_provider: str = "env-file",
+    infisical: dict[str, str] | None = None,
 ) -> None:
     path = repo_root / ".devcontainer" / "fr-profiles.yaml"
     data = yaml.safe_load(path.read_text()) if path.is_file() else {}
     data = data or {}
     data.setdefault("profiles", {})
     entry: dict[str, object] = {"purpose": purpose, "secrets": secrets}
+    if secret_provider != "env-file":
+        entry["secret_provider"] = secret_provider
+    if infisical:
+        # Coordinates + WHERE to find the host identity (env-var names) — never
+        # the secret values. The auth env-var names default to the spec's.
+        entry["infisical"] = {
+            "project_id": infisical["project_id"],
+            "env": infisical["env"],
+            "path": infisical["path"],
+            "auth": {
+                "method": "universal-auth",
+                "client_id_env": infisical.get("client_id_env", "FR_INFISICAL_CLIENT_ID"),
+                "client_secret_env": infisical.get(
+                    "client_secret_env", "FR_INFISICAL_CLIENT_SECRET"
+                ),
+            },
+        }
     if unknown_tools:
         entry["notes"] = [
             f"tool {t!r} has no known devcontainer feature — wire it via postCreateCommand"

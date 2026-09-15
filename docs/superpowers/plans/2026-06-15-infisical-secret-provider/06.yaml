@@ -1,0 +1,55 @@
+schema_version: 2
+phase:
+  number: 6
+  title: '[manual] Operator: provision Infisical identity + real end-to-end smoke'
+  tag: manual
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - secret-provider-live-infisical-smoke
+tasks:
+- number: 1
+  title: Operator-only Infisical setup and live verification
+  steps:
+  - id: P6.T1.S1
+    text: |
+      MANUAL (operator). In Infisical (the `infisical` namespace on frank): create
+      a machine identity with **Universal Auth**, scoped **read-only** to the
+      target project + path, and configure a **short Access-Token TTL** on the
+      identity. fr cannot set the TTL at mint time; this platform-side setting is
+      the control the spec relies on. Put its client-id/secret into the host env
+      vars the profile names (`FR_INFISICAL_CLIENT_ID` /
+      `FR_INFISICAL_CLIENT_SECRET`) through your keyring or shell, never a
+      committed file. Install the `infisical` CLI on the host too: universal-auth
+      mints the token host-side, and `fr isolation up` refuses without it.
+  - id: P6.T1.S2
+    text: |
+      MANUAL (operator). Create the Infisical project/env/path and the declared
+      secret keys. Scaffold an infisical profile
+      (`fr init scaffold --secret-provider infisical …`), run `fr isolation up`
+      in devcontainer mode, then run a real
+      `fr isolation exec --secret <KEY> -- printenv <KEY>` and confirm four
+      things: the value is printed; the same command without `--secret` prints
+      nothing; `fr isolation exec --secret <KEY> -- sh -c 'printenv INFISICAL_TOKEN'`
+      prints nothing (the token is unset in the child); and this workspace's
+      `~/.cache/fr/run-tokens/<repo>/<profile>/<worktree-basename>/` is empty
+      afterwards.
+      Record the results with
+      `fr plan edit <plan-dir> --complete-phase 6 --note "<what was verified>"`,
+      and flip the `secret-provider-live-infisical-smoke` acceptance row to
+      `skipped` (proven live once).
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

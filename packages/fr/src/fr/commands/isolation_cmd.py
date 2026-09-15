@@ -276,6 +276,16 @@ def exec(  # noqa: A001 - typer command name
     branch: str | None = typer.Option(
         None, help="Isolation branch (default: the single active workspace)."
     ),
+    secret: list[str] = typer.Option(
+        [],
+        "--secret",
+        "-s",
+        help="Run this command with the profile's Infisical secrets (devcontainer mode, "
+        "secret_provider: infisical). Injects EVERYTHING under the profile's Infisical "
+        "path for this one exec — KEY is checked against the profile's declared "
+        "`secrets:` (undeclared → exit 2, nothing minted), it does not narrow the set. "
+        "Values never touch argv or the terminal. Repeatable.",
+    ),
 ) -> None:
     """Run a command inside the isolation container (exit code passthrough)."""
     root = _resolve_repo(repo)
@@ -290,7 +300,12 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target_or_exit(repo).exec(state, argv))
+    try:
+        rc = _target_or_exit(repo).exec(state, argv, keys=secret)
+    except IsolationError as err:  # undeclared key / non-devcontainer mode → exit 2
+        _fail(err)
+        return
+    raise typer.Exit(rc)
 
 
 @isolation_app.command()

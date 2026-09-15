@@ -47,6 +47,22 @@ def scaffold(
         help="Self-hosted instance hostname (e.g. gitlab.mycorp.com). Omit for "
         "gitlab.com/gitea.com or GitHub.",
     ),
+    secret_provider: str = typer.Option(
+        "env-file", "--secret-provider", help="Secret backend: env-file (default) | infisical."
+    ),
+    infisical_project: str | None = typer.Option(
+        None,
+        "--infisical-project",
+        help="Infisical project_id (required for --secret-provider infisical).",
+    ),
+    infisical_env: str | None = typer.Option(
+        None, "--infisical-env", help="Infisical environment slug (e.g. prod)."
+    ),
+    infisical_path: str | None = typer.Option(
+        None,
+        "--infisical-path",
+        help="Infisical secret path — the isolation boundary; scope narrowly.",
+    ),
 ) -> None:
     """Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus
     host secrets placeholders. The commit is what lets `fr isolation up` see the
@@ -54,7 +70,45 @@ def scaffold(
     if backend not in ("github", "gitlab", "gitea"):
         typer.echo(f"error: --backend must be one of github, gitlab, gitea; got {backend!r}")
         raise typer.Exit(2)
+    if secret_provider not in ("env-file", "infisical"):
+        typer.echo(
+            f"error: --secret-provider must be one of env-file, infisical; got {secret_provider!r}"
+        )
+        raise typer.Exit(2)
+    infisical_flags = [
+        flag
+        for flag, val in (
+            ("--infisical-project", infisical_project),
+            ("--infisical-env", infisical_env),
+            ("--infisical-path", infisical_path),
+        )
+        if val is not None
+    ]
+    if secret_provider == "env-file" and infisical_flags:
+        typer.echo(
+            f"error: {', '.join(infisical_flags)} only apply with --secret-provider infisical "
+            "(the profile would silently keep the env-file model)."
+        )
+        raise typer.Exit(2)
     try:
+        infisical = None
+        if secret_provider == "infisical":
+            if not (infisical_project and infisical_env and infisical_path):
+                missing = [
+                    flag
+                    for flag, val in (
+                        ("--infisical-project", infisical_project),
+                        ("--infisical-env", infisical_env),
+                        ("--infisical-path", infisical_path),
+                    )
+                    if not val
+                ]
+                raise IsolationError(f"--secret-provider infisical requires {', '.join(missing)}.")
+            infisical = {
+                "project_id": infisical_project,
+                "env": infisical_env,
+                "path": infisical_path,
+            }
         path = scaffold_profile(
             repo.resolve(),
             profile,
@@ -66,6 +120,8 @@ def scaffold(
             commit=not no_commit,
             backend=backend,  # type: ignore[arg-type]
             host=host,
+            secret_provider=secret_provider,
+            infisical=infisical,
         )
     except IsolationError as err:
         typer.echo(f"error: {err}")
