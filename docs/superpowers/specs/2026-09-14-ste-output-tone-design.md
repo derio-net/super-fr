@@ -1,240 +1,304 @@
-# Simplified Technical English output tone — design
+# super-fr chattiness — reporting contract, artifact lint, opt-in STE style — design
 
-Status: draft (fr-brainstorming, 2026-09-14)
+Status: revised (fr-brainstorming, 2026-09-15). First version 2026-09-14.
 Branch: `feat/ste-output-tone`
-Operator decisions: §4 (d1–d4). Agent decision: d5.
+Operator decisions: §4 (d1–d10). d2 is superseded by d7.
 
 This spec is written in the style it specifies.
 
 ## 1. Goal
 
-The operator reports that super-fr is too "chatty". Agent replies and the text
-that skills make the agent write must use **Simplified Technical English**
-(STE). STE is a published standard: ASD-STE100, Issue 9, January 2025.
+The operator reports that super-fr is too "chatty". The first version of this
+spec answered with a forced Simplified Technical English (STE) output style and
+a global rule. Review showed three problems with that answer (§3). It reached
+every session. It needed exceptions for other skills and for Claude Code
+settings. Its effect stayed non-deterministic.
 
-Result: short sentences, active voice, one instruction per sentence, no filler.
-The operator gets this without any setting change.
+This revision starts from the problem. It asks where the words come from, and
+it changes what super-fr controls:
+
+1. **Reporting contract.** fr-goal and fr-debugging speak to the operator only
+   at gates, blocks and delivery. Each update is the result, then the next step.
+2. **Row presentation.** New acceptance rows reach the operator as one table.
+3. **Artifact lint.** `fr journal add` and `fr plan self-review` warn on long
+   sentences and filler words. Nothing fails.
+4. **Opt-in STE style.** The STE output style stays, but the operator selects
+   it. super-fr never forces a style.
 
 ### Non-goals
 
+- super-fr does not force an output style or install a tone rule (d7).
 - The `fr` CLI messages and the hook messages do not change (d1).
-- Docs, explainers, specs, plans and code comments do not change.
-- super-fr does not ship the ASD dictionary and does not claim STE
-  certification (d5).
+- PR body sections and the skill announce lines do not change (d8).
+- Explainers, blog posts, READMEs and code comments do not change.
+- The lint never fails a command (d9).
 - super-fr does not change or disable other plugins (d3).
+- super-fr does not ship the ASD dictionary or claim STE certification (d5).
 
-## 2. Background — verified 2026-09-14
+## 2. Background — verified 2026-09-14 and 2026-09-15
 
-- **No tone guidance exists.** A search of `plugins/`, `scripts/`,
-  `packages/fr/src`, `.claude/` and the live specs finds no rule, style or skill
-  text about tone or length.
-- **Claude Code plugin output styles.** A plugin can ship `output-styles/*.md`.
-  The frontmatter field `force-for-plugin: true` applies the style whenever the
-  plugin is enabled. It overrides the user's `outputStyle` setting. If more than
-  one enabled plugin forces a style, the first plugin loaded wins.
-  `keep-coding-instructions: true` keeps the built-in engineering instructions.
-  Source: https://code.claude.com/docs/en/output-styles. Local Claude Code is
-  2.1.270.
-- **Output styles do not reach subagents** (forks excepted). Subagents do load
-  every CLAUDE.md level, including user rules. Source:
-  https://code.claude.com/docs/en/sub-agents. `fr-phase-executor` is a subagent.
-- **OpenCode and Hermes have no output styles.** OpenCode reads
-  `.opencode/instructions/*.md` by glob, but only through this repo's own
-  `opencode.json`. No installer delivers `.opencode/instructions` to consumer
-  machines (`scripts/install.sh` copies OpenCode skills and commands only).
-  This gap is older than this spec and applies to every shipped rule. Consumer
-  delivery is a follow-up, not part of this spec (phase 3 review). Hermes reads the
-  managed rules block in `~/.hermes/SOUL.md`, built from
-  `SHIPPED_RULE_NAMES` in `scripts/sync-hermes.py`.
-- **The explanatory plugin is a hook, not a style.**
-  `explanatory-output-style@claude-plugins-official` is enabled on the operator
-  Mac. Its `hooks-handlers/session-start.sh` injects SessionStart
-  `additionalContext`. That text asks for "Insight" blocks and says "you may
-  exceed typical length constraints". It does not use `force-for-plugin`, so it
-  does not collide with a forced super-fr style.
-- **Licence.** ASD-STE100 is free to obtain. Issue 9 permits reproduction only
-  with written authority from ASD. (MIT-licensed prior art,
-  `danyuchn/asd-ste100-skill`, records the same constraint and ships no word
-  list.)
-- **Skill line cap.** Six shipped skills are at the 120-line cap
-  (`tests/unit/test_skill_validation.py`). Per-skill tone text cannot fit.
+### Where the words come from (baseline, d10)
 
-## 3. Principle — one text, two carriers
+Measured over the 11 most recent super-fr Claude Code sessions on the operator
+Mac, with the script in Appendix A:
 
-The STE instructions exist as one text. Two carriers deliver it:
+| Measure | Value |
+|---|---|
+| Assistant messages / tool calls | 308 / 563 |
+| Words in end-of-turn replies | 8,956 (68%) |
+| Words next to tool calls (narration) | 4,198 (31%) |
+| Words in Insight blocks | 281 (2%) |
+| Skill announce lines | 2 |
+| Words per tool call | 23.4 |
 
-1. a forced plugin output style, for the Claude Code main thread;
-2. a shipped rule, for subagents and Hermes, and for OpenCode sessions inside
-   this repo (§2: no installer delivers OpenCode instructions to consumers).
+Two gaps make these numbers indicative, not exact. The transcripts do not
+record the harness's "user hasn't heard from you" nudges. And the current
+session holds fewer words than its visible replies. The direction is still
+clear: most words sit in end-of-turn reports, not in announce lines.
 
-In both files, the shared text is between the lines `<!-- ste-shared:start -->`
-and `<!-- ste-shared:end -->`. A test makes the two marked blocks identical.
-Thus the carriers cannot drift apart.
+### What super-fr prescribes
 
-## 4. Operator decisions (asked once, 2026-09-14)
+- Nine skills have one `**Announce at start:**` line each.
+- fr-goal says "Blocked → stop, say what you tried, ask", and it has no rule
+  for updates between steps. So each step and phase ends with a report.
+- fr-debugging §2 says "stop, state what you found / tried, and ask" at its two
+  hard stops. It has no rule for other updates.
+- fr-brainstorming §3 ends the brainstorm by "presenting the rows to the
+  operator with a one-line defense each". fr-acceptance presents mid-flight
+  additions "with a one-line defense". In practice each defense grows into a
+  paragraph.
+- fr-goal §7 lists the PR body sections. The operator keeps these (d8).
 
-- **d1 — Scope.** Agent chat replies, plus the text that skills make the agent
-  write: announcements, status reports, PR bodies, journal entries,
-  phase-executor returns. The CLI and hook messages are out of scope.
-- **d2 — Activation.** A forced plugin output style plus a shipped rule.
-- **d3 — Explanatory plugin.** Operator: "can we only keep the Insight blocks?
-  If not, keep both". It is possible (§2). The style keeps Insight blocks,
-  writes them in STE, and cancels the permission to exceed length limits.
-- **d4 — Test Plan.** An operator walk after merge, plus CI tests.
-- **d5 — No dictionary** (agent decision, forced by the licence). The text
-  paraphrases the STE writing-rule principles. It does not copy rule text or
-  the approved-word list.
+### Harness facts
+
+- **Precedence is not deterministic.** An output style is part of the system
+  prompt. Rules and CLAUDE.md load at session start in every project,
+  subagents included. Skills load when they are invoked. Hook
+  `additionalContext` arrives as extra context. The model weighs them together.
+- **Output styles.** A plugin can ship `output-styles/*.md`.
+  `force-for-plugin: true` overrides the user's `outputStyle` setting, and the
+  only way to stop it is to disable the plugin. Without that field, the user
+  selects the style in `/config`. Output styles do not reach subagents (forks
+  excepted). Sources: https://code.claude.com/docs/en/output-styles,
+  https://code.claude.com/docs/en/sub-agents.
+- **The explanatory plugin is a hook.**
+  `explanatory-output-style@claude-plugins-official` injects SessionStart
+  `additionalContext` that asks for Insight blocks and permits longer replies.
+- **blog-craft ships no output style and no context hook.** Its voice rules
+  (`educational-writing`, `explainers`, `post-rewrite`) live in skills.
+- **Licence.** ASD-STE100 Issue 9 is free to obtain but permits reproduction
+  only with written authority from ASD.
+- **Skill line cap.** Skills have a 120-line cap
+  (`tests/unit/test_skill_validation.py`). fr-goal is at 120 lines, so a new
+  sentence must replace text.
+- **`fr plan self-review` exit codes.** It exits 1 only when an issue has
+  severity `error` (`packages/fr/src/fr/commands/plan_cmd.py`). A `warn` issue
+  prints and exits 0. So `fr run advance` keeps `plan-review` green.
+
+## 3. Principle — change what super-fr controls, deterministically
+
+The first version put a prompt in front of every session and then tried to
+limit it with exceptions. Each exception changed the probability of a result,
+not the result. That is the whack-a-mole the operator described.
+
+This revision follows three rules:
+
+- **A tone is a user preference.** The harness owns it. super-fr offers a
+  style; it does not select one.
+- **super-fr's own output is super-fr's job.** The skills ask for reports and
+  presentations. Changing that text removes words at the source, with no
+  competing instruction.
+- **Artifacts fr writes are checked by fr, in code.** A lint in `fr` sees only
+  fr's files. So it cannot affect other skills, other repos or chat replies.
+
+## 4. Operator decisions
+
+Asked 2026-09-14:
+
+- **d1 — Scope.** Agent replies and skill-prescribed text; CLI and hook messages
+  out of scope. (Scope of the reporting contract and row tables in this
+  revision. The opt-in style keeps its own scope text, §5.D.)
+- **d2 — Activation.** Forced style plus shipped rule. *Superseded by d7.*
+- **d3 — Explanatory plugin.** Keep the Insight blocks, in STE, with no longer
+  replies. It now applies only when the operator selects the STE style.
+- **d4 — Test Plan.** Operator walk after merge, plus CI tests.
+- **d5 — No dictionary** (agent decision, licence). Paraphrased principles only.
+
+Asked 2026-09-15:
+
+- **d6 — Reframe.** Chattiness problem first. The skill audit and the artifact
+  lint are prerequisites, not follow-ups. Extend this spec and branch in place.
+- **d7 — Repurpose.** Remove the `ste-output-tone` rule and its wiring, the
+  fr-phase-executor STE line, and `force-for-plugin`. Keep the STE style as
+  opt-in, with its tests. Keep the hermetic test fix `97e0b32` in this branch.
+- **d8 — Skill audit.** Remove mid-run status reports (fr-goal, fr-debugging)
+  and per-row presentation (fr-brainstorming, fr-acceptance). Keep PR body
+  sections and announce lines.
+- **d9 — Lint.** Warn only, in `fr journal add` and `fr plan self-review`. The
+  plan's spec is checked by the same function.
+- **d10 — Measure and reports.** Record the baseline (§2). Re-measure after
+  merge. fr-goal updates are the result in 1–3 lines, then the next step.
 
 ## 5. Design
 
-### A. The shared text
+### A. Reporting contract (d8, d10)
 
-The text has these sections. The wording is final in the plan, not here.
+**fr-goal** (`plugins/super-fr/skills/fr-goal/SKILL.md`). Replace "Blocked →
+stop, say what you tried, ask." with:
 
-- **Scope.** A closed list: replies, status updates, skill announcements, PR
-  bodies, journal entries, subagent results. Do not apply to files that the
-  agent edits: code, comments, docs, specs, plans, CLI and hook messages. Do
-  not apply to commit messages.
-  Copy code, commands, paths, identifiers, quoted output and quoted words of
-  the operator exactly. If the operator, a skill or a caller gives a format or
-  exact words, use them; write only the agent's own sentences in STE.
-- **Words.** Use common words. Use one word for one meaning, and use the same
-  term for the same thing every time. Use a simple verb, not a phrasal verb or
-  a noun made from a verb ("check", not "carry out a check"). Technical names
-  are permitted. Do not use filler, hedges or intensifiers ("just", "really",
-  "basically", "I think", "it seems").
-- **Sentences.** Maximum 20 words in an instruction. Maximum 25 words in a
-  description. Commands and paths go in code spans and do not count as words.
-  One instruction in each sentence. Use the active voice. Use simple tenses
-  (no progressive: STE excludes it). Use the imperative for instructions. Put a
-  condition before the instruction ("If the test fails, do X").
-- **Structure.** Start with the result. Use a numbered list for sequential
-  steps and a bulleted list for other items. Maximum six sentences in a
-  paragraph. Do not use a preamble, a summary of the reply itself, or a closing
-  offer.
-- **Warnings.** Start with the instruction, then give the risk. Keep all the
-  content of error reports, security warnings and confirmations for destructive
-  actions.
-- **Insight blocks.** If another prompt asks for Insight blocks, keep them.
-  Write each point as one STE sentence, with a maximum of three points. Insight
-  blocks do not make a reply longer. Ignore the other prompt's permission to
-  "exceed typical length constraints"; these rules take precedence. (Say
-  "prompt", not "instruction": in §5.A "instruction" is a sentence type.)
+> **Operator updates** only at the Q&A gate, a block or failure, and delivery.
+> Each update is the result in 1–3 lines, then the next step. Evidence goes to
+> the journal and the PR body, not the chat. Blocked → stop, give the result,
+> ask.
 
-### B. Carrier 1 — output style
+The file stays at or below 120 lines. Reflow other paragraphs to make room;
+do not remove content.
 
-New file `plugins/super-fr/output-styles/simplified-technical-english.md`:
+**fr-debugging** (`plugins/super-fr/skills/fr-debugging/SKILL.md`, §2). Add
+the same contract after the two hard stops. The hard stops keep "stop, state
+what you found / tried, and ask", now as the result then the question.
 
-```yaml
-name: Simplified Technical English
-description: Short, clear replies based on ASD-STE100 writing rules
-keep-coding-instructions: true
-force-for-plugin: true
-```
+### B. Row presentation (d8)
 
-The body is the shared text. Claude Code discovers `output-styles/` by
-convention, so `plugin.json` does not change. `install.sh` already copies the
-whole plugin tree with rsync, so no install line is necessary.
+**fr-brainstorming** §3: replace "presenting the rows to the operator with a
+one-line defense each" with "presenting the rows as one table — `id | claim |
+level | defense`, one short line per cell".
 
-### C. Carrier 2 — rule
+**fr-acceptance**, "Mid-flight additions": replace "with a one-line defense"
+with "as one table row each (`id | claim | level | defense`)".
 
-New file `plugins/super-fr/rules/ste-output-tone.md`. Its body is the shared
-text, after a short header that names the standard and the licence limit.
+The explainer `docs/explainers/01-fr-goal.md:329` says the agent "presents
+these rows and a short defense for each". A table with a defense column keeps
+that true, so the explainer does not change.
 
-Wiring. Every item has a drift test today, so each item fails CI if it is
-missing:
+### C. Artifact lint (d9)
 
-- `scripts/install.sh`: one `cp` line with the other rules, and one `rm` line
-  in `--uninstall` (`test_install_copies_rules.py`).
-- `.opencode/instructions/ste-output-tone.md`: generated by
-  `scripts/sync-opencode.py`, which uses a glob
-  (`test_tripwire_opencode_instructions_sync.py`).
+New module `packages/fr/src/fr/prose_lint.py`:
+
+- `MAX_SENTENCE_WORDS = 25`.
+- `FILLER_WORDS`: `just`, `really`, `basically`, `actually`, `simply`,
+  `I think`, `it seems`.
+- `lint_prose(text: str) -> list[ProseIssue]`. A `ProseIssue` has a `kind`
+  (`long-sentence` or `filler`), a word count (long sentences), and a short
+  excerpt.
+- Before it counts, the lint removes text that is not prose:
+  - YAML front matter, fenced code blocks and `BEGIN …`/`END …` embed blocks;
+  - inline code spans, double-quoted strings and URLs;
+  - HTML comments, headings and Markdown table rows.
+- It splits prose at blank lines and list bullets, then at `.`, `!` or
+  `?` followed by whitespace. Words match `[\w'-]+`.
+- The 20-word limit for instructions is not checked. Code cannot tell an
+  instruction from a description.
+
+**`fr journal add`** (`packages/fr/src/fr/commands/journal_cmd.py`). After it
+writes a new entry, lint the title and the body. Print at most five warning
+lines to stderr, then `… N more`. The exit code does not change. An idempotent
+re-add writes nothing and lints nothing.
+
+**`fr plan self-review`** (`packages/fr/src/fr/plan_ops.py`). New
+`_prose_issues(plan)`, called from `self_review`. It lints:
+
+- the text of each step that is not ticked `x` (the manual-verb detector uses
+  the same exemption, so historical plans stay quiet);
+- the plan's `_prose.md`;
+- the plan's spec, when it is a same-repo path that resolves.
+
+It returns one `ReviewIssue(severity="warn")` for each source that has issues,
+with the count and the first three excerpts. So a long document gives one
+line, not a flood.
+
+A tripwire test keeps `FILLER_WORDS` equal to the quoted list in the STE
+style's "Words" section. Thus the style and the lint cannot drift apart.
+
+### D. Opt-in STE style (d7)
+
+`plugins/super-fr/output-styles/simplified-technical-english.md` keeps its
+text. Its frontmatter loses `force-for-plugin`. It keeps
+`keep-coding-instructions: true`. The operator selects it in `/config`. The
+description names the plugin, so the operator knows where it comes from.
+
+The shared-block markers stay: the tests use them to find the text.
+
+### E. Removals (d7)
+
+- `plugins/super-fr/rules/ste-output-tone.md` — deleted.
+- `scripts/install.sh` — the rule's `cp` and `echo` lines, and the `rm` line in
+  `--uninstall` (its echo returns to the earlier text).
 - `scripts/sync-hermes.py` `SHIPPED_RULE_NAMES` and `SHIPPED_RULES` in
-  `tests/unit/test_tripwire_hermes_rules_sync.py`; then regenerate
-  `.hermes/SOUL.d/super-fr-rules.md`.
-- `AGENTS.md`: add the rule to the list of canonical rules.
+  `tests/unit/test_tripwire_hermes_rules_sync.py` (with its docstring) — back
+  to four rules.
+- `.opencode/instructions/ste-output-tone.md` and the Hermes SOUL block —
+  regenerated by `scripts/sync-opencode.py` and `scripts/sync-hermes.py`, which
+  delete a mirror whose source is gone.
+- `AGENTS.md` — the rule leaves the canonical rule list.
+- `plugins/super-fr/agents/fr-phase-executor.md` — the STE sentence is removed;
+  the section ends as before.
+- `tests/unit/test_ste_output_tone.py` — the rule, identity and executor tests
+  are removed. The style test asserts that `force-for-plugin` is absent.
+- `docs/acceptance/matrix.yaml` — `hermes-rules-soul-block` names four shipped
+  rules again.
 
-### D. Phase executor
+The rule was never released: 4.4.0 is not on `main`. No consumer machine has
+it, so no uninstall cleanup is needed.
 
-`plugins/super-fr/agents/fr-phase-executor.md`, section "What you return": add
-one line that tells the agent to write the result and every journal entry in
-STE, as the `ste-output-tone` rule specifies. The rule already loads in Claude
-Code subagents, so the line restates it in the executor's return contract. The
-agent file exists only in Claude Code: Hermes `delegate_task` loads
-`fr-execute`, not this file. STE results on Hermes would need a pointer in
-`fr-execute` (a follow-up, not part of this spec; phase 4 review).
+### F. Tests (new)
 
-### E. Tests (new)
+- `tests/unit/test_prose_lint.py`:
+  - a long sentence is found;
+  - each strip rule in §5.C removes its text;
+  - a filler word is found, and a quoted filler word is ignored;
+  - a 25-word sentence passes, and a 26-word sentence warns.
+- `tests/unit/test_journal_add_prose_warning.py`: a long body prints a warning
+  and exits 0; a clean entry prints nothing; an idempotent re-add prints
+  nothing; output stops after five lines.
+- `tests/unit/test_self_review_prose.py`: warnings for a pending step, for
+  `_prose.md` and for the spec; a ticked step is exempt; the exit code stays 0.
+- `tests/unit/test_reporting_contract.py`: fr-goal and fr-debugging contain the
+  contract sentence; fr-brainstorming and fr-acceptance contain the table form;
+  fr-goal no longer contains "say what you tried".
+- The tripwire for `FILLER_WORDS` against the style text.
 
-`tests/unit/test_ste_output_tone.py`:
+### G. Release
 
-1. The style file exists, and its frontmatter has `force-for-plugin: true` and
-   `keep-coding-instructions: true`.
-2. Both files have exactly one `ste-shared` marker pair, and the two marked
-   blocks are identical.
-3. The shared text contains each section heading of §5.A as an exact line.
-   The Insight section names the length permission, says Insight blocks do
-   not make a reply longer, and says these rules take precedence.
-4. Normalize whitespace and require balanced double quotes. Read the filler
-   list from the "Words" bullet itself. Remove every double-quoted string; the
-   remaining text contains no word from that list. (This keeps the text
-   consistent with itself.)
-5. `fr-phase-executor.md` refers to `ste-output-tone`.
-6. The Scope section excludes edited files and defers to a format or exact
-   words that the operator, a skill or a caller gives.
-7. No sentence of the shared text has more than 25 words (headings, code spans
-   and quoted examples excluded). A second test proves that the splitter
-   catches a fake 30-word sentence, so the guard can fail. The 20-word limit
-   for instructions needs a reader: a test cannot tell an instruction from a
-   description.
-
-### F. Release
-
-This is a new mandatory behaviour, so the version bump is **minor**
-(`scripts/bump-version.py minor`). No explainer describes the reply tone.
-The PR body records this under the explainers-currency rule.
+4.4.0 stays (minor): new warnings, a new opt-in style, and changed skill
+behaviour. No second bump is needed; 4.4.0 is not released.
 
 ## 6. Risks and mitigations
 
-- **The forced style overrides an output style that the operator selected.**
-  Accepted in d2. To stop it, disable super-fr. The style description in
-  `/config` names the plugin.
-- **The rule applies in every project** on a machine where super-fr is
-  installed, not only in fr-enabled repos. This is the same reach as the
-  plugin. Accepted.
-- **Another plugin that forces a style loads first.** Then our style does not
-  apply, but the rule still does. The Test Plan checks the real result.
-- **The installed Claude Code does not support `force-for-plugin`.** Then the
-  style is only selectable in `/config`, but the rule still applies. Test Plan
-  step 2 finds this condition.
-- **Hook context asks for longer replies.** The shared text cancels that
-  permission explicitly (§5.A, Insight blocks).
-- **Short sentences can remove necessary detail.** The text keeps all content
-  of errors and warnings, and it permits lists for complex information.
-- **Token cost.** In the Claude Code main thread, both carriers load: the style
-  (about 400 words) and the rule in `~/.claude/rules/` (about 460 words). This
-  adds approximately 1,100 input tokens to each request. The copies are
-  identical, so behaviour does not change. The prompt cache absorbs most of the
-  cost. Subagents load only the rule.
+- **The lint is noisy on existing specs.** Old specs were not written in STE.
+  The self-review prints one line per source, and warnings never fail.
+- **Warnings get ignored.** Possible. The lint is a nudge by d9. Promoting it
+  to an error later is a one-word change and a new decision.
+- **Fewer updates hide progress.** The run file, the journal and
+  `fr run status` still show every step. Blocks and failures still report at
+  once.
+- **fr-goal line cap.** The contract replaces one sentence and the text is
+  reflowed. `test_skill_validation.py` enforces the cap.
+- **Measurement gaps.** The script misses nudges and may miss compacted text.
+  The re-measure uses the same script, so the comparison is like for like.
+- **The explainer drifts.** §5.B checks the one sentence it has on rows. The
+  plan re-checks it after the skill edits.
 
 ## 7. Test Plan
 
-Pre-merge (CI): the tests in §5.E, and the existing drift tests in §5.C.
+Pre-merge (CI): the tests in §5.F, the existing skill-validation, drift and
+install tests, and `fr validate artifacts`.
 
 Post-merge (operator-driven):
 
 1. Update the plugin: `claude plugin update super-fr@derio-net--super-fr`.
    Restart Claude Code.
-2. In `/config`, make sure that "Output style" shows
-   "Simplified Technical English".
-3. In any fr-enabled repo, run `/super-fr:fr-progress`.
-4. Examine the reply against this checklist:
-   - no sentence has more than 25 words (20 for an instruction);
-   - active voice, one instruction in each sentence;
-   - no preamble, no closing offer, no filler words;
-   - if the explanatory plugin is enabled, Insight blocks have a maximum of
-     three one-sentence points.
-5. If a check fails, record the reply text in a follow-up issue.
+2. In `/config`, make sure that "Output style" is not forced to "Simplified
+   Technical English". Select it once, send one message, and examine the reply.
+   Then select your normal style again.
+3. Run `/fr-goal` on a small goal. Make sure that the agent speaks only at the
+   Q&A, at a block or failure, and at delivery. Make sure that each update is
+   the result, then the next step.
+4. Run Appendix A over that session. Compare words per tool call and the
+   end-of-turn share with the baseline in §2.
+5. In any fr repo, run `fr journal add` with a body that has a 30-word
+   sentence. Make sure that a warning prints and the exit code is 0.
+6. If a check fails, record the reply text or the output in a follow-up issue.
 
 ## Implementation Plans
 
@@ -244,8 +308,59 @@ Post-merge (operator-driven):
 
 ## 8. Acceptance rows (born here; presented at spec review)
 
+The three rows of the first version are retired: they were born on this branch
+and never merged. `ste-style-forced-in-claude-code`,
+`ste-rule-reaches-every-harness` and `ste-insight-blocks-kept-short` are
+replaced by:
+
 | id | capability | acceptance | level |
 |---|---|---|---|
-| `ste-style-forced-in-claude-code` | output-tone | With super-fr enabled, Claude Code replies use the Simplified Technical English style, and the operator selects nothing. | unit (text) + operator walk |
-| `ste-rule-reaches-every-harness` | output-tone | The STE rule installs for Claude Code and Hermes, loads in OpenCode sessions inside this repo, and reaches the phase executor. | unit + tripwire |
-| `ste-insight-blocks-kept-short` | output-tone | When another plugin asks for Insight blocks, the blocks stay, written in STE, and replies do not get longer. | unit (text) + operator walk |
+| `ste-style-opt-in` | output-tone | An operator can select a Simplified Technical English output style in `/config`, and super-fr never forces a style. | unit + operator walk |
+| `fr-goal-reports-result-and-next-step` | output-tone | During fr-goal and fr-debugging runs, the operator gets updates only at gates, blocks and delivery, each as the result then the next step. | unit (skill text) + operator walk |
+| `acceptance-rows-presented-as-table` | output-tone | New acceptance rows reach the operator as one short table, not a paragraph per row. | unit (skill text) |
+| `journal-add-warns-on-long-prose` | output-tone | `fr journal add` warns, without failing, when an entry has a sentence over 25 words or a filler word. | unit |
+| `plan-self-review-warns-on-long-prose` | output-tone | `fr plan self-review` warns, without failing, on long sentences and filler words in pending steps, the plan prose and its spec. | unit |
+
+## Appendix A — chattiness measurement
+
+Run from any directory. Pass the transcript files to measure, newest first.
+Transcripts live in `~/.claude/projects/<project-key>/*.jsonl`.
+
+```python
+import json, re, sys
+
+W = lambda s: len(re.findall(r"[\w'-]+", s))
+rows = []
+for path in sys.argv[1:]:
+    msgs, order, explanatory = {}, [], 0
+    for line in open(path):
+        try:
+            e = json.loads(line)
+        except Exception:
+            continue
+        if "explanatory' output style" in json.dumps(e):
+            explanatory = 1
+        if e.get("type") != "assistant":
+            continue
+        m = e.get("message") or {}
+        mid = m.get("id") or e.get("uuid")
+        if mid not in msgs:
+            msgs[mid] = {"text": "", "tools": 0}
+            order.append(mid)
+        for c in m.get("content") or []:
+            if c.get("type") == "text":
+                msgs[mid]["text"] += " " + c.get("text", "")
+            elif c.get("type") == "tool_use":
+                msgs[mid]["tools"] += 1
+    narr = sum(W(msgs[i]["text"]) for i in order if msgs[i]["tools"])
+    final = sum(W(msgs[i]["text"]) for i in order if not msgs[i]["tools"])
+    insight = sum(W(x) for i in order
+                  for x in re.findall(r"★ Insight.*?`─{20,}`", msgs[i]["text"], re.S))
+    calls = sum(msgs[i]["tools"] for i in order)
+    rows.append((len(order), calls, narr, final, insight, explanatory))
+
+msgs, calls, narr, final, insight = (sum(r[k] for r in rows) for k in range(5))
+words = narr + final
+print(f"messages={msgs} tool_calls={calls} narration={narr} end_of_turn={final} insight={insight}")
+print(f"end_of_turn_share={100 * final // max(1, words)}% words_per_tool_call={words / max(1, calls):.1f}")
+```

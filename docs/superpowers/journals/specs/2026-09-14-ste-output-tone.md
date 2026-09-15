@@ -54,3 +54,8 @@ fr journal add and fr plan self-review print warnings for sentences over 25 word
 ### d10-measure-and-reports · decision · Baseline measurement and result-plus-next-step reports
 
 Record the 2026-09-15 baseline in the spec (11 super-fr sessions: 68% end-of-turn words, 31% narration, 2% Insight, about 23 words per tool call; transcript gaps noted) and re-measure on a new fr-goal session after merge. fr-goal operator updates are the result in 1-3 lines, then the next step; full evidence goes to the journal and PR body.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-rev2 created=2026-09-15T20:26:12 -->
+### spec-review-rev2 · review · Revised spec review: 1 finding, fixed
+
+Checked the revised spec against d6-d10 and the codebase. Code claims hold: plan_cmd exits 1 only on error issues; Plan (fr/parser.py) has dir, repo_root, prose, prose_path() and spec_path; journal add writes through err_console-capable code; both sync scripts delete a mirror whose source is gone; fr-goal is at the 120-line cap; explainer 01-fr-goal.md:329 stays true with a defense column. R5-1: the spec had 5 sentences over 25 words, so it failed its own lint. Fixed by splitting them; a re-check finds 0.

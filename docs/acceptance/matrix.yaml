@@ -1853,43 +1853,53 @@ rows:
       (test_cwd_flag_reads_no_stdin, test_oneline, test_never_invokes_fr). Hermes custom_command
       wiring is docs-only until NousResearch/hermes-agent#109596 ships; OpenCode has
       no status-line hook (anomalyco/opencode#37464).
-  - id: ste-style-forced-in-claude-code
+  - id: ste-style-opt-in
     capability: output-tone
-    acceptance: With super-fr enabled, Claude Code replies use the Simplified Technical
-      English style, and the operator selects nothing.
+    acceptance: An operator can select a Simplified Technical English output style in
+      /config, and super-fr never forces a style.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels:
-      unit:
-      - super-fr:tests/unit/test_ste_output_tone.py
-    status: skipped
-    notes: 'Unit pins the forced-style frontmatter and the text in CI; live reply check
-      is the post-merge operator walk (spec §7, Test Plan steps 1-4).'
-  - id: ste-rule-reaches-every-harness
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit test pins
+      the frontmatter without force-for-plugin; operator walk (Test Plan step 2).'
+  - id: fr-goal-reports-result-and-next-step
     capability: output-tone
-    acceptance: The STE rule installs for Claude Code and Hermes, loads in OpenCode sessions
-      inside this repo, and reaches the phase executor.
+    acceptance: During fr-goal and fr-debugging runs, the operator gets updates only
+      at gates, blocks and delivery, each as the result then the next step.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels:
-      unit:
-      - super-fr:tests/unit/test_ste_output_tone.py
-      - super-fr:tests/unit/test_install_copies_rules.py
-      - super-fr:tests/unit/test_tripwire_opencode_instructions_sync.py
-      - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py
-      - super-fr:tests/unit/test_hermes_install_cmd.py
-    status: ci
-    notes: 'No installer delivers .opencode/instructions to consumer machines (pre-existing
-      gap for every shipped rule); consumer delivery is a follow-up.'
-  - id: ste-insight-blocks-kept-short
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit test pins
+      the skill text; operator walk and re-measure (Test Plan steps 3-4).'
+  - id: acceptance-rows-presented-as-table
     capability: output-tone
-    acceptance: When another plugin asks for Insight blocks, the blocks stay, written
-      in STE, and replies do not get longer.
+    acceptance: New acceptance rows reach the operator as one short table, not a paragraph
+      per row.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels:
-      unit:
-      - super-fr:tests/unit/test_ste_output_tone.py
-    status: skipped
-    notes: 'Unit pins the Insight override text in CI; live reply length is the post-merge
-      operator walk (spec §7, Test Plan step 4).'
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit test pins
+      fr-brainstorming and fr-acceptance text.'
+  - id: journal-add-warns-on-long-prose
+    capability: output-tone
+    acceptance: fr journal add warns, without failing, when an entry has a sentence
+      over 25 words or a filler word.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit tests on fr.prose_lint
+      and the journal add command.'
+  - id: plan-self-review-warns-on-long-prose
+    capability: output-tone
+    acceptance: fr plan self-review warns, without failing, on long sentences and filler
+      words in pending steps, the plan prose and its spec.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit tests on self_review
+      prose issues and the exit code.'
