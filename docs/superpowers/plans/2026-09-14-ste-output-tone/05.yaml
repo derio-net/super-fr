@@ -112,18 +112,18 @@ state:
       ticked_at: '2026-09-15T18:36:42+00:00'
       note: null
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-15T18:42:03+00:00'
       note: null
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-15T18:42:12+00:00'
       note: null
     P5.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-15T18:42:22+00:00'
       note: null
   completion:
-    at: null
+    at: '2026-09-15T18:42:35+00:00'
     note: null
     observed_prs: []

@@ -5,12 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "plugins/super-fr/output-styles/simplified-technical-english.md"
-RULE = REPO_ROOT / "plugins/super-fr/rules/ste-output-tone.md"
 START = "<!-- ste-shared:start -->"
 END = "<!-- ste-shared:end -->"
 MAX_SENTENCE_WORDS = 25
@@ -86,9 +84,8 @@ def test_insight_blocks_cannot_lengthen_replies() -> None:
     assert "take precedence" in insight
 
 
-@pytest.mark.parametrize("path", [STYLE, RULE])
-def test_shared_text_uses_no_filler_outside_quoted_examples(path: Path) -> None:
-    block = re.sub(r"\s+", " ", _shared_block(path))
+def test_shared_text_uses_no_filler_outside_quoted_examples() -> None:
+    block = re.sub(r"\s+", " ", _shared_block(STYLE))
     assert block.count('"') % 2 == 0, "unbalanced double quote hides text from this check"
     bullet = block.split("Do not use filler", 1)[1].split(" - ", 1)[0]
     filler = [w.lower() for w in re.findall(r'"([^"]+)"', bullet)]
@@ -98,11 +95,10 @@ def test_shared_text_uses_no_filler_outside_quoted_examples(path: Path) -> None:
     assert not found, f"shared STE text uses its own filler words: {found}"
 
 
-@pytest.mark.parametrize("path", [STYLE, RULE])
-def test_no_shared_sentence_exceeds_the_description_limit(path: Path) -> None:
+def test_no_shared_sentence_exceeds_the_description_limit() -> None:
     long = [
         (len(re.findall(r"[\w'-]+", s)), s)
-        for s in _sentences(_shared_block(path))
+        for s in _sentences(_shared_block(STYLE))
         if len(re.findall(r"[\w'-]+", s)) > MAX_SENTENCE_WORDS
     ]
     assert not long, f"sentences over {MAX_SENTENCE_WORDS} words: {long}"
@@ -113,27 +109,3 @@ def test_sentence_splitter_finds_a_long_sentence() -> None:
     fake = "### Scope\n\n- " + " ".join(["word"] * 30) + ".\n- Short one."
     counts = [len(re.findall(r"[\w'-]+", s)) for s in _sentences(fake)]
     assert counts == [30, 2]
-
-
-def _raw_block(path: Path) -> str:
-    """Bytes between the markers, unstripped: whitespace drift must fail identity."""
-    _shared_block(path)  # marker count and order checks
-    return path.read_text().split(START, 1)[1].split(END, 1)[0]
-
-
-def test_rule_block_is_identical_to_style_block() -> None:
-    assert _raw_block(RULE) == _raw_block(STYLE), (
-        "rules/ste-output-tone.md and the output style must carry the same "
-        "ste-shared text — copy the style block into the rule"
-    )
-
-
-EXECUTOR = REPO_ROOT / "plugins/super-fr/agents/fr-phase-executor.md"
-
-
-def test_phase_executor_returns_in_ste() -> None:
-    text = EXECUTOR.read_text()
-    assert "## What you return" in text, "fr-phase-executor.md lost its return section"
-    returns = re.sub(r"\s+", " ", text.split("## What you return", 1)[1])
-    assert "ste-output-tone" in returns
-    assert "every journal entry" in returns

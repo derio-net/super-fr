@@ -709,9 +709,9 @@ rows:
       Test Plan item 1 (real Hermes install).
   - id: hermes-rules-soul-block
     capability: Hermes Agent compatibility
-    acceptance: super-fr's five shipped rules (fr-isolation-required, fr-plan-override,
-      fr-worktree-override, no-claude-p-batch, ste-output-tone) reach a Hermes user
-      via a managed, reversible ~/.hermes/SOUL.md block.
+    acceptance: super-fr's four shipped rules (fr-isolation-required, fr-plan-override,
+      fr-worktree-override, no-claude-p-batch) reach a Hermes user via a managed,
+      reversible ~/.hermes/SOUL.md block.
     origin:
     - super-fr:docs/superpowers/specs/2026-07-23-hermes-agent-compat-design.md
     levels:

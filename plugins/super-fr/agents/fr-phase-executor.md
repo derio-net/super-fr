@@ -79,5 +79,4 @@ re-enters its context:
 - files touched;
 - the ids of journal entries you added (so the orchestrator can render them).
 
-Keep the prose minimal; the journal holds the detail. Write the result and every
-journal entry in Simplified Technical English, as the `ste-output-tone` rule specifies.
+Keep the prose minimal; the journal holds the detail.

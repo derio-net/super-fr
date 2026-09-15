@@ -1,9 +1,9 @@
 """CI tripwire: .hermes/SOUL.d/super-fr-rules.md must mirror the shipped rules.
 
 Hermes has no OpenCode-style `instructions` array; its only always-on global
-surface is `~/.hermes/SOUL.md`. `scripts/sync-hermes.py` assembles the five
+surface is `~/.hermes/SOUL.md`. `scripts/sync-hermes.py` assembles the four
 *shipped* plugin rules (fr-isolation-required, fr-plan-override,
-fr-worktree-override, no-claude-p-batch, ste-output-tone) into a delimited
+fr-worktree-override, no-claude-p-batch) into a delimited
 managed block written to
 `.hermes/SOUL.d/super-fr-rules.md`; `fr hermes install` later applies that block
 to the user's `~/.hermes/SOUL.md`. The repo-local `acceptance-matrix` rule is a
@@ -33,7 +33,6 @@ SHIPPED_RULES = {
     "fr-plan-override",
     "fr-worktree-override",
     "no-claude-p-batch",
-    "ste-output-tone",
 }
 
 
