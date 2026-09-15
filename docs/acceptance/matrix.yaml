@@ -1460,21 +1460,30 @@ rows:
       binding.'
   - id: statusline-shows-bound-workspace
     capability: isolation-traceability
-    acceptance: The Claude Code status line shows the session isolation path alongside
-      the checked-out branch and cwd, and lists the repo other worktrees, well inside one status-line refresh
-      (about 100 ms warm on the operator Mac; 0.5 s CI guard).
+    acceptance: The Claude Code status line shows the branch this session works on and
+      its fr-isolation worktree path (or no fr-isolation), green when fr and purple
+      when not, well inside one status-line refresh (0.5 s CI guard).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
+    - super-fr:docs/superpowers/specs/2026-09-14-statusline-session-branch-design.md
     levels:
       int:
       - super-fr:tests/unit/test_statusline_segment.py
+      - super-fr:tests/unit/test_statusline_claude.py
     status: ci
-    notes: 'Segment script plugins/super-fr/scripts/fr-statusline-segment.sh (phase 5,
-      filed under int because the matrix has no golden level): golden outputs for
-      bound / unbound / inside-workspace / non-repo / detached-HEAD / width-bounded
-      shapes via subprocess, a 0.5 s CI timing guard (about 100 ms warm on the operator
-      Mac with a real git first on PATH; see journal 9ecae0965ac4), and a trap fr on PATH proving the fr CLI is never invoked. Operator-side
-      wiring (~/.claude/statusline.sh calling the segment) is phase 7.'
+    notes: 'Contract v2 (spec 2026-09-14). Golden subprocess tests, filed under int
+      because the matrix has no golden level. Segment plugins/super-fr/scripts/fr-statusline-segment.sh
+      (test_statusline_segment.py): a live binding wins, a stale binding (worktree
+      gone) is ignored, a cwd inside an fr workspace is fr, plain linked and detached
+      agent worktrees are none, non-repo and missing cwd, the plain / ansi / oneline
+      formats and --cwd, a 0.5 s CI timing guard, and a trap fr on PATH proving the
+      fr CLI is never invoked. Reference status line plugins/super-fr/scripts/fr-statusline-claude.sh
+      (test_statusline_claude.py): three lines (model, ctx and rates; branch row and
+      ~/cwd; worktree row), a symlinked script still finds the segment, a missing
+      segment degrades to purple none rows, and float percentages are floored. Measured
+      on the operator Mac (2026-09-14, /bin/bash 3.2, Xcode git first on PATH): bound
+      about 77 ms, unbound in a repo about 100 ms, non-repo about 65 ms. Operator-side
+      wiring (~/.claude/statusline.sh) is the manual phase 5.'
   - id: native-worktree-sessions-land-in-fr
     capability: isolation-conformity
     acceptance: claude --worktree <name> and EnterWorktree in an fr-enabled repo create
@@ -1827,3 +1836,19 @@ rows:
     notes: 'Fallback-gone unit tests landed this PR (#276): test_isolation.py pins
       profiles_config/state-dir fr-only + the legacy-vk-mount hard error;
       test_bridge_cli.py pins bridge_env reading only FR_BRIDGE_*. Run in CI.'
+  - id: statusline-harness-neutral-segment
+    capability: isolation-traceability
+    acceptance: Any harness can render the session branch and fr-isolation state from
+      one shell command (--cwd, --format oneline), without the fr CLI and without stdin
+      JSON.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-14-statusline-session-branch-design.md
+    levels:
+      int:
+      - super-fr:tests/unit/test_statusline_segment.py
+    status: ci
+    notes: Born at brainstorm 2026-09-14. Level int (golden subprocess tests in
+      tests/unit/test_statusline_segment.py); --cwd/oneline covered by golden tests
+      (test_cwd_flag_reads_no_stdin, test_oneline, test_never_invokes_fr). Hermes custom_command
+      wiring is docs-only until NousResearch/hermes-agent#109596 ships; OpenCode has
+      no status-line hook (anomalyco/opencode#37464).
