@@ -32,14 +32,20 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-15T17:45:38+00:00'
+      note: '2026-09-15: operator updated super-fr plugin to 4.4.0 (cache current
+        -> 4.4.0); ~/.claude/statusline.sh replaced by a symlink to current/scripts/fr-statusline-claude.sh
+        (old script backed up to statusline.sh.bak-1789493782).'
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-15T17:45:49+00:00'
+      note: '2026-09-15: operator confirmed the live footer looks good. Pre-check
+        renders via bash ~/.claude/statusline.sh: bound session green branch/worktree
+        rows; unbound willikins base clone purple branch row + no fr-isolation; /tmp
+        purple no branch + no fr-isolation.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-15T17:50:17+00:00'
+    note: 'Operator rollout done 2026-09-15: plugin 4.4.0, status line symlinked to
+      fr-statusline-claude.sh, footer confirmed by the operator (journal p5-operator-verified).'
     observed_prs: []
