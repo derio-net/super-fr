@@ -28,6 +28,22 @@ a forced plugin output style (Claude Code main thread) and a shipped rule
 No manual phase: the only operator work is the post-merge Test Plan (spec §7),
 which goes in the PR body.
 
+## Revision 2026-09-15 — chattiness first (spec d6–d10)
+
+Phases 1–4 shipped a forced style and a global rule. Review showed that this
+reached every session and stayed non-deterministic. The spec now starts from
+the chattiness problem. Phases 5–8 change the plan in the same branch:
+
+5. **Repurpose.** Make the STE style opt-in. Remove the rule, its wiring and
+   the phase-executor line.
+6. **Prose lint module.** `fr.prose_lint`: long sentences and filler words,
+   with the filler list pinned to the style text.
+7. **Wire the lint.** `fr journal add` and `fr plan self-review` print
+   warnings. No exit code changes.
+8. **Skill audit and acceptance.** The fr-goal and fr-debugging reporting
+   contract, row tables in fr-brainstorming and fr-acceptance, the acceptance
+   rows, and the gate.
+
 ## Conventions for every phase
 
 - Run all commands in the workspace with `fr isolation exec --repo

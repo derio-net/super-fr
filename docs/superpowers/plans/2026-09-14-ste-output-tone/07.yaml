@@ -1,0 +1,273 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Wire the lint — fr journal add and fr plan self-review print warnings
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 6
+  tracking_issue: null
+  acceptance:
+  - journal-add-warns-on-long-prose
+  - plan-self-review-warns-on-long-prose
+tasks:
+- number: 1
+  title: fr journal add warns on long prose
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: create tests/unit/test_journal_add_prose_warning.py. Reuse the
+      repo setup of tests/unit/test_journal_cmd.py: import its _init_repo helper
+      (`from tests.unit.test_journal_cmd import _init_repo`), then
+      `monkeypatch.chdir(root)` and `runner.invoke(app, ["journal", "add", ...])`.
+      BEGIN tests/unit/test_journal_add_prose_warning.py
+      """Spec 2026-09-14-ste-output-tone §5.C: journal add warns, never fails."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      from fr.cli import app
+      from typer.testing import CliRunner
+
+      from tests.unit.test_journal_cmd import _init_repo
+
+      runner = CliRunner()
+      LONG = " ".join(["word"] * 30) + "."
+
+
+      def _add(title: str, body: str, entry_id: str):
+          return runner.invoke(
+              app,
+              ["journal", "add", "--scope", "plan", "--slug", "S", "--kind", "discovery",
+               "--title", title, "--body", body, "--id", entry_id],
+          )
+
+
+      def test_a_long_sentence_warns_and_exits_zero(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.chdir(_init_repo(tmp_path))
+          result = _add("Short title", LONG, "e1")
+          assert result.exit_code == 0, result.output
+          assert "warning: journal entry e1: sentence of 30 words" in result.output
+
+
+      def test_a_clean_entry_prints_no_warning(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.chdir(_init_repo(tmp_path))
+          result = _add("Short title", "The test passes.", "e2")
+          assert result.exit_code == 0, result.output
+          assert "warning:" not in result.output
+
+
+      def test_an_idempotent_re_add_prints_no_warning(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.chdir(_init_repo(tmp_path))
+          _add("Short title", LONG, "e3")
+          result = _add("Short title", LONG, "e3")
+          assert result.exit_code == 0, result.output
+          assert "warning:" not in result.output
+
+
+      def test_warnings_stop_after_five_lines(tmp_path: Path, monkeypatch) -> None:
+          monkeypatch.chdir(_init_repo(tmp_path))
+          result = _add("Short title", " ".join([LONG] * 8), "e4")
+          lines = [line for line in result.output.splitlines() if line.startswith("warning:")]
+          assert len(lines) == 6
+          assert lines[-1] == "warning: journal entry e4: … 3 more"
+      END tests/unit/test_journal_add_prose_warning.py
+      Run `uv run pytest tests/unit/test_journal_add_prose_warning.py -q --no-cov`.
+      Expected: 3 failed (no warnings yet), 1 passed (the clean entry).
+      If CliRunner does not mix stderr into result.output in the installed test-runner library version,
+      use `result.stderr` in the assertions and journal a discovery.
+  - id: P7.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/journal_cmd.py, add this helper below _load:
+      BEGIN helper
+      _PROSE_WARNING_LIMIT = 5
+
+
+      def _warn_prose(entry_id: str, title: str, body: str) -> None:
+          """Print warn-only prose lint results for a new entry (spec 2026-09-14 §5.C)."""
+          from fr.prose_lint import lint_prose
+
+          issues = lint_prose(title) + lint_prose(body)
+          for issue in issues[:_PROSE_WARNING_LIMIT]:
+              err_console.print(f"warning: journal entry {entry_id}: {issue}", markup=False)
+          if len(issues) > _PROSE_WARNING_LIMIT:
+              more = len(issues) - _PROSE_WARNING_LIMIT
+              err_console.print(f"warning: journal entry {entry_id}: … {more} more", markup=False)
+      END helper
+      At the end of add(), after both path.write_text(...) branches, call
+      `_warn_prose(eid, title, body)`. The idempotent `return` stays before it,
+      so a re-add prints nothing.
+      Run the same pytest command, then `uv run pytest tests/unit/test_journal_cmd.py -q --no-cov`.
+      Expected: all pass.
+  - id: P7.T1.S3
+    text: |-
+      REFACTOR: run `uv run ruff format packages/fr/src/fr/commands/journal_cmd.py tests/unit/test_journal_add_prose_warning.py`,
+      `uv run ruff check packages/fr/src tests/unit/test_journal_add_prose_warning.py`
+      and `uv run mypy packages/fr/src`. All pass.
+      Commit: `feat(journal): warn on long sentences and filler words`.
+- number: 2
+  title: fr plan self-review warns on long prose
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      RED: create tests/unit/test_self_review_prose.py. Reuse _repo, _spec and
+      _create_plan from tests/unit/test_plan_acceptance_links.py.
+      BEGIN tests/unit/test_self_review_prose.py
+      """Spec 2026-09-14-ste-output-tone §5.C: self-review warns on long prose."""
+
+      from __future__ import annotations
+
+      from pathlib import Path
+
+      from fr.cli import app
+      from fr.parser import parse as parse_plan
+      from fr.plan_ops import self_review
+      from typer.testing import CliRunner
+
+      from tests.unit.test_plan_acceptance_links import _create_plan, _repo, _spec
+
+      LONG = " ".join(["word"] * 30) + "."
+
+
+      def _prose_warnings(plan_dir: Path) -> list[str]:
+          issues = self_review(parse_plan(plan_dir))
+          return [i.message for i in issues if i.severity == "warn" and i.message.startswith("prose lint")]
+
+
+      def _plan(tmp_path: Path) -> Path:
+          repo = _repo(tmp_path, matrix=False)
+          _spec(repo, test_plan=False)
+          return _create_plan(repo)
+
+
+      def test_a_clean_plan_has_no_prose_warning(tmp_path: Path) -> None:
+          assert _prose_warnings(_plan(tmp_path)) == []
+
+
+      def test_a_pending_step_with_a_long_sentence_warns(tmp_path: Path) -> None:
+          plan_dir = _plan(tmp_path)
+          phase = plan_dir / "01.yaml"
+          text = phase.read_text()
+          first_text = text.index("text:")
+          phase.write_text(text[:first_text] + f"text: {LONG}\n" + text[text.index("\n", first_text) + 1:])
+          warnings = _prose_warnings(plan_dir)
+          assert any("step P1.T1.S1" in w and "sentence of 30 words" in w for w in warnings), warnings
+
+
+      def test_the_plan_prose_warns(tmp_path: Path) -> None:
+          plan_dir = _plan(tmp_path)
+          (plan_dir / "_prose.md").write_text(f"# Plan\n\n{LONG}\n")
+          assert any("_prose.md" in w for w in _prose_warnings(plan_dir))
+
+
+      def test_the_spec_warns(tmp_path: Path) -> None:
+          plan_dir = _plan(tmp_path)
+          spec = tmp_path / "docs/superpowers/specs/2026-07-04-toy.md"
+          spec.write_text(spec.read_text() + f"\n{LONG}\n")
+          assert any("spec " in w for w in _prose_warnings(plan_dir))
+
+
+      def test_prose_warnings_do_not_fail_the_command(tmp_path: Path) -> None:
+          plan_dir = _plan(tmp_path)
+          (plan_dir / "_prose.md").write_text(f"# Plan\n\n{LONG}\n")
+          result = CliRunner().invoke(app, ["plan", "self-review", str(plan_dir)])
+          assert "prose lint" in result.output
+          assert result.exit_code == 0, result.output
+      END tests/unit/test_self_review_prose.py
+      Before you run it, read _create_plan: if its step text differs from what
+      test_a_pending_step_with_a_long_sentence_warns expects, change only the
+      test's file manipulation, and keep the assertions.
+      Run `uv run pytest tests/unit/test_self_review_prose.py -q --no-cov`.
+      Expected: the clean-plan test passes; the other four fail. If the exit-code
+      test fails for another reason (for example an unrelated error issue from
+      the fixture), journal a discovery and make the fixture clean.
+  - id: P7.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/plan_ops.py, add this function after _workflow_issues:
+      BEGIN _prose_issues
+      def _prose_issues(plan: Plan) -> list[ReviewIssue]:
+          """Warn-only prose lint (spec 2026-09-14-ste-output-tone §5.C).
+
+          Pending step text, the plan prose and a same-repo spec. Ticked steps are
+          exempt, like the manual-verb detector. One issue per source keeps a long
+          document to one line.
+          """
+          from fr.prose_lint import lint_prose
+
+          sources: list[tuple[str, str]] = []
+          for phase in plan.phases:
+              for task in phase.tasks:
+                  for step in task.steps:
+                      state = phase.state.steps.get(step.id)
+                      if state is not None and state.state == "x":
+                          continue
+                      sources.append((f"step {step.id}", step.text))
+          if plan.prose:
+              sources.append(("_prose.md", plan.prose))
+          spec_rel = plan.spec_path or plan.meta.spec
+          if plan.repo_root is not None and spec_rel and not is_cross_repo_spec(spec_rel):
+              spec_file = plan.repo_root / spec_rel
+              if spec_file.is_file():
+                  sources.append((f"spec {spec_rel}", spec_file.read_text()))
+
+          out: list[ReviewIssue] = []
+          for label, text in sources:
+              found = lint_prose(text)
+              if not found:
+                  continue
+              shown = "; ".join(str(issue) for issue in found[:3])
+              more = f" (+{len(found) - 3} more)" if len(found) > 3 else ""
+              out.append(
+                  ReviewIssue(
+                      severity="warn",
+                      message=f"prose lint — {label}: {len(found)} issue(s): {shown}{more}",
+                  )
+              )
+          return out
+      END _prose_issues
+      In self_review, add `issues.extend(_prose_issues(plan))` directly after
+      `issues.extend(_refactor_issues(plan))`.
+      Run the same pytest command, then `uv run pytest tests/unit/test_plan_acceptance_links.py
+      tests/unit/test_v2_plan_ops.py tests/unit/test_plan_workflow_binding.py -q --no-cov`.
+      Expected: all pass. An existing test that asserts "no issues" on a plan with
+      long prose may now see a warn issue. If so, filter it to non-prose issues
+      in that test and journal a discovery that names the test.
+  - id: P7.T2.S3
+    text: |-
+      REFACTOR + dogfood: run `uv run ruff format packages/fr/src/fr/plan_ops.py tests/unit/test_self_review_prose.py`,
+      `uv run ruff check packages/fr/src tests/unit/test_self_review_prose.py`
+      and `uv run mypy packages/fr/src`. All pass.
+      Run `fr plan self-review docs/superpowers/plans/2026-09-14-ste-output-tone` and record
+      the prose-lint warning count in the phase result. The exit code must be 0.
+      Commit: `feat(plan): self-review warns on long sentences and filler words`.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

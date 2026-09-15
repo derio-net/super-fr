@@ -7,10 +7,6 @@ phase:
   depends_on:
   - 3
   tracking_issue: null
-  acceptance:
-  - ste-style-forced-in-claude-code
-  - ste-rule-reaches-every-harness
-  - ste-insight-blocks-kept-short
 tasks:
 - number: 1
   title: Phase executor returns in STE

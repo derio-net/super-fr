@@ -7,8 +7,6 @@ phase:
   depends_on:
   - 2
   tracking_issue: null
-  acceptance:
-  - ste-rule-reaches-every-harness
 tasks:
 - number: 1
   title: Rule file with an identical shared block

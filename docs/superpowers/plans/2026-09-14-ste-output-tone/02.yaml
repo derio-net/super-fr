@@ -8,8 +8,7 @@ phase:
   - 1
   tracking_issue: null
   acceptance:
-  - ste-style-forced-in-claude-code
-  - ste-insight-blocks-kept-short
+  - ste-style-opt-in
 tasks:
 - number: 1
   title: Section, override and filler tests, then the full text
