@@ -224,3 +224,8 @@ M5: phase 8 step P8.T2.S1 already moves ste-style-opt-in to skipped with a unit 
 ### p7-plan-exit-code-test · finding [fixed] · Plan 07: exit-code test assumed a clean fixture (phase 5)
 
 Found before dispatch: the _create_plan fixture has no skeleton marker, so self-review exits 1 without any prose. The planned test asserted exit 0. The test now compares against the clean plan's exit code. Spec §5.F wording updated.
+
+<!-- fr:journal kind=discovery scope=plan id=2bbe0d69c345 created=2026-09-15T21:03:01 phase=6 -->
+### 2bbe0d69c345 · discovery · complete-phase 6 warns on not-implemented acceptance rows (phase 6)
+
+fr plan edit --complete-phase 6 prints a warning that journal-add-warns-on-long-prose and plan-self-review-warns-on-long-prose are still not-implemented. Expected: those rows are satisfied by phase 7 (wiring the lint into fr journal add and fr plan self-review), not phase 6 (the lint module itself). No action taken in phase 6.
