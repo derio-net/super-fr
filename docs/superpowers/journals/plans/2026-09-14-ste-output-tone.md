@@ -234,3 +234,43 @@ fr plan edit --complete-phase 6 prints a warning that journal-add-warns-on-long-
 ### p8-plan-fr-goal-line-cap · finding [fixed] · Plan 08: fr-goal reflow instruction would break the line cap (phase 8)
 
 Found by a dry run before dispatch. The reporting contract adds 2 lines to fr-goal, which is at the 120-line cap. Reflowing only the §2 paragraph, as the step said, gives 121 lines. Reflowing the Interactive touchpoints paragraph as well gives 120. P8.T1.S2(a) now names both paragraphs.
+
+<!-- fr:journal kind=finding scope=plan id=r6-i1-cross-wrap created=2026-09-16T06:53:27 phase=6 state=fixed -->
+### r6-i1-cross-wrap · finding [fixed] · I1 Quotes and code spans paired wrongly across a line wrap (phase 6)
+
+Stripping ran per line, so a span that wrapped deleted real prose between it and the next mark. Fix: split into items, flatten each item, then strip inline code, quotes and URLs. Verified on the reviewer case and on this repo own spec: 1 warning to 0.
+
+<!-- fr:journal kind=finding scope=plan id=r6-i2-word-count created=2026-09-16T06:53:29 phase=6 state=fixed -->
+### r6-i2-word-count · finding [fixed] · I2 Paths and dotted names inflated the word count (phase 6)
+
+The old token pattern split on slash and dot, so one path counted as many words. Fix: a word is a whitespace token that contains a letter or digit; a lone dash counts as none. Spec section 5.C updated.
+
+<!-- fr:journal kind=finding scope=plan id=r6-i3-closers created=2026-09-16T06:53:31 phase=6 state=fixed -->
+### r6-i3-closers · finding [fixed] · I3 A closer after the end mark stopped the sentence split (phase 6)
+
+Bold lead-ins and closing brackets or quotes after a period never split, so two sentences merged into one long count. Fix: the split accepts closers after a period, an exclamation mark or a question mark. The repo has 564 bold lead-ins.
+
+<!-- fr:journal kind=finding scope=plan id=r6-i4-embed-end created=2026-09-16T06:53:33 phase=6 state=fixed -->
+### r6-i4-embed-end · finding [fixed] · I4 A code line starting with END closed an embed early (phase 6)
+
+Step P1.T1.S1 of 01.yaml embeds a code line that starts with END, which ended the block and linted the rest of the code as prose. Fix: an embed ends only at a bare END or at END with the same label. That step now reports 0 warnings, was 2.
+
+<!-- fr:journal kind=finding scope=plan id=r6-i5-fences created=2026-09-16T06:53:34 phase=6 state=fixed -->
+### r6-i5-fences · finding [fixed] · I5 Indented and longer fences were not stripped (phase 6)
+
+The fence pattern needed column 0 and exactly three marks. Fix: allow indentation, three or more backticks or tildes, and close on the same run. An unclosed fence runs to the end of the text.
+
+<!-- fr:journal kind=finding scope=plan id=r6-i6-markup created=2026-09-16T06:53:36 phase=6 state=fixed -->
+### r6-i6-markup · finding [fixed] · I6 Self-review would crash on an excerpt with square brackets (phase 6)
+
+plan_cmd prints issues with Rich markup on, so an excerpt with a closing tag raises MarkupError and breaks decision d9. Fixed in the phase 7 plan: step P7.T2.S2 adds markup off, and P7.T2.S1 adds a test. The change also restores the warn and error prefixes that Rich used to eat.
+
+<!-- fr:journal kind=finding scope=plan id=r6-minors created=2026-09-16T06:53:38 phase=6 state=fixed -->
+### r6-minors · finding [fixed] · Phase 6 minors fixed: M7 to M10, M12, M13, M14, M16, M17 (phase 6)
+
+A heading needs a hash and a space (M7). Numbered lists with a bracket split (M8). CRLF front matter is stripped (M9). A quote that ends a sentence keeps its mark (M10). Nested and longer fences are stripped (M12). A filler inside a path or a hyphenated word is ignored (M13). The docstring states the real order (M14). The tripwire self-test runs the real comparison (M16). Tests were added for every case (M17). Tests: 20 to 48.
+
+<!-- fr:journal kind=finding scope=plan id=r6-m11-m15 created=2026-09-16T06:53:40 phase=6 state=refuted -->
+### r6-m11-m15 · finding [refuted] · M11 and M15: not fixed (phase 6)
+
+M11, an unmatched quote eating the rest of a line, is covered in practice by the I1 flatten fix. M15, backtracking on thousands of unclosed openers, needs deliberately broken input and the lint only warns. The largest real spec lints in 12 ms.

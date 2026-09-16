@@ -182,11 +182,22 @@ New module `packages/fr/src/fr/prose_lint.py`:
   (`long-sentence` or `filler`), a word count (long sentences), and a short
   excerpt.
 - Before it counts, the lint removes text that is not prose:
-  - YAML front matter, fenced code blocks and `BEGIN …`/`END …` embed blocks;
-  - inline code spans, double-quoted strings and URLs;
-  - HTML comments, headings and Markdown table rows.
-- It splits prose at blank lines and list bullets, then at `.`, `!` or
-  `?` followed by whitespace. Words match `[\w'-]+`.
+  - YAML front matter (LF or CRLF);
+  - fenced code blocks, also indented, with `~~~` or with 4+ backticks;
+  - `BEGIN <label>` embed blocks, which end only at a bare `END` or at
+    `END <label>`;
+  - HTML comments, headings (`#` to `######` and a space) and table rows.
+- It splits the rest into items at blank lines and list markers (`-`, `*`,
+  `+`, `1.`, `1)`). It flattens each item to one line, then removes inline
+  code, double-quoted strings and URLs. So a quote or a code span that wraps
+  across lines is removed whole. A quoted string that ends with `.`, `!` or
+  `?` keeps that mark.
+- It splits each item into sentences at `.`, `!` or `?`, also when a closer
+  follows the mark (`**`, `)`, `"`, `` ` ``, `_`).
+- A word is a whitespace-separated token that contains a letter or a digit. So
+  a path counts as one word, and a lone `-` counts as none.
+- A filler word matches only as a whole word, not inside a path or a
+  hyphenated word.
 - The 20-word limit for instructions is not checked. Code cannot tell an
   instruction from a description.
 

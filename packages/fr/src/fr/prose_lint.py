@@ -24,17 +24,30 @@ FILLER_WORDS: tuple[str, ...] = (
     "it seems",
 )
 
-_FRONT_MATTER = re.compile(r"\A---\n.*?\n---\n", re.S)
-_FENCE = re.compile(r"^(```|~~~)[^\n]*\n.*?^\1[^\n]*$", re.S | re.M)
-_EMBED = re.compile(r"^[ \t]*BEGIN\b[^\n]*\n.*?^[ \t]*END\b[^\n]*$", re.S | re.M)
+# Block-level non-prose, removed from the whole text before it is split.
+_FRONT_MATTER = re.compile(r"\A---[ \t]*\n.*?\n---[ \t]*(?:\n|\Z)", re.S)
+# Indented, `~~~` and 4+-backtick fences; an unclosed fence runs to the end.
+_FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t]*\1[ \t]*$|\Z)", re.S | re.M)
+# The plan embed convention. It ends at a bare `END` or at `END <same label>`,
+# never at a code line that merely starts with END.
+_EMBED = re.compile(
+    r"^[ \t]*BEGIN[ \t]+([^\n]*?)[ \t]*\n.*?^[ \t]*END(?:[ \t]+\1)?[ \t]*$", re.S | re.M
+)
 _COMMENT = re.compile(r"<!--.*?-->", re.S)
-_INLINE_CODE = re.compile(r"`[^`\n]*`")
-_QUOTED = re.compile(r'"[^"\n]*"')
+_SKIPPED_LINE = re.compile(r"^[ \t]*(?:#{1,6}(?:[ \t]|$)|\|)")
+
+_ITEM_SPLIT = re.compile(r"\n[ \t]*\n|\n(?=[ \t]*(?:[-*+]|\d+[.)])[ \t])")
+_LIST_MARKER = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
+
+# Inline non-prose, removed from one flattened item, so a span that wraps
+# across lines is removed whole.
+_INLINE_CODE = re.compile(r"(`+).+?\1")
+_QUOTED = re.compile(r'"([^"]*)"')
 _URL = re.compile(r"https?://\S+")
-_WORD = re.compile(r"[\w'-]+")
-_ITEM_SPLIT = re.compile(r"\n[ \t]*\n|\n(?=[ \t]*(?:[-*+]|\d+\.)[ \t])")
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
-_BULLET = re.compile(r"^(?:[-*+]|\d+\.)\s+")
+
+# A sentence ends at . ! or ?, also when a closer follows (`.**`, `.)`, `."`).
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])[*_)\]\"'’”`]*\s+")
+_WORD_CHAR = re.compile(r"\w")
 
 
 @dataclass(frozen=True)
@@ -49,16 +62,40 @@ class ProseIssue:
         return f"filler word {self.excerpt!r}"
 
 
-def _prose_only(text: str) -> str:
-    """Drop everything that is not prose: code, embeds, quotes, tables, headings."""
-    text = _FRONT_MATTER.sub("", text)
+def _filler_pattern(word: str) -> re.Pattern[str]:
+    """A whole-word match that is not part of a path or a hyphenated word."""
+    body = r"\s+".join(re.escape(part) for part in word.split())
+    return re.compile(rf"(?<![\w/.-]){body}(?![\w/-])", re.IGNORECASE)
+
+
+_FILLER_PATTERNS: dict[str, re.Pattern[str]] = {}
+
+
+def _keep_final_mark(match: re.Match[str]) -> str:
+    """A quoted string is removed, but a sentence end inside it is kept."""
+    inner = match.group(1)
+    return inner[-1] if inner[-1:] in (".", "!", "?") else ""
+
+
+def _prose_items(text: str) -> list[str]:
+    """Flattened prose items with every kind of non-prose removed."""
+    text = _FRONT_MATTER.sub("", text.replace("\r\n", "\n"))
     for pattern in (_FENCE, _EMBED, _COMMENT):
         text = pattern.sub("", text)
-    lines = [line for line in text.splitlines() if not line.lstrip().startswith(("#", "|"))]
-    text = "\n".join(lines)
-    for pattern in (_INLINE_CODE, _QUOTED, _URL):
-        text = pattern.sub("", text)
-    return text
+    text = "\n".join(line for line in text.split("\n") if not _SKIPPED_LINE.match(line))
+    items: list[str] = []
+    for item in _ITEM_SPLIT.split(text):
+        flat = _LIST_MARKER.sub("", " ".join(item.split()), count=1)
+        flat = _INLINE_CODE.sub("", flat)
+        flat = _QUOTED.sub(_keep_final_mark, flat)
+        flat = _URL.sub("", flat)
+        if flat.strip():
+            items.append(flat)
+    return items
+
+
+def _word_count(sentence: str) -> int:
+    return sum(1 for token in sentence.split() if _WORD_CHAR.search(token))
 
 
 def _excerpt(sentence: str, limit: int = 80) -> str:
@@ -67,17 +104,18 @@ def _excerpt(sentence: str, limit: int = 80) -> str:
 
 
 def lint_prose(text: str) -> list[ProseIssue]:
-    """Long sentences, then filler words, in the order they are found."""
-    prose = _prose_only(text)
+    """All long sentences in document order, then filler words in FILLER_WORDS order."""
+    items = _prose_items(text)
     issues: list[ProseIssue] = []
-    for item in _ITEM_SPLIT.split(prose):
-        flat = _BULLET.sub("", " ".join(item.split()))
-        for sentence in _SENTENCE_SPLIT.split(flat):
-            count = len(_WORD.findall(sentence))
+    for item in items:
+        for sentence in _SENTENCE_SPLIT.split(item):
+            count = _word_count(sentence)
             if count > MAX_SENTENCE_WORDS:
                 issues.append(ProseIssue("long-sentence", _excerpt(sentence), count))
-    flat_prose = " ".join(prose.split()).lower()
     for word in FILLER_WORDS:
-        if re.search(rf"\b{re.escape(word.lower())}\b", flat_prose):
+        pattern = _FILLER_PATTERNS.get(word) or _FILLER_PATTERNS.setdefault(
+            word, _filler_pattern(word)
+        )
+        if any(pattern.search(item) for item in items):
             issues.append(ProseIssue("filler", word))
     return issues
