@@ -2,7 +2,7 @@ run: 2026-09-15-feat-ste-output-tone
 workflow: fr-goal@1
 branch: feat/ste-output-tone
 started: '2026-09-15T18:21:24+00:00'
-cursor: implement
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -25,8 +25,8 @@ steps:
 
       '
   implement:
-    state: running
-    at: '2026-09-16T05:41:53+00:00'
+    state: done
+    at: '2026-09-16T05:59:14+00:00'
     items:
       phase/1/implement-phase: done
       phase/1/review-phase: done
@@ -43,12 +43,13 @@ steps:
       phase/7/implement-phase: done
       phase/7/review-phase: done
       phase/8/implement-phase: done
-      phase/8/review-phase: running
+      phase/8/review-phase: done
     members:
     - implement-phase
     - review-phase
   deliver:
-    state: pending
+    state: running
+    at: '2026-09-16T05:59:16+00:00'
 accounting:
   phase/1/implement-phase:
     at: '2026-09-15T18:33:13+00:00'
