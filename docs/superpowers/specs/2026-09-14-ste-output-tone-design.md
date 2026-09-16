@@ -307,7 +307,8 @@ Post-merge (operator-driven):
    Then select your normal style again.
 3. Run `/fr-goal` on a small goal. Make sure that the agent speaks only at the
    Q&A, at a block or failure, and at delivery. Make sure that each update is
-   the result, then the next step.
+   the result, then the next step. When it presents new acceptance rows, make
+   sure that they arrive as one table, not a paragraph for each row.
 4. Run Appendix A over that session. Compare words per tool call and the
    end-of-turn share with the baseline in §2.
 5. In any fr repo, run `fr journal add` with a body that has a 30-word
@@ -331,7 +332,7 @@ replaced by:
 |---|---|---|---|
 | `ste-style-opt-in` | output-tone | An operator can select a Simplified Technical English output style in `/config`, and super-fr never forces a style. | unit + operator walk |
 | `fr-goal-reports-result-and-next-step` | output-tone | During fr-goal and fr-debugging runs, the operator gets updates only at gates, blocks and delivery, each as the result then the next step. | unit (skill text) + operator walk |
-| `acceptance-rows-presented-as-table` | output-tone | New acceptance rows reach the operator as one short table, not a paragraph per row. | unit (skill text) |
+| `acceptance-rows-presented-as-table` | output-tone | New acceptance rows reach the operator as one short table, not a paragraph per row. | unit (text) + operator walk |
 | `journal-add-warns-on-long-prose` | output-tone | `fr journal add` warns, without failing, when an entry has a sentence over 25 words or a filler word. | unit |
 | `plan-self-review-warns-on-long-prose` | output-tone | `fr plan self-review` warns, without failing, on long sentences and filler words in pending steps, the plan prose and its spec. | unit |
 

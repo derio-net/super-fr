@@ -97,7 +97,7 @@ flowchart TD
 This is autonomous work, not blind work. `fr-goal` stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(`plugins/super-fr/skills/fr-goal/SKILL.md:16-32`, `:44-47`). The reviews shown above are
+(`plugins/super-fr/skills/fr-goal/SKILL.md:16-34`, `:46-48`). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.
 
@@ -121,7 +121,7 @@ risks instead.
 Because the pipeline is a shape, the command also takes an optional shape name.
 `/fr-goal` runs the feature-delivery shape this article describes;
 `/fr-goal <name>` runs another one that the project or the plugin provides
-(`plugins/super-fr/skills/fr-goal/SKILL.md:16-32`). Most requests never need
+(`plugins/super-fr/skills/fr-goal/SKILL.md:16-34`). Most requests never need
 the argument, and nothing about the rest of this article changes when you use
 it: the machinery is the same, only the list of steps differs.
 
@@ -284,7 +284,7 @@ It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
 question set, with no more than four questions and recommended choices first.
 A deployed change may include a question about how you will verify it in the
-real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:49-56`).
+real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:50-57`).
 
 This is the shape's one operator gate, and an unanswered batch is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
@@ -313,7 +313,7 @@ existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
-(`plugins/super-fr/skills/fr-goal/SKILL.md:49-56`,
+(`plugins/super-fr/skills/fr-goal/SKILL.md:50-57`,
 `plugins/super-fr/skills/fr-brainstorming/SKILL.md`).
 
 The important promises also become **acceptance tests**: concrete statements of
@@ -461,7 +461,7 @@ and one PR. A coordinating spec may cover several repositories, but `fr-goal`
 locates each checkout and assigns one isolated agent per other repository, each
 running this same pipeline from planning onward in its own repo. Dependencies
 between repositories live in the spec and PR order, not in a plan phase's local
-`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:58-64`).
+`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:59-64`).
 
 The shape decides the granularity at which its work is handed out, by declaring
 one of three units: a whole run as a single item, which is what the shipped

@@ -1886,8 +1886,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_reporting_contract.py
-    status: ci
-    notes: Unit test pins the fr-brainstorming and fr-acceptance table text in CI.
+    status: skipped
+    notes: Unit test pins the skill text in CI (test_reporting_contract.py). Whether an
+      agent actually presents the rows as a table is the post-merge operator walk — spec
+      section 7, Test Plan step 3.
+
   - id: journal-add-warns-on-long-prose
     capability: output-tone
     acceptance: fr journal add warns, without failing, when an entry has a sentence

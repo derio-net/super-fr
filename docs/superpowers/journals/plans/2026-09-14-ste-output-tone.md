@@ -334,3 +334,33 @@ The test matched any message containing the word spec. It now matches the full s
 ### f358d88be10a · discovery · Phase 8 ran exactly as dry-run predicted (phase 8)
 
 All six RED tests failed as expected, the four skill edits produced 6 green tests plus test_skill_validation.py green, and the fr-goal reflow of both named paragraphs to width 95 landed the file at exactly 120 lines with no words removed. The explainer grep for the phrase short defense for each still matched line 329, so no explainer edit was needed. The acceptance gate (report, check, report check) passed with the five updated rows and no failing status.
+
+<!-- fr:journal kind=finding scope=plan id=r8-i2-explainer-refs created=2026-09-16T07:58:58 phase=8 state=fixed -->
+### r8-i2-explainer-refs · finding [fixed] · I2 Explainer line citations drifted after the fr-goal reflow (phase 8)
+
+Five refs in docs/explainers/01-fr-goal.md pointed at shifted lines: the first paragraph is 16-34, the touchpoints paragraph 46-48, brainstorm 50-57 and spec-review 59-64. Fixed in the md. The html was regenerated with the blog-craft renderer from the filesystem root, after a byte-parity check proved the renderer reproduces the committed page from the unmodified source.
+
+<!-- fr:journal kind=finding scope=plan id=r8-i3-fr-goal-table created=2026-09-16T07:59:00 phase=8 state=fixed -->
+### r8-i3-fr-goal-table · finding [fixed] · I3 fr-goal still asked for a defense per row in the PR body (phase 8)
+
+fr-acceptance presented mid-flight rows as a table while fr-goal line 111 still said each with a one-line defense for the same PR body block. fr-goal now says as one table with the same column list. The file is still 120 lines. The test pins each skill wording separately.
+
+<!-- fr:journal kind=finding scope=plan id=r8-i4-row-status created=2026-09-16T07:59:02 phase=8 state=fixed -->
+### r8-i4-row-status · finding [fixed] · I4 acceptance-rows-presented-as-table claimed ci on skill text alone (phase 8)
+
+A skill-text assertion does not prove an agent obeys the skill, so the row is now skipped, like its sibling row. Spec section 7 Test Plan step 3 now also asks the operator to confirm that new rows arrive as one table, and the row notes cite it.
+
+<!-- fr:journal kind=finding scope=plan id=r8-m5-test-gaps created=2026-09-16T07:59:04 phase=8 state=fixed -->
+### r8-m5-test-gaps · finding [fixed] · M5 Reporting contract test was loose and asymmetric (phase 8)
+
+The table assertion matched a bare token anywhere. Each skill now has its own sentence pinned, and the no-defense-per-row negative covers fr-brainstorming, fr-acceptance and fr-goal.
+
+<!-- fr:journal kind=finding scope=plan id=r8-m6-install-guard created=2026-09-16T07:59:06 phase=8 state=fixed -->
+### r8-m6-install-guard · finding [fixed] · M6 The new output-styles category had no install guard (phase 8)
+
+Added tests/unit/test_install_copies_output_styles.py, modelled on the workflows guard: a style exists, the marketplace rsync excludes neither output-styles nor md files, and no shipped style forces itself on.
+
+<!-- fr:journal kind=finding scope=plan id=r8-m7-commit-title created=2026-09-16T07:59:08 phase=8 state=refuted -->
+### r8-m7-commit-title · finding [refuted] · M7 Duplicated title line in commit 1e4724b: left alone (phase 8)
+
+The repo has no commit-message lint and the release tag comes from pyproject.toml. Rewriting a pushed branch to fix a cosmetic duplicate costs more than it returns.

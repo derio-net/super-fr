@@ -108,7 +108,7 @@ summary + spec/plan paths; findings + fixes (+ refutations) and decisions via
 `fr journal render --scope plan --section findings`/`decisions`; the back-loaded manual phase
 marked "unimplemented — operator pushes to this PR"; the Test Plan verbatim ("post-merge —
 operator-driven"); acceptance debt (`fr acceptance status`) and rows-added-since-brainstorm
-(`fr acceptance check --added-since origin/main`), each with a one-line defense. The body carries a
+(`fr acceptance check --added-since origin/main`) as one table (`id | claim | level | defense`). The body carries a
 Ready-checklist guard (CI green, explicit review ok, no commits since the ok). ONLY when all three
 hold: `gh pr ready`, remove the guard — never say "ready to merge" before this, never self-merge,
 never flip it manually. Resolve `deliver` done; nothing follows it. Stop; the operator merges.
