@@ -13,27 +13,38 @@
 <div class="slides">
 
 <!-- 0 title -->
-<section class="title" data-background-image="../diagrams/factory-line.png" data-background-size="cover">
+<section data-markdown>
+<script type="text/template">
+<!-- .slide: class="title" data-background-image="../diagrams/factory-line.png" data-background-size="cover" -->
+
 <div class="topblock">
-<h1>Delivering more robust code safely using custom skills</h1>
-<h2>A personal experiment in overengineering the Superpowers skill</h2>
+
+# Delivering more robust code safely using custom skills
+
+## A personal experiment in overengineering the Superpowers skill
+
 </div>
-<aside class="notes">Same chassis, three stations. Left: hand tools and taped-up notes. Middle: one robot, a half-built fence, a clipboard. Right: the full line, conveyor, scanner gate, control booth. This talk walks that floor left to right. What each station added, what failure paid for it, what it costs. Then you get the keys to run station three yourself. No superpowers knowledge assumed. Half 2, later, takes the finished car to the test track.</aside>
+
+Note: Same chassis, three stations. Left: hand tools and taped-up notes. Middle: one robot, a half-built fence, a clipboard. Right: the full line, conveyor, scanner gate, control booth. This talk walks that floor left to right. What each station added, what failure paid for it, what it costs. Then you get the keys to run station three yourself. No superpowers knowledge assumed. Half 2, later, takes the finished car to the test track.
+</script>
 </section>
 
 <!-- 1 questions -->
 <section data-markdown>
+<script type="text/template">
 ## What is this talk really about
 
 1. **Structure and best practices** over free form discussion
 2. **Agentic safety* and autonomy** towards a goal
 3. **High feature throughput** in local development
 
-<aside class="notes"></aside>
+Note: Three claims, increasing ambition. One: structure beats chat. A pipeline with artifacts outperforms free-form discussion every time the work outlives the session. Two: safety and autonomy together, not traded. The asterisk is honest: these are discipline backstops with documented escapes, not a security boundary. Autonomy inside the cage, never outside it. Three: throughput is the scoreboard. A thousand merged PRs in four months is what the first two buy you in local development.
+</script>
 </section>
 
 <!-- 2 agenda -->
 <section data-markdown>
+<script type="text/template">
 ## Agenda
 
 - **Three stations:** just the agent and its harness / superpowers / super-fr
@@ -42,26 +53,37 @@
 - **Quickstart:** installation and your first goal
 - **Discussion**
 
-<aside class="notes"></aside>
+Note: Shapes first, upgrades second. The model gives each upgrade somewhere to hang. Then we get practical.
+</script>
 </section>
 
 <!-- 3 vanilla -->
-<section class="split">
+<section data-markdown>
+<script type="text/template">
+<!-- .slide: class="split" -->
+
 <div class="col">
 <div class="crumb"><strong>Stages</strong> &gt; Upgrades &gt; Run it</div>
-<h2>Vanilla cycle</h2>
-<pre class="chain"><code class="nohighlight">prompt ──▶ plan in chat ──▶ code in base
-──▶ eyeball ──▶ commit + push</code></pre>
-<ul>
-<li>Outcome in, approach out: explores, asks on real decisions</li>
-<li>Three modes: interactive, plan-to-approve, autopilot</li>
-<li>Validates what you name, reruns on failure</li>
-<li><strong>No plan artifact</strong>: conventions restated every single task</li>
-<li>Human owns merge, secrets, production impact</li>
-</ul>
+
+## Vanilla cycle
+
+```
+prompt ──▶ plan in chat ──▶ code in base
+──▶ eyeball ──▶ commit + push
+```
+<!-- .element: class="chain" -->
+
+- Outcome in, approach out: explores, asks on real decisions
+- Three modes: interactive, plan-to-approve, autopilot
+- Validates what you name, reruns on failure
+- **No plan artifact**: conventions restated every single task
+- Human owns merge, secrets, production impact
 </div>
-<aside class="notes">This is the usual case, and it is already smart. Copilot plus Terra is a strong general teammate: outcome-oriented prompts, repository exploration, multi-file edits, terminal validation, three session modes up to full autopilot. Two honest limits, straight from its own description. One: no plan artifact survives the session, so every task restates conventions, checks, and constraints from scratch. Repetition is the tax. Two: it validates what you name and ships what you approve. Teammate, not owner. The merge, the secrets, the production judgment stay human, and nothing on disk records the journey. This slide is the baseline the next two stations upgrade.</aside>
+
 <img class="side" src="../diagrams/st1-bay.png" alt="">
+
+Note: This is the usual case, and it is already smart. Copilot plus Terra is a strong general teammate: outcome-oriented prompts, repository exploration, multi-file edits, terminal validation, three session modes up to full autopilot. Two honest limits, straight from its own description. One: no plan artifact survives the session, so every task restates conventions, checks, and constraints from scratch. Repetition is the tax. Two: it validates what you name and ships what you approve. Teammate, not owner. The merge, the secrets, the production judgment stay human, and nothing on disk records the journey. This slide is the baseline the next two stations upgrade.
+</script>
 </section>
 
 <!-- 4 superpowers -->
@@ -101,9 +123,10 @@
 </section>
 
 <!-- 6 street cred -->
-<section>
-<div class="crumb"><strong>Stages</strong> &gt; Upgrades &gt; Run it</div>
 <section data-markdown>
+<script type="text/template">
+<div class="crumb"><strong>Stages</strong> &gt; Upgrades &gt; Run it</div>
+
 ## Feature velocity
 
 - **1000+ merged PRs** across **15 repos**, May to September 2026
@@ -112,36 +135,48 @@
 
 > Acceptance rows, verification log, journaled deviations, open findings
 
-<aside class="notes">Feature velocity, honestly labeled. A thousand merged pull requests in four months across fifteen repos of one org, and about two thirds of the bodies I sampled reference the spec, the plan, or the journal. Pull request 449 is the anatomy slide: Why, links to spec plan journal, what ships, acceptance rows all flipped to ci, verification output, deviations from the plan with journal hashes, open findings that are follow-ups not blockers, and an operator rollout phase. Caveat I will not skip: not every one of those thousand ran this pipeline. The claim is that the org ships at this rate with this workflow available, and the bodies show the discipline spreading.</aside>
-</section>
+
+Note: Feature velocity, honestly labeled. A thousand merged pull requests in four months across fifteen repos of one org, and about two thirds of the bodies I sampled reference the spec, the plan, or the journal. Pull request 449 is the anatomy slide: Why, links to spec plan journal, what ships, acceptance rows all flipped to ci, verification output, deviations from the plan with journal hashes, open findings that are follow-ups not blockers, and an operator rollout phase. Caveat I will not skip: not every one of those thousand ran this pipeline. The claim is that the org ships at this rate with this workflow available, and the bodies show the discipline spreading.
+</script>
 </section>
 
 <!-- 7 upgrades divider -->
 <section class="divider" data-markdown>
+<script type="text/template">
 # Upgrades, each justified
 
 What superpowers lacked, the failure that paid, what it costs
 
-<aside class="notes">The evolutions showed the what. These next slides show the why, one upgrade at a time. Each follows the same shape: what superpowers lacked, the failure that paid for the addition, what it costs you.</aside>
+
+Note: The evolutions showed the what. These next slides show the why, one upgrade at a time. Each follows the same shape: what superpowers lacked, the failure that paid for the addition, what it costs you.
+</script>
 </section>
 
 <!-- 8 isolation + D1 -->
 <section>
-<section class="split">
+<section data-markdown>
+<script type="text/template">
+<!-- .slide: class="split" -->
+
 <div class="col">
 <div class="crumb">Stages &gt; <strong>Upgrades</strong> &gt; Run it</div>
-<h2>Isolation</h2>
-<ul>
-<li>Sidecar fence became a mandatory cell: worktree plus container</li>
-<li>Secrets stay outside, least-privilege profile by default</li>
-<li>Dead brainstorms leave the base checkout pristine</li>
-</ul>
+
+## Isolation
+
+- Sidecar fence became a mandatory cell: worktree plus container
+- Secrets stay outside, least-privilege profile by default
+- Dead brainstorms leave the base checkout pristine
+
 <p class="nav"><a href="#/8/1">detail ↓</a></p>
 </div>
-<aside class="notes">Upgrade one, the cage. Superpowers had using-git-worktrees as an opt-in sidecar. Here isolation is mandatory: worktree plus devcontainer before anything else, every command through the exec bridge, secrets host-side per profile. A brainstorm that dies leaves the base pristine. That sentence alone is worth the profile-setup interview on first run.</aside>
+
 <img class="side" src="../diagrams/up-cage.png" alt="">
+
+Note: Upgrade one, the cage. Superpowers had using-git-worktrees as an opt-in sidecar. Here isolation is mandatory: worktree plus devcontainer before anything else, every command through the exec bridge, secrets host-side per profile. A brainstorm that dies leaves the base pristine. That sentence alone is worth the profile-setup interview on first run.
+</script>
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D1 — isolation commands
 
 ```
@@ -155,6 +190,7 @@ fr isolation down --branch feat/thing
 - Refuses teardown while the pull request is open
 
 <p class="nav"><a href="#/8/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -175,6 +211,7 @@ fr isolation down --branch feat/thing
 <img class="side" src="../diagrams/up-recipe.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D2 — shape fragment, real file
 
 ```yaml
@@ -194,6 +231,7 @@ steps:
 - `implement` is a grouped `for_each`, review enforced per phase
 
 <p class="nav"><a href="#/9/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -214,6 +252,7 @@ steps:
 <img class="side" src="../diagrams/up-conveyor.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D3 — run file, real run
 
 ```yaml
@@ -232,6 +271,7 @@ steps:
 - Failed steps hold the cursor, pending steps wait
 
 <p class="nav"><a href="#/10/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -252,6 +292,7 @@ steps:
 <img class="side" src="../diagrams/up-cord.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D4 — answering the gate
 
 ```
@@ -264,6 +305,7 @@ fr run resolve 2026-09-09-feat-presentation-showdown \
 - Unanswered gates stop the run, never default it
 
 <p class="nav"><a href="#/11/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -284,6 +326,7 @@ fr run resolve 2026-09-09-feat-presentation-showdown \
 <img class="side" src="../diagrams/up-gate.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D5 — matrix row anatomy
 
 ```yaml
@@ -299,8 +342,10 @@ rows:
 - Schema from `docs/acceptance/matrix.yaml`, rows appended by CLI only
 
 <p class="nav"><a href="#/12/0">↑ back</a></p>
+</script>
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D13 — spec, superpowers vs super-fr
 
 ```
@@ -314,6 +359,7 @@ super-fr adds: Test Plan section (post-merge, operator-driven),
 - Test Plan agreed in the batched Q&A, driven together after merge
 
 <p class="nav"><a href="#/12/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -335,6 +381,7 @@ super-fr adds: Test Plan section (post-merge, operator-driven),
 <img class="side" src="../diagrams/up-bay.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D6 — phase file, real plan
 
 ```yaml
@@ -354,8 +401,10 @@ tasks:
 - One file per phase, explicit dependencies, tickable steps
 
 <p class="nav"><a href="#/13/0">↑ back</a></p>
+</script>
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D14 — plan, superpowers vs super-fr
 
 ```
@@ -369,6 +418,7 @@ super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
 - Manual phases labeled, cross-repo refs in canonical form
 
 <p class="nav"><a href="#/13/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -389,6 +439,7 @@ super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
 <img class="side" src="../diagrams/up-robots.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D7 — journal entry, real run
 
 ```
@@ -402,6 +453,7 @@ Demo: details redacted (not accessed; not cleared).
 - Machine-tagged entries, rendered raw into briefs and bodies
 
 <p class="nav"><a href="#/14/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -422,6 +474,7 @@ Demo: details redacted (not accessed; not cleared).
 <img class="side" src="../diagrams/up-audit.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D8 — acceptance evidence, PR 449
 
 ```
@@ -434,8 +487,10 @@ pytest: 2685 passed, 84 skipped. ruff clean.
 - Source: `derio-net/super-fr#449`, the annotated example
 
 <p class="nav"><a href="#/15/0">↑ back</a></p>
+</script>
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D9 — deviations, PR 449
 
 ```
@@ -449,6 +504,7 @@ Open findings (follow-ups, not blockers):
 - Drift disclosed with hashes, never silently absorbed
 
 <p class="nav"><a href="#/15/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -484,6 +540,7 @@ Open findings (follow-ups, not blockers):
 <img class="side" src="../diagrams/up-docks.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D10 — docks in two commands
 
 ```
@@ -495,6 +552,7 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 - Labels: `fr:ready` to `fr:pr-ready`, `manual` never routed
 
 <p class="nav"><a href="#/17/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -516,6 +574,7 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 <img class="side" src="../diagrams/up-crossplant.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D11 — cross-repo table, real spec
 
 ```
@@ -527,6 +586,7 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 - Cross-repo form: `owner/repo:path`, one plan per repo
 
 <p class="nav"><a href="#/18/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
@@ -547,6 +607,7 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 <img class="side" src="../diagrams/up-archive.png" alt="">
 </section>
 <section data-markdown>
+<script type="text/template">
 ## D12 — the vault, real contents
 
 ```
@@ -558,16 +619,20 @@ docs/superpowers/implemented/
 - Gated mover only: complete phases, clean tree, one unit
 
 <p class="nav"><a href="#/19/0">↑ back</a></p>
+</script>
 </section>
 </section>
 
 <!-- 20 run divider -->
 <section class="divider" data-markdown>
+<script type="text/template">
 # Run it
 
 From zero to first reviewed pull request
 
-<aside class="notes">Theory over. This part is a checklist you can follow Monday. Four moves plus pointers.</aside>
+
+Note: Theory over. This part is a checklist you can follow Monday. Four moves plus pointers.
+</script>
 </section>
 
 <!-- 21 first goal -->

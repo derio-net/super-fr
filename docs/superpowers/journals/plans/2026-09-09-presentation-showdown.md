@@ -29,3 +29,13 @@ Stages with ASCII flows, stats+#449, 11 upgrade slides with halo-portrait placeh
 ### 034fab6daa04 · decision · Ending locked: annotated fr-goal playback, no full comparison
 
 1h slot. Half 2 = one annotated fr-goal run narrated live. Comparison table dropped.
+
+<!-- fr:journal kind=decision scope=plan id=460b1d3a04a7 created=2026-09-11T18:47:45 -->
+### 460b1d3a04a7 · decision · Migrated deck to reveal.js for nonlinear detours
+
+23 horizontal, 12 upgrades carry vertical D-slides with back-links. Marp source retained until reveal verified slide-for-slide. Navigation: Esc overview, S speaker view, hash links.
+
+<!-- fr:journal kind=finding scope=plan id=6d0f93c31412 created=2026-09-16T09:02:02 state=fixed -->
+### 6d0f93c31412 · finding [fixed] · data-markdown slides silently dropped all raw HTML
+
+reveal's markdown plugin reads `section.textContent` for inline `data-markdown` slides, so every raw HTML child is reduced to its text. Commit 3f6974b added `data-markdown` around existing markup, which at render time destroyed: 3 crumbs, 2 side portraits, 15 detour back-links (all dead), the `split`/`title`/`divider` slide classes (set via `<!-- .slide: -->` comments, which have no textContent), and 20 speaker notes. The deck still rendered, so nothing looked wrong. Two notes (slides 'What is this talk really about', 'Agenda') were additionally deleted outright by that commit. Fix: wrap every data-markdown body in `<script type="text/template">` (reveal's supported inline form — its textContent is the literal source, so raw HTML survives), convert raw `<aside class="notes">` to reveal's `Note:` separator, flatten a stray wrapper section that orphaned the 'Feature velocity' crumb, restore `class="chain"` on the converted ASCII flow, and restore the 2 deleted notes from c572ec3. Verified by rendering the pre-conversion baseline (c572ec3) and the fixed deck and comparing: 37 leaf slides, 18 crumbs, 0 orphaned, 17 side images, 0 broken, 28 nav links all resolving, 23 non-empty notes, 3 chain blocks, 20 classed slides, identical heading list.
