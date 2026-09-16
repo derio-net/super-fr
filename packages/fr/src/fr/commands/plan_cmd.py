@@ -362,6 +362,8 @@ def self_review_cmd(
         console.print("[green]self-review passed[/green]")
         return
     for issue in issues:
-        console.print(str(issue))
+        # markup=False: an excerpt can hold `[...]`, which Rich reads as a tag.
+        # soft_wrap=True: one issue on one line, not 3-6 wrapped ones.
+        console.print(str(issue), markup=False, soft_wrap=True)
     if any(issue.severity == "error" for issue in issues):
         raise typer.Exit(1)

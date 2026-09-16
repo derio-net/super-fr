@@ -17,19 +17,21 @@ One operator touchpoint — the batched Q&A — from goal to reviewed PR, driven
 shape** (spec §4.A, `2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`): `fr run
 start <shape> --branch <b>` (defaults to `fr-goal`), then loop `fr run advance <run-id>`.
 **Shape lookup:** repo `docs/superpowers/workflows/<shape>.yaml` (overrides wholesale) →
-`$FR_SHIPPED_WORKFLOWS_DIR` → the installed `fr` wheel's own copy → the Claude Code
-marketplace clone — so shipped shapes work on a hermes pod or under OpenCode with no plugin
-installed. **`start` enters isolation itself** and writes the run inside that workspace — the
-first action, before anything else ("start with X" changes the first work item, never the
-first action); run every later command from the workspace it prints. No devcontainer profile
-→ pause for fr-init. `kind: cli` executes directly — exit code is the verdict, fix and
-re-`advance` on failure. `kind: agent` never executes itself: it prints a dispatch brief
+`$FR_SHIPPED_WORKFLOWS_DIR` → the installed `fr` wheel's own copy → the Claude Code marketplace
+clone — so shipped shapes work on a hermes pod or under OpenCode with no plugin installed.
+**`start` enters isolation itself** and writes the run inside that workspace — the first
+action, before anything else ("start with X" changes the first work item, never the first
+action); run every later command from the workspace it prints. No devcontainer profile → pause
+for fr-init. `kind: cli` executes directly — exit code is the verdict, fix and re-`advance` on
+failure. `kind: agent` never executes itself: it prints a dispatch brief
 (skill/agent/needs/emits/tier/for_each) you fulfill per that step below, then `fr run resolve
 <run-id> --step <id> --state done|failed [--emitted name=path ...]` (each `name` must be one
 the step `emits`; a `spec`/`plan` path must exist and is stored repo-relative). `gate:
 operator` blocks until you resolve it (same command; a gated `cli` step then runs on the next
-`advance`). Blocked → stop, say what you tried, ask. Another shape, same mechanics; below
-narrates the shipped `fr-goal` shape.
+`advance`). Another shape, same mechanics; below narrates the shipped `fr-goal` shape.
+**Operator updates** only at the Q&A gate, a block or failure, and delivery. Each update is the
+result in 1–3 lines, then the next step. Evidence goes to the journal and the PR body, not the
+chat. Blocked → stop, give the result, ask.
 
 **`fr` refused with "artifacts … must be migrated"?** Expected: a pod, CI and an agent's Bash
 tool are all non-interactive, where fr never migrates or commits by itself. Run `fr migrate
@@ -41,10 +43,9 @@ instead of being stranded. Offered, never forced: the migration prints the comma
 
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
 
-**Interactive touchpoints (all else autonomous):** `brainstorm`'s batched
-Q&A (`gate: operator` — unanswered = stop), with any cross-repo location question folded in;
-manual phases from `plan`; PR merge after `deliver` — never self-merged — and the post-merge
-Test Plan.
+**Interactive touchpoints (all else autonomous):** `brainstorm`'s batched Q&A (`gate: operator`
+— unanswered = stop), with any cross-repo location question folded in; manual phases from
+`plan`; PR merge after `deliver` — never self-merged — and the post-merge Test Plan.
 
 ### 1. brainstorm — batched Q&A, in isolation (`gate: operator`)
 Invoke `fr-brainstorming`. Explore, collect EVERY operator-owned decision — including one
@@ -57,10 +58,9 @@ spec=<path>` once written.
 
 ### 2. spec-review
 Review the spec against the Q&A answers AND codebase reality (do the named
-files/helpers/services exist?). Fix every finding, log a spec-scope `review`. Cross-repo
-spec: this session owns ONE repo's plan + PR; for each other repo, dispatch one agent
-(`isolation: "worktree"` — right
-*here*: a fresh pipeline in a *different* repo) with the spec ref and this
+files/helpers/services exist?). Fix every finding, log a spec-scope `review`. Cross-repo spec:
+this session owns ONE repo's plan + PR; for each other repo, dispatch one agent (`isolation:
+"worktree"` — right *here*: a fresh pipeline in a *different* repo) with the spec ref and this
 pipeline from `plan` onward — one plan, one PR per repo.
 
 ### 3. plan — fr-plan, then review it
@@ -108,7 +108,7 @@ summary + spec/plan paths; findings + fixes (+ refutations) and decisions via
 `fr journal render --scope plan --section findings`/`decisions`; the back-loaded manual phase
 marked "unimplemented — operator pushes to this PR"; the Test Plan verbatim ("post-merge —
 operator-driven"); acceptance debt (`fr acceptance status`) and rows-added-since-brainstorm
-(`fr acceptance check --added-since origin/main`), each with a one-line defense. The body carries a
+(`fr acceptance check --added-since origin/main`) as one table (`id | claim | level | defense`). The body carries a
 Ready-checklist guard (CI green, explicit review ok, no commits since the ok). ONLY when all three
 hold: `gh pr ready`, remove the guard — never say "ready to merge" before this, never self-merge,
 never flip it manually. Resolve `deliver` done; nothing follows it. Stop; the operator merges.

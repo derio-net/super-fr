@@ -199,7 +199,7 @@ pull request: it returns after the merge and walks the operator through it.</p>
 <p>This is autonomous work, not blind work. <code>fr-goal</code> stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-32</code>, <code>:44-47</code>). The reviews shown above are
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-34</code>, <code>:46-48</code>). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.</p>
 <h2>When it triggers</h2>
@@ -218,7 +218,7 @@ risks instead.</p>
 <p>Because the pipeline is a shape, the command also takes an optional shape name.
 <code>/fr-goal</code> runs the feature-delivery shape this article describes;
 <code>/fr-goal &lt;name&gt;</code> runs another one that the project or the plugin provides
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-32</code>). Most requests never need
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:16-34</code>). Most requests never need
 the argument, and nothing about the rest of this article changes when you use
 it: the machinery is the same, only the list of steps differs.</p>
 <p>The skill also recognizes <code>/goal</code> and natural-language requests such as "build
@@ -358,7 +358,7 @@ It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
 question set, with no more than four questions and recommended choices first.
 A deployed change may include a question about how you will verify it in the
-real environment (<code>plugins/super-fr/skills/fr-goal/SKILL.md:49-56</code>).</p>
+real environment (<code>plugins/super-fr/skills/fr-goal/SKILL.md:50-57</code>).</p>
 <p>This is the shape's one operator gate, and an unanswered batch is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
 decisions are batched rather than dripped out as repeated interruptions. When
@@ -424,7 +424,7 @@ existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning. The file lives at
 <code>docs/superpowers/specs/&lt;YYYY-MM-DD-slug&gt;-design.md</code> — the path is
 <code>fr-brainstorming</code>'s, which <code>brainstorm</code> invokes
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:49-56</code>,
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:50-57</code>,
 <code>plugins/super-fr/skills/fr-brainstorming/SKILL.md</code>).</p>
 <p>The important promises also become <strong>acceptance tests</strong>: concrete statements of
 what a user or operator must be able to do when the feature is complete. For
@@ -546,7 +546,7 @@ and one PR. A coordinating spec may cover several repositories, but <code>fr-goa
 locates each checkout and assigns one isolated agent per other repository, each
 running this same pipeline from planning onward in its own repo. Dependencies
 between repositories live in the spec and PR order, not in a plan phase's local
-<code>depends_on</code> field (<code>plugins/super-fr/skills/fr-goal/SKILL.md:58-64</code>).</p>
+<code>depends_on</code> field (<code>plugins/super-fr/skills/fr-goal/SKILL.md:59-64</code>).</p>
 <p>The shape decides the granularity at which its work is handed out, by declaring
 one of three units: a whole run as a single item, which is what the shipped
 shape does; one item per plan phase; or one item per target repository of a

@@ -76,6 +76,10 @@ Everything else — reading errors, reproduction, evidence instrumentation,
 pattern analysis, single-hypothesis testing, the failing-test-then-fix, the
 milestone review — runs autonomously.
 
+**Operator updates** only at these two stops, a block or failure, and
+delivery. Each update is the result in 1–3 lines, then the next step.
+Evidence goes to the debug journal and the PR body, not the chat.
+
 ## 3. Record — durable debug journal, flushed as you go
 
 Record the investigation to the `debug`-scope journal
