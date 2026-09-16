@@ -202,8 +202,8 @@ New module `packages/fr/src/fr/prose_lint.py`:
   instruction from a description.
 
 **`fr journal add`** (`packages/fr/src/fr/commands/journal_cmd.py`). After it
-writes a new entry, lint the title and the body. Print at most five warning
-lines to stderr, then `… N more`. The exit code does not change. An idempotent
+writes a new entry, lint the title and the body. Print at most five warnings
+to stderr, each on one line and labelled `title:` or `body:`, then `… N more`. The exit code does not change. An idempotent
 re-add writes nothing and lints nothing.
 
 **`fr plan self-review`** (`packages/fr/src/fr/plan_ops.py`). New
@@ -215,8 +215,8 @@ re-add writes nothing and lints nothing.
 - the plan's spec, when it is a same-repo path that resolves.
 
 It returns one `ReviewIssue(severity="warn")` for each source that has issues,
-with the count and the first three excerpts. So a long document gives one
-line, not a flood.
+with the count and the first two excerpts, printed on one line. So a long
+document gives one line, not a flood.
 
 A tripwire test keeps `FILLER_WORDS` equal to the quoted list in the STE
 style's "Words" section. Thus the style and the lint cannot drift apart.

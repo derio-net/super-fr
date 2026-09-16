@@ -41,7 +41,10 @@ _LIST_MARKER = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
 
 # Inline non-prose, removed from one flattened item, so a span that wraps
 # across lines is removed whole.
-_INLINE_CODE = re.compile(r"(`+).+?\1")
+# `[^`]*` rather than `.+?`: an item is already flat, and a bounded body
+# cannot backtrack when the text has unmatched backticks (20000 of them took
+# 174 s with the lazy form).
+_INLINE_CODE = re.compile(r"(`+)[^`]*\1")
 _QUOTED = re.compile(r'"([^"]*)"')
 _URL = re.compile(r"https?://\S+")
 

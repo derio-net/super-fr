@@ -289,3 +289,43 @@ Corrected by the orchestrator: the cause is this branch, not the repo before it.
 ### cf68c8a8a6eb · discovery · P7.T2.S1 test_markup_like_prose_does_not_crash_self_review needed a fixture tweak (phase 7)
 
 As copied, the fixture text put the period right after the markdown link, so the sentence splitter (fixed in phase 6) split it into a short 5 word sentence holding the bracket text and a separate 30 word sentence with none of it. Only the long sentence gets an excerpt, so the excerpt never contained the bracket text and the test failed. Fix: drop the period after the link so the whole thing is one long sentence; the bracket text now sits inside the flagged excerpt. Behavior of the phase 6 lint is unchanged, only the test fixture.
+
+<!-- fr:journal kind=finding scope=plan id=r7-i1-softwrap-journal created=2026-09-16T07:28:15 phase=7 state=fixed -->
+### r7-i1-softwrap-journal · finding [fixed] · I1 The five-line cap printed 11 lines (phase 7)
+
+Rich wraps at 80 columns off a TTY, so the five-warning cap wrapped into 11 physical lines and the test name promised more than it checked. Fix: soft wrap on both journal warning prints, and a test that counts physical lines.
+
+<!-- fr:journal kind=finding scope=plan id=r7-i2-selfreview-wall created=2026-09-16T07:28:17 phase=7 state=fixed -->
+### r7-i2-selfreview-wall · finding [fixed] · I2 Self-review printed a wall of wrapped text (phase 7)
+
+On real plans each warn issue wrapped over 3 to 6 lines, so 16 of 22 printed lines were prose lint. Fix: soft wrap in plan_cmd, and the per-source excerpt cap cut from three to two. A new test asserts one physical line per issue.
+
+<!-- fr:journal kind=finding scope=plan id=r7-i3-matrix-note created=2026-09-16T07:28:20 phase=7 state=fixed -->
+### r7-i3-matrix-note · finding [fixed] · I3 The ci row note did not name the owed walk (phase 7)
+
+The journal-add row now records that Test Plan step 5 is owed post-merge. My first edit put a bare colon inside the YAML note, which broke matrix.yaml parsing and made every fr command refuse with the migration gate message. Fixed by using a dash; fr validate artifacts and fr acceptance check pass.
+
+<!-- fr:journal kind=finding scope=plan id=r7-m4-filler-labels created=2026-09-16T07:28:22 phase=7 state=fixed -->
+### r7-m4-filler-labels · finding [fixed] · M4 Duplicate filler warnings were indistinguishable (phase 7)
+
+A filler word in both title and body printed twice with no source. Each warning now carries title or body.
+
+<!-- fr:journal kind=finding scope=plan id=r7-m5-read-errors created=2026-09-16T07:28:25 phase=7 state=fixed -->
+### r7-m5-read-errors · finding [fixed] · M5 Unguarded spec read in the new code (phase 7)
+
+The spec read in _prose_issues now uses errors=replace, so an odd encoding cannot raise out of a warn-only lint. The identical older read in _acceptance_link_issues predates this work and is left alone.
+
+<!-- fr:journal kind=finding scope=plan id=r7-m6-backtracking created=2026-09-16T07:28:27 phase=7 state=fixed -->
+### r7-m6-backtracking · finding [fixed] · M6 Inline-code pattern could backtrack (phase 7)
+
+The lazy body made 20000 unmatched backticks take 174 seconds. Items are flattened before the strip, so a bounded body is enough. Fixed with a no-backtick body.
+
+<!-- fr:journal kind=discovery scope=plan id=r7-m7-dogfood created=2026-09-16T07:28:30 phase=7 -->
+### r7-m7-dogfood · discovery · M7 Dogfood record for step P7.T2.S3 (phase 7)
+
+fr plan self-review on this plan exits 0 with exactly one prose warning, from plan step P8.T1.S2, a sentence of 26 words.
+
+<!-- fr:journal kind=finding scope=plan id=r7-m8-weak-assert created=2026-09-16T07:28:32 phase=7 state=fixed -->
+### r7-m8-weak-assert · finding [fixed] · M8 Weak assertion on the spec warning (phase 7)
+
+The test matched any message containing the word spec. It now matches the full spec path label.

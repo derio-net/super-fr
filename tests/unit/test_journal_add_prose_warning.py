@@ -39,7 +39,26 @@ def test_a_long_sentence_warns_and_exits_zero(tmp_path: Path, monkeypatch) -> No
     monkeypatch.chdir(_init_repo(tmp_path))
     result = _add("Short title", LONG, "e1")
     assert result.exit_code == 0, result.output
-    assert "warning: journal entry e1: sentence of 30 words" in result.output
+    assert "warning: journal entry e1: body: sentence of 30 words" in result.output
+
+
+def test_each_warning_is_one_physical_line(tmp_path: Path, monkeypatch) -> None:
+    """Rich wraps at 80 columns off a TTY, so a five-warning cap printed 11
+    lines (phase 7 review, finding I1). soft_wrap keeps one line per warning."""
+    monkeypatch.chdir(_init_repo(tmp_path))
+    result = _add("Short title", LONG, "e5")
+    lines = [line for line in result.output.splitlines() if line.strip()]
+    assert len(lines) == 1, lines
+
+
+def test_a_filler_in_both_title_and_body_names_its_source(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(_init_repo(tmp_path))
+    result = _add("It is just a title", "It is just a body.", "e6")
+    warnings = [line for line in result.output.splitlines() if line.startswith("warning:")]
+    assert warnings == [
+        "warning: journal entry e6: title: filler word 'just'",
+        "warning: journal entry e6: body: filler word 'just'",
+    ]
 
 
 def test_a_clean_entry_prints_no_warning(tmp_path: Path, monkeypatch) -> None:
@@ -60,6 +79,7 @@ def test_an_idempotent_re_add_prints_no_warning(tmp_path: Path, monkeypatch) -> 
 def test_warnings_stop_after_five_lines(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(_init_repo(tmp_path))
     result = _add("Short title", " ".join([LONG] * 8), "e4")
-    lines = [line for line in result.output.splitlines() if line.startswith("warning:")]
+    lines = [line for line in result.output.splitlines() if line.strip()]
+    assert all(line.startswith("warning:") for line in lines), lines
     assert len(lines) == 6
     assert lines[-1] == "warning: journal entry e4: … 3 more"

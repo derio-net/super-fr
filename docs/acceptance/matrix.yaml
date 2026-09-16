@@ -1893,8 +1893,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_journal_add_prose_warning.py
     status: ci
-    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Phase 7: journal add
-      calls fr.prose_lint and warns to stderr, capped at 5 lines plus a summary.'
+    notes: Unit tests pin the warning text and the exit code in CI (prose lint plus
+      the journal add warning test). Test Plan step 5 is owed post-merge — run fr journal
+      add with a 30-word sentence in any fr repo, then confirm a warning prints and the
+      exit code is 0.
+
   - id: plan-self-review-warns-on-long-prose
     capability: output-tone
     acceptance: fr plan self-review warns, without failing, on long sentences and filler

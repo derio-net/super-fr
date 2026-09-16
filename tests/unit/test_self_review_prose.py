@@ -53,7 +53,29 @@ def test_the_spec_warns(tmp_path: Path) -> None:
     plan_dir = _plan(tmp_path)
     spec = tmp_path / "docs/superpowers/specs/2026-07-04-toy.md"
     spec.write_text(spec.read_text() + f"\n{LONG}\n")
-    assert any("spec " in w for w in _prose_warnings(plan_dir))
+    label = "spec docs/superpowers/specs/2026-07-04-toy.md"
+    assert any(w.startswith(f"prose lint — {label}") for w in _prose_warnings(plan_dir))
+
+
+def test_one_source_shows_two_excerpts_then_a_count(tmp_path: Path) -> None:
+    """Four issues in one source stay on one line: two excerpts, then the rest
+    as a count (phase 7 review, finding I2)."""
+    plan_dir = _plan(tmp_path)
+    (plan_dir / "_prose.md").write_text("# Plan\n\n" + "\n\n".join([LONG] * 4) + "\n")
+    warning = next(w for w in _prose_warnings(plan_dir) if "_prose.md" in w)
+    assert "4 issue(s)" in warning
+    assert warning.count("sentence of 30 words") == 2
+    assert warning.endswith("(+2 more)")
+
+
+def test_each_prose_warning_prints_on_one_line(tmp_path: Path) -> None:
+    """Rich wrapped each warn issue over 3-6 physical lines (phase 7 review, I2)."""
+    plan_dir = _plan(tmp_path)
+    (plan_dir / "_prose.md").write_text(f"# Plan\n\n{LONG}\n")
+    result = CliRunner().invoke(app, ["plan", "self-review", str(plan_dir)])
+    printed = [line for line in result.output.splitlines() if line.strip()]
+    issues = self_review(parse_plan(plan_dir))
+    assert len(printed) == len(issues), printed
 
 
 def test_prose_warnings_do_not_change_the_exit_code(tmp_path: Path) -> None:

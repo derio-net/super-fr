@@ -53,15 +53,24 @@ _PROSE_WARNING_LIMIT = 5
 
 
 def _warn_prose(entry_id: str, title: str, body: str) -> None:
-    """Print warn-only prose lint results for a new entry (spec 2026-09-14 §5.C)."""
+    """Print warn-only prose lint results for a new entry (spec 2026-09-14 §5.C).
+
+    `soft_wrap` keeps one warning on one line: Rich wraps at 80 columns off a
+    TTY, which turned the five-warning cap into 11 printed lines. The source
+    label tells two identical filler warnings apart.
+    """
     from fr.prose_lint import lint_prose
 
-    issues = lint_prose(title) + lint_prose(body)
-    for issue in issues[:_PROSE_WARNING_LIMIT]:
-        err_console.print(f"warning: journal entry {entry_id}: {issue}", markup=False)
+    issues = [("title", i) for i in lint_prose(title)] + [("body", i) for i in lint_prose(body)]
+    for source, issue in issues[:_PROSE_WARNING_LIMIT]:
+        err_console.print(
+            f"warning: journal entry {entry_id}: {source}: {issue}", markup=False, soft_wrap=True
+        )
     if len(issues) > _PROSE_WARNING_LIMIT:
         more = len(issues) - _PROSE_WARNING_LIMIT
-        err_console.print(f"warning: journal entry {entry_id}: … {more} more", markup=False)
+        err_console.print(
+            f"warning: journal entry {entry_id}: … {more} more", markup=False, soft_wrap=True
+        )
 
 
 @journal_app.command("add")

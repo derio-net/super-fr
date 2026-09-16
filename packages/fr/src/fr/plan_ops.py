@@ -1050,6 +1050,10 @@ def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
     ]
 
 
+_SHOWN_PROSE_ISSUES = 2
+"""Excerpts shown per source. Three wrapped over several lines on real plans."""
+
+
 def _prose_issues(plan: Plan) -> list[ReviewIssue]:
     """Warn-only prose lint (spec 2026-09-14-ste-output-tone §5.C).
 
@@ -1073,15 +1077,17 @@ def _prose_issues(plan: Plan) -> list[ReviewIssue]:
     if plan.repo_root is not None and spec_rel and not is_cross_repo_spec(spec_rel):
         spec_file = plan.repo_root / spec_rel
         if spec_file.is_file():
-            sources.append((f"spec {spec_rel}", spec_file.read_text()))
+            # errors="replace": a lint warning must never raise (spec d9).
+            sources.append((f"spec {spec_rel}", spec_file.read_text(errors="replace")))
 
     out: list[ReviewIssue] = []
     for label, text in sources:
         found = lint_prose(text)
         if not found:
             continue
-        shown = "; ".join(str(issue) for issue in found[:3])
-        more = f" (+{len(found) - 3} more)" if len(found) > 3 else ""
+        shown = "; ".join(str(issue) for issue in found[:_SHOWN_PROSE_ISSUES])
+        extra = len(found) - _SHOWN_PROSE_ISSUES
+        more = f" (+{extra} more)" if extra > 0 else ""
         out.append(
             ReviewIssue(
                 severity="warn",
