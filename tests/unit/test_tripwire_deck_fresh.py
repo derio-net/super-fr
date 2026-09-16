@@ -17,6 +17,7 @@ Regenerate with:
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -75,3 +76,24 @@ def test_separators_inside_fenced_code_do_not_split_slides() -> None:
     """A YAML document marker in a code block is content, not a slide break."""
     markdown = "## X\n\n```yaml\n---\nkey: value\n```\n\n---\n\n## Y"
     assert build.render_slides(markdown).count('<script type="text/template">') == 2
+
+
+def test_the_theme_uses_no_viewport_units() -> None:
+    """`vh`/`vw` inside a slide break reveal's scaling.
+
+    Reveal lays slides out on a fixed 960x700 logical canvas and scales that
+    with a CSS transform. Lengths in px/em/% live inside the scaled coordinate
+    system; `vh` and `vw` are measured against the real window instead, so a
+    rule mixing them re-lays-out as the window resizes while every other slide
+    holds still. The title slide had exactly that bug: `padding-top: 6vh` moved
+    its heading between 37 and 54 logical px depending on window size.
+    """
+    css = (DECK / "theme-industrial.css").read_text()
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)  # comments may discuss vh
+    offenders = [
+        line.strip() for line in css.splitlines() if re.search(r"\b\d*\.?\d+v(h|w|min|max)\b", line)
+    ]
+    assert offenders == [], (
+        "viewport units in the deck theme do not scale with reveal's transform; "
+        f"use logical px instead: {offenders}"
+    )

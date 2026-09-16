@@ -88,10 +88,15 @@
    No flex wrappers needed — the background image owns the right side. */
 .reveal section.split { display: flex !important; gap: 5%; align-items: center; }
 .reveal .split .col { width: 58%; flex: none; }
-.reveal .split img.side { width: 34%; max-height: 76vh; object-fit: contain; }
-.reveal .slides>section.title { height: 100%; display: flex !important; flex-direction: column; justify-content: flex-start !important; padding-top: 6vh; }
+.reveal .split img.side { width: 34%; max-height: 555px; object-fit: contain; }
+/* Lengths inside a slide are in reveal's 960x700 logical canvas, which reveal
+   scales with a CSS transform. `vh` is measured against the real window and so
+   does NOT scale with it -- a slide mixing the two re-lays-out as you resize,
+   while its neighbours hold still. These px values are the `vh` ones as they
+   resolved at fullscreen 1920x1080: 6vh -> 44, 3vh -> 22, 76vh -> 555. */
+.reveal .slides>section.title { height: 100%; display: flex !important; flex-direction: column; justify-content: flex-start !important; padding-top: 44px; }
 .reveal h2 + ol, .reveal h2 + ul, .reveal h2 + pre { margin-top: 0.45em; }
-.reveal .title .topblock { margin-bottom: auto; background: linear-gradient(rgba(16,18,22,0.88), rgba(16,18,22,0)); padding: 0 0 3vh; }
+.reveal .title .topblock { margin-bottom: auto; background: linear-gradient(rgba(16,18,22,0.88), rgba(16,18,22,0)); padding: 0 0 22px; }
 .reveal ul li, .reveal ol li { font-size: 0.64em; }
 .reveal pre { font-size: 0.55em; }
 .reveal .closer { font-size: 0.7em; }
@@ -102,4 +107,4 @@
 .reveal .divider p { color: rgba(255,255,255,0.85); }
 .reveal .title h1 { font-size: 1.35em; text-shadow: 0 2px 14px rgba(0,0,0,0.95); }
 .reveal .title h2 { font-size: 0.85em; border: none; text-shadow: 0 2px 10px rgba(0,0,0,0.95); }
-.reveal section.title { justify-content: flex-start; padding-top: 6vh; }
+.reveal section.title { justify-content: flex-start; padding-top: 44px; }
