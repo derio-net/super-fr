@@ -362,6 +362,6 @@ def self_review_cmd(
         console.print("[green]self-review passed[/green]")
         return
     for issue in issues:
-        console.print(str(issue))
+        console.print(str(issue), markup=False)
     if any(issue.severity == "error" for issue in issues):
         raise typer.Exit(1)

@@ -967,6 +967,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # multi-step task ends red → green → refactor, or records why not.
     issues.extend(_refactor_issues(plan))
 
+    # Warn-only prose lint (spec 2026-09-14-ste-output-tone §5.C): never
+    # fails a command (d9).
+    issues.extend(_prose_issues(plan))
+
     # Same-repo-form spec that doesn't resolve locally (#248): almost always a
     # malformed cross-repo ref missing the `owner/repo:` prefix, which apply's
     # reachability gate treats as a missing same-repo file and flags unreachable.
@@ -1044,6 +1048,47 @@ def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
         )
         for err in check_workflow(manifest)
     ]
+
+
+def _prose_issues(plan: Plan) -> list[ReviewIssue]:
+    """Warn-only prose lint (spec 2026-09-14-ste-output-tone §5.C).
+
+    Pending step text, the plan prose and a same-repo spec. Ticked steps are
+    exempt, like the manual-verb detector. One issue per source keeps a long
+    document to one line.
+    """
+    from fr.prose_lint import lint_prose
+
+    sources: list[tuple[str, str]] = []
+    for phase in plan.phases:
+        for task in phase.tasks:
+            for step in task.steps:
+                state = phase.state.steps.get(step.id)
+                if state is not None and state.state == "x":
+                    continue
+                sources.append((f"step {step.id}", step.text))
+    if plan.prose:
+        sources.append(("_prose.md", plan.prose))
+    spec_rel = plan.spec_path or plan.meta.spec
+    if plan.repo_root is not None and spec_rel and not is_cross_repo_spec(spec_rel):
+        spec_file = plan.repo_root / spec_rel
+        if spec_file.is_file():
+            sources.append((f"spec {spec_rel}", spec_file.read_text()))
+
+    out: list[ReviewIssue] = []
+    for label, text in sources:
+        found = lint_prose(text)
+        if not found:
+            continue
+        shown = "; ".join(str(issue) for issue in found[:3])
+        more = f" (+{len(found) - 3} more)" if len(found) > 3 else ""
+        out.append(
+            ReviewIssue(
+                severity="warn",
+                message=f"prose lint — {label}: {len(found)} issue(s): {shown}{more}",
+            )
+        )
+    return out
 
 
 def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
