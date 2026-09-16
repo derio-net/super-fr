@@ -49,6 +49,21 @@ def _load(path: Path) -> list[JournalEntry]:
     return parse_journal(path.read_text())
 
 
+_PROSE_WARNING_LIMIT = 5
+
+
+def _warn_prose(entry_id: str, title: str, body: str) -> None:
+    """Print warn-only prose lint results for a new entry (spec 2026-09-14 §5.C)."""
+    from fr.prose_lint import lint_prose
+
+    issues = lint_prose(title) + lint_prose(body)
+    for issue in issues[:_PROSE_WARNING_LIMIT]:
+        err_console.print(f"warning: journal entry {entry_id}: {issue}", markup=False)
+    if len(issues) > _PROSE_WARNING_LIMIT:
+        more = len(issues) - _PROSE_WARNING_LIMIT
+        err_console.print(f"warning: journal entry {entry_id}: … {more} more", markup=False)
+
+
 @journal_app.command("add")
 def add(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
@@ -98,6 +113,7 @@ def add(
         path.write_text(prior + sep + block)
     else:
         path.write_text(f"# Journal: {slug}\n\n{block}")
+    _warn_prose(eid, title, body)
 
 
 _SECTION_KINDS = {
