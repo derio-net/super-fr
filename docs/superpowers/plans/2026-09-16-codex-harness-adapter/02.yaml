@@ -1,0 +1,135 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Harden the edit gate — relative cwd, multi-file atomicity, escapes, parser
+    posture
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - codex-isolation-gate-edits
+tasks:
+- number: 1
+  title: RED — the relative-path trap (d7), proven by removing the fix
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED, and this one must be proven, not assumed. Add to
+      tests/unit/test_codex_isolation_hook_edits.py:
+
+      (a) test_relative_patch_path_is_resolved_against_cwd — a patch naming
+          `src/a.py` (RELATIVE) with cwd = an fr-enabled base clone DENIES.
+
+      PROVE THE TEST CAN FAIL. Temporarily edit the hook, replacing
+          abs=$(fr_resolve_against "$cwd" "$t")
+      with
+          abs="$t"
+      and re-run ONLY this test. It MUST go from green to FAILING (the gate
+      allows). Paste that failure into the phase notes, then restore the
+      line. This is the phase's central guarantee: fr_isolation_decide_edit
+      returns ALLOW for any non-absolute path, so without the join the gate
+      passes everything while every other test still looks green.
+
+      (b) test_absolute_patch_path_still_decided — a patch naming an ABSOLUTE
+          path inside the base clone also denies (fr_resolve_against must not
+          mangle it).
+- number: 2
+  title: RED — multi-file atomicity and the escapes
+  steps:
+  - id: P2.T2.S1
+    text: |
+      RED. Add, still in test_codex_isolation_hook_edits.py:
+
+      (a) test_multi_file_patch_denies_when_any_path_is_blocked — cwd = a
+          linked worktree with NO marker but WITH `.fr-isolation-allow`
+          containing "notes/**". Patch adds `notes/ok.md` (exempt) AND
+          `src/a.py` (blocked) → DENY, and the reason names `src/a.py`, not
+          `notes/ok.md`. Then reverse the ORDER of the two files in the patch
+          and assert it still denies — this is the real assertion, because
+          the tempting bug is to allow once the FIRST path passes.
+      (b) test_all_paths_allowlisted_allows — a patch touching only
+          `notes/a.md` and `notes/b.md` under the same allowlist → allowed.
+      (c) test_fr_base_ok_allows — FR_BASE_OK=1 with a blocked patch → allowed.
+      (d) test_non_edit_tool_allows — tool_name "Bash" → allowed (the bash
+          guard, not this hook, owns that).
+      (e) test_valid_worktree_allows — marker present → allowed.
+      (f) test_delete_and_move_targets_are_decided — a patch whose ONLY
+          entries are `*** Delete File:` and `*** Move to:` in a base clone
+          → DENY (deleting and renaming tracked files are edits too).
+
+      Run; confirm which fail and WHY before writing any fix.
+- number: 3
+  title: GREEN — fixes surfaced by the matrix
+  steps:
+  - id: P2.T3.S1
+    text: |
+      GREEN. Make the Task 1 and Task 2 cases pass. Expect the atomicity and
+      ordering cases to already pass from phase 1's loop; if any do not, fix
+      the hook rather than the test. Do not weaken an assertion to make it
+      pass — if a case looks wrong, record a `finding` with
+      `fr journal add --scope plan --slug 2026-09-16-codex-harness-adapter
+      --kind finding --state open` and refute it explicitly.
+- number: 4
+  title: 'RED+GREEN — parser posture (d6): armed without jq, explicit refusal with
+    no parser'
+  steps:
+  - id: P2.T4.S1
+    text: |
+      The brief asked for "fail-open when jq is absent". Do NOT write that
+      test — it would assert something weaker than its name, because the
+      shared library resolves python3 FIRST and jq only as a fallback, so
+      removing jq changes nothing. Write the two honest tests instead
+      (journal d6):
+
+      (a) test_gate_stays_armed_without_jq — run the hook with
+          env FR_JQ_CANDIDATES="" (python3 still resolvable) against a
+          blocked patch → still DENY. Naming: the point is the guard stays
+          ARMED, not that it fails open.
+      (b) test_no_parser_at_all_refuses_explicitly — run with
+          FR_PYTHON_CANDIDATES="" FR_JQ_CANDIDATES="" → stdout is a deny
+          whose reason contains "no JSON parser", and the exit code is 0.
+          A silent pass here is the exact failure that once disarmed the
+          Hermes guards (jq missing from a service PATH, script aborted
+          under `set -eu` before printing a decision).
+
+      Both should pass against phase 1's implementation. If (b) does not,
+      fix the hook. Confirm (b) can fail: temporarily change the
+      `fr_json_resolve` branch to `exit 0` and watch it go red, then restore.
+- number: 5
+  title: REFACTOR + quality gate
+  steps:
+  - id: P2.T5.S1
+    text: |
+      Refactor: if the test module now repeats the repo/worktree scaffolding,
+      hoist it into module-level fixtures — but keep the payload builders
+      explicit, so a reader can see the exact JSON shape under test.
+
+      Gate: uv run pytest -q --no-cov tests/unit ; log the real rc.
+      Commit: `test(codex): pin relative-path resolution, patch atomicity and parser posture`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

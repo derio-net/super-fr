@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 5
+  title: fr codex install/uninstall/doctor + install.sh wiring
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  tracking_issue: null
+  acceptance:
+  - codex-skills-delivery
+  - codex-skills-link-repair
+  - codex-rules-agents-block
+tasks:
+- number: 1
+  title: RED — the install core does not exist
+  steps:
+  - id: P5.T1.S1
+    text: |
+      RED. Create tests/unit/test_codex_install_cmd.py, modelled on
+      test_hermes_install_cmd.py, operating on a tmp CODEX_HOME. Cases:
+
+      hooks.json merge:
+      (a) merge is idempotent and preserves unrelated keys AND the user's own
+          hook entries. Seed the tmp hooks.json with the REAL shape captured
+          from the operator's live ~/.codex/hooks.json (journal v5) — a
+          SessionStart matcher group plus a second group with a timeout — and
+          assert both survive untouched.
+      (b) commands are written ABSOLUTE under <home>/super-fr-hooks/.
+      (c) uninstall removes only super-fr-owned entries (those whose command
+          is under the managed hook dir) and leaves the user's.
+      (d) a malformed hooks.json raises CodexError and does NOT clobber the
+          file (assert byte-identical afterwards).
+
+      AGENTS.md block:
+      (e) apply into an EMPTY file, then into one with pre-existing user
+          content → user content preserved, exactly one managed block.
+      (f) re-apply is idempotent (still exactly one block).
+      (g) strip leaves user content intact and removes the markers.
+
+      skills (the headline, journal v3):
+      (h) install creates <home>/skills/<name> for every canonical skill;
+      (i) REPAIR — pre-create <home>/skills/fr-goal as a DANGLING symlink to
+          /nonexistent/... ; install replaces it with a resolving link.
+          Assert `Path(link).resolve().is_dir()` and that the target is the
+          canonical skill dir. Then assert the pre-state really was broken
+          (`not link.exists() and link.is_symlink()`) so the test cannot pass
+          vacuously.
+      (j) doctor REPORTS a dangling link (non-zero exit, the skill name in
+          the output) and is clean after a repair.
+      (k) uninstall removes only super-fr's skills, leaving an unrelated
+          <home>/skills/mine/ untouched.
+
+      Plus a CLI smoke via typer.testing.CliRunner on fr.cli.app for
+      `fr codex install --source <repo> --home <tmp>`.
+      Run, confirm RED (fr.codex missing).
+- number: 2
+  title: GREEN — fr/codex.py + commands/codex_cmd.py + CLI registration
+  steps:
+  - id: P5.T2.S1
+    text: |
+      GREEN. Create packages/fr/src/fr/codex.py mirroring fr/hermes.py:
+      CodexError, codex_home() ($CODEX_HOME else ~/.codex), snippet_entries()
+      (read .codex/hooks.snippet.json, rewrite each command to
+      <home>/super-fr-hooks/<relpath>), merge/replace/remove managed hook
+      entries in hooks.json (keyed by command being under the managed dir —
+      reuse the _is_managed_command idea), apply/strip the AGENTS.md managed
+      block (reuse the _split_managed/_user_content idiom verbatim; it is
+      already proven), link_skills() / repair, install_rules(), doctor().
+
+      install(source_root, home):
+        - copy plugins/super-fr/hooks -> <home>/super-fr-hooks (preserving
+          codex/ + lib/ so the `../lib` sourcing resolves)
+        - replace managed hooks.json entries
+        - apply the AGENTS.md block from .codex/AGENTS.snippet.md
+        - copy .codex/rules/*.md -> <home>/rules/super-fr/
+        - link each canonical skill into <home>/skills/<name>, REPLACING a
+          dangling or wrong-target link (os.path.islink + not exists)
+      uninstall(): reverse each, removing only our own files.
+      doctor(): return a list of problems (dangling/absent skill links,
+        missing hook registrations, hook scripts that are not executable);
+        the command exits 1 when non-empty and prints the trust reminder.
+
+      Create packages/fr/src/fr/commands/codex_cmd.py (thin typer wrapper,
+      copy hermes_cmd.py's shape: install/uninstall/doctor, --source/--home).
+      Register in packages/fr/src/fr/cli.py:
+        from fr.commands.codex_cmd import codex_app
+        app.add_typer(codex_app, name="codex")   # next to the hermes line
+
+      Run tests/unit/test_codex_install_cmd.py, confirm green. Then
+      `uv run mypy packages/fr/src` — CI typechecks this package.
+- number: 3
+  title: RED+GREEN — install.sh wiring
+  steps:
+  - id: P5.T3.S1
+    text: |
+      RED. Create tests/unit/test_install_copies_codex.py — static assertions
+      on scripts/install.sh, in the style of test_install_copies_rules.py:
+      it defines CODEX_HOME, gates the Codex path on
+      `CODEX_SKILLS_INSTALL=1` OR an existing ~/.codex, invokes
+      `fr codex install` on that path, and the uninstall block invokes
+      `fr codex uninstall` via `uv run --project ... ` from THIS checkout
+      (the same reasoning the Hermes uninstall documents: a stale global
+      binary cannot parse a renamed tree and fails silently).
+      Confirm RED.
+
+      GREEN. Add the Codex section to scripts/install.sh next to the Hermes
+      one, plus the matching uninstall block. Re-run; confirm green.
+      NOTE: scripts/install.sh is in VERSION_REQUIRED_EXACT — phase 6 bumps.
+- number: 4
+  title: REFACTOR + quality gate
+  steps:
+  - id: P5.T4.S1
+    text: |
+      Refactor: fr/codex.py and fr/hermes.py now share the managed-block and
+      managed-command idioms. Do NOT extract a shared module in this PR —
+      the two harnesses' file formats differ (JSON vs YAML) and premature
+      unification would couple them; record the observation as a plan-scope
+      `discovery` instead, naming it as a candidate follow-up.
+      Gate: uv run ruff check packages/ tests/ ; uv run ruff format --check packages/ tests/ ;
+      uv run mypy packages/fr/src ; uv run pytest -q --no-cov tests/unit ; log the real rc for each.
+      Commit: `feat(codex): fr codex install/uninstall/doctor + installer wiring`.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

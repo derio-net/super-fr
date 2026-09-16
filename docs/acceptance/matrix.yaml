@@ -1852,3 +1852,59 @@ rows:
       (test_cwd_flag_reads_no_stdin, test_oneline, test_never_invokes_fr). Hermes custom_command
       wiring is docs-only until NousResearch/hermes-agent#109596 ships; OpenCode has
       no status-line hook (anomalyco/opencode#37464).
+  - id: codex-skills-delivery
+    capability: Codex harness
+    acceptance: Installing super-fr under Codex makes the fr-* skills discoverable in
+      a Codex session
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-16-codex-harness-adapter-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Unit: sync-codex drift tripwire + install wiring guard. Post-merge manual:
+      Test Plan 1 (codex debug prompt-input lists the fr-* skills). Skill DISCOVERY
+      is already empirically verified this session (journal v1/v2); what is unverified
+      is delivery by our installer.'
+  - id: codex-skills-link-repair
+    capability: Codex harness
+    acceptance: A stale or dangling ~/.codex/skills/fr-* link is detected and repaired,
+      because Codex itself fails silently
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-16-codex-harness-adapter-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Unit: fr codex doctor/install tests over a tmp CODEX_HOME. Post-merge manual:
+      Test Plan 2. Motivated by journal v3 - a dangling skill symlink is skipped with
+      exit 0 and EMPTY stderr, so Codex surfaces no error at all.'
+  - id: codex-rules-agents-block
+    capability: Codex harness
+    acceptance: super-fr rules reach a Codex user via a managed, reversible, size-budgeted
+      ~/.codex/AGENTS.md block
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-16-codex-harness-adapter-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Unit: rules-sync tripwire, <= 2 KiB rendered-block budget test, idempotent
+      apply + clean strip leaving user content intact. Budget is load-bearing: project_doc_max_bytes
+      is 32 KiB and discovery stops at the cap (journal r1).'
+  - id: codex-isolation-gate-edits
+    capability: Codex harness
+    acceptance: Codex blocks an apply_patch touching a tracked file outside a valid
+      fr-isolation workspace - multi-file and relative paths included - honoring FR_BASE_OK
+      and .fr-isolation-allow
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-16-codex-harness-adapter-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Unit: apply_patch path-extraction + entrypoint tests driving the hook as
+      a subprocess. Covers the two traps: relative paths resolved against payload cwd
+      (journal d7) and atomic multi-file deny (d8). Post-merge manual: Test Plan 5.'
+  - id: codex-isolation-gate-bash
+    capability: Codex harness
+    acceptance: Codex blocks git/gh mutations made outside an fr-isolation workspace
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-16-codex-harness-adapter-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Unit: bash-guard tests (marker-based, mirroring the Hermes guard). Closes
+      the bash hole the OpenCode port still has (edits-only). Post-merge manual: Test
+      Plan 6.'
