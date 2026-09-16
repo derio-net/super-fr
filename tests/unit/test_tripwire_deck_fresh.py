@@ -11,7 +11,7 @@ check is exact rather than heuristic: re-render and compare byte for byte.
 
 Regenerate with:
 
-    python3 docs/presentation/reveal/build.py
+    uv run --no-project python docs/presentation/reveal/build.py
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def test_index_html_is_current_with_slides_md() -> None:
     """index.html is exactly what build.py renders from slides.md."""
     assert build.render() == (DECK / "index.html").read_text(), (
         "docs/presentation/reveal/index.html is stale with respect to slides.md. "
-        "Run: python3 docs/presentation/reveal/build.py"
+        "Run: uv run --no-project python docs/presentation/reveal/build.py"
     )
 
 

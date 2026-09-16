@@ -4,9 +4,14 @@
 from it and is the file you open to present.
 
 ```bash
-python3 build.py            # rebuild index.html after editing slides.md
-python3 build.py --check    # what CI asks: is index.html current?
+cd docs/presentation/reveal
+uv run --no-project python build.py            # rebuild after editing slides.md
+uv run --no-project python build.py --check    # what CI asks: is it current?
 ```
+
+`--no-project` keeps it off the workspace venv — the script is pure stdlib, so
+it runs in about a tenth of a second. The script resolves its paths from its own
+location, so you can also call it by absolute path from anywhere.
 
 `tests/unit/test_tripwire_deck_fresh.py` fails if `index.html` is stale, so an
 edit to `slides.md` that never got rebuilt cannot merge.
