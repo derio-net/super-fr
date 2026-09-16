@@ -373,6 +373,10 @@ def test_plan_create_refuses_a_workflow_plan_whose_fr_version_admits_older_fr(
 def test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The ceiling must admit the RUNNING fr: `create` parses the plan it just
+    wrote, and `_enforce_fr_version` fails a constraint that excludes this fr.
+    A pinned ceiling like `<4.5.0` therefore breaks on the release that reaches
+    it (it did, at 4.5.0)."""
     repo = _cli_repo(tmp_path)
 
     result = _create(
@@ -381,11 +385,11 @@ def test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4(
         "--workflow",
         "fr-goal-phase-dispatch",
         "--fr-version",
-        ">=4.0.0,<4.5.0",
+        ">=4.0.0,<5.0.0",
     )
 
     assert result.exit_code == 0, result.output
-    assert "fr_version: '>=4.0.0,<4.5.0'" in _meta_text(repo)
+    assert "fr_version: '>=4.0.0,<5.0.0'" in _meta_text(repo)
 
 
 def test_plan_create_leaves_fr_version_alone_without_the_flag(

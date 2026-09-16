@@ -280,10 +280,10 @@ M11, an unmatched quote eating the rest of a line, is covered in practice by the
 
 P7.T1.S1 RED was 2 failed, 2 passed, not 3 failed 1 passed as the plan text said: the idempotent re-add test and the clean-entry test both pass trivially before the warning code exists, since neither expects any warning text. P7.T2.S1 RED matched the plan exactly, 5 failed 1 passed. No code change needed either way; noting the variance for anyone re-running the steps.
 
-<!-- fr:journal kind=finding scope=plan id=5c58c0defefa created=2026-09-16T07:05:00 phase=7 state=open -->
-### 5c58c0defefa · finding [open] · test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4 fails independent of phase 7 (phase 7)
+<!-- fr:journal kind=finding scope=plan id=5c58c0defefa created=2026-09-16T07:05:00 phase=7 state=fixed -->
+### 5c58c0defefa · finding [fixed] · test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4 fails because of this branch's 4.5.0 bump (phase 7)
 
-The version-floor test in test_plan_workflow_binding.py asserts a plan whose constraint reads less than 4.5.0 parses cleanly, but this repo is now at version 4.5.0, so the floor check fails the same way with or without my changes. Confirmed by stashing the phase 7 diff and rerunning just that test: same failure. Left open since it is a pre-existing version-drift issue, not part of this phase scope.
+Corrected by the orchestrator: the cause is this branch, not the repo before it. The test pins the ceiling at less than 4.5.0, and fr create parses the plan it just wrote, so the version gate refuses the running fr once that fr is 4.5.0. The 4.4.0 to 4.5.0 bump in commit 05eed2c is what crosses the ceiling, so CI on this PR would fail. Fixed here: the test now uses a ceiling of less than 5.0.0 and says why a pinned ceiling breaks on the release that reaches it.
 
 <!-- fr:journal kind=discovery scope=plan id=cf68c8a8a6eb created=2026-09-16T07:05:11 phase=7 -->
 ### cf68c8a8a6eb · discovery · P7.T2.S1 test_markup_like_prose_does_not_crash_self_review needed a fixture tweak (phase 7)
