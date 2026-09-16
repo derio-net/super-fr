@@ -329,3 +329,8 @@ fr plan self-review on this plan exits 0 with exactly one prose warning, from pl
 ### r7-m8-weak-assert · finding [fixed] · M8 Weak assertion on the spec warning (phase 7)
 
 The test matched any message containing the word spec. It now matches the full spec path label.
+
+<!-- fr:journal kind=discovery scope=plan id=f358d88be10a created=2026-09-16T07:39:49 phase=8 -->
+### f358d88be10a · discovery · Phase 8 ran exactly as dry-run predicted (phase 8)
+
+All six RED tests failed as expected, the four skill edits produced 6 green tests plus test_skill_validation.py green, and the fr-goal reflow of both named paragraphs to width 95 landed the file at exactly 120 lines with no words removed. The explainer grep for the phrase short defense for each still matched line 329, so no explainer edit was needed. The acceptance gate (report, check, report check) passed with the five updated rows and no failing status.
