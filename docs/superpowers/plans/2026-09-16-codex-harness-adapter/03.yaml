@@ -1,0 +1,104 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Codex bash guard — git/gh mutations and apply_patch smuggled through a shell
+    call
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - codex-isolation-gate-bash
+tasks:
+- number: 1
+  title: RED — the bash guard does not exist
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED. Create tests/unit/test_codex_bash_guard.py against
+      plugins/super-fr/hooks/codex/fr-isolation-guard.sh.
+
+          def payload(cmd: str, cwd: Path) -> dict:
+              return {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                      "tool_input": {"command": cmd}, "cwd": str(cwd)}
+
+      Cases:
+      (a) `git commit -m x` with cwd = fr-enabled base clone → deny;
+      (b) the same inside a valid marked worktree → allowed;
+      (c) `git status` / `git log` in the base clone → allowed (read-only;
+          this is a discipline backstop, not an allowlist firewall);
+      (d) `cd <worktree> && git commit -m x` from a base-clone cwd → allowed
+          (the documented leading-`cd` escape);
+      (e) FR_BASE_OK=1 → allowed;
+      (f) a NON-fr repo → allowed;
+      (g) a shell call carrying an apply_patch heredoc that writes
+          `src/a.py` in the base clone → DENY. This is the gap that makes the
+          guard worth shipping: the edit gate matches tool_name apply_patch,
+          so a patch smuggled through Bash would otherwise walk straight past
+          both hooks.
+      (h) tool_name "apply_patch" → allowed here (the edit gate owns it; no
+          double-deny).
+
+      Run, confirm RED (script missing).
+- number: 2
+  title: GREEN — codex/fr-isolation-guard.sh
+  steps:
+  - id: P3.T2.S1
+    text: |
+      GREEN. Create plugins/super-fr/hooks/codex/fr-isolation-guard.sh
+      (chmod +x), porting hermes/fr-isolation-guard.sh — it is already
+      MARKER-based (session-independent), which is what Codex needs since
+      there is no pipeline sentinel. Changes from the Hermes original:
+        - tool-name gate becomes `case "$tool_name" in Bash) ;; *) exit 0 ;;`
+        - the deny shape becomes the Codex/Claude
+          hookSpecificOutput.permissionDecision form (reuse emit_deny from
+          the sibling edit gate — copy the two helper functions; they are
+          four lines and duplicating them keeps each entrypoint standalone,
+          exactly as the Hermes pair does)
+        - after the is_mutation check, add the smuggled-patch branch:
+
+              . "$SCRIPT_DIR/../lib/fr-apply-patch-paths.sh"
+              patch_targets=$(fr_apply_patch_paths "$command")
+              if [ -n "$patch_targets" ]; then
+                while IFS= read -r t; do
+                  [ -n "$t" ] || continue
+                  abs=$(fr_resolve_against "$effective_dir" "$t")
+                  if fr_isolation_decide_edit "$abs"; then continue; fi
+                  emit_deny "fr-isolation: apply_patch to '$t' via a shell call blocked - not inside an fr-isolation workspace."
+                  exit 0
+                done <<EOF
+              $patch_targets
+              EOF
+              fi
+
+        Keep the git/gh mutation regex and the leading-`cd` resolution byte
+        for byte from the Hermes guard — they are already tested logic.
+
+      Run the Task 1 tests, confirm green.
+- number: 3
+  title: REFACTOR + quality gate
+  steps:
+  - id: P3.T3.S1
+    text: |
+      Refactor: verify the two Codex entrypoints share every non-trivial
+      decision through the libraries and differ only in tool vocabulary.
+      Gate: uv run pytest -q --no-cov tests/unit ; log the real rc.
+      Commit: `feat(codex): marker-based bash guard incl. smuggled apply_patch`.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

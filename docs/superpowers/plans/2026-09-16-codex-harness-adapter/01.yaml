@@ -1,0 +1,280 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — apply_patch path extractor + Codex edit gate, end to end
+    in CI
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - codex-isolation-gate-edits
+  skeleton: true
+tasks:
+- number: 1
+  title: RED — the apply_patch path extractor does not exist
+  steps:
+  - id: P1.T1.S1
+    text: |
+      RED. Create tests/unit/test_codex_apply_patch_paths.py.
+
+      It drives the (not yet existing) shell library as a subprocess, the
+      same way the other hook tests drive hooks:
+
+          REPO_ROOT = Path(__file__).resolve().parents[2]
+          LIB = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "lib" / "fr-apply-patch-paths.sh"
+
+          def paths(patch: str) -> list[str]:
+              script = f'. "{LIB}"; fr_apply_patch_paths "$1"'
+              r = subprocess.run(["bash", "-c", script, "_", patch],
+                                 capture_output=True, text=True, check=True)
+              return [ln for ln in r.stdout.splitlines() if ln]
+
+      FIXTURE PROVENANCE — read this before writing the fixture. The patch
+      body below is DOC-DERIVED, not captured from a live Codex session
+      (journal v4: no Codex session was run against a real hook). That is a
+      deliberate, recorded deviation from "fixtures captured never
+      constructed": the capture requires a live session plus a trust grant,
+      which is Test Plan step 4/5, post-merge. What IS captured is the
+      hooks.json SCHEMA (read from the operator's live ~/.codex/hooks.json)
+      — phase 5 uses that. Keep the fixture in ONE module-level constant so
+      a later capture replaces it in one place.
+
+          PATCH = """*** Begin Patch
+          *** Update File: src/a.py
+          @@
+          -old
+          +new
+          *** Add File: docs/new.md
+          +hello
+          *** Delete File: old/gone.txt
+          *** Update File: src/b.py
+          *** Move to: src/c.py
+          *** End Patch
+          """
+
+      Cases:
+      (a) paths(PATCH) == ["src/a.py", "docs/new.md", "old/gone.txt",
+          "src/b.py", "src/c.py"] — every verb, in order, Move-to included;
+      (b) paths("") == [] and paths("echo hi") == [] — no false positives;
+      (c) a path with spaces (`*** Add File: docs/my notes.md`) yields
+          "docs/my notes.md" intact;
+      (d) CRLF input (`*** Add File: a.py\r\n`) yields "a.py" with NO
+          trailing carriage return — assert repr equality, not `in`;
+      (e) an indented/prefixed line ("  *** Add File: x.py") is NOT matched,
+          so patch-like prose in a message body cannot inject a path.
+
+      Run: uv run pytest -q --no-cov tests/unit/test_codex_apply_patch_paths.py
+      CONFIRM RED, and confirm the reason is the missing library (bash
+      reports "No such file or directory" for the source), NOT a Python
+      error in the test itself. Paste the failure line into the phase notes.
+- number: 2
+  title: GREEN — fr-apply-patch-paths.sh
+  steps:
+  - id: P1.T2.S1
+    text: |
+      GREEN. Create plugins/super-fr/hooks/lib/fr-apply-patch-paths.sh:
+
+          #!/bin/bash
+          # Extract every target path from a Codex apply_patch payload, and
+          # resolve a path against a payload cwd.
+          #
+          # Codex reports file edits as tool_name "apply_patch" with the patch
+          # text in tool_input.command (learn.chatgpt.com/docs/hooks). The body
+          # names its targets on `*** <verb>:` lines and carries MULTIPLE files
+          # per call. This library is the only Codex-specific parsing in the
+          # enforcement path; the allow/deny decision itself stays in
+          # lib/fr-isolation-decision.sh, shared with Claude, Hermes and OpenCode.
+
+          # fr_apply_patch_paths <patch-text>
+          #   Echoes one repo-relative path per line, in payload order.
+          #   Anchored at column 0 so patch-like prose cannot inject a path.
+          fr_apply_patch_paths() {
+            printf '%s\n' "$1" | sed -nE \
+              's/^\*\*\*[[:space:]]+(Add File|Update File|Delete File|Move to):[[:space:]]*(.+)$/\2/p' \
+              | sed -e 's/[[:space:]]*$//' -e '/^$/d'
+          }
+
+          # fr_resolve_against <cwd> <path>
+          #   Absolute path stays; a relative one is joined onto cwd. See the
+          #   decision library: fr_isolation_decide_edit ALLOWS any non-absolute
+          #   path by design, so an unresolved relative path silently disarms
+          #   the gate. Never call the decision library without this.
+          fr_resolve_against() {
+            case "$2" in
+              /*) printf '%s\n' "$2" ;;
+              *)  printf '%s\n' "${1%/}/$2" ;;
+            esac
+          }
+
+      The trailing `sed` strips trailing whitespace AND the CR that case (d)
+      pins. Run the Task 1 tests, confirm all five cases green.
+- number: 3
+  title: RED — the Codex edit gate does not exist
+  steps:
+  - id: P1.T3.S1
+    text: |
+      RED. Create tests/unit/test_codex_isolation_hook_edits.py, modelled on
+      tests/unit/test_hermes_isolation_hook_edits.py (copy its `_git`,
+      `fr_repo`, `linked_worktree` helpers — do NOT import across test
+      modules, the repo's convention is each file keeps its own).
+
+          SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "codex" / "fr-isolation-required.sh"
+
+          def payload(patch: str, cwd: Path, tool: str = "apply_patch") -> dict:
+              return {"hook_event_name": "PreToolUse", "tool_name": tool,
+                      "tool_input": {"command": patch}, "cwd": str(cwd)}
+
+          def decision(r) -> str | None:
+              if not r.stdout.strip(): return None
+              return json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"]
+
+      Only the two skeleton cases here (the full matrix is phase 2):
+      (a) an apply_patch adding `src/a.py` with cwd = an fr-enabled BASE
+          CLONE (fr_repo, no marker) → decision(...) == "deny";
+      (b) the same patch with cwd = a valid linked worktree carrying a
+          marker → allowed (returncode 0 and EMPTY stdout).
+
+      Run it. CONFIRM RED. Both cases must fail because the SCRIPT does not
+      exist. Record in the notes that (b) currently "fails" only because the
+      script is missing — a missing script produces no stdout, which is
+      indistinguishable from allow, so (b) is NOT yet a meaningful assertion.
+      It becomes meaningful in T4 once the script exists and can deny.
+- number: 4
+  title: GREEN — codex/fr-isolation-required.sh
+  steps:
+  - id: P1.T4.S1
+    text: |
+      GREEN. Create plugins/super-fr/hooks/codex/fr-isolation-required.sh
+      (chmod +x). Thin entrypoint: it owns ONLY the Codex tool vocabulary,
+      the payload shape, and the Codex deny JSON.
+
+          #!/bin/bash
+          # Codex PreToolUse hook: deny edits to tracked source/docs in an
+          # fr-enabled repo unless they land in a valid fr-isolation workspace.
+          # The Codex sibling of fr-isolation-required.sh (Claude) and
+          # hermes/fr-isolation-required.sh. Codex accepts the SAME deny shape
+          # Claude emits, so only the input parsing is harness-specific:
+          # tool_name is "apply_patch" (even when the matcher says Edit/Write)
+          # and the patch text arrives in tool_input.command, naming MULTIPLE
+          # files per call, repo-relative.
+          set -eu
+
+          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+          LIB="$SCRIPT_DIR/../lib/fr-isolation-decision.sh"
+          PATCHLIB="$SCRIPT_DIR/../lib/fr-apply-patch-paths.sh"
+
+          json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr -d '\n\r'; }
+          emit_deny() {
+            printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' \
+              "$(json_escape "$1")"
+          }
+
+          [ -r "$LIB" ] && [ -r "$PATCHLIB" ] || {
+            emit_deny 'fr-isolation edit guard unavailable: a shared decision library is missing, so the isolation context cannot be established. Refusing edits until the hook install is repaired.'
+            exit 0; }
+          . "$LIB"
+          . "$PATCHLIB"
+
+          if ! fr_json_resolve; then
+            emit_deny 'fr-isolation edit guard unavailable: no JSON parser (python3 or jq) could be resolved, so the tool payload cannot be read. Refusing edits until the dependency is restored.'
+            exit 0
+          fi
+          if ! fr_git_resolve; then
+            emit_deny 'fr-isolation edit guard unavailable: git could not be resolved, so the isolation context cannot be established. Refusing edits until the dependency is restored.'
+            exit 0
+          fi
+
+          input=$(cat)
+          tool_name=$(printf '%s' "$input" | fr_json_field tool_name) || tool_name='__HOOK_PARSE_ERROR__'
+          if [ "$tool_name" = "__HOOK_PARSE_ERROR__" ]; then
+            emit_deny 'fr-isolation edit guard: the PreToolUse payload is not valid JSON, so the isolation context cannot be established. Refusing the call.'
+            exit 0
+          fi
+          case "$tool_name" in
+            apply_patch | Edit | Write | MultiEdit | NotebookEdit) ;;
+            *) exit 0 ;;
+          esac
+
+          cwd=$(printf '%s' "$input" | fr_json_field cwd) || cwd=''
+          command=$(printf '%s' "$input" | fr_json_field tool_input.command) || command=''
+          file=$(printf '%s' "$input" | fr_json_field tool_input.file_path) || file=''
+          for v in "$cwd" "$command" "$file"; do
+            if [ "$v" = "__HOOK_PARSE_ERROR__" ]; then
+              emit_deny 'fr-isolation edit guard: the PreToolUse payload is not valid JSON, so the isolation context cannot be established. Refusing the call.'
+              exit 0
+            fi
+          done
+          [ -n "$cwd" ] || cwd=$PWD
+
+          # Candidate targets: an explicit file_path (Edit/Write-shaped
+          # payloads) else every path the patch body names.
+          if [ -n "$file" ]; then
+            targets=$(printf '%s\n' "$file")
+          else
+            targets=$(fr_apply_patch_paths "$command")
+          fi
+          [ -n "$targets" ] || exit 0
+
+          # A patch is ATOMIC: Codex cannot partially apply, so ANY blocked
+          # path denies the whole call.
+          while IFS= read -r t; do
+            [ -n "$t" ] || continue
+            abs=$(fr_resolve_against "$cwd" "$t")
+            if fr_isolation_decide_edit "$abs"; then continue; fi
+            emit_deny "fr-isolation: edit to '$t' blocked - not inside an fr-isolation workspace. Enter isolation ('fr isolation up' / fr-goal) and edit in the worktree; or add the path to '.fr-isolation-allow'; or set FR_BASE_OK=1 for a deliberate base-clone edit."
+            exit 0
+          done <<EOF
+          $targets
+          EOF
+          exit 0
+
+      Run tests/unit/test_codex_apply_patch_paths.py and
+      tests/unit/test_codex_isolation_hook_edits.py — confirm green.
+- number: 5
+  title: REFACTOR + quality gate
+  steps:
+  - id: P1.T5.S1
+    text: |
+      Refactor and gate. Confirm the two new shell files carry no logic that
+      belongs in the shared decision library (the entrypoint must contain NO
+      marker parsing, NO .fr-isolation-allow handling, NO fr-enabled test —
+      all of that is fr_isolation_decide_edit's job). If shellcheck is
+      available run `shellcheck plugins/super-fr/hooks/codex/*.sh
+      plugins/super-fr/hooks/lib/fr-apply-patch-paths.sh` and fix warnings
+      (add explicit disables with a reason, matching the style of the
+      existing hooks).
+
+      Then the full gate:
+          uv run ruff check packages/ tests/
+          uv run ruff format --check packages/ tests/
+          uv run pytest -q --no-cov tests/unit
+
+      Log the exit code you actually read (`rc=$?` on its own line — do NOT
+      judge a piped/tailed run's status). Commit:
+      `feat(codex): apply_patch path extractor + Codex isolation edit gate`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,126 @@
+schema_version: 2
+phase:
+  number: 4
+  title: scripts/sync-codex.py — generated mirrors, drift tripwires, AGENTS.md block
+    budget
+  tag: agentic
+  depends_on:
+  - 1
+  - 3
+  tracking_issue: null
+  acceptance:
+  - codex-skills-delivery
+  - codex-rules-agents-block
+tasks:
+- number: 1
+  title: RED — tripwires for mirrors that do not exist yet
+  steps:
+  - id: P4.T1.S1
+    text: |
+      RED. Create three tripwires modelled on
+      tests/unit/test_tripwire_hermes_skills_sync.py — each importing
+      scripts/sync-codex.py by path via importlib and calling ITS drift
+      functions, so the CI gate and `--check` can never disagree:
+
+        tests/unit/test_tripwire_codex_skills_sync.py
+          - canonical_skills() non-empty
+          - find_skills_drift() == []   (.agents/skills mirrors canonical)
+        tests/unit/test_tripwire_codex_rules_sync.py
+          - canonical_rules() returns EXACTLY the four SHIPPED_RULE_NAMES
+            (fr-isolation-required, fr-plan-override, fr-worktree-override,
+            no-claude-p-batch) — assert the set, so a maintainer-only rule
+            added later cannot leak into a consumer's global instructions
+          - find_rules_drift() == []
+          - test_agents_block_is_within_budget: len(render_rules_block()
+            .encode()) <= 2048. Assert on the RENDERED block, not the file,
+            so editing a rule cannot blow the budget unnoticed. Include the
+            measured rationale in the docstring: project_doc_max_bytes is
+            32768 and discovery STOPS at the cap; full inline measures 13129
+            bytes which with super-fr's own 16365-byte AGENTS.md reaches 90%.
+          - test_block_points_at_the_full_rule_files: the rendered block
+            mentions each of the four rule filenames (pointer, not body)
+        tests/unit/test_tripwire_codex_hooks_sync.py
+          - the .codex/hooks.snippet.json entries name exactly the shipped
+            codex hook scripts, and every referenced script EXISTS and is
+            executable (a snippet pointing at a missing script installs a
+            hook that can never fire)
+
+      Run all three, confirm RED on the missing scripts/sync-codex.py.
+- number: 2
+  title: GREEN — the generator
+  steps:
+  - id: P4.T2.S1
+    text: |
+      GREEN. Create scripts/sync-codex.py, structured exactly like
+      sync-hermes.py (module docstring explaining the Codex surfaces;
+      canonical_* / mirror_* / find_*_drift / sync_* functions; a main()
+      with --check). Constants:
+
+          SKILLS_CANONICAL_DIR = REPO_ROOT/"plugins"/"super-fr"/"skills"
+          SKILLS_MIRROR_DIR    = REPO_ROOT/".agents"/"skills"
+          RULES_CANONICAL_DIR  = REPO_ROOT/"plugins"/"super-fr"/"rules"
+          SHIPPED_RULE_NAMES   = ("fr-isolation-required", "fr-plan-override",
+                                  "fr-worktree-override", "no-claude-p-batch")
+          AGENTS_SNIPPET       = REPO_ROOT/".codex"/"AGENTS.snippet.md"
+          RULES_MIRROR_DIR     = REPO_ROOT/".codex"/"rules"
+          HOOKS_SNIPPET        = REPO_ROOT/".codex"/"hooks.snippet.json"
+          BLOCK_START = "<!-- super-fr:rules START -->"
+          BLOCK_END   = "<!-- super-fr:rules END -->"
+          BLOCK_MAX_BYTES = 2048
+
+      render_rules_block() emits a POINTER block, not rule bodies (journal
+      d3/r1): the markers, one short paragraph naming the fr-isolation
+      invariant and its three escapes (enter isolation / .fr-isolation-allow
+      / FR_BASE_OK), one line for the no-`claude -p` convention, then a list
+      of the four rules with their installed absolute location
+      ($CODEX_HOME/rules/super-fr/<name>.md) for the full text. Raise if the
+      rendered block exceeds BLOCK_MAX_BYTES, so `sync-codex.py` fails loudly
+      rather than shipping an over-budget block.
+
+      sync_skills() byte-copies each canonical SKILL.md to
+      .agents/skills/<name>/SKILL.md with a `.source` breadcrumb and prunes
+      mirrors with no canonical source (copy sync-hermes.py's logic).
+      sync_rules() writes AGENTS_SNIPPET and mirrors the four full rule
+      bodies into .codex/rules/. sync_hooks() writes HOOKS_SNIPPET:
+
+          {"hooks": {"PreToolUse": [
+            {"matcher": "apply_patch|Edit|Write",
+             "hooks": [{"type": "command", "command": "codex/fr-isolation-required.sh"}]},
+            {"matcher": "Bash",
+             "hooks": [{"type": "command", "command": "codex/fr-isolation-guard.sh"}]}]}}
+
+      Commands are stored RELATIVE to the hook tree root; the installer
+      rewrites them to absolute paths under $CODEX_HOME/super-fr-hooks/
+      (journal d5) — the same shape .hermes/config.snippet.yaml uses.
+
+      Run: uv run scripts/sync-codex.py, then the three tripwires. Green.
+- number: 3
+  title: REFACTOR + quality gate
+  steps:
+  - id: P4.T3.S1
+    text: |
+      Refactor: check sync-codex.py against sync-hermes.py for gratuitous
+      divergence; the three generators should read as siblings.
+      Verify idempotence: run `uv run scripts/sync-codex.py` twice and
+      confirm `git status --porcelain` is clean the second time, and that
+      `uv run scripts/sync-codex.py --check` exits 0.
+      Gate: uv run ruff check packages/ tests/ ; uv run pytest -q --no-cov tests/unit ; log the real rc.
+      Commit: `feat(codex): sync-codex generator, mirrors and drift tripwires`.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
