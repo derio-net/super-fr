@@ -218,6 +218,14 @@ Invasive, reversible mutations as tested Python (`packages/fr/src/fr/codex.py`,
   `~/.codex/hooks.json` (idempotent, keyed by command), apply the AGENTS.md
   block, install rule bodies, and **link the skills, repairing stale/dangling
   links**.
+  - **Dry run is the DEFAULT** (operator decision, journal `d12`). A bare
+    invocation prints the diff for every target and writes nothing; an explicit
+    flag performs the write. These are the operator's global, cross-project
+    Codex files, and this repo's own motivating incident was eleven stale links
+    in exactly that tree, so every global mutation is inspectable before it
+    happens. The phase-5 tests assert that a bare invocation leaves
+    `~/.codex/AGENTS.md`, `~/.codex/hooks.json` and `$CODEX_HOME/skills/`
+    byte-identical.
 - `fr codex uninstall` — reverse every one of the above; touch only super-fr's
   own files.
 - `fr codex doctor` — report dangling/stale `$CODEX_HOME/skills/fr-*` links,
@@ -263,7 +271,9 @@ Invasive, reversible mutations as tested Python (`packages/fr/src/fr/codex.py`,
 
 Requires a real Codex install (the operator has one) and a trust grant:
 
-1. **Install:** `CODEX_SKILLS_INSTALL=1 bash scripts/install.sh`. Verify
+1. **Install:** run `fr codex install` with no write flag first and read the
+   printed diff; confirm the three global targets are unchanged afterwards.
+   Then `CODEX_SKILLS_INSTALL=1 bash scripts/install.sh`. Verify
    `~/.codex/skills/fr-goal` resolves (not dangling) and that
    `codex debug prompt-input` lists the `fr-*` skills.
 2. **Repair:** break a link deliberately (`ln -sfn /nonexistent ~/.codex/skills/fr-goal`),
