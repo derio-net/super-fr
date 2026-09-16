@@ -364,3 +364,8 @@ Added tests/unit/test_install_copies_output_styles.py, modelled on the workflows
 ### r8-m7-commit-title · finding [refuted] · M7 Duplicated title line in commit 1e4724b: left alone (phase 8)
 
 The repo has no commit-message lint and the release tag comes from pyproject.toml. Rewriting a pushed branch to fix a cosmetic duplicate costs more than it returns.
+
+<!-- fr:journal kind=finding scope=plan id=r8-i1-pr-body created=2026-09-16T08:18:00 phase=8 state=fixed -->
+### r8-i1-pr-body · finding [fixed] · I1 PR 474 still advertised the deleted forced style (phase 8)
+
+The deliver step ran at phase 4, before the 2026-09-15 reframe, so the body claimed a forced output style, a shipped rule, a phase-executor line and release 4.4.0. Fixed by running deliver again: the title and body are rebuilt from the durable journal and the current diff.
