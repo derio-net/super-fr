@@ -1889,17 +1889,22 @@ rows:
       over 25 words or a filler word.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit tests on fr.prose_lint
-      and the journal add command.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_add_prose_warning.py
+    status: ci
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Phase 7: journal add
+      calls fr.prose_lint and warns to stderr, capped at 5 lines plus a summary.'
   - id: plan-self-review-warns-on-long-prose
     capability: output-tone
     acceptance: fr plan self-review warns, without failing, on long sentences and filler
       words in pending steps, the plan prose and its spec.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Target: unit tests on self_review
-      prose issues and the exit code.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_self_review_prose.py
+    status: ci
+    notes: 'Born at brainstorm revision 2026-09-15 (d6-d10). Phase 7: self_review
+      warns per source (steps, plan prose, spec); markup=False on print avoids
+      Rich MarkupError on bracketed excerpts.'

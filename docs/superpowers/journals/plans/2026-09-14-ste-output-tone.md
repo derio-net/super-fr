@@ -274,3 +274,18 @@ A heading needs a hash and a space (M7). Numbered lists with a bracket split (M8
 ### r6-m11-m15 · finding [refuted] · M11 and M15: not fixed (phase 6)
 
 M11, an unmatched quote eating the rest of a line, is covered in practice by the I1 flatten fix. M15, backtracking on thousands of unclosed openers, needs deliberately broken input and the lint only warns. The largest real spec lints in 12 ms.
+
+<!-- fr:journal kind=discovery scope=plan id=9b2c50c5f5ac created=2026-09-16T07:04:48 phase=7 -->
+### 9b2c50c5f5ac · discovery · RED counts for P7.T1.S1 and P7.T2.S1 differed slightly from the plan text (phase 7)
+
+P7.T1.S1 RED was 2 failed, 2 passed, not 3 failed 1 passed as the plan text said: the idempotent re-add test and the clean-entry test both pass trivially before the warning code exists, since neither expects any warning text. P7.T2.S1 RED matched the plan exactly, 5 failed 1 passed. No code change needed either way; noting the variance for anyone re-running the steps.
+
+<!-- fr:journal kind=finding scope=plan id=5c58c0defefa created=2026-09-16T07:05:00 phase=7 state=open -->
+### 5c58c0defefa · finding [open] · test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4 fails independent of phase 7 (phase 7)
+
+The version-floor test in test_plan_workflow_binding.py asserts a plan whose constraint reads less than 4.5.0 parses cleanly, but this repo is now at version 4.5.0, so the floor check fails the same way with or without my changes. Confirmed by stashing the phase 7 diff and rerunning just that test: same failure. Left open since it is a pre-existing version-drift issue, not part of this phase scope.
+
+<!-- fr:journal kind=discovery scope=plan id=cf68c8a8a6eb created=2026-09-16T07:05:11 phase=7 -->
+### cf68c8a8a6eb · discovery · P7.T2.S1 test_markup_like_prose_does_not_crash_self_review needed a fixture tweak (phase 7)
+
+As copied, the fixture text put the period right after the markdown link, so the sentence splitter (fixed in phase 6) split it into a short 5 word sentence holding the bracket text and a separate 30 word sentence with none of it. Only the long sentence gets an excerpt, so the excerpt never contained the bracket text and the test failed. Fix: drop the period after the link so the whole thing is one long sentence; the bracket text now sits inside the flagged excerpt. Behavior of the phase 6 lint is unchanged, only the test fixture.
