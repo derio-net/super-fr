@@ -1,0 +1,157 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — v2 segment contract (three plain lines) for the no-repo
+    path, v1 tests retired
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - statusline-harness-neutral-segment
+  skeleton: true
+tasks:
+- number: 1
+  title: v2 test harness + no-repo golden, RED against v1, GREEN skeleton script
+  steps:
+  - id: P1.T1.S1
+    text: |
+      RED: rewrite tests/unit/test_statusline_segment.py for contract v2
+      (spec 2026-09-14 §5.A). Keep the imports, `_git`, the `World`
+      dataclass and the `world` fixture (repo home/Docs/acme on main, plain
+      linked worktree .worktrees/blog on docs/blog, fr workspace
+      home/.cache/fr/worktrees/acme/feat__x on feat/x with a state file).
+      Replace the module docstring with a v2 description (three plain
+      lines: state `fr|none`, `branch: <b>|no branch`,
+      `worktree: <path>|no fr-isolation`; `--cwd` mode reads no stdin;
+      formats plain/ansi/oneline). Change `World.run` to
+      `run(self, cwd, sid="sess-1", *args: str, **extra: str)` and pass
+      `["bash", str(SCRIPT), *args]`. DELETE every v1 test (they encode
+      the retired `iso:` / gauge contract). Add:
+
+          def _plain(res: subprocess.CompletedProcess[str]) -> tuple[str, str, str]:
+              assert res.returncode == 0, res.stderr
+              assert res.stdout.endswith("\n"), res.stdout
+              lines = res.stdout[:-1].split("\n")
+              assert len(lines) == 3, f"plain output must be exactly three lines: {res.stdout!r}"
+              return lines[0], lines[1], lines[2]
+
+          NONE = ("none", "no branch", "no fr-isolation")
+
+          def test_not_a_git_repo(world: World, tmp_path: Path) -> None:
+              plain = tmp_path / "plain"
+              plain.mkdir()
+              assert _plain(world.run(plain)) == NONE
+
+          def test_missing_cwd(world: World, tmp_path: Path) -> None:
+              assert _plain(world.run(tmp_path / "nope")) == NONE
+
+      Run in the workspace:
+      `fr isolation exec --branch feat/statusline-session-branch -- uv run pytest -q --no-cov tests/unit/test_statusline_segment.py`
+      Expected: 2 failed — the v1 script prints two lines ("must be exactly three lines").
+  - id: P1.T1.S2
+    text: |
+      GREEN: replace plugins/super-fr/scripts/fr-statusline-segment.sh with
+      the v2 skeleton (argument parsing, stdin read, output formats; the
+      resolution only knows "no repo" — phase 2 adds the rules):
+
+      BEGIN plugins/super-fr/scripts/fr-statusline-segment.sh
+      #!/bin/bash
+      # fr-statusline-segment.sh — session branch + fr-isolation rows (spec 2026-09-14 §5.A).
+      #
+      # Answers two questions for a status line: which branch is this session
+      # working on, and is it inside an fr-isolation workspace?
+      #
+      # Input:  Claude Code status-line JSON on stdin ({session_id,
+      #         workspace.current_dir, cwd}), or --cwd <dir> (stdin is NOT read).
+      # Output: --format plain (default) — exactly three lines:
+      #           fr | none
+      #           branch: <b> | no branch
+      #           worktree: <abs path> | no fr-isolation
+      #         --format ansi — the two rows, green when fr, purple when not.
+      #         --format oneline — "fr:<branch>" | "<branch>" (Hermes 40-char slot).
+      #
+      # Env: FR_SESSIONS_DIR (default ~/.cache/fr/sessions) — per-session index.
+      #
+      # Shell + jq + git only. NEVER the fr CLI (4 s). Every failure path
+      # degrades to the "none" rows and exit 0 — a status line must never break
+      # the harness.
+      set -u
+
+      format=plain
+      cwd=""
+      cwd_given=0
+      while [ $# -gt 0 ]; do
+        case "$1" in
+        --format) format="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+        --format=*) format="${1#--format=}"; shift ;;
+        --cwd) cwd="${2:-}"; cwd_given=1; shift; [ $# -gt 0 ] && shift ;;
+        --cwd=*) cwd="${1#--cwd=}"; cwd_given=1; shift ;;
+        *) shift ;;
+        esac
+      done
+      case "$format" in plain | ansi | oneline) ;; *) format=plain ;; esac
+
+      session_id=""
+      if [ "$cwd_given" -eq 0 ]; then
+        { IFS= read -r session_id; IFS= read -r cwd; } < <(
+          jq -r '(.session_id // ""), (.workspace.current_dir // .cwd // "")' 2>/dev/null || true
+        )
+      fi
+
+      state=none
+      branch=""
+      worktree=""
+
+      # (resolution rules: phase 2)
+
+      if [ -n "$branch" ]; then b_row="branch: $branch"; else b_row="no branch"; fi
+      if [ "$state" = fr ]; then w_row="worktree: $worktree"; else w_row="no fr-isolation"; fi
+
+      case "$format" in
+      plain) printf '%s\n%s\n%s\n' "$state" "$b_row" "$w_row" ;;
+      ansi)
+        if [ "$state" = fr ]; then c=$'\033[32m'; else c=$'\033[35m'; fi
+        r=$'\033[0m'
+        printf '%s%s%s\n%s%s%s\n' "$c" "$b_row" "$r" "$c" "$w_row" "$r"
+        ;;
+      oneline)
+        b="${branch:-no branch}"
+        if [ "$state" = fr ]; then printf 'fr:%s\n' "$b"; else printf '%s\n' "$b"; fi
+        ;;
+      esac
+      exit 0
+      END plugins/super-fr/scripts/fr-statusline-segment.sh
+
+      Run the same pytest command. Expected: 2 passed.
+  - id: P1.T1.S3
+    text: |
+      REFACTOR + skeleton gate: `bash -n plugins/super-fr/scripts/fr-statusline-segment.sh`
+      (and `shellcheck` on it when the container has it). Then run the FULL
+      suite once to prove CI shape: `fr isolation exec --branch
+      feat/statusline-session-branch -- bash -c 'uv run pytest -q > /tmp/full.log 2>&1; echo rc=$?; tail -5 /tmp/full.log'`.
+      Expected: rc=0 (coverage gate met). Read rc from the echoed value,
+      never from a pipeline status. Commit
+      `feat(statusline): v2 segment skeleton — three-line contract`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-14T19:49:57+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-14T19:59:22+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-14T20:41:26+00:00'
+      note: 'Gate accepted at review: full suite 3 failed / 2886 passed. Only CI-relevant
+        failure is test_no_merged_but_unarchived_plans, already failing on origin/main
+        (CI run 34828373985, unarchived 2026-07-24-remove-vk-legacy-fallbacks). test_install_bridge
+        passes in CI (container uv tool env only); bridge entry-point timeout passed
+        in isolation. Coverage 91.41%.'
+  completion:
+    at: '2026-09-14T20:41:28+00:00'
+    note: null
+    observed_prs: []

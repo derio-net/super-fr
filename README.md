@@ -226,10 +226,12 @@ of them, and knows which agent session holds each workspace:
 | Agent tool `isolation: "worktree"` (`agent-*` names) | `<repo>/.claude/worktrees/agent-<id>` — Claude's default shape, reproduced by the same hook on purpose | Claude-internal (subagent only) |
 | superpowers `using-git-worktrees` | routed to `fr isolation up` by the shipped rule `fr-worktree-override.md`; `<repo>/.worktrees/` is never created (CI tripwire) | fr state |
 
-`fr isolation status` lists the sessions holding each workspace; the shipped
-`plugins/super-fr/scripts/fr-statusline-segment.sh` renders the bound
-workspace and the repo's other worktrees in the Claude Code status line
-(wiring in the fr-isolation skill, "Session bindings").
+`fr isolation status` lists the sessions holding each workspace. The
+shipped `plugins/super-fr/scripts/fr-statusline-segment.sh` prints the
+branch this session works on and its fr-isolation worktree (green when
+fr, purple when not); `fr-statusline-claude.sh` is a ready-made Claude
+Code status line (wiring for every harness in the fr-isolation skill,
+"Session bindings").
 
 A repo without a profile is a blocker, not a degraded mode: the `fr-init`
 skill scans the repo, interviews the operator (profiles, tools, credential
