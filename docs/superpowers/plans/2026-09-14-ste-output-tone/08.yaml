@@ -148,16 +148,16 @@ tasks:
 state:
   steps:
     P8.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-16T05:33:40+00:00'
       note: null
     P8.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-16T05:33:50+00:00'
       note: null
     P8.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-16T05:34:00+00:00'
       note: null
     P8.T2.S1:
       state: ' '

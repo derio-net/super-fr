@@ -54,7 +54,7 @@ During planning or implementation, ADD a row the moment a legitimate business
 need surfaces (a missed edge, a review-found failure mode, a constraint turned
 load-bearing) — never silently widen or narrow scope. Every addition is
 presented in the PR body ("rows added since brainstorm", generated via
-`fr acceptance check --added-since <base-ref>`) with a one-line defense.
+`fr acceptance check --added-since <base-ref>`) as one table row each (`id | claim | level | defense`).
 
 ## Refs and the gate
 
