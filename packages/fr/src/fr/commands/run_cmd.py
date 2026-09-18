@@ -1256,7 +1256,16 @@ def resolve_cmd(
                 update={
                     "state": "pending",
                     "gate": "cleared",
-                    "answered_by": answered_by,
+                    # `_clears_gate`, not the inline `blocked and done` this
+                    # branch already established (review r4-m1). The two are
+                    # equivalent today — the only writer of `blocked` is
+                    # `_gate_pending`, which requires `gate == "operator"` —
+                    # but the helper exists so the condition lives in one
+                    # place, and a future second writer of `blocked` would
+                    # have made these diverge silently.
+                    "answered_by": (
+                        answered_by if _clears_gate(step, record, state_value) else None
+                    ),
                     "at": _now(),
                     "emitted": dict(emitted_map) if emitted_map else record.emitted,
                 }

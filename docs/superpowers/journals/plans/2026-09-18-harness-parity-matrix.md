@@ -340,3 +340,34 @@ Row harness-gate-provenance ('A gate cleared without an operator is recorded as 
 ### p4-red-closed · finding [fixed] · GREEN: the 18 phase-4 RED tests pass (closes the RED finding 24de273e45fd) (phase 4)
 
 All 18 tests recorded RED in 24de273e45fd now pass, and the full suite is 3042 passed / 80 skipped with exactly the three known-local failures root-caused earlier in this journal (test_run_workspace.py x2, test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable) — no fourth. ruff format (3 files reformatted), ruff check, mypy packages/fr/src (109 files), fr validate artifacts (23 artifacts, all structurally valid) and fr harness parity --check (declared matrix agrees with the registration files) are all clean.
+
+<!-- fr:journal kind=finding scope=plan id=r4-i1 created=2026-09-18T17:43:05 phase=4 state=open -->
+### r4-i1 · finding [open] · PHASE 5 MUST FIX: nothing teaches the enforced path to type --answered-by operator, so the report cries wolf (phase 4)
+
+`--answered-by` appears nowhere in plugins/ or .opencode/ (grep: zero hits). fr-goal's documented resolve command is `fr run resolve <run-id> --step <id> --state done|failed [--emitted ...]`, so on Claude Code — the ONE harness where operator-gate is `enforced` and a human really does answer the batch — the orchestrator runs the documented command, the default fires, and the cursor records answered_by: agent.
+
+Consequence: `fr run check` and every phase-5 PR body will say 'no operator answered it' on runs where an operator did. A warning that fires on every run is a warning nobody reads, which hollows out the exact signal §3.D.3 buys. The conservative default is still right (the §4 risk row depends on the lie having to be TYPED) — what is missing is its counterpart: the enforced path must type the truth.
+
+PHASE 5 (P5.T3.S1 already edits this file): add `--answered-by operator` to fr-goal §1's documented resolve for the brainstorm gate, scoped to 'when you actually put the batch to the operator and they answered', re-sync both mirrors, and pin it with a content test the way phase 3 pinned the neutrality clauses.
+
+<!-- fr:journal kind=finding scope=plan id=r4-i2 created=2026-09-18T17:43:06 phase=4 state=open -->
+### r4-i2 · finding [open] · PHASE 5 MUST FIX: the helper cannot say 'a gate exists but its provenance predates the field' — this PR's own Operator gates section renders EMPTY (phase 4)
+
+Confirmed on the live cursor: cleared_gates() -> (), agent_cleared_gates() -> (), brainstorm record = state='done' gate=None answered_by=None. brainstorm IS gate: operator in the shipped manifest and WAS cleared — by the operator, in this very run — but before the field existed.
+
+'Absent' is handled coherently everywhere (filters on answered_by is not None; no crash, no None leaking into AnsweredBy, no false claim), and the migration deliberately not backfilling is RIGHT: fabricating 'operator' would be the precise false claim the feature opposes, and fabricating 'agent' would be a fabricated accusation.
+
+But the earlier mitigation (use cleared_gates() not agent_cleared_gates(), so a clean body differs from a body where the feature never ran) DOES NOT WORK HERE, because cleared_gates() is also empty. The delivered PR for the harness-parity feature itself would carry an 'Operator gates' heading with nothing under it — reading as 'the feature did not run', which is this repo's signature failure mode, on the feature's own PR.
+
+Structural cause: cleared_gates() reads only RunState, which does not carry the manifest's gate: declarations, so it cannot tell 'this run has no gates' from 'this run has a gate whose provenance predates the field'. ClearedGate.answered_by is non-optional, leaving no room for a third state.
+
+PHASE 5, preferred: widen to gates(state, manifest) -> tuple[GateStatus, ...] over every step the manifest declares gate: operator on, with answered_by: AnsweredBy | None, so the composer can render 'brainstorm — provenance not recorded (this cursor predates the field)'. Keeps the single-helper discipline P4.T4.S1 exists for; the alternative (composer resolves the manifest itself) is exactly the divergence that step forbids. Minimum: fr-goal §7 emits an explicit 'no gate provenance recorded — this cursor predates answered_by' line when the helper returns empty, so the section is never silently blank. Same gap applies to adopted runs (adopt.py marks prior steps done with no gate/answered_by).
+
+<!-- fr:journal kind=finding scope=plan id=r4-m1m2m3 created=2026-09-18T17:43:06 phase=4 state=fixed -->
+### r4-m1m2m3 · finding [fixed] · Three minors fixed: helper bypassed on one path, misleading timestamp, stale rule claim (phase 4)
+
+r4-m1: run_cmd.py's cli clearing branch re-derived '_clears_gate' inline WITHOUT its step.gate == 'operator' half. Equivalent today (the only writer of 'blocked' is _gate_pending, which requires it) so no live bug — but the helper exists so the condition lives in one place, and a second writer of 'blocked' would have made them diverge silently. Now routed through _clears_gate.
+
+r4-m2: ClearedGate.at is the record's LAST WRITE, not when the gate was answered — on the cli path _complete_step overwrites it when advance later executes the step. check does not render it; phase 5's PR body might. Documented on the class as a claim the field cannot support.
+
+r4-m3: .claude/rules/artifact-versioning.md asserted that an optional defaulted field is not a shape change 'when no released fr can read the file at all (the run kind in 4.0.0 — fr/run/model.py does not exist on origin/main)'. VERIFIED STALE: git cat-file -e origin/main:packages/fr/src/fr/run/model.py succeeds. This phase treated the change as a shape change anyway and was proved right within the hour (PATH fr 4.4.0 cannot read the new cursor), but a rule agents read should not carry a false example. Corrected, and the run kind's own case recorded in its place as the live evidence.

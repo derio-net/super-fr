@@ -23,10 +23,20 @@ change with it.
 
 "Shape" means what a reader must handle: a new required field, a renamed or
 removed one, a changed carrier, a new nesting. Adding an **optional, defaulted**
-field is not a shape change *when no released `fr` can read the file at all*
-(the `run` kind in 4.0.0 — `fr/run/model.py` does not exist on `origin/main`).
-If a released `fr` could read it, it is a shape change: the models are
-`extra="forbid"`, so an old reader does not ignore your new key, it raises.
+field is not a shape change *when no released `fr` can read the file at all* —
+a genuinely narrow exemption, and the example that used to sit here has expired:
+it read "the `run` kind in 4.0.0 — `fr/run/model.py` does not exist on
+`origin/main`", which stopped being true the moment `fr run` shipped. Check the
+claim before relying on it. If a released `fr` could read the file, it IS a
+shape change: the models are `extra="forbid"`, so an old reader does not ignore
+your new key, it raises.
+
+The `run` kind proved this on itself in the 2026-09-18 harness-parity PR.
+Adding an optional, defaulted `StepRecord.answered_by` was treated as a shape
+change, and the live evidence arrived immediately: an `fr` 4.4.0 on `PATH` reads
+a cursor written by the new one and fails with `schema_version — Extra inputs
+are not permitted`. Optional and defaulted buys you nothing against a
+closed-world model held by an older reader.
 
 Related obligation, from the same closed-world models: the first PR that moves
 any kind's `current_version` past 1 must, in that PR, add an optional defaulted

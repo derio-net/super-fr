@@ -25,7 +25,14 @@ from fr.run.model import AnsweredBy, RunState
 
 @dataclass(frozen=True)
 class ClearedGate:
-    """One gate this run records as cleared, and who cleared it."""
+    """One gate this run records as cleared, and who cleared it.
+
+    `at` is the record's LAST WRITE, not the moment the gate was answered
+    (review r4-m2). On the `cli` path the gate is cleared, the step returns to
+    `pending`, and the next `advance` executes it — `_complete_step` then
+    overwrites `at`, so what survives is the execution time. Render it as "last
+    write to this record" or not at all; do not present it as when a human
+    answered, which is a claim this field cannot support."""
 
     step: str
     answered_by: AnsweredBy
