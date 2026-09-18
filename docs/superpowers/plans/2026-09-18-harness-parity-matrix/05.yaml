@@ -1,0 +1,110 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Degrade loudly — harness detection, the gate notice, the PR body, and phase-sequence
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  - 4
+  tracking_issue: null
+  acceptance:
+  - harness-gate-degrades-loudly
+tasks:
+- number: 1
+  title: RED/GREEN — harness detection
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests for fr.harness.detect_harness(env) -> str.
+      FR_HARNESS wins outright when set to a member of HARNESSES (and
+      raises when set to a non-member — a typo must not silently become an
+      inference). NOTE FR_HARNESS does not exist today; this phase
+      introduces it. Falling back: CLAUDECODE or CLAUDE_PLUGIN_ROOT ->
+      claude-code; an OPENCODE* key -> opencode; a HERMES* key -> hermes.
+      An UNRECOGNISED environment returns None, and the caller then treats
+      it as degraded — fail loud, matching the isolation gate's
+      fail-closed posture. Confirm red, then implement, confirm green.
+- number: 2
+  title: RED/GREEN — `fr run advance` prints the degradation notice
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: test that `fr run advance` on a run blocked at a
+      `gate: operator` step, with the environment detected as opencode,
+      prints — in addition to the existing gate line — a notice naming the
+      harness, saying the gate is advisory there, telling the agent to put
+      the questions in its reply and STOP, and warning that clearing it
+      anyway records answered_by: agent and is reported in the PR. Test
+      that with claude-code detected (operator-gate is `enforced`) NO
+      notice prints, and that an unrecognised harness DOES print it.
+      Assert the notice text comes from the matrix row's scope_note, not a
+      hardcoded string — otherwise the matrix is decoration.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: implement in run_cmd.py's advance, reading the operator-gate
+      row via load_matrix(). Keep it to the blocked-gate path only. Use
+      soft_wrap, as the existing gate line does. Confirm green.
+- number: 3
+  title: GREEN — deliver's PR body, and phase-sequence closure
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      GREEN: fr-goal §7 (deliver) gains an "Operator gates" section
+      derived from the phase-4 helper: every gate and who cleared it, so a
+      run that never asked arrives at human review saying so in its own
+      words. Edit plugins/super-fr/skills/fr-goal/SKILL.md, then re-sync
+      both mirrors and confirm --check clean on each.
+  - id: P5.T3.S2
+    text: |-
+      GREEN: close #436 instance 1 (an agent finishing fr-brainstorming
+      and going straight to production code, skipping fr-plan). Per spec
+      §3.E the matrix picks the neutral mechanism that already works:
+      `fr run` enforces order because `implement` declares
+      needs: [spec, plan] and the cursor will not advance past a step
+      whose inputs no artifact satisfies. Edit
+      plugins/super-fr/skills/fr-brainstorming/SKILL.md so a STANDALONE
+      brainstorm starts or adopts a run (`fr run start fr-goal --branch`,
+      else `fr run adopt`) — under fr-goal a run already exists and this
+      is a no-op, which the prose must say so the two paths cannot both
+      fire. Re-sync both mirrors. Add a test asserting the
+      phase-sequence row is `enforced` on all three supported harnesses
+      AND that the fr-brainstorming prose names `fr run`.
+- number: 4
+  title: REFACTOR + quality gate
+  steps:
+  - id: P5.T4.S1
+    text: |-
+      REFACTOR: if detection and the notice both grew env-reading code,
+      give detection the single reader. Re-run ruff + mypy + pytest +
+      both sync --check scripts. Commit.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T16:09:54+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-09-18T16:09:55+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-09-18T16:09:55+00:00'
+      note: null
+    P5.T3.S1:
+      state: x
+      ticked_at: '2026-09-18T16:09:56+00:00'
+      note: null
+    P5.T3.S2:
+      state: x
+      ticked_at: '2026-09-18T16:09:56+00:00'
+      note: null
+    P5.T4.S1:
+      state: x
+      ticked_at: '2026-09-18T16:09:56+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T16:11:55+00:00'
+    note: null
+    observed_prs: []

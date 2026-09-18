@@ -149,3 +149,78 @@ def test_accounting_round_trips_and_defaults_to_absent() -> None:
     assert parse_run_state(dump_run_state(state)) == state
     assert _sample_state().accounting is None
     assert "accounting" not in dump_run_state(_sample_state())
+
+
+# --- Phase 4: gate provenance + the `run` artifact stamp -------------------
+#
+# `RunState`/`StepRecord` are `extra="forbid"`, so adding `answered_by` is a
+# SHAPE change under `.claude/rules/artifact-versioning.md`. These pin the two
+# halves the rule requires of the model itself: the new field, and the
+# optional defaulted `schema_version` without which the stamp the migration
+# writes would make the file unparseable by the fr that wrote it.
+
+
+def test_step_record_answered_by_defaults_to_absent_and_round_trips() -> None:
+    state = _sample_state()
+    assert state.steps["isolate"].answered_by is None
+
+    cleared = state.steps["isolate"].model_copy(update={"gate": "cleared", "answered_by": "agent"})
+    text = dump_run_state(_with_isolate(state, cleared))
+    assert "answered_by: agent" in text
+    assert parse_run_state(text).steps["isolate"].answered_by == "agent"
+
+
+def _with_isolate(state: RunState, record: StepRecord) -> RunState:
+    steps = dict(state.steps)
+    steps["isolate"] = record
+    return state.model_copy(update={"steps": steps})
+
+
+def test_an_unrecognised_answered_by_fails_loud() -> None:
+    text = """
+run: r
+workflow: fr-goal@1
+branch: b
+started: "2026-08-14T09:00:00Z"
+cursor: a
+steps:
+  a:
+    state: done
+    answered_by: the-cat
+"""
+    with pytest.raises(RunStateError):
+        parse_run_state(text)
+
+
+def test_run_state_accepts_an_optional_defaulted_schema_version() -> None:
+    """Required by `.claude/rules/artifact-versioning.md` in the same PR that
+    moves the kind past version 1: the migration stamps `schema_version` into
+    the file, and `extra="forbid"` would otherwise make that file unreadable
+    by the very fr that wrote it."""
+    # absent -> the pre-framework version, not an error
+    assert parse_run_state(dump_run_state(_sample_state())) is not None
+    state = RunState(
+        run="r",
+        workflow="fr-goal@1",
+        branch="b",
+        started="2026-08-14T09:00:00Z",
+        cursor="a",
+        steps={"a": StepRecord(state="pending")},
+    )
+    assert state.schema_version == 1
+
+    stamped = parse_run_state(
+        "schema_version: 2\nrun: r\nworkflow: fr-goal@1\nbranch: b\n"
+        'started: "2026-08-14T09:00:00Z"\ncursor: a\nsteps:\n  a:\n    state: pending\n'
+    )
+    assert stamped.schema_version == 2
+
+
+def test_the_current_run_schema_version_comes_from_the_artifact_registry() -> None:
+    """One number, one place: the registry is the ONLY module allowed to
+    declare a kind's `current_version`, so fr's own writers read it rather
+    than restating it."""
+    from fr.artifacts.registry import artifact_kind
+    from fr.run.model import current_run_schema_version
+
+    assert current_run_schema_version() == artifact_kind("run").current_version

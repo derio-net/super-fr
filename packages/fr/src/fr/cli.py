@@ -21,6 +21,7 @@ from fr.artifacts.trigger import ensure_artifacts_current
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command
+from fr.commands.harness_cmd import harness_app
 from fr.commands.hermes_cmd import hermes_app
 from fr.commands.init_cmd import init_app
 from fr.commands.isolation_cmd import isolation_app
@@ -69,6 +70,7 @@ app.add_typer(init_app, name="init")
 app.add_typer(repos_app, name="repos")
 app.add_typer(journal_app, name="journal")
 app.add_typer(models_app, name="models")
+app.add_typer(harness_app, name="harness")
 app.add_typer(hermes_app, name="hermes")
 app.add_typer(workflow_app, name="workflow")
 app.add_typer(run_app, name="run")

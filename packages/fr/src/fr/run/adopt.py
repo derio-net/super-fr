@@ -53,6 +53,7 @@ from fr.run.model import (
     RunState,
     RunStateError,
     StepRecord,
+    current_run_schema_version,
     run_path,
     save_run_state,
     validate_run_id,
@@ -313,6 +314,9 @@ def build_run_state(
         for index, step in enumerate(manifest.steps)
     }
     return RunState(
+        # Born stamped with the version this fr writes — an adopted cursor is
+        # a new artifact, not an old one, so it must not arrive stale.
+        schema_version=current_run_schema_version(),
         run=run_id,
         workflow=f"{manifest.workflow}@{manifest.schema_version}",
         branch=branch,

@@ -348,7 +348,13 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ),
         ArtifactKind(
             name="run",
-            current_version=1,
+            # 2: `StepRecord.answered_by` — gate provenance (spec
+            # `2026-09-18-harness-parity-matrix-design` §3.D.2). `RunState` is
+            # `extra="forbid"`, so a cursor carrying the new key raises for an
+            # fr that predates it; the migration is
+            # `fr.artifacts.run_provenance`, and `RunState.schema_version`
+            # exists so the stamp it writes stays readable.
+            current_version=2,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
