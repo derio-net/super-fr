@@ -1920,3 +1920,24 @@ rows:
     notes: Spec 3.D.2/3.D.3. Default answered_by=agent so the stronger claim must be
       typed deliberately; fr run gates never renders blank. Incurred a run-kind
       stamp bump (schema_version 2) + migration.
+  - id: lifecycle-journal-resolve
+    capability: Artifact lifecycles
+    acceptance: A journal finding can be resolved, and the freshness gate that requires
+      no open findings can therefore reach clean.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.G.1. Today fr journal add --id <existing> is a silent no-op, so fr
+      journal check can never return clean once any finding is opened — the gate fr-goal
+      7 requires before deliver.
+  - id: lifecycle-acceptance-set-status
+    capability: Artifact lifecycles
+    acceptance: An acceptance row's status can be moved with a command, so the matrix's
+      own lifecycle rule needs no hand-edited YAML.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.G.2. Today fr acceptance add refuses a duplicate id and no verb flips
+      a status, while add's help says agents never hand-edit YAML shapes.

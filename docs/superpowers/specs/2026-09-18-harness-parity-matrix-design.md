@@ -271,6 +271,50 @@ says so and exits 0 rather than inventing a verdict — the `fr acceptance check
 workflow manifests are not: it is a CLI surface every harness drives identically, so there is
 nothing harness-specific to generate.
 
+### G. The verbs those lifecycles never had (added 2026-09-18, after phases 1-6)
+
+Not harness parity. This section exists because building the rest of this spec kept hitting
+the *same shape* the spec is about — **a documented state transition with no command to
+perform it** — and two of the three instances bend this very PR's delivery gates.
+
+| Lifecycle | Where it is documented | Verb to move it |
+|---|---|---|
+| a journal finding: `open` → `fixed`/`refuted` | fr-plan's rules; fr-goal §6 records each finding `--state open\|fixed\|refuted` | **none** |
+| an acceptance row: `not-implemented` → `skipped` → `ci` | `.claude/rules/acceptance-matrix.md`, "Statuses move **explicitly, never silently**" | **none** |
+| a plan gaining a phase | fr-plan's format section | **none** (`fr plan` is create/edit/rework/self-review) |
+
+Measured, not assumed. `fr journal add --id <existing> --state fixed` is a silent no-op — the
+entry keeps `state: open` and `fr journal check` keeps exiting 1, so once any finding is ever
+opened that command can never return clean. fr-goal §7 required exactly that before
+`deliver`; phase 5 had to reword the gate rather than satisfy it. `fr acceptance add` with an
+existing `--id` exits 2, and no sibling verb flips a status, while `add`'s own help reads
+*"agents never hand-edit YAML shapes"* — so phase 6 hand-edited `matrix.yaml` to obey
+`acceptance-matrix.md`, breaking one stated discipline to keep another.
+
+A gate that cannot pass is not a strict gate; it is a gate people learn to route around. That
+is the same failure #436 reports, one layer in.
+
+**G.1 `fr journal resolve --scope <s> --slug <s> --id <id> --state fixed|refuted --note <why>`**
+appends a *resolution record* naming the finding, and `fr journal check` computes a finding's
+**effective** state: open unless a later record resolves it. It does **not** rewrite the
+original entry. The journal is an audit log — later phases read `fr journal handoff` to learn
+what was found and what became of it, and a finding mutated in place would erase that it was
+ever open. Append-only is the property; what was missing is a resolution that `check` can
+read. `--note` is required: "resolved" without a reason is the silent state change the rule
+forbids.
+
+**G.2 `fr acceptance set-status --id <id> --status <s> --notes <why>`** mutates the row in
+place and regenerates all three committed reports. The asymmetry with G.1 is deliberate:
+`matrix.yaml` is a **registry of current state**, not a log — `fr acceptance check` reads
+today's status, reports render today's status, and an append-only matrix would need
+compaction nobody asked for. Provenance lives in git history, which for a registry is the
+right place. Refuses an unknown id and an unknown status rather than creating a row — that is
+`add`'s job, and silently creating one on a typo'd id is how a row gets orphaned.
+
+**Not in scope:** a verb to add a phase to an existing plan. It is the same gap, recorded
+here so it is not rediscovered, but a plan grows through `fr plan create`/`rework` and
+reshaping that is a larger design question than these two.
+
 ## 4. Risks and mitigations
 
 | Risk | Mitigation |
@@ -300,6 +344,12 @@ exercise. These are owed after merge:
    Revert.
 5. **`fr harness parity` off a checkout.** Run it on a pod from the installed wheel; confirm
    render works and `--check` declines cleanly.
+6. **The §3.G verbs, on a real run.** On the next `/fr-goal`, resolve a finding with
+   `fr journal resolve` and confirm `fr journal check --scope plan` reaches clean — the gate
+   fr-goal §7 asks for, satisfied rather than reworded. Then flip a row with
+   `fr acceptance set-status` and confirm `fr acceptance check` stays green with no hand-edit
+   and all three reports in sync. These are CI-testable in the small, but the claim that the
+   gates are now *satisfiable in practice* is only settled by a run that satisfies them.
 
 ## Implementation Plans
 

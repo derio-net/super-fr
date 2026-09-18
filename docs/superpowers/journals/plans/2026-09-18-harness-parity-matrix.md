@@ -490,3 +490,34 @@ docs/explainers/01-fr-goal.md covers fr-goal's operator-gate mechanics at length
 ### p6-own-red-caught · finding [fixed] · A 4th, self-caused test failure appeared after the minor version bump and was fixed before completing the phase (phase 6)
 
 First full-suite run after bumping to 4.5.0 showed 4 failures, not the expected 3 pre-existing ones: tests/unit/test_plan_workflow_binding.py::test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4 went red. Root cause: the test hardcoded an explicit --fr-version ceiling of '<4.5.0', expecting it to be satisfied by the THEN-installed fr (4.4.0) -- fr.parser._enforce_fr_version reads importlib.metadata.version('fr') live, so the moment fr itself became 4.5.0 the plan it created failed its own version gate at parse-time verification (exit_code 1, not the expected 0), the same class of self-referential bug plan_cmd.py's own WORKFLOW_FR_VERSION comment already warns about for the 3.x->4.0.0 bump ('a ceiling would make every plan created on 4.0.0+ fr fail its own version gate'). Fixed by deriving the ceiling from fr.parser.INSTALLED_FR_VERSION (next minor) instead of a literal, so the test's actual claim -- an explicit narrow floor-4 constraint is accepted as-is -- stays true across every future version bump rather than breaking on this exact one. Re-ran the full suite after the fix: back to exactly the 3 known-local failures (test_run_workspace.py x2, test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable), no 4th. 3080 passed, 80 skipped, 92%/91.59% coverage (threshold 75%).
+
+<!-- fr:journal kind=finding scope=plan id=r6-x1 created=2026-09-18T19:18:31 phase=6 state=open -->
+### r6-x1 · finding [open] · SECOND instance of the same gap: the acceptance matrix documents a status lifecycle with no verb to move it (phase 6)
+
+My own phase-6 plan step told the executor 'fr acceptance add — re-adding the same --id is the documented update path'. That is FALSE, and it was my error: I conflated it with `fr journal add`, which IS idempotent on --id (AGENTS.md says so). Verified directly: `fr acceptance add --id harness-parity-declared ...` exits 2 with 'error: duplicate row id'.
+
+Worse, `fr acceptance --help` shows no verb that can flip a status at all — status/summary/check/report/add/init/backfill/digest, and `add`'s own help reads 'Append a schema-validated row (agents never hand-edit YAML shapes)'. So .claude/rules/acceptance-matrix.md's central instruction — 'Statuses move EXPLICITLY, never silently: not-implemented -> skipped -> ci/scheduled' — has no tool to move them with, and the only available path is the hand-edit that `add`'s own help forbids. The executor took it (following repo precedent commit 1a5929d) and regenerated all three reports; `fr acceptance check` gates the drift, so the result is correct. But it had to break a stated discipline to obey a stated rule.
+
+This is the SECOND instance of one shape in this PR, after r5-journal-gate: a documented state transition with no command to perform it, so the discipline survives only by hand-editing. Both belong in the same follow-up — `fr acceptance set-status` and `fr journal resolve`. Out of scope here (#436 is harness parity), recorded so the PR body can say it rather than leave the hand-edit unexplained.
+
+<!-- fr:journal kind=discovery scope=plan id=r6-explainer-isolated created=2026-09-18T19:18:31 phase=6 -->
+### r6-explainer-isolated · discovery · The explainers rule's 'run from /' mitigation is insufficient — --isolated is what actually works (phase 6)
+
+The rule .claude/rules/explainers-currency.md says to run the renderer from / because `uv run --no-project --with` leaks the project venv's pygments in and rewrites every code block. Phase 6 followed it and the unmodified page STILL diverged: the executor root-caused past the rule's stated cause to a machine-global pygments under homebrew's python3.14 site-packages, which `uv run --no-project` picks up regardless of cwd. `--isolated` fixes it, verified by a byte-identical re-render of the unmodified page BEFORE trusting the renderer — which is exactly the check the rule prescribes, doing its job.
+
+The rule's own procedure is therefore incomplete on this machine class. Worth an addendum: `uv run --isolated --no-project --with markdown --with pyyaml python ...`. Not amended here only because the rule is a repo-local doc and this PR's docs work is already done; carrying it as a named follow-up.
+
+<!-- fr:journal kind=discovery scope=plan id=norefactor-P7.T1 created=2026-09-18T19:24:40 phase=7 -->
+### norefactor-P7.T1 · discovery · no-refactor-because P7.T1 (phase 7)
+
+Same shape as phases 1-5: this phase's cleanup is collected into its own dedicated REFACTOR task, P7.T4, which is the form fr-plan's rules sanction for larger cleanups. P7.T4.S1 names the specific candidate — if resolve and add grow parallel writers, give them one — and the quality gate runs once at P7.T4.S3 rather than three or four times per phase for no extra signal.
+
+<!-- fr:journal kind=discovery scope=plan id=norefactor-P7.T2 created=2026-09-18T19:24:40 phase=7 -->
+### norefactor-P7.T2 · discovery · no-refactor-because P7.T2 (phase 7)
+
+Same shape as phases 1-5: this phase's cleanup is collected into its own dedicated REFACTOR task, P7.T4, which is the form fr-plan's rules sanction for larger cleanups. P7.T4.S1 names the specific candidate — if resolve and add grow parallel writers, give them one — and the quality gate runs once at P7.T4.S3 rather than three or four times per phase for no extra signal.
+
+<!-- fr:journal kind=discovery scope=plan id=norefactor-P7.T3 created=2026-09-18T19:24:40 phase=7 -->
+### norefactor-P7.T3 · discovery · no-refactor-because P7.T3 (phase 7)
+
+Same shape as phases 1-5: this phase's cleanup is collected into its own dedicated REFACTOR task, P7.T4, which is the form fr-plan's rules sanction for larger cleanups. P7.T4.S1 names the specific candidate — if resolve and add grow parallel writers, give them one — and the quality gate runs once at P7.T4.S3 rather than three or four times per phase for no extra signal.

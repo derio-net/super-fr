@@ -51,6 +51,33 @@ non-goals rather than letting a reader assume otherwise.
 | 4 | Gate provenance: `answered_by`, stamp bump, migration | hard | 1 |
 | 5 | Degrade loudly: detection, the notice, PR body, phase-sequence | standard | 1, 4 |
 | 6 | Ship: install wiring, acceptance flips, docs, version bump, full gate | standard | 2, 3, 5 |
+| 7 | The verbs those lifecycles never had: `fr journal resolve`, `fr acceptance set-status` | hard | 6 |
+
+**Phase 7 was added after phase 6, at the operator's request, and it is only
+half-related — the PR body says so rather than implying #436 asked for it.**
+Building phases 1-6 kept hitting the same shape the spec is about: a documented
+state transition with no command to perform it. `fr journal add --id <existing>
+--state fixed` is a silent no-op, so `fr journal check` can never return clean
+once any finding is opened - and fr-goal section 7 required exactly that before
+`deliver`, so phase 5 had to reword the gate instead of satisfying it. `fr
+acceptance add` refuses a duplicate id and nothing flips a status, while its own
+help says *"agents never hand-edit YAML shapes"* - so phase 6 hand-edited
+`matrix.yaml` to obey `acceptance-matrix.md`, breaking one stated discipline to
+keep another. A third instance surfaced writing this very phase: there is no
+verb to add a phase to a plan either, so `07.yaml` was written by hand.
+
+Two of the three bend *this PR's own* delivery gates, which is the argument for
+fixing them here rather than filing them. Spec section 3.G carries the design,
+including why the two verbs are deliberately asymmetric: the journal is an
+append-only audit log, so a finding is resolved by a *record* that `check` folds
+into an effective state; the matrix is a registry of current state, so a row is
+moved in place and provenance lives in git.
+
+The proof is a dogfood. P7.T2.S3 resolves the six findings in this plan's own
+journal that are already fixed but unmarkable, and P7.T4.S1 flips the phase's
+own two acceptance rows with the new command - replacing the hand-edit phase 6
+had to perform. This PR's delivery gate going from unsatisfiable to satisfied is
+the acceptance evidence.
 
 Phases 2, 3 and 4 all hang off phase 1 and off nothing else — they are three
 independent consumers of the same vocabulary, and keeping them independent is
