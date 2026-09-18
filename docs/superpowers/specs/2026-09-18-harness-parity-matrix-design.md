@@ -303,7 +303,9 @@ exercise. These are owed after merge:
 
 ## Implementation Plans
 
-- `docs/superpowers/plans/2026-09-18-harness-parity-matrix/`
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-18-harness-parity-matrix | `derio-net/super-fr` | `2026-09-18-harness-parity-matrix` | — |
 
 ## References
 

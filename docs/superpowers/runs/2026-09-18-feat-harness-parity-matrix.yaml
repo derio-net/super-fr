@@ -2,7 +2,7 @@ run: 2026-09-18-feat-harness-parity-matrix
 workflow: fr-goal@1
 branch: feat/harness-parity-matrix
 started: '2026-09-18T12:25:26+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -10,10 +10,11 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
   spec-review:
-    state: running
-    at: '2026-09-18T12:51:18+00:00'
+    state: done
+    at: '2026-09-18T12:53:03+00:00'
   plan:
-    state: pending
+    state: running
+    at: '2026-09-18T12:53:12+00:00'
   plan-review:
     state: pending
   implement:

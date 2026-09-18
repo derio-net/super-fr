@@ -1,0 +1,119 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Gate provenance — answered_by, the run-kind stamp bump, and its migration
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - harness-gate-provenance
+tasks:
+- number: 1
+  title: RED — the model change and its versioning obligations
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: extend tests/unit/test_run_cmd.py (or a sibling) for
+      StepRecord.answered_by: Literal["operator","agent"] | None = None,
+      set ONLY when a gate is cleared — the same shape as the existing
+      `gate: cleared` field, which is likewise an authorization rather
+      than a lifecycle position. Assert: a non-gate resolve leaves it
+      None; an omitted --answered-by records "agent" (the conservative
+      default, so nothing is silently upgraded to "a human answered");
+      an explicit --answered-by operator records "operator".
+  - id: P4.T1.S2
+    text: |-
+      RED: add tests for the artifact-versioning obligations this incurs,
+      per .claude/rules/artifact-versioning.md. RunState is frozen +
+      extra="forbid", so a new key makes the file unparseable by the fr
+      that wrote it: assert RunState accepts an optional defaulted
+      `schema_version: int = 1`, that fr.artifacts.registry's `run`
+      current_version has moved, and that a migration from the old version
+      to the new is REGISTERED in MIGRATIONS via a module imported by
+      fr/artifacts/__init__.py (a migration nobody imports never runs).
+      Confirm red.
+- number: 2
+  title: GREEN — model, CLI option, stamp, migration
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      GREEN: add `schema_version: int = 1` to RunState and
+      `answered_by` to StepRecord. Add --answered-by to
+      `fr run resolve` (choices operator|agent, default agent), wired only
+      on the gate-clearing path in run_cmd.py's resolve. Bump the `run`
+      kind's current_version in packages/fr/src/fr/artifacts/registry.py
+      and NOWHERE else. Register the SchemaMigration and ensure its module
+      is imported by fr/artifacts/__init__.py. Confirm the Task 1 tests
+      green.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: run `fr migrate artifacts --yes` in this worktree and commit
+      the result. .claude/rules/artifact-versioning.md is explicit: the
+      moment a kind's current_version moves, every live artifact of that
+      kind in THIS repo is stale, and acceptance-report.yml runs
+      `fr acceptance check` with CI=true where the gate refuses. Dogfood
+      the migration; do not hand-edit the artifacts. Then run
+      `fr validate artifacts`, which the CI validate-artifacts job runs.
+- number: 3
+  title: RED/GREEN — `fr run check` reports without changing its exit code
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: test that `fr run check` on a run with a gate cleared
+      answered_by=agent PRINTS that fact naming the step, and EXITS 0.
+      The exit code is the contract under test: `fr run check` is today a
+      narrow freshness gate ("non-zero when the cursor sits on a failed
+      step"), and making an agent-cleared gate non-zero would turn every
+      legitimate non-interactive dispatch red — the hard-refusal option
+      the operator explicitly rejected (spec §3.D.3). Also test that a
+      failed step still exits non-zero, so the existing contract is
+      untouched.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: implement the report in run_cmd.py's check. Confirm both
+      tests green and the pre-existing `fr run check` tests still pass.
+- number: 4
+  title: REFACTOR + quality gate
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      REFACTOR: keep the provenance read in ONE helper both `check` and
+      (phase 5) the PR-body composer call, so the two cannot diverge on
+      what counts as agent-cleared. Re-run ruff + mypy + pytest +
+      `fr validate artifacts`. Commit.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

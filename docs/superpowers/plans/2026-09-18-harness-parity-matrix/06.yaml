@@ -1,0 +1,125 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Ship it — install wiring, acceptance flips, docs, version bump, full gate
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 2
+  - 3
+  - 5
+  tracking_issue: null
+  acceptance:
+  - harness-parity-declared
+  - harness-parity-derived-check
+  - harness-tool-neutrality
+  - harness-gate-degrades-loudly
+  - harness-gate-provenance
+tasks:
+- number: 1
+  title: Install wiring and acceptance status flips
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Confirm nothing new needs copying by scripts/install.sh: parity.yaml
+      ships INSIDE the fr wheel (src/fr/), and `fr harness parity` is a
+      CLI surface, so — exactly like shipped workflow manifests — it is
+      NOT mirrored to OpenCode or Hermes. Add a one-line assertion to the
+      relevant install test if one is cheap; if genuinely nothing is owed,
+      record that in the journal rather than inventing a test.
+  - id: P6.T1.S2
+    text: |-
+      Flip all five acceptance rows from not-implemented to ci with
+      `fr acceptance add` (re-adding the same --id is the documented
+      update path), each --level unit=super-fr:<the test file that now
+      proves it>. Then `fr acceptance report --deterministic` to
+      regenerate ALL THREE committed renderings (report_local.html,
+      report_linked.html, report_linked.md) and commit them — drift is
+      gated by `fr acceptance check` itself. Run `fr acceptance check`.
+  - id: P6.T1.S3
+    text: |-
+      Run `fr acceptance check --added-since origin/main` and keep the
+      output: fr-goal §7 requires rows-added-since-brainstorm in the PR
+      body, each with a one-line defense.
+- number: 2
+  title: Docs — AGENTS.md, the repo rule mirror, explainers currency
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Add a short `fr.harness` entry to AGENTS.md's "Repo shape" list
+      (siblinged with fr/workflow and fr.capabilities, since parity.yaml
+      is a fourth closed vocabulary) and a line to "Standing conventions
+      enforced by tests, not just prose" for the two new tripwires. Keep
+      it a pointer, not a restatement — that section explicitly is one.
+  - id: P6.T2.S2
+    text: |-
+      Check .claude/rules/explainers-currency.md's triggers against this
+      PR: a new CLI verb (`fr harness parity`) and a minor version bump
+      BOTH trigger it. Read docs/explainers/*.md; if any page describes
+      fr-goal's operator touchpoint or the harness story, update the .md
+      AND regenerate the .html per that rule — running the renderer from
+      `/`, never inside the worktree, because `uv run --no-project --with`
+      leaks the project venv's pygments in and rewrites every code block.
+      Re-render the UNMODIFIED .md first and confirm byte-identity before
+      trusting the renderer. If no page is affected, say so explicitly in
+      the PR body, which the rule accepts.
+- number: 3
+  title: Version bump and the full gate
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      Bump the version with `uv run --no-project python scripts/bump-version.py minor`
+      — MINOR, not patch: a new subcommand plus a new mandatory behaviour
+      (the gate notice) is the documented minor trigger in AGENTS.md.
+      Never hand-edit the version-bearing manifests. Commit the changed
+      manifests and uv.lock together.
+  - id: P6.T3.S2
+    text: |-
+      Run the WHOLE CI gate locally and keep the output for the PR body:
+      `uv run ruff format packages/ tests/`;
+      `uv run ruff check packages/ tests/`;
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`;
+      `uv run pytest` (full, which also gates cov-fail-under=75 — not
+      --no-cov here);
+      `uv run --no-project python scripts/bump-version.py --check`;
+      `fr validate artifacts`; `fr acceptance check`;
+      `fr harness parity --check`;
+      `uv run scripts/sync-opencode.py --check`;
+      `uv run scripts/sync-hermes.py --check`;
+      `cd packages/fr-opencode-plugin && bun test`.
+      Every one green before deliver. A red one is a phase-6 finding, not
+      a PR-body footnote.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
