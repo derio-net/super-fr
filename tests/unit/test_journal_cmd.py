@@ -1,6 +1,6 @@
 """Unit tests for the `fr journal` CLI (Phase 2): add / render / check.
 
-Spec §A: append-only writes, idempotency on `--id`, PR-body render sections,
+Spec §A: append-only writes, duplicate-id refusal, PR-body render sections,
 and a freshness `check` that fails closed on parse but where `render` fails
 open.
 """
@@ -108,31 +108,43 @@ class TestAdd:
         entries = parse_journal(_journal_file(root, "S").read_text())
         assert [e.id for e in entries] == ["d1", "d2"]
 
-    def test_add_idempotent_on_id(self, tmp_path: Path, monkeypatch) -> None:
+    def test_duplicate_add_fails_loudly_without_writing(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
-        for _ in range(2):
-            runner.invoke(
-                app,
-                [
-                    "journal",
-                    "add",
-                    "--scope",
-                    "plan",
-                    "--slug",
-                    "S",
-                    "--kind",
-                    "discovery",
-                    "--title",
-                    "one",
-                    "--id",
-                    "d1",
-                ],
-            )
-        from fr.journal.model import parse_journal
+        first = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "one",
+            "--id",
+            "d1",
+        )
+        assert first.exit_code == 0, first.output
+        before = _journal_file(root, "S").read_text()
 
-        entries = parse_journal(_journal_file(root, "S").read_text())
-        assert [e.id for e in entries] == ["d1"]
+        duplicate = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "two",
+            "--id",
+            "d1",
+        )
+
+        assert duplicate.exit_code == 2
+        assert "d1" in duplicate.output
+        assert "fr journal resolve" in duplicate.output
+        assert _journal_file(root, "S").read_text() == before
 
     def test_finding_requires_state_via_cli(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
@@ -333,6 +345,27 @@ class TestCheck:
         jf.write_text("<!-- fr:journal broken header -->\n### x\n\nbody\n")
         res = runner.invoke(app, ["journal", "render", "--scope", "plan", "--slug", "S"])
         assert res.exit_code == 0
+
+
+class TestScopeValidation:
+    def test_every_journal_command_rejects_invalid_scope_cleanly(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        commands = (
+            ["add", "--kind", "decision", "--title", "x"],
+            ["resolve", "--id", "f1", "--state", "fixed", "--note", "x"],
+            ["render"],
+            ["check"],
+            ["handoff", "--phase", "1"],
+        )
+
+        for command in commands:
+            res = runner.invoke(app, ["journal", *command, "--scope", "bogus", "--slug", "S"])
+            assert res.exit_code == 2, res.output
+            assert "invalid journal scope" in res.output
+            assert "Traceback" not in res.output
 
 
 class TestReadsResolveArchivedLocation:
@@ -663,6 +696,23 @@ class TestResolve:
         )
         assert res.exit_code != 0
         assert "typo" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    def test_resolve_refuses_a_journal_with_duplicate_ids_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        entry = _journal_file(root, "S").read_text().split("# Journal: S\n\n", 1)[1]
+        _journal_file(root, "S").write_text(f"# Journal: S\n\n{entry}\n{entry}")
+        before = _journal_file(root, "S").read_text()
+
+        res = self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "f1", "--state", "fixed", "--note", "why"
+        )
+
+        assert res.exit_code == 2
+        assert "duplicate journal entry id" in res.output
         assert _journal_file(root, "S").read_text() == before
 
     def test_resolve_on_a_journal_that_does_not_exist_is_refused(
