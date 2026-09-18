@@ -101,10 +101,12 @@ def load_matrix(path: Path) -> Matrix:
     """Parse + validate `matrix.yaml`; every failure is an AcceptanceError."""
     import yaml
 
+    from fr.artifacts.structure import _StrictLoader
+
     if not path.exists():
         raise AcceptanceError(f"no acceptance matrix at {path}")
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.load(path.read_text(), Loader=_StrictLoader) or {}  # noqa: S506
     except yaml.YAMLError as e:
         raise AcceptanceError(f"matrix is not valid YAML: {e}") from e
     if not isinstance(data, dict):

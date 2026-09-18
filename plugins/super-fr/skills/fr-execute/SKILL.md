@@ -6,7 +6,6 @@ description: >
 ---
 
 # fr-execute
-
 Implements a single phase from a plan.
 
 **Announce at start:** "I'm using fr-execute to implement this phase."
@@ -70,6 +69,9 @@ take the PR out of draft.
    fr plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state - --note "<reason>"
    ```
 
+   Record a new finding with `fr journal add`; resolve it with `fr journal update
+   --scope plan --slug <plan-slug> --id <id> --state fixed|refuted [--note <reason>]`.
+   This preserves its identity and creation context; duplicate `add --id` is rejected.
 4. **Mark the phase complete (after every step is ticked):**
    ```bash
    fr plan edit <plan-dir> --complete-phase N
@@ -100,14 +102,12 @@ take the PR out of draft.
    (or let the runner) to close.
 
 ## Constraints
-
 - Don't touch other phases. One phase = one PR, except fr-goal LOCAL mode
   (step 5's caveat) — never open a per-phase PR there.
 - Stop if blocked — report what's missing.
 - Step IDs: `P<n>.T<n>.S<n>`.
 
 ## v1 plan migration
-
 If you encounter a `.md` plan file (not a folder), it's a v1 plan that needs
 migration to the v2 plan-as-folder format before any execution:
 

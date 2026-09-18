@@ -248,6 +248,82 @@ class TestRoundTrip:
         with pytest.raises(JournalParseError):
             parse_journal(bad)
 
+    @pytest.mark.parametrize("field", ["unknown=value", "state=open state=fixed"])
+    def test_unknown_or_duplicate_header_field_raises(self, field: str) -> None:
+        from fr.journal.model import JournalParseError, parse_journal
+
+        text = (
+            f"<!-- fr:journal kind=finding scope=plan id=x created=2026-07-22T10:00:00 "
+            f"state=open {field} -->\n### x · finding [open] · title\n"
+        )
+        with pytest.raises(JournalParseError):
+            parse_journal(text)
+
+    def test_heading_is_derived_from_its_own_entry_block(self) -> None:
+        from fr.journal.model import parse_journal, serialize_entry
+
+        entry = _entry(id="e1", title="actual")
+        text = "### e1 · decision · preamble trap\n\n" + serialize_entry(entry)
+        assert parse_journal(text)[0].title == "actual"
+
+    def test_legacy_finding_state_heading_is_readable_but_not_rewrite_safe(self) -> None:
+        from fr.journal.model import parse_journal
+
+        text = (
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-14T22:03:02 "
+            "phase=1 state=fixed -->\n"
+            "### f1 · finding [open] · legacy resolved finding (phase 1)\n"
+        )
+        entry = parse_journal(text)[0]
+        assert entry.state == "fixed"
+        assert entry.title == "legacy resolved finding"
+        assert not entry._rewrite_safe
+
+    @pytest.mark.parametrize(
+        "heading",
+        [
+            "not a heading",
+            "### e1 · finding [open] · mismatched kind",
+            "### e1 · decision · missing phase",
+        ],
+    )
+    def test_missing_or_incompatible_heading_raises(self, heading: str) -> None:
+        from fr.journal.model import JournalParseError, parse_journal
+
+        text = (
+            "<!-- fr:journal kind=decision scope=plan id=e1 created=2026-07-22T10:00:00 "
+            "phase=2 -->\n"
+            f"{heading}\n"
+        )
+        with pytest.raises(JournalParseError, match="heading"):
+            parse_journal(text)
+
+    def test_truncated_delimiter_after_valid_entry_raises(self) -> None:
+        from fr.journal.model import JournalParseError, parse_journal, serialize_entry
+
+        valid = serialize_entry(_entry(id="valid", title="first"))
+        truncated = "<!-- fr:journal kind=finding scope=plan id=truncated\nbody survives parsing"
+        with pytest.raises(JournalParseError, match="unterminated journal delimiter"):
+            parse_journal(valid + "\n" + truncated)
+
+    def test_invalid_entry_fields_raise_parse_error(self) -> None:
+        from fr.journal.model import JournalParseError, parse_journal
+
+        bad = (
+            "<!-- fr:journal kind=finding scope=plan id=x created=2026-07-22T10:00:00 "
+            "state=invalid -->\n### x · finding [invalid] · bad\n"
+        )
+        with pytest.raises(JournalParseError):
+            parse_journal(bad)
+
+    def test_duplicate_ids_raise_parse_error(self) -> None:
+        from fr.journal.model import JournalParseError, parse_journal, serialize_entry
+
+        entry = _entry(id="duplicate", title="first")
+        duplicate = _entry(id="duplicate", title="second")
+        with pytest.raises(JournalParseError, match="duplicate journal entry id"):
+            parse_journal(serialize_entry(entry) + "\n" + serialize_entry(duplicate))
+
     def test_body_starting_with_heading_round_trips(self) -> None:
         """F2: a body whose first line is a `### ...` markdown heading survives."""
         from fr.journal.model import parse_journal, serialize_entry

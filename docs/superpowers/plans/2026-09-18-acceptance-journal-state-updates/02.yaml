@@ -1,0 +1,41 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Journal finding lifecycle mutations
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - journal-finding-state-update
+tasks:
+- number: 1
+  title: Add safe finding update command
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write failing CLI tests for state updates, note appending, clean checks, unknown/non-finding IDs, archived journals, and duplicate add rejection.
+  - id: P2.T1.S2
+    text: |-
+      Implement journal update and replace duplicate add's silent no-op with an actionable error.
+  - id: P2.T1.S3
+    text: |-
+      Refactor the journal rewrite only as needed, update canonical agent guidance, sync generated mirrors, and run focused journal plus skill-sync tests.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T09:29:44+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-18T09:29:54+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-18T09:29:54+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T09:30:39+00:00'
+    note: null
+    observed_prs: []

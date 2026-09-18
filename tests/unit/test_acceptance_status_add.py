@@ -195,6 +195,333 @@ def test_add_accumulates_levels_and_origins(
     assert new.levels["unit"] and new.levels["api"]
 
 
+# ── T2b: lifecycle mutations ───────────────────────────────────────────────
+
+
+def test_set_status_preserves_header_and_appends_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    header = "# hand-written header\norg: derio-net\nrepo: own\nrows:\n"
+    root = make_repo(tmp_path, row(id="promote", status="skipped"), header=header)
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    before = matrix_path.read_text()
+    result = _invoke(
+        root,
+        monkeypatch,
+        "set-status",
+        "promote",
+        "--status",
+        "ci",
+        "--note",
+        "unit evidence landed",
+    )
+    assert result.exit_code == 0, result.output
+    after = matrix_path.read_text()
+    assert after.startswith("# hand-written header\norg: derio-net\nrepo: own\nrows:\n")
+    assert 'status: "ci"' in after
+    from fr.acceptance.model import load_matrix
+
+    assert load_matrix(matrix_path).rows[0].notes == "n\nunit evidence landed"
+    assert after != before
+
+
+def test_acceptance_mutations_regenerate_report_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(id="r1", status="skipped"))
+    d = root / "docs" / "acceptance"
+    status = _invoke(root, monkeypatch, "set-status", "r1", "--status", "ci")
+    assert status.exit_code == 0, status.output
+    level = _invoke(root, monkeypatch, "add-level", "r1", "--level", "api=own:tests/test_a.py")
+    assert level.exit_code == 0, level.output
+    names = ("report_local.html", "report_linked.html", "report_linked.md")
+    assert all((d / name).exists() for name in names)
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+def test_add_level_deduplicates_retries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row(id="r1"))
+    args = ("add-level", "r1", "--level", "api=own:tests/test_a.py")
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    from fr.acceptance.model import load_matrix
+
+    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    assert matrix.rows[0].levels["api"] == ("own:tests/test_a.py",)
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    (
+        '      unit: ["own:tests/test_a.py"]  # keep flow comment\n',
+        (
+            "      unit:  # keep block comment\n"
+            '        - "own:tests/test_a.py"  # keep evidence comment\n'
+        ),
+    ),
+)
+def test_add_level_extends_existing_evidence_sequence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence: str
+) -> None:
+    rows = f"""\
+  - id: r1
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+    levels:
+{evidence}    status: ci
+    notes: "n"
+"""
+    root = make_repo(tmp_path, rows)
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    result = _invoke(root, monkeypatch, "add-level", "r1", "--level", "unit=own:tests/test_b.py")
+    assert result.exit_code == 0, result.output
+    after = matrix_path.read_text()
+    assert "# keep" in after
+    from fr.acceptance.model import load_matrix
+
+    assert load_matrix(matrix_path).rows[0].levels["unit"] == (
+        "own:tests/test_a.py",
+        "own:tests/test_b.py",
+    )
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "levels",
+    (
+        '    levels: {unit: ["own:tests/test_a.py"]}  # keep flow mapping comment\n',
+        "    levels:\n      unit: []  # keep empty sequence comment\n",
+    ),
+)
+def test_add_level_supports_flow_mapping_and_empty_sequence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, levels: str
+) -> None:
+    rows = f"""\
+  - id: r1
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+{levels}    status: ci
+    notes: "n"
+"""
+    root = make_repo(tmp_path, rows)
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    result = _invoke(root, monkeypatch, "add-level", "r1", "--level", "unit=own:tests/test_b.py")
+    assert result.exit_code == 0, result.output
+    assert "# keep" in matrix_path.read_text()
+    from fr.acceptance.model import load_matrix
+
+    assert (
+        load_matrix(matrix_path).rows[0].levels["unit"]
+        == (
+            "own:tests/test_a.py",
+            "own:tests/test_b.py",
+        )
+        if "test_a" in levels
+        else ("own:tests/test_b.py",)
+    )
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+@pytest.mark.parametrize(
+    ("prefix", "duplicate", "args"),
+    (
+        ("", "    status: skipped\n    status: ci\n", ("set-status", "r1", "--status", "ci")),
+        (
+            "",
+            (
+                "    levels:\n"
+                '      unit: ["own:tests/test_a.py"]\n'
+                '      unit: ["own:tests/test_b.py"]\n'
+            ),
+            ("add-level", "r1", "--level", "api=own:tests/test_b.py"),
+        ),
+        ("repo: duplicate\n", "    status: ci\n", ("set-status", "r1", "--status", "ci")),
+    ),
+)
+def test_lifecycle_mutations_reject_duplicate_yaml_keys_without_changing_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    prefix: str,
+    duplicate: str,
+    args: tuple[str, ...],
+) -> None:
+    rows = f"""\
+  - id: r1
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+{duplicate}    notes: "n"
+"""
+    root = make_repo(tmp_path, rows, header=f"org: derio-net\n{prefix}repo: own\nrows:\n")
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    before = matrix_path.read_text()
+    result = _invoke(root, monkeypatch, *args)
+    assert result.exit_code == 1
+    assert "duplicate key" in result.output
+    assert matrix_path.read_text() == before
+
+
+def test_lifecycle_mutations_preserve_row_comments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = """\
+  # before row
+  - id: r1  # identity
+    capability: "Cap"  # grouping
+    acceptance: "Operator can do X"  # outcome
+    origin: ["own:docs/superpowers/specs/s.md"]  # design
+    levels:  # evidence
+      unit: ["own:tests/test_a.py"]  # existing test
+    # status rationale
+    status: skipped  # awaiting coverage
+    notes: "n"  # prior evidence
+  # after row
+"""
+    root = make_repo(tmp_path, rows)
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    status = _invoke(root, monkeypatch, "set-status", "r1", "--status", "ci", "--note", "landed")
+    assert status.exit_code == 0
+    level = _invoke(root, monkeypatch, "add-level", "r1", "--level", "api=own:tests/test_a.py")
+    assert level.exit_code == 0
+    after = matrix_path.read_text()
+    for comment in (
+        "# before row",
+        "# identity",
+        "# grouping",
+        "# outcome",
+        "# design",
+        "# evidence",
+        "# existing test",
+        "# status rationale",
+        "# awaiting coverage",
+        "# prior evidence",
+        "# after row",
+    ):
+        assert comment in after
+    from fr.acceptance.model import load_matrix
+
+    updated = load_matrix(matrix_path).rows[0]
+    assert updated.status == "ci"
+    assert updated.notes == "n\nlanded"
+    assert updated.levels["api"] == ("own:tests/test_a.py",)
+
+
+def test_add_level_rejects_aliased_levels_without_changing_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = """\
+  - id: source
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+    levels: &levels
+      unit: ["own:tests/test_a.py"]
+    status: ci
+    notes: "n"
+  - id: target
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+    levels: *levels
+    status: ci
+    notes: "n"
+"""
+    root = make_repo(tmp_path, rows)
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    before = matrix_path.read_text()
+    result = _invoke(root, monkeypatch, "add-level", "target", "--level", "api=own:tests/test_a.py")
+    assert result.exit_code == 2
+    assert "alias" in result.output.lower()
+    assert matrix_path.read_text() == before
+
+
+@pytest.mark.parametrize("levels", ("", "    levels: {}\n"))
+def test_add_level_materializes_omitted_or_empty_levels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, levels: str
+) -> None:
+    rows = f"""\
+  - id: r1
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+{levels}    # keep this neighboring comment
+    status: ci
+    notes: "n"
+"""
+    root = make_repo(tmp_path, rows)
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    result = _invoke(root, monkeypatch, "add-level", "r1", "--level", "api=own:tests/test_a.py")
+    assert result.exit_code == 0, result.output
+    assert "# keep this neighboring comment" in matrix_path.read_text()
+    from fr.acceptance.model import load_matrix
+
+    assert load_matrix(matrix_path).rows[0].levels["api"] == ("own:tests/test_a.py",)
+
+
+def test_set_status_materializes_omitted_notes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = """\
+  - id: r1
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+    # keep this neighboring comment
+    status: skipped
+"""
+    root = make_repo(tmp_path, rows)
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    result = _invoke(root, monkeypatch, "set-status", "r1", "--status", "ci", "--note", "landed")
+    assert result.exit_code == 0, result.output
+    assert "# keep this neighboring comment" in matrix_path.read_text()
+    from fr.acceptance.model import load_matrix
+
+    updated = load_matrix(matrix_path).rows[0]
+    assert updated.status == "ci"
+    assert updated.notes == "landed"
+
+
+def test_set_status_render_failure_keeps_update(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.acceptance.report as report_mod
+
+    def boom(*_a: object, **_k: object) -> str:
+        raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(report_mod, "render_deterministic", boom)
+    root = make_repo(tmp_path, row(id="r1", status="skipped"))
+    result = _invoke(root, monkeypatch, "set-status", "r1", "--status", "ci")
+    assert result.exit_code == 0, result.output
+    assert "report" in result.output.lower()
+    from fr.acceptance.model import load_matrix
+
+    assert load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows[0].status == "ci"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("set-status", "missing", "--status", "ci"),
+        ("set-status", "r1", "--status", "not-ci"),
+        ("add-level", "missing", "--level", "unit=own:tests/test_a.py"),
+        ("add-level", "r1", "--level", "bad=own:tests/test_a.py"),
+        ("add-level", "r1", "--level", "unit=bad-ref"),
+    ],
+)
+def test_lifecycle_mutations_reject_invalid_input_without_changing_matrix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: tuple[str, ...]
+) -> None:
+    root = make_repo(tmp_path, row(id="r1"))
+    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    before = matrix_path.read_text()
+    result = _invoke(root, monkeypatch, *args)
+    assert result.exit_code == 2, result.output
+    assert matrix_path.read_text() == before
+
+
 @pytest.mark.parametrize(
     "flag,value",
     [

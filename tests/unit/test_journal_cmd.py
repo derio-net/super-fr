@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.cli import app
 from typer.testing import CliRunner
 
@@ -108,31 +109,32 @@ class TestAdd:
         entries = parse_journal(_journal_file(root, "S").read_text())
         assert [e.id for e in entries] == ["d1", "d2"]
 
-    def test_add_idempotent_on_id(self, tmp_path: Path, monkeypatch) -> None:
+    def test_add_duplicate_id_fails_without_rewriting(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
-        for _ in range(2):
-            runner.invoke(
-                app,
-                [
-                    "journal",
-                    "add",
-                    "--scope",
-                    "plan",
-                    "--slug",
-                    "S",
-                    "--kind",
-                    "discovery",
-                    "--title",
-                    "one",
-                    "--id",
-                    "d1",
-                ],
-            )
-        from fr.journal.model import parse_journal
+        args = [
+            "journal",
+            "add",
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "one",
+            "--id",
+            "d1",
+        ]
+        assert runner.invoke(app, args).exit_code == 0
+        path = _journal_file(root, "S")
+        before = path.read_text()
 
-        entries = parse_journal(_journal_file(root, "S").read_text())
-        assert [e.id for e in entries] == ["d1"]
+        res = runner.invoke(app, args)
+
+        assert res.exit_code == 2
+        assert "fr journal update" in res.output
+        assert path.read_text() == before
 
     def test_finding_requires_state_via_cli(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
@@ -333,6 +335,454 @@ class TestCheck:
         jf.write_text("<!-- fr:journal broken header -->\n### x\n\nbody\n")
         res = runner.invoke(app, ["journal", "render", "--scope", "plan", "--slug", "S"])
         assert res.exit_code == 0
+
+
+class TestUpdate:
+    def _add_finding(self, root: Path) -> None:
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "add",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--kind",
+                "finding",
+                "--title",
+                "a finding",
+                "--body",
+                "original evidence",
+                "--phase",
+                "2",
+                "--id",
+                "f1",
+                "--state",
+                "open",
+            ],
+        )
+        assert res.exit_code == 0, res.output
+
+    def test_update_rewrites_finding_state_and_appends_note(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._add_finding(root)
+        path = _journal_file(root, "S")
+        path.write_text(
+            "# Journal: S\n\nPreamble survives.\n\n" + path.read_text().split("\n\n", 1)[1]
+        )
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+                "--note",
+                "resolved by regression",
+            ],
+        )
+
+        assert res.exit_code == 0, res.output
+        text = path.read_text()
+        assert text.startswith("# Journal: S\n\nPreamble survives.\n\n")
+        assert "id=f1 created=" in text
+        assert "phase=2 state=fixed" in text
+        assert "### f1 · finding [fixed] · a finding (phase 2)" in text
+        from fr.journal.model import parse_journal
+
+        entry = parse_journal(text)[0]
+        assert entry.body == "original evidence\n\nresolved by regression"
+        assert (
+            runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"]).exit_code
+            == 0
+        )
+
+    def test_update_rejects_invalid_target_or_journal_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._add_finding(root)
+        path = _journal_file(root, "S")
+        before = path.read_text()
+        runner.invoke(
+            app,
+            [
+                "journal",
+                "add",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--kind",
+                "decision",
+                "--title",
+                "a decision",
+                "--id",
+                "d1",
+            ],
+        )
+        before_with_decision = path.read_text()
+
+        unknown = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "missing",
+                "--state",
+                "fixed",
+            ],
+        )
+        non_finding = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "d1",
+                "--state",
+                "fixed",
+            ],
+        )
+        assert unknown.exit_code == non_finding.exit_code == 2
+        assert path.read_text() == before_with_decision
+
+        invalid_state = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "invalid",
+            ],
+        )
+        assert invalid_state.exit_code == 2
+        assert path.read_text() == before_with_decision
+
+        path.write_text("<!-- fr:journal broken header -->\n")
+        malformed_before = path.read_text()
+        malformed = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+        assert malformed.exit_code == 2
+        assert path.read_text() == malformed_before
+        assert before != malformed_before
+
+    def test_update_rejects_invalid_entry_fields_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        path = _journal_file(root, "S")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+            "state=invalid -->\n### f1 · finding [invalid] · bad\n"
+        )
+        before = path.read_text()
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+
+        assert res.exit_code == 2
+        assert path.read_text() == before
+
+    def test_update_rejects_duplicate_source_ids_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        path = _journal_file(root, "S")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        entry = (
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+            "state=open -->\n### f1 · finding [open] · finding\n"
+        )
+        path.write_text(entry + "\n" + entry)
+        before = path.read_text()
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+
+        assert res.exit_code == 2
+        assert "duplicate journal entry id" in res.output
+        assert path.read_text() == before
+
+    @pytest.mark.parametrize(
+        "bad_header",
+        ["unexpected=value", "state=open state=fixed"],
+    )
+    def test_update_rejects_ambiguous_header_without_writing(
+        self, tmp_path: Path, monkeypatch, bad_header: str
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        path = _journal_file(root, "S")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+            f"state=open {bad_header} -->\n### f1 · finding [open] · finding\n"
+        )
+        before = path.read_text()
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+
+        assert res.exit_code == 2
+        assert path.read_text() == before
+
+    def test_update_rejects_bad_entry_heading_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        path = _journal_file(root, "S")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "### f1 · finding [open] · preamble trap\n\n"
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+            "state=open -->\n### f1 · decision · wrong kind\n"
+        )
+        before = path.read_text()
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+
+        assert res.exit_code == 2
+        assert "heading does not match" in res.output
+        assert path.read_text() == before
+
+    def test_update_refuses_legacy_state_heading_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        path = _journal_file(root, "S")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-14T22:03:02 "
+            "state=fixed -->\n### f1 · finding [open] · legacy resolved finding\n"
+        )
+        before = path.read_text()
+
+        update = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+        render = runner.invoke(app, ["journal", "render", "--scope", "plan", "--slug", "S"])
+        check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+
+        assert update.exit_code == 2
+        assert "cannot be safely rewritten" in update.output
+        assert path.read_text() == before
+        assert render.exit_code == check.exit_code == 0
+        assert "[fixed]" in render.output
+
+    def test_update_rejects_truncated_delimiter_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._add_finding(root)
+        path = _journal_file(root, "S")
+        path.write_text(
+            path.read_text()
+            + "\n<!-- fr:journal kind=finding scope=plan id=truncated\n"
+            + "content that must not be dropped\n"
+        )
+        before = path.read_text()
+
+        update = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+        render = runner.invoke(app, ["journal", "render", "--scope", "plan", "--slug", "S"])
+        check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+
+        assert update.exit_code == 2
+        assert "unterminated journal delimiter" in update.output
+        assert path.read_text() == before
+        assert render.exit_code == 0
+        assert render.output == ""
+        assert check.exit_code == 2
+
+    def test_update_rejects_invalid_scope_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._add_finding(root)
+        path = _journal_file(root, "S")
+        before = path.read_text()
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "invalid",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+            ],
+        )
+
+        assert res.exit_code == 2
+        assert "invalid journal scope" in res.output
+        assert "KeyError" not in res.output
+        assert path.read_text() == before
+
+    def test_update_writes_archived_journal_when_it_is_the_read_resolution(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import archived_journal_path
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        path = archived_journal_path(root, "plan", "S")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "# Archived\n\n<!-- fr:journal kind=finding scope=plan id=f1 "
+            "created=2026-09-18T00:00:00 state=open -->\n"
+            "### f1 · finding [open] · old finding\n\nold evidence\n"
+        )
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "refuted",
+            ],
+        )
+
+        assert res.exit_code == 0, res.output
+        assert "state=refuted" in path.read_text()
+        assert not _journal_file(root, "S").exists()
 
 
 class TestReadsResolveArchivedLocation:

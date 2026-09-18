@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, PrivateAttr, ValidationError, model_validator
 
 JournalKind = Literal[
     "decision",
@@ -78,6 +78,9 @@ class JournalEntry(BaseModel):
     body: str = ""
     # Present ONLY on `finding` entries (fixed | refuted | open).
     state: FindingState | None = None
+    # Legacy headings may retain an old finding state. Read-only consumers may
+    # use them, but a canonical full-file rewrite must refuse them.
+    _rewrite_safe: bool = PrivateAttr(default=True)
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -160,8 +163,45 @@ def _parse_header(line: str) -> dict[str, str]:
         key, sep, value = token.partition("=")
         if not sep:
             raise JournalParseError(f"malformed journal header token: {token!r}")
+        if key not in _HEADER_FIELDS:
+            raise JournalParseError(f"unknown journal header field: {key!r}")
+        if key in fields:
+            raise JournalParseError(f"duplicate journal header field: {key!r}")
         fields[key] = value
     return fields
+
+
+def _title_from_heading(block: list[str], fields: dict[str, str]) -> tuple[str, list[str], bool]:
+    """Parse an entry heading and report whether canonical rewrite is safe."""
+    while block and block[0].strip() == "":
+        block.pop(0)
+    if not block or not block[0].startswith("### "):
+        raise JournalParseError("journal entry is missing its canonical heading")
+
+    heading = block.pop(0)
+    prefix = f"### {fields['id']} · {fields['kind']}"
+    if not heading.startswith(prefix):
+        raise JournalParseError(f"journal heading does not match its header: {heading!r}")
+    remainder = heading[len(prefix) :]
+    state = fields.get("state")
+    rewrite_safe = True
+    if state is None:
+        if not remainder.startswith(" · "):
+            raise JournalParseError(f"journal heading does not match its header: {heading!r}")
+        title = remainder[3:]
+    else:
+        if not remainder.startswith(" [") or " · " not in remainder:
+            raise JournalParseError(f"journal heading does not match its header: {heading!r}")
+        heading_state, separator, title = remainder[2:].partition("] · ")
+        if not separator or not title or heading_state not in {"fixed", "refuted", "open"}:
+            raise JournalParseError(f"journal heading does not match its header: {heading!r}")
+        rewrite_safe = heading_state == state
+    if "phase" in fields:
+        phase_suffix = f" (phase {fields['phase']})"
+        if not title.endswith(phase_suffix):
+            raise JournalParseError(f"journal heading does not match its header: {heading!r}")
+        title = title[: -len(phase_suffix)]
+    return title, block, rewrite_safe
 
 
 def parse_journal(text: str) -> list[JournalEntry]:
@@ -172,14 +212,17 @@ def parse_journal(text: str) -> list[JournalEntry]:
     raises ``JournalParseError``.
     """
     entries: list[JournalEntry] = []
+    entry_ids: set[str] = set()
     lines = text.splitlines()
     i = 0
     n = len(lines)
     while i < n:
         line = lines[i]
-        if not (line.startswith(_DELIM_PREFIX) and line.rstrip().endswith(_DELIM_SUFFIX)):
+        if not line.startswith(_DELIM_PREFIX):
             i += 1
             continue
+        if not line.rstrip().endswith(_DELIM_SUFFIX):
+            raise JournalParseError(f"unterminated journal delimiter: {line!r}")
         fields = _parse_header(line.rstrip())
         # Body = the lines up to the next delimiter (or EOF), minus the
         # auto-generated `### ...` heading and surrounding blank lines.
@@ -188,45 +231,36 @@ def parse_journal(text: str) -> list[JournalEntry]:
         while j < n and not lines[j].startswith(_DELIM_PREFIX):
             block.append(lines[j])
             j += 1
-        # Drop the heading line (first non-blank) and blank padding.
-        while block and block[0].strip() == "":
-            block.pop(0)
-        if block and block[0].startswith("### "):
-            block.pop(0)
+        try:
+            title, block, rewrite_safe = _title_from_heading(block, fields)
+        except KeyError as e:
+            raise JournalParseError(f"journal entry missing required field: {e}") from e
         while block and block[0].strip() == "":
             block.pop(0)
         while block and block[-1].strip() == "":
             block.pop()
         try:
-            entries.append(
-                JournalEntry(
-                    kind=fields["kind"],  # type: ignore[arg-type]
-                    scope=fields["scope"],  # type: ignore[arg-type]
-                    id=fields["id"],
-                    created=fields["created"],
-                    phase=int(fields["phase"]) if "phase" in fields else None,
-                    title=_title_from_heading(text, fields["id"]),
-                    body="\n".join(block),
-                    state=fields.get("state"),  # type: ignore[arg-type]
-                )
+            entry = JournalEntry(
+                kind=fields["kind"],  # type: ignore[arg-type]
+                scope=fields["scope"],  # type: ignore[arg-type]
+                id=fields["id"],
+                created=fields["created"],
+                phase=int(fields["phase"]) if "phase" in fields else None,
+                title=title,
+                body="\n".join(block),
+                state=fields.get("state"),  # type: ignore[arg-type]
             )
         except KeyError as e:
             raise JournalParseError(f"journal entry missing required field: {e}") from e
+        except ValidationError as e:
+            raise JournalParseError(f"invalid journal entry: {e}") from e
+        entry._rewrite_safe = rewrite_safe
+        if entry.id in entry_ids:
+            raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
+        entry_ids.add(entry.id)
+        entries.append(entry)
         i = j
     return entries
-
-
-def _title_from_heading(text: str, entry_id: str) -> str:
-    """Recover an entry's title from its ``### <id> · <kind>[ ...] · <title>`` heading."""
-    for line in text.splitlines():
-        if line.startswith(f"### {entry_id} · "):
-            # title is the segment after the last ' · ', minus any trailing
-            # ` (phase N)` suffix the serializer appended.
-            title = line.split(" · ", 2)[-1]
-            if title.endswith(")") and " (phase " in title:
-                title = title[: title.rindex(" (phase ")]
-            return title
-    return ""
 
 
 def _handoff_line(entry: JournalEntry) -> str:

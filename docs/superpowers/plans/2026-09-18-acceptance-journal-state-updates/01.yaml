@@ -1,0 +1,41 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Acceptance row lifecycle mutations
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - acceptance-mutation-report-sync
+  skeleton: true
+tasks:
+- number: 1
+  title: Add status and evidence commands
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing CLI tests for status promotion, note preservation, level addition, invalid inputs, and report synchronization.
+  - id: P1.T1.S2
+    text: |-
+      Implement set-status and add-level using validated matrix mutation and committed-report regeneration.
+  - id: P1.T1.S3
+    text: |-
+      Refactor the shared mutation/report path only as needed and run the focused acceptance tests.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T09:08:41+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-18T09:08:41+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-18T09:08:42+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T09:08:42+00:00'
+    note: null
+    observed_prs: []
