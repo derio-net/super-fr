@@ -67,3 +67,66 @@ absolute timestamps. True wall time comes from the db's session spans.
 alone. `answers.md` is read out only when a run asks, and every utterance is
 logged in `corrections.md` — which is the only record of what was actually
 said to a run.
+
+## Post-run: harvest the harness findings, don't just score the feature
+
+The runs are also a live test of the 4.5.x harness-parity work. That evidence is
+perishable — it lives in the casts, the dbs and the cursors — so collect it when
+the runs end, before anything is torn down, and **open issues for whatever it
+surfaces**. This is a second deliverable, not a footnote to the comparison.
+
+### 1. Did the operator gate actually fire, and is that recorded?
+
+Run A of the previous experiment never asked anything: on OpenCode the gate named
+a Claude-only tool, so it could not fire (#436 instance 2). 4.5.x replaced that
+with a scoped per-harness clause — *"put the numbered batch in your reply and END
+THE TURN"* — and made the answer itself recordable.
+
+Observed live in arm G this run: **four questions, capped at 4, recommended-first,
+turn ended**. So the degradation works. Two things to confirm at the end:
+
+```bash
+# the cursor must say a human answered, not that the agent cleared its own gate
+grep -n 'answered_by' <workspace>/docs/superpowers/runs/*.yaml
+```
+
+- `answered_by: operator` → the fix holds end to end.
+- `answered_by: agent`, or the field absent → **a finding**: the gate was cleared
+  unasked and nothing stopped it. File it.
+
+### 2. Question count is a measurement, not a side note
+
+Arm P asked **one** question; arm G asked **four**. Record both, with the text,
+and judge whether each was a genuine design decision or a clarification. The
+interesting number is not "who asked more" but **which operator-owned choices
+each arm made silently** — the last experiment's sharpest finding was two arms
+quietly picking opposite `--note` semantics at exactly the point the third arm
+stopped to ask.
+
+### 3. Re-check the declared matrix against what the runs actually did
+
+```bash
+fr harness parity --check          # declaration vs observed wiring
+fr harness parity                  # the table, for the write-up
+```
+
+For every row the runs exercised — `operator-gate`, `phase-sequence`,
+`subagent-dispatch`, `fr-isolation-required` — ask: did the harness behave the
+way the matrix says it does? A row that claims `enforced` and did not enforce is
+the highest-value defect this experiment can produce, because the matrix is
+supposed to be the thing you can trust instead of reading hooks.
+
+### 4. Validate the other recent fixes while the evidence is warm
+
+- `fr journal add --id <existing>` now fails loudly rather than silently
+  discarding (the #429 residual). If either run hit it, confirm it was loud.
+- `fr journal resolve` / `fr acceptance set-status`: did the run use them, and
+  did `fr journal check` clear at delivery?
+- Anything the run had to work around with a hand-edit is a finding.
+
+### 5. Surface it
+
+Open one issue per confirmed defect against the repo that owns it, with the
+reproduction and the cast timestamp. Cross-link them from #436 if they are
+parity-shaped. Record each in the plan journal as a finding so the PR body
+carries them.
