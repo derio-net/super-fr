@@ -81,9 +81,9 @@ is the verdict. Fix findings against the spec and re-`advance`; no `resolve` nee
 ### 5. implement — grouped per-phase loop, journal-fed, TDD
 The run's workspace is the working copy (`fr isolation exec`); spec/plan aren't on main yet,
 so NOT dispatched (`fr apply --yes` refuses). `implement` is a grouped `for_each`: per phase in
-dependency order, dispatch ONE phase-executor for `implement-phase` — brief = `fr pickup` + spec
-+ `fr journal handoff --scope plan --phase N`: TDD (`superpowers:test-driven-development`),
-journals discoveries/findings (`fr journal add`), ticks steps / completes the phase, returns a
+dependency order, dispatch ONE phase-executor for `implement-phase` — brief = `fr pickup` + spec +
+`fr journal handoff --scope plan --phase N`: TDD (`superpowers:test-driven-development`), journals
+discoveries/findings (`fr journal add`) and resolves them with `fr journal update`, ticks steps / completes the phase, returns a
 structured result — the handoff IS the context. Model = phase `tier` via `fr models resolve
 --harness <h>` (unbound → set at step 1); blocked → run inline; never a manual phase.
 **Harness — dispatch:** Claude Code uses the `fr-phase-executor` Agent without `isolation: "worktree"`
@@ -98,7 +98,7 @@ workspace.) Hermes `delegate_task(goal, context)` carries the brief in `context`
 After each `implement-phase` return, run `review-phase`: `superpowers:requesting-code-review` over
 spec + plan + code; fix every finding with tests (a wrong one gets refuting reasoning via
 `superpowers:receiving-code-review`, never a silent drop); record each as a plan-scope `finding`
-(`--state open|fixed|refuted`) — the next phase's handoff includes them, `deliver` derives the PR
+(`--state open|fixed|refuted`) and update it as resolution evidence lands — the next phase's handoff includes them, `deliver` derives the PR
 body from the durable list. **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
 
 ### 7. deliver — one PR per repo, all artifacts aboard

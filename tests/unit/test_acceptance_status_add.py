@@ -217,6 +217,68 @@ def test_add_rejects_malformed_refs(
     assert matrix_path.read_text() == before
 
 
+# ── T2b: mutations ─────────────────────────────────────────────────────────
+
+
+def test_set_status_updates_note_and_regenerates_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(id="debt", status="not-implemented"))
+    result = _invoke(
+        root,
+        monkeypatch,
+        "set-status",
+        "debt",
+        "--status",
+        "ci",
+        "--note",
+        "covered by unit test",
+    )
+    assert result.exit_code == 0, result.output
+    from fr.acceptance.model import load_matrix
+
+    updated = load_matrix(root / "docs/acceptance/matrix.yaml").rows[0]
+    assert updated.status == "ci"
+    assert updated.notes == "covered by unit test"
+    assert "covered by unit test" in (root / "docs/acceptance/report_linked.md").read_text()
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("set-status", "missing", "--status", "ci"),
+        ("set-status", "debt", "--status", "not-a-status"),
+        ("add-level", "missing", "--level", "unit=own:tests/test_a.py"),
+        ("add-level", "debt", "--level", "unknown=own:tests/test_a.py"),
+        ("add-level", "debt", "--level", "unit=bad-ref"),
+    ],
+)
+def test_mutations_reject_invalid_input_without_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: tuple[str, ...]
+) -> None:
+    root = make_repo(tmp_path, row(id="debt", status="not-implemented"))
+    matrix = root / "docs/acceptance/matrix.yaml"
+    before = matrix.read_text()
+    result = _invoke(root, monkeypatch, *args)
+    assert result.exit_code == 2, result.output
+    assert matrix.read_text() == before
+
+
+def test_add_level_is_idempotent_and_regenerates_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(id="debt", status="not-implemented", unit=""))
+    args = ("add-level", "debt", "--level", "unit=own:tests/test_a.py")
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    from fr.acceptance.model import load_matrix
+
+    updated = load_matrix(root / "docs/acceptance/matrix.yaml").rows[0]
+    assert updated.levels["unit"] == ("own:tests/test_a.py",)
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
 # ── T3: --added-since ──────────────────────────────────────────────────────
 
 

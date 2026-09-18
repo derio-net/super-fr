@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
+from fr.acceptance.model import AcceptanceError, Matrix, Row, load_matrix, split_ref
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
@@ -34,6 +34,47 @@ def _load(root: Path) -> Matrix:
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(1) from e
+
+
+def _write_matrix(path: Path, original: str, matrix: Matrix) -> None:
+    """Rewrite rows while preserving the human-authored matrix preamble."""
+    import yaml
+
+    prefix, marker, _ = original.partition("rows:")
+    if not marker:
+        raise AcceptanceError("matrix is missing the required `rows:` key")
+    rows = [
+        {
+            "id": row.id,
+            "capability": row.capability,
+            "acceptance": row.acceptance,
+            "origin": list(row.origin),
+            "levels": {level: list(refs) for level, refs in row.levels.items() if refs},
+            "status": row.status,
+            "notes": row.notes,
+        }
+        for row in matrix.rows
+    ]
+    dumped = yaml.dump(rows, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    indented = "".join("  " + line if line.strip() else line for line in dumped.splitlines(True))
+    path.write_text(prefix + "rows:\n" + indented)
+
+
+def _regenerate_reports(matrix: Matrix, root: Path, action: str) -> None:
+    """Keep committed reports in sync without discarding a valid mutation."""
+    from fr.acceptance.report import prune_stale_reports, render_committed_set
+
+    try:
+        for rel, html in render_committed_set(matrix, root).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(html)
+        prune_stale_reports(root)
+    except Exception as e:  # noqa: BLE001 - matrix mutation is already valid
+        err_console.print(
+            f"[yellow]warning:[/yellow] row {action} but the HTML reports were not regenerated "
+            f"({e}); run `fr acceptance report --deterministic` and commit them."
+        )
 
 
 def _added_since(root: Path, ref: str, matrix: Matrix) -> list[str]:
@@ -319,8 +360,6 @@ def add_cmd(
     """Append a schema-validated row (agents never hand-edit YAML shapes)."""
     import yaml
 
-    from fr.acceptance.model import Row
-
     root = resolve_repo_root()
     matrix_path = root / MATRIX_REL
     matrix = _load(root)
@@ -350,8 +389,6 @@ def add_cmd(
         raise typer.Exit(2)
     # Ref grammar validated NOW, not at the next check — a shell-mangled ref
     # (e.g. zsh's `$VAR:t` modifier eating "…:tests/…") must not land.
-    from fr.acceptance.model import split_ref
-
     for ref in new_row.refs():
         try:
             split_ref(ref)
@@ -389,19 +426,99 @@ def add_cmd(
     # The row is already valid on disk — a render failure NEVER rolls it back
     # (that would discard valid work); it warns, and the CI sync tripwire is
     # the backstop.
-    from fr.acceptance.report import prune_stale_reports, render_committed_set
+    _regenerate_reports(reloaded, root, "added")
 
+
+def _replace_row(matrix: Matrix, row_id: str, replacement: Row) -> Matrix:
+    """Return a validated matrix with exactly one identified row replaced."""
+    if not any(row.id == row_id for row in matrix.rows):
+        raise AcceptanceError(f"unknown row id: {row_id}")
+    return Matrix(
+        org=matrix.org,
+        repo=matrix.repo,
+        rows=tuple(replacement if row.id == row_id else row for row in matrix.rows),
+    )
+
+
+def _mutate_row(root: Path, row_id: str, replacement: Row, action: str) -> None:
+    """Write a validated replacement and regenerate its deterministic reports."""
+    path = root / MATRIX_REL
+    original = path.read_text()
+    matrix = _load(root)
     try:
-        for rel, html in render_committed_set(reloaded, root).items():
-            path = root / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(html)
-        prune_stale_reports(root)
-    except Exception as e:  # noqa: BLE001 — never fail an accepted row on a render hiccup
-        err_console.print(
-            f"[yellow]warning:[/yellow] row added but the HTML reports were not regenerated ({e}); "
-            "run `fr acceptance report --deterministic` and commit them."
+        updated = _replace_row(matrix, row_id, replacement)
+        _write_matrix(path, original, updated)
+        reloaded = load_matrix(path)
+    except AcceptanceError as e:
+        path.write_text(original)
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    _regenerate_reports(reloaded, root, action)
+
+
+@acceptance_app.command("set-status")
+def set_status_cmd(
+    row_id: str = typer.Argument(..., help="Existing acceptance row id."),
+    status: str = typer.Option(
+        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+    ),
+    note: str | None = typer.Option(
+        None, "--note", help="Replacement evidence detail / backfill note."
+    ),
+) -> None:
+    """Set one existing row's honest status and optionally replace its note."""
+    root = resolve_repo_root()
+    matrix = _load(root)
+    current = next((row for row in matrix.rows if row.id == row_id), None)
+    if current is None:
+        err_console.print(f"[red]error:[/red] unknown row id: {row_id}")
+        raise typer.Exit(2)
+    try:
+        replacement = current.model_copy(
+            update={"status": status, "notes": note if note is not None else current.notes}
         )
+        replacement = Row.model_validate(replacement.model_dump())
+    except Exception as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    _mutate_row(root, row_id, replacement, "updated")
+    typer.echo(f"set row {row_id} status to {replacement.status}")
+
+
+@acceptance_app.command("add-level")
+def add_level_cmd(
+    row_id: str = typer.Argument(..., help="Existing acceptance row id."),
+    level: str = typer.Option(..., "--level", help="'<level>=<repo>:<path>[#Lline]' test ref."),
+) -> None:
+    """Add one verified test reference to an existing acceptance row."""
+    level_name, separator, ref = level.partition("=")
+    if not separator:
+        err_console.print(f"[red]error:[/red] --level must be '<level>=<ref>', got {level!r}")
+        raise typer.Exit(2)
+    try:
+        split_ref(ref)
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    root = resolve_repo_root()
+    matrix = _load(root)
+    current = next((row for row in matrix.rows if row.id == row_id), None)
+    if current is None:
+        err_console.print(f"[red]error:[/red] unknown row id: {row_id}")
+        raise typer.Exit(2)
+    levels = dict(current.levels)
+    levels[level_name] = (
+        (*levels.get(level_name, ()), ref)
+        if ref not in levels.get(level_name, ())
+        else levels.get(level_name, ())
+    )
+    try:
+        replacement = Row.model_validate({**current.model_dump(), "levels": levels})
+    except Exception as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    _mutate_row(root, row_id, replacement, "updated")
+    typer.echo(f"added {level_name} evidence to row {row_id}")
 
 
 @acceptance_app.command("init")

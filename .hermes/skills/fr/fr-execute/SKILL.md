@@ -7,8 +7,6 @@ description: >
 
 # fr-execute
 
-Implements a single phase from a plan.
-
 **Announce at start:** "I'm using fr-execute to implement this phase."
 
 ## Mode selection
@@ -76,10 +74,11 @@ take the PR out of draft.
    # manual phases require --note describing what was done
    fr plan edit <plan-dir> --complete-phase N --note "<runbook ref>"
    ```
-   A phase carrying `acceptance: [row-ids]` — flip those matrix rows now
-   (`not-implemented` → `skipped`/`ci`), citing the test refs; the CLI warns
-   on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows
-   (`fr acceptance add`) — defended at PR time, never silent scope drift.
+    A phase carrying `acceptance: [row-ids]` — flip those matrix rows now
+    (`not-implemented` → `skipped`/`ci`) with `fr acceptance add-level` then
+    `fr acceptance set-status`, citing the test refs; the CLI warns on
+    unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows
+    (`fr acceptance add`) — defended at PR time, never silent scope drift.
 
 5. **Open the PR.** Delegate to `superpowers:finishing-a-development-branch`.
    Use the PR title from `fr pickup` and the body shape above.
