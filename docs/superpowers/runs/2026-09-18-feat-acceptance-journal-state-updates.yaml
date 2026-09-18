@@ -1,0 +1,75 @@
+run: 2026-09-18-feat-acceptance-journal-state-updates
+workflow: fr-goal@1
+branch: feat/acceptance-journal-state-updates
+started: '2026-09-18T09:01:30+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-18T09:03:38+00:00'
+    emitted:
+      spec: docs/superpowers/specs/2026-09-18-acceptance-journal-state-updates-design.md
+      journal:spec: docs/superpowers/journals/specs/2026-09-18-acceptance-journal-state-updates.md
+  spec-review:
+    state: done
+    at: '2026-09-18T09:03:42+00:00'
+    emitted:
+      journal:spec: docs/superpowers/journals/specs/2026-09-18-acceptance-journal-state-updates.md
+  plan:
+    state: done
+    at: '2026-09-18T09:05:16+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-18-acceptance-journal-state-updates
+      journal:plan: docs/superpowers/journals/plans/2026-09-18-acceptance-journal-state-updates.md
+  plan-review:
+    state: done
+    at: '2026-09-18T09:05:17+00:00'
+    exit: 0
+    stdout: 'self-review passed
+
+      '
+  implement:
+    state: done
+    at: '2026-09-18T09:43:24+00:00'
+    emitted:
+      journal:plan: docs/superpowers/journals/plans/2026-09-18-acceptance-journal-state-updates.md
+    items:
+      phase/1/implement-phase: done
+      phase/1/review-phase: done
+      phase/2/implement-phase: done
+      phase/2/review-phase: done
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: running
+    at: '2026-09-18T09:43:24+00:00'
+accounting:
+  phase/1/implement-phase:
+    at: '2026-09-18T09:09:01+00:00'
+    journal_entries: 3
+    journal_lines: 16
+    handoff_chars: 1274
+    spec_bytes: 4897
+    plan_bytes: 2902
+  phase/1/review-phase:
+    at: '2026-09-18T09:09:12+00:00'
+    journal_entries: 3
+    journal_lines: 16
+    handoff_chars: 1274
+    spec_bytes: 4897
+    plan_bytes: 2902
+  phase/2/implement-phase:
+    at: '2026-09-18T09:27:28+00:00'
+    journal_entries: 14
+    journal_lines: 71
+    handoff_chars: 6563
+    spec_bytes: 4897
+    plan_bytes: 2902
+  phase/2/review-phase:
+    at: '2026-09-18T09:31:36+00:00'
+    journal_entries: 16
+    journal_lines: 81
+    handoff_chars: 7433
+    spec_bytes: 4897
+    plan_bytes: 2988

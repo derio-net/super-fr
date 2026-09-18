@@ -1286,7 +1286,7 @@ def test_journal_justification_silences_the_refactor_gate(tmp_path):
         "# Journal: 2026-09-09-refactor\n\n"
         "<!-- fr:journal kind=discovery scope=plan "
         "id=p1t1-norefactor created=2026-09-09T00:00:00 phase=1 -->\n"
-        "### p1t1-norefactor · discovery · no-refactor-because P1.T1\n\n"
+        "### p1t1-norefactor · discovery · no-refactor-because P1.T1 (phase 1)\n\n"
         "Two-line glue; nothing to extract.\n"
     )
 

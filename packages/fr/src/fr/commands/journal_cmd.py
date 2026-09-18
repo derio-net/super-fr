@@ -2,8 +2,9 @@
 
 Spec: docs/superpowers/specs/2026-07-22-fr-goal-subagent-execution-design.md §A.
 
-Three verbs:
-  - ``add``    append one entry (idempotent on ``--id``).
+Four verbs:
+  - ``add``    append one entry (create-only on ``--id``).
+  - ``update`` change a finding's state and append a resolution note.
   - ``render`` emit the Markdown a PR body embeds (fail-open on missing/bad file).
   - ``check``  freshness gate: non-zero on open findings or a parse error
                (fail-closed), so a stale journal cannot ride into a PR silently.
@@ -49,6 +50,14 @@ def _load(path: Path) -> list[JournalEntry]:
     return parse_journal(path.read_text())
 
 
+def _validate_scope(scope: str) -> None:
+    if scope not in {"spec", "plan", "debug"}:
+        err_console.print(
+            f"[red]invalid journal scope: {scope!r} (expected spec, plan, or debug)[/red]"
+        )
+        raise typer.Exit(2)
+
+
 @journal_app.command("add")
 def add(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
@@ -59,10 +68,11 @@ def add(
     phase: int | None = typer.Option(None, "--phase", help="Phase number, if any."),
     state: str | None = typer.Option(None, "--state", help="finding only: fixed | refuted | open."),
     entry_id: str | None = typer.Option(
-        None, "--id", help="Stable id; re-adding the same id is idempotent."
+        None, "--id", help="Stable id; duplicate ids are rejected."
     ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
+    _validate_scope(scope)
     root = resolve_repo_root()
     path = journal_path(root, scope, slug)  # type: ignore[arg-type]
 
@@ -86,10 +96,17 @@ def add(
         err_console.print(f"[red]invalid entry:[/red] {e}")
         raise typer.Exit(2) from e
 
-    existing = _load(path)
+    try:
+        existing = _load(path)
+    except JournalParseError as e:
+        err_console.print(f"[red]journal parse error:[/red] {e}")
+        raise typer.Exit(2) from e
     if any(e.id == eid for e in existing):
-        # Idempotent: the id is already recorded; leave the file untouched.
-        return
+        err_console.print(
+            f"[red]journal entry {eid!r} already exists; use `fr journal update` "
+            "to change a finding[/red]"
+        )
+        raise typer.Exit(2)
     path.parent.mkdir(parents=True, exist_ok=True)
     block = serialize_entry(entry)
     if path.exists():
@@ -98,6 +115,61 @@ def add(
         path.write_text(prior + sep + block)
     else:
         path.write_text(f"# Journal: {slug}\n\n{block}")
+
+
+@journal_app.command("update")
+def update(
+    scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
+    slug: str = typer.Option(..., "--slug", help="Journal slug (spec/plan/debug slug)."),
+    entry_id: str = typer.Option(..., "--id", help="Existing finding id."),
+    state: str = typer.Option(..., "--state", help="finding state: open | fixed | refuted."),
+    note: str | None = typer.Option(None, "--note", help="Resolution note to append."),
+) -> None:
+    """Update one finding while preserving journal preamble and entry order."""
+    _validate_scope(scope)
+    root = resolve_repo_root()
+    # Resolve through the archive boundary: never create an active twin for an
+    # archived journal that is the current readable source of truth.
+    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    if not path.exists():
+        err_console.print(f"[red]journal {scope}/{slug} does not exist[/red]")
+        raise typer.Exit(2)
+
+    text = path.read_text()
+    try:
+        entries = parse_journal(text)
+    except JournalParseError as e:
+        err_console.print(f"[red]journal parse error:[/red] {e}")
+        raise typer.Exit(2) from e
+    if not all(entry._rewrite_safe for entry in entries):
+        err_console.print(
+            "[red]journal contains legacy headings that cannot be safely rewritten[/red]"
+        )
+        raise typer.Exit(2)
+
+    target = next((entry for entry in entries if entry.id == entry_id), None)
+    if target is None:
+        err_console.print(f"[red]journal finding {entry_id!r} does not exist[/red]")
+        raise typer.Exit(2)
+    if target.kind != "finding":
+        err_console.print(f"[red]journal entry {entry_id!r} is not a finding[/red]")
+        raise typer.Exit(2)
+
+    body = target.body if note is None else f"{target.body}\n\n{note}".strip()
+    try:
+        data = target.model_dump()
+        data.update(state=state, body=body)
+        replacement = JournalEntry(**data)  # type: ignore[arg-type]
+    except ValueError as e:
+        err_console.print(f"[red]invalid finding update:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    # Parsing has succeeded and every requested replacement has been validated;
+    # only now construct and write the canonical journal body.
+    marker = "<!-- fr:journal "
+    preamble = text[: text.index(marker)]
+    rewritten = [replacement if entry.id == entry_id else entry for entry in entries]
+    path.write_text(preamble + "\n".join(serialize_entry(entry) for entry in rewritten))
 
 
 _SECTION_KINDS = {

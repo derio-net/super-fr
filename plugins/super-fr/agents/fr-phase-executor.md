@@ -51,7 +51,9 @@ dispatch, so this should be unreachable; super-fr#420.)
    prescribes. **Never open a PR** — the orchestrator owns delivery.
 4. Append what you learned to the plan journal as you go:
    `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding …`
-   (findings carry `--state open|fixed|refuted`). This is the durable record
+    (findings carry `--state open|fixed|refuted`). Resolve an existing finding
+    with `fr journal update --scope plan --slug <plan-slug> --id <id> --state
+    fixed|refuted [--note <reason>]`, never a duplicate `add`. This is the durable record
    the orchestrator reviews and the PR body is derived from.
 
 ## Contract — the worktree has exactly one writer

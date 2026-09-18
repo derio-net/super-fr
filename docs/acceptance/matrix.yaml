@@ -1852,3 +1852,26 @@ rows:
       (test_cwd_flag_reads_no_stdin, test_oneline, test_never_invokes_fr). Hermes custom_command
       wiring is docs-only until NousResearch/hermes-agent#109596 ships; OpenCode has
       no status-line hook (anomalyco/opencode#37464).
+  - id: acceptance-mutation-report-sync
+    capability: Acceptance lifecycle
+    acceptance: Acceptance updates validate target changes and synchronize committed
+      reports
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-acceptance-journal-state-updates-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_status_add.py
+    status: ci
+    notes: Phase 1 focused CLI coverage.
+  - id: journal-finding-state-update
+    capability: Journal lifecycle
+    acceptance: Journal findings can transition state through a validated update command
+      without losing durable history
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-acceptance-journal-state-updates-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: Phase 2 focused CLI and parser coverage.

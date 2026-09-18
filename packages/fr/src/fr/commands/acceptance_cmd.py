@@ -5,6 +5,7 @@ Spec: docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md §4.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import typer
@@ -34,6 +35,227 @@ def _load(root: Path) -> Matrix:
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(1) from e
+
+
+def _replace_row(root: Path, matrix: Matrix, old_id: str, replacement: object) -> Matrix:
+    """Patch changed values in one YAML row without rewriting its comments."""
+    import yaml
+
+    from fr.acceptance.model import Row
+
+    if not isinstance(replacement, Row):
+        raise TypeError("replacement must be an acceptance row")
+    matrix_path = root / MATRIX_REL
+    original = matrix_path.read_text()
+    source = original
+    document = yaml.compose(source)
+    if not isinstance(document, yaml.MappingNode):
+        raise AcceptanceError("matrix top level must be a mapping")
+    rows_node = next(
+        (
+            value
+            for key, value in document.value
+            if isinstance(key, yaml.ScalarNode) and key.value == "rows"
+        ),
+        None,
+    )
+    if not isinstance(rows_node, yaml.SequenceNode):
+        raise AcceptanceError("matrix rows must be a sequence")
+    target = next(
+        (
+            node
+            for node in rows_node.value
+            if isinstance(node, yaml.MappingNode)
+            and any(
+                isinstance(key, yaml.ScalarNode) and key.value == "id" and value.value == old_id
+                for key, value in node.value
+            )
+        ),
+        None,
+    )
+    if target is None:
+        raise AcceptanceError(f"unknown row id: {old_id}")
+    old = next(row for row in matrix.rows if row.id == old_id)
+    fields = {
+        key.value: (key, value)
+        for key, value in target.value
+        if isinstance(key, yaml.ScalarNode) and isinstance(value, yaml.Node)
+    }
+
+    def mutable_field(name: str) -> tuple[yaml.ScalarNode, yaml.Node] | None:
+        pair = fields.get(name)
+        if pair is None:
+            return None
+        key, value = pair
+        line_end = source.find("\n", key.end_mark.index)
+        raw = source[key.end_mark.index : len(source) if line_end == -1 else line_end]
+        if re.search(r"(?:^|\s)[&*][A-Za-z0-9_-]+", raw.split("#", 1)[0]):
+            raise AcceptanceError(
+                f"row {old_id} {name!r} uses a YAML alias or anchor and cannot be updated"
+            )
+        return key, value
+
+    def reject_alias_or_anchor(key: yaml.ScalarNode, name: str) -> None:
+        line_end = source.find("\n", key.end_mark.index)
+        raw = source[key.end_mark.index : len(source) if line_end == -1 else line_end]
+        if re.search(r"(?:^|\s)[&*][A-Za-z0-9_-]+", raw.split("#", 1)[0]):
+            raise AcceptanceError(
+                f"row {old_id} {name!r} uses a YAML alias or anchor and cannot be updated"
+            )
+
+    edits: list[tuple[int, int, str]] = []
+    for name, value in (("status", replacement.status), ("notes", replacement.notes)):
+        if getattr(old, name) != value:
+            field = mutable_field(name)
+            if field is None:
+                if name != "notes":
+                    raise AcceptanceError(f"row {old_id} has no scalar {name!r}")
+                status = mutable_field("status")
+                if status is None:
+                    raise AcceptanceError(f"row {old_id} has no scalar 'status'")
+                status_key, status_node = status
+                line_end = source.find("\n", status_node.end_mark.index)
+                if line_end == -1:
+                    line_end = len(source)
+                indent = " " * status_key.start_mark.column
+                rendered = yaml.safe_dump(value, default_style='"', allow_unicode=True).strip()
+                edits.append((line_end, line_end, f"\n{indent}notes: {rendered}"))
+                continue
+            _, node = field
+            if not isinstance(node, yaml.ScalarNode):
+                raise AcceptanceError(f"row {old_id} has no scalar {name!r}")
+            rendered = yaml.safe_dump(value, default_style='"', allow_unicode=True).strip()
+            edits.append((node.start_mark.index, node.end_mark.index, rendered))
+
+    for level, refs in replacement.levels.items():
+        added = [ref for ref in refs if ref not in old.levels[level]]
+        if not added:
+            continue
+        field = mutable_field("levels")
+        if field is None:
+            status = mutable_field("status")
+            if status is None:
+                raise AcceptanceError(f"row {old_id} has no scalar 'status'")
+            status_key, _ = status
+            indent = " " * status_key.start_mark.column
+            rendered_refs = [
+                yaml.safe_dump(ref, default_style='"', allow_unicode=True).strip() for ref in added
+            ]
+            refs_text = "".join(f"{indent}    - {ref}\n" for ref in rendered_refs)
+            edits.append(
+                (
+                    status_key.start_mark.index - status_key.start_mark.column,
+                    status_key.start_mark.index - status_key.start_mark.column,
+                    f"{indent}levels:\n{indent}  {level}:\n{refs_text}",
+                )
+            )
+            continue
+        levels_key, levels = field
+        if isinstance(levels, yaml.MappingNode) and not levels.value and levels.flow_style:
+            indent = " " * levels_key.start_mark.column
+            rendered_refs = [
+                yaml.safe_dump(ref, default_style='"', allow_unicode=True).strip() for ref in added
+            ]
+            refs_text = "".join(f"{indent}    - {ref}\n" for ref in rendered_refs)
+            edits.append(
+                (
+                    levels.start_mark.index,
+                    levels.end_mark.index,
+                    f"\n{indent}  {level}:\n{refs_text}".rstrip("\n"),
+                )
+            )
+            continue
+        if not isinstance(levels, yaml.MappingNode):
+            raise AcceptanceError("row levels must be a mapping to add evidence")
+        level_pair = next(
+            (
+                (key, value)
+                for key, value in levels.value
+                if isinstance(key, yaml.ScalarNode) and key.value == level
+            ),
+            None,
+        )
+        if level_pair is not None:
+            level_key, evidence = level_pair
+            reject_alias_or_anchor(level_key, f"levels.{level}")
+            if not isinstance(evidence, yaml.SequenceNode):
+                raise AcceptanceError(f"row {old_id} levels.{level!r} must be a sequence")
+            rendered_refs = [
+                yaml.safe_dump(ref, default_style='"', allow_unicode=True).strip() for ref in added
+            ]
+            if evidence.flow_style:
+                refs_text = ", ".join(rendered_refs)
+                prefix = ", " if evidence.value else ""
+                edits.append(
+                    (
+                        evidence.end_mark.index - 1,
+                        evidence.end_mark.index - 1,
+                        f"{prefix}{refs_text}",
+                    )
+                )
+            else:
+                last_item = evidence.value[-1]
+                line_end = source.find("\n", last_item.end_mark.index)
+                if line_end == -1:
+                    line_end = len(source)
+                indent = " " * (last_item.start_mark.column - 2)
+                refs_text = "".join(f"{indent}- {ref}\n" for ref in rendered_refs)
+                edits.append((line_end, line_end, f"\n{refs_text}".rstrip("\n")))
+            continue
+        if levels.flow_style:
+            refs_text = ", ".join(
+                yaml.safe_dump(ref, default_style='"', allow_unicode=True).strip() for ref in added
+            )
+            prefix = ", " if levels.value else ""
+            edits.append(
+                (
+                    levels.end_mark.index - 1,
+                    levels.end_mark.index - 1,
+                    f"{prefix}{level}: [{refs_text}]",
+                )
+            )
+            continue
+        last_key, last_value = levels.value[-1]
+        last_end = last_value.end_mark.index
+        line_end = source.find("\n", last_end)
+        if line_end == -1:
+            line_end = len(source)
+        indent = " " * last_key.start_mark.column
+        rendered_refs = [
+            yaml.safe_dump(ref, default_style='"', allow_unicode=True).strip() for ref in added
+        ]
+        refs_text = "".join(f"{indent}  - {ref}\n" for ref in rendered_refs)
+        edits.append((line_end, line_end, f"\n{indent}{level}:\n{refs_text}".rstrip("\n")))
+
+    for start, end, text in sorted(edits, reverse=True):
+        source = source[:start] + text + source[end:]
+    matrix_path.write_text(source)
+    try:
+        reloaded = load_matrix(matrix_path)
+        actual = next((row for row in reloaded.rows if row.id == old_id), None)
+        if actual != replacement:
+            raise AcceptanceError(f"update did not preserve intended row {old_id}, rolled back")
+        return reloaded
+    except AcceptanceError as e:
+        matrix_path.write_text(original)
+        raise AcceptanceError(f"update produced an invalid matrix, rolled back: {e}") from e
+
+
+def _regenerate_reports(matrix: Matrix, root: Path, action: str) -> None:
+    """Warn on rendering failures; a valid matrix mutation is never rolled back."""
+    from fr.acceptance.report import prune_stale_reports, render_committed_set
+
+    try:
+        for rel, html in render_committed_set(matrix, root).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(html)
+        prune_stale_reports(root)
+    except Exception as e:  # noqa: BLE001 — report drift is recoverable
+        err_console.print(
+            f"[yellow]warning:[/yellow] row {action} but reports were not regenerated ({e}); "
+            "run `fr acceptance report --deterministic` and commit them."
+        )
 
 
 def _added_since(root: Path, ref: str, matrix: Matrix) -> list[str]:
@@ -384,24 +606,86 @@ def add_cmd(
         raise typer.Exit(2) from e
     typer.echo(f"added row {new_row.id} ({new_row.status})")
 
-    # Keep the committed HTML report in lockstep with the matrix (the CLI
-    # mutation path of "always update the report when matrix.yaml changes").
-    # The row is already valid on disk — a render failure NEVER rolls it back
-    # (that would discard valid work); it warns, and the CI sync tripwire is
-    # the backstop.
-    from fr.acceptance.report import prune_stale_reports, render_committed_set
+    _regenerate_reports(reloaded, root, "added")
 
+
+@acceptance_app.command("set-status")
+def set_status_cmd(
+    row_id: str = typer.Argument(..., help="ID of the existing row to update."),
+    status: str = typer.Option(
+        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+    ),
+    note: str | None = typer.Option(None, "--note", help="Evidence note to append."),
+) -> None:
+    """Set an existing row's status, preserving its other evidence."""
+    from fr.acceptance.model import Row
+
+    root = resolve_repo_root()
+    matrix = _load(root)
+    old = next((row for row in matrix.rows if row.id == row_id), None)
+    if old is None:
+        err_console.print(f"[red]error:[/red] unknown row id: {row_id}")
+        raise typer.Exit(2)
     try:
-        for rel, html in render_committed_set(reloaded, root).items():
-            path = root / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(html)
-        prune_stale_reports(root)
-    except Exception as e:  # noqa: BLE001 — never fail an accepted row on a render hiccup
-        err_console.print(
-            f"[yellow]warning:[/yellow] row added but the HTML reports were not regenerated ({e}); "
-            "run `fr acceptance report --deterministic` and commit them."
+        replacement = Row(
+            id=old.id,
+            capability=old.capability,
+            acceptance=old.acceptance,
+            origin=old.origin,
+            levels=old.levels,
+            status=status,  # type: ignore[arg-type]  # pydantic validates the literal
+            notes=f"{old.notes}\n{note}" if old.notes and note else (note or old.notes),
         )
+        reloaded = _replace_row(root, matrix, row_id, replacement)
+    except Exception as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    typer.echo(f"set row {row_id} status to {replacement.status}")
+    _regenerate_reports(reloaded, root, "updated")
+
+
+@acceptance_app.command("add-level")
+def add_level_cmd(
+    row_id: str = typer.Argument(..., help="ID of the existing row to update."),
+    level: str = typer.Option(..., "--level", help="'<level>=<repo>:<path>[#Lline]' test ref."),
+) -> None:
+    """Add one verification reference to an existing row, idempotently."""
+    from fr.acceptance.model import LEVELS, Row, split_ref
+
+    root = resolve_repo_root()
+    matrix = _load(root)
+    old = next((row for row in matrix.rows if row.id == row_id), None)
+    if old is None:
+        err_console.print(f"[red]error:[/red] unknown row id: {row_id}")
+        raise typer.Exit(2)
+    level_name, separator, ref = level.partition("=")
+    if not separator:
+        err_console.print(f"[red]error:[/red] --level must be '<level>=<ref>', got {level!r}")
+        raise typer.Exit(2)
+    try:
+        if level_name not in LEVELS:
+            raise AcceptanceError(f"unknown level key {level_name!r} (allowed: {list(LEVELS)})")
+        split_ref(ref)
+        levels = dict(old.levels)
+        if ref in levels[level_name]:
+            typer.echo(f"{level_name} evidence already present on row {row_id}")
+            return
+        levels[level_name] = (*levels[level_name], ref)
+        replacement = Row(
+            id=old.id,
+            capability=old.capability,
+            acceptance=old.acceptance,
+            origin=old.origin,
+            levels=levels,
+            status=old.status,
+            notes=old.notes,
+        )
+        reloaded = _replace_row(root, matrix, row_id, replacement)
+    except Exception as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    typer.echo(f"added {level_name} evidence to row {row_id}")
+    _regenerate_reports(reloaded, root, "updated")
 
 
 @acceptance_app.command("init")

@@ -12,7 +12,6 @@ description: >
 ---
 
 # fr-goal
-
 One operator touchpoint — the batched Q&A — from goal to reviewed PR, driven by a **workflow
 shape** (spec §4.A, `2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`): `fr run
 start <shape> --branch <b>` (defaults to `fr-goal`), then loop `fr run advance <run-id>`.
@@ -98,7 +97,8 @@ workspace.) Hermes `delegate_task(goal, context)` carries the brief in `context`
 After each `implement-phase` return, run `review-phase`: `superpowers:requesting-code-review` over
 spec + plan + code; fix every finding with tests (a wrong one gets refuting reasoning via
 `superpowers:receiving-code-review`, never a silent drop); record each as a plan-scope `finding`
-(`--state open|fixed|refuted`) — the next phase's handoff includes them, `deliver` derives the PR
+(`--state open|fixed|refuted`); resolve it with `fr journal update --scope plan --slug <plan-slug>
+--id <id> --state fixed|refuted [--note <reason>]` rather than adding it again — the next phase's handoff includes them, `deliver` derives the PR
 body from the durable list. **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
 
 ### 7. deliver — one PR per repo, all artifacts aboard
