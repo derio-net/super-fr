@@ -7,8 +7,8 @@ description: >
   feature brainstorm in a vk-enabled repo (vk plans or devcontainer profiles
   present), when fr-goal starts its pipeline, or when the operator says
   "brainstorm this feature", "let's design X", or starts creative work that
-  will become a spec. devcontainer mode hard-stops without a profile; docker-
-  less host/external modes isolate via the worktree instead.
+  will become a spec. devcontainer mode hard-stops without a profile;
+  docker-less host/external modes isolate via the worktree instead.
 ---
 
 # fr-brainstorming

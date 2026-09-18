@@ -24,13 +24,13 @@ Before asking anything, learn what the repo already says:
 
 - Languages and toolchains: manifests (pyproject/package.json/go.mod/...),
   lockfiles, `.tool-versions`, CI workflows (what does CI install?).
-- Existing `.devcontainer/` (profiles already present? then this is an edit, not a green-
-  field init). Check `.devcontainer/fr-profiles.yaml` for an existing top-level
+- Existing `.devcontainer/` (profiles already present? then this is an edit, not a
+  green-field init). Check `.devcontainer/fr-profiles.yaml` for an existing top-level
   `backend:`/`host:` key too.
-- Which forge: `git remote get-url origin`'s hostname (`github.com` / `gitlab.com` self-
-  identify; anything else, including a literal `gitea.com`, is self-hosted and needs the
-  operator to confirm the backend explicitly — no hostname alone distinguishes GitLab Self-
-  Managed / Gitea / GitHub Enterprise).
+- Which forge: `git remote get-url origin`'s hostname (`github.com` / `gitlab.com`
+  self-identify; anything else, including a literal `gitea.com`, is self-hosted and needs
+  the operator to confirm the backend explicitly — no hostname alone distinguishes GitLab
+  Self-Managed / Gitea / GitHub Enterprise).
 - Credential surface: `.env*` patterns in .gitignore, CI secret names,
   cloud/k8s configs — candidates for the profile's expected secrets.
 - Working patterns: Makefile/justfile/scripts (what do humans run here?).
@@ -112,8 +112,8 @@ Unknown tools land in the profile's notes — wire them into
 
 ## Multi-profile principles
 
-- The DEFAULT profile is the one autonomous runs use; keep it least-
-  privileged enough to be safe unattended (admin credentials belong in a
+- The DEFAULT profile is the one autonomous runs use; keep it
+  least-privileged enough to be safe unattended (admin credentials belong in a
   non-default profile the operator selects explicitly).
 - Adding a profile later is one more `fr init scaffold` call — the layout
   is per-profile subfolders from day one, no migration.

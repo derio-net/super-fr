@@ -247,3 +247,12 @@ fr plan edit --complete-phase 3 warned: acceptance row 'harness-tool-neutrality'
 
 - tests/unit/test_harness_vocabulary.py — TOOL_VOCABULARY closure (no name claimed by two harnesses) + scan_prose's four rules (bare mention / scoped-valid / scoped-single-harness-invalid / neutral-prose) + the real fr-goal §5 dispatch clause passing.
 - tests/unit/test_tripwire_skill_tool_neutrality.py::test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause — the CI-gating tripwire itself, run over all three trees (canonical, .opencode/, .hermes/skills/fr/).
+
+<!-- fr:journal kind=finding scope=plan id=r3-x1 created=2026-09-18T16:47:51 phase=3 state=fixed -->
+### r3-x1 · finding [fixed] · The line-cap rewrap broke three hyphenated words across lines — 'content-neutral' was verified against the wrong thing (phase 3)
+
+Phase 3 needed lines to fit a new clause under the hard 120-line skill cap, and rewrapped surrounding prose to buy them, reporting it 'content-neutral, diff-verified no wording change'. The words WERE unchanged; the rendering was not. Three hyphenated terms ended a line on their hyphen — 'green-', 'self-', 'Self-' in fr-init — and both Markdown and a YAML folded scalar turn a line break inside a paragraph into a SPACE, so a reader gets 'green- field', 'self- identify', 'Self- Managed'. Caught by running `git diff --word-diff=porcelain` on the two edited skills rather than trusting the report: fr-goal's diff showed ONLY the intended edit (genuinely neutral), fr-init's showed the three breaks.
+
+Two MORE were then found by grepping every canonical skill, both pre-existing on main: fr-brainstorming:10 ('docker-' / 'less') and fr-init:115 ('least-' / 'privileged'). The first sits in the frontmatter `description:` — the text every session's skill listing renders, so it has been reaching every agent as 'docker- less' for as long as it has shipped. Fixed all five; mirrors re-synced byte-identically.
+
+Guard added: test_skill_validation.py::test_no_hyphenated_word_is_broken_across_lines, over every canonical skill. The lesson it encodes is the generalisable one — the 120-line cap makes rewrapping-to-buy-a-line the obvious move, and a word-level diff will keep saying every word is unchanged. Words unchanged is not rendering unchanged.
