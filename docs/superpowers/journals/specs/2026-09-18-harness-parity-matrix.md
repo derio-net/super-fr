@@ -19,3 +19,18 @@ packages/fr/src/fr/harness/parity.yaml, shipped in the wheel; `fr harness parity
 ### d4 · decision · Tier bindings: mechanical+standard -> sonnet-5, hard -> opus-5
 
 Operator declined haiku for mechanical phases. Written to ~/.config/fr/models.yaml under harness claude-code.
+
+<!-- fr:journal kind=review scope=spec id=r1 created=2026-09-18T14:52:56 -->
+### r1 · review · Spec review: five claims corrected against the code
+
+1. Dropped the 'six tripwires assert byte-identity' overclaim — only test_tripwire_{opencode,hermes}_skills_sync do; the hermes hooks tripwire checks script existence, not mirror identity.
+2. `FR_HARNESS` does not exist today; the spec now says it introduces it.
+3. `fr run check` is currently a narrow freshness gate ('non-zero when the cursor sits on a failed step'). Reporting agent-cleared gates must NOT change its exit code — doing so would turn every legitimate non-interactive dispatch red, i.e. re-introduce the hard-refusal option the operator rejected. Now stated.
+4. `status-line` corrected from absent to partial on opencode/hermes: `fr-statusline-segment.sh` already accepts `--cwd` as well as Claude status-line JSON, so it is harness-neutral today; only the renderer and its settings.json registration are Claude-specific.
+5. `subagent-dispatch` row semantics were conflating the dispatch capability with the fr-phase-executor guard. Split and documented.
+Verified as stated: `fr acceptance check` outside a repo prints a message and exits 0 (the 'decline cleanly' precedent §3.F cites); `fr.hermes.snippet_entries` exists; RunState/StepRecord are frozen + extra=forbid; the fr-goal manifest's `implement` declares needs: [spec, plan]; AskUserQuestion appears 6x across canonical + both mirrors.
+
+<!-- fr:journal kind=decision scope=spec id=d5 created=2026-09-18T14:52:56 -->
+### d5 · decision · Tool names go neutral at the canonical source; mirrors stay byte-identical
+
+Agent-made call, not operator-owned, recorded because it rejects the approach #436 itself suggested. The issue proposes translating tool names at sync time; both sync scripts are byte-for-byte copies with tripwires asserting that identity, so translation forks one prose into three. The canonical prose goes neutral instead and a tripwire pins it, with an existing scoped-clause shape (fr-goal §5's '**Harness — dispatch:**') as the sanctioned escape.

@@ -146,9 +146,10 @@ per-harness state" true by construction rather than by diligence.
 ### C. Tool-name neutrality — enforced at the source, not translated at sync
 
 #436 suggests translating tool names at sync time. **Rejected.** Both sync scripts write
-`dest.write_text(src.read_text())` and six existing tripwires assert byte-identity between
-canonical and mirror. Translation would fork the prose three ways, break all six, and leave
-three texts to keep in agreement.
+`dest.write_text(src.read_text())`, and `test_tripwire_opencode_skills_sync` /
+`test_tripwire_hermes_skills_sync` assert exactly that byte-identity. Translation would fork
+one prose into three, break both tripwires, and leave three texts to keep in agreement —
+where today there is one text and two copies.
 
 Instead the *canonical* prose goes harness-neutral, the mirrors stay byte-identical, and a
 tripwire pins it: **no skill may name a harness-specific tool outside an explicitly scoped
@@ -177,10 +178,12 @@ Neutral prose alone would not have stopped the measured failure: the OpenCode ag
 lack instructions, it lacked a tool, and then cleared the gate anyway. Three changes:
 
 **D.1 `fr run advance` degrades loudly.** When a `gate: operator` step blocks, `advance`
-already prints the gate line. It now also detects the harness (`FR_HARNESS`, else inferred
-from the environment: `CLAUDE_PLUGIN_ROOT`/`CLAUDECODE` → claude-code, `OPENCODE*` →
-opencode, `HERMES*` → hermes) and consults the `operator-gate` row. When that row is not
-`enforced` for the detected harness, it prints the degradation notice:
+already prints the gate line. It now also detects the harness and consults the
+`operator-gate` row. Detection reads **`FR_HARNESS`** — a new variable this spec introduces,
+no such convention exists today — and falls back to inference from the environment
+(`CLAUDE_PLUGIN_ROOT`/`CLAUDECODE` → claude-code, `OPENCODE*` → opencode, `HERMES*` →
+hermes). When that row is not `enforced` for the detected harness, it prints the degradation
+notice:
 
 ```
 gate: your harness (opencode) has NO operator-question tool — this gate is advisory here.
@@ -205,9 +208,12 @@ and — since this moves the `run` kind's `current_version` past 1 — the optio
 `schema_version: int = 1` on `RunState` that the rule requires in the same PR.
 
 **D.3 `fr run check` and the PR body surface it.** `fr run check` reports every gate cleared
-with `answered_by: agent` as a finding. fr-goal's `deliver` step includes that list in the PR
-body under an "Operator gates" heading, so a run that never asked arrives at review saying so
-in its own words.
+with `answered_by: agent`. Its **exit code is unchanged** — today it is a narrow freshness
+gate ("non-zero when the cursor sits on a failed step"), and making an agent-cleared gate
+non-zero would turn every legitimate non-interactive dispatch red, which is the hard-refusal
+option the operator rejected in §3.D. The report is informational; the enforcement is that
+fr-goal's `deliver` step puts the same list in the PR body under an "Operator gates" heading,
+so a run that never asked arrives at human review saying so in its own words.
 
 ### E. Interaction surfaces, and what closes instance 1
 
@@ -218,7 +224,24 @@ Beyond the ten hook rows, the matrix carries `kind: interaction` rows. Four at s
 | `operator-gate` | `enforced` | `advisory` | `advisory` | `unsupported` |
 | `phase-sequence` | `enforced` | `enforced` | `enforced` | `unsupported` |
 | `subagent-dispatch` | `enforced` | `absent` | `enforced` | `unsupported` |
-| `status-line` | `enforced` | `absent` | `absent` | `unsupported` |
+| `status-line` | `enforced` | `partial` | `partial` | `unsupported` |
+
+Two of these rows were corrected during spec review, by checking the code rather than
+assuming, and both corrections are the matrix doing its job before it shipped:
+
+- **`subagent-dispatch`** is the pipeline's ability to hand a phase to a subagent, *not* the
+  `fr-phase-executor-guard` hook (which is a `kind: hook` row of its own, and is `absent` on
+  both non-Claude harnesses because neither `delegate_task` nor OpenCode's dispatch takes an
+  `isolation` argument, so neither can express the poisoned shape the guard refuses).
+  claude-code has the `Agent` tool; hermes has `delegate_task(goal, context)`; OpenCode is
+  `absent` with the `scope_note` that fr-goal §5's documented fallback applies — phases run
+  inline, which is correct behaviour, not a gap to fill.
+- **`status-line`** is `partial`, not `absent`, on the two other harnesses.
+  `fr-statusline-segment.sh` is **already harness-neutral** — it reads Claude status-line JSON
+  on stdin *or* takes `--cwd <dir>` — and only `fr-statusline-claude.sh`, the renderer, plus
+  its `settings.json` registration are Claude-specific. Any harness with a status line can
+  call the segment today; none but Claude Code ships a renderer. Declaring that `absent` would
+  have invited someone to re-port a script that already works.
 
 `phase-sequence` is **instance 1** of #436 — an agent finishing `fr-brainstorming` and going
 straight to production code, skipping `fr-plan`. The matrix picks the mechanism the issue
