@@ -28,6 +28,7 @@ import re
 from dataclasses import dataclass
 
 from fr.harness import HARNESSES, TOOL_VOCABULARY
+from fr.harness.model import HarnessError
 
 # Every mention needs its owning harness looked up; TOOL_VOCABULARY is
 # built the other way around (harness -> tools), so invert it once. The
@@ -49,25 +50,41 @@ _HARNESS_LABELS: dict[str, str] = {
     "codex": "Codex",
     "copilot-cli": "Copilot CLI",
 }
-assert set(_HARNESS_LABELS) == set(HARNESSES)
+if set(_HARNESS_LABELS) != set(HARNESSES):  # pragma: no cover — import-time invariant
+    raise HarnessError(
+        "TOOL_VOCABULARY/_HARNESS_LABELS disagree with HARNESSES: "
+        f"{sorted(set(_HARNESS_LABELS) ^ set(HARNESSES))}"
+    )
 
 # `**Harness — <topic>:**` — the em dash and bold markers are load-bearing:
 # they're what makes this shape rare enough to grep for and distinguishable
 # from ordinary prose that happens to say the word "harness".
 _CLAUSE_LEAD_RE = re.compile(r"\*\*Harness — [^*\n]+:\*\*")
 
-# A scoped clause is only a pass when it actually serves more than one
-# harness's reader. A clause wrapper around a single harness's tool still
-# leaves every other harness's reader with nothing — "the bug wearing a
-# clause's shape" — so the bar is DISTINCT harnesses named (by their
-# `_HARNESS_LABELS` display label, not necessarily by a tool of their
-# own — "Hermes has no dedicated tool here, do X instead" still correctly
-# serves a Hermes reader). Two, not "every HARNESSES member":
-# the real fr-goal §5 clause this rule is derived from names exactly two
-# (claude-code, hermes) because OpenCode has no dispatch mechanism of its
-# own to name; requiring all five would make the shipping clause its own
-# violation.
-_MIN_HARNESSES_PER_CLAUSE = 2
+# A scoped clause excuses a mention only when it names every SUPPORTED
+# harness by display label — not by a tool of its own, because "OpenCode has
+# no tool here, do X instead" serves an OpenCode reader perfectly well.
+#
+# The bar was 2 and is now len(SUPPORTED_HARNESSES) (review r3-i1). At 2, a
+# clause could excuse a Claude-only tool by name-dropping any second harness
+# while telling its reader nothing: `**Harness — q:** Call AskUserQuestion.
+# Hermes, OpenCode.` passed. Requiring all three means a clause cannot be
+# written without at least confronting what each reader should do. It also
+# forced fr-goal §5's dispatch clause to grow the OpenCode arm it was missing,
+# which is a real improvement rather than gate-appeasement — an OpenCode reader
+# of that clause previously got nothing.
+#
+# BE HONEST ABOUT WHAT THIS PROVES: it is a SYNTACTIC bar. It shows a clause
+# was written with every reader in view; it cannot show the clause is useful,
+# and one valid clause still excuses every tool inside its span. A clause that
+# name-drops all three and says nothing passes. Review catches that; the scan
+# cannot.
+#
+# Unsupported harnesses (`codex`, `copilot-cli`) are excluded: there is no
+# reader to serve yet, and requiring their labels would make every clause
+# recite two names that mean "not yet".
+SUPPORTED_HARNESSES = ("claude-code", "opencode", "hermes")
+_MIN_HARNESSES_PER_CLAUSE = len(SUPPORTED_HARNESSES)
 
 
 @dataclass(frozen=True)
@@ -105,7 +122,13 @@ def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
             while j < n:
                 if lines[j].strip() == "":
                     following = lines[j + 1] if j + 1 < n else None
-                    if following is None or not following[0].isspace():
+                    # `following[:1]`, not `following[0]` (review r3-c1): a
+                    # SECOND blank line makes `following` empty and `""[0]`
+                    # raised IndexError, so an ordinary blank-line pair after a
+                    # clause crashed the scan. `""[:1].isspace()` is False,
+                    # which breaks the span — exactly what an unindented line
+                    # should do.
+                    if following is None or not following[:1].isspace():
                         break
                 end = j
                 j += 1
@@ -123,14 +146,19 @@ def _clause_is_valid(lines: list[str], start: int, end: int) -> bool:
     harnesses_named = {
         harness
         for harness, label in _HARNESS_LABELS.items()
-        if any(_word_pattern(label).search(clause_line) for clause_line in clause_lines)
+        if harness in SUPPORTED_HARNESSES
+        and any(_word_pattern(label).search(clause_line) for clause_line in clause_lines)
     }
     return len(harnesses_named) >= _MIN_HARNESSES_PER_CLAUSE
 
 
 def scan_prose(text: str) -> list[Violation]:
     """Every harness-specific tool mention in `text` that is NOT inside a
-    scoped clause serving more than one harness."""
+    scoped clause naming every supported harness.
+
+    Ordered by (line, tool) so a failure listing several hits reads top to
+    bottom the way the file does — the loop below is tool-major for pattern
+    reuse (review r3-m6)."""
     lines = text.splitlines()
     spans = _clause_spans(lines)
     valid_span = {span: _clause_is_valid(lines, *span) for span in spans}
@@ -145,4 +173,4 @@ def scan_prose(text: str) -> list[Violation]:
             if clause is not None and valid_span[clause]:
                 continue
             violations.append(Violation(harness=harness, tool=tool, line=line_idx + 1))
-    return violations
+    return sorted(violations, key=lambda v: (v.line, v.tool))

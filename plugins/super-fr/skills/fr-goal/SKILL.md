@@ -39,22 +39,21 @@ instead of being stranded. Offered, never forced: the migration prints the comma
 
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
 
-**Interactive touchpoints (all else autonomous):** `brainstorm`'s batched
-Q&A (`gate: operator` — unanswered = stop), with any cross-repo location question folded in;
-manual phases from `plan`; PR merge after `deliver` — never self-merged — and the post-merge
-Test Plan.
+**Interactive touchpoints (all else autonomous):** `brainstorm`'s batched Q&A (`gate: operator`),
+with any cross-repo location question folded in; manual phases from `plan`; PR merge after
+`deliver` — never self-merged — and the post-merge Test Plan.
 
 ### 1. brainstorm — batched Q&A, in isolation (`gate: operator`)
 Invoke `fr-brainstorming`. Explore, collect EVERY operator-owned decision — including one
 repo-location question per other repo of a cross-repo spec (ask only if not found on disk) —
-into ONE batch (max 4, recommended first) put to the operator through your harness's question
-surface, then STOP; add a post-merge Test Plan question when the deliverable deploys, a
-model-per-tier one if `fr models resolve` is unbound. Log each answer as a spec-scope
-`decision`. **Hard gate:** an unanswered batch is a stop signal — restate the open questions,
-never default. Resolve with `--emitted spec=<path>` once written.
+into ONE batch (max 4, recommended first) put to the operator, then STOP; add a post-merge Test
+Plan question when the deliverable deploys, a model-per-tier one if `fr models resolve` is
+unbound. Log each answer as a spec-scope `decision`. **Hard gate:** an unanswered batch is a
+stop signal — restate the open questions, never default. Resolve `--emitted spec=<path>`.
 
-**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call; Hermes and OpenCode have none — ask via whatever surface the harness offers, treating
-silence as the same stop signal.
+**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call. Hermes and
+OpenCode have no question tool: put the numbered batch in your reply and END THE TURN — an
+unanswered batch is the same stop signal there, and clearing the gate unasked is recorded.
 
 ### 2. spec-review
 Review the spec against the Q&A answers AND codebase reality (do the named
@@ -92,7 +91,8 @@ where spec/plan are invisible and writes are denied, yet the dispatch succeeds, 
 healthy while nothing happens. The two isolations don't compose. (Contrast §2's cross-repo agents,
 which *keep* the flag — each starts a fresh pipeline in a different repo; these share this one's
 workspace.) Hermes `delegate_task(goal, context)` carries the brief in `context`, serial; child loads
-`fr-execute`. An executor that both returns and messages: keep the return, log the drop, move on (#461).
+`fr-execute`. OpenCode has no dispatch primitive of its own — phases run inline, which is correct
+behaviour, not a gap. An executor that both returns and messages: keep the return, log the drop (#461).
 
 ### 6. review-phase — per phase, inside the loop, then push (never a PR)
 After each `implement-phase` return, run `review-phase`: `superpowers:requesting-code-review` over

@@ -256,3 +256,42 @@ Phase 3 needed lines to fit a new clause under the hard 120-line skill cap, and 
 Two MORE were then found by grepping every canonical skill, both pre-existing on main: fr-brainstorming:10 ('docker-' / 'less') and fr-init:115 ('least-' / 'privileged'). The first sits in the frontmatter `description:` — the text every session's skill listing renders, so it has been reaching every agent as 'docker- less' for as long as it has shipped. Fixed all five; mirrors re-synced byte-identically.
 
 Guard added: test_skill_validation.py::test_no_hyphenated_word_is_broken_across_lines, over every canonical skill. The lesson it encodes is the generalisable one — the 120-line cap makes rewrapping-to-buy-a-line the obvious move, and a word-level diff will keep saying every word is unchanged. Words unchanged is not rendering unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=r3-c1 created=2026-09-18T17:04:43 phase=3 state=fixed -->
+### r3-c1 · finding [fixed] · scan_prose crashed on two consecutive blank lines after a clause (phase 3)
+
+`following[0]` on an empty string raises IndexError, so an ordinary blank-line PAIR after a **Harness — ...:** clause made the neutrality scan unrunnable rather than merely wrong. Reproduced before fixing. No shipped skill triggers it today, so it was latent — but this is a library function phase 6 and any future caller lean on, and it converts 'someone added a blank line' into 'the gate cannot run'. Fixed with `following[:1]`, which is False for an empty line and so breaks the span — the semantics the docstring already promised. Test: test_two_blank_lines_after_a_clause_do_not_crash_the_scan.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i1 created=2026-09-18T17:04:43 phase=3 state=fixed -->
+### r3-i1 · finding [fixed] · The two-harness clause bar was a name-dropping loophole; raised to every supported harness (phase 3)
+
+Verified the loophole by probe: '**Harness — q:** Call AskUserQuestion. Hermes, Codex.' returned [] — a Claude-only tool excused by naming a second harness while telling its reader nothing. The clause topic was unvalidated and one valid clause laundered every tool in its span.
+
+The executor was RIGHT to change the plan's rule (tool-vocabulary membership would have made the shipping fr-goal §5 clause its own violation — verified). The error was the bar, not the switch to display labels. Raised from 2 to every SUPPORTED harness (claude-code, opencode, hermes; unsupported excluded — no reader to serve yet). This forced fr-goal §5's dispatch clause to grow the OpenCode arm it never had, which is a real improvement rather than gate-appeasement: an OpenCode reader of that clause previously got nothing. Wording taken from spec §3.E ('no dispatch primitive of its own — phases run inline, which is correct behaviour, not a gap').
+
+The comment now states plainly that this is a SYNTACTIC bar: it shows a clause was written with every reader in view, it cannot show the clause is useful, and a clause that name-drops all three and says nothing still passes. Review catches that; the scan cannot. The code previously asserted the opposite of what it did, which a future reader would have trusted. This also narrowed an existing test that named exactly two harnesses and asserted they were excused — it encoded the old bar.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i2 created=2026-09-18T17:04:44 phase=3 state=fixed -->
+### r3-i2 · finding [fixed] · The neutral prose was neutral but vague — it would not have stopped the agent in the measured failure (phase 3)
+
+Two defects, and this is THE bug #436 is about, so vagueness here costs the whole phase.
+
+1. fr-init §2 never received the hard-gate sentence fr-goal §1 got. Its new clause said 'treat silence the same as an unanswered round' while nothing in the file ever said what an unanswered round obliges — circular for the reader who needs it. Added: '**Hard gate:** an unanswered round is a stop signal — restate the open questions, never default.'
+
+2. Both clauses read 'Hermes and OpenCode have none — ask via whatever surface the harness offers', which is self-contradictory (you have none, so ask via what you have) and names no action. An OpenCode agent can read 'have none' as 'there is no way to ask here' and proceed — precisely the measured failure. Replaced with the concrete action spec §3.D.1's own degradation notice names: 'put the numbered batch in your reply and END THE TURN'. Prose that is neutral but vague satisfies the tripwire without fixing the bug.
+
+fr-goal went 2 lines over the 120 cap; reclaimed by tightening (a touchpoints bullet that restated §1's gate, now stated better in §1 itself), not by rewrapping — and the new hyphen guard would have caught a bad rewrap anyway. Both files land at exactly 120.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i3 created=2026-09-18T17:04:44 phase=3 state=fixed -->
+### r3-i3 · finding [fixed] · plugins/super-fr/rules/ mirrors to all three harnesses and is unscanned — one live misleading claim fixed, the tripwire scope carried to phase 6 (phase 3)
+
+Spec §3.C scopes the tripwire to skills, so this is not a phase-3 violation — but rules/ is copied BYTE-IDENTICALLY into .opencode/instructions/ and .hermes/SOUL.d/, reaching the same non-Claude readers, and scan_prose finds nine tool mentions there.
+
+Triaged them: most are defensible (fr-isolation-required.md is explicitly prose ABOUT the Claude Code hook, and its line 149 is already a per-harness sentence). One was not: fr-worktree-override.md told every reader that 'super-fr's WorktreeCreate hook already lands them in fr', unqualified — untrue on OpenCode and Hermes, where fr isolation up is the only route in. Fixed that one now.
+
+CARRY TO PHASE 6 (alongside r1-m8): decide deliberately whether rules/ joins the tripwire's tree. It is the same bug class the phase exists to close, and leaving the vocabulary rule half-applied should be a decision with reasons, not an omission. Doing it needs scoped clauses or rewrites in the remaining rules — real work, not a drive-by.
+
+<!-- fr:journal kind=finding scope=plan id=r3-m5m6 created=2026-09-18T17:04:44 phase=3 state=fixed -->
+### r3-m5m6 · finding [fixed] · Import-time bare assert replaced with HarnessError; violations now ordered line-major (phase 3)
+
+M5: a bare assert in library code is stripped under python -O and fired at import — harmless while prose.py was test-only, a landmine once phase 6 may wire it into the CLI path. Now raises HarnessError. M6: scan_prose loops tool-major for pattern reuse, so a multi-hit failure listed out of file order; results are now sorted by (line, tool).
