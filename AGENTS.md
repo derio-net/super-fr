@@ -19,10 +19,17 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`spec|plan|debug`) durable run-state under
     `docs/superpowers/journals/{specs,plans,debug}/` (one subdir per scope so
     the tree is glanceable; archived to `implemented/journals/<scope>/`).
-    `add` (idempotent
-    on `--id`) / `render` (raw, feeds PR bodies) / `check` (fail-closed on open
-    findings). `fr plan create` seeds a plan journal; parsing never depends on
-    one (back-compat). fr-goal & fr-debugging write it as they run.
+    `add` (idempotent on `--id` — re-adding an existing id changes **nothing**,
+    including its `state`, so it is never an update path) / `resolve` (appends a
+    RESOLUTION RECORD closing a finding; append-only, so the original entry is
+    never rewritten) / `render` (raw, feeds PR bodies) / `check` (fail-closed on
+    findings whose **effective** state — the fold of every record naming them,
+    last one wins — is still open). `fr plan create` seeds a plan journal;
+    parsing never depends on one (back-compat), and a journal with no resolution
+    records folds to exactly what it did before `resolve` existed. fr-goal &
+    fr-debugging write it as they run. The matrix's counterpart verb is
+    `fr acceptance set-status` (in-place, beside `add`): a registry of CURRENT
+    state, deliberately not a log.
   - **`fr models`** (`fr/models.py`, `commands/models_cmd.py`) — `tier → model`
     bindings (`~/.config/fr/models.yaml`, repo override > user) for fr-goal
     subagent dispatch; `PhaseHeader.tier` is the harness-neutral hint.

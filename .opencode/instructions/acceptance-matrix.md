@@ -16,7 +16,8 @@ the following updates the matrix in the SAME PR:**
   `acceptance-report` workflow then FAILS by design until it is fixed or
   re-classified with reasoning in `notes`
 
-Statuses move **explicitly, never silently**: `ci` | `scheduled` (automated
+Statuses move **explicitly, never silently** — and they move with
+`fr acceptance set-status`, never a hand-edit: `ci` | `scheduled` (automated
 — the safe end) · `skipped` (verification exists, not in CI — warning,
 backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
 (fails CI).
@@ -25,6 +26,16 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
 
 - Add rows: `fr acceptance add --id ... --capability ... --acceptance ...
   --origin <repo>:<path> --level unit=<repo>:<path> --status ... --notes ...`
+  (`add` CREATES; re-adding an existing id is refused, exit 2.)
+- Move a status: `fr acceptance set-status --id ... --status ...
+  --notes "<why it moved>" [--level unit=<repo>:<path>]` — the whole
+  documented transition in one command: it rewrites the row in place, adds
+  the evidence refs, and regenerates all three committed reports. `--notes`
+  is required (a status that moved for no recorded reason is the silent
+  change this rule forbids), and an unknown id or status is refused rather
+  than created. The matrix is a registry of CURRENT state, so this mutates;
+  its journal counterpart `fr journal resolve` appends instead, because a
+  journal is a log.
 - Check: `fr acceptance check` (refs, staleness, statuses; exit 2 on
   `failing`). Nag: `fr acceptance status` — **any agent session in this repo
   runs `fr acceptance status --brief` at session start** (Claude Code does it

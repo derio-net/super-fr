@@ -78,6 +78,11 @@ class JournalEntry(BaseModel):
     body: str = ""
     # Present ONLY on `finding` entries (fixed | refuted | open).
     state: FindingState | None = None
+    # A RESOLUTION RECORD names the finding it speaks about (spec §3.G.1). The
+    # journal is an audit log: `fr journal resolve` appends one of these rather
+    # than rewriting the finding, because a finding mutated in place erases
+    # that it was ever open. `effective_finding_states` folds them.
+    resolves: str | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -85,6 +90,22 @@ class JournalEntry(BaseModel):
             raise ValueError("a `finding` entry requires a `state` (fixed|refuted|open)")
         if self.kind != "finding" and self.state is not None:
             raise ValueError(f"`state` is only valid on `finding` entries, not `{self.kind}`")
+        if self.resolves is not None:
+            if self.kind != "finding":
+                raise ValueError(
+                    f"`resolves` is only valid on `finding` entries, not `{self.kind}` "
+                    "— a resolution record carries the state it resolves the finding to"
+                )
+            if any(c.isspace() for c in self.resolves) or not self.resolves:
+                raise ValueError(
+                    f"`resolves` must be a non-empty whitespace-free journal id, "
+                    f"got {self.resolves!r}"
+                )
+            if self.resolves == self.id:
+                raise ValueError(
+                    f"entry `{self.id}` cannot resolve itself — a resolution record is a "
+                    "SEPARATE entry naming the finding it closes"
+                )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
         if not self.id or any(c.isspace() for c in self.id):
@@ -132,7 +153,11 @@ def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -
 _DELIM_PREFIX = "<!-- fr:journal "
 _DELIM_SUFFIX = " -->"
 # Header fields serialized into the delimiter comment, in a stable order.
-_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state")
+# `resolves` is appended LAST so every journal written before phase 7 keeps
+# the byte-for-byte header it already has; an fr that predates the field reads
+# the token and ignores it (`parse_journal` names the fields it wants), so an
+# older reader sees a resolution record as an ordinary fixed/refuted finding.
+_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state", "resolves")
 
 
 def serialize_entry(entry: JournalEntry) -> str:
@@ -208,6 +233,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                     title=_title_from_heading(text, fields["id"]),
                     body="\n".join(block),
                     state=fields.get("state"),  # type: ignore[arg-type]
+                    resolves=fields.get("resolves"),
                 )
             )
         except KeyError as e:
@@ -227,6 +253,58 @@ def _title_from_heading(text: str, entry_id: str) -> str:
                 title = title[: title.rindex(" (phase ")]
             return title
     return ""
+
+
+# --- effective finding state (the fold) ----------------------------------
+
+
+def effective_finding_states(entries: list[JournalEntry]) -> dict[str, FindingState]:
+    """Each finding id → the state its LAST record gives it (spec §3.G.1).
+
+    A *record* for a finding is either the finding entry itself or a later
+    resolution record naming it through `resolves`. Entries arrive in file
+    order, which for an append-only journal is chronological, so the fold is a
+    left-to-right overwrite: resolved, then re-opened by a later record, reads
+    open again.
+
+    A record carrying `resolves` speaks about the finding it names and NOT
+    about itself — otherwise resolving one finding would open a new one — so it
+    never contributes its own id to the map. A record naming an id that has no
+    entry still folds (a hand-spliced journal must not crash the gate);
+    `fr journal resolve` refuses to write one.
+
+    A journal with no resolution records — every journal written before this
+    existed — folds to exactly each finding's own `state`.
+    """
+    states: dict[str, FindingState] = {}
+    for e in entries:
+        if e.resolves is not None:
+            if e.state is not None:
+                states[e.resolves] = e.state
+        elif e.kind == "finding" and e.state is not None:
+            states[e.id] = e.state
+    return states
+
+
+def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
+    """Findings whose EFFECTIVE state is open, in first-appearance order.
+
+    First-appearance, not resolution order, so the gate's message stays stable
+    as records accumulate.
+    """
+    states = effective_finding_states(entries)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for e in entries:
+        if e.kind != "finding":
+            continue
+        fid = e.resolves if e.resolves is not None else e.id
+        if fid in seen:
+            continue
+        seen.add(fid)
+        if states.get(fid) == "open":
+            ordered.append(fid)
+    return ordered
 
 
 def _handoff_line(entry: JournalEntry) -> str:
@@ -257,11 +335,17 @@ def compose_handoff(
     `depends_on`, then calls this.
     """
     relevant = {phase, *depends_on}
+    # EFFECTIVE state, not each entry's own: a finding resolved by a later
+    # record has stopped being actionable, and re-showing it in full is the
+    # noise the fold exists to remove. The resolution record itself still
+    # renders (in context or collapsed), so the handoff says both what was
+    # found and what became of it.
+    still_open = set(open_finding_ids(entries))
     open_findings: list[str] = []
     context: list[str] = []
     collapsed: list[str] = []
     for e in entries:
-        if e.kind == "finding" and e.state == "open":
+        if e.kind == "finding" and e.resolves is None and e.id in still_open:
             open_findings.append(serialize_entry(e))
         elif e.phase is None or e.phase in relevant:
             context.append(serialize_entry(e))

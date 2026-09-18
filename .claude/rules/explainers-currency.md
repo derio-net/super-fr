@@ -69,6 +69,25 @@ markdown's codehilite into syntax-highlighting mode and rewrites every code
 block — a diff of hundreds of lines you did not write. From `/`, pygments is
 absent and the unmodified render is byte-identical.
 
+**`--isolated` is what actually closes it** (found 2026-09-18, phase 6 of the
+harness-parity work, by running the byte-for-byte check above from `/` and
+still getting a divergent page). Running from `/` is necessary but not
+sufficient: on a machine with a **global** pygments — homebrew's
+`python3.14` `site-packages`, nothing to do with any project venv — `uv run
+--no-project` picks it up whatever the cwd, and codehilite flips again. Add
+`--isolated`:
+
+```bash
+uv run --isolated --no-project --with markdown --with pyyaml python \
+  "$B/tools/render_explainer.py" docs/explainers/<name>.md \
+  --style broadsheet --embed-fonts -o docs/explainers/<name>.html
+```
+
+With it, the unmodified re-render came back byte-identical to the committed
+`.html`, and the real render then produced exactly the paragraph that was
+written and nothing else. The verification step is not optional ceremony: it
+is what found this, twice.
+
 ## Enforcement
 
 `tests/unit/test_tripwire_explainers_fresh.py` fails when a rendered page stops

@@ -534,3 +534,165 @@ TWO causes, and the second is the generalisable one:
 2. ORDERING. P6.T3.S2 lists the gate as ruff format -> ruff check -> mypy -> pytest -> ... . The phase's self-caused 4th failure was discovered DURING pytest, i.e. after ruff check had already passed, and the fix for it added the offending import. `ruff format` does not sort imports, so re-running format would not have caught it either. Nothing re-ran lint after the last source edit. A linear gate list is only valid if no step edits source; the moment one does, the gate must restart.
 
 FOR ANY LATER PHASE AND FOR THE PLAN TEMPLATE: after the LAST source edit, re-run the whole gate, and capture exit codes by redirecting to a file rather than piping. The phase-7 brief carries the same ordering in P7.T4.S3 and was warned.
+
+<!-- fr:journal kind=finding scope=plan id=p7-red-confirmed created=2026-09-18T19:31:50 phase=7 state=open -->
+### p7-red-confirmed · finding [open] · RED confirmed: 18 tests fail before any phase-7 journal code (phase 7)
+
+P7.T1.S1: appended TestEffectiveFindingStates/TestResolvesRoundTrip/TestHandoffReadsEffectiveState to tests/unit/test_journal_model.py and TestResolve to tests/unit/test_journal_cmd.py, ran them against the unmodified tree: 18 failed, 57 passed. Failures are exactly the new properties (no effective_finding_states/open_finding_ids symbol, no resolves field, no resolve verb). Two of the new model tests (resolves_requires_a_finding_entry, a_record_cannot_resolve_itself) pass RED for a different reason -- extra='forbid' rejects the unknown kwarg -- and only become real validator tests after GREEN; they are guards, kept deliberately.
+
+<!-- fr:journal kind=decision scope=plan id=p7-resolution-record-shape created=2026-09-18T19:34:31 phase=7 -->
+### p7-resolution-record-shape · decision · The resolution record is a finding entry with a resolves= header token -- no stamp bump, no new kind (phase 7)
+
+P7.T2.S1/S2 GREEN, with three design calls worth pinning:
+
+1. The resolution record is an ordinary `finding` entry carrying one NEW optional header token, `resolves=<finding-id>` (fr/journal/model.py). Chosen over a new `kind` because the header parser (`parse_journal`) names the fields it wants and ignores every other token, so an fr that predates the field reads a phase-7 journal without error -- it just sees the record as an ordinary fixed/refuted finding. That is why this is NOT an artifact shape change and ships no stamp bump: the artifact-versioning rule's trigger is "an old reader raises because the models are extra=forbid", and journals are the one kind whose reader does not (verified by reading _parse_header/parse_journal, not assumed). `resolves` is appended LAST in _HEADER_FIELDS so every existing entry's header is byte-identical.
+
+2. The fold lives in fr/journal/model.py as `effective_finding_states()` + `open_finding_ids()`, not in a new fr/journal/check.py as the plan step named -- there is no check.py in that package (check is a command in fr/commands/journal_cmd.py, and the package holds only __init__.py + model.py). Putting a pure fold next to compose_handoff, the other pure reader, keeps one module for journal semantics; the CLI calls it. `check`'s output shape is unchanged ("N open finding(s): <ids>").
+
+3. `compose_handoff` now reads EFFECTIVE state too, so a resolved finding leaves the "Open findings" section and its resolution record still renders (in context or collapsed). Back-compat is exact: a journal with no resolution records folds to each finding's own state, so both check and handoff behave identically on every journal written before this existed (pinned by test_an_older_journal_file_on_disk_still_folds against literal pre-phase-7 text).
+
+Two asymmetries deliberately encoded: a record carrying `resolves` speaks about the finding it names and never registers as a finding of its own (else resolving would open a new one); and `resolve` refuses --state open (RESOLUTION_STATES = fixed|refuted) -- re-opening is `fr journal add --resolves <id> --state open`, which is real new information and deserves a body of its own. That also makes the "last record wins" fold testable through the real CLI rather than over a hand-built state no command can produce.
+
+`add` and `resolve` share one writer, `_append_entry(path, slug, entry)` (the P7.T4.S1 candidate, done here since it was the natural shape).
+
+<!-- fr:journal kind=finding scope=plan id=949ba7697d2b-resolved created=2026-09-18T19:35:37 phase=7 state=fixed resolves=949ba7697d2b -->
+### 949ba7697d2b-resolved · finding [fixed] · resolves 949ba7697d2b: No // super-fr-parity: marker comments exist yet in fr-opencode-plugin (phase 7)
+
+Superseded by the phase-2 entries 5150890be0af and 0fa365c4346a, which planted the marker. Re-verified live before resolving: packages/fr-opencode-plugin/src/index.ts line 13 carries the super-fr-parity: fr-isolation-required.sh marker (plus the explanatory comment at line 8), so observe() no longer reads the hook as absent on opencode.
+
+<!-- fr:journal kind=finding scope=plan id=2b552ded3e12-resolved created=2026-09-18T19:35:37 phase=7 state=fixed resolves=2b552ded3e12 -->
+### 2b552ded3e12-resolved · finding [fixed] · resolves 2b552ded3e12: Tripwire RED: six live AskUserQuestion occurrences (fr-goal §1, fr-init §2, x3 copies) (phase 7)
+
+Superseded by the phase-3 entries r3-i1 and r3-i2, which rewrote the offending prose into scoped Harness clauses. Re-verified live before resolving: tests/unit/test_tripwire_skill_tool_neutrality.py is green (4 passed), and the six AskUserQuestion occurrences are now two canonical lines plus their four mirrors, each inside a Harness questions clause that names every supported harness -- scoped, not deleted, which is what the tripwire asks for.
+
+<!-- fr:journal kind=finding scope=plan id=r4-i1-resolved created=2026-09-18T19:35:37 phase=7 state=fixed resolves=r4-i1 -->
+### r4-i1-resolved · finding [fixed] · resolves r4-i1: PHASE 5 MUST FIX: nothing teaches the enforced path to type --answered-by operator, so the report cries wolf (phase 7)
+
+Superseded by the phase-5 entry r4-i1-fixed: the enforced path now types --answered-by operator, present in all three skill mirrors.
+
+<!-- fr:journal kind=finding scope=plan id=r4-i2-resolved created=2026-09-18T19:35:37 phase=7 state=fixed resolves=r4-i2 -->
+### r4-i2-resolved · finding [fixed] · resolves r4-i2: PHASE 5 MUST FIX: the helper cannot say 'a gate exists but its provenance predates the field' — this PR's own Operator gates section renders EMPTY (phase 7)
+
+Superseded by the phase-5 entry r4-i2-fixed: fr.run.provenance.gates() reads the manifest and renders provenance-not-recorded rather than a blank Operator gates section.
+
+<!-- fr:journal kind=finding scope=plan id=r1-m8-resolved-2 created=2026-09-18T19:35:38 phase=7 state=fixed resolves=r1-m8 -->
+### r1-m8-resolved-2 · finding [fixed] · resolves r1-m8: CARRY TO PHASE 6: decide deliberately whether 'harness' joins fr.artifacts.trigger.EXEMPT_COMMANDS (phase 7)
+
+Superseded by the phase-6 decision entry r1-m8-resolved: harness joined READ_ONLY_COMMANDS in fr/artifacts/trigger.py and the pinned literal test was updated with the argument. The finding was a deliberate carry asking phase 6 to make the call; the call was made and written down.
+
+<!-- fr:journal kind=finding scope=plan id=770edf2e5133-resolved-2 created=2026-09-18T19:35:38 phase=7 state=fixed resolves=770edf2e5133 -->
+### 770edf2e5133-resolved-2 · finding [fixed] · resolves 770edf2e5133: FOR PHASES 5-6: the fr on PATH (4.4.0, base clone) can no longer read this worktree's run cursor — use uv run fr (phase 7)
+
+Superseded by the phase-6 decision entry 770edf2e5133-resolved: AGENTS.md Dev commands now carries the always uv run fr inside an fr-isolation worktree note, so the trap is documented where a reader looks for it rather than only in this journal.
+
+<!-- fr:journal kind=finding scope=plan id=r5-journal-gate-resolved created=2026-09-18T19:35:38 phase=7 state=fixed resolves=r5-journal-gate -->
+### r5-journal-gate-resolved · finding [fixed] · resolves r5-journal-gate: fr-goal §7's own gate 'fr journal check --scope plan clean' is UNSATISFIABLE — verified by experiment, out of scope to fix here (phase 7)
+
+Closed by phase 7 itself. The finding said fr journal check can never return clean once any finding is opened, and that fixing it was out of scope for the harness-parity criteria. Spec 3.G was then added and this phase built the missing verb: fr journal resolve appends a resolution record and check folds records into an effective state. This very entry was closed by that command, which is the demonstration. fr-goal 7 gate prose (reworded by the phase-5 decision r5-gate-prose to describe raw-state counting) is restored to a plain clean gate in P7.T4.S2.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-dogfood-before-after created=2026-09-18T19:36:03 phase=7 -->
+### p7-dogfood-before-after · discovery · DOGFOOD: this plan journal's own gate went from 9 open to 2 open, by command, with the originals untouched (phase 7)
+
+P7.T2.S3, exact output (uv run fr journal check --scope plan --slug 2026-09-18-harness-parity-matrix; rich wraps the line at the console width):
+
+BEFORE (exit 1):
+  9 open finding(s): 949ba7697d2b, r1-m8, 2b552ded3e12, 770edf2e5133, r4-i1, r4-i2, r5-journal-gate, r6-x1, p7-red-confirmed
+
+AFTER seven resolutions (exit 1, and correctly so):
+  2 open finding(s): r6-x1, p7-red-confirmed
+
+The two that remain are genuinely open at that moment: r6-x1 is closed later in this phase once fr acceptance set-status exists, and p7-red-confirmed is this phase's own RED marker, closed when the phase is green. r3-i3 needed nothing: phase 3 recorded it as fixed and phase 6 added the reasoned deferral r3-i3-resolved, so it never counted as open.
+
+Records written (resolve auto-ids as <finding>-resolved, then -2, -3 on collision): 949ba7697d2b-resolved, 2b552ded3e12-resolved, r4-i1-resolved, r4-i2-resolved, r1-m8-resolved-2, 770edf2e5133-resolved-2, r5-journal-gate-resolved. The -2 suffixes are real evidence of the collision path: phase 6 had already written DECISION entries named r1-m8-resolved and 770edf2e5133-resolved, and a duplicate id would have failed fr validate artifacts. It does not: uv run fr validate artifacts reports 23 artifact(s) checked, all structurally valid, after the seven appends.
+
+Every original finding still reads state=open in the file with its text unchanged; what changed is that check folds. Two of the seven were verified live rather than taken from the earlier journal prose: the super-fr-parity marker is on packages/fr-opencode-plugin/src/index.ts:13 (closing 949ba7697d2b), and tests/unit/test_tripwire_skill_tool_neutrality.py is green with the six AskUserQuestion occurrences now inside scoped Harness clauses (closing 2b552ded3e12).
+
+<!-- fr:journal kind=discovery scope=plan id=p7-red-set-status created=2026-09-18T19:37:38 phase=7 -->
+### p7-red-set-status · discovery · RED confirmed for fr acceptance set-status: 9 of 12 new tests fail on No such command (phase 7)
+
+P7.T3.S1: tests/unit/test_acceptance_set_status.py added and run against the tree that already has fr journal resolve: 9 failed, 3 passed. The three that pass RED do so because a missing subcommand also exits 2 and touches no file, which is what they assert (notes required, malformed level ref refused, other fields preserved); they become real assertions only once the verb exists, and are kept because they pin the no-write-on-refusal property the whole verb is about. The nine genuine reds cover the in-place move, the recorded reason, report regeneration (fresh and pre-existing), unknown id creating nothing, unknown status listing the valid five, byte-stability of every other row, and level-evidence accumulation.
+
+<!-- fr:journal kind=decision scope=plan id=p7-set-status-writer created=2026-09-18T19:39:30 phase=7 -->
+### p7-set-status-writer · decision · set-status and add share ONE row writer (fr/acceptance/edit.py), and the row span is parsed, never pattern-matched (phase 7)
+
+P7.T3.S2 GREEN (124 passed across the six acceptance test modules). Shape:
+
+New module packages/fr/src/fr/acceptance/edit.py owns every textual write into matrix.yaml: render_row_block() (the indented yaml.dump block add has always emitted, now used by both verbs), append_row(), replace_row(), merge_levels(). acceptance_cmd.py keeps three shared helpers both verbs go through: _parse_levels, _validate_refs (ref grammar checked BEFORE the file is touched), _commit_matrix (write, reload, roll back on an invalid result) and _regenerate_reports (warn-only; a render hiccup never discards a valid write). add_cmd lost ~45 lines to this and behaves identically -- its whole existing test file still passes untouched.
+
+Two decisions worth naming:
+
+1. replace_row finds a row by PARSING each list item under rows: and comparing its id, never by matching a literal id: <row> line. A row whose notes quote another row id (this matrix has several, since notes cite spec sections and sibling rows) would otherwise hijack the span and the wrong row would be rewritten -- a silent mis-edit, which is the exact failure class this PR exists to remove. Everything outside the target block is preserved byte for byte, including the 23-line header comment block a yaml.safe_dump round trip would reflow; pinned by test_no_other_row_is_touched.
+
+2. set-status takes an optional repeatable --level, additive and de-duplicating. The rule .claude/rules/acceptance-matrix.md documents ONE transition -- add the ref to levels, move status up -- and a verb that moved only the status would leave the evidence half to the hand-edit it exists to end, producing ci rows with no test refs (a false clean in the rendered report). Removal stays a deliberate edit; a status flip never drops a ref silently.
+
+<!-- fr:journal kind=finding scope=plan id=r6-x1-resolved created=2026-09-18T19:40:10 phase=7 state=fixed resolves=r6-x1 -->
+### r6-x1-resolved · finding [fixed] · resolves r6-x1: SECOND instance of the same gap: the acceptance matrix documents a status lifecycle with no verb to move it (phase 7)
+
+Closed by phase 7 itself. The finding said the acceptance matrix documents a status lifecycle with no verb to move it, so the only path was the hand-edit add's own help forbids. fr acceptance set-status now exists: it moves the row in place, requires a reason, takes optional --level evidence so the whole documented transition is one command, regenerates all three committed reports, and refuses an unknown id or status rather than creating anything. Demonstrated on the two rows this phase owns: both lifecycle-journal-resolve and lifecycle-acceptance-set-status went not-implemented to ci BY that command, with fr acceptance check green and no report drift -- no hand-edit anywhere in phase 7.
+
+<!-- fr:journal kind=finding scope=plan id=p7-red-confirmed-resolved created=2026-09-18T19:40:10 phase=7 state=fixed resolves=p7-red-confirmed -->
+### p7-red-confirmed-resolved · finding [fixed] · resolves p7-red-confirmed: RED confirmed: 18 tests fail before any phase-7 journal code (phase 7)
+
+GREEN. The 18 journal RED tests and the 9 acceptance-set-status RED tests all pass, and the pre-existing acceptance and journal suites pass untouched alongside them (97 journal-side, 124 acceptance-side). Closes this phase's own RED marker.
+
+<!-- fr:journal kind=finding scope=plan id=p7-gate-now-clean created=2026-09-18T19:40:28 phase=7 state=fixed -->
+### p7-gate-now-clean · finding [fixed] · This PR's own delivery gate is now SATISFIABLE: fr journal check --scope plan exits 0, and both acceptance rows were flipped BY the new verb (phase 7)
+
+P7.T4.S1, the acceptance evidence in one place.
+
+fr journal check --scope plan --slug 2026-09-18-harness-parity-matrix:
+  BEFORE (exit 1): 9 open finding(s): 949ba7697d2b, r1-m8, 2b552ded3e12, 770edf2e5133, r4-i1, r4-i2, r5-journal-gate, r6-x1, p7-red-confirmed
+  AFTER  (exit 0): no output -- clean.
+
+Nine resolution records were appended, never a rewrite: 949ba7697d2b-resolved, 2b552ded3e12-resolved, r4-i1-resolved, r4-i2-resolved, r1-m8-resolved-2, 770edf2e5133-resolved-2, r5-journal-gate-resolved, r6-x1-resolved, p7-red-confirmed-resolved. Every original finding still carries its own text and state=open in the file; what changed is that check folds records into an effective state. Two of the nine (r5-journal-gate, r6-x1) are the entries that asserted these gaps could not be closed here -- closing them with the very commands they said did not exist is the demonstration, and it also keeps the PR body honest, since both render into it verbatim.
+
+fr acceptance set-status, used on its own rows (no hand-edit anywhere in this phase):
+  lifecycle-journal-resolve: not-implemented -> ci
+  lifecycle-acceptance-set-status: not-implemented -> ci
+Each carried its --level test refs and a --notes reason in the same command. git diff docs/acceptance/ shows exactly four files: matrix.yaml (the two row blocks only -- the 23-line header comment and all 112 other rows byte-identical) and the three committed report renderings. uv run fr acceptance check exits 0 with no report-drift error and only the pre-existing unrelated warnings (114 rows OK, ci: 96, skipped: 14, not-implemented: 4).
+
+The refactor P7.T4.S1 asked about was done where it belonged rather than after the fact: journal add/resolve share _append_entry, acceptance add/set-status share fr/acceptance/edit.py plus _parse_levels/_validate_refs/_commit_matrix/_regenerate_reports.
+
+<!-- fr:journal kind=decision scope=plan id=p7-docs-surfaces created=2026-09-18T19:43:01 phase=7 -->
+### p7-docs-surfaces · decision · Documented both verbs on five surfaces, and repaired the two claims this phase falsifies (phase 7)
+
+P7.T4.S2, per the orchestrator's audited list:
+
+1. plugins/super-fr/skills/fr-acceptance/SKILL.md -- the sharpest one. It mandated flipping rows up the ladder while also saying never hand-edit YAML shapes, with no verb able to do it: exactly the trap phase 6 fell into. Flip statuses (execution hand-off) now gives the full fr acceptance set-status invocation including --level and --notes, and the Statuses honesty scale names the verb in the same breath as explicitly, never silently.
+
+2. plugins/super-fr/skills/fr-goal/SKILL.md 7 -- a live contradiction this phase CREATED. Phase 5's wording (it counts raw states, so a superseded open id still counts: name each in the body) became false the moment check started folding. Restored to a plain clean gate: it folds resolution records, so close each fixed finding with fr journal resolve rather than explaining it away. Phase 5 weakened a gate because the tool could not satisfy it; leaving the weakened wording would keep the lowered bar with the reason gone.
+
+3. fr-goal 6 -- added that a finding fixed later is closed with fr journal resolve, never by re-adding the id (a silent no-op). That exact misunderstanding produced r6-x1.
+
+4. AGENTS.md fr journal bullet -- lists resolve, says check reads EFFECTIVE state, spells out that re-adding an existing id changes nothing including its state (the phrasing idempotent on --id is what misled the orchestrator into telling phase 6 that re-adding was the update path for fr acceptance add, which exits 2), and names fr acceptance set-status as the counterpart with the registry-not-a-log asymmetry.
+
+5. .claude/rules/acceptance-matrix.md -- How gains a Move a status entry with the full command and the reason --notes is required; the explicitly, never silently line names the verb.
+
+6. .claude/rules/explainers-currency.md -- the --isolated addendum from r6-explainer-isolated: running from / is necessary but not sufficient, because a machine-global pygments (homebrew python3.14) is picked up regardless of cwd; uv run --isolated --no-project is what makes the unmodified re-render byte-identical.
+
+Both mirrors regenerated (scripts/sync-opencode.py: 9 skills, 7 instructions, 9 commands; scripts/sync-hermes.py: 9 skills, 4 rules). fr-goal stays at exactly 120 lines -- the two edits lengthen existing lines rather than adding any, so no rewrap and no hyphen-break hazard; test_skill_validation.py and both sync tripwires pass. Checked with git diff --word-diff=porcelain that no other wording moved. Version NOT re-bumped: 4.5.0 is already a minor and two new subcommands stay minor.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-full-gate created=2026-09-18T19:47:24 phase=7 -->
+### p7-full-gate · discovery · Full gate, verbatim: 11 of 12 steps green, pytest red only on the three known-local failures (phase 7)
+
+P7.T4.S3. Every step run with output redirected to its own file and the exit code read from the command itself, never through a pipe (the trap that made phase 6 report a green gate over a red ruff check: $? after a pipe is tail's). No source edit happened after the gate started, so the linear order is valid; had one been needed, the whole gate re-runs from the top.
+
+01 uv run ruff format packages/ tests/            exit=0  -> 3 files reformatted, 351 files left unchanged
+02 uv run ruff check packages/ tests/             exit=0  -> All checks passed!
+03 uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+                                                  exit=0  -> Success: no issues found in 137 source files
+04 uv run pytest (full, with coverage)            exit=1  -> 3 failed, 3115 passed, 80 skipped in 192.04s; Required test coverage of 75% reached. Total coverage: 91.50%
+     FAILED tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused
+     FAILED tests/unit/test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused
+     FAILED tests/unit/test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable
+   Exactly the three known-local, CI-green failures root-caused in pre-existing-local-failures (macOS tmp-path length pushing rich's wrap into the asserted phrase, x2; and a real marketplace clone under the operator's HOME satisfying the tier-4 workflow fallback). No FOURTH failure: nothing in phase 7 is among them.
+05 uv run --no-project python scripts/bump-version.py --check   exit=0 -> ok -- versions agree (4.5.0 across every manifest; NOT re-bumped, per the phase brief)
+06 uv run fr validate artifacts                   exit=0  -> 23 artifact(s) checked -- all structurally valid.
+07 uv run fr acceptance check                     exit=0  -> acceptance matrix check: 114 rows OK ({'ci': 96, 'skipped': 14, 'not-implemented': 4}); only pre-existing unrelated warnings, no report drift
+08 uv run fr harness parity --check               exit=0  -> harness parity: declared matrix agrees with the registration files
+09 uv run python scripts/sync-opencode.py --check exit=0  -> .opencode/ mirrors are in sync.
+10 uv run python scripts/sync-hermes.py --check   exit=0  -> .hermes/ mirrors are in sync.
+11 uv run fr journal check --scope plan --slug 2026-09-18-harness-parity-matrix   exit=0 -> no output (CLEAN)
+12 cd packages/fr-opencode-plugin && bun test     exit=0  -> 15 pass, 0 fail, 16 expect() calls across 2 files
+
+Independent evidence that the journal write really is append-only: git diff --numstat on the plan journal reports 137 insertions and 0 deletions across the whole phase, nine resolution records included.

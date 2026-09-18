@@ -1926,18 +1926,26 @@ rows:
       no open findings can therefore reach clean.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.G.1. Today fr journal add --id <existing> is a silent no-op, so fr
-      journal check can never return clean once any finding is opened — the gate fr-goal
-      7 requires before deliver.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: 'Spec 3.G.1. fr journal resolve appends a resolution record (header token
+      resolves=<id>); check and handoff fold records into an effective state, last record
+      wins. Proven on this PR''s own journal: 9 open findings to 2, by command, with
+      every original entry untouched.'
   - id: lifecycle-acceptance-set-status
     capability: Artifact lifecycles
     acceptance: An acceptance row's status can be moved with a command, so the matrix's
       own lifecycle rule needs no hand-edited YAML.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.G.2. Today fr acceptance add refuses a duplicate id and no verb flips
-      a status, while add's help says agents never hand-edit YAML shapes.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_set_status.py
+    status: ci
+    notes: Spec 3.G.2. fr acceptance set-status moves a row in place, records the reason,
+      adds level evidence and regenerates all three committed reports; unknown id or
+      status creates nothing. This row was flipped to ci BY that command, and so was
+      its sibling -- the hand-edit phase 6 had to perform is gone.

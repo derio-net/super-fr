@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
+from fr.acceptance.model import AcceptanceError, Matrix, Row, load_matrix
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
@@ -300,6 +300,154 @@ def summary_cmd() -> None:
     typer.echo("\n".join(lines))
 
 
+def _parse_levels(level: list[str]) -> dict[str, list[str]]:
+    """`['unit=own:tests/x.py', …]` → `{'unit': ['own:tests/x.py']}`."""
+    levels: dict[str, list[str]] = {}
+    for item in level:
+        lv, sep, ref = item.partition("=")
+        if not sep:
+            err_console.print(f"--level must be '<level>=<ref>', got {item!r}")
+            raise typer.Exit(2)
+        levels.setdefault(lv, []).append(ref)
+    return levels
+
+
+def _validate_refs(row: Row) -> None:
+    """Ref grammar checked BEFORE the file is touched — a shell-mangled ref
+    (zsh's `$VAR:t` modifier eating "…:tests/…") must not land and surface
+    only at the next `check`."""
+    from fr.acceptance.model import split_ref
+
+    for ref in row.refs():
+        try:
+            split_ref(ref)
+        except AcceptanceError as e:
+            err_console.print(f"[red]error:[/red] {e}")
+            raise typer.Exit(2) from e
+
+
+def _commit_matrix(matrix_path: Path, new_text: str, original: str) -> Matrix:
+    """Write, re-validate, and roll back on a shape violation.
+
+    Both mutating verbs land here, so neither can leave an unparseable matrix
+    behind — the post-write invariant `add` has always carried, now shared.
+    """
+    matrix_path.write_text(new_text)
+    try:
+        return load_matrix(matrix_path)
+    except AcceptanceError as e:
+        matrix_path.write_text(original)
+        err_console.print(f"[red]error:[/red] write produced an invalid matrix, rolled back: {e}")
+        raise typer.Exit(2) from e
+
+
+def _regenerate_reports(matrix: Matrix, root: Path) -> None:
+    """Keep the three committed renderings in lockstep with `matrix.yaml`.
+
+    The matrix on disk is already valid — a render failure NEVER rolls the
+    change back (that would discard valid work); it warns, and `fr acceptance
+    check`'s drift gate is the backstop.
+    """
+    from fr.acceptance.report import prune_stale_reports, render_committed_set
+
+    try:
+        for rel, html in render_committed_set(matrix, root).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(html)
+        prune_stale_reports(root)
+    except Exception as e:  # noqa: BLE001 — never fail a valid write on a render hiccup
+        err_console.print(
+            f"[yellow]warning:[/yellow] matrix updated but the HTML reports were not "
+            f"regenerated ({e}); run `fr acceptance report --deterministic` and commit them."
+        )
+
+
+@acceptance_app.command("set-status")
+def set_status_cmd(
+    row_id: str = typer.Option(..., "--id", help="Existing row id (never created here)."),
+    status: str = typer.Option(
+        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+    ),
+    notes: str = typer.Option(
+        ...,
+        "--notes",
+        help="Why the status moved (required — a status that moved for no recorded "
+        "reason is the silent change the acceptance-matrix rule forbids).",
+    ),
+    level: list[str] = typer.Option(
+        [],
+        "--level",
+        help="'<level>=<repo>:<path>[#Lline]' evidence to ADD (repeatable) — the other "
+        "half of the documented transition.",
+    ),
+) -> None:
+    """Move an existing row's status, in place, with a reason (spec §3.G.2).
+
+    The matrix is a registry of CURRENT state, not a log: `check` and the three
+    committed reports read today's status, so this rewrites the row and
+    regenerates the report set. Provenance lives in git history, which for a
+    registry is the right place — the asymmetry with `fr journal resolve`
+    (append-only) is deliberate.
+
+    Refuses an unknown id rather than creating a row: that is `add`'s job, and
+    silently creating one on a typo'd id is how a row gets orphaned.
+    """
+    from typing import get_args
+
+    from fr.acceptance.edit import merge_levels, replace_row
+    from fr.acceptance.model import Status
+
+    root = resolve_repo_root()
+    matrix_path = root / MATRIX_REL
+    matrix = _load(root)
+
+    valid = list(get_args(Status))
+    if status not in valid:
+        err_console.print(
+            f"[red]error:[/red] unknown status {status!r} (valid: {' | '.join(valid)})"
+        )
+        raise typer.Exit(2)
+    target = next((r for r in matrix.rows if r.id == row_id), None)
+    if target is None:
+        known = ", ".join(r.id for r in matrix.rows) or "none"
+        err_console.print(
+            f"[red]error:[/red] no row with id {row_id!r} — nothing changed "
+            f"(`fr acceptance add` creates rows; existing ids: {known})"
+        )
+        raise typer.Exit(2)
+
+    try:
+        merged = merge_levels(target.levels, _parse_levels(level))
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    try:
+        new_row = Row(
+            id=target.id,
+            capability=target.capability,
+            acceptance=target.acceptance,
+            origin=target.origin,
+            levels=merged,
+            status=status,  # type: ignore[arg-type]  # pydantic validates the literal
+            notes=notes,
+        )
+    except Exception as e:  # pydantic ValidationError → operator-readable
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    _validate_refs(new_row)
+
+    original = matrix_path.read_text()
+    try:
+        new_text = replace_row(original, row_id, new_row)
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    reloaded = _commit_matrix(matrix_path, new_text, original)
+    typer.echo(f"{row_id}: {target.status} → {new_row.status}")
+    _regenerate_reports(reloaded, root)
+
+
 @acceptance_app.command("add")
 def add_cmd(
     row_id: str = typer.Option(..., "--id", help="Stable kebab-case row id."),
@@ -316,22 +464,18 @@ def add_cmd(
     ),
     notes: str = typer.Option("", "--notes", help="Evidence detail / backfill owed."),
 ) -> None:
-    """Append a schema-validated row (agents never hand-edit YAML shapes)."""
-    import yaml
+    """Append a schema-validated row (agents never hand-edit YAML shapes).
 
-    from fr.acceptance.model import Row
+    `add` CREATES rows; moving an existing row's status is
+    `fr acceptance set-status` (re-adding an id is refused below, by design).
+    """
+    from fr.acceptance.edit import append_row
 
     root = resolve_repo_root()
     matrix_path = root / MATRIX_REL
     matrix = _load(root)
 
-    levels: dict[str, list[str]] = {}
-    for item in level:
-        lv, sep, ref = item.partition("=")
-        if not sep:
-            err_console.print(f"--level must be '<level>=<ref>', got {item!r}")
-            raise typer.Exit(2)
-        levels.setdefault(lv, []).append(ref)
+    levels = _parse_levels(level)
     try:
         new_row = Row(
             id=row_id,
@@ -346,62 +490,18 @@ def add_cmd(
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
     if any(r.id == new_row.id for r in matrix.rows):
-        err_console.print(f"[red]error:[/red] duplicate row id: {new_row.id}")
+        err_console.print(
+            f"[red]error:[/red] duplicate row id: {new_row.id} "
+            "(move an existing row with `fr acceptance set-status`)"
+        )
         raise typer.Exit(2)
-    # Ref grammar validated NOW, not at the next check — a shell-mangled ref
-    # (e.g. zsh's `$VAR:t` modifier eating "…:tests/…") must not land.
-    from fr.acceptance.model import split_ref
-
-    for ref in new_row.refs():
-        try:
-            split_ref(ref)
-        except AcceptanceError as e:
-            err_console.print(f"[red]error:[/red] {e}")
-            raise typer.Exit(2) from e
+    _validate_refs(new_row)
 
     # Textual append: a load→dump cycle would destroy the header comments.
-    block_data = {
-        "id": new_row.id,
-        "capability": new_row.capability,
-        "acceptance": new_row.acceptance,
-        "origin": list(new_row.origin),
-        "levels": {lv: list(refs) for lv, refs in new_row.levels.items() if refs},
-        "status": new_row.status,
-        "notes": new_row.notes,
-    }
-    block = yaml.dump([block_data], default_flow_style=False, sort_keys=False, allow_unicode=True)
     original = matrix_path.read_text()
-    text = original if original.endswith("\n") else original + "\n"
-    indented = "".join(
-        ("  " + line if line.strip() else line) + "\n" for line in block.rstrip("\n").split("\n")
-    )
-    matrix_path.write_text(text + indented)
-    try:
-        reloaded = load_matrix(matrix_path)  # post-write invariant
-    except AcceptanceError as e:
-        matrix_path.write_text(original)
-        err_console.print(f"[red]error:[/red] append produced an invalid matrix, rolled back: {e}")
-        raise typer.Exit(2) from e
+    reloaded = _commit_matrix(matrix_path, append_row(original, new_row), original)
     typer.echo(f"added row {new_row.id} ({new_row.status})")
-
-    # Keep the committed HTML report in lockstep with the matrix (the CLI
-    # mutation path of "always update the report when matrix.yaml changes").
-    # The row is already valid on disk — a render failure NEVER rolls it back
-    # (that would discard valid work); it warns, and the CI sync tripwire is
-    # the backstop.
-    from fr.acceptance.report import prune_stale_reports, render_committed_set
-
-    try:
-        for rel, html in render_committed_set(reloaded, root).items():
-            path = root / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(html)
-        prune_stale_reports(root)
-    except Exception as e:  # noqa: BLE001 — never fail an accepted row on a render hiccup
-        err_console.print(
-            f"[yellow]warning:[/yellow] row added but the HTML reports were not regenerated ({e}); "
-            "run `fr acceptance report --deterministic` and commit them."
-        )
+    _regenerate_reports(reloaded, root)
 
 
 @acceptance_app.command("init")
