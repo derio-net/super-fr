@@ -399,10 +399,17 @@ def test_is_stale_short_circuits_and_agrees_with_the_plan(tmp_path: Path) -> Non
 #
 # `RunState`, `Matrix` and `PlanMeta` are all `extra="forbid"`; stamping a LIVE
 # file of those kinds makes it unparseable, and for the matrix that would take
-# the `fr acceptance check` CI gate down. journal/run/matrix/spec are all
+# the `fr acceptance check` CI gate down. journal/matrix/spec are all
 # registered at version 1 and an absent stamp already READS as 1, so a correct
 # runner has no reason to write to them. Phase 1 left that as an assertion;
 # these two tests are the proof.
+#
+# The `run` kind is the ONE exception, and it is the shape the framework was
+# built to allow rather than a hole in it: it moved to version 2 with
+# `StepRecord.answered_by`, and it may be stamped precisely because
+# `RunState` gained an optional defaulted `schema_version` in the same PR
+# (`.claude/rules/artifact-versioning.md`). So the run assertions below are
+# "stamped, still parseable, body untouched" — not "never written to".
 
 
 def _seed_closed_world(root: Path) -> dict[str, Path]:
@@ -441,18 +448,36 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
     assert report.failed == ()
     for name, p in paths.items():
+        if name == "run":
+            continue  # stamped on purpose — see the block comment above
         assert _unchanged(p, frozen[name]), f"the runner wrote to a {name} artifact"
-    # And the closed-world models still parse — the failure mode the finding named.
+    # And the closed-world models still parse — the failure mode the finding
+    # named. For the run cursor this is now the load-bearing assertion: it WAS
+    # written to, and it must still parse afterwards.
     parse_run_state(paths["run"].read_text())
     load_matrix(paths["matrix"])
 
 
 def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> None:
-    for name in ("journal", "run", "matrix", "spec"):
+    for name in ("journal", "matrix", "spec"):
         assert MIGRATIONS.schema_migrations(name) == (), (
             f"{name} is at current_version=1; a schema migration for it would make the "
             f"runner stamp a live file whose model is extra='forbid'"
         )
+
+
+def test_the_run_kind_is_reachable_from_version_one() -> None:
+    """The other half of the rule for the kind this PR moved: a bump with no
+    migration off 1 strands every cursor written before it.
+
+    Asserted for `run` and not generalised over `ARTIFACT_KINDS`, because
+    `plan` is at version 2 with no *framework* migration on purpose — a v1
+    plan is a single `.md`, and `fr migrate v1-to-v2` rewrites it into a
+    folder. Generalising here would assert an invariant this repo does not
+    hold and never claimed to."""
+    chain = MIGRATIONS.chain("run", 1)
+    assert chain, "the run kind moved past version 1 with no migration off it"
+    assert chain[-1].to_version == ARTIFACT_KINDS["run"].current_version
 
 
 def test_this_repos_own_artifacts_plan_only_safe_actions() -> None:

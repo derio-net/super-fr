@@ -38,9 +38,11 @@ from fr.artifacts.runner import (
     run_migrations,
 )
 
-# Imported last and for its registration side effect; it imports `runner`, so
-# it cannot come before it.
+# Imported last and for their registration side effect; they import `runner`,
+# so they cannot come before it. EVERY registered migration is reached from
+# here — one that nobody imports silently never runs.
 from fr.artifacts import fr_version as _fr_version  # noqa: F401  (isort: skip)
+from fr.artifacts import run_provenance as _run_provenance  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",

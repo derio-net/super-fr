@@ -43,10 +43,12 @@ from fr.run.adopt import AdoptError, adopt_run, plan_phase_numbers
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
+    AnsweredBy,
     PhaseAccounting,
     RunState,
     RunStateError,
     StepRecord,
+    current_run_schema_version,
     existing_run_id_colliding_with,
     load_run_state,
     parse_run_state,
@@ -54,6 +56,7 @@ from fr.run.model import (
     save_run_state,
     validate_run_id,
 )
+from fr.run.provenance import agent_cleared_gates
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS
 from fr.workflow.check import check_workflow
@@ -316,6 +319,7 @@ def _complete_step(
     exit_code: int | None = None,
     stdout: str | None = None,
     emitted: Mapping[str, str] | None = None,
+    answered_by: AnsweredBy | None = None,
 ) -> RunState:
     """Record `step_id`'s outcome and move the cursor — the ONE place that
     implements the done/failed cursor asymmetry, shared by `advance`'s
@@ -343,12 +347,20 @@ def _complete_step(
     step that failed after its gate was answered is a new question, not a
     resumption — but the claim that the gate is answered once for the life of
     the run was not true of it.
+
+    `answered_by` is the gated **agent** branch's half of that story: those
+    steps never acquire `gate: cleared` at all, so provenance is the only
+    record that a gate was cleared there, and it is passed in by `resolve`.
+    Absent an explicit value the prior record's is carried forward — exactly
+    like `gate`, so a cleared `cli` gate's provenance survives the `advance`
+    that finally executes the step.
     """
     prior = state.steps.get(step_id)
     new_record = StepRecord(
         state=outcome,
         at=_now(),
         gate=prior.gate if prior is not None else None,
+        answered_by=answered_by or (prior.answered_by if prior is not None else None),
         exit=exit_code,
         stdout=stdout,
         emitted=dict(emitted) if emitted else None,
@@ -376,6 +388,20 @@ def _gate_pending(step: Step, record: StepRecord) -> bool:
     the turn and the run does not advance until the operator answers."
     """
     return step.gate == "operator" and record.gate != "cleared" and record.state != "done"
+
+
+def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
+    """Does this `resolve` CLEAR an operator gate (rather than decline it, or
+    resolve a step that never had one)?
+
+    The condition provenance is recorded under, and deliberately narrow:
+    `answered_by` must not claim an authorization for a step nobody gated, and
+    a *declined* gate (`--state failed`) was not cleared. It reads the
+    record's own state rather than `_gate_pending`, because by the time this
+    runs the step is `blocked` — which is what "waiting on its gate" looks
+    like once `advance` has seen it.
+    """
+    return step.gate == "operator" and record.state == "blocked" and outcome == "done"
 
 
 def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
@@ -739,6 +765,7 @@ def start_cmd(
         for s in manifest.steps
     }
     state = RunState(
+        schema_version=current_run_schema_version(),
         run=rid,
         workflow=f"{manifest.workflow}@{manifest.schema_version}",
         branch=branch,
@@ -1105,6 +1132,13 @@ def resolve_cmd(
         help="Phase item (phase/<n>) this outcome is for — required when --step "
         "names a member of a grouped `for_each` step.",
     ),
+    answered_by: str = typer.Option(
+        "agent",
+        "--answered-by",
+        help="operator | agent — who answered this step's operator gate. "
+        "Defaults to `agent`, the weaker claim; recorded only when a gate "
+        "is cleared, and reported by `fr run check` and in the PR body.",
+    ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
 
@@ -1130,6 +1164,14 @@ def resolve_cmd(
     """
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
+        raise typer.Exit(2)
+    if answered_by not in ("operator", "agent"):
+        # Refused rather than coerced: a typo recorded as a third provenance
+        # would be read by nobody and would quietly weaken the one claim this
+        # field exists to make.
+        err_console.print(
+            f"[red]--answered-by must be 'operator' or 'agent', got {answered_by!r}[/red]"
+        )
         raise typer.Exit(2)
 
     repo_root = resolve_repo_root()
@@ -1214,6 +1256,7 @@ def resolve_cmd(
                 update={
                     "state": "pending",
                     "gate": "cleared",
+                    "answered_by": answered_by,
                     "at": _now(),
                     "emitted": dict(emitted_map) if emitted_map else record.emitted,
                 }
@@ -1265,6 +1308,15 @@ def resolve_cmd(
         step_id,
         state_value,  # type: ignore[arg-type]  # validated above
         emitted=emitted_map,
+        # A gated `agent` step is the shape of the measured failure (spec §1):
+        # it goes straight from `blocked` to `done` here and never acquires
+        # `gate: cleared`, so provenance is the only trace that its gate was
+        # cleared at all.
+        answered_by=(
+            answered_by  # type: ignore[arg-type]  # validated above
+            if _clears_gate(step, record, state_value)
+            else None
+        ),
     )
     save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
@@ -1272,13 +1324,29 @@ def resolve_cmd(
 
 @run_app.command("check")
 def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
-    """Freshness gate: non-zero when the cursor sits on a failed step."""
+    """Freshness gate: non-zero when the cursor sits on a failed step.
+
+    It also REPORTS every operator gate the agent cleared itself (spec
+    §3.D.3) — and does not fail on one. The exit code stays exactly what it
+    was: `check` is a narrow freshness gate, and making an agent-cleared gate
+    non-zero would turn every legitimate non-interactive dispatch red, which
+    is the hard refusal the operator rejected. The enforcement is that the
+    same list rides the delivered PR body, where a human reads it.
+    """
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
 
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
     console.print(f"{state.run}: cursor={state.cursor} ({step_state})")
+    for gate in agent_cleared_gates(state):
+        # soft_wrap: this line is read for the step id it names, and rich
+        # would fold a long id across a line break at a narrow width.
+        console.print(
+            f"{gate.step}: operator gate cleared by the agent (answered_by: agent) — "
+            "no operator answered it",
+            soft_wrap=True,
+        )
     if record is not None and record.state == "failed":
         err_console.print(f"[red]{state.cursor}: failed[/red]")
         raise typer.Exit(1)

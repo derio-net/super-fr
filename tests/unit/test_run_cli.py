@@ -2069,3 +2069,250 @@ def test_serial_resolves_still_flow(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert _brief_of(result.output)["step"] == "peer-review"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — gate provenance (spec `2026-09-18-harness-parity-matrix-design`
+# §3.D.2/§3.D.3). `StepRecord.answered_by` records WHO cleared an operator
+# gate, and `fr run check` reports an agent-cleared one without changing its
+# exit code.
+# ---------------------------------------------------------------------------
+
+
+def _clear_cli_gate(repo: Path, shipped: Path, *extra: str):
+    """Start the `gated` shape, block on its gate, and clear it."""
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    return _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done", *extra],
+    )
+
+
+def test_clearing_a_gate_without_answered_by_records_the_agent(tmp_path: Path) -> None:
+    """The DEFAULT is the conservative claim (spec §3.D.2): an unmodified
+    caller records `agent`, so nothing is silently upgraded to "a human
+    answered"."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+
+    result = _clear_cli_gate(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["brainstorm"]
+    assert record.gate == "cleared"
+    assert record.answered_by == "agent"
+
+
+def test_clearing_a_gate_with_answered_by_operator_records_the_operator(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+
+    result = _clear_cli_gate(repo, shipped, "--answered-by", "operator")
+
+    assert result.exit_code == 0, result.output
+    assert load_run_state(repo, "r1").steps["brainstorm"].answered_by == "operator"
+
+
+def test_provenance_survives_the_advance_that_follows_a_cleared_cli_gate(tmp_path: Path) -> None:
+    """A cleared `cli` gate returns the step to `pending`, so the NEXT
+    `advance` rebuilds its record through `_complete_step`. Provenance has to
+    be carried forward there exactly like `gate`, or the one surface that
+    reports it (`fr run check`) goes quiet the moment the step runs."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _clear_cli_gate(repo, shipped)
+
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    record = load_run_state(repo, "r1").steps["brainstorm"]
+    assert record.state == "done"
+    assert record.answered_by == "agent"
+
+
+def test_a_gated_agent_step_records_provenance_too(tmp_path: Path) -> None:
+    """The measured failure (spec §1) was a `kind: agent` + `gate: operator`
+    step self-resolving to `done` on a harness with no question tool. If
+    provenance only covered the `cli` branch it would miss exactly that."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    (repo / "s.md").write_text("# spec\n")
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=s.md",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["brainstorm"]
+    assert record.state == "done"
+    assert record.answered_by == "agent"
+
+
+def test_a_gated_agent_step_can_record_an_operator(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    (repo / "s.md").write_text("# spec\n")
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=s.md",
+            "--answered-by",
+            "operator",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert load_run_state(repo, "r1").steps["brainstorm"].answered_by == "operator"
+
+
+def test_a_resolve_that_clears_no_gate_records_no_provenance(tmp_path: Path) -> None:
+    """`answered_by` is a property of a GATE, not of a resolve — the same
+    shape as `gate: cleared` itself. An ungated agent step records `None`
+    even when `--answered-by` is passed, so the field never claims an
+    authorization that was never asked for."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "plan", "--state", "done", "--answered-by", "operator"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert load_run_state(repo, "r1").steps["plan"].answered_by is None
+
+
+def test_a_declined_gate_records_no_provenance(tmp_path: Path) -> None:
+    """A declined gate was not cleared, and `answered_by` is set only when a
+    gate is cleared."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "brainstorm", "--state", "failed"]
+    )
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["brainstorm"]
+    assert record.state == "failed"
+    assert record.answered_by is None
+
+
+def test_an_unknown_answered_by_is_refused(tmp_path: Path) -> None:
+    """A typo must not be recorded as a third provenance nobody reads."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+
+    result = _clear_cli_gate(repo, shipped, "--answered-by", "the-cat")
+
+    assert result.exit_code == 2, result.output
+    assert "answered-by" in result.output
+    assert load_run_state(repo, "r1").steps["brainstorm"].gate != "cleared"
+
+
+def test_a_new_run_is_born_stamped_with_the_current_run_version(tmp_path: Path) -> None:
+    """Moving the `run` kind's `current_version` makes every run file fr
+    itself writes stale unless `start` stamps the new one — and a run that is
+    stale from birth makes the first non-interactive `fr` command refuse."""
+    import yaml as _yaml
+    from fr.artifacts.registry import artifact_kind
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+
+    path = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    written = _yaml.safe_load(path.read_text())
+    assert written["schema_version"] == artifact_kind("run").current_version
+    assert artifact_kind("run").read_version(path) == artifact_kind("run").current_version
+
+
+# --- §3.D.3: `fr run check` reports, and its exit code is unchanged ---------
+
+
+def test_check_reports_an_agent_cleared_gate_and_still_exits_zero(tmp_path: Path) -> None:
+    """The exit code IS the contract here. Making an agent-cleared gate
+    non-zero would turn every legitimate non-interactive dispatch red — the
+    hard-refusal option the operator rejected (spec §3.D.3)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _clear_cli_gate(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "brainstorm" in result.output
+    assert "answered_by: agent" in result.output
+
+
+def test_check_says_nothing_about_a_gate_the_operator_answered(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _clear_cli_gate(repo, shipped, "--answered-by", "operator")
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "answered_by" not in result.output
+
+
+def test_check_still_exits_nonzero_on_a_failed_step_that_had_an_agent_cleared_gate(
+    tmp_path: Path,
+) -> None:
+    """The existing freshness contract is untouched: the report is additive,
+    not a replacement for the one thing `check` already failed on."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(
+        shipped,
+        "gated-fail",
+        "workflow: gated-fail\nschema: 1\nunit: run\n"
+        'steps:\n  - id: boom\n    kind: cli\n    gate: operator\n    run: "false"\n',
+    )
+    _invoke(repo, shipped, ["run", "start", "gated-fail", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "boom", "--state", "done"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # executes, fails
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 1, result.output
+    assert "answered_by: agent" in result.output

@@ -1,3 +1,4 @@
+schema_version: 2
 run: 2026-09-18-feat-harness-parity-matrix
 workflow: fr-goal@1
 branch: feat/harness-parity-matrix
@@ -26,13 +27,15 @@ steps:
       '
   implement:
     state: running
-    at: '2026-09-18T14:15:20+00:00'
+    at: '2026-09-18T15:05:04+00:00'
     items:
       phase/1/implement-phase: done
       phase/1/review-phase: done
       phase/2/implement-phase: done
       phase/2/review-phase: done
-      phase/3/implement-phase: running
+      phase/3/implement-phase: done
+      phase/3/review-phase: done
+      phase/4/implement-phase: running
     members:
     - implement-phase
     - review-phase
@@ -74,3 +77,17 @@ accounting:
     handoff_chars: 23579
     spec_bytes: 19385
     plan_bytes: 36152
+  phase/3/review-phase:
+    at: '2026-09-18T15:05:03+00:00'
+    journal_entries: 52
+    journal_lines: 297
+    handoff_chars: 36667
+    spec_bytes: 19385
+    plan_bytes: 36301
+  phase/4/implement-phase:
+    at: '2026-09-18T15:05:04+00:00'
+    journal_entries: 52
+    journal_lines: 297
+    handoff_chars: 26303
+    spec_bytes: 19385
+    plan_bytes: 36301
