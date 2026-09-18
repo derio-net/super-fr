@@ -1852,3 +1852,53 @@ rows:
       (test_cwd_flag_reads_no_stdin, test_oneline, test_never_invokes_fr). Hermes custom_command
       wiring is docs-only until NousResearch/hermes-agent#109596 ships; OpenCode has
       no status-line hook (anomalyco/opencode#37464).
+  - id: harness-parity-declared
+    capability: Harness parity
+    acceptance: Every shipped enforcement and interaction surface declares its state
+      on every supported harness, and an undeclared surface fails CI.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec 3.A/3.B. Owed: fr.harness matrix + derived check pairing every hook
+      script with a row.'
+  - id: harness-parity-derived-check
+    capability: Harness parity
+    acceptance: The declared matrix is checked against the real registration files,
+      so a hook wired (or unwired) without a matrix update fails.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec 3.B. Both directions: overclaim AND the already-live understatement
+      (fr-acceptance-nag on Hermes).'
+  - id: harness-tool-neutrality
+    capability: Harness parity
+    acceptance: No skill names a harness-specific tool as the way to do something outside
+      an explicitly scoped per-harness clause.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.C. Today AskUserQuestion x6 across canonical + both mirrors. Mirrors
+      stay byte-identical; neutrality is enforced at the canonical source.
+  - id: harness-gate-degrades-loudly
+    capability: Harness parity
+    acceptance: On a harness where the operator gate is not enforced, fr run advance
+      says so at the gate instead of behaving as though it fired.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.D.1. Live verification on OpenCode/Hermes is Test Plan items 1-2,
+      post-merge.
+  - id: harness-gate-provenance
+    capability: Harness parity
+    acceptance: A gate cleared without an operator is recorded as such and reported
+      in the delivered PR.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec 3.D.2/3.D.3. Default answered_by=agent so the stronger claim must be
+      typed deliberately. Incurs a run-kind stamp bump + migration.

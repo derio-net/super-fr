@@ -1,0 +1,22 @@
+run: 2026-09-18-feat-harness-parity-matrix
+workflow: fr-goal@1
+branch: feat/harness-parity-matrix
+started: '2026-09-18T12:25:26+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: blocked
+    at: '2026-09-18T12:25:34+00:00'
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: pending
