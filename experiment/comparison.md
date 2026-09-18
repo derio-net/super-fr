@@ -82,3 +82,52 @@ the bill (19.9M) — the cost shape #464 describes.
    mid-run** when they ran `scripts/sync-opencode.py`. OpenCode never loaded
    them, but they were readable from that point.
 5. One feature, one model, one harness, n=1 per arm.
+
+## Bugs: are A's review findings present in B and C?
+
+A's reviewer raised **9 findings, all fixed before delivery** (5 in the
+acceptance phase, 4 in the journal phase). I probed each arm's own build for
+the three most consequential. They are not hypothetical: **B and C shipped
+them.**
+
+| A's finding | A | B | C |
+|---|---|---|---|
+| `journal update --scope bogus` → clean error, not `KeyError` | ✓ exit 2, clean message | **✗ unhandled `KeyError` traceback** | **✗ unhandled `KeyError` traceback** |
+| duplicate entry ids must not be rewritten ambiguously | ✓ exit 2, refuses | **✗ silently updates 1 of 2** | **✗ rewrites both entries** |
+| `set-status` must not destroy the matrix's comments/structure | ✓ comments intact, note appended | **✗ corrupts the file** | **✗ refuses a valid file** |
+
+### The matrix bug, precisely
+
+The repo's real `matrix.yaml` carries a comment on line 23:
+
+```
+# Add rows with `fr acceptance add` (schema-validated append). Keep `rows:`
+```
+
+The actual `rows:` key is on line 28. **B and C both split the file on the
+first literal `"rows:"`** — B via `read_text().split("rows:", 1)[0]`, C via
+`original.partition("rows:")` — and so cut the document inside that comment.
+
+- **B writes the result.** `org:`, `repo:` and `rows:` are destroyed; the file
+  parses as a **list**, and B's *own* `fr acceptance check` then rejects the
+  file it just wrote: `matrix top level must be a mapping, got list`. B also
+  reflowed unrelated rows' notes, and replaced the target row's note instead of
+  appending.
+- **C fails closed.** Same split, but it validates before writing, so it exits 2
+  and leaves the file untouched. Unusable rather than destructive.
+- **A does neither.** It edits by source span (`yaml.compose` + `end_mark`
+  offsets), so comments and layout survive — the shape its reviewer demanded in
+  `acceptance-row-comments-lost`.
+
+This is the clearest result in the experiment. A CI-gated, hand-commented,
+tracked file is exactly the kind of artifact a one-shot agent damages, and the
+damage is invisible until something reads the file back. B's suite is green;
+its own tests never fed it the repo's real matrix.
+
+### What none of them got
+
+Checklist row 8 (`--note` required on a down-transition or `failing`) is
+`answers.md` row 3, given identically to all three. **No arm implemented it**,
+and A's spec, plan, per-phase review and self-review all passed over it. The
+review loop catches implementation defects; it did not catch a dropped
+requirement.
