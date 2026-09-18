@@ -25,7 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.harness import load_matrix
-from fr.harness.check import check
+from fr.harness.check import check, pairing
 from fr.harness.model import Matrix, parse_matrix
 from fr.harness.observe import HOOKS_RELPATH, observe, shipped_scripts
 
@@ -34,17 +34,27 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PARITY_FILE = "packages/fr/src/fr/harness/parity.yaml"
 
 
-def _hook_rows(matrix: Matrix) -> dict[str, str]:
-    """`{script filename: surface id}` for every `kind: hook` row."""
-    return {s.script: s.id for s in matrix.surfaces if s.kind == "hook" and s.script}
+# The pairing logic itself lives in `fr.harness.check.pairing` and is called
+# from `fr harness parity --check` too (review r2-i1). These read it back out
+# by direction, so the tests below keep their two distinct claims while there
+# stays exactly ONE implementation — before r2-i1 the pairing existed only
+# here, and the operator-facing command reported "agrees with the registration
+# files" on a repo this file called drifted.
 
 
 def _scripts_with_no_row(matrix: Matrix, shipped: set[str]) -> list[str]:
-    return sorted(shipped - set(_hook_rows(matrix)))
+    return sorted(
+        f.surface_id for f in pairing(matrix, frozenset(shipped)) if f.declared == "(no row)"
+    )
 
 
 def _rows_with_no_script(matrix: Matrix, shipped: set[str]) -> list[str]:
-    return sorted(script for script in _hook_rows(matrix) if script not in shipped)
+    by_id = {s.id: s.script for s in matrix.surfaces}
+    return sorted(
+        by_id[f.surface_id]
+        for f in pairing(matrix, frozenset(shipped))
+        if f.declared == "(row)" and by_id.get(f.surface_id)
+    )
 
 
 # --- (1) every shipped hook script has a row -------------------------------
@@ -119,3 +129,24 @@ def test_the_dangling_row_detector_fires_on_a_row_for_a_deleted_script() -> None
 def test_this_repos_matrix_agrees_with_its_own_registration_files() -> None:
     findings = check(load_matrix(), observe(REPO_ROOT))
     assert not findings, "harness-parity drift:\n" + "\n".join(f.message for f in findings)
+
+
+# --- M-4: the invariant that makes `shipped_scripts()` non-recursive safe ---
+
+
+def test_every_hermes_port_has_a_top_level_sibling() -> None:
+    """`shipped_scripts()` globs `hooks/*.sh` only, on the stated ground that
+    `hooks/hermes/*.sh` are PORTS of those same surfaces rather than surfaces
+    of their own. True today — but nothing made it stay true, and a
+    Hermes-only hook would then be registered in the snippet, observed
+    `present`, own no parity row, and be invisible to the tripwire above
+    (review r2-m4). Pin the assumption rather than the conclusion."""
+    hooks = REPO_ROOT / HOOKS_RELPATH
+    ports = {p.name for p in (hooks / "hermes").glob("*.sh")}
+    orphans = sorted(ports - shipped_scripts(REPO_ROOT))
+    assert not orphans, (
+        f"hermes-only hook script(s) with no top-level sibling: {orphans}. "
+        f"`shipped_scripts()` is non-recursive, so these own no parity row and "
+        f"the tripwire above cannot see them. Either add a top-level surface "
+        f"script, or make `shipped_scripts()` recursive and give them rows."
+    )

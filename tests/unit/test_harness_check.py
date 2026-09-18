@@ -20,9 +20,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.harness import load_matrix
-from fr.harness.check import Finding, check
-from fr.harness.model import parse_matrix
-from fr.harness.observe import OBSERVABLE_HARNESSES, observe
+from fr.harness.check import Finding, check, pairing
+from fr.harness.model import Matrix, parse_matrix
+from fr.harness.observe import OBSERVABLE_HARNESSES, observe, shipped_scripts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -132,10 +132,16 @@ def test_declared_advisory_and_observed_absent_is_clean() -> None:
 # --- (e) unsupported is never a finding ------------------------------------
 
 
-def test_unsupported_never_produces_a_finding_on_any_observation() -> None:
+def test_unsupported_makes_no_claim_an_observation_can_contradict() -> None:
+    """The narrowed form of what this test used to assert. `unsupported` is a
+    missing key in the rule table, so no observation contradicts it — but that
+    only holds where fr genuinely cannot look. This test originally declared
+    `unsupported` on OPENCODE, an observable harness, and asserted silence,
+    which is the green button review r2-m5 found. The silence claim belongs to
+    the unobservable harnesses, and they get their own test below."""
+    matrix = _matrix({"state": "unsupported"}, harness="codex")
     for present in (True, False):
-        matrix = _matrix({"state": "unsupported"}, harness="opencode")
-        assert check(matrix, _observed(opencode=present)) == []
+        assert [f for f in check(matrix, _observed(opencode=present)) if f.harness == "codex"] == []
 
 
 def test_the_unobservable_harnesses_never_produce_a_finding() -> None:
@@ -265,17 +271,31 @@ def test_check_on_this_repo_exits_zero(monkeypatch) -> None:
 
 
 def test_check_on_a_drifted_matrix_exits_one_and_names_the_surface(monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
-    monkeypatch.setattr("fr.commands.harness_cmd.load_matrix", lambda: _DRIFTED)
+    _only_cell_drift(monkeypatch)
     result = runner_cli.invoke(app, ["harness", "parity", "--check"])
     assert result.exit_code == 1
     assert "fr-session-bind" in result.output
     assert "opencode" in result.output
 
 
-def test_check_json_reports_each_finding_structurally(monkeypatch) -> None:
+def _only_cell_drift(monkeypatch) -> None:
+    """Point `--check` at the drifted fixture AND make the row/script pairing
+    vacuous, so these tests measure cell drift alone.
+
+    `pairing` (review r2-i1) compares the matrix against the real repo's ten
+    shipped scripts, and `_DRIFTED` declares two — without this the fixture
+    reports eight "no row" findings that have nothing to do with what is under
+    test. Pairing gets its own CLI test below."""
     monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
     monkeypatch.setattr("fr.commands.harness_cmd.load_matrix", lambda: _DRIFTED)
+    monkeypatch.setattr(
+        "fr.commands.harness_cmd.shipped_scripts",
+        lambda root: frozenset(s.script for s in _DRIFTED.surfaces if s.script),
+    )
+
+
+def test_check_json_reports_each_finding_structurally(monkeypatch) -> None:
+    _only_cell_drift(monkeypatch)
     result = runner_cli.invoke(app, ["harness", "parity", "--check", "--format", "json"])
     assert result.exit_code == 1
     payload = json.loads(result.output)
@@ -295,10 +315,111 @@ def test_check_outside_a_super_fr_checkout_declines_and_exits_zero(monkeypatch, 
 
 
 def test_check_with_a_harness_filter_reports_only_that_harness(monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
-    monkeypatch.setattr("fr.commands.harness_cmd.load_matrix", lambda: _DRIFTED)
+    _only_cell_drift(monkeypatch)
     result = runner_cli.invoke(
         app, ["harness", "parity", "--check", "--harness", "hermes", "--format", "json"]
     )
     assert result.exit_code == 0
     assert json.loads(result.output) == []
+
+
+# --- Review r2-i1: the operator-facing command must not be more reassuring
+# than CI. ------------------------------------------------------------------
+
+
+def _matrix_with(script: str, *, state: str = "absent") -> Matrix:
+    return parse_matrix(
+        {
+            "schema": 1,
+            "surfaces": [
+                {
+                    "id": "only",
+                    "kind": "hook",
+                    "script": script,
+                    "summary": "s",
+                    "harnesses": {
+                        "claude-code": {"state": state},
+                        "opencode": {"state": "absent"},
+                        "hermes": {"state": "absent"},
+                        "codex": {"state": "unsupported"},
+                        "copilot-cli": {"state": "unsupported"},
+                    },
+                }
+            ],
+        }
+    )
+
+
+def test_a_shipped_script_with_no_row_is_a_pairing_finding() -> None:
+    """Before this, the pairing lived only in the pytest tripwire, so
+    `fr harness parity --check` printed "agrees with the registration files"
+    on a repo carrying an undeclared hook — the surface a human consults was
+    the one that lied."""
+    findings = pairing(_matrix_with("only.sh"), frozenset({"only.sh", "new-hook.sh"}))
+    assert [f.surface_id for f in findings] == ["new-hook.sh"]
+    assert "has no `kind: hook` row" in findings[0].message
+
+
+def test_a_row_naming_a_script_that_does_not_ship_is_a_pairing_finding() -> None:
+    """Both directions fire here, and that is correct: `other.sh` ships with no
+    row AND the `only` row names a script that does not ship."""
+    findings = pairing(_matrix_with("deleted.sh"), frozenset({"other.sh"}))
+    dangling = [f for f in findings if f.declared == "(row)"]
+    assert [f.surface_id for f in dangling] == ["only"]
+    assert "is not in" in dangling[0].message
+
+
+def test_pairing_is_silent_when_rows_and_scripts_agree() -> None:
+    assert pairing(_matrix_with("only.sh"), frozenset({"only.sh"})) == []
+
+
+def test_a_pairing_finding_is_not_scoped_to_one_harness() -> None:
+    """`harness="-"`: a row missing entirely is not one harness's problem, so
+    `--check --harness X` must still surface it."""
+    findings = pairing(_matrix_with("only.sh"), frozenset({"only.sh", "new.sh"}))
+    assert findings[0].harness == "-"
+
+
+# --- Review r2-m5: `unsupported` must not silence an observable harness. ----
+
+
+def test_unsupported_on_an_observable_harness_is_itself_a_finding() -> None:
+    """`unsupported` makes no claim about registration, which is exactly why
+    it is a missing key in the rule table — and exactly why, on a harness fr
+    DOES read a registration file for, it would be a green button for any
+    drifting cell."""
+    matrix = _matrix_with("only.sh", state="unsupported")
+    findings = check(matrix, {"only.sh": {"claude-code": "present"}})
+    claude = [f for f in findings if f.harness == "claude-code"]
+    assert claude, "declaring a supported harness `unsupported` must not pass silently"
+    assert "is a supported harness" in claude[0].message
+
+
+def test_check_reports_an_undeclared_shipped_hook_through_the_cli(monkeypatch) -> None:
+    """The r2-i1 regression, end to end. With an undeclared script on disk,
+    `fr harness parity --check` must exit 1 — before the fix it printed
+    "declared matrix agrees with the registration files" and exited 0 while
+    the pytest tripwire went red on the very same repo."""
+    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
+    real = shipped_scripts(REPO_ROOT)
+    monkeypatch.setattr(
+        "fr.commands.harness_cmd.shipped_scripts",
+        lambda root: real | {"zz-undeclared-probe.sh"},
+    )
+    result = runner_cli.invoke(app, ["harness", "parity", "--check"])
+    assert result.exit_code == 1, result.output
+    assert "zz-undeclared-probe.sh" in result.output
+
+
+def test_a_pairing_finding_survives_the_harness_filter(monkeypatch) -> None:
+    """`--harness hermes` must not hide a missing row: it is not one harness's
+    problem, so it is not filtered away."""
+    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
+    real = shipped_scripts(REPO_ROOT)
+    monkeypatch.setattr(
+        "fr.commands.harness_cmd.shipped_scripts",
+        lambda root: real | {"zz-undeclared-probe.sh"},
+    )
+    result = runner_cli.invoke(app, ["harness", "parity", "--check", "--harness", "hermes"])
+    assert result.exit_code == 1, result.output
+    assert "zz-undeclared-probe.sh" in result.output

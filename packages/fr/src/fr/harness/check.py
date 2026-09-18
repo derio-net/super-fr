@@ -26,6 +26,10 @@ from dataclasses import dataclass
 from fr.harness.model import Matrix
 from fr.harness.observe import OBSERVABLE_HARNESSES, REGISTRATION_FILES, Observation
 
+HOOKS_DIR = "plugins/super-fr/hooks/"
+"""The other side of the row<->script pairing, named in every `pairing`
+finding so the operator knows which directory is being compared."""
+
 PARITY_FILE = "packages/fr/src/fr/harness/parity.yaml"
 """Named in every finding: one of the two files the operator must edit, and
 the one to edit when the code is right and the matrix is stale."""
@@ -47,12 +51,22 @@ an if/elif chain — adding a sixth state is one row here."""
 
 @dataclass(frozen=True, order=True)
 class Finding:
-    """One cell where `parity.yaml` and the registration files disagree."""
+    """One thing wrong with the matrix — a drifted cell, or a row and a script
+    that do not pair up.
+
+    `declared` and `observed` were `Observation`-typed when cell drift was the
+    only finding. They are plain `str` since review r2-i1 folded `pairing` into
+    the same type and the same exit-1 path: a missing row is not an observation
+    of anything ("shipped" / "no script"), and neither is `unsupported` claimed
+    on a harness fr can actually read ("n/a"). Widening beat inventing a second
+    finding type for `_run_check` to merge — but `message` is the field an
+    operator reads, and these two remain a short machine-readable summary for
+    `--format json`, not a closed vocabulary anything branches on."""
 
     surface_id: str
     harness: str
     declared: str
-    observed: Observation
+    observed: str
     message: str
 
 
@@ -64,6 +78,54 @@ def _message(surface_id: str, harness: str, declared: str, observed: Observation
         else f"declared {declared!r} but IS registered in {registration}"
     )
     return f"{surface_id} / {harness}: {direction} — fix that file or {PARITY_FILE}"
+
+
+def pairing(matrix: Matrix, shipped: frozenset[str]) -> list[Finding]:
+    """Rows and scripts that do not pair up, in both directions.
+
+    Split out of `check` because it compares the matrix against the *files on
+    disk* rather than against a reading of them, but reported through the SAME
+    `Finding` type and the same exit-1 path — review finding r2-i1. Before that
+    fix this lived only in `tests/unit/test_tripwire_harness_parity.py`, so
+    `fr harness parity --check` printed "declared matrix agrees with the
+    registration files" on a repo carrying an undeclared hook script: the
+    command a human consults gave a clean bill of health for a state the
+    repo's own CI called drift. A check that is honest in pytest and
+    reassuring on the terminal is the failure mode this feature exists to
+    stop, wearing the feature's own clothes.
+
+    The tripwire now calls this too, so there is one implementation rather
+    than two that can disagree."""
+    declared = {s.script: s for s in matrix.surfaces if s.kind == "hook" and s.script}
+
+    findings = [
+        Finding(
+            surface_id=script,
+            harness="-",
+            declared="(no row)",
+            observed="shipped",
+            message=(
+                f"{script}: shipped in {HOOKS_DIR} but has no `kind: hook` row — "
+                f"add one to {PARITY_FILE}, declaring its state on every harness"
+            ),
+        )
+        for script in sorted(shipped - set(declared))
+    ]
+    findings += [
+        Finding(
+            surface_id=surface.id,
+            harness="-",
+            declared="(row)",
+            observed="no script",
+            message=(
+                f"{surface.id}: row names script {surface.script!r}, which is not in "
+                f"{HOOKS_DIR} — remove the row from {PARITY_FILE} or restore the script"
+            ),
+        )
+        for script, surface in sorted(declared.items())
+        if script not in shipped
+    ]
+    return findings
 
 
 def check(matrix: Matrix, observed: dict[str, dict[str, Observation]]) -> list[Finding]:
@@ -88,7 +150,28 @@ def check(matrix: Matrix, observed: dict[str, dict[str, Observation]]) -> list[F
         for harness in OBSERVABLE_HARNESSES:
             declared = surface.harnesses[harness].state
             expected = _EXPECTED_OBSERVATION.get(declared)
-            if expected is None:  # `unsupported` — makes no claim to contradict
+            if expected is None:
+                # `unsupported` makes no claim about registration, so nothing
+                # can contradict it — but only where fr genuinely cannot look.
+                # On a harness that HAS an observer it would be a green button
+                # for any drifting cell (review r2-m5): spec §3.A scopes the
+                # state to "the harness is not supported", and this loop only
+                # ever visits observable ones, so reaching here at all is the
+                # misuse.
+                findings.append(
+                    Finding(
+                        surface_id=surface.id,
+                        harness=harness,
+                        declared=declared,
+                        observed="n/a",
+                        message=(
+                            f"{surface.id} / {harness}: declared 'unsupported', but "
+                            f"{harness} is a supported harness fr reads "
+                            f"{REGISTRATION_FILES.get(harness, 'a registration file')} for. "
+                            f"Use a state that makes a claim — fix {PARITY_FILE}"
+                        ),
+                    )
+                )
                 continue
             seen: Observation = per_harness.get(harness, "absent")
             if seen != expected:
@@ -104,4 +187,4 @@ def check(matrix: Matrix, observed: dict[str, dict[str, Observation]]) -> list[F
     return findings
 
 
-__all__ = ["PARITY_FILE", "Finding", "check"]
+__all__ = ["HOOKS_DIR", "PARITY_FILE", "Finding", "check", "pairing"]

@@ -13,7 +13,8 @@ inventing a verdict from files it could not read (the `fr acceptance
 check` precedent).
 
 Exit codes: 0 render, or `--check` clean / declined; 1 `--check` found
-drift; 2 usage (`--format`/`--harness` given a bad value).
+drift; 2 usage (`--format`/`--harness` given a bad value) or an
+unreadable registration file.
 """
 
 from __future__ import annotations
@@ -26,9 +27,14 @@ from rich.table import Table
 
 from fr.commands.common import resolve_repo_root
 from fr.harness import HARNESSES, load_matrix
-from fr.harness.check import Finding, check
+from fr.harness.check import Finding, check, pairing
 from fr.harness.model import HarnessError, Matrix
-from fr.harness.observe import is_super_fr_checkout, observe
+from fr.harness.observe import (
+    OBSERVABLE_HARNESSES,
+    is_super_fr_checkout,
+    observe,
+    shipped_scripts,
+)
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
@@ -148,22 +154,34 @@ def _run_check(matrix: Matrix, output_format: str, harness: str | None) -> None:
         # exit 0: a verdict invented from files we could not read is worse
         # than no verdict, and this command is meant to be runnable from a
         # pod with nothing but the installed wheel.
-        typer.echo(
+        reason = (
             f"cannot check: {root} is not a super-fr checkout (no "
             "plugins/super-fr/hooks/hooks.json) — the declared matrix is "
             "unchecked, not verified. Run `fr harness parity` to render it."
+        )
+        # In json mode this must still be JSON (review r2-m2): the decline is
+        # the ONE path designed to be benign, and emitting prose here makes it
+        # the one path that crashes a consumer which always parses the output.
+        typer.echo(
+            _json.dumps({"checked": False, "reason": reason}) if output_format == "json" else reason
         )
         return
 
     try:
         observed = observe(root)
     except HarnessError as exc:
-        err_console.print(f"[red]error:[/red] {exc}")
+        # `typer.echo`, not `err_console` (review r2-m3): this message names a
+        # file path, and rich wrapped one mid-path into something neither
+        # greppable nor copy-pasteable — the same r1-m6 fragility the findings
+        # below already avoid.
+        typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(2) from exc
 
-    findings = check(matrix, observed)
+    findings = check(matrix, observed) + pairing(matrix, shipped_scripts(root))
     if harness is not None:
-        findings = [f for f in findings if f.harness == harness]
+        # A pairing finding is not about one harness (`harness="-"`), so it
+        # survives the filter — a row missing entirely is everyone's problem.
+        findings = [f for f in findings if f.harness in (harness, "-")]
 
     if output_format == "json":
         typer.echo(_json.dumps([_finding_json(f) for f in findings], indent=2))
@@ -171,6 +189,14 @@ def _run_check(matrix: Matrix, output_format: str, harness: str | None) -> None:
         typer.echo(f"harness parity: {len(findings)} disagreement(s) with the registration files")
         for finding in findings:
             typer.echo(f"  {finding.message}")
+    elif harness is not None and harness not in OBSERVABLE_HARNESSES:
+        # Silence is not evidence (review r2-m1). Everywhere else this command
+        # is careful that "we cannot look" differs from "we looked and found
+        # nothing"; claiming agreement here would throw that away in one line.
+        typer.echo(
+            f"harness parity on {harness}: fr reads no registration file for this "
+            "harness, so nothing was checked — its cells are declared, not verified."
+        )
     else:
         scope = f" on {harness}" if harness else ""
         typer.echo(f"harness parity{scope}: declared matrix agrees with the registration files")

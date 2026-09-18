@@ -175,3 +175,43 @@ Finding r1-m6 (phase 1) showed rich snapshots COLUMNS at Console construction, w
 ### ce59ede5e20b · discovery · FOR PHASE 6 (P6.T1.S2): the two acceptance rows phase 2 satisfies, and the exact --level refs to cite (phase 2)
 
 fr plan edit --complete-phase 2 warned that harness-parity-derived-check is still not-implemented. That flip is P6.T1.S2's job, not phase 2's, so it is deliberately left alone - but the refs are here so phase 6 does not have to re-derive them. harness-parity-derived-check -> status ci, --level unit=super-fr:tests/unit/test_harness_check.py (both drift directions: test_declared_enforced_but_observed_absent_is_a_finding and test_declared_absent_but_observed_present_is_a_finding, the live #436 understatement) and unit=super-fr:tests/unit/test_harness_observe.py (the three registration readers). harness-parity-declared -> status ci, --level unit=super-fr:tests/unit/test_tripwire_harness_parity.py, which is the 'an undeclared surface fails CI' half of that row's acceptance text: every shipped hooks/*.sh must have a row, every hook row's script must exist, and check() over the REAL repo must return zero findings. Verified the tripwire actually goes red by dropping a throwaway plugins/super-fr/hooks/zz-temp-tripwile-probe.sh in and watching test_every_shipped_hook_script_has_a_parity_row fail with that filename, then removing it.
+
+<!-- fr:journal kind=finding scope=plan id=r2-i1 created=2026-09-18T16:14:59 phase=2 state=fixed -->
+### r2-i1 · finding [fixed] · The operator-facing --check was more reassuring than CI: a false-clean on an undeclared hook (phase 2)
+
+Reproduced before fixing: with a throwaway plugins/super-fr/hooks/zz-probe.sh present, `uv run fr harness parity --check` printed 'declared matrix agrees with the registration files' and exited 0, while `pytest tests/unit/test_tripwire_harness_parity.py` went RED on the same repo naming that file. The row<->script pairing lived only in the tripwire, so the surface a human consults was the one that lied — this feature's own failure mode, wearing its clothes. Fixed by moving pairing into fr.harness.check.pairing(), calling it from _run_check alongside check(), and having the tripwire call THE SAME function rather than re-derive it, so there is one implementation instead of two that can disagree. Pairing findings carry harness='-' and deliberately survive the --harness filter: a row missing entirely is not one harness's problem. Verified after: the same probe now exits 1 naming zz-probe.sh; clean repo still exits 0. Regression tests: test_check_reports_an_undeclared_shipped_hook_through_the_cli, test_a_pairing_finding_survives_the_harness_filter, plus four unit tests on pairing().
+
+<!-- fr:journal kind=finding scope=plan id=r2-m1 created=2026-09-18T16:14:59 phase=2 state=fixed -->
+### r2-m1 · finding [fixed] · --check --harness codex claimed agreement for a harness fr cannot observe (phase 2)
+
+Printed 'declared matrix agrees with the registration files', exit 0 — converting silence into a verdict in the one command that is otherwise scrupulous about the difference. Now says fr reads no registration file for that harness, so nothing was checked and its cells are declared rather than verified.
+
+<!-- fr:journal kind=finding scope=plan id=r2-m2 created=2026-09-18T16:14:59 phase=2 state=fixed -->
+### r2-m2 · finding [fixed] · --check --format json emitted prose on the decline path (phase 2)
+
+The decline is the ONE path designed to be benign, and it was the one path that crashed a consumer which always json.loads the output. Now emits {"checked": false, "reason": ...}.
+
+<!-- fr:journal kind=finding scope=plan id=r2-m3 created=2026-09-18T16:15:00 phase=2 state=fixed -->
+### r2-m3 · finding [fixed] · The observe-error path still went through rich, wrapping a file path mid-token (phase 2)
+
+_run_check's own docstring explains why findings use typer.echo; the error branch three lines above still used err_console and wrapped a path into something neither greppable nor copy-pasteable — the r1-m6 fragility again. Now typer.echo(..., err=True). Also corrected the module docstring's exit-code list: an unreadable registration file also exits 2, not just a usage error.
+
+<!-- fr:journal kind=finding scope=plan id=r2-m4 created=2026-09-18T16:15:00 phase=2 state=fixed -->
+### r2-m4 · finding [fixed] · shipped_scripts() is non-recursive, so a future Hermes-only hook would evade the tripwire (phase 2)
+
+No live gap: all three hooks/hermes/*.sh have top-level siblings today, which is what makes non-recursion correct. But nothing made it STAY true — a Hermes-only hook would be registered in the snippet, observed present, own no parity row, and be invisible. Pinned the assumption rather than the conclusion: test_every_hermes_port_has_a_top_level_sibling.
+
+<!-- fr:journal kind=finding scope=plan id=r2-m5 created=2026-09-18T16:15:00 phase=2 state=fixed -->
+### r2-m5 · finding [fixed] · 'unsupported' silenced any cell, including on harnesses fr does observe (phase 2)
+
+Declaring claude-code: {state: unsupported} for a script hooks.json demonstrably registers produced zero findings — a green button for any drifting cell. Spec §3.A scopes the state to 'the harness is not supported', i.e. codex/copilot-cli, but nothing enforced it. check() now reports it as its own finding on an observable harness. This narrowed an EXISTING phase-2 test (test_unsupported_never_produces_a_finding_on_any_observation) which had declared unsupported on opencode and asserted silence — it encoded the bug, so it was rewritten to make the claim that actually holds: unsupported is silent where fr cannot look.
+
+<!-- fr:journal kind=finding scope=plan id=r2-m6 created=2026-09-18T16:15:01 phase=2 state=fixed -->
+### r2-m6 · finding [fixed] · A malformed hermes snippet entry escaped as a bare KeyError (phase 2)
+
+snippet_entries indexes entry['command'] unguarded, so an entry missing that key produced a traceback where every neighbouring path gives a curated message. Now caught alongside HermesError.
+
+<!-- fr:journal kind=discovery scope=plan id=r2-finding-widened created=2026-09-18T16:15:01 phase=2 -->
+### r2-finding-widened · discovery · Finding.declared/observed widened to str when pairing joined the type (phase 2)
+
+mypy caught this rather than a human: Finding.observed was Observation = Literal['present','absent'], but a pairing finding is not an observation of anything ('shipped'/'no script') and neither is a misused 'unsupported' ('n/a'). Widened both to str with the reasoning recorded on the class, rather than inventing a second finding type for _run_check to merge. message stays the field an operator reads; these two are a machine-readable summary for --format json that nothing branches on.

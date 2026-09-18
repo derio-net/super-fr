@@ -95,9 +95,13 @@ def _read_hermes(repo_root: Path, shipped: frozenset[str]) -> set[str]:
         return set()
     try:
         entries = snippet_entries(repo_root, repo_root / HOOKS_RELPATH)
-    except HermesError as exc:
-        raise HarnessError(f"cannot read {SNIPPET_RELPATH}: {exc}") from exc
-    return {Path(str(entry["command"])).name for entry in entries}
+        return {Path(str(entry["command"])).name for entry in entries}
+    except (HermesError, KeyError, TypeError) as exc:
+        # `snippet_entries` indexes `entry["command"]` unguarded, so a snippet
+        # entry missing that key escapes as a bare KeyError and the CLI shows a
+        # traceback where every neighbouring path gives a curated message
+        # (review r2-m6). Fail loud either way — just legibly.
+        raise HarnessError(f"cannot read {SNIPPET_RELPATH}: {exc!r}") from exc
 
 
 def _read_opencode(repo_root: Path, shipped: frozenset[str]) -> set[str]:
