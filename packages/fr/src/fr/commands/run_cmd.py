@@ -1441,8 +1441,18 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         console.print(f"{state.run}: no `gate: operator` steps recorded as cleared")
         return
     for status in statuses:
-        if status.outcome == "recorded":
-            console.print(f"{status.step}: cleared by {status.answered_by}", soft_wrap=True)
+        if status.outcome == "recorded" and status.answered_by == "agent":
+            # The same sentence `fr run check` prints (review r5-m3). This is
+            # the surface that rides the delivered PR body, so the case a human
+            # most needs to notice must not be the tersest line on the page —
+            # "cleared by agent" alone reads as bookkeeping, not as a warning.
+            console.print(
+                f"{status.step}: operator gate cleared by the agent "
+                "(answered_by: agent) — no operator answered it",
+                soft_wrap=True,
+            )
+        elif status.outcome == "recorded":
+            console.print(f"{status.step}: operator gate answered by the operator", soft_wrap=True)
         else:
             console.print(
                 f"{status.step}: cleared, but provenance not recorded "

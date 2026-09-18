@@ -406,3 +406,52 @@ Row harness-gate-degrades-loudly ("On a harness where the operator gate is not e
 ### p5-journal-check-still-red · discovery · fr journal check --scope plan reports 6 open findings even after fixing r4-i1/r4-i2 -- pre-existing journal-model characteristic, not a phase-5 regression (phase 5)
 
 `fr.journal` is append-only: `fr journal add --id <id>` is a no-op if `<id>` already exists (journal_cmd.py: "Idempotent: the id is already recorded; leave the file untouched"), and there is no `journal resolve`/`journal edit` command that flips an EXISTING entrys `state=` attribute. So marking a finding fixed, per this plans own established pattern (phase 2s 949ba7697d2b, this phases r4-i1/r4-i2), means adding a NEW entry with a DIFFERENT id and state=fixed that references the original -- the original entry keeps state=open in the raw file forever. `fr journal check --scope plan` (and compose_handoff) count RAW state=open entries with no cross-referencing, so they report 949ba7697d2b, r1-m8, 2b552ded3e12, 770edf2e5133, r4-i1, r4-i2 as open right now even though 949ba7697d2b (phase 2), r4-i1 and r4-i2 (this phase) already have superseding fixed entries. This was ALREADY true before phase 5 started (949ba7697d2b/r1-m8/2b552ded3e12/770edf2e5133 were open in the phase-5 handoff); phase 5 followed the dispatch instructions exact pattern ("mark r4-i1/r4-i2 addressed with new --kind finding --state fixed entries referencing them") and did not change this behavior. Flagging for whoever runs fr-goal §7s `fr journal check --scope plan clean` at deliver time: today that command cannot go clean without either a new `fr journal` capability to flip an existing entrys state, or a decision that check/deliver should read compose_handoffs open-findings section (which is NOT how check.py works today) rather than raw entry state. Out of phase-5 scope to redesign; recording so it is not rediscovered cold at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=r5-journal-gate created=2026-09-18T18:17:06 phase=5 state=open -->
+### r5-journal-gate · finding [open] · fr-goal §7's own gate 'fr journal check --scope plan clean' is UNSATISFIABLE — verified by experiment, out of scope to fix here (phase 5)
+
+The phase-5 executor flagged this; I verified it directly rather than accepting it.
+
+Experiment: `fr journal add --scope debug --slug zz-probe --kind finding --id p1 --state open`, then the SAME id with `--state fixed`. Result: the second add is a SILENT no-op — the entry stays '### p1 · finding [open] · probe' and `fr journal check` stays exit 1. There is no `fr journal resolve`/`edit` verb either (`fr journal --help`: add/render/check/handoff only). So the only way to record a resolution is to append a NEW entry with a NEW id whose prose says 'resolves <old-id>', which `check` does not read.
+
+Consequence: once any finding is ever opened, `fr journal check --scope plan` can never return clean — and fr-goal §7 requires exactly that before `deliver`. On this plan it exits 1 naming six findings, of which only TWO are genuinely open (r1-m8, the EXEMPT_COMMANDS decision; 770edf2e5133, the PATH-fr note — both deliberate phase-6 carries). The other four are resolved and superseded: 949ba7697d2b (phase 2 planted the marker), 2b552ded3e12 (phase 3 fixed the six AskUserQuestion occurrences), r4-i1 and r4-i2 (phase 5 fixed both, verified live: `--answered-by operator` is now in all three mirrors, and `fr run gates` on this very cursor prints 'brainstorm: cleared, but provenance not recorded').
+
+This is the same family as everything else this PR fixes — a gate that cannot pass gets routed around, which makes it decoration — but it is a defect in `fr journal`, a different subsystem from harness parity, and the operator scoped this PR to #436's six criteria. NOT fixing it here, deliberately. The PR body will state the gate's real output and name which four findings are resolved-but-unmarkable, rather than claiming 'journal clean'. A follow-up issue is owed for `fr journal resolve` (append a resolution record; have check compute effective state, preserving the append-only audit trail).
+
+<!-- fr:journal kind=finding scope=plan id=r5-c1 created=2026-09-18T18:41:30 phase=5 state=fixed -->
+### r5-c1 · finding [fixed] · CRITICAL: the journal claimed a test pin that did not exist — in the record that ships verbatim into the PR (phase 5)
+
+Entry r4-i1-fixed said '--answered-by operator' was 'Pinned by a grep-style content assertion'. Verified false: `grep -rn -- 'answered-by operator' tests/` returned ZERO hits, and test_skill_validation.py (the suite the entry gestured at) asserts frontmatter, line count and hyphenation — it would have passed identically with the clause deleted.
+
+This matters more than the missing test. fr-goal §7 renders this journal VERBATIM into the delivered PR body, so a reviewer reading 'pinned by a content assertion' would not re-grep. A false success claim, inside the record of the phase whose subject is honest reporting, in the PR that exists to stop exactly that — the repo's named failure mode, three levels deep.
+
+Fixed by making it true rather than by softening the wording: tests/unit/test_tripwire_skill_tool_neutrality.py's sibling, tests/unit/test_tripwire_gate_provenance_prose.py, asserts the clause over all three shipped copies AND that it stays conditional (a second test fails if the clause loses its 'only if / once the operator' scope, since unconditional boilerplate would turn the deliberate claim back into a default). Proved RED first: replacing the clause fails both tests naming the canonical file. fr.journal is append-only, so this entry supersedes the false one rather than editing it — which is itself r5-journal-gate's subject.
+
+<!-- fr:journal kind=finding scope=plan id=r5-i2 created=2026-09-18T18:41:30 phase=5 state=fixed -->
+### r5-i2 · finding [fixed] · gates() claimed for_each member coverage that no code path can produce — and its test proved it over an impossible state (phase 5)
+
+_iter_steps flattened group members and the docstring said 'Members carry their own gate, independent of their group's'. But a member step NEVER has a StepRecord: both builders key RunState.steps on top-level ids only (run_cmd.py's {s.id: StepRecord(...) for s in manifest.steps}, the identical comprehension in adopt.py); member progress lives in the group's record.items under phase/<n>/<member>. Verified. So the descent could only ever look up records that are never written, and _advance_group does not honour member.gate either, so nothing enforces one upstream.
+
+The test passed solely because it hand-built _state({'review': StepRecord(...)}) — a member-keyed state fr cannot produce. Green over an impossible state, while the real behaviour went unpinned: the SAME class as r5-c1, and the third instance in this PR of a test encoding a wish rather than a property (after phase 2's 'unsupported' and phase 3's two-harness clause).
+
+Took the cheap honest option: _gated_steps is top-level-only, the docstring says why, and the test now asserts the truth — even handed a member-keyed record, nothing is reported. Modelling member gates is a real change (give members records, teach _advance_group the gate) and the test now tells whoever does it what to update.
+
+<!-- fr:journal kind=finding scope=plan id=r5-i3m1m3m4 created=2026-09-18T18:41:31 phase=5 state=fixed -->
+### r5-i3m1m3m4 · finding [fixed] · Four more: an inert cursor, contradictory prose, a too-quiet PR line, and wording lost to over-compression (phase 5)
+
+r5-i3: fr-brainstorming created the run cursor in §0 and then never mentioned it again — §2 'Hand off' was unchanged, so after a standalone brainstorm the cursor sat at brainstorm/blocked forever, unread. spec §3.E's mechanism only bites on something that calls `fr run advance`, and nothing did. A file on disk is not a gate. §2 now resolves the brainstorm step with --emitted spec=<path> and says to drive everything after through `fr run advance`.
+
+r5-m1: the §0 bullet read 'Under fr-goal this is a no-op' AND 'a second fr run start would collide — do not run it twice'. Those pull opposite ways and the collision is real (exit 2). Now: 'Under fr-goal, skip this entirely', plus the two edge cases the bullet missed (a branch that already has a run; the migration refusal, since fr run start is not exempt).
+
+r5-m3: `fr run gates` — the surface that rides the PR BODY — printed 'cleared by agent' where `fr run check` prints 'operator gate cleared by the agent (answered_by: agent) — no operator answered it'. The terser line reads as bookkeeping, not a warning, on the one case a human most needs to notice. Now identical wording. One existing test's NAME already claimed parity with check while asserting the terser line; updated, and the name is now true.
+
+r5-m4: the §5 compression freed 6 lines to spend 3 and paid in meaning — 'carries the brief in `context`' (which argument carries it), the clause explaining WHY the cross-repo contrast holds, and the subject of 'An executor that both returns and messages'. It also left 462- and 243-character lines against a whole-file max of 106, which is how the earlier 'without'->'with no' regression slipped through a word-diff. Restored and re-wrapped.
+
+While paying for those lines I cut 'Multi-repo depends_on is within-plan only' — then grepped, found fr-goal was its ONLY statement anywhere in the skills, and restored it, taking the line out of my own §7 edit instead. Same trap I had just criticised.
+
+<!-- fr:journal kind=decision scope=plan id=r5-gate-prose created=2026-09-18T18:41:31 phase=5 -->
+### r5-gate-prose · decision · fr-goal §7's journal-check gate reworded to something satisfiable, rather than fixing fr journal (phase 5)
+
+r5-journal-gate proves `fr journal check --scope plan` can never return clean once any finding is opened, yet §7 demanded exactly that before deliver. The reviewer's conclusion was right: whoever runs deliver would have to stall or assert a green gate that is red, and the second is the behaviour this whole feature exists to make impossible.
+
+Fixing `fr journal` is out of scope (operator scoped this PR to #436's six criteria; it is a different subsystem). So §7 now states what the command can actually deliver: clean — and, since it counts raw states, a superseded open id still counts, so name each in the body. That keeps the gate meaningful without requiring a false claim, and the PR body will carry the six ids with their supersessions. A follow-up issue for `fr journal resolve` is still owed.

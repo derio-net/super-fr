@@ -105,15 +105,25 @@ class GateStatus:
     at: str | None = None
 
 
-def _iter_steps(steps: tuple[Step, ...]) -> tuple[Step, ...]:
-    """Every step in `steps`, flattened one level into `for_each` member
-    steps — the same nesting `_find_step` (run_cmd.py) already assumes.
-    Members carry their own `gate`, independent of their group's."""
-    flat: list[Step] = []
-    for step in steps:
-        flat.append(step)
-        flat.extend(step.steps)
-    return tuple(flat)
+def _gated_steps(steps: tuple[Step, ...]) -> tuple[Step, ...]:
+    """The TOP-LEVEL steps declaring `gate: operator`.
+
+    Deliberately not flattened into `for_each` members, and the docstring that
+    claimed otherwise was wrong (review r5-i2). A member step never has a
+    `StepRecord`: both builders key `RunState.steps` on top-level ids only
+    (`run_cmd.py`'s `{s.id: StepRecord(...) for s in manifest.steps}` and the
+    identical comprehension in `adopt.py`), and member progress lives in the
+    group's `record.items` under `phase/<n>/<member>`. So a walk that descended
+    into members could only ever look up records that do not exist — and the
+    test covering it passed solely because it hand-built a member-keyed state no
+    fr code path writes. A green test over an impossible state is worse than no
+    test.
+
+    Member gates are also unenforced upstream: `_advance_group` never consults
+    `member.gate`, so nothing blocks on one either. Modelling them means giving
+    members records and teaching `_advance_group` to honour the gate — a real
+    change, not a walk. Until then this says what is true."""
+    return tuple(step for step in steps if step.gate == "operator")
 
 
 def gates(state: RunState, manifest: WorkflowManifest) -> tuple[GateStatus, ...]:
@@ -125,9 +135,7 @@ def gates(state: RunState, manifest: WorkflowManifest) -> tuple[GateStatus, ...]
     step `RunState` alone cannot distinguish (`cleared_gates` above cannot
     either, for exactly that reason)."""
     statuses: list[GateStatus] = []
-    for step in _iter_steps(manifest.steps):
-        if step.gate != "operator":
-            continue
+    for step in _gated_steps(manifest.steps):
         record = state.steps.get(step.id)
         if record is None:
             continue

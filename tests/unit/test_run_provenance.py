@@ -94,10 +94,22 @@ def test_a_gated_step_still_blocked_is_not_reported_as_cleared() -> None:
     assert gates(state, manifest) == ()
 
 
-def test_gates_walks_grouped_for_each_member_steps_too() -> None:
-    """A `gate: operator` MEMBER step (nested under `for_each`) must not be
-    invisible — `gates()` walks `Step.steps` recursively, the same shape
-    `_find_step` already assumes elsewhere in this package."""
+def test_a_member_gate_is_not_modelled_and_the_code_no_longer_pretends_it_is() -> None:
+    """The inverse of what this test used to assert, because what it asserted
+    was unreachable (review r5-i2).
+
+    It passed only by hand-building `_state({"review": ...})` — a member-keyed
+    record no fr code path writes. Both `RunState` builders key on TOP-LEVEL ids
+    (`{s.id: StepRecord(...) for s in manifest.steps}` in `run_cmd.py`, the same
+    in `adopt.py`); member progress lives in the group's `record.items` under
+    `phase/<n>/<member>`. So the old test was green over a state fr cannot
+    produce, while the real behaviour — a member gate is invisible — went
+    unpinned. `_advance_group` does not honour `member.gate` either, so nothing
+    enforces one upstream.
+
+    This pins the truth instead. Modelling member gates is a real change (give
+    members records, teach `_advance_group` the gate); whoever makes it will
+    find this test telling them what to update."""
     group = Step(  # type: ignore[call-arg]
         id="implement",
         kind="agent",
@@ -106,9 +118,11 @@ def test_gates_walks_grouped_for_each_member_steps_too() -> None:
         steps=(Step(id="review", kind="agent", gate="operator", skill="r"),),  # type: ignore[call-arg]
     )
     manifest = _manifest(group)
+    # Even handed a member-keyed record, nothing is reported — the walk does not
+    # descend, because descending could only ever look up records that are never
+    # written.
     state = _state({"review": StepRecord(state="done", answered_by="operator")})
-    result = gates(state, manifest)
-    assert result == (GateStatus(step="review", outcome="recorded", answered_by="operator"),)
+    assert gates(state, manifest) == ()
 
 
 def test_gates_preserves_manifest_step_order() -> None:

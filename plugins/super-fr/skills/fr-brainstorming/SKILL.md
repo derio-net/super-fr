@@ -42,13 +42,15 @@ fr isolation up --branch <feature-branch> [--profile <name>]
 - From here on, follow the fr-isolation skill's exec-bridge discipline:
   read/edit files in the worktree, run every command through
   `fr isolation exec -- ...`.
-- **Standalone invocation only:** also start or adopt the run cursor now —
-  `fr run start fr-goal --branch <feature-branch>` (or `fr run adopt
-  <plan-dir|spec>` if work already exists on disk) — so `implement`'s
+- **Standalone invocation only:** also start the run cursor now —
+  `fr run start fr-goal --branch <feature-branch>`, or `fr run adopt
+  <plan-dir|spec>` when work already exists on disk — so `implement`'s
   `needs: [spec, plan]` later refuses to advance past a plan that was never
-  written (#436 instance 1). **Under fr-goal this is a no-op**: that
-  pipeline already started the run before invoking this skill, and a
-  second `fr run start` here would collide with it — do not run it twice.
+  written (#436 instance 1). **Under fr-goal, skip this entirely** — that
+  pipeline already started the run, and a second `fr run start` exits 2. It
+  also exits 2 (naming the run) if this branch already has one: resume with
+  `fr run advance <id>`. Refused over stale artifacts? Run
+  `fr migrate artifacts --yes` and retry — `fr run start` is not exempt.
 
 ## 1. Brainstorm
 
@@ -66,7 +68,12 @@ design.
 
 The brainstorm's design document becomes the spec
 (`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`, committed in the
-worktree). Hand off to `fr-plan` (the fr-plan-override rule already routes
+worktree). **Standalone:** resolve the cursor §0 started — `fr run resolve
+<run-id> --step brainstorm --state done --emitted spec=<path>` — then drive
+everything after this through `fr run advance <run-id>`. That is what makes
+the cursor a gate rather than a file on disk: `implement`'s
+`needs: [spec, plan]` only refuses work that asks it to. Hand off to
+`fr-plan` (the fr-plan-override rule already routes
 `writing-plans` there). The isolation workspace stays up — planning and
 implementation continue in it; cleanup belongs to whoever finishes the run
 (`fr isolation down` after the PR merges).

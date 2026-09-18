@@ -2448,7 +2448,9 @@ def test_gates_reports_who_cleared_an_operator_answered_gate(tmp_path: Path) -> 
     result = _invoke(repo, shipped, ["run", "gates", "r1"])
 
     assert result.exit_code == 0, result.output
-    assert "brainstorm: cleared by operator" in result.output
+    # r5-m3: `gates` feeds the PR BODY, so it now says what `check` says
+    # rather than a terser bookkeeping line.
+    assert "brainstorm: operator gate answered by the operator" in result.output
 
 
 def test_gates_reports_an_agent_cleared_gate_with_the_same_wording_as_check(tmp_path: Path) -> None:
@@ -2459,7 +2461,10 @@ def test_gates_reports_an_agent_cleared_gate_with_the_same_wording_as_check(tmp_
     result = _invoke(repo, shipped, ["run", "gates", "r1"])
 
     assert result.exit_code == 0, result.output
-    assert "brainstorm: cleared by agent" in result.output
+    # r5-m3: this test's NAME already claimed parity with `check`; until the
+    # fix it asserted a terser line that differed. Now it is true.
+    assert "operator gate cleared by the agent (answered_by: agent)" in result.output
+    assert "no operator answered it" in result.output
 
 
 def test_gates_never_renders_blank_on_a_pre_provenance_cursor(tmp_path: Path) -> None:
