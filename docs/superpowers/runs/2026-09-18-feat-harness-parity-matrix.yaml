@@ -3,7 +3,7 @@ run: 2026-09-18-feat-harness-parity-matrix
 workflow: fr-goal@1
 branch: feat/harness-parity-matrix
 started: '2026-09-18T12:25:26+00:00'
-cursor: implement
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -26,8 +26,8 @@ steps:
 
       '
   implement:
-    state: running
-    at: '2026-09-18T15:46:48+00:00'
+    state: done
+    at: '2026-09-18T18:27:08+00:00'
     items:
       phase/1/implement-phase: done
       phase/1/review-phase: done
@@ -37,12 +37,20 @@ steps:
       phase/3/review-phase: done
       phase/4/implement-phase: done
       phase/4/review-phase: done
-      phase/5/implement-phase: running
+      phase/5/implement-phase: done
+      phase/5/review-phase: done
+      phase/6/implement-phase: done
+      phase/6/review-phase: done
+      phase/7/implement-phase: done
+      phase/7/review-phase: done
     members:
     - implement-phase
     - review-phase
   deliver:
-    state: pending
+    state: done
+    at: '2026-09-18T18:27:14+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/481
 accounting:
   phase/1/implement-phase:
     at: '2026-09-18T13:41:20+00:00'
@@ -101,9 +109,44 @@ accounting:
     spec_bytes: 19385
     plan_bytes: 36471
   phase/5/implement-phase:
-    at: '2026-09-18T16:15:20+00:00'
-    journal_entries: 71
-    journal_lines: 408
-    handoff_chars: 52133
-    spec_bytes: 19385
-    plan_bytes: 36620
+    at: '2026-09-18T18:26:56+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 65805
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/5/review-phase:
+    at: '2026-09-18T18:27:05+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 65805
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/6/implement-phase:
+    at: '2026-09-18T18:27:06+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 82664
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/6/review-phase:
+    at: '2026-09-18T18:27:06+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 82664
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/7/implement-phase:
+    at: '2026-09-18T18:27:07+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 68564
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/7/review-phase:
+    at: '2026-09-18T18:27:08+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 68564
+    spec_bytes: 23046
+    plan_bytes: 45521
