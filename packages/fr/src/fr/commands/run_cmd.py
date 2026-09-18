@@ -673,12 +673,24 @@ def _advance_group(
     console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
 
 
-def _existing_run_for_workflow(repo_root: Path, workflow: str) -> str | None:
-    """The id of a run in this workspace already driving `workflow`, if any.
+def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
+    """The id of a run on `branch` already driving `workflow`, if any.
 
-    Scoped to the workspace, which IS the branch: `fr run start` writes the
-    run inside the isolation worktree for `--branch`, so every run file here
-    belongs to that branch by construction.
+    Compares `state.branch` rather than trusting the workspace to stand in for
+    it. The previous version scanned every run file in the workspace on the
+    reasoning that "`fr run start` writes the run inside the isolation worktree
+    for `--branch`, so every run file here belongs to that branch by
+    construction" — true of runs CREATED here, false of runs INHERITED here. A
+    workspace is a fresh checkout of `origin/main`, so it carries every cursor
+    ever merged and not yet archived, and one merged `fr-goal` cursor therefore
+    refused every subsequent `fr-goal` run in the repo: the shape worked exactly
+    once between archives. The refusal even named the new branch as the one that
+    "already has a run".
+
+    Found by Test Plan item 1 of the 2026-09-18 harness-parity work, running
+    `/fr-goal` on OpenCode against a clean branch — post-merge testing catching
+    what CI structurally could not, since every unit fixture creates its runs in
+    the workspace and so satisfies the false assumption by construction.
     """
     runs_dir = repo_root / RUNS_REL
     if not runs_dir.is_dir():
@@ -688,7 +700,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str) -> str | None:
             state = parse_run_state(candidate.read_text())
         except (RunStateError, OSError):
             continue  # a broken run file is a different problem
-        if state.workflow.split("@", 1)[0] == workflow:
+        if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
             return state.run
     return None
 
@@ -788,7 +800,7 @@ def start_cmd(
     if path.exists():
         err_console.print(f"[red]run {rid!r} already exists at {path}[/red]")
         raise typer.Exit(2)
-    existing = _existing_run_for_workflow(workspace, manifest.workflow)
+    existing = _existing_run_for_workflow(workspace, manifest.workflow, branch)
     if existing is not None:
         # A second `start` on the same branch and shape is nearly always a
         # mistake — a re-run after a wedge, or a forgotten in-flight run
