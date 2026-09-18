@@ -2,8 +2,9 @@
 
 Spec: docs/superpowers/specs/2026-07-22-fr-goal-subagent-execution-design.md §A.
 
-Three verbs:
-  - ``add``    append one entry (idempotent on ``--id``).
+Four verbs:
+   - ``add``    append one entry (duplicate ``--id`` values fail loudly).
+   - ``update`` change a finding's state and optionally append a resolution note.
   - ``render`` emit the Markdown a PR body embeds (fail-open on missing/bad file).
   - ``check``  freshness gate: non-zero on open findings or a parse error
                (fail-closed), so a stale journal cannot ride into a PR silently.
@@ -31,7 +32,7 @@ console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
 
 journal_app = typer.Typer(
-    help="Scope-keyed durable run-state (spec|plan|debug): add / render / check.",
+    help="Scope-keyed durable run-state (spec|plan|debug): add / update / render / check.",
     no_args_is_help=True,
 )
 
@@ -59,7 +60,7 @@ def add(
     phase: int | None = typer.Option(None, "--phase", help="Phase number, if any."),
     state: str | None = typer.Option(None, "--state", help="finding only: fixed | refuted | open."),
     entry_id: str | None = typer.Option(
-        None, "--id", help="Stable id; re-adding the same id is idempotent."
+        None, "--id", help="Stable entry id; must be unique within the journal."
     ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
@@ -88,8 +89,11 @@ def add(
 
     existing = _load(path)
     if any(e.id == eid for e in existing):
-        # Idempotent: the id is already recorded; leave the file untouched.
-        return
+        err_console.print(
+            f"[red]duplicate journal id:[/red] {eid}; use `fr journal update --id {eid} ...` "
+            "to change a finding."
+        )
+        raise typer.Exit(2)
     path.parent.mkdir(parents=True, exist_ok=True)
     block = serialize_entry(entry)
     if path.exists():
@@ -98,6 +102,56 @@ def add(
         path.write_text(prior + sep + block)
     else:
         path.write_text(f"# Journal: {slug}\n\n{block}")
+
+
+@journal_app.command("update")
+def update(
+    scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
+    slug: str = typer.Option(..., "--slug", help="Journal slug (spec/plan/debug slug)."),
+    entry_id: str = typer.Option(..., "--id", help="Existing finding id."),
+    state: str = typer.Option(..., "--state", help="fixed | refuted | open."),
+    note: str | None = typer.Option(
+        None, "--note", help="Resolution detail appended to the finding body."
+    ),
+) -> None:
+    """Update a finding's state while preserving its identity and creation time."""
+    root = resolve_repo_root()
+    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    try:
+        entries = _load(path)
+    except JournalParseError as e:
+        err_console.print(f"[red]journal parse error:[/red] {e}")
+        raise typer.Exit(2) from e
+    current = next((entry for entry in entries if entry.id == entry_id), None)
+    if current is None:
+        err_console.print(f"[red]error:[/red] no journal entry with id {entry_id!r}")
+        raise typer.Exit(2)
+    if current.kind != "finding":
+        err_console.print(f"[red]error:[/red] journal entry {entry_id!r} is not a finding")
+        raise typer.Exit(2)
+    body = current.body if note is None else f"{current.body.rstrip()}\n\n{note}".lstrip()
+    try:
+        replacement = JournalEntry.model_validate(
+            current.model_dump() | {"state": state, "body": body}
+        )
+    except ValueError as e:
+        err_console.print(f"[red]invalid update:[/red] {e}")
+        raise typer.Exit(2) from e
+    original = path.read_text()
+    offsets: list[int] = []
+    offset = 0
+    for line in original.splitlines(keepends=True):
+        if line.startswith("<!-- fr:journal "):
+            offsets.append(offset)
+        offset += len(line)
+    start = next(
+        offset
+        for offset in offsets
+        if f"id={entry_id}" in original[offset : original.find(" -->", offset)].split()
+    )
+    end = next((offset for offset in offsets if offset > start), len(original))
+    path.write_text(original[:start] + serialize_entry(replacement) + original[end:])
+    typer.echo(f"updated finding {entry_id} to {replacement.state}")
 
 
 _SECTION_KINDS = {

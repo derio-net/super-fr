@@ -195,6 +195,55 @@ def test_add_accumulates_levels_and_origins(
     assert new.levels["unit"] and new.levels["api"]
 
 
+# ── T2b: mutate existing rows ───────────────────────────────────────────────
+
+
+def test_set_status_updates_note_and_regenerates_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(id="debt", status="not-implemented", unit=""))
+    result = _invoke(
+        root, monkeypatch, "set-status", "debt", "--status", "ci", "--note", "covered in CI"
+    )
+    assert result.exit_code == 0, result.output
+    from fr.acceptance.model import load_matrix
+
+    updated = load_matrix(root / "docs/acceptance/matrix.yaml").rows[0]
+    assert updated.status == "ci"
+    assert updated.notes == "covered in CI"
+    assert (root / "docs/acceptance/report_local.html").exists()
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ("set-status", "missing", "--status", "ci"),
+        ("add-level", "missing", "--level", "unit=own:tests/test_a.py"),
+    ],
+)
+def test_existing_row_mutations_reject_unknown_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: tuple[str, ...]
+) -> None:
+    root = make_repo(tmp_path, row())
+    matrix_path = root / "docs/acceptance/matrix.yaml"
+    before = matrix_path.read_text()
+    result = _invoke(root, monkeypatch, *command)
+    assert result.exit_code == 2, result.output
+    assert matrix_path.read_text() == before
+
+
+def test_add_level_appends_valid_ref_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row(id="evidence"))
+    args = ("add-level", "evidence", "--level", "api=own:tests/test_a.py#L1")
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    from fr.acceptance.model import load_matrix
+
+    updated = load_matrix(root / "docs/acceptance/matrix.yaml").rows[0]
+    assert updated.levels["api"] == ("own:tests/test_a.py#L1",)
+
+
 @pytest.mark.parametrize(
     "flag,value",
     [

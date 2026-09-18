@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
+from fr.acceptance.model import LEVELS, AcceptanceError, Matrix, Row, load_matrix, split_ref
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
@@ -64,6 +64,55 @@ def _added_since(root: Path, ref: str, matrix: Matrix) -> list[str]:
             raise AcceptanceError(f"--added-since {ref}: base matrix unparseable: {e}") from e
         old_ids = {str(r["id"]) for r in old.get("rows") or [] if isinstance(r, dict) and "id" in r}
     return [r.id for r in matrix.rows if r.id not in old_ids]
+
+
+def _write_matrix(root: Path, matrix: Matrix) -> None:
+    """Write a validated replacement and keep the committed report set in sync."""
+    import yaml
+
+    matrix_path = root / MATRIX_REL
+    rows = [
+        {
+            "id": row.id,
+            "capability": row.capability,
+            "acceptance": row.acceptance,
+            "origin": list(row.origin),
+            "levels": {level: list(refs) for level, refs in row.levels.items() if refs},
+            "status": row.status,
+            "notes": row.notes,
+        }
+        for row in matrix.rows
+    ]
+    # Match `add`'s promise that matrix header comments survive CLI mutations.
+    header = matrix_path.read_text().split("rows:", 1)[0]
+    block = yaml.dump(rows, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    matrix_path.write_text(
+        header + "rows:\n" + "".join(f"  {line}" for line in block.splitlines(True))
+    )
+    from fr.acceptance.report import prune_stale_reports, render_committed_set
+
+    try:
+        for rel, html in render_committed_set(matrix, root).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(html)
+        prune_stale_reports(root)
+    except Exception as e:  # noqa: BLE001 -- keep a valid matrix mutation on render failure
+        err_console.print(
+            "[yellow]warning:[/yellow] matrix updated but the HTML reports were not regenerated "
+            f"({e}); "
+            "run `fr acceptance report --deterministic` and commit them."
+        )
+
+
+def _replace_row(matrix: Matrix, row_id: str, replacement: Row) -> Matrix:
+    if not any(row.id == row_id for row in matrix.rows):
+        raise AcceptanceError(f"no acceptance row with id {row_id!r}")
+    return Matrix(
+        org=matrix.org,
+        repo=matrix.repo,
+        rows=tuple(replacement if row.id == row_id else row for row in matrix.rows),
+    )
 
 
 @acceptance_app.command("check")
@@ -319,8 +368,6 @@ def add_cmd(
     """Append a schema-validated row (agents never hand-edit YAML shapes)."""
     import yaml
 
-    from fr.acceptance.model import Row
-
     root = resolve_repo_root()
     matrix_path = root / MATRIX_REL
     matrix = _load(root)
@@ -350,8 +397,6 @@ def add_cmd(
         raise typer.Exit(2)
     # Ref grammar validated NOW, not at the next check — a shell-mangled ref
     # (e.g. zsh's `$VAR:t` modifier eating "…:tests/…") must not land.
-    from fr.acceptance.model import split_ref
-
     for ref in new_row.refs():
         try:
             split_ref(ref)
@@ -402,6 +447,71 @@ def add_cmd(
             f"[yellow]warning:[/yellow] row added but the HTML reports were not regenerated ({e}); "
             "run `fr acceptance report --deterministic` and commit them."
         )
+
+
+@acceptance_app.command("set-status")
+def set_status_cmd(
+    row_id: str = typer.Argument(..., help="Existing acceptance row id."),
+    status: str = typer.Option(
+        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+    ),
+    note: str | None = typer.Option(
+        None, "--note", help="Replace the row's evidence/backfill note."
+    ),
+) -> None:
+    """Set an existing row's honest status and regenerate committed reports."""
+    root = resolve_repo_root()
+    matrix = _load(root)
+    current = next((row for row in matrix.rows if row.id == row_id), None)
+    if current is None:
+        err_console.print(f"[red]error:[/red] no acceptance row with id {row_id!r}")
+        raise typer.Exit(2)
+    try:
+        replacement = Row.model_validate(
+            current.model_dump()
+            | {"status": status, "notes": note if note is not None else current.notes}
+        )
+        updated = _replace_row(matrix, row_id, replacement)
+    except Exception as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    _write_matrix(root, updated)
+    typer.echo(f"set {row_id} status to {replacement.status}")
+
+
+@acceptance_app.command("add-level")
+def add_level_cmd(
+    row_id: str = typer.Argument(..., help="Existing acceptance row id."),
+    level: str = typer.Option(..., "--level", help="'<level>=<repo>:<path>[#Lline]' test ref."),
+) -> None:
+    """Add one evidence reference to an existing row and regenerate reports."""
+    level_name, separator, ref = level.partition("=")
+    if not separator or level_name not in LEVELS:
+        err_console.print(
+            f"[red]error:[/red] --level must use one of {list(LEVELS)}, got {level!r}"
+        )
+        raise typer.Exit(2)
+    try:
+        split_ref(ref)
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    root = resolve_repo_root()
+    matrix = _load(root)
+    current = next((row for row in matrix.rows if row.id == row_id), None)
+    if current is None:
+        err_console.print(f"[red]error:[/red] no acceptance row with id {row_id!r}")
+        raise typer.Exit(2)
+    if ref in current.levels[level_name]:
+        typer.echo(f"level {level_name} already contains {ref} for {row_id}")
+        return
+    levels = dict(current.levels)
+    levels[level_name] = (*levels[level_name], ref)
+    updated = _replace_row(
+        matrix, row_id, Row.model_validate(current.model_dump() | {"levels": levels})
+    )
+    _write_matrix(root, updated)
+    typer.echo(f"added {level_name} evidence to {row_id}")
 
 
 @acceptance_app.command("init")
