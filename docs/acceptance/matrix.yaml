@@ -1858,47 +1858,65 @@ rows:
       on every supported harness, and an undeclared surface fails CI.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec 3.A/3.B. Owed: fr.harness matrix + derived check pairing every hook
-      script with a row.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_harness_parity.py
+    status: ci
+    notes: 'Spec 3.A/3.B. Phase 2/6: fr.harness.check.pairing() pairs every shipped
+      hooks/*.sh with a matrix row; the tripwire and the operator-facing --check
+      call the same function so they cannot disagree.'
   - id: harness-parity-derived-check
     capability: Harness parity
     acceptance: The declared matrix is checked against the real registration files,
       so a hook wired (or unwired) without a matrix update fails.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_check.py
+      - super-fr:tests/unit/test_harness_observe.py
+    status: ci
     notes: 'Spec 3.B. Both directions: overclaim AND the already-live understatement
-      (fr-acceptance-nag on Hermes).'
+      (fr-acceptance-nag on Hermes) both produce findings.'
   - id: harness-tool-neutrality
     capability: Harness parity
     acceptance: No skill names a harness-specific tool as the way to do something outside
       an explicitly scoped per-harness clause.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.C. Today AskUserQuestion x6 across canonical + both mirrors. Mirrors
-      stay byte-identical; neutrality is enforced at the canonical source.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_vocabulary.py
+      - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
+    status: ci
+    notes: Spec 3.C. Fixed the six live AskUserQuestion occurrences (fr-goal §1,
+      fr-init §2, both mirrors). Mirrors stay byte-identical; neutrality is
+      enforced at the canonical source.
   - id: harness-gate-degrades-loudly
     capability: Harness parity
     acceptance: On a harness where the operator gate is not enforced, fr run advance
       says so at the gate instead of behaving as though it fired.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.D.1. Live verification on OpenCode/Hermes is Test Plan items 1-2,
-      post-merge.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: Spec 3.D.1. fr.commands.run_cmd._gate_degradation_notice() reads the
+      matrix scope_note live (never hardcoded). Live verification on
+      OpenCode/Hermes is Test Plan items 1-2, post-merge.
   - id: harness-gate-provenance
     capability: Harness parity
     acceptance: A gate cleared without an operator is recorded as such and reported
       in the delivered PR.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_provenance.py
+      - super-fr:tests/unit/test_migration_run_provenance.py
+    status: ci
     notes: Spec 3.D.2/3.D.3. Default answered_by=agent so the stronger claim must be
-      typed deliberately. Incurs a run-kind stamp bump + migration.
+      typed deliberately; fr run gates never renders blank. Incurred a run-kind
+      stamp bump (schema_version 2) + migration.

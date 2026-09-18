@@ -305,6 +305,18 @@ expected path, not an unconditional promise of one conversation turn.
 | PR merge | Yes | The agent never self-merges. |
 | Post-merge environment validation | Usually | It needs the deployed environment. |
 
+How the pause is enforced differs by harness. On a harness with a built-in
+structured question prompt, that prompt call is itself what pauses the run.
+Elsewhere `fr-goal` cannot force a pause the same way: it puts the numbered
+batch in its reply and ends the turn, and `fr run advance` says so loudly
+there rather than behaving as though the gate had fired silently. Either way
+the record travels with the run: resolving the gate types who actually
+answered it — `agent` by default, `operator` only when typed deliberately
+once the operator genuinely answered — and `fr run gates <run-id>` prints
+that provenance, so a reviewer reading the delivered pull request can tell a
+human-answered batch from one the agent had to clear on its own, rather than
+trust silence.
+
 ### 3. Define how success will be proved (`spec-review` and acceptance tests)
 
 Your answers become a **specification**, a document that says what will change
