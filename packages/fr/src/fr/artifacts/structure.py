@@ -170,7 +170,7 @@ def validate_plan(path: Path) -> list[str]:
 def validate_journal(path: Path) -> list[str]:
     """Every entry parses, and no entry id appears twice.
 
-    `fr journal add` is idempotent on `--id`, so two entries sharing one id can
+    `fr journal add` refuses duplicate `--id` values, so two entries sharing one id can
     only come from a hand edit or a bad splice — and `fr journal render
     --entry` would then silently show the first.
     """

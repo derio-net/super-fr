@@ -3,7 +3,7 @@
 Spec: docs/superpowers/specs/2026-07-22-fr-goal-subagent-execution-design.md §A.
 
 Verbs:
-  - ``add``     append one entry (idempotent on ``--id``).
+  - ``add``     append one entry (create-only; duplicate ``--id`` is refused).
   - ``resolve`` append a RESOLUTION RECORD closing a finding (spec §3.G.1) —
                 never a rewrite of the finding, which would erase that it was
                 ever open.
@@ -53,6 +53,14 @@ def _load(path: Path) -> list[JournalEntry]:
     return parse_journal(path.read_text())
 
 
+def _validate_scope(scope: str) -> None:
+    if scope not in {"spec", "plan", "debug"}:
+        err_console.print(
+            f"[red]invalid journal scope: {scope!r} (expected spec, plan, or debug)[/red]"
+        )
+        raise typer.Exit(2)
+
+
 @journal_app.command("add")
 def add(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
@@ -73,6 +81,7 @@ def add(
     ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
+    _validate_scope(scope)
     root = resolve_repo_root()
     path = journal_path(root, scope, slug)  # type: ignore[arg-type]
 
@@ -99,8 +108,11 @@ def add(
 
     existing = _load(path)
     if any(e.id == eid for e in existing):
-        # Idempotent: the id is already recorded; leave the file untouched.
-        return
+        err_console.print(
+            f"[red]journal entry {eid!r} already exists; use `fr journal resolve` "
+            "to change a finding[/red]"
+        )
+        raise typer.Exit(2)
     # Review r7-m2: `resolve` refuses an unknown id, and so must `--resolves`.
     # `effective_finding_states` deliberately tolerates a record naming a
     # finding that is not there, so that a hand-spliced journal cannot crash the
@@ -171,6 +183,7 @@ def resolve(
     Fails, loudly and without writing, on an unknown id — a silent success here
     would leave the gate red with the operator believing it was cleared.
     """
+    _validate_scope(scope)
     root = resolve_repo_root()
     # Resolve through the read path: a journal archived alongside its plan is
     # still the file the finding lives in, and a resolution record must land
@@ -240,6 +253,7 @@ def render(
     ),
 ) -> None:
     """Emit journal entries as Markdown (fail-open: missing/bad file → nothing)."""
+    _validate_scope(scope)
     root = resolve_repo_root()
     # Read-resolve so a render still works after the spec/plan was archived.
     path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
@@ -269,6 +283,7 @@ def check(
     (spec §3.G.1). A journal with no resolution records — every journal written
     before that verb existed — gates exactly as it did before.
     """
+    _validate_scope(scope)
     root = resolve_repo_root()
     # Read-resolve so a check still gates on an archived journal's findings.
     path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
@@ -309,6 +324,7 @@ def handoff(
     from fr.journal.model import compose_handoff
     from fr.parser import PlanSchemaError, parse
 
+    _validate_scope(scope)
     if scope != "plan":
         err_console.print(
             f"[red]handoff needs --scope plan (got {scope!r}) — only plan journals "

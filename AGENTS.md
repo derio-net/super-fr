@@ -19,8 +19,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`spec|plan|debug`) durable run-state under
     `docs/superpowers/journals/{specs,plans,debug}/` (one subdir per scope so
     the tree is glanceable; archived to `implemented/journals/<scope>/`).
-    `add` (idempotent on `--id` — re-adding an existing id changes **nothing**,
-    including its `state`, so it is never an update path) / `resolve` (appends a
+    `add` (create-only on `--id` — re-adding an existing id fails loudly and
+    directs the caller to `resolve`) / `resolve` (appends a
     RESOLUTION RECORD closing a finding; append-only, so the original entry is
     never rewritten) / `render` (raw, feeds PR bodies) / `check` (fail-closed on
     findings whose **effective** state — the fold of every record naming them,
