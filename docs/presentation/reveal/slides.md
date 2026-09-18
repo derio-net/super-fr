@@ -42,21 +42,22 @@ Note:             [Shapes first, upgrades second. The model gives each upgrade s
 ## Just the agent
 
 ```
-prompt ──▶ plan in chat ──▶ code in base
+prompt ──▶ plan in chat ──▶ code in base checkout
 ──▶ eyeball ──▶ commit + push
 ```
-<!-- .element: class="chain" -->
+</br>
 
+<!-- .element: class="chain" -->
 - Outcome in, approach out: explores, asks on real decisions
 - Three modes: interactive, plan-to-approve, autopilot
 - Validates what you name, reruns on failure
 - **No plan artifact**: conventions restated every single task
-- Human owns merge, secrets, production impact
+- Operator owns merge, secrets, production impact
 </div>
 
 <img class="side" src="../diagrams/st1-bay.png" alt="">
 
-Note:             [This is the usual case, and it is already smart. Copilot plus Terra is a strong general teammate: outcome-oriented prompts, repository exploration, multi-file edits, terminal validation, three session modes up to full autopilot. Two honest limits, straight from its own description. One: no plan artifact survives the session, so every task restates conventions, checks, and constraints from scratch. Repetition is the tax. Two: it validates what you name and ships what you approve. Teammate, not owner. The merge, the secrets, the production judgment stay human, and nothing on disk records the journey. This slide is the baseline the next two stations upgrade.]
+Note: Everybody starts here. Open an IDE, run the harness CLI or the IDE plugin and go. For anything complex, you should start with a Planning session. Once you've discussed the feature or bug with the agent, the implementation part begins, based on the generated plan. The plan can optionally be persisted. The agent implements, the operator approves as needed and, once the implementation is done, it's the operator's responsibility to test, commit, push, review and merge. This is Station 1, the baseline the next two stations build upon.
 
 ---
 
@@ -71,10 +72,11 @@ Note:             [This is the usual case, and it is already smart. Copilot plus
 idea ──▶ brainstorm ──▶ write plan ──▶ worktree
 ──▶ execute plan + TDD ──▶ verify→review→fix ──▶ finish
 ```
-<!-- .element: class="chain" -->
+</br>
 
+<!-- .element: class="chain" -->
 - Idea in, approved spec out: no code before sign-off
-- Spec in, zero-context plan out, then two executor options
+- Spec in, plan out, then two executor options
 - Iron laws inside: failing test first, evidence before any claim
 - Review is double-sided, finishing gates on green with 4 options
 - **Gaps remain**: one markdown plan, session memory, opt-in fence
@@ -97,13 +99,16 @@ Note:             [Station two, the serious version of station one. Brainstormin
 
 ```
 brainstorm ──▶ spec-review ──▶ plan
-──▶ plan-review ──▶ implement+review ×N ──▶ deliver
+──▶ plan-review ──▶ implement+review ×N 
+──▶ deliver ──▶ cleanup
 ```
+</br>
 <!-- .element: class="chain" -->
 
-- Shape is data: `kind: cli` runs, `kind: agent` briefs, `gate` stops
-- Run file on the branch, failed step holds the cursor
-- Workspace first: worktree plus container, then the run
+- Isolate first: git worktree plus devcontainer, then act
+- Everything is a file: Spec and Plans are stateful yaml, decisions are journaled, implementation moves the cursor
+- Goal reached through predefined steps: Acceptance tests, TDD, phase reviews, deployment, cleanup 
+- Type over prose: Phases and quality gates backed by python scripts and YAML skeleton 
 
 </div>
 
@@ -114,24 +119,9 @@ Note:             [Station three. Same silhouette as station two, new species: t
 
 ---
 
-<div class="crumb"><strong>Stations</strong> &gt; Upgrades &gt; Example run &gt; Quickstart &gt; Discussion</div>
-
-## Feature velocity
-
-- **1000+ merged PRs** across **15 repos**, May to September 2026
-- Roughly two thirds of sampled bodies carry pipeline markers
-- Example: `super-fr#449` — Why, spec/plan/journal links, What ships
-
-> Acceptance rows, verification log, journaled deviations, open findings
-
-
-Note:             [Feature velocity, honestly labeled. A thousand merged pull requests in four months across fifteen repos of one org, and about two thirds of the bodies I sampled reference the spec, the plan, or the journal. Pull request 449 is the anatomy slide: Why, links to spec plan journal, what ships, acceptance rows all flipped to ci, verification output, deviations from the plan with journal hashes, open findings that are follow-ups not blockers, and an operator rollout phase. Caveat I will not skip: not every one of those thousand ran this pipeline. The claim is that the org ships at this rate with this workflow available, and the bodies show the discipline spreading.]
-
----
-
 <!-- .slide: class="divider" -->
 
-# Upgrades, each justified
+# Station upgrades
 
 What superpowers lacked, the failure that paid, what it costs
 
@@ -168,6 +158,7 @@ fr isolation exec --branch feat/thing -- uv run pytest -q
 fr isolation status
 fr isolation down --branch feat/thing
 ```
+</br>
 
 - Worktree plus container, secrets host-side per profile
 - Refuses teardown while the pull request is open
@@ -211,6 +202,7 @@ steps:
     gate: operator
     emits: [spec, journal:spec]
 ```
+</br>
 
 - Source: `plugins/super-fr/workflows/fr-goal.yaml`
 - `implement` is a grouped `for_each`, review enforced per phase
@@ -253,6 +245,7 @@ steps:
   instrument: {state: done}
   record-compare: {state: pending}
 ```
+</br>
 
 - This deck's own run, committed on its branch
 - Failed steps hold the cursor, pending steps wait
@@ -289,6 +282,7 @@ fr run resolve 2026-09-09-feat-presentation-showdown \
   --step outline --state done \
   --emitted spec=docs/superpowers/specs/2026-09-09-design.md
 ```
+</br>
 
 - Emitted paths must exist and be repo-relative
 - Unanswered gates stop the run, never default it
@@ -329,6 +323,7 @@ rows:
     origin: [super-fr:docs/superpowers/specs/2026-09-04-design.md]
     status: ci
 ```
+</br>
 
 - Schema from `docs/acceptance/matrix.yaml`, rows appended by CLI only
 
@@ -344,6 +339,7 @@ super-fr adds: Test Plan section (post-merge, operator-driven),
   Implementation Plans table (one row per repo),
   acceptance rows born here with one-line defenses
 ```
+</br>
 
 - Same path, same name form — the additions are sections, not files
 - Test Plan agreed in the batched Q&A, driven together after merge
@@ -389,6 +385,7 @@ tasks:
     steps:
       - {id: P2.T1.S1, text: Write seed prompt template}
 ```
+</br>
 
 - One file per phase, explicit dependencies, tickable steps
 
@@ -404,6 +401,7 @@ superpowers: # Feature Implementation Plan, checkbox steps,
 super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
   P1.T1.S1 ids, tier + acceptance per phase, self-review gate
 ```
+</br>
 
 - Checkboxes a session ticks became state a CLI validates
 - Manual phases labeled, cross-repo refs in canonical form
@@ -442,6 +440,7 @@ Note:             [Upgrade seven, the robots. Superpowers already had subagent-d
 Model: OpenAI Terra default effort both runs.
 Demo: details redacted (not accessed; not cleared).
 ```
+</br>
 
 - Machine-tagged entries, rendered raw into briefs and bodies
 
@@ -478,6 +477,7 @@ session-workspace-binding, statusline-shows-bound-workspace, ...
 fr acceptance check: 99 rows OK.
 pytest: 2685 passed, 84 skipped. ruff clean.
 ```
+</br>
 
 - Source: `derio-net/super-fr#449`, the annotated example
 
@@ -494,6 +494,7 @@ Deviations from the plan text (all journaled):
 Open findings (follow-ups, not blockers):
 - d028f3cc945a Hermes has no session bind transport yet.
 ```
+</br>
 
 - Drift disclosed with hashes, never silently absorbed
 
@@ -548,6 +549,7 @@ Note:             [Upgrade ten, the docks. One backend switch instead of a rewri
 fr apply docs/superpowers/plans/2026-09-09-x          # dry-run preview
 fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 ```
+</br>
 
 - Backend resolves per repo: config key, remote host, default
 - Labels: `fr:ready` to `fr:pr-ready`, `manual` never routed
@@ -585,6 +587,7 @@ Note:             [Upgrade eleven, the group order. A feature touching three rep
 |---|---|---|---|
 | 2026-09-09-presentation-showdown | `derio-net/super-fr` | `2026-09-09-presentation-showdown` | — |
 ```
+</br>
 
 - Cross-repo form: `owner/repo:path`, one plan per repo
 
@@ -620,6 +623,7 @@ docs/superpowers/implemented/
   audits/ journals/ plans/ specs/
   plans/2026-04-12-vk-cli-p2-dispatch ...
 ```
+</br>
 
 - Gated mover only: complete phases, clean tree, one unit
 
@@ -651,6 +655,7 @@ fr-init                               # profile interview
 /fr-goal <want>                       # answer once, watch
 fr acceptance status                  # flip rows on evidence
 ```
+</br>
 
 - Standalone when small: `fr-brainstorming`, `fr-debugging`, `fr-plan`
 - Custom pipeline: your own `workflows/<name>.yaml`, validated by check
