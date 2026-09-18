@@ -44,7 +44,9 @@ Do not inflate coverage; the operator audits statuses at review.
 
 When a plan phase carrying `acceptance: [row-ids]` completes, flip those rows
 up the ladder (`not-implemented` → `skipped` → `ci`/`scheduled`), citing the
-test refs that justify the move in `levels` and `notes`. `fr plan edit
+test refs that justify the move: `fr acceptance add-level <id> --level
+unit=<repo>:<path>` and `fr acceptance set-status <id> --status ci --note
+"evidence"`. Both commands regenerate the committed report set. `fr plan edit
 --complete-phase` warns on unflipped rows — fix or record why in the
 completion note.
 

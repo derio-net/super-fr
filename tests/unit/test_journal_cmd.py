@@ -108,11 +108,11 @@ class TestAdd:
         entries = parse_journal(_journal_file(root, "S").read_text())
         assert [e.id for e in entries] == ["d1", "d2"]
 
-    def test_add_idempotent_on_id(self, tmp_path: Path, monkeypatch) -> None:
+    def test_add_duplicate_id_fails_loudly(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
-        for _ in range(2):
-            runner.invoke(
+        for index in range(2):
+            result = runner.invoke(
                 app,
                 [
                     "journal",
@@ -129,10 +129,99 @@ class TestAdd:
                     "d1",
                 ],
             )
+            if index:
+                assert result.exit_code == 2
+                assert "update" in result.output
         from fr.journal.model import parse_journal
 
         entries = parse_journal(_journal_file(root, "S").read_text())
         assert [e.id for e in entries] == ["d1"]
+
+
+class TestUpdate:
+    def test_update_changes_finding_state_and_appends_note(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "finding",
+            "--title",
+            "bug",
+            "--body",
+            "reported",
+            "--id",
+            "f1",
+            "--state",
+            "open",
+        )
+        result = runner.invoke(
+            app,
+            [
+                "journal",
+                "update",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--id",
+                "f1",
+                "--state",
+                "fixed",
+                "--note",
+                "covered by regression test",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        from fr.journal.model import parse_journal
+
+        entry = parse_journal(_journal_file(root, "S").read_text())[0]
+        assert entry.state == "fixed"
+        assert entry.body == "reported\n\ncovered by regression test"
+        assert (
+            runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"]).exit_code
+            == 0
+        )
+
+    def test_update_refuses_unknown_or_non_finding_entry(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "decision",
+            "--title",
+            "choice",
+            "--id",
+            "d1",
+        )
+        for entry_id in ("missing", "d1"):
+            result = runner.invoke(
+                app,
+                [
+                    "journal",
+                    "update",
+                    "--scope",
+                    "plan",
+                    "--slug",
+                    "S",
+                    "--id",
+                    entry_id,
+                    "--state",
+                    "fixed",
+                ],
+            )
+            assert result.exit_code == 2, result.output
 
     def test_finding_requires_state_via_cli(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
