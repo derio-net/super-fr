@@ -2,7 +2,7 @@ run: 2026-09-18-feat-harness-parity-matrix
 workflow: fr-goal@1
 branch: feat/harness-parity-matrix
 started: '2026-09-18T12:25:26+00:00'
-cursor: plan
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -13,14 +13,32 @@ steps:
     state: done
     at: '2026-09-18T12:53:03+00:00'
   plan:
-    state: running
-    at: '2026-09-18T12:53:12+00:00'
+    state: done
+    at: '2026-09-18T12:58:32+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-18-harness-parity-matrix
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-18T12:58:32+00:00'
+    exit: 0
+    stdout: 'self-review passed
+
+      '
   implement:
-    state: pending
+    state: running
+    at: '2026-09-18T12:58:37+00:00'
+    items:
+      phase/1/implement-phase: running
     members:
     - implement-phase
     - review-phase
   deliver:
     state: pending
+accounting:
+  phase/1/implement-phase:
+    at: '2026-09-18T12:58:37+00:00'
+    journal_entries: 14
+    journal_lines: 71
+    handoff_chars: 10277
+    spec_bytes: 19385
+    plan_bytes: 35770
