@@ -83,6 +83,37 @@ def _invoke(repo: Path, shipped: Path, argv: list[str]):
     return runner_cli.invoke(app, argv, env=env)
 
 
+_HARNESS_DETECTION_KEYS = ("FR_HARNESS", "CLAUDECODE", "CLAUDE_PLUGIN_ROOT")
+
+
+def _invoke_as_harness(
+    repo: Path, shipped: Path, argv: list[str], harness_env: dict[str, str | None]
+):
+    """Like `_invoke`, but with every harness-detection signal cleared first
+    (`os.environ` in THIS process carries `CLAUDECODE=1` — it is a Claude
+    Code session — so a test asserting "no notice on claude-code" or "an
+    unrecognised harness" would silently pass or fail on the ambient
+    environment rather than the one it declares). `harness_env` values of
+    `None` unset a key for the invocation (click's `CliRunner.isolation`
+    deletes it); anything else sets it."""
+    env: dict[str, str | None] = {
+        **os.environ,
+        "VK_REPO_ROOT": str(repo),
+        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+    }
+    # `None` (not a pop) so click's `CliRunner.isolation` actively DELETES the
+    # key from the real `os.environ` for the duration of the call — a pop
+    # here only edits this local dict and leaves this process's actual
+    # CLAUDECODE=1 (it IS a Claude Code session) untouched underneath.
+    for key in _HARNESS_DETECTION_KEYS:
+        env[key] = None
+    for key in list(env):
+        if key.startswith(("OPENCODE", "HERMES")):
+            env[key] = None
+    env.update(harness_env)
+    return runner_cli.invoke(app, argv, env=env)
+
+
 _CLI_ONLY_SHAPE = """
 workflow: cli-only
 schema: 1
@@ -280,6 +311,81 @@ def test_advance_is_idempotent_while_still_blocked(tmp_path: Path) -> None:
     state = load_run_state(repo, "r1")
     assert state.steps["brainstorm"].state == "blocked"
     assert not (repo / "executed.marker").exists()
+
+
+# --- Task 2 (Phase 5): fr run advance — the harness degradation notice ---
+
+
+def test_advance_prints_the_degradation_notice_on_opencode(tmp_path: Path) -> None:
+    """spec §3.D.1: a `gate: operator` step blocking on a harness where
+    `operator-gate` is not `enforced` prints a notice — and the notice text
+    comes from the matrix row's `scope_note`, not a hardcoded string
+    (otherwise the matrix is decoration)."""
+    from fr.harness import load_matrix
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke_as_harness(
+        repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"], {}
+    )
+    result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "opencode"})
+    assert result.exit_code == 0, result.output
+    matrix = load_matrix()
+    surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
+    scope_note = surface.harnesses["opencode"].scope_note
+    assert scope_note is not None
+    assert scope_note in result.output, result.output
+    assert "opencode" in result.output
+    assert "answered_by: agent" in result.output
+    assert "STOP" in result.output
+
+
+def test_advance_prints_no_notice_when_the_harness_enforces_the_gate(tmp_path: Path) -> None:
+    """claude-code's `operator-gate` row is `enforced` — the one harness where
+    the gate genuinely blocks, so the loud notice would be noise there."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke_as_harness(
+        repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"], {}
+    )
+    result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {"CLAUDECODE": "1"})
+    assert result.exit_code == 0, result.output
+    assert "advisory" not in result.output
+    assert "answered_by: agent" not in result.output
+
+
+def test_advance_prints_the_degradation_notice_when_the_harness_is_unrecognised(
+    tmp_path: Path,
+) -> None:
+    """Fail loud (spec §3.D.1): an environment fr cannot place at all is
+    treated as degraded too, not silently skipped — a wrong notice costs a
+    confusing paragraph, a missing one costs a silent skipped gate."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke_as_harness(
+        repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"], {}
+    )
+    result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {})
+    assert result.exit_code == 0, result.output
+    assert "answered_by: agent" in result.output
+    assert "STOP" in result.output
+
+
+def test_advance_rejects_an_unrecognised_fr_harness_value(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke_as_harness(
+        repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"], {}
+    )
+    result = _invoke_as_harness(
+        repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "clawd-code"}
+    )
+    assert result.exit_code == 2
+    assert "FR_HARNESS" in result.output
 
 
 # --- Task 2: fr run advance — agent steps NEVER execute anything ---
@@ -2316,3 +2422,63 @@ def test_check_still_exits_nonzero_on_a_failed_step_that_had_an_agent_cleared_ga
 
     assert result.exit_code == 1, result.output
     assert "answered_by: agent" in result.output
+
+
+# --- `fr run gates` (Phase 5, review r4-i2): the PR-body "Operator gates" ---
+# --- section source. Never blank — always says something, even "none". ----
+
+
+def test_gates_reports_none_when_the_workflow_declares_no_operator_gates(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "gates", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "no `gate: operator` steps" in result.output
+
+
+def test_gates_reports_who_cleared_an_operator_answered_gate(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _clear_cli_gate(repo, shipped, "--answered-by", "operator")
+
+    result = _invoke(repo, shipped, ["run", "gates", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "brainstorm: cleared by operator" in result.output
+
+
+def test_gates_reports_an_agent_cleared_gate_with_the_same_wording_as_check(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _clear_cli_gate(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "gates", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "brainstorm: cleared by agent" in result.output
+
+
+def test_gates_never_renders_blank_on_a_pre_provenance_cursor(tmp_path: Path) -> None:
+    """The r4-i2 shape: a cursor written before `answered_by` existed. A
+    blank "Operator gates" section on a PR body reads as "the feature never
+    ran" — so this must name the gap explicitly, not fall silent."""
+    import yaml as _yaml
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _clear_cli_gate(repo, shipped)
+    path = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    raw = _yaml.safe_load(path.read_text())
+    del raw["steps"]["brainstorm"]["answered_by"]  # simulate a pre-field cursor
+    path.write_text(_yaml.safe_dump(raw, sort_keys=False))
+
+    result = _invoke(repo, shipped, ["run", "gates", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "brainstorm" in result.output
+    assert "provenance not recorded" in result.output
+    assert "predates" in result.output

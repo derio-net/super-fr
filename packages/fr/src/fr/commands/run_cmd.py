@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -32,6 +33,9 @@ import typer
 from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
+from fr.harness import HARNESSES, load_matrix
+from fr.harness.detect import detect_harness
+from fr.harness.model import HarnessError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -56,7 +60,7 @@ from fr.run.model import (
     save_run_state,
     validate_run_id,
 )
-from fr.run.provenance import agent_cleared_gates
+from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS
 from fr.workflow.check import check_workflow
@@ -388,6 +392,46 @@ def _gate_pending(step: Step, record: StepRecord) -> bool:
     the turn and the run does not advance until the operator answers."
     """
     return step.gate == "operator" and record.gate != "cleared" and record.state != "done"
+
+
+def _gate_degradation_notice() -> str | None:
+    """The loud degradation notice for a blocked `gate: operator` step (spec
+    §3.D.1), or `None` when the detected harness genuinely enforces it.
+
+    Reads `os.environ` through `detect_harness` (never a hardcoded harness
+    name) and the shipped matrix's `operator-gate` row through `load_matrix`
+    — the notice text is built from that row's `scope_note`, so a stale or
+    hand-typed string here can never drift from what `fr harness parity`
+    itself declares. An UNRECOGNISED environment (`detect_harness` returns
+    `None`) is treated as degraded too — fail loud, the same posture as the
+    isolation gate: a wrong notice costs a confusing paragraph, a missing one
+    costs a silently skipped gate.
+
+    Raises `HarnessError` when `FR_HARNESS` is set to something outside
+    `fr.harness.HARNESSES` — a typo must not silently become an inference,
+    so the caller surfaces it as a command error rather than guessing.
+    """
+    harness = detect_harness(os.environ)
+    matrix = load_matrix()
+    surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
+    if harness is not None:
+        hstate = surface.harnesses[harness]
+        if hstate.state == "enforced":
+            return None
+        detail = f"your harness ({harness}) does not enforce this gate (state: {hstate.state})"
+        if hstate.scope_note:
+            detail += f" — {hstate.scope_note}"
+    else:
+        detail = (
+            "your harness could not be detected (set FR_HARNESS to one of "
+            f"{', '.join(HARNESSES)}) — treating this gate as advisory to be safe"
+        )
+    return (
+        f"gate: {detail}.\n"
+        "      Put the questions to the operator in your reply and STOP. Clearing this "
+        "gate without\n"
+        "      asking is recorded as `answered_by: agent` and reported in the delivered PR."
+    )
 
 
 def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
@@ -971,6 +1015,16 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             f"`fr run resolve {state.run} --step {step.id} --state done`",
             soft_wrap=True,
         )
+        # spec §3.D.1: printed BEFORE the agent brief (below), not after — the
+        # brief is a single JSON line a harness parses off stdout, and this
+        # notice must not become the last line a naive `tail -1` reads.
+        try:
+            notice = _gate_degradation_notice()
+        except HarnessError as e:
+            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+        if notice is not None:
+            console.print(notice, soft_wrap=True)
         # A gate stops the RUN, not the harness's view of the step: an `agent`
         # step still prints its brief here, because the skill/agent named in it
         # is how the operator's question gets asked in the first place. Nothing
@@ -1359,3 +1413,39 @@ def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     if record is not None and record.state == "failed":
         err_console.print(f"[red]{state.cursor}: failed[/red]")
         raise typer.Exit(1)
+
+
+@run_app.command("gates")
+def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+    """Every `gate: operator` step this run's manifest declares, and who
+    cleared it — the source `fr-goal`'s `deliver` step reads for the PR
+    body's "Operator gates" section (spec §3.D.3, review r4-i2).
+
+    NEVER prints nothing: a workflow with no operator gates says so
+    explicitly, and a step whose cursor predates `answered_by` (this
+    feature's own OpenCode run, or any `fr run adopt` cursor) says THAT
+    explicitly too — both `cleared_gates()`-only readings would have
+    rendered blank here, which on a delivered PR reads as "the feature
+    never ran".
+    """
+    repo_root = resolve_repo_root()
+    try:
+        state = _load_or_exit(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except (RunStateError, WorkflowError, AdoptError) as e:
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+    statuses = gates(state, manifest)
+    if not statuses:
+        console.print(f"{state.run}: no `gate: operator` steps recorded as cleared")
+        return
+    for status in statuses:
+        if status.outcome == "recorded":
+            console.print(f"{status.step}: cleared by {status.answered_by}", soft_wrap=True)
+        else:
+            console.print(
+                f"{status.step}: cleared, but provenance not recorded "
+                "(this cursor predates `answered_by`)",
+                soft_wrap=True,
+            )

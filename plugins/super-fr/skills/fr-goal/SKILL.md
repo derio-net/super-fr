@@ -49,7 +49,8 @@ repo-location question per other repo of a cross-repo spec (ask only if not foun
 into ONE batch (max 4, recommended first) put to the operator, then STOP; add a post-merge Test
 Plan question when the deliverable deploys, a model-per-tier one if `fr models resolve` is
 unbound. Log each answer as a spec-scope `decision`. **Hard gate:** an unanswered batch is a
-stop signal — restate the open questions, never default. Resolve `--emitted spec=<path>`.
+stop signal — restate the open questions, never default. Resolve `--emitted spec=<path>`, adding
+`--answered-by operator` once the operator actually answered (defaults to `agent` otherwise).
 
 **Harness — questions:** Claude Code batches them into one `AskUserQuestion` call. Hermes and
 OpenCode have no question tool: put the numbered batch in your reply and END THE TURN — an
@@ -85,14 +86,8 @@ dependency order, dispatch ONE phase-executor for `implement-phase` — brief = 
 journals discoveries/findings (`fr journal add`), ticks steps / completes the phase, returns a
 structured result — the handoff IS the context. Model = phase `tier` via `fr models resolve
 --harness <h>` (unbound → set at step 1); blocked → run inline; never a manual phase.
-**Harness — dispatch:** Claude Code uses the `fr-phase-executor` Agent without `isolation: "worktree"`
-— not "needn't", **mustn't** (#420, hook-refused): the flag cuts a *second* worktree from main
-where spec/plan are invisible and writes are denied, yet the dispatch succeeds, so the run looks
-healthy while nothing happens. The two isolations don't compose. (Contrast §2's cross-repo agents,
-which *keep* the flag — each starts a fresh pipeline in a different repo; these share this one's
-workspace.) Hermes `delegate_task(goal, context)` carries the brief in `context`, serial; child loads
-`fr-execute`. OpenCode has no dispatch primitive of its own — phases run inline, which is correct
-behaviour, not a gap. An executor that both returns and messages: keep the return, log the drop (#461).
+**Harness — dispatch:** Claude Code uses the `fr-phase-executor` Agent without `isolation: "worktree"` — **mustn't**, not "needn't" (#420, hook-refused): that flag cuts a *second* worktree from main where spec/plan are invisible and writes are denied, yet dispatch succeeds, so the run looks healthy while nothing happens; the two isolations don't compose (contrast §2's cross-repo agents, which DO keep the flag — each starts a fresh pipeline elsewhere).
+Hermes `delegate_task(goal, context)` carries the brief, serial, child loads `fr-execute`; OpenCode has no dispatch primitive — phases run inline, correct behaviour, not a gap. Both returns AND messages: keep the return, log the drop (#461).
 
 ### 6. review-phase — per phase, inside the loop, then push (never a PR)
 After each `implement-phase` return, run `review-phase`: `superpowers:requesting-code-review` over
@@ -105,13 +100,15 @@ body from the durable list. **Push the branch ONLY — never open the PR** (#320
 Verify first (`superpowers:verification-before-completion`): full test-suite output, self-review
 pass, steps ticked, `fr journal check --scope plan` clean. Open the **draft** PR ("Draft" = do not merge):
 summary + spec/plan paths; findings + fixes (+ refutations) and decisions via
-`fr journal render --scope plan --section findings`/`decisions`; the back-loaded manual phase
-marked "unimplemented — operator pushes to this PR"; the Test Plan verbatim ("post-merge —
-operator-driven"); acceptance debt (`fr acceptance status`) and rows-added-since-brainstorm
-(`fr acceptance check --added-since origin/main`), each with a one-line defense. The body carries a
-Ready-checklist guard (CI green, explicit review ok, no commits since the ok). ONLY when all three
-hold: `gh pr ready`, remove the guard — never say "ready to merge" before this, never self-merge,
-never flip it manually. Resolve `deliver` done; nothing follows it. Stop; the operator merges.
+`fr journal render --scope plan --section findings`/`decisions`; an **Operator gates** section
+verbatim from `fr run gates <run-id>` (never blank — a run that never asked says so itself); the
+back-loaded manual phase marked "unimplemented — operator pushes to this PR"; the Test Plan
+verbatim ("post-merge — operator-driven"); acceptance debt (`fr acceptance status`) and
+rows-added-since-brainstorm (`fr acceptance check --added-since origin/main`), each with a
+one-line defense. The body carries a Ready-checklist guard (CI green, explicit review ok, no
+commits since the ok). ONLY when all three hold: `gh pr ready`, remove the guard — never say
+"ready to merge" before this, never self-merge, never flip it manually. Resolve `deliver` done;
+nothing follows it. Stop; the operator merges.
 
 ### Post-merge close-out
 When the operator reports the merge: **first verify it reached `main`** via `fr isolation

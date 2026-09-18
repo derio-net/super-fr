@@ -42,6 +42,13 @@ fr isolation up --branch <feature-branch> [--profile <name>]
 - From here on, follow the fr-isolation skill's exec-bridge discipline:
   read/edit files in the worktree, run every command through
   `fr isolation exec -- ...`.
+- **Standalone invocation only:** also start or adopt the run cursor now —
+  `fr run start fr-goal --branch <feature-branch>` (or `fr run adopt
+  <plan-dir|spec>` if work already exists on disk) — so `implement`'s
+  `needs: [spec, plan]` later refuses to advance past a plan that was never
+  written (#436 instance 1). **Under fr-goal this is a no-op**: that
+  pipeline already started the run before invoking this skill, and a
+  second `fr run start` here would collide with it — do not run it twice.
 
 ## 1. Brainstorm
 
