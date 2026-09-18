@@ -8,7 +8,7 @@
 
 </div>
 
-Note: I haven't written code since December. I am coding for fun like a lot of us but coding was always so expensive, mostly paid in time.  This talk is a recursive solution to a persistent frustration. [Same chassis, three stations. Left: hand tools and taped-up notes. Middle: one robot, a half-built fence, a clipboard. Right: the full line, conveyor, scanner gate, control booth. This talk walks that floor left to right. What each station added, what failure paid for it, what it costs. Then you get the keys to run station three yourself. No superpowers knowledge assumed. Half 2, later, takes the finished car to the test track.]
+Note: I haven't written code since December. And I've never been more prolific. Like a lot of us, I was always coding for fun but I always had to be careful with my choices, as a project was a long-term commitment. With AI, that limitation is gone. I feel like a gambler in a casino, a alcoholic in a wine cellar, a diabetic in a candy shop. So I dove in and started building. But I also have demands of my code. It must a. work on the first try, b. be maintainable, c. be testable, d. be documented. This talk is my journey on how I am iteratively building a solution to this persistent frustration.
 
 ---
 
@@ -18,41 +18,53 @@ Note: I haven't written code since December. I am coding for fun like a lot of u
 2. **Agentic safety\* and autonomy** towards a goal
 3. **High feature throughput** in local development
 
-Note:             [Three claims, increasing ambition. One: structure beats chat. A pipeline with artifacts outperforms free-form discussion every time the work outlives the session. Two: safety and autonomy together, not traded. The asterisk is honest: these are discipline backstops with documented escapes, not a security boundary. Autonomy inside the cage, never outside it. Three: throughput is the scoreboard. A thousand merged PRs in four months is what the first two buy you in local development.]
+Note: LLMs are smart. But requirements are messy. And best practices are only wishes, until they are written down.. Agents are also powerful. They get access to your system and they can break things so they should be controlled, ideally in-depth.. And a smart, capable agent that needs hand-holding all the time is not really performing, so we should be able to "let them cook".
 
 ---
 
 ## Agenda
 
-- **Three stations** - just the agent (and its harness) / superpowers / super-fr
+- **Three stations** - just the agent / superpowers / super-fr
 - **Twelve upgrades** towards fr-goal
-- **Example run** - an annotated test track
+- **Comparison** - just the agent (+ planning) vs `/fr-goal gh#429`
+- **Annotated example** of a full run
 - **Quickstart** - installation and your first goal
 - **Discussion**
 
-Note:             [Shapes first, upgrades second. The model gives each upgrade somewhere to hang. Then we get practical.]
+<p class="nav"><a href="#/2/1">detail ↓</a></p>
 
+Note: So, today we'll talk about how I transformed my local development from "just using an agent", to the very promising superpowers Claude plugin, to upgrading it, step by step, until I got the Agent one-shot complex features with high confidence and build quality. This has allowed me, as a solo developer, in my free time, to implement and merge more that a thousand features since May. I have prepared a comparison between a "vanilla" feature development and the main loop of super-fr, fr-goal. Then we might take a look in the full run, if time allows.
+
+
+--
+
+## Feature velocity
+
+<img src="../diagrams/feature-velocity.png" alt=""
+     style="max-height: 545px; width: auto;">
+
+<p class="nav"><a href="#/2/0">↑ back</a></p>
 ---
 
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb"><strong>Stations</strong> &gt; Upgrades &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb"><strong>Stations</strong> &gt; Upgrades &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
-## Just the agent
+## Station 1: Just the agent
 
 ```
 prompt ──▶ plan in chat ──▶ code in base checkout
-──▶ eyeball ──▶ commit + push
+──▶ testing ──▶ commit + push
 ```
 </br>
 
 <!-- .element: class="chain" -->
-- Outcome in, approach out: explores, asks on real decisions
-- Three modes: interactive, plan-to-approve, autopilot
-- Validates what you name, reruns on failure
-- **No plan artifact**: conventions restated every single task
-- Operator owns merge, secrets, production impact
+- **Outcome in, approach out**: explores, asks on real decisions
+- **Three modes**: interactive, plan-to-approve, autopilot
+- **Validates** what you name, reruns on failure
+- **No structured plan** (depends on the agent/harness)
+- **Operator owned**: merge, secrets, production impact
 </div>
 
 <img class="side" src="../diagrams/st1-bay.png" alt="">
@@ -64,43 +76,70 @@ Note: Everybody starts here. Open an IDE, run the harness CLI or the IDE plugin 
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb"><strong>Stations</strong> &gt; Upgrades &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb"><strong>Stations</strong> &gt; Upgrades &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
-## Superpowers run
+## Station 2: Superpowers skill
 
 ```
-idea ──▶ brainstorm ──▶ write plan ──▶ worktree
-──▶ execute plan + TDD ──▶ verify→review→fix ──▶ finish
+brainstorm ──▶ write plan
+──▶ optional worktree ──▶ execute plan + TDD
+──▶ verify→review→fix ──▶ finish
 ```
 </br>
 
 <!-- .element: class="chain" -->
-- Idea in, approved spec out: no code before sign-off
-- Spec in, plan out, then two executor options
+- Brainstorming: Idea in, approved spec out: no code before sign-off
+- Writing Plans: Spec in, plan out, then two executor options
 - Iron laws inside: failing test first, evidence before any claim
 - Review is double-sided, finishing gates on green with 4 options
-- **Gaps remain**: one markdown plan, session memory, opt-in fence
 
+
+<p class="nav"><a href="#/4/1">detail ↓</a></p>
 </div>
 
 
 <img class="side" src="../diagrams/st2-cell.png" alt="">
 
-Note:             [Station two, the serious version of station one. Brainstorming ends in a spec markdown and refuses code until the design is approved, with a reviewer loop on top. Writing-plans turns it into steps a fresh session could execute, then offers subagent-driven or inline execution. Inside: test-driven-development runs red-green-refactor, verification-before-completion forbids completion claims without a fresh full-command run. Reviewing is double-sided, requesting dispatches SHA-scoped reviews, receiving bans performative agreement. Finishing verifies tests first, offers exactly four options, cleans up the worktree. The honest limit, and it is the whole rest of this talk: the plan is one markdown file no tool can read, progress lives in session memory, and the worktree fence is opt-in per task. Everything after this slide is one of those three growing up.]
+Note: Station 2, Superpowers (and OpenSpec to some extent) was a big upgrade. Best practices, codified! A brainstorming session that results in a design document, a Plan document that already decides what files are touched and implemented. All that before the agent writes any code. Test driven (mostly), evidence based debugging, code reviews out of the box! I worked with it for a long time and was very happy, but kept having to solve the same issues again and again. It's open source so, after a while I decided to fork it and implement my wishes. And thus we go to Station 3.
 
+
+--
+
+## A full run, using superpowers
+
+```
+brainstorming                     ◀ you approve the design
+writing-plans                     ◀ you pick an executor
+using-git-worktrees
+executing-plans                   (or subagent-driven-development)
+  test-driven-development         red before green
+  verification-before-completion  before any claim of done
+requesting-code-review
+receiving-code-review             fix or refute each one
+finishing-a-development-branch    merge, PR, cleanup
+```
+</br>
+
+
+- The agent picks these up itself — *"a 1% chance a skill applies: invoke it"*
+- The chain is **prose**: "invoke writing-plans", "REQUIRED SUB-SKILL" — advice, not a gate
+- Two touchpoints; progress lives in the session and one markdown file
+
+<p class="nav"><a href="#/4/0">↑ back</a></p>
 ---
 
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb"><strong>Stations</strong> &gt; Upgrades &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb"><strong>Stations</strong> &gt; Upgrades &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## fr-goal run
 
 ```
-brainstorm ──▶ spec-review ──▶ plan
-──▶ plan-review ──▶ implement+review ×N 
-──▶ deliver ──▶ cleanup
+brainstorm ──▶ spec-review 
+──▶ plan ──▶ plan-review 
+──▶ implement+review ×N 
+──▶ deploy ──▶ cleanup
 ```
 </br>
 <!-- .element: class="chain" -->
@@ -115,7 +154,7 @@ brainstorm ──▶ spec-review ──▶ plan
 
 <img class="side" src="../diagrams/st3-line.png" alt="">
 
-Note:             [Station three. Same silhouette as station two, new species: the pipeline is a yaml manifest that validates, the cursor is a file on your branch that survives compaction, and isolation is a mandatory cell, not a sidecar fence. Cli steps execute with exit code as verdict. Agent steps print a brief, you work, you resolve. The single operator gate is the batched question round. Everything after this slide is one super-fr addition presented as the upgrade it is: what superpowers lacked, what failure paid for it, what it costs.]
+Note: Station 3, super-fr (for real) is after a few months of continuous tinkering, a different beast. I decided early that I wanted to get isolation, security, testing, documentation out of the box. Everything is tracked and journaled: decisions, progress, errors, review findings, all in files, and are selectively fed to subagents, to keep their context as small as possible. Contrary to the superpowers skill, prose is replaced by structures: YAML, python code, hooks and gates.
 
 ---
 
@@ -123,17 +162,17 @@ Note:             [Station three. Same silhouette as station two, new species: t
 
 # Station upgrades
 
-What superpowers lacked, the failure that paid, what it costs
+What superpowers lacked, the failure that made the fix worth it and what it costs
 
 
-Note:             [The evolutions showed the what. These next slides show the why, one upgrade at a time. Each follows the same shape: what superpowers lacked, the failure that paid for the addition, what it costs you.]
+Note: I've just shown you a high level view of the end-result. But that doesn't mean much at that point. These next slides show how I got there, one upgrade at a time and why. Each follows the same shape: what superpowers lacked, the failure that made the addition worth it, and what it costs.
 
 ---
 
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Isolation
 
@@ -170,7 +209,7 @@ fr isolation down --branch feat/thing
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Pipeline as data
 
@@ -214,7 +253,7 @@ steps:
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Run cursor
 
@@ -257,7 +296,7 @@ steps:
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## One batched Q&A
 
@@ -294,7 +333,7 @@ fr run resolve 2026-09-09-feat-presentation-showdown \
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Acceptance matrix
 
@@ -351,7 +390,7 @@ super-fr adds: Test Plan section (post-merge, operator-driven),
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Plan folders, labeled manual work
 
@@ -413,7 +452,7 @@ super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Phase executors, journal handoff
 
@@ -451,7 +490,7 @@ Demo: details redacted (not accessed; not cleared).
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Review loop, guarded delivery
 
@@ -505,7 +544,7 @@ Open findings (follow-ups, not blockers):
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## PR bodies from the journal
 
@@ -525,7 +564,7 @@ Note:             [Upgrade nine, the paperwork. A vanilla agent writes whatever 
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Git backends, harness ports
 
@@ -561,7 +600,7 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Multi-repo specs
 
@@ -598,7 +637,7 @@ Note:             [Upgrade eleven, the group order. A feature touching three rep
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Example run &gt; Quickstart &gt; Discussion</div>
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
 ## Archiving
 
@@ -645,7 +684,7 @@ Note:             [Theory over. This part is a checklist you can follow Monday. 
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; Upgrades &gt; Example run &gt; <strong>Quickstart</strong> &gt; Discussion</div>
+<div class="crumb">Stations &gt; Upgrades &gt; Comparison &gt; Example &gt; <strong>Quickstart</strong> &gt; Discussion</div>
 
 ## First goal in four moves
 
@@ -673,7 +712,7 @@ Note:             [Move one installs everything and wires the harness you have. 
 <!-- .slide: class="split" -->
 
 <div class="col">
-<div class="crumb">Stations &gt; Upgrades &gt; Example run &gt; <strong>Quickstart</strong> &gt; Discussion</div>
+<div class="crumb">Stations &gt; Upgrades &gt; Comparison &gt; Example &gt; <strong>Quickstart</strong> &gt; Discussion</div>
 
 ## Takeaways
 
