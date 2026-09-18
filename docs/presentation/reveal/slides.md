@@ -8,7 +8,7 @@
 
 </div>
 
-Note:             [Same chassis, three stations. Left: hand tools and taped-up notes. Middle: one robot, a half-built fence, a clipboard. Right: the full line, conveyor, scanner gate, control booth. This talk walks that floor left to right. What each station added, what failure paid for it, what it costs. Then you get the keys to run station three yourself. No superpowers knowledge assumed. Half 2, later, takes the finished car to the test track.]
+Note: I haven't written code since December. I am coding for fun like a lot of us but coding was always so expensive, mostly paid in time.  This talk is a recursive solution to a persistent frustration. [Same chassis, three stations. Left: hand tools and taped-up notes. Middle: one robot, a half-built fence, a clipboard. Right: the full line, conveyor, scanner gate, control booth. This talk walks that floor left to right. What each station added, what failure paid for it, what it costs. Then you get the keys to run station three yourself. No superpowers knowledge assumed. Half 2, later, takes the finished car to the test track.]
 
 ---
 

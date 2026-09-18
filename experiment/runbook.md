@@ -3,13 +3,19 @@
 Two runs at the same feature, same harness, same model, same brief. One with
 `/fr-goal`, one without. Fills P1/P3 of the plan.
 
-| | Run A | Run B |
-|---|---|---|
-| Treatment | `/fr-goal <seed prompt>` | seed prompt, no `fr-*` |
-| Harness | `opencode --auto` | `opencode --auto --pure` |
-| Model | `github-copilot/gpt-5.6-terra`, default effort | same |
-| Branch | whatever fr-goal picks | `experiment/vanilla-429` |
-| Base | `RECORD_SHA` (pin below) | same `RECORD_SHA` |
+| | Run A | Run B | Run C |
+|---|---|---|---|
+| Treatment | `/fr-goal <seed prompt>` | `prompts/goal.md`, no `fr-*` | `prompts/goal-planned.md` — plan first, then implement |
+| Harness | `opencode --auto` | `opencode --auto --pure` | `opencode --auto --pure` |
+| Model | `github-copilot/gpt-5.6-terra`, default effort | same | same |
+| Branch | whatever fr-goal picks | `experiment/vanilla-429` | `experiment/vanilla-planned-429` |
+| Base | `RECORD_SHA` | same | same |
+
+Run C exists because run B one-shotted the work: no planning pass, no
+questions. That leaves fr-goal being compared against an agent that never
+planned, which flatters it. Run C asks for the plan *in the prompt* and gives
+nothing else, so the remaining difference between C and A is what the tooling
+adds over a well-phrased instruction.
 
 **Feature: issue #429** — `fr acceptance` and `fr journal` can create state but
 not update it. #431 is its duplicate. Chosen because it has real design
@@ -45,24 +51,36 @@ lifetime. Credentials are copied in, so neither run re-authenticates.
 
 ```bash
 # --- one-off, before recording -----------------------------------------
-export RUN_ROOT=~/experiment-429            # outside any fr-enabled repo
+# MUST live under ~/Docs/projects: ~/.gitconfig has
+#   [includeIf "gitdir:~/Docs/projects/**"] -> personal identity
+# and everything outside it falls back to the WORK identity. The first run was
+# cloned to ~/experiment-429 and committed as ioannis.dermitzakis@gebit.de.
+export RUN_ROOT=~/Docs/projects/experiment-429
 export RECORD_SHA=<pin from origin/main>
 
 # run B: clean clone, repo-level OpenCode wiring removed
-git clone https://github.com/derio-net/super-fr "$RUN_ROOT/vanilla"
-git -C "$RUN_ROOT/vanilla" checkout -b experiment/vanilla-429 "$RECORD_SHA"
-rm -rf "$RUN_ROOT/vanilla/.opencode" "$RUN_ROOT/vanilla/opencode.json"
+# ssh, NOT https: the keychain's https credential for github.com belongs to
+# `clawdia-ai-assistant`, not you, so gh/git act as the wrong account.
+for arm in vanilla vanilla-planned; do
+  git clone git@github.com:derio-net/super-fr.git "$RUN_ROOT/$arm"
+  git -C "$RUN_ROOT/$arm" checkout -b "experiment/${arm}-429" "$RECORD_SHA"
+  rm -rf "$RUN_ROOT/$arm/.opencode" "$RUN_ROOT/$arm/opencode.json"
+  # commit the removal, so the PR can be scored against this commit rather
+  # than main and the setup deviation never pollutes the measured diff
+  git -C "$RUN_ROOT/$arm" commit -q -am "experiment setup: remove OpenCode wiring"
+done
 
 # clean config + isolated storage for each run; copy credentials, drop MCP
-for r in A B; do
+for r in A B C; do
   mkdir -p "$RUN_ROOT/cfg-$r/opencode" "$RUN_ROOT/data-$r/opencode"
   cp ~/.local/share/opencode/auth.json "$RUN_ROOT/data-$r/opencode/"
 done
 # run A keeps super-fr's OpenCode skills/commands; run B gets none
 cp -R ~/.config/opencode/skills ~/.config/opencode/commands \
       ~/.config/opencode/instructions "$RUN_ROOT/cfg-A/opencode/"
-printf '{"$schema":"https://opencode.ai/config.json"}\n' \
-  | tee "$RUN_ROOT/cfg-A/opencode/opencode.json" > "$RUN_ROOT/cfg-B/opencode/opencode.json"
+for r in A B C; do
+  printf '{"$schema":"https://opencode.ai/config.json"}\n' > "$RUN_ROOT/cfg-$r/opencode/opencode.json"
+done
 ```
 
 Neither config declares an MCP server: the host's global config has one
@@ -99,10 +117,23 @@ Both runs open **draft** PRs. Only the better one merges, and `Closes #429,
 
 Per run, after it ends:
 
+Each run writes its own `opencode.db` under its `XDG_DATA_HOME`, so per-run
+accounting is exact rather than lifetime. The `session` table carries
+`parent_id`, `agent`, `cost`, `tokens_*` and `time_created/updated`, so
+**subagents are child rows with their own cost, tokens and wall time** — a sum
+over the run's db includes every subagent, and a `GROUP BY parent_id` splits
+orchestrator from delegated work.
+
 ```bash
-XDG_DATA_HOME=$RUN_ROOT/data-<r> opencode stats            # tokens, cost
-XDG_DATA_HOME=$RUN_ROOT/data-<r> opencode export <session> # full transcript
+DB=$RUN_ROOT/data-<r>/opencode/opencode.db
+sqlite3 -readonly "file:$DB?mode=ro" "
+SELECT COUNT(*) sessions, SUM(parent_id IS NOT NULL) subagents,
+       ROUND(SUM(cost),2) cost, SUM(tokens_input) tin, SUM(tokens_output) tout,
+       SUM(tokens_cache_read) cache_read FROM session;"
+XDG_DATA_HOME=$RUN_ROOT/data-<r> opencode export <session>   # full transcript
 ```
+
+Reading the db while a run is live is safe read-only; do not open it writable.
 
 - **Target hit:** `acceptance.md`, scored from the delivered PR alone. Never shown to either run.
 - **Operator effort:** `corrections.md` — count, and how early they cluster.
