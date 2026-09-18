@@ -1373,6 +1373,52 @@ def test_start_refuses_a_second_run_of_the_same_shape_on_this_branch(tmp_path: P
     assert not (repo / "docs" / "superpowers" / "runs" / "r2.yaml").exists()
 
 
+def test_a_run_inherited_from_the_base_branch_does_not_block_a_new_branch(
+    tmp_path: Path,
+) -> None:
+    """Found by Test Plan item 1 on OpenCode, on merged code.
+
+    `_existing_run_for_workflow`'s docstring claimed the scan is "scoped to the
+    workspace, which IS the branch ... every run file here belongs to that
+    branch by construction". That holds for runs CREATED in the workspace and
+    is false for runs INHERITED by it: an fr-isolation worktree is a fresh
+    checkout of `origin/main`, so it carries every run cursor ever merged and
+    not yet archived. One merged `fr-goal` cursor therefore blocked every
+    subsequent `fr-goal` run in the repo — the shape works exactly once between
+    archives — and the refusal said "branch <new> already has a run", naming a
+    branch that had none.
+
+    Scoping the comparison to `state.branch` makes the code do what the
+    docstring always said."""
+    repo = _repo(tmp_path, branch="feat/new")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    # The inherited cursor: written into the runs dir the way a checkout of
+    # `main` carries it, naming a DIFFERENT branch. Planted as a file rather
+    # than created by a second `fr run start`, because that is how it really
+    # arrives — via git, not the CLI.
+    runs = repo / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "old.yaml").write_text(
+        "run: old\n"
+        "workflow: cli-only@1\n"
+        "branch: feat/other\n"
+        "started: '2026-09-18T00:00:00+00:00'\n"
+        "cursor: only\n"
+        "steps:\n"
+        "  only:\n"
+        "    state: done\n"
+    )
+
+    result = _invoke(
+        repo, shipped, ["run", "start", "cli-only", "--branch", "feat/new", "--run-id", "new"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (repo / "docs" / "superpowers" / "runs" / "new.yaml").exists()
+
+
 def test_a_different_shape_on_the_same_branch_is_allowed(tmp_path: Path) -> None:
     """The refusal is about the same SHAPE, not about the branch: a research
     run alongside a delivery run is a legitimate thing to want."""
