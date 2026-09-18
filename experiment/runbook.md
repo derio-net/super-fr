@@ -51,10 +51,13 @@ lifetime. Credentials are copied in, so neither run re-authenticates.
 
 ```bash
 # --- one-off, before recording -----------------------------------------
-# MUST live under ~/Docs/projects: ~/.gitconfig has
-#   [includeIf "gitdir:~/Docs/projects/**"] -> personal identity
-# and everything outside it falls back to the WORK identity. The first run was
-# cloned to ~/experiment-429 and committed as ioannis.dermitzakis@gebit.de.
+# MUST live under ~/Docs/projects, which ~/.gitconfig maps to the personal
+# identity via [includeIf "gitdir:~/Docs/projects/**"]. That include used to be
+# dead: a global [user] section sat AFTER it, and git's last-value-wins meant
+# every clone committed as the work identity regardless of path (fixed
+# 2026-09-18 by moving [user] above the includeIf blocks). Verify a fresh clone
+# with `git -C <clone> config --show-origin user.email` before the first commit:
+# run B was cloned to ~/experiment-429 and pushed as ioannis.dermitzakis@gebit.de.
 export RUN_ROOT=~/Docs/projects/experiment-429
 export RECORD_SHA=<pin from origin/main>
 
