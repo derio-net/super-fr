@@ -1,14 +1,19 @@
 """`fr harness parity` — render the declared harness-parity matrix.
 
-2026-09-18 harness-parity-matrix spec §3.F, Phase 1 (walking skeleton).
+2026-09-18 harness-parity-matrix spec §3.F.
+
 Render reads ONLY the shipped `parity.yaml` (via `fr.harness.load_matrix`,
 `importlib.resources` under the hood) — no repo, no registration files, so
 it works on a pod with no plugin installed and no super-fr checkout.
-`--check` (declared vs. observed, needing the registration files) is
-Phase 2 and deliberately absent here.
 
-Exit codes: 0 always (a render has nothing to fail on); 2 usage
-(`--format`/`--harness` given a bad value).
+`--check` is the other mode: it re-derives the matrix from the real
+registration files and reports every disagreement. That needs a super-fr
+checkout, so run outside one it says it cannot check and exits 0 — never
+inventing a verdict from files it could not read (the `fr acceptance
+check` precedent).
+
+Exit codes: 0 render, or `--check` clean / declined; 1 `--check` found
+drift; 2 usage (`--format`/`--harness` given a bad value).
 """
 
 from __future__ import annotations
@@ -19,8 +24,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from fr.commands.common import resolve_repo_root
 from fr.harness import HARNESSES, load_matrix
-from fr.harness.model import Matrix
+from fr.harness.check import Finding, check
+from fr.harness.model import HarnessError, Matrix
+from fr.harness.observe import is_super_fr_checkout, observe
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
@@ -116,6 +124,61 @@ def _validate_harness(harness: str | None) -> None:
         raise typer.Exit(2)
 
 
+def _finding_json(finding: Finding) -> dict[str, str]:
+    return {
+        "surface_id": finding.surface_id,
+        "harness": finding.harness,
+        "declared": finding.declared,
+        "observed": finding.observed,
+        "message": finding.message,
+    }
+
+
+def _run_check(matrix: Matrix, output_format: str, harness: str | None) -> None:
+    """`--check`: declared vs. observed, exit 1 on drift.
+
+    Output goes through `typer.echo`, not the rich console: a finding
+    message is one long line naming two file paths, and rich would wrap it
+    at whatever width the console happened to snapshot at import — the
+    fragility that made two Phase 1 tests width-dependent (finding r1-m6).
+    """
+    root = resolve_repo_root()
+    if not is_super_fr_checkout(root):
+        # It needs the registration files and there are none here. Say so and
+        # exit 0: a verdict invented from files we could not read is worse
+        # than no verdict, and this command is meant to be runnable from a
+        # pod with nothing but the installed wheel.
+        typer.echo(
+            f"cannot check: {root} is not a super-fr checkout (no "
+            "plugins/super-fr/hooks/hooks.json) — the declared matrix is "
+            "unchecked, not verified. Run `fr harness parity` to render it."
+        )
+        return
+
+    try:
+        observed = observe(root)
+    except HarnessError as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(2) from exc
+
+    findings = check(matrix, observed)
+    if harness is not None:
+        findings = [f for f in findings if f.harness == harness]
+
+    if output_format == "json":
+        typer.echo(_json.dumps([_finding_json(f) for f in findings], indent=2))
+    elif findings:
+        typer.echo(f"harness parity: {len(findings)} disagreement(s) with the registration files")
+        for finding in findings:
+            typer.echo(f"  {finding.message}")
+    else:
+        scope = f" on {harness}" if harness else ""
+        typer.echo(f"harness parity{scope}: declared matrix agrees with the registration files")
+
+    if findings:
+        raise typer.Exit(1)
+
+
 @harness_app.command("parity")
 def parity_cmd(
     output_format: str = typer.Option(
@@ -126,7 +189,12 @@ def parity_cmd(
     harness: str | None = typer.Option(
         None,
         "--harness",
-        help="Restrict the table to one harness column (with its scope_notes).",
+        help="Restrict to one harness (a single table column, or --check's findings).",
+    ),
+    check_drift: bool = typer.Option(
+        False,
+        "--check",
+        help="Compare the declared matrix against the real registration files; exit 1 on drift.",
     ),
 ) -> None:
     """Render the declared harness-parity matrix (`fr.harness.parity.yaml`)."""
@@ -136,6 +204,10 @@ def parity_cmd(
     _validate_harness(harness)
 
     matrix = load_matrix()
+
+    if check_drift:
+        _run_check(matrix, output_format, harness)
+        return
 
     if output_format == "json":
         console.print_json(_json.dumps(_matrix_json(matrix)))
