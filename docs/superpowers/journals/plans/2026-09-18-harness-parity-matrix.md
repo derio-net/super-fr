@@ -215,3 +215,35 @@ snippet_entries indexes entry['command'] unguarded, so an entry missing that key
 ### r2-finding-widened · discovery · Finding.declared/observed widened to str when pairing joined the type (phase 2)
 
 mypy caught this rather than a human: Finding.observed was Observation = Literal['present','absent'], but a pairing finding is not an observation of anything ('shipped'/'no script') and neither is a misused 'unsupported' ('n/a'). Widened both to str with the reasoning recorded on the class, rather than inventing a second finding type for _run_check to merge. message stays the field an operator reads; these two are a machine-readable summary for --format json that nothing branches on.
+
+<!-- fr:journal kind=finding scope=plan id=2b552ded3e12 created=2026-09-18T16:20:47 phase=3 state=open -->
+### 2b552ded3e12 · finding [open] · Tripwire RED: six live AskUserQuestion occurrences (fr-goal §1, fr-init §2, x3 copies) (phase 3)
+
+P3.T2.S1: tests/unit/test_tripwire_skill_tool_neutrality.py, run against the unmodified tree, fails naming exactly six occurrences — the same count spec §3.C's measured-consequence section documents, confirming #436's estimate of four was stale:
+
+plugins/super-fr/skills/fr-goal/SKILL.md:52: 'AskUserQuestion' (claude-code)
+plugins/super-fr/skills/fr-init/SKILL.md:42: 'AskUserQuestion' (claude-code)
+.opencode/skills/fr-goal/SKILL.md:52: 'AskUserQuestion' (claude-code)
+.opencode/skills/fr-init/SKILL.md:42: 'AskUserQuestion' (claude-code)
+.hermes/skills/fr/fr-goal/SKILL.md:52: 'AskUserQuestion' (claude-code)
+.hermes/skills/fr/fr-init/SKILL.md:42: 'AskUserQuestion' (claude-code)
+
+No other TOOL_VOCABULARY name (Agent, Skill, NotebookEdit, WorktreeCreate, WorktreeRemove, MultiEdit, delegate_task, tool.execute.before) triggers a violation on the unmodified tree: the sole other 'Agent' occurrences are fr-goal §5's already-scoped **Harness — dispatch:** clause (passes: it names claude-code AND hermes) and fr-execute's frontmatter 'Agent-facing skill' (excluded by scan_prose's hyphen-adjacency guard — a compound adjective, not a tool mention). Confirms scan_prose's precision on real prose before any fix, not just on synthetic test text.
+
+<!-- fr:journal kind=discovery scope=plan id=2e7ffbc7f7d2 created=2026-09-18T16:40:14 phase=3 -->
+### 2e7ffbc7f7d2 · discovery · P3.T4 refactor: merged duplicate word-boundary pattern, precomputed clause validity once per span (phase 3)
+
+scan_prose's clause-recognition rule ended up two nearly-identical regex builders (_tool_pattern/_label_pattern) plus an O(mentions x clause_lines x labels) recomputation of a clause's validity for every candidate mention inside it. Merged into one _word_pattern(name) (same 'refuse a hyphen-touching match' semantics serves both a tool name and a harness display label), and hoisted clause validity into a single dict comprehension (valid_span = {span: _clause_is_valid(...) for span in spans}) computed once per scan rather than once per occurrence. Also worth recording: clause validity ended up judged by HARNESS DISPLAY LABELS ('Claude Code', 'Hermes', 'OpenCode' — a small local _HARNESS_LABELS map), not by TOOL_VOCABULARY membership as the plan's prose implied ('requiring only that every supported harness be named') — verified against the real fr-goal §5 dispatch clause, which names Claude Code's Agent and Hermes's delegate_task but never mentions OpenCode at all (it has no dispatch mechanism of its own to name); a tool-membership-based validity check would make that shipping clause its own violation. Label-based validity also lets the NEW fr-goal §1 / fr-init §2 'Harness — questions' clauses correctly serve Hermes/OpenCode readers even though neither harness has a distinct question TOOL to name ('Hermes and OpenCode have none — ask via whatever surface the harness offers'). Threshold is >=2 distinct harnesses named, not all HARNESSES members, for the same reason.
+
+<!-- fr:journal kind=discovery scope=plan id=9102eb79d990 created=2026-09-18T16:40:25 phase=3 -->
+### 9102eb79d990 · discovery · fr-goal and fr-init SKILL.md were already AT the 120-line cap — any addition needed an offsetting rewrap (phase 3)
+
+test_skill_validation.py::TestSkillValidation::test_under_120_lines and test_fr_goal_hermes_dispatch.py::test_fr_goal_stays_under_120_lines both failed after the first pass at the neutral rewrite + scoped clause, because both files were EXACTLY 120 lines before this phase (git show HEAD confirms) — zero headroom. Fix was NOT to shrink the new content below what's needed for clarity; it's to reflow existing content that was wrapped narrower than the file's own established width variance (60-155 chars/line elsewhere in fr-goal) to claw back the same number of lines the new **Harness — questions:** clause costs: fr-goal's frontmatter description (8->6 lines) and §2 spec-review paragraph (7->6 lines); fr-init's frontmatter description (6->5), its §1 scan bullets for `.devcontainer/` and forge detection (9->7), and its §4 hand-back first bullet (6->4). No wording/meaning changed in any of those rewraps, confirmed by diff — only line-wrap position. Both files land back at exactly 120 (fr-goal) and 119 (fr-init) lines. For phases 4-6: any future addition to either skill has the same zero-headroom problem and needs the same rewrap-to-offset move, not a shrink of the new content.
+
+<!-- fr:journal kind=discovery scope=plan id=bfb712c4c0b6 created=2026-09-18T16:40:49 phase=3 -->
+### bfb712c4c0b6 · discovery · FOR PHASE 6: harness-tool-neutrality acceptance row + exact test refs to cite (phase 3)
+
+fr plan edit --complete-phase 3 warned: acceptance row 'harness-tool-neutrality' is still not-implemented (expected — phase 6 owns the flip, per this phase's dispatch instructions not to touch docs/acceptance/). Refs to cite when phase 6 flips it:
+
+- tests/unit/test_harness_vocabulary.py — TOOL_VOCABULARY closure (no name claimed by two harnesses) + scan_prose's four rules (bare mention / scoped-valid / scoped-single-harness-invalid / neutral-prose) + the real fr-goal §5 dispatch clause passing.
+- tests/unit/test_tripwire_skill_tool_neutrality.py::test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause — the CI-gating tripwire itself, run over all three trees (canonical, .opencode/, .hermes/skills/fr/).

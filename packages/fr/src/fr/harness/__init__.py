@@ -27,6 +27,7 @@ from fr.harness.model import (
 __all__ = [
     "HARNESSES",
     "STATES",
+    "TOOL_VOCABULARY",
     "HarnessError",
     "HarnessState",
     "Matrix",
@@ -34,6 +35,33 @@ __all__ = [
     "load_matrix",
     "parse_matrix",
 ]
+
+TOOL_VOCABULARY: dict[str, frozenset[str]] = {
+    "claude-code": frozenset(
+        {
+            "AskUserQuestion",
+            "Agent",
+            "Skill",
+            "NotebookEdit",
+            "WorktreeCreate",
+            "WorktreeRemove",
+            "MultiEdit",
+        }
+    ),
+    "opencode": frozenset({"tool.execute.before"}),
+    "hermes": frozenset({"delegate_task"}),
+    "codex": frozenset(),
+    "copilot-cli": frozenset(),
+}
+"""Spec §3.C: the tool names that are each harness's OWN — used by
+`fr.harness.prose.scan_prose` to flag a harness-specific tool named outside
+an explicitly scoped `**Harness — <topic>:**` clause. Keyed by every
+member of `HARNESSES` (closed-world, same reason `Surface` requires every
+harness key): `codex`/`copilot-cli` carry no tools of their own today, an
+empty frozenset rather than a missing key. No name may appear under two
+harnesses — checked by `test_no_tool_name_is_claimed_by_two_harnesses` —
+because an ambiguous name would leave the tripwire unable to say which
+harness a bare mention serves."""
 
 
 def load_matrix() -> Matrix:

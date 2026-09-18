@@ -1,14 +1,12 @@
 ---
 name: fr-goal
 description: >
-  Run a feature goal end-to-end autonomously via the `fr-goal` workflow
-  shape (optional shape-name argument; no argument resolves `fr-goal`):
-  brainstorm, one batched Q&A, then spec → review → fr-plan → review → TDD
-  implementation → review → single PR, fixing every finding, no
-  intermediate approval gates. ALWAYS use when the operator invokes
-  /fr-goal or /goal, says "build this autonomously", "ask your questions
-  once then build it", "take this to a PR", hands a feature to run
-  unattended, says "auto mode" or spec-to-PR.
+  Run a feature goal end-to-end autonomously via the `fr-goal` workflow shape (optional
+  shape-name argument; no argument resolves `fr-goal`): brainstorm, one batched Q&A, then
+  spec → review → fr-plan → review → TDD implementation → review → single PR, fixing every
+  finding, no intermediate approval gates. ALWAYS use when the operator invokes /fr-goal or
+  /goal, says "build this autonomously", "ask your questions once then build it", "take this
+  to a PR", hands a feature to run unattended, says "auto mode" or spec-to-PR.
 ---
 
 # fr-goal
@@ -49,19 +47,21 @@ Test Plan.
 ### 1. brainstorm — batched Q&A, in isolation (`gate: operator`)
 Invoke `fr-brainstorming`. Explore, collect EVERY operator-owned decision — including one
 repo-location question per other repo of a cross-repo spec (ask only if not found on disk) —
-into ONE AskUserQuestion call (max 4, recommended first); add a post-merge Test Plan
-question when the deliverable deploys, a model-per-tier one if `fr models resolve` is
-unbound. Log each answer as a spec-scope `decision`. **Hard gate:** an unanswered call is a
-stop signal — restate the open questions, never default. Resolve with `--emitted
-spec=<path>` once written.
+into ONE batch (max 4, recommended first) put to the operator through your harness's question
+surface, then STOP; add a post-merge Test Plan question when the deliverable deploys, a
+model-per-tier one if `fr models resolve` is unbound. Log each answer as a spec-scope
+`decision`. **Hard gate:** an unanswered batch is a stop signal — restate the open questions,
+never default. Resolve with `--emitted spec=<path>` once written.
+
+**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call; Hermes and OpenCode have none — ask via whatever surface the harness offers, treating
+silence as the same stop signal.
 
 ### 2. spec-review
 Review the spec against the Q&A answers AND codebase reality (do the named
 files/helpers/services exist?). Fix every finding, log a spec-scope `review`. Cross-repo
 spec: this session owns ONE repo's plan + PR; for each other repo, dispatch one agent
-(`isolation: "worktree"` — right
-*here*: a fresh pipeline in a *different* repo) with the spec ref and this
-pipeline from `plan` onward — one plan, one PR per repo.
+(`isolation: "worktree"` — right *here*: a fresh pipeline in a *different* repo) with the
+spec ref and this pipeline from `plan` onward — one plan, one PR per repo.
 
 ### 3. plan — fr-plan, then review it
 Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the design). Keep

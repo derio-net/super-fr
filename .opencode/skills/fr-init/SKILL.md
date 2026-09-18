@@ -1,12 +1,11 @@
 ---
 name: fr-init
 description: >
-  Initialize a repo for isolated runs: scan it, interview the operator about
-  working patterns, tools, and credentials, then scaffold one or more
-  devcontainer profiles via `fr init scaffold`. Use when a repo has no
-  devcontainer profile, when fr-isolation or fr-brainstorming hard-stops
-  asking for one, when the operator says "init this repo", "set up the
-  devcontainer", or wants separate read-only/admin environments.
+  Initialize a repo for isolated runs: scan it, interview the operator about working patterns,
+  tools, and credentials, then scaffold one or more devcontainer profiles via `fr init scaffold`.
+  Use when a repo has no devcontainer profile, when fr-isolation or fr-brainstorming hard-stops
+  asking for one, when the operator says "init this repo", "set up the devcontainer", or wants
+  separate read-only/admin environments.
 ---
 
 # fr-init
@@ -25,21 +24,23 @@ Before asking anything, learn what the repo already says:
 
 - Languages and toolchains: manifests (pyproject/package.json/go.mod/...),
   lockfiles, `.tool-versions`, CI workflows (what does CI install?).
-- Existing `.devcontainer/` (profiles already present? then this is an
-  edit, not a green-field init). Check `.devcontainer/fr-profiles.yaml`
-  for an existing top-level `backend:`/`host:` key too.
-- Which forge: `git remote get-url origin`'s hostname (`github.com` /
-  `gitlab.com` self-identify; anything else, including a literal
-  `gitea.com`, is self-hosted and needs the operator to confirm the
-  backend explicitly — no hostname alone distinguishes GitLab
-  Self-Managed / Gitea / GitHub Enterprise).
+- Existing `.devcontainer/` (profiles already present? then this is an edit, not a green-
+  field init). Check `.devcontainer/fr-profiles.yaml` for an existing top-level
+  `backend:`/`host:` key too.
+- Which forge: `git remote get-url origin`'s hostname (`github.com` / `gitlab.com` self-
+  identify; anything else, including a literal `gitea.com`, is self-hosted and needs the
+  operator to confirm the backend explicitly — no hostname alone distinguishes GitLab Self-
+  Managed / Gitea / GitHub Enterprise).
 - Credential surface: `.env*` patterns in .gitignore, CI secret names,
   cloud/k8s configs — candidates for the profile's expected secrets.
 - Working patterns: Makefile/justfile/scripts (what do humans run here?).
 
 The interview confirms and fills gaps; it never asks what the scan answers.
 
-## 2. Interview (AskUserQuestion, batched ≤4 per round)
+## 2. Interview (batched ≤4 per round)
+
+**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call; Hermes and OpenCode have none — ask via whatever surface the harness offers, treating
+silence the same as an unanswered round.
 
 Cover, with scan-informed recommended options:
 
@@ -97,12 +98,10 @@ Unknown tools land in the profile's notes — wire them into
 
 ## 4. Hand back
 
-- Tell the operator which placeholders to fill
-  (`~/.config/fr/secrets/<repo>/<profile>.env`) before the first
-  `fr isolation up` — an empty env-file is normal for a default profile
-  (the standard pipeline needs only the host's own CLI auth to be green:
-  `gh auth status` for GitHub, `glab auth status` for GitLab, `tea login`
-  for Gitea).
+- Tell the operator which placeholders to fill (`~/.config/fr/secrets/<repo>/<profile>.env`)
+  before the first `fr isolation up` — an empty env-file is normal for a default profile (the
+  standard pipeline needs only the host's own CLI auth to be green: `gh auth status` for
+  GitHub, `glab auth status` for GitLab, `tea login` for Gitea).
 - `fr init scaffold` already **committed** the `.devcontainer/` files (scoped
   commit on the current branch — `main` during bootstrap), so the profile is in
   the committed tree that `fr isolation up` checks out. No separate commit step
