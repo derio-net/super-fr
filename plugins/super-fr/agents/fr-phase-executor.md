@@ -50,9 +50,12 @@ dispatch, so this should be unreachable; super-fr#420.)
 3. Tick steps and complete the phase with `fr plan edit` exactly as `fr-execute`
    prescribes. **Never open a PR** — the orchestrator owns delivery.
 4. Append what you learned to the plan journal as you go:
-   `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding …`
-   (findings carry `--state open|fixed|refuted`). This is the durable record
-   the orchestrator reviews and the PR body is derived from.
+    `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding …`
+    (findings carry `--state open|fixed|refuted`). This is the durable record
+    the orchestrator reviews and the PR body is derived from. Resolve or
+    refute an existing finding with `fr journal update --scope plan --slug
+    <plan-slug> --id <id> --state fixed|refuted --note "<why>"`; the note is
+    appended to preserve the original evidence.
 
 ## Contract — the worktree has exactly one writer
 

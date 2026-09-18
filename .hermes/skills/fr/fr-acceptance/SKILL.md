@@ -44,9 +44,12 @@ Do not inflate coverage; the operator audits statuses at review.
 
 When a plan phase carrying `acceptance: [row-ids]` completes, flip those rows
 up the ladder (`not-implemented` → `skipped` → `ci`/`scheduled`), citing the
-test refs that justify the move in `levels` and `notes`. `fr plan edit
---complete-phase` warns on unflipped rows — fix or record why in the
-completion note.
+test refs that justify the move: `fr acceptance add-level <id> --level
+unit=<repo>:<path>`, then `fr acceptance set-status <id> --status <honest>
+--note "<evidence / backfill owed>"`. These commands validate and update the
+existing row, then regenerate the tracked reports; never hand-edit matrix YAML.
+`fr plan edit --complete-phase` warns on unflipped rows — fix or record why in
+the completion note.
 
 ## Mid-flight additions (encouraged, then defended)
 
