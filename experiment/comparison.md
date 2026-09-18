@@ -124,10 +124,33 @@ tracked file is exactly the kind of artifact a one-shot agent damages, and the
 damage is invisible until something reads the file back. B's suite is green;
 its own tests never fed it the repo's real matrix.
 
-### What none of them got
+### Row 8: my scoring error, not their miss
 
-Checklist row 8 (`--note` required on a down-transition or `failing`) is
-`answers.md` row 3, given identically to all three. **No arm implemented it**,
-and A's spec, plan, per-phase review and self-review all passed over it. The
-review loop catches implementation defects; it did not catch a dropped
-requirement.
+I first recorded this as "no arm implemented `--note` required on a
+down-transition, though it was given to all three identically". **That was
+wrong, and the correction matters more than the original claim.**
+
+`answers.md` is a *response* document. Its content reaches a run only when that
+run asks the matching question. Checked against what was actually said:
+
+- the seed prompts contain **no** mention of notes;
+- issue #429 proposes `--status <s> [--note ...]` — **optional**, in brackets;
+- the only operator utterances ever made are run C's three, in
+  `corrections.md`, none of which state the rule.
+
+So the requirement existed **only in the operator's private sheet** and was
+never delivered to anyone. All three implemented exactly what the issue
+specified. Checklist row 8 tested for something no arm could have known, and it
+is withdrawn as a defect; it stays as a row only to record that the requirement
+never travelled.
+
+The causal chain is the interesting part, and it runs straight back to the gate:
+
+> A's Q&A gate could not fire (`AskUserQuestion` absent on OpenCode, super-fr#436)
+> → A asked nothing → the sheet was never consulted → an operator-owned
+> constraint never reached the work.
+
+An unasked question costs exactly one dropped requirement here. That is the
+clearest argument in the experiment *for* the gate — and it only became visible
+because the gate was broken.
+
