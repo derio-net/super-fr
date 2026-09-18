@@ -136,11 +136,27 @@ def test_this_repos_own_run_cursors_are_current(repo_root: Path) -> None:
     repo's own live cursors went stale — including the cursor of the very run
     that is doing the moving — and CI (`CI=true`, non-interactive) refuses
     rather than migrating. `fr migrate artifacts --yes` was run here and its
-    result committed."""
+    result committed.
+
+    ZERO LIVE CURSORS IS A PASS, and the `assert live, "this test would prove
+    nothing"` guard that used to sit here was wrong. Its instinct was right — a
+    test that can pass vacuously proves nothing — but it conflated two
+    different states: *the repo has no live cursors*, which is the normal
+    condition between runs and the exact condition one second after
+    `fr archive` moves the last one to `implemented/`, and *the fixture is
+    broken*, which is a problem. An empty set is not evidence of a broken
+    fixture.
+
+    It failed the archive PR of the very PR that introduced it (#482), on a
+    repo in a perfectly correct state. The anti-vacuity concern is already
+    carried by this file's synthetic-fixture siblings
+    (`test_migrating_a_v1_run_file_stamps_it_and_rewrites_no_body`,
+    `test_migrating_is_idempotent`,
+    `test_a_run_file_that_is_not_run_state_is_reported_never_stamped`), which
+    build their own cursors and cannot go vacuous. This test's job is narrower:
+    whatever live cursors exist, none of them is stale."""
     kind = artifact_kind("run")
     from fr.artifacts import iter_artifact_paths
 
-    live = list(iter_artifact_paths(repo_root, "run"))
-    assert live, "no live run cursors — this test would prove nothing"
-    for path in live:
+    for path in iter_artifact_paths(repo_root, "run"):
         assert kind.read_version(path) == kind.current_version, f"{path} is stale"
