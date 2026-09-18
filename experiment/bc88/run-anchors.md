@@ -1,34 +1,25 @@
 # Run anchors — bc88
 
-Arm G did **not** use the prepared clean room. Recorded here so its numbers stay
-recoverable from the shared store.
+## Arm G, first attempt: ABORTED, discarded
 
-| | Arm P | Arm G |
-|---|---|---|
-| Config | `cfg-P` (clean, as designed) | **default global config** — no `XDG_CONFIG_HOME` set |
-| Data store | `data-P/opencode/opencode.db` (isolated) | **shared** `~/.local/share/opencode/opencode.db` |
-| Working dir | `experiment-bc88/planned` | `~/Docs/projects/blog-craft` → fr worktree `blog-craft/gh-88` |
-| Recording | `planned.cast` | **none** |
-| Base | `2874f35c3755` | `2874f35c3755` (verified: the worktree contains the pin) |
+Started outside the prepared clean room — default global config (25 skills, 19
+commands, `gebit-mcp`), shared session store, working in `~/Docs/projects/blog-craft`,
+and **not recorded**. Exited and torn down: worktree, devcontainer, branch and
+working tree all removed, nothing preserved.
 
-**Arm G root session: `ses_f494e3317ffeho2OL5ZqKi`** (started 2026-09-19 00:45,
-directory `~/Docs/projects/blog-craft`). Subagents attach to it as children, so:
+Its sessions remain in the shared store and must be excluded from any total.
+Aborted root: `ses_f494e3317ffeho2OL5ZqKi` (2026-09-19 00:45, $1.11) — **not**
+arm G's cost.
 
-```sql
--- arm G totals, from the shared db
-WITH g(root) AS (VALUES('ses_f494e3317ffeho2OL5ZqKi'))
-SELECT COUNT(*), SUM(parent_id IS NOT NULL), ROUND(SUM(cost),2)
-FROM session, g WHERE id = g.root OR parent_id = g.root;
-```
+## Arm G, second attempt
 
-## Confounds this introduces, to carry into the write-up
+Fill in after the restart:
 
-1. **No recording for arm G.** asciinema cannot attach to a running process, so
-   this is unrecoverable. The session transcript (`opencode export`) is the
-   substitute and is arguably richer, just not screenable.
-2. **Arm G has more context than arm P**: the full global config — 25 skills,
-   19 commands and the `gebit-mcp` server — where arm P has only blog-craft's
-   repo tooling plus nothing. fr is therefore *not* the single variable between
-   the arms; extra tooling and an MCP server ride along with it.
-3. **Shared store**: arm G's cost/token totals must be filtered by the root
-   session above, never summed over the whole db.
+- root session id: `<pending>`
+- store: `data-G/opencode/opencode.db` (isolated — read the whole db, no filtering)
+- cast: `frgoal.cast`
+
+## Arm P
+
+Running as designed since 00:32: `cfg-P`, isolated `data-P`, recorded to
+`planned.cast`, working in `experiment-bc88/planned`.
