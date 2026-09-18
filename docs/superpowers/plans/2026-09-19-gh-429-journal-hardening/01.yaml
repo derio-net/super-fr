@@ -1,0 +1,38 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Journal input validation and ambiguous-id safety
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  skeleton: true
+  acceptance:
+  - journal-ambiguous-id-protection
+  - journal-loud-duplicate-create
+tasks:
+- number: 1
+  title: RED - characterize strict journal command failures
+  steps:
+  - id: P1.T1.S1
+    text: |
+      Add focused command and model tests: duplicate add exits 2, names its id and leaves the journal unchanged; every journal command rejects scope bogus with exit 2 and no traceback; a duplicate entry id raises JournalParseError and makes resolve refuse without writing. Run the focused tests and observe failure before implementation.
+- number: 2
+  title: GREEN - validate scope and duplicate identities
+  steps:
+  - id: P1.T2.S1
+    text: |
+      Add one scope validator used before every journal path resolution. Make add reject an existing id with guidance to fr journal resolve. Detect duplicate ids while parsing, preserving render's documented fail-open behavior. Run focused tests, then ruff format and the journal test files.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T22:28:21+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-18T22:28:22+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T22:28:22+00:00'
+    note: null
+    observed_prs: []

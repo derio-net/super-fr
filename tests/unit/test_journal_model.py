@@ -248,6 +248,14 @@ class TestRoundTrip:
         with pytest.raises(JournalParseError):
             parse_journal(bad)
 
+    def test_duplicate_entry_id_raises(self) -> None:
+        from fr.journal.model import JournalParseError, parse_journal, serialize_entry
+
+        text = "\n".join((serialize_entry(_entry(id="same")), serialize_entry(_entry(id="same"))))
+
+        with pytest.raises(JournalParseError, match="duplicate journal entry id"):
+            parse_journal(text)
+
     def test_body_starting_with_heading_round_trips(self) -> None:
         """F2: a body whose first line is a `### ...` markdown heading survives."""
         from fr.journal.model import parse_journal, serialize_entry

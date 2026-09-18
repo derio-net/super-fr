@@ -197,6 +197,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
     raises ``JournalParseError``.
     """
     entries: list[JournalEntry] = []
+    entry_ids: set[str] = set()
     lines = text.splitlines()
     i = 0
     n = len(lines)
@@ -233,19 +234,21 @@ def parse_journal(text: str) -> list[JournalEntry]:
         # test_a_header_token_this_fr_does_not_know_is_ignored_not_fatal` is the
         # guard; a refactor to `**fields` fails it immediately.
         try:
-            entries.append(
-                JournalEntry(
-                    kind=fields["kind"],  # type: ignore[arg-type]
-                    scope=fields["scope"],  # type: ignore[arg-type]
-                    id=fields["id"],
-                    created=fields["created"],
-                    phase=int(fields["phase"]) if "phase" in fields else None,
-                    title=_title_from_heading(text, fields["id"]),
-                    body="\n".join(block),
-                    state=fields.get("state"),  # type: ignore[arg-type]
-                    resolves=fields.get("resolves"),
-                )
+            entry = JournalEntry(
+                kind=fields["kind"],  # type: ignore[arg-type]
+                scope=fields["scope"],  # type: ignore[arg-type]
+                id=fields["id"],
+                created=fields["created"],
+                phase=int(fields["phase"]) if "phase" in fields else None,
+                title=_title_from_heading(text, fields["id"]),
+                body="\n".join(block),
+                state=fields.get("state"),  # type: ignore[arg-type]
+                resolves=fields.get("resolves"),
             )
+            if entry.id in entry_ids:
+                raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
+            entry_ids.add(entry.id)
+            entries.append(entry)
         except KeyError as e:
             raise JournalParseError(f"journal entry missing required field: {e}") from e
         i = j

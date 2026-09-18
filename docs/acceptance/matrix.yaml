@@ -1949,3 +1949,28 @@ rows:
       adds level evidence and regenerates all three committed reports; unknown id or
       status creates nothing. This row was flipped to ci BY that command, and so was
       its sibling -- the hand-edit phase 6 had to perform is gone.
+  - id: journal-ambiguous-id-protection
+    capability: Journal commands refuse ambiguous entry identities
+    acceptance: An operator cannot accidentally resolve or validate a journal containing
+      two entries with the same id
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-19-gh-429-journal-hardening-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: Focused parser and command tests now reject duplicate journal ids before
+      mutation.
+  - id: journal-loud-duplicate-create
+    capability: Journal creates report duplicate ids
+    acceptance: An operator receives a failure and resolution guidance instead of a
+      silent no-op when reusing a journal id
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-19-gh-429-journal-hardening-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: Focused command tests verify duplicate adds fail loudly and leave journals
+      byte-identical.
