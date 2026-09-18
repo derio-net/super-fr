@@ -72,7 +72,6 @@ uv workspace monorepo, version lockstepped across every manifest (see
     declaration, and `check.py` is the only bridge between the two. CLI:
     `fr harness parity` (`commands/harness_cmd.py`). `prose.py`'s
     `scan_prose` is the sibling tool-neutrality scanner over skill prose.
-
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)

@@ -93,12 +93,16 @@ never see it report a stale artifact — only CI, which is non-interactive, ever
 could. That guts the diagnostic. `fr isolation` and `fr init` are the two
 commands an operator reaches for when the workspace is not yet in a state to be
 migrated at all. `fr harness` (2026-09-18 harness-parity-matrix, spec §3.F) is
-the same shape as `validate`: a pure render (`fr harness parity`'s own
-docstring: "no repo, no registration files") explicitly designed to run on a
-pod with no super-fr checkout at all — the one case where blocking it behind
-*this repo's own* stale plan/journal/run artifacts would be the most visibly
-wrong, since the command's entire purpose is to work where there is no
-checkout to be stale."""
+the same shape as `validate`, and the precise claim matters since this list is
+pinned so that additions are argued from here: the RENDER path reads nothing
+but the `parity.yaml` shipped inside the wheel, and `--check` reads the
+registration files but writes none — neither path mutates anything, so the
+exemption cannot let an agent proceed *over* a stale artifact, which is the one
+thing this gate exists to prevent. Render is explicitly designed to run on a pod
+with no super-fr checkout at all, which is the case where blocking it behind
+*this repo's own* stale plan/journal/run artifacts would be most visibly wrong:
+the command's whole purpose is to work where there is no checkout to be
+stale."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by

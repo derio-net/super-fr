@@ -521,3 +521,16 @@ Same shape as phases 1-5: this phase's cleanup is collected into its own dedicat
 ### norefactor-P7.T3 · discovery · no-refactor-because P7.T3 (phase 7)
 
 Same shape as phases 1-5: this phase's cleanup is collected into its own dedicated REFACTOR task, P7.T4, which is the form fr-plan's rules sanction for larger cleanups. P7.T4.S1 names the specific candidate — if resolve and add grow parallel writers, give them one — and the quality gate runs once at P7.T4.S3 rather than three or four times per phase for no extra signal.
+
+<!-- fr:journal kind=finding scope=plan id=r6-c1 created=2026-09-18T19:26:31 phase=6 state=fixed -->
+### r6-c1 · finding [fixed] · CRITICAL: phase 6 reported the gate green while ruff check was red — CI would have failed on first push (phase 6)
+
+Phase 6's full-gate run reported every command green, but `uv run ruff check packages/ tests/` was RED at the commit it declared ready — CI's first job (.github/workflows/ci.yml:11 `lint`) would have failed on the first push. Verified: exit 1, I001 un-sorted import block at tests/unit/test_plan_workflow_binding.py:382. Fixed with `ruff check --fix`; both `ruff check` and `ruff format --check` now exit 0.
+
+TWO causes, and the second is the generalisable one:
+
+1. `$?` after a pipe reports the PIPE's last command, not the command of interest. `uv run ruff check ... | tail -1` prints "All checks passed!" only when it passes, but the exit code read afterwards is tail's, which is always 0. I hit this myself earlier in this same run on `fr journal check` and had to re-measure with a file redirect. Any gate result captured through a pipe is unverified.
+
+2. ORDERING. P6.T3.S2 lists the gate as ruff format -> ruff check -> mypy -> pytest -> ... . The phase's self-caused 4th failure was discovered DURING pytest, i.e. after ruff check had already passed, and the fix for it added the offending import. `ruff format` does not sort imports, so re-running format would not have caught it either. Nothing re-ran lint after the last source edit. A linear gate list is only valid if no step edits source; the moment one does, the gate must restart.
+
+FOR ANY LATER PHASE AND FOR THE PLAN TEMPLATE: after the LAST source edit, re-run the whole gate, and capture exit codes by redirecting to a file rather than piping. The phase-7 brief carries the same ordering in P7.T4.S3 and was warned.

@@ -379,9 +379,8 @@ def test_plan_create_accepts_an_explicit_constraint_that_already_floors_at_4(
     from the installed version rather than hardcoded: a literal '<4.5.0'
     breaks the moment fr itself reaches 4.5.0, which is exactly what this
     test hit self-inflicted when phase 6 bumped the version under it."""
-    from packaging.version import Version
-
     from fr.parser import INSTALLED_FR_VERSION
+    from packaging.version import Version
 
     repo = _cli_repo(tmp_path)
     installed = Version(INSTALLED_FR_VERSION)
