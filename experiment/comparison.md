@@ -26,9 +26,24 @@ experiment's own removal of `.opencode/`, which would otherwise read as
 ## Did they do the job
 
 All three delivered the **same CLI surface** — `fr journal update`,
-`fr acceptance set-status`, `fr acceptance add-level`, identical flags — because
-`answers.md` dictated it. That is the answer sheet working as intended: it moves
-the comparison off API taste and onto process and quality.
+`fr acceptance set-status`, `fr acceptance add-level`, identical flags.
+
+Not because of `answers.md`: that sheet was never delivered to a run except its
+row 9, which run C asked for. **The convergence comes from issue #429 itself**,
+which proposes the shapes verbatim:
+
+```
+fr acceptance set-status <id> --status ci|scheduled|skipped|not-implemented|failing [--note ...]
+fr acceptance add-level  <id> --level unit=<repo>:<path>
+fr journal update --id <id> --state open|fixed|refuted [--note ...]
+```
+
+The tell is the inconsistency all three reproduced: acceptance takes the row id
+**positionally** while journal takes it as **`--id`** — exactly as the issue
+writes them. A well-specified issue, not the pipeline and not the operator,
+fixed the API. That removes API taste from the comparison, but it also means
+this experiment cannot say anything about how the arms handle an *under*
+-specified brief — arguably the case where planning matters most.
 
 Probed in scratch repos against each arm's own build:
 
