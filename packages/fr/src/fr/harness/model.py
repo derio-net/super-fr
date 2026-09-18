@@ -13,7 +13,7 @@ failure. Callers never catch pydantic's `ValidationError` directly.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -117,10 +117,40 @@ def _first_message(exc: ValidationError) -> str:
     return msg[len(prefix) :] if msg.startswith(prefix) else msg
 
 
+class _StrictLoader(yaml.SafeLoader):
+    """`SafeLoader` that refuses a mapping with a repeated key.
+
+    PyYAML keeps the LAST occurrence and says nothing, so a duplicate key is a
+    *silent* rewrite: the shape still validates and the earlier value is simply
+    gone. For a file whose entire purpose is to not misstate a cell, that is
+    the wrong loader. Same detector, same reason, as
+    `fr.artifacts.structure._StrictLoader` — which exists because a row of
+    `docs/acceptance/matrix.yaml` carried `levels:` twice and lost a test ref
+    with nothing anywhere reporting it. (A local subclass rather than an
+    import: `fr.artifacts.structure` pulls the plan parser and pydantic models
+    in behind it, and this module is reached from CLI entry.)"""
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+        seen: set[Any] = set()
+        for key_node, _ in node.value:
+            # PyYAML ships no stubs for its constructor API, hence the ignore —
+            # same as `fr.artifacts.structure._StrictLoader`, whose unhashable
+            # key guard is mirrored here too.
+            key: Any = self.construct_object(key_node, deep=deep)  # type: ignore[no-untyped-call]
+            try:
+                duplicate = key in seen
+            except TypeError:  # pragma: no cover — an unhashable YAML key
+                continue
+            if duplicate:
+                raise HarnessError(f"duplicate key {key!r} in parity data")
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 def _load_mapping(source: str | Mapping[str, object]) -> Mapping[str, object]:
     if isinstance(source, str):
         try:
-            data = yaml.safe_load(source)
+            data = yaml.load(source, Loader=_StrictLoader)  # noqa: S506 — _StrictLoader is a SafeLoader
         except yaml.YAMLError as exc:
             raise HarnessError(f"parity data is not valid YAML: {exc}") from exc
     else:
@@ -144,12 +174,31 @@ def parse_matrix(source: str | Mapping[str, object]) -> Matrix:
         raise HarnessError("parity data must have a 'surfaces' list")
 
     surfaces: list[Surface] = []
+    seen_ids: set[str] = set()
     for raw in raw_surfaces:
         surface_id = raw.get("id", "<unknown>") if isinstance(raw, Mapping) else "<unknown>"
         try:
-            surfaces.append(Surface.model_validate(raw))
+            surface = Surface.model_validate(raw)
         except ValidationError as exc:
             raise HarnessError(f"surface {surface_id!r}: {_first_message(exc)}") from exc
+        # A duplicate id belongs HERE, not in Phase 2's derived check: two rows
+        # claiming one surface is a malformed file, not a disagreement between
+        # what is declared and what is wired. `fr.workflow.check` draws the
+        # same line for duplicate step ids.
+        if surface.id in seen_ids:
+            raise HarnessError(f"duplicate surface id {surface.id!r}")
+        seen_ids.add(surface.id)
+        surfaces.append(surface)
+
+    # Checked AHEAD of pydantic so the message names the version the file
+    # asked for, the way `fr.workflow.model.parse_manifest` does — pydantic's
+    # native `Input should be 1` does not say what it read or what is
+    # supported. (The deviation from the plan's `schema: int = 1` is
+    # deliberate: no default, so `schema:` is required and a file cannot
+    # arrive un-versioned.)
+    declared = data.get("schema")
+    if declared != 1:
+        raise HarnessError(f"unsupported parity schema: {declared!r} (fr supports schema: 1)")
 
     try:
         return Matrix.model_validate({**data, "surfaces": surfaces})

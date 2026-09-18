@@ -34,7 +34,13 @@ surfaces:
     harnesses:
       claude-code: {state: enforced}
       opencode: {state: absent}
-      hermes: {state: enforced}
+      hermes:
+        state: partial
+        scope_note: >-
+          git/gh MUTATIONS only — read-only and unknown commands pass, where the
+          Claude hook denies every base-repo-cwd command. Also marker-based
+          rather than pipeline-sentinel-based (Hermes has no Skill PostToolUse
+          to write a sentinel).
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
@@ -137,7 +143,7 @@ surfaces:
       claude-code: {state: enforced}
       opencode:
         state: advisory
-        scope_note: no operator-question tool exists on OpenCode — the gate cannot mechanically block; the measured failure of #436 instance 2
+        scope_note: "no operator-question tool exists on OpenCode — the gate cannot mechanically block; the measured failure of #436 instance 2"
       hermes:
         state: advisory
         scope_note: delegate_task has no operator-question primitive — the gate is prose only

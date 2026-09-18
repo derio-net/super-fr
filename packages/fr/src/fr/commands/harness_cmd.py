@@ -38,23 +38,74 @@ def _matrix_json(matrix: Matrix) -> dict[str, object]:
     return matrix.model_dump(mode="json", by_alias=True)
 
 
-def _table(matrix: Matrix, harness_filter: str | None) -> Table:
-    columns = [harness_filter] if harness_filter else list(HARNESSES)
-    table = Table(title="Harness parity")
-    table.add_column("surface")
-    table.add_column("kind")
-    for col in columns:
-        table.add_column(col)
-    for surface in matrix.surfaces:
-        row = [surface.id, surface.kind]
+def _render(matrix: Matrix, harness_filter: str | None) -> tuple[list[Table], list[str]]:
+    """The tables, plus the footnotes that did not fit inside them.
+
+    Three things make this readable at the default 80 columns, and all three
+    were review findings (r1-i2):
+
+    1. `overflow="fold"` on every column. rich's default is `ellipsis`, which
+       renders `fr-isolation-guard` and `fr-isolation-required` BOTH as
+       `fr-isol…` — worse than plain truncation, because two rows become
+       indistinguishable rather than obviously cut.
+    2. `scope_note` text moves out of the cells into numbered footnotes. A note
+       is a sentence or two; inline, it blows the table's width out and every
+       other column pays for it. The single-harness view has the room, so there
+       notes stay inline and the footnote list comes back empty.
+    3. One table per `kind` instead of a `kind` COLUMN. Seven columns do not fit
+       in eighty characters, and `kind` was the one carrying least — as a
+       heading it costs no width and groups the rows besides.
+    """
+    inline_notes = harness_filter is not None
+    if harness_filter:
+        columns, collapsed = [harness_filter], []
+    else:
+        # A harness that is `unsupported` on EVERY row spends a whole column
+        # saying one word. Collapse it to a footer line instead — data-driven,
+        # not a hardcoded skip-list: the day a codex cell becomes anything
+        # else, its column comes back on its own. (`--harness codex` and
+        # `--format json` always show it regardless.)
+        columns = [
+            h
+            for h in HARNESSES
+            if any(s.harnesses[h].state != "unsupported" for s in matrix.surfaces)
+        ]
+        collapsed = [h for h in HARNESSES if h not in columns]
+
+    footnotes: list[str] = []
+    tables: list[Table] = []
+
+    for kind, heading in (("hook", "Hooks"), ("interaction", "Interaction surfaces")):
+        rows = [s for s in matrix.surfaces if s.kind == kind]
+        if not rows:
+            continue
+        table = Table(title=f"Harness parity — {heading}")
+        # The identifier is what the operator scans; give it the room first and
+        # let the state columns (whose vocabulary is five short words) shrink.
+        table.add_column("surface", overflow="fold", min_width=22)
         for col in columns:
-            hstate = surface.harnesses[col]
-            cell: str = hstate.state
-            if hstate.scope_note:
-                cell = f"{cell} — {hstate.scope_note}"
-            row.append(cell)
-        table.add_row(*row)
-    return table
+            table.add_column(col, overflow="fold")
+        for surface in rows:
+            row = [surface.id]
+            for col in columns:
+                hstate = surface.harnesses[col]
+                cell: str = hstate.state
+                if hstate.scope_note:
+                    if inline_notes:
+                        cell = f"{cell} — {hstate.scope_note}"
+                    else:
+                        footnotes.append(
+                            f"[{len(footnotes) + 1}] {surface.id} / {col}: {hstate.scope_note}"
+                        )
+                        cell = f"{cell} [{len(footnotes)}]"
+                row.append(cell)
+            table.add_row(*row)
+        tables.append(table)
+
+    if collapsed:
+        footnotes.append(f"unsupported on every surface (column omitted): {', '.join(collapsed)}")
+
+    return tables, footnotes
 
 
 def _validate_harness(harness: str | None) -> None:
@@ -90,7 +141,11 @@ def parity_cmd(
         console.print_json(_json.dumps(_matrix_json(matrix)))
         return
 
-    console.print(_table(matrix, harness))
+    tables, footnotes = _render(matrix, harness)
+    for table in tables:
+        console.print(table)
+    for note in footnotes:
+        console.print(note)
 
 
 __all__ = ["harness_app"]
