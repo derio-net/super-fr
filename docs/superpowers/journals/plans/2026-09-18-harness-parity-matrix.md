@@ -696,3 +696,34 @@ P7.T4.S3. Every step run with output redirected to its own file and the exit cod
 12 cd packages/fr-opencode-plugin && bun test     exit=0  -> 15 pass, 0 fail, 16 expect() calls across 2 files
 
 Independent evidence that the journal write really is append-only: git diff --numstat on the plan journal reports 137 insertions and 0 deletions across the whole phase, nine resolution records included.
+
+<!-- fr:journal kind=finding scope=plan id=p7-no-stamp-bump-verified created=2026-09-18T19:50:06 phase=7 state=open -->
+### p7-no-stamp-bump-verified · finding [open] · No journal stamp bump: conclusion verified against a real fr 4.4.0, but the reason given was wrong and the property is unguarded (phase 7)
+
+The phase-7 executor argued no stamp bump is needed for the `journal` kind because "the parser ignores unknown header tokens" and the journal is "the one kind whose reader is not a closed-world model". The CONCLUSION is right and I verified it the decisive way, but the stated REASON is wrong in a way that matters.
+
+`JournalEntry` IS a closed-world model — `model_config = ConfigDict(frozen=True, extra="forbid")` (journal/model.py:70), exactly like RunState and Matrix. What actually saves back-compat is the CONSTRUCTION STYLE: `parse_journal` builds a `fields` dict from the header, then constructs the entry by EXPLICITLY NAMED keys (`kind=fields["kind"]`, `scope=fields["scope"]`, ... at model.py:228+) rather than splatting `**fields`. An unknown token lands in the dict and is simply never passed to the model, so `extra="forbid"` never sees it.
+
+Verified empirically rather than by reading, which is the evidence that settles it: the PATH `fr` is a real 4.4.0 release that predates this work, and `fr journal render --scope plan --slug 2026-09-18-harness-parity-matrix` on the phase-7 journal (nine `resolves=` records) exits 0 and renders all 112 headings. Contrast the run kind, where the same test fails loudly — `fr run status` on this worktree's cursor exits 1 with "schema_version — Extra inputs are not permitted". Same closed-world model, opposite outcome, because `RunState` is built by parsing the whole mapping while `JournalEntry` is built field by field.
+
+SO THE PROPERTY IS REAL BUT FRAGILE, AND NOTHING GUARDS IT. A future refactor of `parse_journal` to `JournalEntry(**fields)` — an obvious tidy-up — would silently convert every later optional header field into a breaking change, and the first symptom would be an older `fr` raising on a journal it used to read. Worth either a comment at the construction site saying the projection is load-bearing, or a test that parses a header carrying an unknown token and asserts it is ignored. Recorded rather than fixed here: it is a pre-existing property of the parser, not something phase 7 introduced.
+
+<!-- fr:journal kind=finding scope=plan id=p7-no-stamp-bump-verified-resolved created=2026-09-18T19:59:30 state=fixed resolves=p7-no-stamp-bump-verified -->
+### p7-no-stamp-bump-verified-resolved · finding [fixed] · resolves p7-no-stamp-bump-verified: No journal stamp bump: conclusion verified against a real fr 4.4.0, but the reason given was wrong and the property is unguarded
+
+Fixed inline at the operator's direction ("no use letting a known defect linger"), after judging it small rather than a deep cut: one comment plus two tests, no design change.
+
+The guard is the test, not the comment. `JournalEntry` is `extra="forbid"`, so a refactor to `JournalEntry(**fields)` makes an unknown header token raise — which is exactly what `test_a_header_token_this_fr_does_not_know_is_ignored_not_fatal` and `test_an_unknown_token_does_not_disturb_the_effective_state_fold` assert against. The construction site now carries a comment saying the named-key projection is load-bearing and naming the test.
+
+PROVED IT CATCHES THE REAL THING rather than trusting it: I simulated the exact future refactor (replaced the named-key construction with `**fields`) and re-ran the file. Both new tests failed; the other 44 passed. That is the finding's whole point made concrete — the existing suite was fully green under a change that would break back-compat for every older fr, and the first symptom in the wild would have been an fr raising on a journal it used to read. Restored after; `git diff` on model.py is the 10-line comment and nothing else.
+
+<!-- fr:journal kind=decision scope=plan id=p7-resolution-record-shape-corrected created=2026-09-18T20:05:37 phase=7 -->
+### p7-resolution-record-shape-corrected · decision · CORRECTION to p7-resolution-record-shape: the journal model DOES forbid extras; named-key construction is what saves back-compat (phase 7)
+
+Supersedes the reasoning in decision `p7-resolution-record-shape`, which cannot be edited (append-only) and which renders into the delivered PR body's decisions section. That entry says journals are "the one kind whose reader does not [forbid extras]". That is FACTUALLY WRONG: `JournalEntry` is `model_config = ConfigDict(frozen=True, extra="forbid")` at journal/model.py:70, exactly like `RunState` and `Matrix`.
+
+The CONCLUSION it reached — no stamp bump, no migration — is right, but for a different reason. `parse_journal` constructs the entry from EXPLICITLY NAMED keys (model.py:228+) instead of splatting `**fields`, so an unknown header token stays in the dict and never reaches the model. Construction style, not model config, is what makes the journal kind forward-compatible where the run kind is not.
+
+THE CROSS-VERSION CONSEQUENCE, which no entry states and which belongs in the PR body: an older fr does not raise on a phase-7 journal — it SILENTLY MIS-GATES. Measured on this PR's own journal: fr 4.4.0 `journal check --scope plan` reports 10 open findings (exit 1) where 4.5.0 reports the true count, because 4.4.0 reads each finding's own `state` and has no notion of a resolution record folding it closed. It is not a crash and not a wrong answer it announces; it is a gate that quietly disagrees with the tool that wrote the file. That is the failure family #436 is about, so it is stated rather than left for someone to discover.
+
+Not bumping the stamp remains the right call — a bump would convert a silent disagreement into a loud "migrate first" for every consumer, at the cost of a forced migration for a purely additive field. But the behaviour exists for fr < 4.5.0 and the PR body says so.

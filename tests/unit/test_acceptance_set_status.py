@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 from fr.cli import app
 from typer.testing import CliRunner
 
@@ -247,3 +248,82 @@ def test_set_status_rejects_a_malformed_level_ref(
     )
     assert result.exit_code == 2
     assert _matrix(root).read_text() == before
+
+
+# --- Review r7-i1: `_row_span`'s load-bearing invariant, pinned. -------------
+#
+# `edit.py` locates a row by PARSING each list item and comparing its `id`,
+# never by pattern-matching an `id:` line — and says so, because a row whose
+# `notes` quote another row's id would otherwise hijack the span. That is
+# silent data corruption in the registry this PR exists to keep honest, and
+# until now the fixtures were two trivial rows that could not have caught it.
+
+_HOSTILE = """\
+  - id: alpha
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+    levels:
+      unit: ["own:tests/test_a.py"]
+    status: ci
+    notes: |-
+      Supersedes the work tracked under beta. A reviewer reading
+      docs/acceptance/matrix.yaml will see a block that looks like a row:
+        - id: beta
+          status: not-implemented
+      but it is prose inside this row's notes, not a row.
+  - id: beta
+    capability: "Cap"
+    acceptance: "Operator can do X"
+    origin: ["own:docs/superpowers/specs/s.md"]
+    levels:
+      unit: ["own:tests/test_a.py"]
+    status: not-implemented
+    notes: "n"
+"""
+
+
+def test_a_row_id_quoted_inside_another_rows_notes_does_not_hijack_the_span(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`alpha`'s notes contain a literal `- id: beta` at deeper indent. Flipping
+    `beta` must edit `beta`, leaving `alpha` byte-identical."""
+    root = make_repo(tmp_path, _HOSTILE)
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    before = matrix.read_text()
+
+    result = _invoke(
+        root, monkeypatch, "set-status", "--id", "beta", "--status", "ci", "--notes", "moved"
+    )
+    assert result.exit_code == 0, result.output
+
+    after = matrix.read_text()
+    loaded = {r["id"]: r for r in yaml.safe_load(after)["rows"]}
+    assert loaded["beta"]["status"] == "ci"
+    assert loaded["alpha"]["status"] == "ci"
+    # The decoy text survives untouched — the span never crossed into `alpha`.
+    assert "- id: beta\n          status: not-implemented" in after
+    assert before.split("  - id: beta\n")[0] == after.split("  - id: beta\n")[0]
+
+
+_PREFIX_PAIR = row(id="foo", status="ci") + row(id="foo-2", status="not-implemented")
+
+
+def test_an_id_that_is_a_prefix_of_another_edits_only_the_exact_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`foo` is a prefix of `foo-2`. Real ids in this repo have this shape
+    (`acceptance-nag-channels` beside `acceptance-nag-*`), so a substring match
+    would silently edit the wrong row — or both."""
+    root = make_repo(tmp_path, _PREFIX_PAIR)
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+
+    result = _invoke(
+        root, monkeypatch, "set-status", "--id", "foo-2", "--status", "ci", "--notes", "moved"
+    )
+    assert result.exit_code == 0, result.output
+
+    loaded = {r["id"]: r for r in yaml.safe_load(matrix.read_text())["rows"]}
+    assert loaded["foo-2"]["status"] == "ci"
+    assert loaded["foo"]["status"] == "ci"
+    assert loaded["foo"]["notes"] == "n", "the prefix row's notes were rewritten"

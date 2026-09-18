@@ -4,8 +4,18 @@
 through here, so the two cannot disagree about the file's shape. Every write is
 line surgery on the original text rather than a `yaml.safe_dump` round trip: a
 dump would reflow the header comments (23 lines of schema documentation), the
-key order and the blank lines of every row in the file, turning a one-row flip
+key order and the blank lines of EVERY row in the file, turning a one-row flip
 into an unreviewable diff.
+
+What that buys, precisely (review r7-m1 measured it, so the claim is not
+overstated): every row *other* than the edited one survives byte-identically.
+The edited row is fully re-rendered, so a hand-authored folded scalar may come
+back single-quoted and re-wrapped — on the real 114-row matrix, 63 rows would
+not be byte-identical after a self-replace, the worst producing a 79-line diff
+for a status flip. That churn is confined to the row you asked to change, and
+is semantically identical (`yaml.safe_load` equal before and after). Narrowing
+it further would mean a round-tripping YAML library, which is not worth a
+dependency.
 
 Spec: `docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md` §3.G.2.
 """

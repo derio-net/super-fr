@@ -745,3 +745,56 @@ class TestResolve:
         assert res.exit_code == 0, res.output
         assert "a real bug" in res.output
         assert "superseded by entry d9" in res.output
+
+
+def test_add_resolves_refuses_an_id_not_in_this_journal(tmp_path: Path, monkeypatch) -> None:
+    """`resolve` already refuses an unknown id; `--resolves` must too (r7-m2).
+
+    `effective_finding_states` deliberately tolerates a record naming a finding
+    that is not in the file, so a hand-spliced journal cannot crash the gate.
+    The cost of that tolerance is that a typo'd `--resolves` id would report as
+    open forever with nothing in the journal to explain it — a gate wedged by an
+    unfindable id, which is the silent-stall shape this whole PR removes. Refuse
+    it at the door instead."""
+    root = _init_repo(tmp_path)
+    monkeypatch.chdir(root)
+    _add(
+        root,
+        "--scope",
+        "plan",
+        "--slug",
+        "s",
+        "--kind",
+        "finding",
+        "--id",
+        "real",
+        "--state",
+        "open",
+        "--title",
+        "t",
+        "--body",
+        "b",
+    )
+
+    res = _add(
+        root,
+        "--scope",
+        "plan",
+        "--slug",
+        "s",
+        "--kind",
+        "finding",
+        "--id",
+        "reopen",
+        "--state",
+        "open",
+        "--title",
+        "t",
+        "--body",
+        "b",
+        "--resolves",
+        "typoed-id",
+    )
+    assert res.exit_code == 2, res.output
+    assert "typoed-id" in res.output
+    assert "reopen" not in _journal_file(root, "s").read_text()

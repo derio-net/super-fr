@@ -617,3 +617,59 @@ class TestHandoffReadsEffectiveState:
         out = compose_handoff(entries, phase=2, depends_on=(1,), scope="plan", slug="s")
         assert "## Open findings" in out
         assert "Open elsewhere" in out
+
+
+# --- Forward compatibility: an OLDER fr must keep reading a NEWER journal. ---
+
+
+def test_a_header_token_this_fr_does_not_know_is_ignored_not_fatal() -> None:
+    """The property that let phase 7 add `resolves=` with no stamp bump and no
+    migration — and it is load-bearing rather than incidental, which is why it
+    is pinned here.
+
+    `JournalEntry` is `extra="forbid"`, exactly like `RunState`. What keeps an
+    older fr able to read a newer journal is that `parse_journal` constructs the
+    entry from EXPLICITLY NAMED keys rather than splatting `**fields`, so an
+    unknown token stays in the dict and never reaches the model. Verified
+    against a real release rather than by reading: `fr` 4.4.0 renders this
+    repo's phase-7 journal — nine `resolves=` records — at exit 0, while the
+    same test against the `run` kind fails loudly (`schema_version — Extra
+    inputs are not permitted`), because `RunState` is built by parsing the whole
+    mapping. Same closed-world model, opposite outcome, purely construction
+    style.
+
+    Nothing guarded that difference until this test. Refactoring the parser to
+    `JournalEntry(**fields)` is an obvious tidy-up and would silently turn every
+    future optional header field into a breaking change, the first symptom being
+    an older fr raising on a journal it used to read. Under `extra="forbid"`
+    that refactor fails this test immediately, which is the whole point.
+    """
+    from fr.journal.model import parse_journal
+
+    text = (
+        "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+        "state=open some_future_field=whatever -->\n"
+        "### f1 · finding [open] · A finding from a newer fr\n"
+        "\n"
+        "Body.\n"
+    )
+    entries = parse_journal(text)
+    assert [e.id for e in entries] == ["f1"]
+    assert entries[0].state == "open"
+    assert entries[0].title == "A finding from a newer fr"
+
+
+def test_an_unknown_token_does_not_disturb_the_effective_state_fold() -> None:
+    """The fold is what `fr journal check` and fr-goal §7's delivery gate read,
+    so an unreadable-to-us token must not make a finding look resolved (or a
+    resolved one look open)."""
+    from fr.journal.model import open_finding_ids, parse_journal
+
+    text = (
+        "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+        "state=open future=1 -->\n"
+        "### f1 · finding [open] · Still open\n"
+        "\n"
+        "Body.\n"
+    )
+    assert open_finding_ids(parse_journal(text)) == ["f1"]

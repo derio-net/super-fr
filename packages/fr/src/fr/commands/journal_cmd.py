@@ -101,6 +101,18 @@ def add(
     if any(e.id == eid for e in existing):
         # Idempotent: the id is already recorded; leave the file untouched.
         return
+    # Review r7-m2: `resolve` refuses an unknown id, and so must `--resolves`.
+    # `effective_finding_states` deliberately tolerates a record naming a
+    # finding that is not there, so that a hand-spliced journal cannot crash the
+    # gate — which means a typo'd id here would report as open FOREVER with
+    # nothing in the file to explain it. A gate wedged by an unfindable id is
+    # the silent-stall shape this PR exists to remove, so refuse it at the door.
+    if resolves is not None and not any(e.id == resolves and e.kind == "finding" for e in existing):
+        err_console.print(
+            f"[red]no finding with id {resolves!r} in this journal[/red] — "
+            "`--resolves` must name a finding that exists"
+        )
+        raise typer.Exit(2)
     _append_entry(path, slug, entry)
 
 
@@ -163,6 +175,13 @@ def resolve(
     # Resolve through the read path: a journal archived alongside its plan is
     # still the file the finding lives in, and a resolution record must land
     # there rather than conjure a new active journal holding only the record.
+    # NAMING THE TRADE-OFF (review r7-m3): that means this command can append
+    # under `docs/superpowers/implemented/`, which
+    # `.claude/rules/artifact-versioning.md` otherwise treats as frozen. The
+    # exception is deliberate and narrow — the rule freezes archived artifacts
+    # against MIGRATION, i.e. against a tool rewriting history nobody asked it
+    # to touch. This is an operator resolving a finding they can still see, and
+    # the alternative writes a phantom journal the gate never reads.
     path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
     if state not in RESOLUTION_STATES:
         err_console.print(

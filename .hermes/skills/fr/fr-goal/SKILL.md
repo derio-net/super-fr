@@ -97,7 +97,7 @@ After each `implement-phase` return, run `review-phase`: `superpowers:requesting
 spec + plan + code; fix every finding with tests (a wrong one gets refuting reasoning via
 `superpowers:receiving-code-review`, never a silent drop); record each as a plan-scope `finding`
 (`--state open|fixed|refuted`) — the next phase's handoff includes them, `deliver` derives the PR
-body from it; a finding fixed LATER is closed with `fr journal resolve --id <f> --state fixed --note <why>`, never by re-adding the id (a silent no-op). **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
+body from it; a finding fixed LATER is closed with `fr journal resolve --scope plan --slug <s> --id <f> --state fixed --note <why>`, never by re-adding the id (a silent no-op). **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
 
 ### 7. deliver — one PR per repo, all artifacts aboard
 Verify first (`superpowers:verification-before-completion`): full test-suite output, self-review

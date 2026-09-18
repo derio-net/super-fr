@@ -222,6 +222,16 @@ def parse_journal(text: str) -> list[JournalEntry]:
             block.pop(0)
         while block and block[-1].strip() == "":
             block.pop()
+        # NAMED KEYS, NEVER `JournalEntry(**fields)` — this projection is
+        # load-bearing, not style. `JournalEntry` is `extra="forbid"` (like
+        # `RunState`), so splatting would make every future optional header
+        # token a BREAKING change: an older fr would raise on a journal it used
+        # to read. Because the fields are named here, an unknown token stays in
+        # `fields` and never reaches the model, which is why a real fr 4.4.0
+        # renders a journal full of `resolves=` records at exit 0 while the same
+        # test against the run kind fails loudly. `test_journal_model.py::
+        # test_a_header_token_this_fr_does_not_know_is_ignored_not_fatal` is the
+        # guard; a refactor to `**fields` fails it immediately.
         try:
             entries.append(
                 JournalEntry(
