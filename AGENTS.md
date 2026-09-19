@@ -137,8 +137,9 @@ and a CI tripwire will catch drift anyway:
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
   `fr-plan-override.md`, `no-claude-p-batch.md`), plus the THREE
   repo-local-only rules with no plugin counterpart —
-  `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`
-  and `.claude/rules/explainers-currency.md` (still *sources*, edit them
+  `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`,
+  `.claude/rules/explainers-currency.md` and
+  `.claude/rules/third-party-privacy.md` (still *sources*, edit them
   directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
 - Generated: `.opencode/skills/<name>/SKILL.md` and
   `.opencode/instructions/*.md`. After editing a canonical skill/rule, run
@@ -281,6 +282,12 @@ exists and how it's checked, not a restatement:
   adds tests for an existing row, or ships a surface a `not-implemented` row
   waits on updates the matrix in the *same* PR. Gate: `fr acceptance check`
   via `.github/workflows/acceptance-report.yml`. Driver skill: `fr-acceptance`.
+- **third-party-privacy** (2026-09-19) — live-verification evidence is
+  redacted at capture time: hostnames, orgs, repo names and usernames outside
+  the `derio-net` org never reach a spec, journal, fixture, matrix note, PR body
+  or commit message. Adapted from `derio-net/frank`'s rule of the same name.
+  **Prose only — no tripwire yet**, and the rule says so; building one needs a
+  curated allowlist of the fictional domains the fixtures legitimately use.
 - **harness parity** (2026-09-18) — every shipped enforcement/interaction
   surface must own a `parity.yaml` row, and no skill may name a
   harness-specific tool outside a scoped per-harness clause. Tripwires:

@@ -84,10 +84,10 @@ class TestGitLabWorkItemUrls:
     structurally could not perform).
     """
 
-    LIVE = "https://gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/work_items/1"
+    LIVE = "https://gitlab.internal.example/example-org/scratch-repo/-/work_items/1"
 
     def test_the_url_gitlab_actually_returns_parses(self) -> None:
-        assert parse_issue_url(self.LIVE) == ("IDermitzakis/devops-scripts", 1)
+        assert parse_issue_url(self.LIVE) == ("example-org/scratch-repo", 1)
 
     def test_a_subgrouped_work_item_url_parses(self) -> None:
         assert parse_issue_url("https://gitlab.corp/group/sub/proj/-/work_items/42") == (

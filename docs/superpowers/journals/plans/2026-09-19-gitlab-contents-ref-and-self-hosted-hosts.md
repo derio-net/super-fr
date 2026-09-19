@@ -142,7 +142,7 @@ Both tasks' pre-recorded no-refactor-because entries (622acdfb72bb, 21bf60a3ca21
 <!-- fr:journal kind=discovery scope=plan id=0fdf7a0ce59a created=2026-09-19T19:32:41 phase=2 -->
 ### 0fdf7a0ce59a · discovery · P2.T2.S1 live proof: ref=HEAD on the tree endpoint is byte-identical to no ref (phase 2)
 
-Ran both forms against gitlab.local.gebit.de, IDermitzakis/devops-scripts, glab 1.89.0: 'projects/IDermitzakis%2Fdevops-scripts/repository/tree?path=' and the same with '&ref=HEAD' appended returned byte-identical JSON (same 8 entries, same ids/order). This cleared P2.T2.S2 to proceed: list_dir now sends &ref=HEAD on the tree endpoint, matching read_file/file_exists, with no behavior change against this live instance.
+Ran both forms against gitlab.internal.example, example-org/scratch-repo, glab 1.89.0: 'projects/example-org%2Fscratch-repo/repository/tree?path=' and the same with '&ref=HEAD' appended returned byte-identical JSON (same 8 entries, same ids/order). This cleared P2.T2.S2 to proceed: list_dir now sends &ref=HEAD on the tree endpoint, matching read_file/file_exists, with no behavior change against this live instance.
 
 <!-- fr:journal kind=finding scope=plan id=f4-contents-docstrings-uneven created=2026-09-19T19:38:00 phase=2 state=fixed -->
 ### f4-contents-docstrings-uneven · finding [fixed] · file_exists and read_file did not document the mandatory ref the way list_dir does (phase 2)
@@ -200,7 +200,7 @@ P4.T2.S2/S3 planned on 'keyword-only with a None default, so every existing call
 Executed with uv run python against real git repos in a tmpdir, phase 4 HEAD. Columns: detect_backend / declared_host / host_for / client type / client._host.
 
 declared host (backend: gitlab, host: gl.corp.com, origin github.com) -> gitlab / 'gl.corp.com' / 'gl.corp.com' / RealGlabClient / 'gl.corp.com'
-self-hosted remote (backend: gitlab, origin git@gitlab.local.gebit.de:...) -> gitlab / None / 'gitlab.local.gebit.de' / RealGlabClient / 'gitlab.local.gebit.de'
+self-hosted remote (backend: gitlab, origin git@gitlab.internal.example:...) -> gitlab / None / 'gitlab.internal.example' / RealGlabClient / 'gitlab.internal.example'
 gitlab.com remote (no config) -> gitlab / None / None / RealGlabClient / None
 github.com remote (no config) -> github / None / None / RealGhClient / n/a
 no remote, no config -> github / None / None / RealGhClient / n/a
@@ -304,7 +304,7 @@ Discharging the explainers-currency obligation the 4.5.2 -> 4.6.0 minor bump tri
 <!-- fr:journal kind=discovery scope=plan id=2325932e0074 created=2026-09-19T20:48:41 phase=5 -->
 ### 2325932e0074 · discovery · backend_for_hostname and self_hosted_hostname are mutually exclusive by construction — P5.T5's fix is provably inert for pr_observe's real self-hosted-GitLab-URL path (phase 5)
 
-Proved live (uv run python, this worktree's fr._hosts): for every hostname tried — gitlab.com, github.com, gitlab.local.gebit.de, gitlab.corp.example, git.mycorp.internal — `backend_for_hostname(h) == "gitlab"` holds ONLY for `h == "gitlab.com"`, and `self_hosted_hostname(h)` is non-None ONLY for `h` NOT in `DEFAULT_HOST_BACKENDS` (i.e. h != "gitlab.com" and h != "github.com"). These two conditions are mutually exclusive by construction, since both are keyed off the same `DEFAULT_HOST_BACKENDS` table:
+Proved live (uv run python, this worktree's fr._hosts): for every hostname tried — gitlab.com, github.com, gitlab.internal.example, gitlab.corp.example, git.mycorp.internal — `backend_for_hostname(h) == "gitlab"` holds ONLY for `h == "gitlab.com"`, and `self_hosted_hostname(h)` is non-None ONLY for `h` NOT in `DEFAULT_HOST_BACKENDS` (i.e. h != "gitlab.com" and h != "github.com"). These two conditions are mutually exclusive by construction, since both are keyed off the same `DEFAULT_HOST_BACKENDS` table:
 
   backend_for_hostname(h) == "gitlab"  <=>  h == "gitlab.com"
   self_hosted_hostname(h) is not None  <=>  h not in DEFAULT_HOST_BACKENDS
@@ -374,7 +374,7 @@ Landed in P6.T1/P6.T2: fr._hosts._URL_SHAPES + backend_for_url (/merge_requests/
 
 Live proof, same URLs as the finding, run through the shipped code before and after:
   https://gitlab.com/g/p/-/merge_requests/7                                     old=gitlab new=gitlab host=None
-  https://gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/merge_requests/7  old=github new=gitlab host=gitlab.local.gebit.de
+  https://gitlab.internal.example/example-org/scratch-repo/-/merge_requests/7  old=github new=gitlab host=gitlab.internal.example
   https://github.com/derio-net/super-fr/pull/486                                old=github new=github host=None
   https://gitea.corp/o/r/pulls/4                                                old=github new=gitea  host=gitea.corp
 
@@ -581,12 +581,12 @@ The shape table gives /pulls/N to the tea adapter, where it previously fell thro
 <!-- fr:journal kind=discovery scope=plan id=d-phase7-run-inline created=2026-09-19T21:51:07 phase=7 -->
 ### d-phase7-run-inline · discovery · Phase 7 run by the orchestrator inline, not dispatched to an executor (phase 7)
 
-fr-goal §5 dispatches every phase to an fr-phase-executor for context isolation. Phase 7 is run inline instead, deliberately. It performs OUTWARD-FACING WRITES on the operator's corporate GitLab (enabling Issues on IDermitzakis/devops-scripts, creating real Issues and labels, then restoring the setting), which needs exact undo and full accounting of every object created; and its verbatim transcripts are the PR body's evidence, which the orchestrator is the one writing. Handing a live corporate system to a subagent to improvise on is the wrong trade for a context saving. Recorded as a deviation rather than made silently.
+fr-goal §5 dispatches every phase to an fr-phase-executor for context isolation. Phase 7 is run inline instead, deliberately. It performs OUTWARD-FACING WRITES on the operator's corporate GitLab (enabling Issues on example-org/scratch-repo, creating real Issues and labels, then restoring the setting), which needs exact undo and full accounting of every object created; and its verbatim transcripts are the PR body's evidence, which the orchestrator is the one writing. Handing a live corporate system to a subagent to improvise on is the wrong trade for a context saving. Recorded as a deviation rather than made silently.
 
 <!-- fr:journal kind=finding scope=plan id=f14-gitlab-work-items-url created=2026-09-19T21:54:59 phase=7 state=open -->
 ### f14-gitlab-work-items-url · finding [open] · SECOND independent bug, found by the live walk: fr cannot parse the Issue URL GitLab hands back, so observe crashes on every re-apply (phase 7)
 
-The end-to-end walk did what unit tests structurally could not. 'fr apply --yes' created two real Issues successfully; the NEXT 'fr apply' died: ValueError: not a tracking issue url: https://gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/work_items/1, raised from fr._urls.parse_issue_url via fr.observe:48. Root cause: fr._urls.ISSUE_URL_RE is '^https://([^/]+)/(.+?)(?:/-)?/issues/(\\d+)$' and GitLab's API returns web_url '.../-/work_items/N' for an issue — verified against the API directly, not inferred from glab's stdout: 'projects/.../issues' reports type ISSUE with web_url .../-/work_items/2. That is GitLab's work-items migration, so it is NOT self-hosted-specific and NOT a glab quirk; it affects gitlab.com equally. Consequence: fr apply against any GitLab repo works ONCE and crashes on every subsequent run, because observe re-reads the tracking_issue URLs it stored. The acceptance row multibackend-gitlab-tracking was therefore green for a capability broken in TWO independent ways — the missing ref parameter (gh-486's subject) and this. Also breaks phase 6's own claim for fr_dispatch.prompt: a tracking_issue URL of this shape does not match _URL_SHAPES' /-/issues/\\d+ either, so it resolves to github and the prompt still says 'GitHub Issue'. My anchoring fix for f11 narrowed the bare '/-/' marker to /-/issues/ and lost this real shape in the process — a narrowing justified by an invented adversarial input that broke a real one. IN SCOPE to fix here: the issue's own closing condition 2 is the end-to-end apply demonstrated, which is impossible without it.
+The end-to-end walk did what unit tests structurally could not. 'fr apply --yes' created two real Issues successfully; the NEXT 'fr apply' died: ValueError: not a tracking issue url: https://gitlab.internal.example/example-org/scratch-repo/-/work_items/1, raised from fr._urls.parse_issue_url via fr.observe:48. Root cause: fr._urls.ISSUE_URL_RE is '^https://([^/]+)/(.+?)(?:/-)?/issues/(\\d+)$' and GitLab's API returns web_url '.../-/work_items/N' for an issue — verified against the API directly, not inferred from glab's stdout: 'projects/.../issues' reports type ISSUE with web_url .../-/work_items/2. That is GitLab's work-items migration, so it is NOT self-hosted-specific and NOT a glab quirk; it affects gitlab.com equally. Consequence: fr apply against any GitLab repo works ONCE and crashes on every subsequent run, because observe re-reads the tracking_issue URLs it stored. The acceptance row multibackend-gitlab-tracking was therefore green for a capability broken in TWO independent ways — the missing ref parameter (gh-486's subject) and this. Also breaks phase 6's own claim for fr_dispatch.prompt: a tracking_issue URL of this shape does not match _URL_SHAPES' /-/issues/\\d+ either, so it resolves to github and the prompt still says 'GitHub Issue'. My anchoring fix for f11 narrowed the bare '/-/' marker to /-/issues/ and lost this real shape in the process — a narrowing justified by an invented adversarial input that broke a real one. IN SCOPE to fix here: the issue's own closing condition 2 is the end-to-end apply demonstrated, which is impossible without it.
 
 <!-- fr:journal kind=finding scope=plan id=f15-label-ensure-not-idempotent created=2026-09-19T21:57:58 phase=7 state=open -->
 ### f15-label-ensure-not-idempotent · finding [open] · THIRD independent bug from the live walk: ensure_labels aborts fr apply on a pre-existing label, so it can never converge (phase 7)

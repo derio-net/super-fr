@@ -70,19 +70,27 @@ After this ships:
 
 ## 2. Background — verified live, 2026-09-19
 
-Every line in this section was run against `gitlab.local.gebit.de` (GitLab
-self-hosted, authenticated as `IDermitzakis`) from this branch's worktree.
-Nothing here is inferred from documentation.
+Every line in this section was run against a **self-hosted GitLab instance**,
+authenticated, from this branch's worktree. Nothing here is inferred from
+documentation.
+
+The instance's hostname, namespace and account are **redacted** throughout, per
+`.claude/rules/third-party-privacy.md`: they belong to a third party and prove
+nothing the technical claims need. Transcripts below show
+`gitlab.internal.example` and `example-org/scratch-repo` in their place. The one
+property of the instance that *is* load-bearing is stated where it matters —
+its default branch is `master`, not `main`, which is why §3 d5 chose `ref=HEAD`
+over a branch name.
 
 ### A. The bug
 
 ```
-$ glab api --hostname gitlab.local.gebit.de \
-    "projects/IDermitzakis%2Fdevops-scripts/repository/files/README.md"
+$ glab api --hostname gitlab.internal.example \
+    "projects/example-org%2Fscratch-repo/repository/files/README.md"
 {"error":"ref is missing, ref is empty"}glab: HTTP 400
 
-$ glab api --hostname gitlab.local.gebit.de \
-    "projects/IDermitzakis%2Fdevops-scripts/repository/files/README.md?ref=HEAD"
+$ glab api --hostname gitlab.internal.example \
+    "projects/example-org%2Fscratch-repo/repository/files/README.md?ref=HEAD"
 {"file_name":"README.md","file_path":"README.md","size":664,"encoding":"base64",
  "ref":"HEAD",...}
 ```
@@ -124,8 +132,8 @@ the capture method could see. The table above was taken from Python.)
 `list_dir`'s tree endpoint is unaffected (it defaults to the default branch):
 
 ```
-$ glab api --hostname gitlab.local.gebit.de \
-    "projects/IDermitzakis%2Fdevops-scripts/repository/tree?path="
+$ glab api --hostname gitlab.internal.example \
+    "projects/example-org%2Fscratch-repo/repository/tree?path="
 [{"id":"e74f1983...","name":".github","type":"tree",...}, ...]
 ```
 
@@ -168,11 +176,11 @@ GitHub):
 $ glab api user                                   # no host
 ERROR  Unauthenticated.                           # defaulted to gitlab.com
 
-$ GITLAB_HOST=gitlab.local.gebit.de glab api user
-{"id":230,"username":"IDermitzakis",...}          # works
+$ GITLAB_HOST=gitlab.internal.example glab api user
+{"id":230,"username":"the operator",...}          # works
 
-$ GITLAB_HOST=gitlab.local.gebit.de glab issue list --repo IDermitzakis/devops-scripts
-No open issues match your search in IDermitzakis/devops-scripts.
+$ GITLAB_HOST=gitlab.internal.example glab issue list --repo example-org/scratch-repo
+No open issues match your search in example-org/scratch-repo.
 ```
 
 Two facts the design turns on:
@@ -189,14 +197,14 @@ Two facts the design turns on:
 ### E. `_hosts` resolution for a self-hosted host
 
 `DEFAULT_HOST_BACKENDS` holds `github.com` and `gitlab.com` only, so
-`gitlab.local.gebit.de` falls through to the `"github"` default. Documented
+`gitlab.internal.example` falls through to the `"github"` default. Documented
 behaviour — but silent, and combined with (D) it means a self-hosted GitLab
 repo talks to the wrong adapter until two separate keys are set.
 
 ## 3. Operator decisions (asked once, 2026-09-19)
 
 **d1 — live verification is agent-run, end to end.** The write-path walk runs
-against `https://gitlab.local.gebit.de/IDermitzakis/devops-scripts`, named by
+against `https://gitlab.internal.example/example-org/scratch-repo`, named by
 the operator. Not a back-loaded manual phase: the agent creates the Issues and
 labels itself and puts the transcript in the PR. This is the decision that lets
 the acceptance row move on evidence in the same PR as the fix.
@@ -363,7 +371,7 @@ construction of the same `DEFAULT_HOST_BACKENDS` table. Verified live:
 
 ```
 https://gitlab.com/g/p/-/merge_requests/7                 -> gitlab, host None
-https://gitlab.local.gebit.de/…/-/merge_requests/7        -> github, host set   (!)
+https://gitlab.internal.example/…/-/merge_requests/7        -> github, host set   (!)
 ```
 
 So the VK bridge polling a self-hosted GitLab MR does not merely lose the
@@ -421,7 +429,7 @@ often and must not become chatty):
 1. **`_hosts.detect_backend`** — no explicit `backend:` and an origin hostname
    that is not in `DEFAULT_HOST_BACKENDS`:
 
-   > `warning: origin host 'gitlab.local.gebit.de' is not a recognized forge; assuming backend "github". Declare it: backend: gitlab in .devcontainer/fr-profiles.yaml (or fr init scaffold --backend gitlab).`
+   > `warning: origin host 'gitlab.internal.example' is not a recognized forge; assuming backend "github". Declare it: backend: gitlab in .devcontainer/fr-profiles.yaml (or fr init scaffold --backend gitlab).`
 
    The behaviour is unchanged — `"github"` is still returned, so no repo's
    resolution moves. Only the silence is fixed.
@@ -591,7 +599,7 @@ Unit (CI, `uv run pytest`):
 Live (this PR, agent-run, transcript in the PR body — d1):
 
 14. `file_exists` / `read_file` / `list_dir` against
-    `IDermitzakis/devops-scripts` on `gitlab.local.gebit.de`, through
+    `example-org/scratch-repo` on `gitlab.internal.example`, through
     `fr.hostclient.client_for_backend`, from a cwd that is **not** a GitLab
     checkout — the configuration that failed in §2.D.
 15. End-to-end `fr apply` against that project: phases rendered, observed,

@@ -1,9 +1,9 @@
 # Journal: 2026-09-19-gitlab-contents-ref-and-self-hosted-hosts
 
 <!-- fr:journal kind=decision scope=spec id=d1 created=2026-09-19T18:47:39 -->
-### d1 · decision · Live verification is agent-run end-to-end against IDermitzakis/devops-scripts
+### d1 · decision · Live verification is agent-run end-to-end against example-org/scratch-repo
 
-Operator declined the back-loaded manual phase and named the scratch project. The agent runs the read-path AND the write-path (real GitLab Issues + labels) against gitlab.local.gebit.de and puts the transcript in the PR, which is what lets the acceptance row move on evidence in the same PR as the fix. Consequence: that project has issues_access_level: disabled, so the verification phase enables Issues, runs the walk, and restores disabled — both mutations recorded in the transcript.
+Operator declined the back-loaded manual phase and named the scratch project. The agent runs the read-path AND the write-path (real GitLab Issues + labels) against gitlab.internal.example and puts the transcript in the PR, which is what lets the acceptance row move on evidence in the same PR as the fix. Consequence: that project has issues_access_level: disabled, so the verification phase enables Issues, runs the walk, and restores disabled — both mutations recorded in the transcript.
 
 <!-- fr:journal kind=decision scope=spec id=d2 created=2026-09-19T18:47:39 -->
 ### d2 · decision · Self-hosted support: wire host: through, default it to the git remote, warn on silent fallback

@@ -63,12 +63,12 @@ class TestClientForHost:
         repo = _repo(
             tmp_path,
             "derived",
-            remote="git@gitlab.local.gebit.de:IDermitzakis/devops-scripts.git",
+            remote="git@gitlab.internal.example:example-org/scratch-repo.git",
             backend="gitlab",
         )
         client = hostclient.client_for(repo)
         assert isinstance(client, RealGlabClient)
-        assert client._host == "gitlab.local.gebit.de"
+        assert client._host == "gitlab.internal.example"
 
     def test_a_gitlab_com_repo_gets_no_host(self, tmp_path: Path) -> None:
         """Nothing changes for a SaaS repo: a host here would make every

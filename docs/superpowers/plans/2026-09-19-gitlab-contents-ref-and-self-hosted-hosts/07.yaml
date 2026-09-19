@@ -28,8 +28,8 @@ tasks:
       ```bash
       uv run python - <<'PY'
       from fr.hostclient import client_for_backend
-      c = client_for_backend("gitlab", host="gitlab.local.gebit.de")
-      R = "IDermitzakis/devops-scripts"
+      c = client_for_backend("gitlab", host="gitlab.internal.example")
+      R = "example-org/scratch-repo"
       print("file_exists(README.md) ->", c.file_exists(R, "README.md"))
       print("file_exists(no-such.md) ->", c.file_exists(R, "no-such-file.md"))
       print("list_dir('') ->", sorted(c.list_dir(R, ""))[:6])
@@ -53,7 +53,7 @@ tasks:
       from fr.glab import GlabError
       c = client_for_backend("gitlab", host="gitlab.com")   # authenticated: no
       try:
-          print("file_exists ->", c.file_exists("IDermitzakis/devops-scripts", "README.md"))
+          print("file_exists ->", c.file_exists("example-org/scratch-repo", "README.md"))
           print("!! FAIL: a non-404 was swallowed as absent")
       except GlabError as e:
           print("raised as designed:", e)
@@ -73,7 +73,7 @@ tasks:
       `client_for`, from inside that checkout, what it resolved:
 
       ```bash
-      git clone git@gitlab.local.gebit.de:IDermitzakis/devops-scripts.git /tmp/fr-gh486-live
+      git clone git@gitlab.internal.example:example-org/scratch-repo.git /tmp/fr-gh486-live
       mkdir -p /tmp/fr-gh486-live/.devcontainer
       printf 'backend: gitlab\n' > /tmp/fr-gh486-live/.devcontainer/fr-profiles.yaml
 
@@ -86,12 +86,12 @@ tasks:
       print("host_for       ->", _hosts.host_for(r))
       c = hostclient.client_for(r)
       print("client         ->", type(c).__name__, "host =", c._host)
-      print("file_exists    ->", c.file_exists("IDermitzakis/devops-scripts", "README.md"))
+      print("file_exists    ->", c.file_exists("example-org/scratch-repo", "README.md"))
       FRPY
       ```
 
-      Expected: `gitlab` / `None` / `gitlab.local.gebit.de` / `RealGlabClient
-      host = gitlab.local.gebit.de` / `True` — the host derived from the
+      Expected: `gitlab` / `None` / `gitlab.internal.example` / `RealGlabClient
+      host = gitlab.internal.example` / `True` — the host derived from the
       remote, with no `host:` key anywhere. Paste the verbatim output into the
       step note, then remove `/tmp/fr-gh486-live`.
 - number: 2
@@ -104,11 +104,11 @@ tasks:
       mutation is sanctioned, reversible, and must be restored in S4):
 
       ```bash
-      glab api --hostname gitlab.local.gebit.de \
-        "projects/IDermitzakis%2Fdevops-scripts" | \
+      glab api --hostname gitlab.internal.example \
+        "projects/example-org%2Fscratch-repo" | \
         python3 -c "import sys,json;d=json.load(sys.stdin);print(d['issues_access_level'])"
-      glab api --hostname gitlab.local.gebit.de --method PUT \
-        "projects/IDermitzakis%2Fdevops-scripts" -f issues_access_level=private
+      glab api --hostname gitlab.internal.example --method PUT \
+        "projects/example-org%2Fscratch-repo" -f issues_access_level=private
       ```
   - id: P7.T2.S2
     text: |-
@@ -134,8 +134,8 @@ tasks:
       create` wants a leading `#` while `LabelDef` stays bare-hex):
 
       ```bash
-      glab api --hostname gitlab.local.gebit.de \
-        "projects/IDermitzakis%2Fdevops-scripts/labels?per_page=100" | \
+      glab api --hostname gitlab.internal.example \
+        "projects/example-org%2Fscratch-repo/labels?per_page=100" | \
         python3 -c "import sys,json;[print(l['name'],l['color']) for l in json.load(sys.stdin)]"
       ```
 
@@ -153,10 +153,10 @@ tasks:
       failure mode here, not a tidiness preference.
 
       ```bash
-      glab api --hostname gitlab.local.gebit.de --method PUT \
-        "projects/IDermitzakis%2Fdevops-scripts" -f issues_access_level=disabled
-      glab api --hostname gitlab.local.gebit.de \
-        "projects/IDermitzakis%2Fdevops-scripts" | \
+      glab api --hostname gitlab.internal.example --method PUT \
+        "projects/example-org%2Fscratch-repo" -f issues_access_level=disabled
+      glab api --hostname gitlab.internal.example \
+        "projects/example-org%2Fscratch-repo" | \
         python3 -c "import sys,json;print(json.load(sys.stdin)['issues_access_level'])"
       ```
 - number: 3
@@ -269,12 +269,12 @@ state:
       state: x
       ticked_at: '2026-09-19T20:03:45+00:00'
       note: 'Live, operator path: a checkout with ONLY ''backend: gitlab'' -> detect_backend
-        gitlab, declared_host None, host_for gitlab.local.gebit.de (derived from the
-        remote), client RealGlabClient host=gitlab.local.gebit.de, file_exists True.
+        gitlab, declared_host None, host_for gitlab.internal.example (derived from the
+        remote), client RealGlabClient host=gitlab.internal.example, file_exists True.
         The spec''s headline claim.'
   completion:
     at: '2026-09-19T20:08:29+00:00'
-    note: Live verification complete against gitlab.local.gebit.de; three further
+    note: Live verification complete against gitlab.internal.example; three further
       bugs found and fixed in-phase; project restored exactly as found; matrix moved
       on evidence.
     observed_prs: []

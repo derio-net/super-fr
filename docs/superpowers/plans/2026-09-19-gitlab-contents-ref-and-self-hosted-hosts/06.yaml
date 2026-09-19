@@ -22,7 +22,7 @@ tasks:
 
       ```
       https://gitlab.com/g/p/-/merge_requests/7                      -> gitlab
-      https://gitlab.local.gebit.de/IDerm/devops-scripts/-/merge_requests/7 -> github  (!)
+      https://gitlab.internal.example/IDerm/devops-scripts/-/merge_requests/7 -> github  (!)
       https://github.com/derio-net/super-fr/pull/486                 -> github
       ```
 
@@ -174,11 +174,11 @@ state:
         (11 cases) fails at collection with ImportError: cannot import name ''backend_for_url''
         from ''fr._hosts''. Live before-state proof through the shipped code (backend_for_hostname
         / self_hosted_hostname): https://gitlab.com/g/p/-/merge_requests/7 -> gitlab,
-        host None | https://gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/merge_requests/7
-        -> github (!), host gitlab.local.gebit.de | https://github.com/derio-net/super-fr/pull/486
+        host None | https://gitlab.internal.example/example-org/scratch-repo/-/merge_requests/7
+        -> github (!), host gitlab.internal.example | https://github.com/derio-net/super-fr/pull/486
         -> github, host None | https://gitea.corp/o/r/pulls/4 -> github (!), host
         gitea.corp. Real MR path shape confirmed against the live instance: glab api
-        projects/IDermitzakis%2Fdevops-scripts -> web_url https://gitlab.local.gebit.de/IDermitzakis/devops-scripts,
+        projects/example-org%2Fscratch-repo -> web_url https://gitlab.internal.example/example-org/scratch-repo,
         so MRs live at <web_url>/-/merge_requests/N.'
     P6.T1.S2:
       state: x
@@ -188,8 +188,8 @@ state:
         /pulls/ -> gitea, /pull/ -> github, most-specific-first); urlparse is now
         a module-level import. tests/unit/test__hosts.py 35 passed. Live proof re-run
         through the new function (old=backend_for_hostname, new=backend_for_url, host=self_hosted_hostname):
-        gitlab.com/-/merge_requests/7 old=gitlab new=gitlab host=None | gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/merge_requests/7
-        old=github new=gitlab host=gitlab.local.gebit.de <- the fix | github.com/.../pull/486
+        gitlab.com/-/merge_requests/7 old=gitlab new=gitlab host=None | gitlab.internal.example/example-org/scratch-repo/-/merge_requests/7
+        old=github new=gitlab host=gitlab.internal.example <- the fix | github.com/.../pull/486
         old=github new=github host=None | gitea.corp/o/r/pulls/4 old=github new=gitea
         host=gitea.corp | gitea.corp/o/r/issues/3 old=github new=github (ambiguous
         /issues/ deliberately not in the table).'
@@ -263,9 +263,9 @@ state:
       URL-only call sites (fr_vk.pr_observe, fr_vk.pr_state._close_linked_gh_issue,
       fr_dispatch.prompt._backend_for_tracking_url) switched off
       backend_for_hostname. The one that matters made phase 5's host threading live:
-      for https://gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/merge_requests/7
-      resolution went from (github, gitlab.local.gebit.de) to
-      (gitlab, gitlab.local.gebit.de) -- the combination that was mutually exclusive
+      for https://gitlab.internal.example/example-org/scratch-repo/-/merge_requests/7
+      resolution went from (github, gitlab.internal.example) to
+      (gitlab, gitlab.internal.example) -- the combination that was mutually exclusive
       by construction before. The pr_observe test's backend_for_hostname monkeypatch
       is gone, so nothing about backend resolution is faked there any more.
       /issues/N is deliberately absent from the shape table (byte-identical for

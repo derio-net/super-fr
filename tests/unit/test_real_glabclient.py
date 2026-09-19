@@ -372,7 +372,7 @@ class TestContentsApi:
 
     def test_list_dir_pins_ref_on_the_tree_endpoint(self, monkeypatch):
         """Live-proven 2026-09-19 (spec §2.A, P2.T2.S1) that ref=HEAD
-        returns identical entries on gitlab.local.gebit.de — kept for
+        returns identical entries on gitlab.internal.example — kept for
         the same reason as the contents endpoints (gh-486)."""
         response = json.dumps(
             [

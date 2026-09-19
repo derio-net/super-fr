@@ -492,8 +492,8 @@ class TestAlreadyExists:
     """
 
     LIVE_409 = (
-        "          \n   ERROR  \n          \n  Post https://gitlab.local.gebit.de/api/v4/"
-        "projects/IDermitzakis%2Fdevops-scripts/labels: 409 {message: Label already\n"
+        "          \n   ERROR  \n          \n  Post https://gitlab.internal.example/api/v4/"
+        "projects/example-org%2Fscratch-repo/labels: 409 {message: Label already\n"
         "  exists}.                                        \n\n"
     )
 

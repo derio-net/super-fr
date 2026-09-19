@@ -2017,7 +2017,7 @@ rows:
       - super-fr:tests/unit/test_pr_observe.py
     status: skipped
     notes: 'All three clauses now hold. (a) ''backend: gitlab'' ALONE suffices — verified
-      live from a checkout with no host: key: host_for derived gitlab.local.gebit.de
+      live from a checkout with no host: key: host_for derived gitlab.internal.example
       from the git remote and client_for built a RealGlabClient carrying it. (b) ''host:''
       overrides the derived value. (c) A host declared for a backend fr cannot target
       warns once, on next use rather than at scaffold time. Also closes the bare-URL
