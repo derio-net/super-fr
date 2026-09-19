@@ -339,3 +339,23 @@ pr_observe half landed: _default_pr_status_fetch now passes host=_hosts.self_hos
 Deliberately NOT fixed, and staying open in its own finding: the pr_state half (_default_close_gh_issue, pr_state.py:94) — it receives only a backend string via a public 3-arg closer signature every test double satisfies structurally, with no room for a host, and widening that arity is a bridge-wide change beyond gh-486. See the separate open finding for pr_state's exact consequence and the comment added at its call site.
 
 Also surfaced while landing this: even the pr_observe half just fixed is provably inert for a REAL self-hosted GitLab MR URL today, because backend_for_hostname (unchanged, by design) and self_hosted_hostname are mutually exclusive by construction of the same DEFAULT_HOST_BACKENDS table — see the separate open finding and discovery entry with the live proof. The code landed is still correct and worth having (mirrors host_for, harmless, forward-compatible); it just doesn't close the full gap the spec's §4.C sentence implied on its own.
+
+<!-- fr:journal kind=discovery scope=plan id=80d37bf71ec7 created=2026-09-19T21:02:30 -->
+### 80d37bf71ec7 · discovery · no-refactor-because P7.T1
+
+Live verification against a real GitLab instance. It writes no production code — it runs the shipped code and records verbatim output as the PR's evidence. Editing the code here would invalidate the transcript. (Was P6.T1 before the plan gained a phase 6; see d-plan-renumbered-for-url-resolver.)
+
+<!-- fr:journal kind=discovery scope=plan id=1068b59b0130 created=2026-09-19T21:02:30 -->
+### 1068b59b0130 · discovery · no-refactor-because P7.T2
+
+End-to-end fr apply against the live instance, plus enabling and restoring the project's Issues setting. Same as P7.T1: the deliverable is a transcript of the shipped code's behaviour, so changing that code mid-phase would void it. (Was P6.T2.)
+
+<!-- fr:journal kind=discovery scope=plan id=87d4d65c8943 created=2026-09-19T21:02:30 -->
+### 87d4d65c8943 · discovery · no-refactor-because P7.T3
+
+Acceptance-matrix moves via fr acceptance set-status and the final verification sweep. The matrix and its three committed reports are generated artifacts; hand-editing them is what the acceptance-matrix rule forbids. (Was P6.T3.)
+
+<!-- fr:journal kind=discovery scope=plan id=d-plan-renumbered-for-url-resolver created=2026-09-19T21:02:31 phase=6 -->
+### d-plan-renumbered-for-url-resolver · discovery · The plan gained a phase 6; live verification became phase 7 — and the stale no-refactor entries now satisfy the wrong tasks (phase 6)
+
+The operator chose to fix the bridge's backend resolution in this PR rather than ship the limit documented, so a new phase 6 (_hosts.backend_for_url + the three URL-only call sites) was inserted and the live-verification phase renumbered 6 -> 7, with its step ids rewritten P6.* -> P7.* and its depends_on extended to include 6. Nothing was ticked in it, so no state was lost. ONE CONSEQUENCE WORTH RECORDING because a gate cannot see it: fr plan self-review matches no-refactor-because justifications BY TITLE, so the three entries written for the old P6.T1-T3 (live verification) now silently satisfy the NEW phase 6's tasks, which are ordinary red/green code tasks. Their real justifications are: P6.T1 — S2 IS the refactor, extracting the shape table and folding urlparse to a module-level import; a third step would restructure a ten-line function written in the step above it. P6.T2 — three one-line call-site swaps plus a comment correction; the shared helper they call was extracted in T1, so there is nothing left to deduplicate. Recorded here because the gate passing is not the same as the justification existing.

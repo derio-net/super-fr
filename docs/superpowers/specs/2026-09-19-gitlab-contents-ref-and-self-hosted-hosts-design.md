@@ -45,6 +45,12 @@ After this ships:
   got in. `client_for_backend` warns when `host:` is declared for a backend
   whose adapter does not thread it, so the limit is visible at the moment it
   matters. See §3 d2 for the operator's wider mandate and why this narrows it.
+- ~~**Resolving a self-hosted host to its real backend.**~~ This was a
+  non-goal when the spec was written — §1 gap 3 and §4.D settled for warning
+  that `fr` was guessing. Phase 5 showed the compromise does not survive
+  contact with the **bridge**, which has a URL and no config to read, so the
+  operator lifted it mid-run. See §4.C2; the warning stays, because a repo
+  that *can* declare `backend:` still should.
 - **Retrofitting the other adapters' fail-soft posture.** `RealGhClient` and
   `RealTeaClient` keep swallowing every error (§3 d3).
 - **Changing what `ref` means.** `HEAD` is the repository's default branch on
@@ -337,6 +343,64 @@ default-None so every existing caller and test is untouched.
 can now pass that same hostname as `host`, which is the case the factory was
 shaped for.
 
+### C2. The forge a URL names — `backend_for_url` (added 2026-09-19, mid-run)
+
+§4.C threads a *host*. It does not help the one consumer that has no
+checkout at all, and phase 5 proved why: for a **bare URL**,
+`backend_for_hostname` and `self_hosted_hostname` are mutually exclusive by
+construction of the same `DEFAULT_HOST_BACKENDS` table. Verified live:
+
+```
+https://gitlab.com/g/p/-/merge_requests/7                 -> gitlab, host None
+https://gitlab.local.gebit.de/…/-/merge_requests/7        -> github, host set   (!)
+```
+
+So the VK bridge polling a self-hosted GitLab MR does not merely lose the
+host — **it picks the GitHub CLI**. §4.C's threading in `fr_vk.pr_observe`
+could never fire, which made it the very thing this spec exists to remove: a
+parameter written, read, and consumed by nothing.
+
+§1's non-goals allowed "documented" for gap 2 (`_hosts` resolving a
+self-hosted host to `github`), and for `fr apply` that is honest — an
+operator declares `backend:` in `.devcontainer/fr-profiles.yaml`. **For a
+bare URL there is no repo and therefore no configuration to document**, so
+the box cannot be closed that way. The operator chose to fix it.
+
+The URL's own **path** names the forge, needing no configuration:
+
+| forge | PR/MR path | issue path |
+|---|---|---|
+| GitLab | `/-/merge_requests/N`, or `/merge_requests/N` pre-dash | `/-/issues/N` |
+| Gitea | `/pulls/N` | `/issues/N` |
+| GitHub | `/pull/N` | `/issues/N` |
+
+`_hosts.backend_for_url(url)` matches the path against that table
+most-specific-first (`/pulls/` before `/pull/`, so Gitea is never read as
+GitHub) and falls back to `backend_for_hostname` when no shape matches.
+
+**`/issues/N` is deliberately not in the table.** It is both GitHub's and
+Gitea's shape, so it cannot discriminate; leaving it out preserves the
+existing documented Gitea boundary instead of replacing a known limit with a
+guess. `fr_dispatch.prompt`'s
+`test_prompt_backend_wording_gitea_hostname_alone_is_not_enough` is the
+tripwire: if the table ever grows greedy enough to pass that test, it is
+wrong.
+
+Three call sites hold a URL and no checkout, and all three switch:
+`fr_vk.pr_observe` (which is what finally makes §4.C's host threading
+reachable), `fr_vk.pr_state._close_linked_gh_issue`, and
+`fr_dispatch.prompt._backend_for_tracking_url` (a self-hosted GitLab phase's
+prompt now says `glab issue view`, not `gh issue view`).
+
+**What is still not fixed, and why.**
+`pr_state._default_close_gh_issue` now gets the right *backend* but still no
+*host*: its public `closer: Callable[[str, str, str], None]` — two call
+sites and every test double — has no room for one, and widening that arity
+is a bridge-wide change beyond this issue. So on a self-hosted instance the
+belt-and-braces Issue auto-close builds a GitLab client aimed at
+`gitlab.com` and fails non-fatally with a logged warning. Stated in the PR
+body, carried as an open journal finding, not papered over.
+
 ### D. Loud degradation
 
 Two silences become one-line warnings on stderr, each emitted **once** per
@@ -448,18 +512,31 @@ Unit (CI, `uv run pytest`):
 10. `detect_backend` warns once for an unrecognized host and is silent the
    second time; its return value is unchanged.
 11. `client_for_backend` warns when `host:` is set for `github`/`gitea`.
+12. `backend_for_url` reads the forge off the path — GitLab's
+    `/-/merge_requests/` and pre-dash `/merge_requests/`, Gitea's `/pulls/`,
+    GitHub's `/pull/` — falls back to the hostname for a shapeless URL, and
+    leaves the ambiguous `/issues/N` to that fallback.
+13. `pr_observe` resolves backend `gitlab` **and** a self-hosted host from
+    one MR URL — the combination that was unreachable before §4.C2.
 
 Live (this PR, agent-run, transcript in the PR body — d1):
 
-12. `file_exists` / `read_file` / `list_dir` against
+14. `file_exists` / `read_file` / `list_dir` against
     `IDermitzakis/devops-scripts` on `gitlab.local.gebit.de`, through
     `fr.hostclient.client_for_backend`, from a cwd that is **not** a GitLab
     checkout — the configuration that failed in §2.D.
-13. End-to-end `fr apply` against that project: phases rendered, observed,
+15. End-to-end `fr apply` against that project: phases rendered, observed,
     diffed, applied as GitLab Issues with correctly-shaped labels (colour and
     length) — the acceptance row's own sentence, demonstrated.
-14. `fr spec status` resolving a plan folder from that project (the cross-repo
+16. `fr spec status` resolving a plan folder from that project (the cross-repo
     read that motivated the host override).
+17. From inside a checkout carrying **only** `backend: gitlab` and no `host:`,
+    `client_for` builds a `RealGlabClient` whose host was derived from the git
+    remote, and reads a file with it — the spec's headline claim, which
+    `client_for_backend(host=...)` does not exercise.
+18. A self-hosted MR URL resolves to the GitLab adapter through
+    `backend_for_url`, live — the §4.C2 fix, shown on a real URL rather than
+    a constructed one.
 
 Post-merge, operator-driven: none. Everything this spec claims is proven in
 the PR — that is the point of the issue's "live proof, not unit tests".
