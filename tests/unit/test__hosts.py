@@ -191,6 +191,36 @@ class TestBackendForUrl:
     def test_the_path_shape_names_the_forge(self, url: str, expected: str) -> None:
         assert backend_for_url(url) == expected
 
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            # A repo NAMED like a route keyword must not hijack the answer.
+            # Both of these returned the wrong forge before the patterns were
+            # anchored (found in phase 6's review):
+            ("https://github.com/owner/merge_requests/pull/5", "github"),
+            ("https://github.com/owner/pulls/pull/5", "github"),
+            ("https://github.com/owner/merge_requests/issues/4", "github"),
+            # ...and a real route later in the path still wins.
+            ("https://gitlab.corp/o/pull/-/merge_requests/3", "gitlab"),
+            ("https://gitlab.corp/o/merge_requests/-/merge_requests/9", "gitlab"),
+            ("https://github.com/o/pull/pull/5", "github"),
+            # A branch literally named `-` is not GitLab's route infix.
+            ("https://github.com/o/r/blob/-/somefile", "github"),
+            # Sub-paths and trailing slashes on a real route still resolve.
+            ("https://gitlab.corp/g/p/-/merge_requests/7/diffs", "gitlab"),
+            ("https://gitlab.corp/g/p/-/merge_requests/7/", "gitlab"),
+            ("https://gitea.corp/o/r/pulls/4?tab=files#L3", "gitea"),
+        ],
+    )
+    def test_a_name_that_looks_like_a_route_does_not_hijack_the_forge(
+        self, url: str, expected: str
+    ) -> None:
+        """The patterns are anchored on a route keyword plus a complete
+        numeric segment precisely so a repo, org or group NAME cannot be
+        read as a route. `owner/merge_requests/pull/5` is a GitHub PR in an
+        oddly-named repo, not a GitLab merge request."""
+        assert backend_for_url(url) == expected
+
     def test_an_ambiguous_issue_path_falls_back_to_the_hostname(self) -> None:
         # `/issues/N` is BOTH GitHub's and Gitea's shape, so it cannot
         # discriminate; the documented Gitea boundary is preserved rather

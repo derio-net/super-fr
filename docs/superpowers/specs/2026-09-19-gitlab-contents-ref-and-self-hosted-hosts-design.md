@@ -37,8 +37,19 @@ After this ships:
 
 ### Non-goals
 
-- **Gitea.** Out of scope per the issue; `tea` stays explicitly unproven, and
-  no host is threaded to it (§4.D makes that gap loud rather than silent).
+- **Gitea**, with one carve-out added mid-run. `tea` stays explicitly unproven
+  and no host is threaded to it (§4.D makes that gap loud rather than silent).
+  But §4.C2's shape table *does* fix Gitea's **PR-URL routing** as a side
+  effect: a `/pulls/N` path is unambiguous, so it now reaches the `tea`
+  adapter where it previously fell through to `github`. That was flagged in
+  review as contradicting this section, and the section is corrected rather
+  than the code: dropping the row would cost nothing for GitLab but would mean
+  knowingly routing Gitea PR URLs to the wrong adapter, and every call site
+  wraps the client in a broad `except Exception` that logs non-fatally, so a
+  missing `tea` binary degrades exactly as it always would have. Gitea's
+  **issue**-URL routing is still unreachable from a bare URL (`/issues/N` is
+  byte-identical to GitHub's), and nothing about Gitea is verified against a
+  live instance.
 - **GitHub Enterprise.** `fr.gh` is not given host threading. There is no
   evidence of a GHE user, and `fr.gh` is the highest-traffic module in the
   package — churning it without proof is exactly how the bug being fixed here

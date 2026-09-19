@@ -114,13 +114,31 @@ def backend_for_hostname(hostname: str | None) -> HostBackend:
 # `backend_for_hostname` knows two SaaS domains, so every self-hosted
 # instance falls through to "github" — fine as a default for a repo that
 # can declare `backend:`, useless for a bare URL, which is all the VK
-# bridge has (gh-486 gap 2). Ordered most-specific first; `/pulls/` is
-# checked before `/pull/` so Gitea is never read as GitHub.
-_URL_SHAPES: tuple[tuple[str, HostBackend], ...] = (
-    ("/merge_requests/", "gitlab"),  # /-/merge_requests/ and pre-dash alike
-    ("/-/", "gitlab"),  # GitLab's route infix, e.g. /-/issues/
-    ("/pulls/", "gitea"),
-    ("/pull/", "github"),
+# bridge has (gh-486 gap 2).
+#
+# Each pattern is ANCHORED on a route keyword followed by a complete
+# numeric segment, and that anchoring is the whole correctness argument.
+# A plain `"/merge_requests/" in path` test cannot tell a route from a
+# NAME, so `github.com/owner/merge_requests/pull/5` — a real GitHub PR in
+# a repo that happens to be called `merge_requests` — classified as
+# GitLab, and `owner/pulls/pull/5` as Gitea. Both were found in review;
+# both are unusual repo names, neither is absurd. Requiring `/<n>` after
+# the keyword means a name only collides if it is ALSO followed by a bare
+# number, and the ordering then resolves that: a real route later in the
+# path still wins because the more specific forge patterns are tried
+# first.
+#
+# Residual, accepted: a BRANCH named `merge_requests/12` inside a
+# non-route URL (`/o/r/tree/merge_requests/12`) still reads as GitLab.
+# These three call sites only ever receive PR/MR and Issue URLs, never a
+# tree URL, so closing it would mean parsing forge route grammars — more
+# machinery than the risk earns.
+_URL_SHAPES: tuple[tuple[re.Pattern[str], HostBackend], ...] = (
+    # /-/merge_requests/7 and pre-dash /merge_requests/7 alike
+    (re.compile(r"/(?:-/)?merge_requests/\d+(?:/|$)"), "gitlab"),
+    (re.compile(r"/-/issues/\d+(?:/|$)"), "gitlab"),
+    (re.compile(r"/pulls/\d+(?:/|$)"), "gitea"),
+    (re.compile(r"/pull/\d+(?:/|$)"), "github"),
 )
 
 
@@ -130,13 +148,14 @@ def backend_for_url(url: str) -> HostBackend:
 
     For `fr_vk.pr_observe`/`pr_state` and `fr_dispatch.prompt`, which hold
     a URL and no checkout, so `detect_backend`'s config tier is
-    unavailable. `/issues/N` is deliberately NOT a shape: it is both
-    GitHub's and Gitea's, so it falls through to the hostname rather than
-    being guessed — the same documented Gitea boundary as before. See
-    spec §4.C2."""
+    unavailable. A bare `/issues/N` is deliberately NOT a shape: it is
+    both GitHub's and Gitea's, so it falls through to the hostname rather
+    than being guessed — the same documented Gitea boundary as before.
+    (GitLab's `/-/issues/N` IS unambiguous, thanks to the route infix.)
+    See spec §4.C2 and `_URL_SHAPES` on why each pattern is anchored."""
     parsed = urlparse(url)
-    for marker, backend in _URL_SHAPES:
-        if marker in parsed.path:
+    for pattern, backend in _URL_SHAPES:
+        if pattern.search(parsed.path):
             return backend
     return backend_for_hostname(parsed.hostname)
 
