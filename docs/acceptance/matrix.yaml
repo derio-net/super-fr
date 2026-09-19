@@ -2058,11 +2058,13 @@ rows:
       int:
       - super-fr:tests/integration/test_install_opencode_agents.py
     status: ci
-    notes: Phase 2/3 shipped the generator (canonical_agents(), the closed permission
-      translation, drift detection) and its unit coverage; phase 5 live-verified opencode
-      agent list against a scratch dir seeded from the shipped .opencode/agent/ mirror
-      shows fr-phase-executor (subagent) plus the three tier agents, matching Test Plan
-      §5 item 1. CI-pinned by the unit suite plus the install integration tests.
+    notes: 'Phases 1-3 shipped the generator (canonical_agents(), the CLOSED tools:->permission:
+      translation, drift detection) and its unit coverage; CI-pinned by the unit suite
+      plus the install integration tests. Live half, re-verified independently by the
+      orchestrator: the shipped .opencode/agent/ mirror copied into a bare directory
+      carrying no opencode.json and no super-fr install registers fr-phase-executor
+      plus all three tier agents as (subagent) on opencode 1.18.31 — Test Plan §5 item
+      1, and the portability the in-repo run cannot show.'
   - id: opencode-subagent-dispatch
     capability: OpenCode parity
     acceptance: An fr-goal run on OpenCode hands a plan phase to the fr-phase-executor
@@ -2072,17 +2074,26 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
     status: skipped
-    notes: 'Phase 5 live-verified the claim: opencode run --model opencode/nemotron-3.5-lightning-free
-      (free model; opencode/north-mini-code-free the matrix previously cited is gone
-      from the live roster, journaled as p5-t1-model-gone) against a scratch dir seeded
-      from the shipped .opencode/agent/ mirror, dispatching to fr-phase-executor via
-      the task tool, produced an opencode.db session row with parent_id SET (ses_f43ff7108ffe1IPI1VlhU4HtJH)
-      and agent = fr-phase-executor (child ses_f43ff53d3ffeSpvrMspCgoQ85v) — a genuine
-      child session, not the primary role-playing (journaled as p5-t2-live-dispatch-proof).
-      Status stays skipped rather than ci because reproducing this needs a live opencode
-      binary and a live model call, which is not automated in CI. Remaining debt is
-      Test Plan §5 item 5, the back-loaded post-merge full /fr-goal run on a paid model
-      against a real plan phase (spec §5, decision d4) — not done in this PR.'
+    notes: 'Phase 5 live-verified the claim, and the orchestrator re-verified it independently
+      from the session store. Run: opencode run --model opencode/nemotron-3.5-lightning-free
+      (a free model; opencode/north-mini-code-free, which this matrix previously cited,
+      is GONE from the live roster — journaled as p5-t1-model-gone), instructing a task-tool
+      dispatch to the fr-phase-executor subagent. Evidence is an opencode.db session
+      row with parent_id SET and agent=''fr-phase-executor'', titled by opencode itself
+      ''(@fr-phase-executor subagent)'' — the same shape as the 13 ''(@general subagent)''
+      rows in the recorded arm-A experiment, but with a NAMED custom agent. The child
+      carries a real assistant turn (reasoning + text parts), so it is not the parent
+      role-playing; cost/tokens_output read 0, which is free-tier accounting, not an
+      absent turn. CORRECTION to the original note: that dispatch ran in the fr-isolation
+      WORKTREE, against the committed .opencode/agent/ mirror in situ — not in a scratch
+      dir, as first recorded; session.directory and the assistant message''s path.cwd
+      both say so. Separately verified by the orchestrator: the shipped mirror copied
+      into a bare directory with no opencode.json and no super-fr install registers
+      all four agents as (subagent), which is Test Plan §5 item 1. Status is ''skipped''
+      rather than ''ci'' because reproducing it needs a live opencode binary and a model,
+      neither available in CI. Remaining debt: the post-merge full /fr-goal run on a
+      paid model (spec §5 item 5, plan phase 6), which exercises the skill prose driving
+      the dispatch rather than the primitive alone.'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
