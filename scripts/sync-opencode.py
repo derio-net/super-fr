@@ -11,26 +11,34 @@ markdown files), not a `~/.claude/rules/` directory. Separately, OpenCode's
 slash commands (`/name`, docs: https://opencode.ai/docs/commands) are a
 third, independent surface from `commands/<name>.md` files — NOT the same
 thing as a skill, and not invoked by typing a skill's own trigger phrase.
-This script generates all three mirrors so OpenCode sessions in this repo (or
-any repo that receives it via install.sh) see the same skills, rules, and
-slash commands with zero extra setup.
+A fourth surface, subagents (`.opencode/agent/<name>.md`, docs:
+https://opencode.ai/docs/agents), is dispatched by name via the task tool —
+its frontmatter dialect differs from Claude Code's own agent files
+(`name:` becomes the filename, `tools:` becomes a `permission:` map; see
+spec docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
+§3.B for the full translation). This script generates all four mirrors so
+OpenCode sessions in this repo (or any repo that receives it via
+install.sh) see the same skills, rules, slash commands, and subagents with
+zero extra setup.
 
-`plugins/super-fr/skills/` and `plugins/super-fr/rules/` (plus
+`plugins/super-fr/skills/`, `plugins/super-fr/rules/` (plus
 `.claude/rules/acceptance-matrix.md`, a repo-local-only rule with no plugin
-equivalent) stay the canonical sources — never hand-edit
-`.opencode/skills/<name>/SKILL.md`, `.opencode/instructions/<rule>.md`, or
-`.opencode/commands/<name>.md` directly; all three are overwritten on sync.
+equivalent), and `plugins/super-fr/agents/` stay the canonical sources —
+never hand-edit `.opencode/skills/<name>/SKILL.md`,
+`.opencode/instructions/<rule>.md`, `.opencode/commands/<name>.md`, or
+`.opencode/agent/<name>.md` directly; all four are overwritten on sync.
 Commands have no canonical file of their own — each is mechanically derived
 from its matching skill's own SKILL.md frontmatter (`name` + `description`),
 so a new skill automatically gets a matching command with zero extra
-authoring.
+authoring. Agents are likewise generated, not byte-copied, because the two
+frontmatter dialects differ.
 
 Run via `uv run scripts/sync-opencode.py` — this module imports `yaml`
 (a `packages/fr/pyproject.toml` workspace dependency), so a bare system
 `python3` without the workspace venv active will not have it.
 
 Usage:
-    uv run scripts/sync-opencode.py          # write/update all three mirrors
+    uv run scripts/sync-opencode.py          # write/update all four mirrors
     uv run scripts/sync-opencode.py --check  # exit non-zero on drift, no writes
 """
 
@@ -60,6 +68,52 @@ INSTRUCTIONS_MIRROR_DIR = REPO_ROOT / ".opencode" / "instructions"
 
 COMMANDS_MIRROR_DIR = REPO_ROOT / ".opencode" / "commands"
 
+AGENTS_CANONICAL_DIR = REPO_ROOT / "plugins" / "super-fr" / "agents"
+# .opencode/agent/ — SINGULAR. All three documented agent-definition forms
+# (opencode.json's `agent` key, `.opencode/agents/`, `.opencode/agent/`)
+# were verified to register on opencode 1.18.31 (spec §3.A); the singular
+# form is pinned here so nobody re-litigates it.
+AGENTS_MIRROR_DIR = REPO_ROOT / ".opencode" / "agent"
+
+
+# ---------------------------------------------------------------------------
+# shared drift-detection helper
+
+
+def _canonical_content(value: Path | str) -> str:
+    """Read a canonical entry's content, whether it's a source Path or already-generated str."""
+    return value.read_text() if isinstance(value, Path) else value
+
+
+def _find_category_drift(
+    canonical: dict[str, Path | str],
+    mirror: dict[str, Path],
+    mirror_dir_label: str,
+    extra_message: str,
+    differs_message: str,
+) -> list[str]:
+    """Shared missing/extra/differing-content comparison over two name->X maps.
+
+    Each of the four categories (skills, commands, instructions, agents)
+    calls this with its own directory label and message wording, so the
+    four public `find_*_drift()` functions keep their existing,
+    tripwire-pinned message text byte-identical.
+    """
+    problems = []
+
+    missing = sorted(set(canonical) - set(mirror))
+    extra = sorted(set(mirror) - set(canonical))
+    for name in missing:
+        problems.append(f"{name}: missing from {mirror_dir_label}")
+    for name in extra:
+        problems.append(f"{name}: present in {mirror_dir_label} with {extra_message}")
+
+    for name in sorted(set(canonical) & set(mirror)):
+        if mirror[name].read_text() != _canonical_content(canonical[name]):
+            problems.append(f"{name}: {mirror_dir_label} content differs from {differs_message}")
+
+    return problems
+
 
 # ---------------------------------------------------------------------------
 # skills
@@ -79,22 +133,9 @@ def mirror_skills() -> dict[str, Path]:
 
 def find_drift() -> list[str]:
     """Human-readable skill mirror drift descriptions; empty means in sync."""
-    canonical = canonical_skills()
-    mirror = mirror_skills()
-    problems = []
-
-    missing = sorted(set(canonical) - set(mirror))
-    extra = sorted(set(mirror) - set(canonical))
-    for name in missing:
-        problems.append(f"{name}: missing from .opencode/skills/")
-    for name in extra:
-        problems.append(f"{name}: present in .opencode/skills/ with no canonical source")
-
-    for name in sorted(set(canonical) & set(mirror)):
-        if canonical[name].read_text() != mirror[name].read_text():
-            problems.append(f"{name}: .opencode/skills/ content differs from canonical")
-
-    return problems
+    return _find_category_drift(
+        canonical_skills(), mirror_skills(), ".opencode/skills/", "no canonical source", "canonical"
+    )
 
 
 def sync_skills() -> None:
@@ -185,22 +226,13 @@ def mirror_commands() -> dict[str, Path]:
 
 def find_commands_drift() -> list[str]:
     """Human-readable command mirror drift descriptions; empty means in sync."""
-    canonical = canonical_commands()
-    mirror = mirror_commands()
-    problems = []
-
-    missing = sorted(set(canonical) - set(mirror))
-    extra = sorted(set(mirror) - set(canonical))
-    for name in missing:
-        problems.append(f"{name}: missing from .opencode/commands/")
-    for name in extra:
-        problems.append(f"{name}: present in .opencode/commands/ with no matching skill")
-
-    for name in sorted(set(canonical) & set(mirror)):
-        if mirror[name].read_text() != canonical[name]:
-            problems.append(f"{name}: .opencode/commands/ content differs from generated canonical")
-
-    return problems
+    return _find_category_drift(
+        canonical_commands(),
+        mirror_commands(),
+        ".opencode/commands/",
+        "no matching skill",
+        "generated canonical",
+    )
 
 
 def sync_commands() -> None:
@@ -214,6 +246,122 @@ def sync_commands() -> None:
     COMMANDS_MIRROR_DIR.mkdir(parents=True, exist_ok=True)
     for name, content in canonical.items():
         dest = COMMANDS_MIRROR_DIR / f"{name}.md"
+        dest.write_text(content)
+
+
+# ---------------------------------------------------------------------------
+# agents (generated — Claude Code and OpenCode use different frontmatter
+# dialects, so this category is content-generated like commands, never a
+# byte-copy like skills/instructions)
+
+# Closed translation of Claude Code's `tools:` allowlist to OpenCode's
+# `permission:` map (spec §3.B). Read/Grep/Glob carry no separate OpenCode
+# permission key, so they are omitted rather than mapped to a no-op entry.
+_TOOL_PERMISSIONS: dict[str, tuple[str, str]] = {
+    "Edit": ("edit", "allow"),
+    "Write": ("edit", "allow"),
+    "Bash": ("bash", "allow"),
+}
+# The capability classes a canonical `tools:` line never grants must be
+# denied explicitly, or the mirror ends up strictly more powerful than its
+# source (spec-review r3): Claude Code's `tools:` is an allowlist, OpenCode's
+# permission defaults are permissive. `task: deny` is the load-bearing one —
+# it is what keeps a phase executor from dispatching further subagents.
+_PERMISSION_DENIES: dict[str, str] = {"task": "deny", "webfetch": "deny"}
+
+
+def _agent_permission(tools: str) -> dict[str, str]:
+    """Translate a canonical `tools:` value into an OpenCode `permission:` map."""
+    permission: dict[str, str] = {}
+    for tool in tools.split(","):
+        mapped = _TOOL_PERMISSIONS.get(tool.strip())
+        if mapped is not None:
+            key, value = mapped
+            permission[key] = value
+    permission.update(_PERMISSION_DENIES)
+    return permission
+
+
+def render_agent(name: str, frontmatter: dict[str, object], body: str) -> str:
+    """Render a `.opencode/agent/<name>.md` mirror of a Claude Code agent.
+
+    Rendered from an explicit template with a FIXED key order, never a
+    `yaml.safe_dump` of the whole frontmatter: install.sh's `model:` rewrite
+    (spec §3.C) is a bash edit anchored on `description:` being a
+    single-line double-quoted scalar and `mode: subagent` sitting on its own
+    line immediately after — a generic dumper does not guarantee that
+    layout. `name:` is dropped entirely: OpenCode names an agent by its
+    mirror filename, not a frontmatter field.
+    """
+    description = str(frontmatter.get("description", "")).strip()
+    description_line = yaml.safe_dump(
+        description, default_style='"', allow_unicode=True, width=1_000_000
+    ).strip()
+
+    permission = _agent_permission(str(frontmatter.get("tools", "")))
+    permission_lines = "\n".join(f"  {key}: {value}" for key, value in permission.items())
+
+    banner = (
+        f"# Generated from plugins/super-fr/agents/{name}.md by "
+        "scripts/sync-opencode.py — do not edit this file directly."
+    )
+
+    return (
+        "---\n"
+        f"{banner}\n"
+        f"description: {description_line}\n"
+        "mode: subagent\n"
+        "permission:\n"
+        f"{permission_lines}\n"
+        "---\n"
+        f"{body.strip()}\n"
+    )
+
+
+def canonical_agents() -> dict[str, str]:
+    """Map of agent name -> expected .opencode/agent/<name>.md content.
+
+    Generated, like commands — the two frontmatter dialects differ, so this
+    is not a byte-copy of plugins/super-fr/agents/*.md.
+    """
+    result = {}
+    for path in sorted(AGENTS_CANONICAL_DIR.glob("*.md")):
+        name = path.stem
+        frontmatter = _skill_frontmatter(path)
+        _, _, body = path.read_text().split("---", 2)
+        result[name] = render_agent(name, frontmatter, body)
+    return result
+
+
+def mirror_agents() -> dict[str, Path]:
+    """Map of agent name -> existing mirror agent path (if any)."""
+    if not AGENTS_MIRROR_DIR.is_dir():
+        return {}
+    return {p.stem: p for p in sorted(AGENTS_MIRROR_DIR.glob("*.md"))}
+
+
+def find_agents_drift() -> list[str]:
+    """Human-readable agent mirror drift descriptions; empty means in sync."""
+    return _find_category_drift(
+        canonical_agents(),
+        mirror_agents(),
+        ".opencode/agent/",
+        "no canonical source",
+        "generated canonical",
+    )
+
+
+def sync_agents() -> None:
+    """Write/overwrite the agents mirror to match canonical_agents() exactly."""
+    canonical = canonical_agents()
+
+    for name, path in mirror_agents().items():
+        if name not in canonical:
+            path.unlink()
+
+    AGENTS_MIRROR_DIR.mkdir(parents=True, exist_ok=True)
+    for name, content in canonical.items():
+        dest = AGENTS_MIRROR_DIR / f"{name}.md"
         dest.write_text(content)
 
 
@@ -239,22 +387,13 @@ def mirror_instructions() -> dict[str, Path]:
 
 def find_instructions_drift() -> list[str]:
     """Human-readable instructions mirror drift descriptions; empty means in sync."""
-    canonical = canonical_instructions()
-    mirror = mirror_instructions()
-    problems = []
-
-    missing = sorted(set(canonical) - set(mirror))
-    extra = sorted(set(mirror) - set(canonical))
-    for name in missing:
-        problems.append(f"{name}: missing from .opencode/instructions/")
-    for name in extra:
-        problems.append(f"{name}: present in .opencode/instructions/ with no canonical source")
-
-    for name in sorted(set(canonical) & set(mirror)):
-        if canonical[name].read_text() != mirror[name].read_text():
-            problems.append(f"{name}: .opencode/instructions/ content differs from canonical")
-
-    return problems
+    return _find_category_drift(
+        canonical_instructions(),
+        mirror_instructions(),
+        ".opencode/instructions/",
+        "no canonical source",
+        "canonical",
+    )
 
 
 def sync_instructions() -> None:
@@ -281,7 +420,9 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.check:
-        drift = find_drift() + find_instructions_drift() + find_commands_drift()
+        drift = (
+            find_drift() + find_instructions_drift() + find_commands_drift() + find_agents_drift()
+        )
         if drift:
             print("scripts/sync-opencode.py --check: drift detected:", file=sys.stderr)
             for line in drift:
@@ -294,13 +435,16 @@ def main() -> int:
     sync_skills()
     sync_instructions()
     sync_commands()
+    sync_agents()
     print(
         f"Synced {len(canonical_skills())} skill(s) into "
         f"{SKILLS_MIRROR_DIR.relative_to(REPO_ROOT)}/, "
         f"{len(canonical_instructions())} instruction file(s) into "
-        f"{INSTRUCTIONS_MIRROR_DIR.relative_to(REPO_ROOT)}/, and "
+        f"{INSTRUCTIONS_MIRROR_DIR.relative_to(REPO_ROOT)}/, "
         f"{len(canonical_commands())} command file(s) into "
-        f"{COMMANDS_MIRROR_DIR.relative_to(REPO_ROOT)}/"
+        f"{COMMANDS_MIRROR_DIR.relative_to(REPO_ROOT)}/, and "
+        f"{len(canonical_agents())} agent file(s) into "
+        f"{AGENTS_MIRROR_DIR.relative_to(REPO_ROOT)}/"
     )
     return 0
 
