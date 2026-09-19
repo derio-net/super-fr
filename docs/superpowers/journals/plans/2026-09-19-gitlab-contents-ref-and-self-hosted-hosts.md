@@ -143,3 +143,13 @@ Both tasks' pre-recorded no-refactor-because entries (622acdfb72bb, 21bf60a3ca21
 ### 0fdf7a0ce59a · discovery · P2.T2.S1 live proof: ref=HEAD on the tree endpoint is byte-identical to no ref (phase 2)
 
 Ran both forms against gitlab.local.gebit.de, IDermitzakis/devops-scripts, glab 1.89.0: 'projects/IDermitzakis%2Fdevops-scripts/repository/tree?path=' and the same with '&ref=HEAD' appended returned byte-identical JSON (same 8 entries, same ids/order). This cleared P2.T2.S2 to proceed: list_dir now sends &ref=HEAD on the tree endpoint, matching read_file/file_exists, with no behavior change against this live instance.
+
+<!-- fr:journal kind=finding scope=plan id=f4-contents-docstrings-uneven created=2026-09-19T19:38:00 phase=2 state=fixed -->
+### f4-contents-docstrings-uneven · finding [fixed] · file_exists and read_file did not document the mandatory ref the way list_dir does (phase 2)
+
+Phase 2's review flagged it as cosmetic. Fixed anyway, because spec §4.A's stated reason for pinning ref on all three methods is that they should speak ONE convention — and the original bug happened precisely because the adapter was written by analogy to GitHub's endpoint shape, with nothing at the call site saying GitLab's differs. Each of the three docstrings now states that ref is mandatory and what happened without it. The next person to add a contents method reads the docstring beside it, not the spec.
+
+<!-- fr:journal kind=finding scope=plan id=f5-phase2-duplicate-tests created=2026-09-19T19:38:00 phase=2 state=refuted -->
+### f5-phase2-duplicate-tests · finding [refuted] · read_file/list_dir test pairs look duplicated — same pattern already refuted in phase 1 (phase 2)
+
+The reviewer raised the phase-2 instance of the shape refuted as f3-duplicate-success-test, and explicitly flagged it only to confirm consistency with that prior ruling rather than to ask for a change. Refused for the same reason: the named test is the gh-486 regression guard a future reader greps for, the retrofitted one proves no contents test is arg-blind any more, and collapsing them would delete one of those two purposes.

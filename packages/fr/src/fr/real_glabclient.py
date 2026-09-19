@@ -198,9 +198,12 @@ class RealGlabClient:
 
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
-        projects/:id/repository/files/:path`. Any error reads as
+        projects/:id/repository/files/:path?ref=HEAD`. Any error reads as
         "not found" — the safe direction (spec-archival callers leave the
-        spec in place on an unresolved lookup)."""
+        spec in place on an unresolved lookup).
+
+        `ref` is MANDATORY on this endpoint; without it GitLab answers 400
+        and this probe reported that as "absent" (gh-486)."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         try:
@@ -239,7 +242,10 @@ class RealGlabClient:
     def read_file(self, repo: str, path: str) -> str:
         """Raw file text via the repository files endpoint. GitLab's API
         returns base64-encoded content (unlike GitHub's raw-media-type
-        trick) — decoded here."""
+        trick) — decoded here.
+
+        `ref` is MANDATORY on this endpoint; without it GitLab answers 400
+        and this method raised on every real instance (gh-486)."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         out = _glab._run_glab(
