@@ -65,8 +65,10 @@ A `/fr-goal` run already visits the angles in order. This is the talk's outline.
 
 | Moment in the run | Angle | superpowers contrast |
 |---|---|---|
+| **`fr-init` scans the repo and interviews** | *the contract (1 of 2)* | — |
+| **profile scaffolded, `backend: gitlab` declared** | Security · Extensibility | — |
 | `fr isolation up` → worktree + devcontainer | Security | base repo never touched, vs. "please work in a worktree" |
-| Batched Q&A — asked once, then left alone | *the contract* | — |
+| Batched Q&A — asked once, then left alone | *the contract (2 of 2)* | — |
 | Spec written, dated, committed | Continuity | — |
 | Acceptance rows born and defended | Quality | — |
 | Plan as a **folder** with `_meta.yaml` | Continuity | formless plan; checkboxes left unticked |
@@ -81,19 +83,64 @@ The angles are deliberately **not** peers. Security bookends, Quality and
 Continuity interleave densely, Extensibility surfaces once. That ranking is also
 the relevance ranking for someone whose next action is one issue tomorrow.
 
-## Time budget (49–57 min)
+## The recording starts from a pristine repo
+
+**Decided 2026-09-19.** `fr-init` is *inside* the recording, not setup done
+beforehand. The run is end-to-end from a repo with no `.devcontainer`, because
+that is the state the listener's own repo is in. A demo that begins after setup
+teaches the half she has already got.
+
+Three consequences.
+
+**The arc is now complete**: pristine repo → `fr-init` → isolation →
+`/fr-goal` → merge request. Nothing is assumed into existence off-screen.
+
+**The contract beat happens twice, and that is the honest message.** `fr-init`
+interviews, then `/fr-goal` batches its own questions. "You are asked once" was
+never quite true; "you are asked once to set the repo up — ever — and once per
+feature after that" is true, and still small enough to be the selling point.
+
+**`backend: gitlab` is now made on camera.** `fr init scaffold --backend gitlab`
+both installs a versioned `glab` in the container and records the key
+`detect_backend` reads. That is precisely the key whose absence made fr silently
+assume GitHub, so the moment the interview asks it is the moment the GitLab
+story becomes visible rather than asserted.
+
+### The waits are real, and get shown as waits
+
+A devcontainer build (base image, Java 17 + Maven, a `glab` install) and a first
+Maven dependency resolution are minutes, not seconds. Two temptations to refuse:
+
+- **Do not pre-build the image and cut to a warm container.** That hides the
+  single biggest cost of adoption and the demo becomes a lie she discovers on
+  her own machine an hour later.
+- **Do not play them in full either.** Nobody learns from watching a progress
+  bar at 1.5×.
+
+Resolution: **compress hard and label the compression on screen** — the same
+posture the privacy rule takes on redaction, that stating it beats hiding it.
+Pre-pulling *base image layers* is legitimate and needs no label; we are not
+demonstrating a registry's bandwidth. Everything fr itself does is shown.
+
+## Time budget (51–59 min)
 
 | # | Beat | Min |
 |---|---|---|
 | 1 | Hook — why your sessions go sideways | 3 |
 | 2 | What a skill is, and how it gets used | 5 |
-| 3 | **The run, annotated** | 28–32 |
+| 3 | **The run, annotated** — from pristine repo through `fr-init` to the MR | 30–34 |
 | 4 | Was the ceremony worth it? — measured | 3 |
 | 5 | Extensibility coda — shipped items only | 2 |
-| 6 | Quickstart: `fr-init` on her repo, live | 8–12 |
+| 6 | **Hands-on: she runs it on her own repo** | 8–12 |
 | 7 | Discussion | — |
 
 Beat 3 is the talk. Beats 1–2 buy the right to it; 4–6 convert it.
+
+Beat 6 changed character when `fr-init` moved into the recording. It is no
+longer a demonstration — she has just watched one — so it becomes the room
+doing it: `fr-init` on their own repos, with help on hand. The walk-out action
+is "run `/fr-goal` on one real issue", and this is the only beat that actually
+starts it.
 
 ## Feature selection — a runtime constraint, not just a credibility one
 
@@ -143,6 +190,28 @@ Its README defines four exercises. Recommended issue composition:
 The first two satisfy all four selection criteria: bounded, multi-surface, with
 a built-in failure to recover from, and describable without naming anything.
 
+**Invoked as `/fr-goal <text>`, with no tracker issue** (operator decision,
+2026-09-19). The brief is composed from those two exercises and passed inline.
+That removes a setup step and a dependency, and it matches what the listener
+will actually type — she has a task in her head, not a ticket.
+
+It also narrows, precisely, which GitLab surface the recording exercises. A
+`/fr-goal` run produces a spec, a plan and a **merge request**; it does not
+create or label tracker issues, because that is the *dispatch* path
+(`fr apply --to <runner>`), which is a different feature. So:
+
+- The recording proves the **MR** half of GitLab, live, on the audience's own
+  forge.
+- The **issue rendering / labelling / diffing** half is already proven — it was
+  PR #487's own live walk, and is what moved `multibackend-gitlab-tracking` to
+  `skipped` with a live-verified note. It does not need redoing here.
+
+Stated because the two are easy to conflate: an earlier note in this session
+claimed the demo run *was* the outstanding `fr apply` exercise. It is not.
+
+The brief's text names classes and files in a third-party repo, so like every
+other identity it lives in the operator-local file outside this repo, not here.
+
 **UNBLOCKED 2026-09-19** — [#486](https://github.com/derio-net/super-fr/issues/486)
 is fixed (PR #487) and independently re-verified live. With `backend: gitlab`
 declared and no `GITLAB_HOST` exported, `detect_backend` resolves `gitlab`,
@@ -150,27 +219,29 @@ declared and no `GITLAB_HOST` exported, `detect_backend` resolves `gitlab`,
 not, `list_dir` and `read_file` both work, and `file_exists` against an
 unreachable host now **raises** instead of reporting absence.
 
-**Setup owed before recording:**
+**Preconditions before recording** — note how few remain, now that `fr-init`
+and the backend declaration happen on camera:
 
-1. **Remote repointed** ✅ (2026-09-19). `origin` is now the operator's own
-   fork; the team's project is kept as `upstream` with its push URL set to
-   `DISABLED`, verified by dry-run. A `/fr-goal` run opens merge requests
-   unattended, so an unreachable push path on another team's repo is a safety
-   property, not tidiness. Issue and MR therefore land in the operator's own
-   namespace.
-2. `fr-init` to scaffold a Java 17 + Maven devcontainer profile. Previously
-   done and then reverted, so the repo is pristine again — which conveniently
-   makes it a candidate for the live `fr-init` in beat 6.
-3. **Declare `backend: gitlab`** in `.devcontainer/fr-profiles.yaml` ✅
-   (2026-09-19). Without it `detect_backend` falls back to `"github"` — now
-   with a loud warning naming the fix, where it used to be silent. Since #487
-   this single key is sufficient: the host is derived from the git remote and
-   reaches `glab` as `GITLAB_HOST` in the child environment.
-4. Create the issue from the two chosen exercises — the fork currently has none.
-5. **Pre-warm the Maven dependency cache in the image.** A first Maven build
-   downloading the world would dominate the recording and measure the network,
-   not the pipeline.
-6. Capture apparatus per `docs/presentation/version-2/runbook.md`.
+1. **Remote repointed** ✅ (2026-09-19). `origin` is the operator's own fork;
+   the team's project is kept as `upstream` with its push URL `DISABLED`,
+   verified by dry-run. A `/fr-goal` run opens merge requests unattended, so an
+   unreachable push path on another team's repo is a safety property, not
+   tidiness. The MR lands in the operator's own namespace.
+2. **The repo must be PRISTINE** ✅ (2026-09-19). No `.devcontainer`, clean
+   working tree. This is now a precondition rather than a setup step — it is
+   the state the recording has to start from. A `fr-profiles.yaml` written by
+   hand during verification earlier in this session has been removed for
+   exactly that reason.
+3. **Pre-pull the devcontainer base image layers.** Legitimate and unlabelled:
+   the talk is not demonstrating a registry's bandwidth. Everything `fr` itself
+   does stays on screen, including the build it drives.
+4. **Prepare the brief text** in the operator-local file, composed from the two
+   chosen exercises.
+5. **Capture apparatus** per `docs/presentation/version-2/runbook.md`.
+
+Deliberately *not* on this list any more: scaffolding the profile, declaring
+`backend: gitlab`, and creating a tracker issue. The first two are now the
+recording's opening beats; the third no longer exists.
 
 ## Confidentiality contract
 

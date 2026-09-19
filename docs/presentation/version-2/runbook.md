@@ -24,16 +24,36 @@ export DEMO_NS=...              # the operator's own namespace on it
 export DEMO_REPO=...            # the training project's name
 export WORK_ROOT=...            # the path whose includeIf gives the WORK identity
 export RUN_ROOT=$WORK_ROOT/runs/v2-demo
+export BASE_IMAGE=...          # devcontainer base to pre-pull (see "the waits" below)
 ```
 
 Source it before every command below. Nothing in this file should ever be
 edited to contain a real value.
 
-## BLOCKED
+## Unblocked
 
-Do not record until [#486](https://github.com/derio-net/super-fr/issues/486) is
-fixed and live-verified. GitLab is the only forge at the audience's employer; a
-run that silently fell back to GitHub would demonstrate nothing to them.
+[#486](https://github.com/derio-net/super-fr/issues/486) is fixed (PR #487) and
+re-verified live on 2026-09-19: with `backend: gitlab` declared and no
+`GITLAB_HOST` exported, the contents reads all pass and `file_exists` raises on
+an unreachable host rather than reporting absence.
+
+## The recording starts pristine — `fr-init` is IN it
+
+The run is end-to-end from a repo with **no `.devcontainer`**, because that is
+the state the listener's own repo is in. So two things that read like setup are
+actually the opening beats, and must NOT be done beforehand:
+
+- `fr-init` — the scan, the interview, the scaffold, and the container build.
+- `fr init scaffold --backend gitlab` — which both installs a versioned `glab`
+  in the container and records the key `detect_backend` reads. That key's
+  absence is what made fr silently assume GitHub before #487, so the interview
+  asking for it is the moment the GitLab story becomes visible.
+
+**The waits get shown as waits.** A devcontainer build and a first Maven resolve
+are minutes. Do not pre-build and cut to a warm container — that hides the
+biggest cost of adoption. Do not play them in full either. Compress hard and
+**label the compression on screen**. Pre-pulling *base image layers* is fine and
+needs no label; we are not demonstrating a registry's bandwidth.
 
 ## Subject
 
@@ -43,12 +63,20 @@ run that silently fell back to GitHub would demonstrate nothing to them.
 | Remote | `origin` → the operator's own fork; `upstream` → the team's project, push `DISABLED` |
 | Default branch | `master` (**not** `main`) |
 | Stack | Java 17 + Maven |
-| Issue | composed from two of its README tasks: fix three deliberately-failing tests, and write unit tests for a class that has none |
+| Invocation | `/fr-goal <text>` — brief passed inline, **no tracker issue** |
 | Budget | 15–25 min, per the bc88 benchmark |
 
-Those two tasks are chosen because together they are bounded, touch more than
-one surface, and contain a **built-in failure to recover from** — which is the
-beat the talk is built on.
+The brief is composed from two of its README exercises — fix three
+deliberately-failing tests, and write unit tests for a class that has none.
+Together they are bounded, touch more than one surface, and contain a
+**built-in failure to recover from**, which is the beat the talk is built on.
+The text itself names third-party classes, so it lives in the local env file,
+not here.
+
+`/fr-goal` produces a spec, a plan and a **merge request** — it does not create
+or label tracker issues, which is the separate `fr apply --to <runner>` dispatch
+path. So this run proves the MR half of GitLab live; the issue-tracking half was
+already proven by #487's own live walk.
 
 ## Fixed since bc88 — the GitLab-specific additions
 
@@ -102,13 +130,12 @@ git -C "$CLONE" push --dry-run origin master
 git -C "$CLONE" push --dry-run upstream master && \
   { echo "FAIL: upstream is pushable"; exit 1; }
 
-# 5. backend resolves to gitlab, not the github default
-cd "$CLONE" && uv run python -c \
-  "from fr._hosts import detect_backend; from pathlib import Path; \
-   b=detect_backend(Path('.')); print(b); assert b=='gitlab', b"
+# 5. the repo is PRISTINE — fr-init must have nothing to find
+test ! -e "$CLONE/.devcontainer" || { echo "FAIL: .devcontainer exists; fr-init is in the recording"; exit 1; }
+test -z "$(git -C "$CLONE" status --porcelain)" || { echo "FAIL: dirty tree"; exit 1; }
 
-# 6. maven cache warm — otherwise the recording measures the network
-mvn -q -o dependency:resolve || echo "WARN: offline resolve failed, cache cold"
+# 6. base image layers pre-pulled, so the build shows fr's work and not a download
+docker image inspect "$BASE_IMAGE" >/dev/null 2>&1 || docker pull "$BASE_IMAGE"
 ```
 
 ## Record
@@ -147,8 +174,11 @@ them live; recovering them afterwards means re-watching the whole cast.
 
 | Moment | Angle |
 |---|---|
+| `fr-init` scans and interviews | the contract (1 of 2) |
+| profile scaffolded, `backend: gitlab` declared | Security · Extensibility |
+| container build (**compress, label it**) | — |
 | `fr isolation up` → worktree + container | Security |
-| batched Q&A asked, turn ends | the contract |
+| batched Q&A asked, turn ends | the contract (2 of 2) |
 | spec written | Continuity |
 | acceptance rows presented | Quality |
 | plan folder + `_meta.yaml` | Continuity |
