@@ -74,7 +74,7 @@ A `/fr-goal` run already visits the angles in order. This is the talk's outline.
 | Acceptance rows born and defended | Quality | — |
 | Plan as a **folder** with `_meta.yaml` | Continuity | formless plan; checkboxes left unticked |
 | Run cursor advances | Continuity | nothing survives the session |
-| ~~Phase executors dispatched; tier→model~~ | — | **does not occur on this harness — see below** |
+| ~~Phase executors dispatched; tier→model~~ | — | **not on camera with 4.5.x's inline default — see #493** |
 | TDD per phase; adversarial review loop | Quality | — |
 | Journal findings; `check` fails on open ones | Quality | — |
 | Merge → archive to `implemented/` | Continuity | specs and plans pile up undifferentiated |
@@ -128,21 +128,42 @@ demonstrating a registry's bandwidth. Everything fr itself does is shown.
 `fr harness parity` on 2026-09-19, read before recording rather than after.
 Two rows change the plan.
 
-### `subagent-dispatch / opencode: absent` — the Extensibility beat cannot happen
+### `subagent-dispatch / opencode: absent` — but the declaration is disputed
 
-> no isolation-argument dispatch primitive on OpenCode — fr-goal §5's documented
-> fallback runs phases **inline**; correct behaviour, not a gap to fill.
+**Corrected 2026-09-19 after the operator challenged it. The challenge holds,
+and my earlier account here was wrong twice over.** Filed as
+[#493](https://github.com/derio-net/super-fr/issues/493).
 
-This is not a bug and needs no fix. But it means phase executors are never
-dispatched on camera, and with phases running inline in one session, model tiers
-per workload complexity have nothing to show either. It also explains bc88's
-arm G running **0 subagents in 17 min**, which is why this harness fits the
-budget at all.
+I wrote that "Claude ran 14 subagents in 56 min" against OpenCode's zero. **Both
+runs were OpenCode.** The experiment's own runbook has every arm on
+`opencode --auto`, and arm A dispatched **13 `@general` subagents** — child
+sessions with `parent_id` set, still in `run-metrics.csv`. OpenCode has a
+dispatch primitive (Task tool / `@mention`, built-in `general`/`explore`/`scout`)
+and we measured it working.
 
-So the Extensibility angle surfaces **zero** times in the run, not once. That
-retroactively justifies demoting it to a verbal coda — it is now the only
-option. The coda must say "on this harness, phases run inline" rather than
-implying the listener will see executors fan out.
+The parity row's stated reason — "no isolation-argument dispatch primitive" —
+cannot be the blocker: Hermes' `delegate_task` has no isolation argument either
+and is declared `enforced`, and the `fr-phase-executor` carve-out *forbids*
+giving phase executors an isolation argument at all. The surface requires its
+absence.
+
+The real limitation is narrower: custom *named* subagents may not be reliably
+invocable on OpenCode (upstream `anomalyco/opencode#29616`), and super-fr ships
+no OpenCode agent definition to test it. Dispatch to the built-in `general`
+agent works.
+
+**What it costs, measured:** arm A's 13 subagents cost **$7.59** against roughly
+$1 inline — about 7×. But arm A was also *faster* in wall clock (56.2 min vs
+77.6 and 105.2 for the single-session arms). So inline-by-default may well be a
+defensible **cost** policy; it is simply not the capability absence the row
+declares.
+
+**For this recording, the practical position is unchanged**: with the shipped
+4.5.x behaviour, `/fr-goal` on OpenCode runs phases inline, so phase executors
+and model tiers do not appear on camera and the Extensibility coda stays verbal.
+That is also *why* the run fits the budget — bc88's arm G was 0 subagents in
+17 min. If #493 changes the default before recording, revisit: dispatched phases
+would restore the beat at roughly 7× the cost and a longer, less watchable run.
 
 ### `operator-gate / opencode: advisory` — the contract beat can silently not fire
 

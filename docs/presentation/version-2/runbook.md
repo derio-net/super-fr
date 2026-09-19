@@ -154,9 +154,14 @@ Claude ran 14 in 56 — decisive for the budget.
 
 Two consequences of that choice, from `fr harness parity`:
 
-- `subagent-dispatch / opencode: absent` — phases run **inline** (fr-goal §5's
-  documented fallback, correct behaviour). Phase executors and model tiers
-  therefore never appear on camera. This is also *why* the run fits the budget.
+- `subagent-dispatch / opencode: absent` — **the declaration is disputed
+  ([#493](https://github.com/derio-net/super-fr/issues/493)); the shipped
+  behaviour is not.** With 4.5.x, phases run inline, so phase executors and
+  model tiers never appear on camera — and that is *why* the run fits the
+  budget (bc88 arm G: 0 subagents, 17 min). OpenCode does in fact have a
+  dispatch primitive: the #429 experiment's arm A, also `opencode --auto`,
+  dispatched 13 `@general` subagents at $7.59 against ~$1 inline. If #493
+  flips the default before recording, re-time the run before committing to it.
 - `operator-gate / opencode: advisory` — no operator-question tool exists on
   OpenCode, so nothing mechanically enforces the batched-Q&A gate. It fired
   correctly in bc88's arm G, and failed to fire at all in the earlier arm A.
