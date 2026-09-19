@@ -214,8 +214,19 @@ def diff(
                 )
             )
 
-        # Body diff (catches the post-IssueCreate URL fill-in case)
-        if obs.body != ri.body:
+        # Body diff (catches the post-IssueCreate URL fill-in case).
+        #
+        # TRAILING WHITESPACE IS IGNORED, and that is load-bearing rather than
+        # tidy: GitLab strips trailing whitespace from an Issue description, so
+        # the body fr sends is never byte-equal to the body it reads back. An
+        # exact `!=` made every GitLab plan permanently non-convergent — `fr
+        # apply` wanted the identical 1270-character update on every run,
+        # forever, because the forge had stored 1269 (gh-486, found by the live
+        # walk). Normalising here rather than in the GitLab adapter, because a
+        # trailing newline is not a meaningful body change on any forge, and
+        # having the adapter re-append a newline GitLab will not keep would be
+        # a fiction maintained to satisfy a comparison.
+        if obs.body.rstrip() != ri.body.rstrip():
             mutations.append(
                 IssueBodyChange(
                     repo=issue_repo,

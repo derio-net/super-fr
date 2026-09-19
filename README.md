@@ -471,6 +471,20 @@ context file (it outranks `AGENTS.md`, so read both).
   (`gh`, the default), [GitLab CLI](https://gitlab.com/gitlab-org/cli) (`glab`),
   or [Gitea's `tea`](https://gitea.com/gitea/tea) — whichever the repo's
   `.devcontainer/fr-profiles.yaml` `backend:` key (or its git remote) resolves to
+
+  **Self-hosted instances**: declare `backend: gitlab` in
+  `.devcontainer/fr-profiles.yaml` and nothing else is needed — the instance
+  hostname is taken from the repo's own git remote. Add `host:` only when the
+  remote's hostname is not the API host you want to target; it overrides the
+  derived one. Either way, `fr` passes the resolved host to `glab` as
+  `GITLAB_HOST`, so it must be a host `glab auth login --hostname <host>`
+  already has a token for. `gh` and `tea` are not threaded to a self-hosted
+  host yet — fr warns rather than pretending otherwise (see gh-486). Where
+  there is no repo to read that config from — the VK bridge polls a PR by bare
+  URL — fr reads the forge off the URL's own path (`/-/merge_requests/` is
+  GitLab, `/pulls/` Gitea, `/pull/` GitHub) instead of guessing from the
+  hostname. A bare `/issues/N` is GitHub's and Gitea's alike, so it stays
+  ambiguous by design rather than being guessed at.
 - Docker (devcontainers for isolation)
 - [uv](https://docs.astral.sh/uv/) (for the `fr` CLI)
 - [VibeKanban](https://github.com/BloopAI/vibe-kanban) MCP server — only for

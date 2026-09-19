@@ -1,0 +1,285 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Resolve the forge from the URL, so the bridge stops guessing GitHub
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 4
+  - 5
+  tracking_issue: null
+  acceptance:
+  - gitlab-selfhosted-host-targeting
+tasks:
+- number: 1
+  title: 'RED -> GREEN: _hosts.backend_for_url, path shape first'
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED. The gap, proven live before it is fixed: a bare MR URL on a
+      self-hosted GitLab resolves to the GITHUB adapter, because
+      `backend_for_hostname` only knows `github.com` and `gitlab.com`.
+
+      ```
+      https://gitlab.com/g/p/-/merge_requests/7                      -> gitlab
+      https://gitlab.internal.example/IDerm/devops-scripts/-/merge_requests/7 -> github  (!)
+      https://github.com/derio-net/super-fr/pull/486                 -> github
+      ```
+
+      So phase 5's host threading in `pr_observe` cannot fire: `backend ==
+      "gitlab"` and a non-None self-hosted host are mutually exclusive by
+      construction of the same table. The bridge does not merely lose the host
+      — it picks the wrong CLI entirely. And unlike `fr apply`, there is no
+      `.devcontainer/fr-profiles.yaml` to declare `backend:` in: a bare URL has
+      no repo.
+
+      The URL's own PATH names the forge, needing no config:
+
+      | forge | PR/MR path | issue path |
+      |---|---|---|
+      | GitLab | `/-/merge_requests/N` (or `/merge_requests/N`) | `/-/issues/N` |
+      | Gitea | `/pulls/N` | `/issues/N` |
+      | GitHub | `/pull/N` | `/issues/N` |
+
+      In `tests/unit/test__hosts.py`:
+
+      ```python
+      class TestBackendForUrl:
+          @pytest.mark.parametrize(
+              ("url", "expected"),
+              [
+                  ("https://gitlab.local.corp/g/p/-/merge_requests/7", "gitlab"),
+                  ("https://gitlab.local.corp/g/sub/p/-/merge_requests/7", "gitlab"),
+                  ("https://git.corp/g/p/merge_requests/7", "gitlab"),   # pre-dash GitLab
+                  ("https://gitlab.local.corp/g/p/-/issues/3", "gitlab"),
+                  ("https://gitea.corp/o/r/pulls/4", "gitea"),
+                  ("https://github.corp/o/r/pull/9", "github"),
+                  ("https://gitlab.com/g/p/-/merge_requests/7", "gitlab"),
+                  ("https://github.com/o/r/pull/1", "github"),
+              ],
+          )
+          def test_the_path_shape_names_the_forge(self, url, expected):
+              assert backend_for_url(url) == expected
+
+          def test_an_ambiguous_issue_path_falls_back_to_the_hostname(self):
+              # `/issues/N` is BOTH GitHub's and Gitea's shape, so it cannot
+              # discriminate; the documented Gitea boundary is preserved rather
+              # than guessed at.
+              assert backend_for_url("https://gitea.corp/o/r/issues/3") == "github"
+              assert backend_for_url("https://gitlab.com/g/p/issues/3") == "gitlab"
+
+          def test_a_shapeless_url_falls_back_to_the_hostname(self):
+              assert backend_for_url("https://gitlab.com/g/p") == "gitlab"
+              assert backend_for_url("not a url") == "github"
+      ```
+
+      Confirm RED: `backend_for_url` does not exist.
+  - id: P6.T1.S2
+    text: |-
+      GREEN. In `packages/fr/src/fr/_hosts.py`, beside `backend_for_hostname`:
+
+      ```python
+      # A forge URL's PATH identifies the forge where its HOSTNAME cannot.
+      # `backend_for_hostname` knows two SaaS domains, so every self-hosted
+      # instance falls through to "github" — fine as a default for a repo that
+      # can declare `backend:`, useless for a bare URL, which is all the VK
+      # bridge has (gh-486 gap 2). Ordered most-specific first; `/pulls/` is
+      # checked before `/pull/` so Gitea is never read as GitHub.
+      _URL_SHAPES: tuple[tuple[str, HostBackend], ...] = (
+          ("/merge_requests/", "gitlab"),  # /-/merge_requests/ and pre-dash alike
+          ("/-/", "gitlab"),               # GitLab's route infix, e.g. /-/issues/
+          ("/pulls/", "gitea"),
+          ("/pull/", "github"),
+      )
+
+
+      def backend_for_url(url: str) -> HostBackend:
+          """Resolve a backend from a forge URL: its path shape first, its
+          hostname second.
+
+          For `fr_vk.pr_observe`/`pr_state` and `fr_dispatch.prompt`, which hold
+          a URL and no checkout, so `detect_backend`'s config tier is
+          unavailable. `/issues/N` is deliberately NOT a shape: it is both
+          GitHub's and Gitea's, so it falls through to the hostname rather than
+          being guessed — the same documented Gitea boundary as before."""
+          path = urlparse(url).path
+          for marker, backend in _URL_SHAPES:
+              if marker in path:
+                  return backend
+          return backend_for_hostname(urlparse(url).hostname)
+      ```
+
+      `urlparse` moves to a module-level import. Green.
+
+      Then re-run the live proof from S1 through the new function and record it
+      in the step note — the self-hosted MR URL must now say `gitlab`.
+- number: 2
+  title: Wire the three URL-only call sites, and state what remains broken
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      RED → GREEN, the three call sites that hold a URL and no checkout.
+      Each is a one-line swap from `backend_for_hostname(urlparse(u).hostname)`
+      to `backend_for_url(u)`:
+
+      1. `fr_vk/pr_observe.py` `_default_pr_status_fetch` — **this is the one
+         that makes phase 5's host threading live.** With the backend now
+         correctly `gitlab`, `host=self_hosted_hostname(hostname)` is non-None
+         at the same time for the first time. Update
+         `tests/unit/test_pr_observe.py`'s self-hosted test to STOP
+         monkeypatching `backend_for_hostname` — that patch existed only to
+         isolate the host claim from this bug, and leaving it would hide the fix.
+      2. `fr_vk/pr_state.py` `_close_linked_gh_issue` (line ~145) — right
+         adapter for a self-hosted GitLab Issue close.
+      3. `fr_dispatch/prompt.py` `_backend_for_tracking_url` — a self-hosted
+         GitLab phase's prompt now gets `glab issue view` wording instead of
+         `gh issue view`. Its docstring's "hostname alone" reasoning is now
+         wrong for GitLab and must be rewritten; the **Gitea** half stays true
+         (`/issues/N` cannot discriminate), so
+         `test_prompt_backend_wording_gitea_hostname_alone_is_not_enough` must
+         still pass unchanged — if it fails, the shape table is too greedy.
+
+      Confirm RED per site before each swap, then the full gate.
+  - id: P6.T2.S2
+    text: |-
+      Say plainly what is still broken, in the code and in the journal.
+
+      `pr_state._default_close_gh_issue` now receives the right backend, but
+      still no HOST: its public `closer: Callable[[str, str, str], None]` — two
+      call sites (`pr_state.py:146`, `:335`) and every test double — has no room
+      for one, and widening that arity is a bridge-wide change beyond gh-486.
+      So on a self-hosted instance the Issue auto-close builds a `gitlab`
+      client pointed at `gitlab.com` and fails non-fatally with a logged
+      warning. Update the comment at that call site to say exactly that (it
+      currently blames backend resolution, which this task just fixed), and
+      resolve/replace the open findings so the journal matches reality:
+
+      ```bash
+      uv run fr journal resolve --scope plan \
+        --slug 2026-09-19-gitlab-contents-ref-and-self-hosted-hosts \
+        --id 51477f0cd417 --state fixed \
+        --note "backend_for_url resolves the forge from the URL path, so pr_observe now reaches backend=gitlab WITH a self-hosted host — the combination phase 5 could not produce."
+      ```
+
+      Leave the `pr_state` host finding OPEN with an updated note naming the
+      `closer` arity as the blocker, and record a `discovery` stating the
+      resulting support matrix for the PR body: which bridge operations work
+      against a self-hosted GitLab after this phase, and which do not.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-09-19T19:17:14+00:00'
+      note: 'RED confirmed for the stated reason: tests/unit/test__hosts.py::TestBackendForUrl
+        (11 cases) fails at collection with ImportError: cannot import name ''backend_for_url''
+        from ''fr._hosts''. Live before-state proof through the shipped code (backend_for_hostname
+        / self_hosted_hostname): https://gitlab.com/g/p/-/merge_requests/7 -> gitlab,
+        host None | https://gitlab.internal.example/example-org/scratch-repo/-/merge_requests/7
+        -> github (!), host gitlab.internal.example | https://github.com/derio-net/super-fr/pull/486
+        -> github, host None | https://gitea.corp/o/r/pulls/4 -> github (!), host
+        gitea.corp. Real MR path shape confirmed against the live instance: glab api
+        projects/example-org%2Fscratch-repo -> web_url https://gitlab.internal.example/example-org/scratch-repo,
+        so MRs live at <web_url>/-/merge_requests/N.'
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-09-19T19:17:50+00:00'
+      note: 'GREEN: _hosts.backend_for_url added beside backend_for_hostname, with
+        the module-level _URL_SHAPES table (/merge_requests/ -> gitlab, /-/ -> gitlab,
+        /pulls/ -> gitea, /pull/ -> github, most-specific-first); urlparse is now
+        a module-level import. tests/unit/test__hosts.py 35 passed. Live proof re-run
+        through the new function (old=backend_for_hostname, new=backend_for_url, host=self_hosted_hostname):
+        gitlab.com/-/merge_requests/7 old=gitlab new=gitlab host=None | gitlab.internal.example/example-org/scratch-repo/-/merge_requests/7
+        old=github new=gitlab host=gitlab.internal.example <- the fix | github.com/.../pull/486
+        old=github new=github host=None | gitea.corp/o/r/pulls/4 old=github new=gitea
+        host=gitea.corp | gitea.corp/o/r/issues/3 old=github new=github (ambiguous
+        /issues/ deliberately not in the table).'
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-09-19T19:24:46+00:00'
+      note: |-
+        All three URL-only call sites swapped, RED confirmed per site first.
+
+        (1) fr_vk/pr_observe._default_pr_status_fetch. RED: removed the
+        backend_for_hostname monkeypatch from
+        test_a_self_hosted_pr_url_carries_its_host_into_the_client (that patch existed
+        only to isolate P5's host claim from this bug) -> failed with
+        {'backend': 'github'} != {'backend': 'gitlab'}, host already correct. GREEN
+        after backend = _hosts.backend_for_url(pr_url): backend gitlab AND
+        host gitlab.corp.example hold at the same time for the first time. 13 passed.
+
+        (2) fr_vk/pr_state._close_linked_gh_issue. RED: new
+        test_tick_resolves_gitlab_backend_from_a_self_hosted_pr_url -> ('group/proj',
+        '100', 'github') != (..., 'gitlab'). GREEN after the swap; urlparse import
+        dropped (no longer used in the module). 13 passed.
+
+        (3) fr_dispatch/prompt._backend_for_tracking_url. RED: new
+        test_prompt_backend_wording_self_hosted_gitlab -> 'working on GitLab Issue
+        gl#42' not in prompt (it said GitHub). GREEN after the swap; urlparse import
+        dropped. Docstring rewritten: the hostname-alone reasoning now applies to
+        Gitea ONLY, and says why (/issues/N is byte-identical to GitHub's, so no shape
+        can discriminate). Module docstring and hostclient.client_for_backend's stale
+        backend_for_hostname references corrected too.
+
+        Gitea tripwire test_prompt_backend_wording_gitea_hostname_alone_is_not_enough
+        passes UNCHANGED (git diff shows it only as a context line). Gate: ruff format
+        354 unchanged, ruff check all passed, mypy 137 files clean, pytest 3 failed /
+        3198 passed / 80 skipped -- the 3 failures are exactly the pre-existing
+        macOS-env ones journaled in ca6cb2838610 (2x test_run_workspace COLUMNS=0
+        wrapping, 1x test_workflow_check marketplace fallback).
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-09-19T19:27:39+00:00'
+      note: |-
+        Said plainly in the code and in the journal.
+
+        Code: fr_vk/pr_state.py::_default_close_gh_issue's docstring rewritten. It
+        previously blamed backend resolution (which P6.T2.S1 just fixed) and would have
+        pointed the next reader at the wrong thing with a confident tone. It now states
+        that the backend arriving here IS correct for a self-hosted instance, that the
+        sole blocker is the ARITY of the public seam
+        closer: Callable[[str, str, str], None] (two call sites in this module plus a
+        test double per test satisfy the 3-tuple structurally, and the hostname sits one
+        frame up in _close_linked_gh_issue with nowhere to go), and the consequence:
+        right adapter, wrong host -- glab falls back to gitlab.com, the close fails
+        non-fatally with the logged warning below, and the practical loss is a missed
+        backstop, not a broken merge. Also corrected the stale
+        'derive it via fr._hosts.backend_for_hostname' reference in the same docstring
+        and the matching one in fr.hostclient.client_for_backend.
+
+        Journal: 51477f0cd417 resolved --state fixed (record 51477f0cd417-resolved),
+        carrying the before/after resolution table. 4d9ab22d64fe left OPEN, with a new
+        open finding 4d9ab22d64fe-arity restating the blocker as arity rather than
+        resolution. Discovery d-selfhosted-support-matrix records the per-operation
+        support matrix the PR body quotes (works: fr apply, fr spec status,
+        pr_observe polling, prompt wording; does not: pr_state Issue auto-close). Also
+        d-no-refactor-p6t1 / d-no-refactor-p6t2 (no S3 in either task) and
+        d-phase-renumber-stale-refs (three plan-authoring entries still say P6.T1-T3 but
+        describe phase 7 after the mid-run renumbering).
+  completion:
+    at: '2026-09-19T19:34:39+00:00'
+    note: |-
+      Phase 6 complete: the URL's own path now names the forge, so the bridge stops
+      guessing GitHub. fr._hosts.backend_for_url + _URL_SHAPES added; all three
+      URL-only call sites (fr_vk.pr_observe, fr_vk.pr_state._close_linked_gh_issue,
+      fr_dispatch.prompt._backend_for_tracking_url) switched off
+      backend_for_hostname. The one that matters made phase 5's host threading live:
+      for https://gitlab.internal.example/example-org/scratch-repo/-/merge_requests/7
+      resolution went from (github, gitlab.internal.example) to
+      (gitlab, gitlab.internal.example) -- the combination that was mutually exclusive
+      by construction before. The pr_observe test's backend_for_hostname monkeypatch
+      is gone, so nothing about backend resolution is faked there any more.
+      /issues/N is deliberately absent from the shape table (byte-identical for
+      GitHub and Gitea); test_prompt_backend_wording_gitea_hostname_alone_is_not_enough
+      passes unchanged as the tripwire on that.
+
+      Still not fixed, deliberately and now accurately documented:
+      pr_state's Issue auto-close gets the right backend and no host, blocked on
+      closer: Callable[[str, str, str], None]'s arity (4d9ab22d64fe-arity, open).
+
+      Gate: ruff format 354 unchanged, ruff check clean, mypy 137 files clean,
+      pytest 3 failed / 3198 passed / 80 skipped (the 3 are the pre-existing
+      macOS-env failures journaled in ca6cb2838610), bump-version --check ok at
+      4.6.0, fr validate artifacts 23/23 valid. fr acceptance check still red on
+      multibackend-gitlab-tracking by design -- phase 7 moves it. No acceptance row
+      touched, nothing pushed, no PR.
+    observed_prs: []

@@ -7,6 +7,7 @@ injectable so these tests never shell out.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from tests.unit.fakes import FakeMcpClient
@@ -140,7 +141,7 @@ def test_default_pr_status_fetch_routes_through_client_for_backend(monkeypatch):
     import fr_vk.pr_observe as po
 
     fake = _FakeClient({"state": "MERGED", "draft": False})
-    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend, *, host=None: fake)
 
     assert po._default_pr_status_fetch("https://gitlab.com/g/p/-/merge_requests/1") == "merged"
     assert fake.urls_seen == ["https://gitlab.com/g/p/-/merge_requests/1"]
@@ -150,7 +151,7 @@ def test_default_pr_status_fetch_open_non_draft(monkeypatch):
     import fr_vk.pr_observe as po
 
     fake = _FakeClient({"state": "OPEN", "draft": False})
-    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend, *, host=None: fake)
     assert po._default_pr_status_fetch("https://github.com/o/r/pull/1") == "open"
 
 
@@ -158,7 +159,7 @@ def test_default_pr_status_fetch_draft_is_none(monkeypatch):
     import fr_vk.pr_observe as po
 
     fake = _FakeClient({"state": "OPEN", "draft": True})
-    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend, *, host=None: fake)
     assert po._default_pr_status_fetch("https://github.com/o/r/pull/1") is None
 
 
@@ -166,7 +167,7 @@ def test_default_pr_status_fetch_none_result_is_none(monkeypatch):
     import fr_vk.pr_observe as po
 
     fake = _FakeClient(None)
-    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: fake)
+    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend, *, host=None: fake)
     assert po._default_pr_status_fetch("https://github.com/o/r/pull/1") is None
 
 
@@ -180,7 +181,9 @@ def test_default_pr_status_fetch_client_raises_is_none(monkeypatch):
         def pr_status_by_url(self, url: str) -> dict | None:
             raise RuntimeError("glab not found")
 
-    monkeypatch.setattr(po.hostclient, "client_for_backend", lambda backend: _RaisingClient())
+    monkeypatch.setattr(
+        po.hostclient, "client_for_backend", lambda backend, *, host=None: _RaisingClient()
+    )
     assert po._default_pr_status_fetch("https://gitlab.com/g/p/-/merge_requests/1") is None
 
 
@@ -192,7 +195,7 @@ def test_default_pr_status_fetch_resolves_backend_from_url_hostname(monkeypatch)
 
     seen_backends: list[str] = []
 
-    def fake_client_for_backend(backend: str):
+    def fake_client_for_backend(backend: str, *, host: str | None = None):
         seen_backends.append(backend)
         return _FakeClient({"state": "OPEN", "draft": False})
 
@@ -200,3 +203,57 @@ def test_default_pr_status_fetch_resolves_backend_from_url_hostname(monkeypatch)
     po._default_pr_status_fetch("https://github.com/o/r/pull/1")
     po._default_pr_status_fetch("https://gitlab.com/g/p/-/merge_requests/1")
     assert seen_backends == ["github", "gitlab"]
+
+
+# --- self-hosted host carried into the client (gh-486, P5.T5/P6.T2) -----
+#
+# Spec §4.C claimed pr_observe "can now pass that same hostname as host" —
+# it did not (pr_observe.py:50-52 computed the hostname, used it for the
+# backend, and dropped it). A bridge tick polling a self-hosted GitLab MR
+# built RealGlabClient(host=None), and since the bridge runs outside any
+# checkout, glab's own git-directory fallback couldn't rescue it either.
+#
+# P5.T5 threaded the host but could not make it observable: with
+# `backend_for_hostname`, backend=="gitlab" and a non-None self-hosted
+# host were mutually exclusive by construction of one table, so the test
+# below had to monkeypatch the backend away to isolate the host claim.
+# P6 removed that patch — `backend_for_url` reads the forge off the URL
+# path, so the two now hold at the same time for the first time (§4.C2).
+
+
+def test_a_self_hosted_pr_url_carries_its_host_into_the_client(monkeypatch):
+    """The whole point of gh-486 gap 2, end to end at this call site and
+    with NOTHING about backend resolution faked: a self-hosted GitLab MR
+    URL must resolve to the `gitlab` adapter AND carry its own instance
+    hostname as `host`. Both halves in one assertion deliberately —
+    either alone is useless (the right CLI aimed at gitlab.com, or the
+    right host handed to `gh`)."""
+    import fr_vk.pr_observe as po
+
+    seen: dict[str, Any] = {}
+
+    def _fake(backend, *, host=None):
+        seen["backend"], seen["host"] = backend, host
+        return SimpleNamespace(pr_status_by_url=lambda u: {"state": "MERGED"})
+
+    monkeypatch.setattr(po.hostclient, "client_for_backend", _fake)
+    po._default_pr_status_fetch("https://gitlab.corp.example/g/p/-/merge_requests/7")
+    assert seen == {"backend": "gitlab", "host": "gitlab.corp.example"}
+
+
+def test_a_saas_pr_url_passes_no_host(monkeypatch):
+    """gitlab.com is glab's own default, so naming it would be noise; for
+    github.com a host is meaningless, since fr threads none for that
+    backend (spec §1 non-goals). Both must pass host=None."""
+    import fr_vk.pr_observe as po
+
+    seen: list[tuple[str, str | None]] = []
+
+    def _fake(backend, *, host=None):
+        seen.append((backend, host))
+        return SimpleNamespace(pr_status_by_url=lambda u: {"state": "MERGED"})
+
+    monkeypatch.setattr(po.hostclient, "client_for_backend", _fake)
+    po._default_pr_status_fetch("https://github.com/o/r/pull/1")
+    po._default_pr_status_fetch("https://gitlab.com/g/p/-/merge_requests/1")
+    assert seen == [("github", None), ("gitlab", None)]

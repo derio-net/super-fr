@@ -230,6 +230,38 @@ def test_tick_resolves_gitlab_backend_from_pr_url(monkeypatch):
     assert closed == [("group/proj", "100", "gitlab")]
 
 
+def test_tick_resolves_gitlab_backend_from_a_self_hosted_pr_url(monkeypatch):
+    """gh-486 gap 2 (spec §4.C2): a SELF-HOSTED GitLab MR URL must reach
+    the `gitlab` adapter too. Until `backend_for_url`, the hostname alone
+    decided, and every hostname but `gitlab.com` resolved "github" — so
+    the belt-and-braces Issue close on a self-hosted instance was handed
+    to `gh`, which cannot read a `/-/merge_requests/` URL at all. The MR
+    path shape now names the forge, which needs no config — and a bare PR
+    URL has no repo whose `.devcontainer/fr-profiles.yaml` could supply
+    one."""
+    from fr_vk.pr_state import tick
+
+    closed: list[tuple[str, str, str]] = []
+
+    mcp = FakeMcpClient()
+    _prime_card(
+        mcp,
+        "card-1",
+        simple_id="5",
+        status="In review",
+        title="gh#100: [group/proj]",
+        latest_pr_url="https://gitlab.corp.example/group/proj/-/merge_requests/7",
+    )
+
+    tick(
+        mcp,
+        pr_observations={"card-1": "merged"},
+        close_gh_issue=lambda r, n, b: closed.append((r, n, b)),
+    )
+
+    assert closed == [("group/proj", "100", "gitlab")]
+
+
 def test_done_cascade_failure_does_not_abort_the_sweep():
     """A raising closer on one Done card must not starve the rest of the
     sweep (the whole backlog flows through the Done cascade on the first

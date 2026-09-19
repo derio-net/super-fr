@@ -281,6 +281,25 @@ def test_prompt_backend_wording_gitlab():
     assert "gh issue view" not in text
 
 
+def test_prompt_backend_wording_self_hosted_gitlab():
+    """gh-486 gap 2 (spec §4.C2): a phase tracked on a SELF-HOSTED GitLab
+    instance must get glab wording too. `build_prompt` has only the
+    tracking_issue URL — no repo_root, so no `backend:` key to read — and
+    the hostname alone resolved "github" for every instance but
+    gitlab.com, so a self-hosted GitLab phase was told to run
+    `gh issue view` against an Issue `gh` cannot see. GitLab's `/-/`
+    route infix names the forge with no configuration at all."""
+    from fr_dispatch.prompt import build_prompt
+
+    plan, phase = _plan_with_phase(
+        tracking_issue="https://gitlab.corp.example/group/proj/-/issues/42",
+        target_repo="group/proj",
+    )
+    text = build_prompt(plan, phase)
+    assert "working on GitLab Issue gl#42" in text
+    assert "gh issue view" not in text
+
+
 def test_prompt_backend_wording_gitea_hostname_alone_is_not_enough():
     """Known, honest limitation: Gitea has no free hostname default (see
     fr._hosts's design — self-hosting is the norm, so even a literal

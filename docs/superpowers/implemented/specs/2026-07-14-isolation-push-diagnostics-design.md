@@ -11,7 +11,7 @@ in the driving issue's thread, no separate brainstorming Q&A needed).
 Issue #377 reports that `fr isolation exec -- git push` fails against a
 GitLab backend from the `dev` profile: host-key verification failure, then
 (once bypassed) `Permission denied (publickey,password)` against
-`git@gitlab.local.gebit.de`. Pushing the SAME worktree from the HOST
+`git@gitlab.internal.example`. Pushing the SAME worktree from the HOST
 succeeds — confirming the repo/remote config is fine, and that the container
 simply has no SSH identity.
 

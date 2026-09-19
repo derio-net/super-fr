@@ -693,3 +693,67 @@ def test_diff_treats_stray_legacy_spellings_as_foreign_data():
     changes = [m for m in d.mutations if isinstance(m, IssueLabelChange)]
     # The stray legacy label is unmanaged: never removed, never replaced.
     assert not any("vk-ready" in c.remove or "vk-ready" in c.add for c in changes), changes
+
+
+def test_diff_ignores_a_trailing_newline_the_forge_stripped():
+    """GitLab strips trailing whitespace from an Issue description, so the
+    body `fr` sent back is never byte-equal to the body it reads.
+
+    Found by gh-486's live walk: `fr apply` against a real GitLab wanted the
+    SAME 1270-char body update on every run forever, because GitLab had
+    stored 1269 — the rendered trailing newline, gone. An exact `!=`
+    comparison therefore made the plan permanently non-convergent. Trailing
+    whitespace is not a meaningful body change on any forge, so the
+    comparison ignores it rather than the GitLab adapter faking a newline
+    that GitLab will not keep.
+    """
+    from dataclasses import replace as dc_replace
+
+    from fr import parse
+    from fr.diff import IssueBodyChange, diff
+    from fr.render import render
+    from fr.states import GhState, PhaseObservation
+
+    plan = parse(FIXTURE)
+    repo = "group/proj"
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://gitlab.corp/{repo}/-/work_items/1"}
+            )
+        }
+    )
+    new_plan = dc_replace(plan, phases=(phase,))
+
+    # Render once to learn the exact body fr would send...
+    probe = render(
+        new_plan,
+        GhState(
+            phases={
+                1: PhaseObservation(
+                    issue_state="OPEN",
+                    issue_labels=frozenset(),
+                    issue_assignees=(),
+                    linked_prs=(),
+                    body="",
+                )
+            }
+        ),
+    )
+    sent = probe.issue_per_phase[1].body
+
+    # ...then observe it back exactly as GitLab hands it over: rstripped.
+    observed = GhState(
+        phases={
+            1: PhaseObservation(
+                issue_state="OPEN",
+                issue_labels=frozenset(),
+                issue_assignees=(),
+                linked_prs=(),
+                body=sent.rstrip(),
+            )
+        }
+    )
+    rendered = render(new_plan, observed)
+    d = diff(rendered, observed, plan=new_plan)
+    assert [m for m in d.mutations if isinstance(m, IssueBodyChange)] == []

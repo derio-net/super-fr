@@ -54,6 +54,7 @@ REPO_LOCAL_ONLY_RULES = (
     REPO_ROOT / ".claude" / "rules" / "acceptance-matrix.md",
     REPO_ROOT / ".claude" / "rules" / "artifact-versioning.md",
     REPO_ROOT / ".claude" / "rules" / "explainers-currency.md",
+    REPO_ROOT / ".claude" / "rules" / "third-party-privacy.md",
 )
 INSTRUCTIONS_MIRROR_DIR = REPO_ROOT / ".opencode" / "instructions"
 

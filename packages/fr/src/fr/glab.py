@@ -14,10 +14,19 @@ installed `glab` binary's `--help` output (not assumed by analogy):
   `--remove-label`).
 - `glab label create --color` wants a leading `#` (default `#428BCA`);
   `ensure_label` prepends it here — `LabelDef` itself stays bare-hex.
+
+Every public helper takes a keyword-only `host: str | None = None` and
+forwards it to `_run_glab`, which puts it in the child's `GITLAB_HOST`.
+That is how a self-hosted instance is targeted; see `_run_glab` for why it
+is an env var and not `--hostname`, and
+docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+§4.C for the layer that supplies it.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
 import time
 from collections.abc import Callable
@@ -27,28 +36,58 @@ from fr.labels import LabelDef
 
 T = TypeVar("T")
 
+logger = logging.getLogger(__name__)
+
 
 class GlabError(Exception):
     """Error from a glab CLI invocation."""
 
-    def __init__(self, message: str, *, stderr: str = "", returncode: int = 0) -> None:
+    def __init__(
+        self, message: str, *, stderr: str = "", stdout: str = "", returncode: int = 0
+    ) -> None:
         super().__init__(message)
         self.stderr = stderr
+        self.stdout = stdout
         self.returncode = returncode
 
 
-def _run_glab(args: list[str]) -> str:
-    """Run a glab command and return stdout. Raises GlabError on failure."""
+def _run_glab(args: list[str], *, host: str | None = None) -> str:
+    """Run a glab command and return stdout. Raises GlabError on failure.
+
+    `host` targets a self-hosted instance by putting GITLAB_HOST in the
+    CHILD's environment only — never `os.environ`, so a host resolved for
+    one repo cannot leak into a call for another repo in the same process
+    (gh-486; a bridge tick handles many repos per process).
+
+    The env var is used rather than `--hostname` because only it is
+    honoured by every glab subcommand: `glab api` accepts `--hostname`,
+    `glab label create` does not, and `fr.glab` calls both (verified live
+    against a self-hosted instance — spec §2.D). `host=None` passes
+    `env=None`, so the child inherits this process's environment unchanged
+    and glab's own resolution from the current git directory still
+    applies."""
+    env = {**os.environ, "GITLAB_HOST": host} if host else None
     try:
         result = subprocess.run(
             ["glab", *args],
             capture_output=True,
             text=True,
             check=True,
+            env=env,
         )
     except subprocess.CalledProcessError as exc:
-        msg = exc.stderr.strip() if exc.stderr else f"glab exited with code {exc.returncode}"
-        raise GlabError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
+        # glab splits an error across both streams: its own summary on
+        # stderr, the API's JSON body on stdout. Keeping only stderr
+        # turned "ref is missing, ref is empty" into a bare "glab: HTTP
+        # 400" — the fault named, then forgotten (gh-486; spec §2.A).
+        parts = [s for s in (exc.stderr.strip(), (exc.stdout or "").strip()) if s]
+        msg = " — ".join(parts) or f"glab exited with code {exc.returncode}"
+        raise GlabError(
+            msg,
+            stderr=exc.stderr or "",
+            stdout=exc.stdout or "",
+            returncode=exc.returncode,
+        ) from exc
     return result.stdout.strip()
 
 
@@ -58,6 +97,7 @@ def create_issue(
     title: str,
     body: str,
     labels: list[str],
+    host: str | None = None,
 ) -> str:
     """Create a GitLab Issue and return its URL."""
     args = [
@@ -72,33 +112,33 @@ def create_issue(
     ]
     for label in labels:
         args.extend(["--label", label])
-    return _run_glab(args)
+    return _run_glab(args, host=host)
 
 
-def view_issue(repo: str, number: int) -> dict[str, object]:
+def view_issue(repo: str, number: int, *, host: str | None = None) -> dict[str, object]:
     """Fetch an Issue's title, description, labels, state via `glab issue
     view --output json`."""
     import json
 
-    out = _run_glab(["issue", "view", str(number), "--repo", repo, "--output", "json"])
+    out = _run_glab(["issue", "view", str(number), "--repo", repo, "--output", "json"], host=host)
     result: dict[str, object] = json.loads(out)
     return result
 
 
-def close_issue(*, repo: str, number: int) -> None:
+def close_issue(*, repo: str, number: int, host: str | None = None) -> None:
     """Close a GitLab Issue by IID."""
-    _run_glab(["issue", "close", str(number), "--repo", repo])
+    _run_glab(["issue", "close", str(number), "--repo", repo], host=host)
 
 
-def reopen_issue(*, repo: str, number: int) -> None:
+def reopen_issue(*, repo: str, number: int, host: str | None = None) -> None:
     """Reopen a closed GitLab Issue by IID."""
-    _run_glab(["issue", "reopen", str(number), "--repo", repo])
+    _run_glab(["issue", "reopen", str(number), "--repo", repo], host=host)
 
 
-def edit_issue_body(*, repo: str, number: int, body: str) -> None:
+def edit_issue_body(*, repo: str, number: int, body: str, host: str | None = None) -> None:
     """Update the description of an existing Issue via `glab issue update
     --description` (glab's flag name for what gh calls `--body`)."""
-    _run_glab(["issue", "update", str(number), "--repo", repo, "--description", body])
+    _run_glab(["issue", "update", str(number), "--repo", repo, "--description", body], host=host)
 
 
 def swap_issue_labels(
@@ -107,6 +147,7 @@ def swap_issue_labels(
     number: int,
     add: list[str],
     remove: list[str],
+    host: str | None = None,
 ) -> None:
     """Add and remove labels on an Issue in a single glab call.
 
@@ -119,7 +160,7 @@ def swap_issue_labels(
         args.extend(["--label", lbl])
     for lbl in remove:
         args.extend(["--unlabel", lbl])
-    _run_glab(args)
+    _run_glab(args, host=host)
 
 
 def ensure_label(
@@ -128,16 +169,16 @@ def ensure_label(
     name: str,
     color: str = "ededed",
     description: str = "",
+    host: str | None = None,
 ) -> None:
     """Create a label on the target repo.
 
     Unlike `gh label create --force`, `glab label create` has no
-    documented idempotent-update flag — a pre-existing label name causes
-    an error, which the caller (RealGlabClient.ensure_labels) tolerates
-    (a label that already exists with the right shape is a no-op in
-    effect; a real color/description drift is a rarer, acceptable gap
-    versus GitHub's `--force` convenience, noted for Phase 9's manual
-    verification).
+    idempotent-update flag, so a pre-existing label name raises. That is
+    tolerated by `ensure_labels` below, via `is_already_exists` — NOT by
+    `RealGlabClient.ensure_labels`, which this docstring used to name and
+    which never did it. Colour/description drift on an existing label is
+    left uncorrected; see `ensure_labels` for that trade.
     """
     args = [
         "label",
@@ -151,14 +192,44 @@ def ensure_label(
     ]
     if description:
         args.extend(["--description", description])
-    _run_glab(args)
+    _run_glab(args, host=host)
 
 
-def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
-    """Ensure every label exists on the repo with the right color and
-    description. First failure propagates (mirrors `fr.gh.ensure_labels`)."""
+def ensure_labels(*, repo: str, labels: list[LabelDef], host: str | None = None) -> None:
+    """Ensure every label exists on the repo.
+
+    An ALREADY-EXISTS refusal is skipped and the remaining labels are still
+    ensured; any other failure propagates (mirroring `fr.gh.ensure_labels`,
+    which never sees this case because `gh label create --force` updates in
+    place and `glab` has no equivalent).
+
+    This tolerance is what `ensure_label`'s docstring has claimed since the
+    multi-backend design landed, and it was never implemented: the first
+    pre-existing label raised, and because label ensure runs before the Issue
+    writes, the whole `fr apply` aborted. So a GitLab plan could be applied
+    exactly once and never converge — found by gh-486's live walk, not by any
+    test, because every test mocked the failure away.
+
+    What it knowingly gives up: a label whose colour or description has DRIFTED
+    is left as-is rather than corrected, since glab offers no update-in-place.
+    That was already recorded as an accepted gap versus GitHub; it is now
+    accepted here, in the function that acts on it, instead of one layer away.
+    """
     for ld in labels:
-        ensure_label(repo=repo, name=ld.name, color=ld.color, description=ld.description)
+        try:
+            ensure_label(
+                repo=repo, name=ld.name, color=ld.color, description=ld.description, host=host
+            )
+        except GlabError as exc:
+            if is_already_exists(exc):
+                # DEBUG, not a warning: on any re-apply EVERY label already
+                # exists, so warning here would print once per label on every
+                # run and train the operator to ignore it. A skip still leaves
+                # a trail, so a false positive (see `is_already_exists`) is
+                # diagnosable rather than invisible.
+                logger.debug("glab: label %r already exists on %s — skipping", ld.name, repo)
+                continue
+            raise
 
 
 _TRANSIENT_PATTERNS = (
@@ -171,14 +242,98 @@ _TRANSIENT_PATTERNS = (
 )
 
 
+def _haystack(err: GlabError) -> str:
+    """Lowercase text to pattern-match glab error classification against.
+    Shared by `is_transient` and `is_not_found` — each keeps its own
+    pattern tuple and docstring; only the construction is common.
+
+    `stdout` is read as well as `stderr`, and for anything `_run_glab`
+    produces that is REDUNDANT: `_run_glab` already folds the body into
+    the message, so `str(err)` carries it. The term earns its place only
+    for a `GlabError` built directly with `stdout=` and no message —
+    which today happens in tests alone. It is kept as the contract for
+    any future construction site: put the body anywhere on the error and
+    classification still sees it. Do not read the term as evidence that
+    a body-only error reaches this function in production; it does not."""
+    raw = err.stderr + " " + err.stdout + " " + str(err)
+    # Whitespace is COLLAPSED, not merely lowercased: glab renders some errors
+    # through rich, which line-wraps them to the console width and so can split
+    # a phrase mid-match — the live 409 arrived as "Label already\n  exists",
+    # where a plain `"already exists" in text` finds nothing. Wrapping also
+    # depends on terminal width, so without this a predicate could pass in CI
+    # and fail on an operator's machine (the same mechanism behind the
+    # width-sensitive failures in tests/unit/test_run_workspace.py). Collapsing
+    # hardens is_not_found and is_transient against the same trap.
+    return " ".join(raw.split()).lower()
+
+
 def is_transient(err: GlabError) -> bool:
     """True if the error looks like a transient network/server failure
     that warrants retry. False for auth, 404, validation, and unknown
-    errors (fail fast). Patterns are glab's own stderr vocabulary
+    errors (fail fast). Patterns are glab's own network-error vocabulary
     (dial/net-style Go error text), distinct from gh's — see the module
-    docstring and the design doc's capability matrix."""
-    text = (err.stderr + " " + str(err)).lower()
-    return any(p in text for p in _TRANSIENT_PATTERNS)
+    docstring and the design doc's capability matrix.
+
+    Since gh-486 this reads the API's response body too, not just
+    stderr (`_haystack`). That is a wider input than the patterns were
+    written against: a NON-transient error whose body happened to
+    contain "timeout" or "http 5" would now be retried. No captured
+    GitLab error body contains that vocabulary (spec §2.A), and a real
+    gateway timeout SHOULD retry, so the widening is deliberate — but it
+    is a widening, recorded here rather than discovered later."""
+    return any(p in _haystack(err) for p in _TRANSIENT_PATTERNS)
+
+
+def is_already_exists(err: GlabError) -> bool:
+    """True when GitLab refused because the thing is already there.
+
+    `glab label create` has no `--force` (gh's idempotent-update flag), so
+    re-ensuring an existing label 409s, and `ensure_labels` treats that as a
+    no-op — see its docstring for what that knowingly gives up.
+
+    The phrase alone is enough, and is reachable only because `_haystack`
+    collapses whitespace: real output arrives rich-wrapped as
+    `Label already\n  exists`. A bare 409 is NOT enough on its own and is
+    deliberately paired with the API's `{message:` envelope. Review called
+    the unpaired form out, and the reason it matters is the asymmetry: a
+    match here makes `ensure_labels` skip SILENTLY, so a false positive is a
+    label that was never created and no error to say so — strictly less
+    discoverable than the loud abort this replaced. Pairing keeps a stray
+    gateway or proxy 409 from being read as "already there".
+
+    Like `is_transient` and `is_not_found`, this reads stdout as well as
+    stderr, which is a wider surface than the phrases were written against.
+    That widening is deliberate and recorded rather than discovered.
+    """
+    text = _haystack(err)
+    if "already exists" in text:
+        return True
+    return " 409 " in text and "{message:" in text
+
+
+# glab's own not-found vocabulary, captured live 2026-09-19 (spec §2.A).
+# BOTH markers are anchored deliberately: a bare `"404" in text` would
+# match a PROBED PATH containing 404 and read a genuine 400 as "absent",
+# which is the bug class this function exists to close. The
+# `"message":"404 ` form only becomes reachable once T4 gives GlabError
+# the stdout the API's body arrives on; it is listed now because the
+# vocabulary is one table, not two.
+_NOT_FOUND_PATTERNS = ("http 404", '"message":"404 ')
+
+
+def is_not_found(err: GlabError) -> bool:
+    """True when GitLab said the thing is absent, as opposed to saying
+    the request was wrong or unauthorized.
+
+    `file_exists` may translate ONLY this into `False`. Anything else is
+    a protocol or auth fault and must propagate: a malformed request
+    that reads as "not found" is indistinguishable from an absent file,
+    which is how gh-486 turned a 400 into a wrong answer.
+
+    Reads stdout as well as stderr via `_haystack`, which is a wider
+    surface than these patterns were written against — the same deliberate,
+    recorded widening `is_transient` carries."""
+    return any(p in _haystack(err) for p in _NOT_FOUND_PATTERNS)
 
 
 def with_retry(
