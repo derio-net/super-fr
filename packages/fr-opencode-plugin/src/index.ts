@@ -4,6 +4,13 @@
 // Code PreToolUse hook) to OpenCode's tool.execute.before hook — see that
 // script for the authoritative decision-logic comments; this file mirrors
 // its behavior exactly (fail-closed on ambiguity, same two escape hatches).
+//
+// The `super-fr-parity:` marker below is how `fr harness parity --check`
+// observes what this plugin ports: OpenCode has no registration file, only
+// source, so the marker IS the declaration (spec §3.B). Add one line per
+// shipped hook this plugin ports; `fr.harness.observe` errors if a marker
+// names a script absent from plugins/super-fr/hooks/.
+// super-fr-parity: fr-isolation-required.sh
 import { isAbsolute } from "node:path";
 import { matchesAllowlist, resolveMarker } from "./marker";
 

@@ -1,5 +1,6 @@
 """Tests for SKILL.md file validation — replacement for validate-skills.sh."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,27 @@ class TestSkillValidation:
         text = (skill_dir / "SKILL.md").read_text()
         line_count = len(text.strip().split("\n"))
         assert line_count <= 120, f"{skill_dir.name}/SKILL.md has {line_count} lines (max 120)"
+
+    def test_no_hyphenated_word_is_broken_across_lines(self, skill_dir: Path) -> None:
+        """A line ending in a letter + `-` splits a hyphenated word, and both
+        Markdown and a YAML folded scalar turn that line break into a SPACE —
+        so the reader gets "docker- less" and "least- privileged".
+
+        The 120-line cap makes this tempting: rewrapping to buy a line is the
+        obvious move, and a word-level diff still shows every word unchanged,
+        which is how three of these were introduced (two older ones already
+        lived in shipped prose, one in the `description:` every skill listing
+        renders). Words unchanged is not rendering unchanged."""
+        text = (skill_dir / "SKILL.md").read_text()
+        broken = [
+            f"{n}: {line.strip()}"
+            for n, line in enumerate(text.splitlines(), 1)
+            if re.search(r"[A-Za-z]-$", line)
+        ]
+        assert not broken, (
+            f"{skill_dir.name}/SKILL.md breaks a hyphenated word across lines "
+            f"(renders with a space): {broken}. Rewrap so the whole word moves."
+        )
 
     def test_fr_execute_uses_v2_pickup(self, skill_dir: Path) -> None:
         """fr-execute must point at `fr pickup` for phase scope (v2 entry point)."""

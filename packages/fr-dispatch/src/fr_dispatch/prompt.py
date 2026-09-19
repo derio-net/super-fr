@@ -27,7 +27,7 @@ design (see docs/superpowers/specs/
 2026-07-09-multi-backend-git-host-adapters-design.md §7): the noun
 ("GitHub Issue"/"GitLab Issue"/"Gitea Issue"), the tag (`gh#`/`gl#`/
 `gt#`), and the dependency-check verify command are all resolved from
-the phase's `tracking_issue` URL's own hostname via `fr._hosts`, not
+the phase's `tracking_issue` URL via `fr._hosts.backend_for_url`, not
 hardcoded to GitHub. `fr._hosts.TAG_FOR_BACKEND` is shared with
 `fr_vk._cardref` — not duplicated here — since `fr_dispatch` depends
 only on `fr`, never on the fr_vk runner adapter.
@@ -35,9 +35,7 @@ only on `fr`, never on the fr_vk runner adapter.
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
-from fr._hosts import TAG_FOR_BACKEND, HostBackend, backend_for_hostname
+from fr._hosts import TAG_FOR_BACKEND, HostBackend, backend_for_url
 from fr._urls import parse_issue_url
 from fr.parser import Plan
 from fr.types import PhaseDoc
@@ -70,20 +68,31 @@ _VERIFY_COMMAND: dict[HostBackend, str] = {
 
 
 def _backend_for_tracking_url(url: str) -> HostBackend:
-    """Resolve backend from the tracking_issue URL's hostname alone —
-    `build_prompt` has no `repo_root` to read explicit
-    `.devcontainer/fr-profiles.yaml` config from (unlike
-    `fr._hosts.detect_backend`'s full 3-tier resolution). This means a
-    Gitea-hosted phase's prompt falls back to "GitHub Issue" wording:
-    Gitea has no free hostname default (self-hosting is the norm), so
-    hostname-alone resolution can never identify it, even for a literal
-    `gitea.com` URL. A known, documented boundary (see
-    test_prompt_backend_wording_gitea_hostname_alone_is_not_enough), not
-    a bug — fixing it would mean threading a repo_root (or an explicit
-    backend override) through `fr_dispatch.tick`/`dispatch_phase`'s
-    signatures, out of scope for this pass.
+    """Resolve backend from the tracking_issue URL alone — `build_prompt`
+    has no `repo_root` to read explicit `.devcontainer/fr-profiles.yaml`
+    config from (unlike `fr._hosts.detect_backend`'s full 3-tier
+    resolution). `fr._hosts.backend_for_url` therefore reads the URL's
+    PATH first and its hostname only as a fallback, which needs no config
+    at all: `/-/merge_requests/N` and `/-/issues/N` are GitLab's shapes,
+    so a **self-hosted** GitLab phase now gets `glab` wording instead of
+    being told to run `gh issue view` against an Issue `gh` cannot see
+    (gh-486, spec §4.C2).
+
+    **Gitea remains a documented boundary, and only Gitea.** Its issue
+    path is `/issues/N` — byte-identical to GitHub's — so no path shape
+    can discriminate the two, and `/issues/` is deliberately absent from
+    `_URL_SHAPES` rather than guessed at. Gitea also has no free hostname
+    default (self-hosting is the norm), so even a literal `gitea.com`
+    tracking URL still renders "GitHub Issue" wording. Closing that would
+    mean threading a repo_root (or an explicit backend override) through
+    `fr_dispatch.tick`/`dispatch_phase`'s signatures, out of scope here.
+    A Gitea *PR* url is a different matter — `/pulls/N` is unambiguous —
+    but a tracking_issue is never a PR url. See
+    test_prompt_backend_wording_gitea_hostname_alone_is_not_enough, which
+    is also the tripwire on the shape table never growing greedy enough
+    to guess.
     """
-    return backend_for_hostname(urlparse(url).hostname)
+    return backend_for_url(url)
 
 
 def _deps_line(dep_refs: str, backend: HostBackend) -> str:

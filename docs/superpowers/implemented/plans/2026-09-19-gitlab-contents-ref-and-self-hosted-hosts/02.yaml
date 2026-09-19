@@ -1,0 +1,111 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '`ref` on `read_file`, and on `list_dir` only if live-proven'
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - gitlab-contents-reads-live
+tasks:
+- number: 1
+  title: 'RED → GREEN: read_file pins ref=HEAD'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. Add, using `_CapturingGlab` from Phase 1:
+
+      ```python
+      def test_read_file_pins_ref_on_the_contents_endpoint(monkeypatch):
+          encoded = base64.b64encode(b"hello world").decode("ascii")
+          cap = _CapturingGlab(json.dumps({"content": encoded, "encoding": "base64"}))
+          monkeypatch.setattr(_glab, "_run_glab", cap)
+          assert RealGlabClient().read_file("group/proj", "docs/x.md") == "hello world"
+          assert cap.endpoint == (
+              "projects/group%2Fproj/repository/files/docs%2Fx.md?ref=HEAD"
+          )
+      ```
+
+      Run it; CONFIRM IT FAILS on the endpoint assertion.
+  - id: P2.T1.S2
+    text: |-
+      GREEN. Append `?ref={_CONTENTS_REF}` to `read_file`'s endpoint. Run
+      the file: the new test and `test_read_file_decodes_base64_content`
+      both pass. Fold the latter onto `_CapturingGlab` too, for the same
+      reason as P1.T1.S3.
+- number: 2
+  title: 'list_dir: verify against the live instance BEFORE changing a working call'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      VERIFY FIRST. `list_dir`'s tree endpoint does NOT need `ref` — it
+      defaults to the default branch, and it demonstrably works today
+      (spec §2.A). Pinning `ref=HEAD` there is for convention, so it must
+      be PROVEN not to regress before it is kept. Run both forms against
+      the live instance and record both outputs in the step note:
+
+      ```bash
+      glab api --hostname gitlab.internal.example \
+        "projects/example-org%2Fscratch-repo/repository/tree?path="
+      glab api --hostname gitlab.internal.example \
+        "projects/example-org%2Fscratch-repo/repository/tree?path=&ref=HEAD"
+      ```
+
+      If the `ref=HEAD` form returns the same entries: proceed to S2.
+      If it errors or differs: SKIP S2, leave `list_dir` without a ref,
+      and record a plan-journal `discovery` saying the tree endpoint
+      rejects it — the convention is not worth breaking a working call
+      for. Tick with the outcome.
+  - id: P2.T2.S2
+    text: |-
+      CONDITIONAL on S2's proof. RED: add
+      `test_list_dir_pins_ref_on_the_tree_endpoint` asserting the endpoint
+      is `projects/group%2Fproj/repository/tree?path=docs%2Fplan&ref=HEAD`;
+      confirm it fails. GREEN: append `&ref={_CONTENTS_REF}` to
+      `list_dir`'s endpoint. Fold the two existing `list_dir` tests onto
+      `_CapturingGlab`. Run the file plus
+      `uv run ruff format packages/ tests/`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-19T17:26:15+00:00'
+      note: 'RED confirmed: added test_read_file_pins_ref_on_the_contents_endpoint
+        using _CapturingGlab; it and test_read_file_decodes_base64_content (updated
+        to assert the endpoint too) both failed on the endpoint assertion, missing
+        ''?ref=HEAD'' suffix.'
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-19T17:26:15+00:00'
+      note: 'GREEN: appended ''?ref={_CONTENTS_REF}'' to read_file''s endpoint. Folded
+        test_read_file_decodes_base64_content onto _CapturingGlab. uv run pytest tests/unit/test_real_glabclient.py
+        -q --no-cov: 37 passed.'
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-19T17:26:44+00:00'
+      note: 'Live-verified against gitlab.internal.example, example-org/scratch-repo,
+        glab 1.89.0. Without ref: `glab api --hostname gitlab.internal.example "projects/example-org%2Fscratch-repo/repository/tree?path="`
+        -> [{"id":"e74f198336790c40b2e26bb06d8e82532b23367a","name":".github","type":"tree","path":".github","mode":"040000"},{"id":"5765e92302f5da42a374547787953e1a42ea255a","name":"git_history","type":"tree","path":"git_history","mode":"040000"},{"id":"86a0b662aadb5d9ce7fd67f51338f4d9408edd28","name":"jenkins-stuck-jobs","type":"tree","path":"jenkins-stuck-jobs","mode":"040000"},{"id":"35c086b9ce5ad3a2558558769dea4bc98b657b27","name":"jenkins_ansible_cleanup_scripts","type":"tree","path":"jenkins_ansible_cleanup_scripts","mode":"040000"},{"id":"435dbdf0fc94a9199bbd99dba20f65bf9f689803","name":"jenkins_scripts","type":"tree","path":"jenkins_scripts","mode":"040000"},{"id":"890253826084b5a9edac68fc1ae2ba3a5c4485b0","name":"klpos_gitlab_hooks","type":"tree","path":"klpos_gitlab_hooks","mode":"040000"},{"id":"0988b1461a7ed56a68f94556a39fe2d54aa2b95f","name":".gitignore","type":"blob","path":".gitignore","mode":"100644"},{"id":"e5fbdf6ee7389d3c0f6e4cd0e168c4650d3823df","name":"README.md","type":"blob","path":"README.md","mode":"100644"}].
+        With ref=HEAD: `glab api --hostname gitlab.internal.example "projects/example-org%2Fscratch-repo/repository/tree?path=&ref=HEAD"`
+        -> byte-identical output (same entries, same ids, same order). PROCEEDING
+        TO S2.'
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-19T17:27:31+00:00'
+      note: 'RED confirmed: added test_list_dir_pins_ref_on_the_tree_endpoint and
+        updated the two existing list_dir tests to assert the endpoint via _CapturingGlab;
+        all 3 failed on the missing ''&ref=HEAD'' suffix. GREEN: appended ''&ref={_CONTENTS_REF}''
+        to list_dir''s tree endpoint. Folded both existing tests onto _CapturingGlab.
+        uv run pytest tests/unit/test_real_glabclient.py -q --no-cov: 38 passed. uv
+        run ruff format packages/ tests/: 354 files left unchanged.'
+  completion:
+    at: '2026-09-19T17:32:55+00:00'
+    note: 'T1: read_file pins ?ref=HEAD, RED->GREEN, folded onto _CapturingGlab. T2:
+      list_dir live-verified byte-identical with/without ref=HEAD against gitlab.internal.example
+      (S1), then RED->GREEN adding &ref=HEAD, folded existing tests onto _CapturingGlab
+      (S2). Full test file: 38 passed. Full suite: 3 failed (pre-existing, journaled)/3127
+      passed/80 skipped. ruff check/format clean, mypy clean. fr acceptance check:
+      exit 2 on multibackend-gitlab-tracking only (deliberate until phase 6).'
+    observed_prs: []

@@ -1,0 +1,114 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Tool-name neutrality — vocabulary, tripwire, and neutral gate prose
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - harness-tool-neutrality
+tasks:
+- number: 1
+  title: RED — TOOL_VOCABULARY and the scoped-clause rule
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: create tests/unit/test_harness_vocabulary.py.
+      fr.harness.TOOL_VOCABULARY maps each harness to a frozenset of the
+      tool names that are ITS OWN (claude-code: AskUserQuestion, Agent,
+      Skill, NotebookEdit, WorktreeCreate, WorktreeRemove, MultiEdit;
+      hermes: delegate_task; opencode: tool.execute.before). Assert no
+      name appears under two harnesses — an ambiguous name would make the
+      tripwire unable to say which harness a mention serves.
+      Then test fr.harness.scan_prose(text) -> list[Violation]:
+      (a) a bare mention of AskUserQuestion is a violation naming it;
+      (b) the SAME mention inside a `**Harness — dispatch:**` clause is
+      NOT, provided the clause names every supported harness;
+      (c) a scoped clause naming only ONE harness IS a violation — a
+      clause that serves one reader is the bug wearing a clause's shape;
+      (d) prose naming no harness tool yields nothing.
+      Confirm red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement TOOL_VOCABULARY in fr/harness/__init__.py and
+      scan_prose in a new fr/harness/prose.py. A clause runs from a
+      `**Harness — <topic>:**` lead-in to the next blank line followed by
+      a non-indented line. Model it on the clause fr-goal §5 ALREADY
+      carries ("Harness — dispatch: Claude Code uses the fr-phase-executor
+      Agent ... Hermes delegate_task(goal, context) ...") — that existing
+      paragraph must pass, and a test asserts it does, so the rule is
+      derived from working prose rather than invented. Confirm green.
+- number: 2
+  title: RED — the tripwire over canonical skills and both mirrors
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: create tests/unit/test_tripwire_skill_tool_neutrality.py
+      scanning every plugins/super-fr/skills/*/SKILL.md,
+      .opencode/skills/*/SKILL.md and .hermes/skills/fr/*/SKILL.md with
+      scan_prose. Expect it to FAIL right now, naming the six live
+      AskUserQuestion occurrences (fr-goal §1 and fr-init §2, x3 copies).
+      Record the six in the phase journal before fixing — the tripwire
+      proving itself on the real defect is the evidence, and a tripwire
+      first seen green proves only that it runs.
+- number: 3
+  title: GREEN — rewrite the gate prose neutrally, re-sync the mirrors
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      GREEN: rewrite plugins/super-fr/skills/fr-goal/SKILL.md §1's
+      touchpoint neutrally — collect every operator-owned decision and put
+      them to the operator through whatever question surface the harness
+      offers, in ONE batch, then STOP; an unanswered batch is a stop
+      signal, never a default. Add a scoped `**Harness — questions:**`
+      clause naming all three concrete surfaces. Do the same for
+      plugins/super-fr/skills/fr-init/SKILL.md §2. Keep both edits tight:
+      skills are read on every invocation and length is a real cost.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: run `uv run scripts/sync-opencode.py` and
+      `uv run scripts/sync-hermes.py` (no flag = write), then
+      `--check` on both to confirm clean. Mirrors stay BYTE-IDENTICAL to
+      canonical — that identity is what test_tripwire_opencode_skills_sync
+      and test_tripwire_hermes_skills_sync assert, and preserving it is
+      precisely why §3.C rejected translating at sync time. Run the Task 2
+      tripwire; confirm it now passes. Run the full pytest suite.
+- number: 4
+  title: REFACTOR + quality gate
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      REFACTOR: if the clause parser grew branches, reduce it to one
+      regex plus one membership test. Re-run ruff + mypy + pytest. Commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T14:40:34+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-18T14:40:34+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-18T14:40:35+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-18T14:40:35+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-18T14:40:35+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-09-18T14:40:36+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T14:40:39+00:00'
+    note: null
+    observed_prs: []

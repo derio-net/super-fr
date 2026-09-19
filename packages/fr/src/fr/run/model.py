@@ -33,6 +33,15 @@ StepState = Literal["pending", "running", "done", "failed", "blocked"]
 (the dispatch-queue vocabulary for a `WorkItem`); this is per-STEP progress
 inside one run's cursor, not a tracker projection."""
 
+AnsweredBy = Literal["operator", "agent"]
+"""Who cleared an operator gate (spec `2026-09-18-harness-parity-matrix` §3.D.2).
+
+Two values, not three, and neither is provable: this records a *claim*. No
+mechanism here can show that a human answered (that spec's §2 non-goals say so
+outright), which is why `fr run resolve --answered-by` defaults to `agent` —
+the weaker claim is what an unmodified caller records, so nothing is silently
+upgraded to "a human answered"."""
+
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 IMPLEMENTED_RUNS_REL = Path("docs") / "superpowers" / "implemented" / "runs"
 
@@ -56,6 +65,21 @@ class StepRecord(BaseModel):
     across `_complete_step`), so a retry after a failure does not silently
     re-block on a question already answered. Absent (`None`) on every step of
     every pre-existing run file, which is exactly "not answered"."""
+
+    answered_by: AnsweredBy | None = None
+    """Who answered that gate — set only when a gate is CLEARED.
+
+    The same shape as `gate` above and for the same reason: it is an
+    authorization, not a lifecycle position. So it is `None` on every step
+    that has no gate, on a gate that was *declined* (a declined gate was not
+    cleared), and on every step of every run file written before this field
+    existed — which is exactly "no gate was cleared here".
+
+    It is the only durable trace of the failure this field was added for
+    (spec §1): a `gate: operator` step self-resolving on a harness with no
+    operator-question tool. Carried across `_complete_step` like `gate`, or
+    the record would go quiet the moment a cleared `cli` gate's step actually
+    ran — and `fr run check` reads it, so quiet means unreported."""
 
     emitted: dict[str, str] | None = None
     exit: int | None = None
@@ -119,8 +143,41 @@ class PhaseAccounting(BaseModel):
     plan_bytes: int = 0
 
 
+def current_run_schema_version() -> int:
+    """The `run` artifact version this `fr` writes.
+
+    Read from `fr.artifacts.registry` rather than restated here:
+    `.claude/rules/artifact-versioning.md` makes the registry the ONE place a
+    kind's `current_version` may be declared, so a future bump moves one
+    number and every run fr creates is still born stamped with it. A run that
+    is stale from birth would make the first `fr` command in any
+    non-interactive context (CI, a pod, an agent's Bash tool) refuse.
+
+    Imported inside the function, like `fr.artifacts.structure` does in the
+    other direction: the registry is imported at CLI entry before every
+    command and must not drag the run models in with it.
+    """
+    from fr.artifacts.registry import artifact_kind
+
+    return artifact_kind("run").current_version
+
+
 class RunState(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: int = 1
+    """The artifact version this cursor was written for (spec §3.A of the
+    migration framework).
+
+    Defaulted to the pre-framework version, NOT to the current one: a run file
+    with no `schema_version` key is a pre-framework file, and saying so is what
+    lets the migration runner find it. fr's own writers (`fr run start`,
+    `fr run adopt`) pass `current_run_schema_version()` explicitly.
+
+    Optional and defaulted because it must be: `extra="forbid"` means an fr
+    that does not know this key *raises* rather than ignoring it, so the stamp
+    the migration writes would otherwise make a file unreadable by the very fr
+    that wrote it (`.claude/rules/artifact-versioning.md`)."""
 
     run: str
     workflow: str  # "<shape-name>@<schema-version>" e.g. "fr-goal@1"

@@ -1,0 +1,161 @@
+schema_version: 2
+phase:
+  number: 7
+  title: The verbs those lifecycles never had — fr journal resolve, fr acceptance
+    set-status
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 6
+  tracking_issue: null
+  acceptance:
+  - lifecycle-journal-resolve
+  - lifecycle-acceptance-set-status
+tasks:
+- number: 1
+  title: RED — fr journal resolve, and check reading EFFECTIVE state
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: extend tests/unit/test_journal*.py (match the existing module's
+      idiom) for `fr journal resolve --scope <s> --slug <s> --id <id>
+      --state fixed|refuted --note <why>`:
+      (a) resolving an open finding appends a RESOLUTION RECORD and leaves the
+      ORIGINAL entry's text and state untouched — assert both, because the
+      append-only audit property is the point (spec §3.G.1): later phases read
+      `fr journal handoff` to learn what was found AND what became of it, and a
+      finding mutated in place erases that it was ever open;
+      (b) `fr journal check` then treats that finding as resolved and, with no
+      other open findings, EXITS 0 — the gate fr-goal §7 asks for;
+      (c) a finding resolved then re-opened by a later `add` is open again
+      (last record wins, so the effective state is a fold, not a one-way flag);
+      (d) resolving an unknown id exits non-zero naming it — never a silent
+      success, which is the failure this whole PR is about;
+      (e) `--note` is REQUIRED; omitting it is a usage error.
+      Run pytest, confirm red (`fr journal resolve` does not exist).
+- number: 2
+  title: GREEN — implement resolve + effective-state folding
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      GREEN: add the resolution record to `fr/journal/` (model + writer),
+      keeping the existing entry format so `fr journal render` and
+      `fr journal handoff` keep parsing older journals unchanged — every
+      journal in this repo predates the record and must still parse.
+      Add `resolve` to `fr/commands/journal_cmd.py`.
+  - id: P7.T2.S2
+    text: |-
+      GREEN: teach `fr/journal/check.py` to fold records into an EFFECTIVE
+      state per finding id rather than reading each entry's own `state`.
+      Keep the output shape (`N open finding(s): <ids>`) so nothing that
+      greps it breaks. Run the Task 1 tests; confirm green.
+  - id: P7.T2.S3
+    text: |-
+      GREEN — dogfood it, which is also the proof: resolve the six findings in
+      THIS plan's journal that are already fixed but unmarkable —
+      949ba7697d2b, 2b552ded3e12, r4-i1, r4-i2, r1-m8, 770edf2e5133 — each
+      with a `--note` naming the entry that superseded it. Then run
+      `fr journal check --scope plan --slug 2026-09-18-harness-parity-matrix`
+      and confirm it now reports ONLY the genuinely-open ones (r5-journal-gate,
+      r6-x1, and r3-i3 if still open). Capture the before/after output for the
+      PR body: this PR's own delivery gate going from unsatisfiable to
+      satisfiable is the acceptance evidence.
+- number: 3
+  title: RED/GREEN — fr acceptance set-status
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      RED: tests for `fr acceptance set-status --id <id> --status <s>
+      --notes <why>`:
+      (a) moves the row's status in place and rewrites all three committed
+      reports, so `fr acceptance check` (which gates report drift) stays green
+      with no separate `report` call;
+      (b) an unknown id exits non-zero naming it and creates NOTHING — silently
+      creating a row on a typo'd id is how a row gets orphaned; that is `add`'s
+      job;
+      (c) an unknown status exits non-zero listing the valid five;
+      (d) `--notes` lands in the row's notes, since a status that moved for no
+      recorded reason is the silent change `.claude/rules/acceptance-matrix.md`
+      forbids;
+      (e) no other row is touched — assert the rest of the file is byte-stable.
+      Confirm red.
+  - id: P7.T3.S2
+    text: |-
+      GREEN: implement it in `fr/acceptance/` + `fr/commands/acceptance_cmd.py`,
+      reusing the same writer `add` uses so the two cannot disagree about the
+      file's shape. In-place mutation is correct here and the asymmetry with
+      §3.G.1 is deliberate (spec): the matrix is a registry of CURRENT state,
+      not a log — `check` and the reports read today's status, and provenance
+      belongs to git history. Confirm green.
+- number: 4
+  title: REFACTOR + wire the docs, then the full gate
+  steps:
+  - id: P7.T4.S1
+    text: |-
+      REFACTOR: if `resolve` and `add` grew parallel writers, give them one.
+      Then flip BOTH new acceptance rows to `ci` USING `fr acceptance
+      set-status` itself — the command proving itself on its own row is the
+      cleanest acceptance evidence available, and it replaces the hand-edit
+      phase 6 had to perform.
+  - id: P7.T4.S2
+    text: |-
+      Docs, tightly scoped: add the two verbs to `.claude/rules/acceptance-matrix.md`'s
+      "How" section and to AGENTS.md's `fr journal` bullet, so the rules that
+      mandate the transitions now name the commands that perform them. Also add
+      the `--isolated` addendum to `.claude/rules/explainers-currency.md`
+      (phase 6 proved "run from /" insufficient: a machine-global pygments is
+      picked up regardless of cwd). Do NOT re-bump the version — 4.5.0 is
+      already minor and two new subcommands stay minor.
+  - id: P7.T4.S3
+    text: |-
+      Full gate, output kept for the PR body: `uv run ruff format packages/
+      tests/`; `uv run ruff check packages/ tests/`; `uv run mypy
+      packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
+      packages/fr-cncd/src`; `uv run pytest` (full, WITH coverage);
+      `uv run --no-project python scripts/bump-version.py --check`;
+      `uv run fr validate artifacts`; `uv run fr acceptance check`;
+      `uv run fr harness parity --check`; both `sync-*.py --check`;
+      `cd packages/fr-opencode-plugin && bun test`. Three known-local failures
+      are expected; a FOURTH is yours.
+state:
+  steps:
+    P7.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T17:34:08+00:00'
+      note: null
+    P7.T2.S1:
+      state: x
+      ticked_at: '2026-09-18T17:34:09+00:00'
+      note: null
+    P7.T2.S2:
+      state: x
+      ticked_at: '2026-09-18T17:34:09+00:00'
+      note: null
+    P7.T2.S3:
+      state: x
+      ticked_at: '2026-09-18T17:36:03+00:00'
+      note: null
+    P7.T3.S1:
+      state: x
+      ticked_at: '2026-09-18T17:37:37+00:00'
+      note: null
+    P7.T3.S2:
+      state: x
+      ticked_at: '2026-09-18T17:39:30+00:00'
+      note: null
+    P7.T4.S1:
+      state: x
+      ticked_at: '2026-09-18T17:40:27+00:00'
+      note: null
+    P7.T4.S2:
+      state: x
+      ticked_at: '2026-09-18T17:43:01+00:00'
+      note: null
+    P7.T4.S3:
+      state: x
+      ticked_at: '2026-09-18T17:47:24+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T17:47:30+00:00'
+    note: null
+    observed_prs: []

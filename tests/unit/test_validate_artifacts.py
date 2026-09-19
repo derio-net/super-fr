@@ -92,7 +92,15 @@ GOOD_JOURNAL = """# Journal
 Body.
 """
 
-GOOD_RUN = """run: 2019-03-04-feat-widget
+RUN_STAMP = f"schema_version: {ARTIFACT_KINDS['run'].current_version}\n"
+"""Built from the registry, never typed. The `run` kind moved past version 1
+when `StepRecord.answered_by` landed, and a fixture carrying a hand-written
+stamp has to be found and edited again on the next bump — while reading as
+"a well-formed run" until someone does."""
+
+GOOD_RUN = (
+    RUN_STAMP
+    + """run: 2019-03-04-feat-widget
 workflow: fr-goal@1
 branch: feat/widget
 started: '2019-03-04T00:00:00'
@@ -103,6 +111,7 @@ steps:
   implement:
     state: running
 """
+)
 
 GOOD_MATRIX = """org: derio-net
 repo: super-fr
@@ -291,7 +300,7 @@ def test_an_unknown_stamp_version_fails(tmp_path: Path) -> None:
     _w(
         tmp_path,
         "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
-        "schema_version: two\n" + GOOD_RUN,
+        GOOD_RUN.replace(RUN_STAMP, "schema_version: two\n"),
     )
     report = validate_repo(tmp_path)
     assert not report.ok

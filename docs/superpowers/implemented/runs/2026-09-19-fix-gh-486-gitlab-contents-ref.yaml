@@ -1,0 +1,117 @@
+schema_version: 2
+run: 2026-09-19-fix-gh-486-gitlab-contents-ref
+workflow: fr-goal@1
+branch: fix/gh-486-gitlab-contents-ref
+started: '2026-09-19T16:35:28+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-19T16:49:00+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+      journal:spec: docs/superpowers/journals/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts.md
+  spec-review:
+    state: done
+    at: '2026-09-19T16:51:50+00:00'
+    emitted:
+      journal:spec: docs/superpowers/journals/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts.md
+  plan:
+    state: done
+    at: '2026-09-19T16:59:52+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts
+      journal:plan: docs/superpowers/journals/plans/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts.md
+  plan-review:
+    state: done
+    at: '2026-09-19T16:59:52+00:00'
+    exit: 0
+    stdout: 'self-review passed
+
+      '
+  implement:
+    state: done
+    at: '2026-09-19T20:19:08+00:00'
+    emitted:
+      journal:plan: docs/superpowers/journals/plans/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts.md
+    items:
+      phase/1/implement-phase: done
+      phase/1/review-phase: done
+      phase/2/implement-phase: done
+      phase/2/review-phase: done
+      phase/3/implement-phase: done
+      phase/3/review-phase: done
+      phase/4/implement-phase: done
+      phase/4/review-phase: done
+      phase/5/implement-phase: done
+      phase/5/review-phase: done
+      phase/6/implement-phase: done
+      phase/6/review-phase: done
+      phase/7/implement-phase: done
+      phase/7/review-phase: done
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: done
+    at: '2026-09-19T20:23:40+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/487
+accounting:
+  phase/1/implement-phase:
+    at: '2026-09-19T16:59:59+00:00'
+    journal_entries: 14
+    journal_lines: 71
+    handoff_chars: 5790
+    spec_bytes: 23158
+    plan_bytes: 49502
+  phase/1/review-phase:
+    at: '2026-09-19T17:24:10+00:00'
+    journal_entries: 20
+    journal_lines: 135
+    handoff_chars: 14072
+    spec_bytes: 26585
+    plan_bytes: 55535
+  phase/2/implement-phase:
+    at: '2026-09-19T17:24:17+00:00'
+    journal_entries: 20
+    journal_lines: 135
+    handoff_chars: 14072
+    spec_bytes: 26585
+    plan_bytes: 55535
+  phase/3/implement-phase:
+    at: '2026-09-19T17:38:12+00:00'
+    journal_entries: 24
+    journal_lines: 155
+    handoff_chars: 14616
+    spec_bytes: 26585
+    plan_bytes: 58626
+  phase/4/implement-phase:
+    at: '2026-09-19T18:02:32+00:00'
+    journal_entries: 31
+    journal_lines: 190
+    handoff_chars: 17016
+    spec_bytes: 26585
+    plan_bytes: 63137
+  phase/5/implement-phase:
+    at: '2026-09-19T18:31:31+00:00'
+    journal_entries: 40
+    journal_lines: 290
+    handoff_chars: 24720
+    spec_bytes: 26585
+    plan_bytes: 74233
+  phase/6/implement-phase:
+    at: '2026-09-19T19:14:02+00:00'
+    journal_entries: 51
+    journal_lines: 366
+    handoff_chars: 39601
+    spec_bytes: 30819
+    plan_bytes: 85596
+  phase/7/implement-phase:
+    at: '2026-09-19T19:50:54+00:00'
+    journal_entries: 61
+    journal_lines: 579
+    handoff_chars: 54165
+    spec_bytes: 31599
+    plan_bytes: 93399

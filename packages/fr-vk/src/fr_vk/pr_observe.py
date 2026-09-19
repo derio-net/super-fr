@@ -4,7 +4,7 @@ Builds the `{card_id: "open"|"merged"}` map that `pr_state.tick` consumes.
 For each active VK card (`In progress` / `In review`), resolves the card's
 `latest_pr_url` to its merge state via the backend-appropriate `GhClient`
 adapter (injectable for tests, mirroring `pr_state.tick`'s `close_gh_issue`
-seam) — resolved per-URL via its own hostname, since one VK board can hold
+seam) — resolved per-URL from the URL itself, since one VK board can hold
 cards from repos on different backends. Previously shelled out to a raw
 `gh pr view` subprocess directly, bypassing `GhClient` entirely; fixed as
 part of the multi-backend design (see docs/superpowers/specs/
@@ -42,14 +42,23 @@ def _default_pr_status_fetch(pr_url: str) -> str | None:
     `"merged"` for a merged PR, `"open"` for an open non-draft PR; drafts,
     closed-unmerged PRs, and any failure (client missing/erroring,
     unresolvable URL) map to None so the observer simply omits that card.
-    Non-fatal. The backend is resolved from `pr_url`'s own hostname
-    (`fr._hosts.backend_for_hostname`) — NOT from any ambient single-repo
-    context — since one VK board can hold cards from repos on different
-    backends.
+    Non-fatal. The backend is resolved from `pr_url` itself
+    (`fr._hosts.backend_for_url`: its path shape first — `/-/merge_requests/`
+    is GitLab's, `/pulls/` is Gitea's — then its hostname) and NOT from any
+    ambient single-repo context, since one VK board can hold cards from
+    repos on different backends. The hostname is threaded through as `host`
+    (via `_hosts.self_hosted_hostname`) whenever it is not a recognized
+    SaaS domain, so a self-hosted GitLab MR URL reaches its own instance
+    rather than glab's gitlab.com default.
+
+    Both halves are needed and only landed together: while the backend came
+    from the hostname alone, `backend == "gitlab"` and a non-None
+    self-hosted host were mutually exclusive by construction of one table,
+    so a self-hosted MR URL was polled with `gh` (gh-486; spec §4.C/§4.C2).
     """
     hostname = urlparse(pr_url).hostname
-    backend = _hosts.backend_for_hostname(hostname)
-    client = hostclient.client_for_backend(backend)
+    backend = _hosts.backend_for_url(pr_url)
+    client = hostclient.client_for_backend(backend, host=_hosts.self_hosted_hostname(hostname))
     try:
         result = client.pr_status_by_url(pr_url)
     except Exception as e:  # noqa: BLE001 — non-fatal, mirrors the old subprocess posture

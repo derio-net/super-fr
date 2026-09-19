@@ -1,6 +1,6 @@
 """Unit tests for the `fr journal` CLI (Phase 2): add / render / check.
 
-Spec §A: append-only writes, idempotency on `--id`, PR-body render sections,
+Spec §A: append-only writes, duplicate-id refusal, PR-body render sections,
 and a freshness `check` that fails closed on parse but where `render` fails
 open.
 """
@@ -108,31 +108,43 @@ class TestAdd:
         entries = parse_journal(_journal_file(root, "S").read_text())
         assert [e.id for e in entries] == ["d1", "d2"]
 
-    def test_add_idempotent_on_id(self, tmp_path: Path, monkeypatch) -> None:
+    def test_duplicate_add_fails_loudly_without_writing(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
-        for _ in range(2):
-            runner.invoke(
-                app,
-                [
-                    "journal",
-                    "add",
-                    "--scope",
-                    "plan",
-                    "--slug",
-                    "S",
-                    "--kind",
-                    "discovery",
-                    "--title",
-                    "one",
-                    "--id",
-                    "d1",
-                ],
-            )
-        from fr.journal.model import parse_journal
+        first = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "one",
+            "--id",
+            "d1",
+        )
+        assert first.exit_code == 0, first.output
+        before = _journal_file(root, "S").read_text()
 
-        entries = parse_journal(_journal_file(root, "S").read_text())
-        assert [e.id for e in entries] == ["d1"]
+        duplicate = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "two",
+            "--id",
+            "d1",
+        )
+
+        assert duplicate.exit_code == 2
+        assert "d1" in duplicate.output
+        assert "fr journal resolve" in duplicate.output
+        assert _journal_file(root, "S").read_text() == before
 
     def test_finding_requires_state_via_cli(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
@@ -335,6 +347,27 @@ class TestCheck:
         assert res.exit_code == 0
 
 
+class TestScopeValidation:
+    def test_every_journal_command_rejects_invalid_scope_cleanly(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        commands = (
+            ["add", "--kind", "decision", "--title", "x"],
+            ["resolve", "--id", "f1", "--state", "fixed", "--note", "x"],
+            ["render"],
+            ["check"],
+            ["handoff", "--phase", "1"],
+        )
+
+        for command in commands:
+            res = runner.invoke(app, ["journal", *command, "--scope", "bogus", "--slug", "S"])
+            assert res.exit_code == 2, res.output
+            assert "invalid journal scope" in res.output
+            assert "Traceback" not in res.output
+
+
 class TestReadsResolveArchivedLocation:
     """After a spec/plan archives, its journal lives under
     implemented/journals/<scope>/; render and check must still find it (#417)."""
@@ -516,3 +549,302 @@ class TestHandoff:
         )
 
         assert res.exit_code == 2, res.output
+
+
+class TestResolve:
+    """Phase 7 (spec §3.G.1) — `fr journal resolve` appends a resolution record
+    the gate can read, and never rewrites the finding it resolves."""
+
+    def _open_finding(self, root: Path, monkeypatch, fid: str = "f1") -> None:
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "finding",
+            "--title",
+            "a real bug",
+            "--body",
+            "the original body",
+            "--state",
+            "open",
+            "--id",
+            fid,
+        )
+        assert res.exit_code == 0, res.output
+
+    def _resolve(self, *args: str):
+        return runner.invoke(app, ["journal", "resolve", *args])
+
+    def test_resolve_appends_a_record_and_leaves_the_original_entry_intact(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        res = self._resolve(
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--id",
+            "f1",
+            "--state",
+            "fixed",
+            "--note",
+            "superseded by entry d9",
+        )
+        assert res.exit_code == 0, res.output
+
+        entries = parse_journal(_journal_file(root, "S").read_text())
+        original = next(e for e in entries if e.id == "f1")
+        assert original.state == "open"  # append-only: never rewritten
+        assert original.body == "the original body"
+        assert original.title == "a real bug"
+
+        record = next(e for e in entries if e.resolves == "f1")
+        assert record.id != "f1"
+        assert record.state == "fixed"
+        assert "superseded by entry d9" in record.body
+
+    def test_check_is_clean_once_the_only_open_finding_is_resolved(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The gate fr-goal §7 asks for: unsatisfiable before, satisfiable now."""
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        before = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert before.exit_code == 1
+
+        self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "f1", "--state", "fixed", "--note", "why"
+        )
+        after = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert after.exit_code == 0, after.output
+
+    def test_check_reports_a_finding_reopened_by_a_later_add(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Last record wins — the effective state is a fold, not a one-way flag."""
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "f1", "--state", "fixed", "--note", "why"
+        )
+        reopened = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "finding",
+            "--title",
+            "it came back",
+            "--state",
+            "open",
+            "--resolves",
+            "f1",
+            "--id",
+            "f1-again",
+        )
+        assert reopened.exit_code == 0, reopened.output
+        res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert res.exit_code == 1
+        assert "f1" in res.output
+
+    def test_a_second_resolution_supersedes_the_first(self, tmp_path: Path, monkeypatch) -> None:
+        from fr.journal.model import effective_finding_states, parse_journal
+
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "f1", "--state", "fixed", "--note", "first"
+        )
+        second = self._resolve(
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--id",
+            "f1",
+            "--state",
+            "refuted",
+            "--note",
+            "second look: not a bug",
+        )
+        assert second.exit_code == 0, second.output
+        entries = parse_journal(_journal_file(root, "S").read_text())
+        # Two distinct records — an id collision would make the journal invalid.
+        ids = [e.id for e in entries]
+        assert len(ids) == len(set(ids)) == 3
+        assert effective_finding_states(entries)["f1"] == "refuted"
+
+    def test_resolve_of_an_unknown_id_exits_nonzero_naming_it(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A silent success is the failure this verb exists to prevent."""
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        before = _journal_file(root, "S").read_text()
+        res = self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "typo", "--state", "fixed", "--note", "why"
+        )
+        assert res.exit_code != 0
+        assert "typo" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    def test_resolve_refuses_a_journal_with_duplicate_ids_without_writing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        entry = _journal_file(root, "S").read_text().split("# Journal: S\n\n", 1)[1]
+        _journal_file(root, "S").write_text(f"# Journal: S\n\n{entry}\n{entry}")
+        before = _journal_file(root, "S").read_text()
+
+        res = self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "f1", "--state", "fixed", "--note", "why"
+        )
+
+        assert res.exit_code == 2
+        assert "duplicate journal entry id" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    def test_resolve_on_a_journal_that_does_not_exist_is_refused(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "f1", "--state", "fixed", "--note", "why"
+        )
+        assert res.exit_code != 0
+        assert not _journal_file(root, "S").exists()
+
+    def test_resolve_requires_a_note(self, tmp_path: Path, monkeypatch) -> None:
+        """'Resolved' with no reason is the silent state change the rule forbids."""
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        before = _journal_file(root, "S").read_text()
+        res = self._resolve("--scope", "plan", "--slug", "S", "--id", "f1", "--state", "fixed")
+        assert res.exit_code == 2
+        assert _journal_file(root, "S").read_text() == before
+
+    def test_resolve_refuses_state_open(self, tmp_path: Path, monkeypatch) -> None:
+        """`resolve` closes a finding; re-opening one is `add --resolves`."""
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        before = _journal_file(root, "S").read_text()
+        res = self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "f1", "--state", "open", "--note", "why"
+        )
+        assert res.exit_code == 2
+        assert "fixed" in res.output and "refuted" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    def test_resolve_refuses_an_id_that_is_not_a_finding(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "a note",
+            "--id",
+            "d1",
+        )
+        before = _journal_file(root, "S").read_text()
+        res = self._resolve(
+            "--scope", "plan", "--slug", "S", "--id", "d1", "--state", "fixed", "--note", "why"
+        )
+        assert res.exit_code != 0
+        assert "d1" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    def test_render_shows_both_the_finding_and_its_resolution(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The PR body reads `render`: what was found AND what became of it."""
+        root = _init_repo(tmp_path)
+        self._open_finding(root, monkeypatch)
+        self._resolve(
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--id",
+            "f1",
+            "--state",
+            "fixed",
+            "--note",
+            "superseded by entry d9",
+        )
+        res = runner.invoke(
+            app, ["journal", "render", "--scope", "plan", "--slug", "S", "--section", "findings"]
+        )
+        assert res.exit_code == 0, res.output
+        assert "a real bug" in res.output
+        assert "superseded by entry d9" in res.output
+
+
+def test_add_resolves_refuses_an_id_not_in_this_journal(tmp_path: Path, monkeypatch) -> None:
+    """`resolve` already refuses an unknown id; `--resolves` must too (r7-m2).
+
+    `effective_finding_states` deliberately tolerates a record naming a finding
+    that is not in the file, so a hand-spliced journal cannot crash the gate.
+    The cost of that tolerance is that a typo'd `--resolves` id would report as
+    open forever with nothing in the journal to explain it — a gate wedged by an
+    unfindable id, which is the silent-stall shape this whole PR removes. Refuse
+    it at the door instead."""
+    root = _init_repo(tmp_path)
+    monkeypatch.chdir(root)
+    _add(
+        root,
+        "--scope",
+        "plan",
+        "--slug",
+        "s",
+        "--kind",
+        "finding",
+        "--id",
+        "real",
+        "--state",
+        "open",
+        "--title",
+        "t",
+        "--body",
+        "b",
+    )
+
+    res = _add(
+        root,
+        "--scope",
+        "plan",
+        "--slug",
+        "s",
+        "--kind",
+        "finding",
+        "--id",
+        "reopen",
+        "--state",
+        "open",
+        "--title",
+        "t",
+        "--body",
+        "b",
+        "--resolves",
+        "typoed-id",
+    )
+    assert res.exit_code == 2, res.output
+    assert "typoed-id" in res.output
+    assert "reopen" not in _journal_file(root, "s").read_text()

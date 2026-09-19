@@ -2,11 +2,14 @@
 
 Spec: docs/superpowers/specs/2026-07-22-fr-goal-subagent-execution-design.md §A.
 
-Three verbs:
-  - ``add``    append one entry (idempotent on ``--id``).
-  - ``render`` emit the Markdown a PR body embeds (fail-open on missing/bad file).
-  - ``check``  freshness gate: non-zero on open findings or a parse error
-               (fail-closed), so a stale journal cannot ride into a PR silently.
+Verbs:
+  - ``add``     append one entry (create-only; duplicate ``--id`` is refused).
+  - ``resolve`` append a RESOLUTION RECORD closing a finding (spec §3.G.1) —
+                never a rewrite of the finding, which would erase that it was
+                ever open.
+  - ``render``  emit the Markdown a PR body embeds (fail-open on missing/bad file).
+  - ``check``   freshness gate: non-zero on open findings or a parse error
+                (fail-closed), so a stale journal cannot ride into a PR silently.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from fr.journal.model import (
     JournalEntry,
     JournalParseError,
     journal_path,
+    open_finding_ids,
     parse_journal,
     resolve_journal_read_path,
     serialize_entry,
@@ -49,6 +53,14 @@ def _load(path: Path) -> list[JournalEntry]:
     return parse_journal(path.read_text())
 
 
+def _validate_scope(scope: str) -> None:
+    if scope not in {"spec", "plan", "debug"}:
+        err_console.print(
+            f"[red]invalid journal scope: {scope!r} (expected spec, plan, or debug)[/red]"
+        )
+        raise typer.Exit(2)
+
+
 @journal_app.command("add")
 def add(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
@@ -61,8 +73,15 @@ def add(
     entry_id: str | None = typer.Option(
         None, "--id", help="Stable id; re-adding the same id is idempotent."
     ),
+    resolves: str | None = typer.Option(
+        None,
+        "--resolves",
+        help="finding only: this entry is a resolution record for that finding id "
+        "(`fr journal resolve` is the ergonomic form; use this to RE-OPEN one).",
+    ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
+    _validate_scope(scope)
     root = resolve_repo_root()
     path = journal_path(root, scope, slug)  # type: ignore[arg-type]
 
@@ -81,6 +100,7 @@ def add(
             title=title,
             body=body,
             state=state,  # type: ignore[arg-type]
+            resolves=resolves,
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {e}")
@@ -88,8 +108,29 @@ def add(
 
     existing = _load(path)
     if any(e.id == eid for e in existing):
-        # Idempotent: the id is already recorded; leave the file untouched.
-        return
+        err_console.print(
+            f"[red]journal entry {eid!r} already exists; use `fr journal resolve` "
+            "to change a finding[/red]"
+        )
+        raise typer.Exit(2)
+    # Review r7-m2: `resolve` refuses an unknown id, and so must `--resolves`.
+    # `effective_finding_states` deliberately tolerates a record naming a
+    # finding that is not there, so that a hand-spliced journal cannot crash the
+    # gate — which means a typo'd id here would report as open FOREVER with
+    # nothing in the file to explain it. A gate wedged by an unfindable id is
+    # the silent-stall shape this PR exists to remove, so refuse it at the door.
+    if resolves is not None and not any(e.id == resolves and e.kind == "finding" for e in existing):
+        err_console.print(
+            f"[red]no finding with id {resolves!r} in this journal[/red] — "
+            "`--resolves` must name a finding that exists"
+        )
+        raise typer.Exit(2)
+    _append_entry(path, slug, entry)
+
+
+def _append_entry(path: Path, slug: str, entry: JournalEntry) -> None:
+    """The ONE writer — `add` and `resolve` both land here, so the two cannot
+    disagree about separators, the file header, or the serialized shape."""
     path.parent.mkdir(parents=True, exist_ok=True)
     block = serialize_entry(entry)
     if path.exists():
@@ -98,6 +139,101 @@ def add(
         path.write_text(prior + sep + block)
     else:
         path.write_text(f"# Journal: {slug}\n\n{block}")
+
+
+RESOLUTION_STATES = ("fixed", "refuted")
+"""What `resolve` may close a finding to. Re-opening is `add --resolves`:
+`resolve` is the verb for "this is done with", and a re-open is new
+information, which belongs in an entry with a body of its own."""
+
+
+def _record_id(finding_id: str, taken: set[str]) -> str:
+    """`<finding>-resolved`, then `-2`, `-3`… — predictable, and never a
+    duplicate id (which `fr validate artifacts` fails a journal for)."""
+    base = f"{finding_id}-resolved"
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
+@journal_app.command("resolve")
+def resolve(
+    scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
+    slug: str = typer.Option(..., "--slug", help="Journal slug (spec/plan/debug slug)."),
+    entry_id: str = typer.Option(..., "--id", help="The FINDING id being resolved."),
+    state: str = typer.Option(..., "--state", help="fixed | refuted."),
+    note: str = typer.Option(
+        ...,
+        "--note",
+        help="Why it is resolved (required — 'resolved' with no reason is the "
+        "silent state change the rules forbid).",
+    ),
+    phase: int | None = typer.Option(None, "--phase", help="Phase doing the resolving, if any."),
+) -> None:
+    """Append a resolution record closing one finding (spec §3.G.1).
+
+    Append-only on purpose: the finding keeps its own text and `state: open`,
+    and `fr journal check` folds records into an EFFECTIVE state. A finding
+    rewritten in place would erase that it was ever open, which is what later
+    phases read the journal to learn.
+
+    Fails, loudly and without writing, on an unknown id — a silent success here
+    would leave the gate red with the operator believing it was cleared.
+    """
+    _validate_scope(scope)
+    root = resolve_repo_root()
+    # Resolve through the read path: a journal archived alongside its plan is
+    # still the file the finding lives in, and a resolution record must land
+    # there rather than conjure a new active journal holding only the record.
+    # NAMING THE TRADE-OFF (review r7-m3): that means this command can append
+    # under `docs/superpowers/implemented/`, which
+    # `.claude/rules/artifact-versioning.md` otherwise treats as frozen. The
+    # exception is deliberate and narrow — the rule freezes archived artifacts
+    # against MIGRATION, i.e. against a tool rewriting history nobody asked it
+    # to touch. This is an operator resolving a finding they can still see, and
+    # the alternative writes a phantom journal the gate never reads.
+    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    if state not in RESOLUTION_STATES:
+        err_console.print(
+            f"[red]--state must be one of {' | '.join(RESOLUTION_STATES)} (got {state!r})[/red] "
+            "— re-open a finding with `fr journal add --resolves <id> --state open`"
+        )
+        raise typer.Exit(2)
+    try:
+        entries = _load(path)
+    except JournalParseError as e:
+        err_console.print(f"[red]journal parse error:[/red] {e}")
+        raise typer.Exit(2) from e
+    target = next((e for e in entries if e.id == entry_id), None)
+    if target is None:
+        err_console.print(
+            f"[red]no journal entry `{entry_id}` in {path}[/red] — nothing resolved "
+            "(`fr journal render` lists the ids this journal carries)"
+        )
+        raise typer.Exit(2)
+    if target.kind != "finding":
+        err_console.print(
+            f"[red]entry `{entry_id}` is a `{target.kind}`, not a finding[/red] — only a "
+            "finding has a state to resolve"
+        )
+        raise typer.Exit(2)
+
+    record = JournalEntry(
+        kind="finding",
+        scope=scope,  # type: ignore[arg-type]
+        id=_record_id(entry_id, {e.id for e in entries}),
+        created=_timestamp(),
+        phase=phase,
+        title=f"resolves {entry_id}: {target.title}",
+        body=note,
+        state=state,  # type: ignore[arg-type]
+        resolves=entry_id,
+    )
+    _append_entry(path, slug, record)
+    typer.echo(f"{entry_id} → {state} (record {record.id})")
 
 
 _SECTION_KINDS = {
@@ -117,6 +253,7 @@ def render(
     ),
 ) -> None:
     """Emit journal entries as Markdown (fail-open: missing/bad file → nothing)."""
+    _validate_scope(scope)
     root = resolve_repo_root()
     # Read-resolve so a render still works after the spec/plan was archived.
     path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
@@ -139,7 +276,14 @@ def check(
     scope: str = typer.Option(..., "--scope"),
     slug: str = typer.Option(..., "--slug"),
 ) -> None:
-    """Freshness gate. Non-zero on a parse error or any `open` finding."""
+    """Freshness gate. Non-zero on a parse error or any EFFECTIVELY open finding.
+
+    Effective, not per-entry: a finding closed by a later `fr journal resolve`
+    record no longer counts, and one re-opened by a later record counts again
+    (spec §3.G.1). A journal with no resolution records — every journal written
+    before that verb existed — gates exactly as it did before.
+    """
+    _validate_scope(scope)
     root = resolve_repo_root()
     # Read-resolve so a check still gates on an archived journal's findings.
     path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
@@ -148,11 +292,11 @@ def check(
     except JournalParseError as e:
         err_console.print(f"[red]journal parse error:[/red] {e}")
         raise typer.Exit(2) from e
-    open_findings = [e for e in entries if e.kind == "finding" and e.state == "open"]
-    if open_findings:
+    still_open = open_finding_ids(entries)
+    if still_open:
+        # Output shape unchanged ("N open finding(s): <ids>") — things grep it.
         err_console.print(
-            f"[yellow]{len(open_findings)} open finding(s):[/yellow] "
-            + ", ".join(e.id for e in open_findings)
+            f"[yellow]{len(still_open)} open finding(s):[/yellow] " + ", ".join(still_open)
         )
         raise typer.Exit(1)
 
@@ -180,6 +324,7 @@ def handoff(
     from fr.journal.model import compose_handoff
     from fr.parser import PlanSchemaError, parse
 
+    _validate_scope(scope)
     if scope != "plan":
         err_console.print(
             f"[red]handoff needs --scope plan (got {scope!r}) — only plan journals "

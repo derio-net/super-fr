@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -32,6 +33,9 @@ import typer
 from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
+from fr.harness import HARNESSES, load_matrix
+from fr.harness.detect import detect_harness
+from fr.harness.model import HarnessError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -43,10 +47,12 @@ from fr.run.adopt import AdoptError, adopt_run, plan_phase_numbers
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
+    AnsweredBy,
     PhaseAccounting,
     RunState,
     RunStateError,
     StepRecord,
+    current_run_schema_version,
     existing_run_id_colliding_with,
     load_run_state,
     parse_run_state,
@@ -54,6 +60,7 @@ from fr.run.model import (
     save_run_state,
     validate_run_id,
 )
+from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS
 from fr.workflow.check import check_workflow
@@ -316,6 +323,7 @@ def _complete_step(
     exit_code: int | None = None,
     stdout: str | None = None,
     emitted: Mapping[str, str] | None = None,
+    answered_by: AnsweredBy | None = None,
 ) -> RunState:
     """Record `step_id`'s outcome and move the cursor — the ONE place that
     implements the done/failed cursor asymmetry, shared by `advance`'s
@@ -343,12 +351,20 @@ def _complete_step(
     step that failed after its gate was answered is a new question, not a
     resumption — but the claim that the gate is answered once for the life of
     the run was not true of it.
+
+    `answered_by` is the gated **agent** branch's half of that story: those
+    steps never acquire `gate: cleared` at all, so provenance is the only
+    record that a gate was cleared there, and it is passed in by `resolve`.
+    Absent an explicit value the prior record's is carried forward — exactly
+    like `gate`, so a cleared `cli` gate's provenance survives the `advance`
+    that finally executes the step.
     """
     prior = state.steps.get(step_id)
     new_record = StepRecord(
         state=outcome,
         at=_now(),
         gate=prior.gate if prior is not None else None,
+        answered_by=answered_by or (prior.answered_by if prior is not None else None),
         exit=exit_code,
         stdout=stdout,
         emitted=dict(emitted) if emitted else None,
@@ -376,6 +392,60 @@ def _gate_pending(step: Step, record: StepRecord) -> bool:
     the turn and the run does not advance until the operator answers."
     """
     return step.gate == "operator" and record.gate != "cleared" and record.state != "done"
+
+
+def _gate_degradation_notice() -> str | None:
+    """The loud degradation notice for a blocked `gate: operator` step (spec
+    §3.D.1), or `None` when the detected harness genuinely enforces it.
+
+    Reads `os.environ` through `detect_harness` (never a hardcoded harness
+    name) and the shipped matrix's `operator-gate` row through `load_matrix`
+    — the notice text is built from that row's `scope_note`, so a stale or
+    hand-typed string here can never drift from what `fr harness parity`
+    itself declares. An UNRECOGNISED environment (`detect_harness` returns
+    `None`) is treated as degraded too — fail loud, the same posture as the
+    isolation gate: a wrong notice costs a confusing paragraph, a missing one
+    costs a silently skipped gate.
+
+    Raises `HarnessError` when `FR_HARNESS` is set to something outside
+    `fr.harness.HARNESSES` — a typo must not silently become an inference,
+    so the caller surfaces it as a command error rather than guessing.
+    """
+    harness = detect_harness(os.environ)
+    matrix = load_matrix()
+    surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
+    if harness is not None:
+        hstate = surface.harnesses[harness]
+        if hstate.state == "enforced":
+            return None
+        detail = f"your harness ({harness}) does not enforce this gate (state: {hstate.state})"
+        if hstate.scope_note:
+            detail += f" — {hstate.scope_note}"
+    else:
+        detail = (
+            "your harness could not be detected (set FR_HARNESS to one of "
+            f"{', '.join(HARNESSES)}) — treating this gate as advisory to be safe"
+        )
+    return (
+        f"gate: {detail}.\n"
+        "      Put the questions to the operator in your reply and STOP. Clearing this "
+        "gate without\n"
+        "      asking is recorded as `answered_by: agent` and reported in the delivered PR."
+    )
+
+
+def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
+    """Does this `resolve` CLEAR an operator gate (rather than decline it, or
+    resolve a step that never had one)?
+
+    The condition provenance is recorded under, and deliberately narrow:
+    `answered_by` must not claim an authorization for a step nobody gated, and
+    a *declined* gate (`--state failed`) was not cleared. It reads the
+    record's own state rather than `_gate_pending`, because by the time this
+    runs the step is `blocked` — which is what "waiting on its gate" looks
+    like once `advance` has seen it.
+    """
+    return step.gate == "operator" and record.state == "blocked" and outcome == "done"
 
 
 def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
@@ -603,12 +673,24 @@ def _advance_group(
     console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
 
 
-def _existing_run_for_workflow(repo_root: Path, workflow: str) -> str | None:
-    """The id of a run in this workspace already driving `workflow`, if any.
+def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
+    """The id of a run on `branch` already driving `workflow`, if any.
 
-    Scoped to the workspace, which IS the branch: `fr run start` writes the
-    run inside the isolation worktree for `--branch`, so every run file here
-    belongs to that branch by construction.
+    Compares `state.branch` rather than trusting the workspace to stand in for
+    it. The previous version scanned every run file in the workspace on the
+    reasoning that "`fr run start` writes the run inside the isolation worktree
+    for `--branch`, so every run file here belongs to that branch by
+    construction" — true of runs CREATED here, false of runs INHERITED here. A
+    workspace is a fresh checkout of `origin/main`, so it carries every cursor
+    ever merged and not yet archived, and one merged `fr-goal` cursor therefore
+    refused every subsequent `fr-goal` run in the repo: the shape worked exactly
+    once between archives. The refusal even named the new branch as the one that
+    "already has a run".
+
+    Found by Test Plan item 1 of the 2026-09-18 harness-parity work, running
+    `/fr-goal` on OpenCode against a clean branch — post-merge testing catching
+    what CI structurally could not, since every unit fixture creates its runs in
+    the workspace and so satisfies the false assumption by construction.
     """
     runs_dir = repo_root / RUNS_REL
     if not runs_dir.is_dir():
@@ -618,7 +700,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str) -> str | None:
             state = parse_run_state(candidate.read_text())
         except (RunStateError, OSError):
             continue  # a broken run file is a different problem
-        if state.workflow.split("@", 1)[0] == workflow:
+        if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
             return state.run
     return None
 
@@ -718,7 +800,7 @@ def start_cmd(
     if path.exists():
         err_console.print(f"[red]run {rid!r} already exists at {path}[/red]")
         raise typer.Exit(2)
-    existing = _existing_run_for_workflow(workspace, manifest.workflow)
+    existing = _existing_run_for_workflow(workspace, manifest.workflow, branch)
     if existing is not None:
         # A second `start` on the same branch and shape is nearly always a
         # mistake — a re-run after a wedge, or a forgotten in-flight run
@@ -739,6 +821,7 @@ def start_cmd(
         for s in manifest.steps
     }
     state = RunState(
+        schema_version=current_run_schema_version(),
         run=rid,
         workflow=f"{manifest.workflow}@{manifest.schema_version}",
         branch=branch,
@@ -944,6 +1027,16 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             f"`fr run resolve {state.run} --step {step.id} --state done`",
             soft_wrap=True,
         )
+        # spec §3.D.1: printed BEFORE the agent brief (below), not after — the
+        # brief is a single JSON line a harness parses off stdout, and this
+        # notice must not become the last line a naive `tail -1` reads.
+        try:
+            notice = _gate_degradation_notice()
+        except HarnessError as e:
+            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+        if notice is not None:
+            console.print(notice, soft_wrap=True)
         # A gate stops the RUN, not the harness's view of the step: an `agent`
         # step still prints its brief here, because the skill/agent named in it
         # is how the operator's question gets asked in the first place. Nothing
@@ -1105,6 +1198,13 @@ def resolve_cmd(
         help="Phase item (phase/<n>) this outcome is for — required when --step "
         "names a member of a grouped `for_each` step.",
     ),
+    answered_by: str = typer.Option(
+        "agent",
+        "--answered-by",
+        help="operator | agent — who answered this step's operator gate. "
+        "Defaults to `agent`, the weaker claim; recorded only when a gate "
+        "is cleared, and reported by `fr run check` and in the PR body.",
+    ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
 
@@ -1130,6 +1230,14 @@ def resolve_cmd(
     """
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
+        raise typer.Exit(2)
+    if answered_by not in ("operator", "agent"):
+        # Refused rather than coerced: a typo recorded as a third provenance
+        # would be read by nobody and would quietly weaken the one claim this
+        # field exists to make.
+        err_console.print(
+            f"[red]--answered-by must be 'operator' or 'agent', got {answered_by!r}[/red]"
+        )
         raise typer.Exit(2)
 
     repo_root = resolve_repo_root()
@@ -1214,6 +1322,16 @@ def resolve_cmd(
                 update={
                     "state": "pending",
                     "gate": "cleared",
+                    # `_clears_gate`, not the inline `blocked and done` this
+                    # branch already established (review r4-m1). The two are
+                    # equivalent today — the only writer of `blocked` is
+                    # `_gate_pending`, which requires `gate == "operator"` —
+                    # but the helper exists so the condition lives in one
+                    # place, and a future second writer of `blocked` would
+                    # have made these diverge silently.
+                    "answered_by": (
+                        answered_by if _clears_gate(step, record, state_value) else None
+                    ),
                     "at": _now(),
                     "emitted": dict(emitted_map) if emitted_map else record.emitted,
                 }
@@ -1265,6 +1383,15 @@ def resolve_cmd(
         step_id,
         state_value,  # type: ignore[arg-type]  # validated above
         emitted=emitted_map,
+        # A gated `agent` step is the shape of the measured failure (spec §1):
+        # it goes straight from `blocked` to `done` here and never acquires
+        # `gate: cleared`, so provenance is the only trace that its gate was
+        # cleared at all.
+        answered_by=(
+            answered_by  # type: ignore[arg-type]  # validated above
+            if _clears_gate(step, record, state_value)
+            else None
+        ),
     )
     save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
@@ -1272,13 +1399,75 @@ def resolve_cmd(
 
 @run_app.command("check")
 def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
-    """Freshness gate: non-zero when the cursor sits on a failed step."""
+    """Freshness gate: non-zero when the cursor sits on a failed step.
+
+    It also REPORTS every operator gate the agent cleared itself (spec
+    §3.D.3) — and does not fail on one. The exit code stays exactly what it
+    was: `check` is a narrow freshness gate, and making an agent-cleared gate
+    non-zero would turn every legitimate non-interactive dispatch red, which
+    is the hard refusal the operator rejected. The enforcement is that the
+    same list rides the delivered PR body, where a human reads it.
+    """
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
 
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
     console.print(f"{state.run}: cursor={state.cursor} ({step_state})")
+    for gate in agent_cleared_gates(state):
+        # soft_wrap: this line is read for the step id it names, and rich
+        # would fold a long id across a line break at a narrow width.
+        console.print(
+            f"{gate.step}: operator gate cleared by the agent (answered_by: agent) — "
+            "no operator answered it",
+            soft_wrap=True,
+        )
     if record is not None and record.state == "failed":
         err_console.print(f"[red]{state.cursor}: failed[/red]")
         raise typer.Exit(1)
+
+
+@run_app.command("gates")
+def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+    """Every `gate: operator` step this run's manifest declares, and who
+    cleared it — the source `fr-goal`'s `deliver` step reads for the PR
+    body's "Operator gates" section (spec §3.D.3, review r4-i2).
+
+    NEVER prints nothing: a workflow with no operator gates says so
+    explicitly, and a step whose cursor predates `answered_by` (this
+    feature's own OpenCode run, or any `fr run adopt` cursor) says THAT
+    explicitly too — both `cleared_gates()`-only readings would have
+    rendered blank here, which on a delivered PR reads as "the feature
+    never ran".
+    """
+    repo_root = resolve_repo_root()
+    try:
+        state = _load_or_exit(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except (RunStateError, WorkflowError, AdoptError) as e:
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+    statuses = gates(state, manifest)
+    if not statuses:
+        console.print(f"{state.run}: no `gate: operator` steps recorded as cleared")
+        return
+    for status in statuses:
+        if status.outcome == "recorded" and status.answered_by == "agent":
+            # The same sentence `fr run check` prints (review r5-m3). This is
+            # the surface that rides the delivered PR body, so the case a human
+            # most needs to notice must not be the tersest line on the page —
+            # "cleared by agent" alone reads as bookkeeping, not as a warning.
+            console.print(
+                f"{status.step}: operator gate cleared by the agent "
+                "(answered_by: agent) — no operator answered it",
+                soft_wrap=True,
+            )
+        elif status.outcome == "recorded":
+            console.print(f"{status.step}: operator gate answered by the operator", soft_wrap=True)
+        else:
+            console.print(
+                f"{status.step}: cleared, but provenance not recorded "
+                "(this cursor predates `answered_by`)",
+                soft_wrap=True,
+            )

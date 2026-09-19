@@ -9,7 +9,9 @@ capability matrix for the concrete differences, e.g. glab's `--description`
 where gh uses `--body`, and glab's `#`-prefixed label color).
 """
 
+import os
 import subprocess
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -20,8 +22,26 @@ from fr.glab import (
     create_issue,
     edit_issue_body,
     ensure_label,
+    ensure_labels,
+    is_already_exists,
+    is_not_found,
+    reopen_issue,
     swap_issue_labels,
     view_issue,
+)
+from fr.labels import LabelDef
+
+from tests.unit.test_real_glabclient import (
+    GLAB_STDERR_400_MISSING_REF,
+    GLAB_STDERR_404_FILE,
+    GLAB_STDERR_404_PROJECT,
+    GLAB_STDERR_404_TREE,
+    GLAB_STDERR_UNAUTHENTICATED,
+    GLAB_STDOUT_400_MISSING_REF,
+    GLAB_STDOUT_404_FILE,
+    GLAB_STDOUT_404_PROJECT,
+    GLAB_STDOUT_404_TREE,
+    GLAB_STDOUT_UNAUTHENTICATED,
 )
 
 
@@ -50,7 +70,8 @@ class TestCreateIssue:
                     "Implementation plan body.",
                     "--label",
                     "fr:ready",
-                ]
+                ],
+                host=None,
             )
 
     def test_multiple_labels(self) -> None:
@@ -79,7 +100,7 @@ class TestViewIssue:
             assert result["title"] == "T"
             assert result["state"] == "opened"
             mock.assert_called_once_with(
-                ["issue", "view", "42", "--repo", "group/proj", "--output", "json"]
+                ["issue", "view", "42", "--repo", "group/proj", "--output", "json"], host=None
             )
 
 
@@ -87,7 +108,9 @@ class TestCloseIssue:
     def test_close(self) -> None:
         with patch("fr.glab._run_glab") as mock:
             close_issue(repo="group/proj", number=42)
-            mock.assert_called_once_with(["issue", "close", "42", "--repo", "group/proj"])
+            mock.assert_called_once_with(
+                ["issue", "close", "42", "--repo", "group/proj"], host=None
+            )
 
 
 class TestEditIssueBody:
@@ -96,7 +119,8 @@ class TestEditIssueBody:
         with patch("fr.glab._run_glab") as mock:
             edit_issue_body(repo="group/proj", number=42, body="New body.")
             mock.assert_called_once_with(
-                ["issue", "update", "42", "--repo", "group/proj", "--description", "New body."]
+                ["issue", "update", "42", "--repo", "group/proj", "--description", "New body."],
+                host=None,
             )
 
 
@@ -122,7 +146,8 @@ class TestSwapIssueLabels:
                     "in-progress",
                     "--unlabel",
                     "fr:ready",
-                ]
+                ],
+                host=None,
             )
 
     def test_empty_add_and_remove_is_noop(self) -> None:
@@ -164,7 +189,12 @@ class TestEnsureLabels:
         captured: list[dict[str, str]] = []
 
         def fake_ensure(
-            *, repo: str, name: str, color: str = "ededed", description: str = ""
+            *,
+            repo: str,
+            name: str,
+            color: str = "ededed",
+            description: str = "",
+            host: str | None = None,
         ) -> None:
             captured.append(
                 {"repo": repo, "name": name, "color": color, "description": description}
@@ -206,6 +236,152 @@ class TestGlabErrorFields:
         assert err.stderr == ""
         assert err.returncode == 0
         assert str(err) == "boom"
+
+    def test_default_stdout(self) -> None:
+        assert glab.GlabError("boom").stdout == ""
+
+
+def test_a_failed_call_keeps_the_api_diagnostic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """glab puts its own summary on STDERR and the API's JSON body on
+    STDOUT; `_run_glab` used to build GlabError from stderr alone and
+    discard the body — the part that actually says *what* was wrong
+    (gh-486; spec §2.A)."""
+
+    def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+        raise subprocess.CalledProcessError(
+            1,
+            argv,
+            output='{"error":"ref is missing, ref is empty"}',
+            stderr="glab: HTTP 400\n",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    with pytest.raises(GlabError) as exc:
+        glab._run_glab(["api", "projects/g%2Fp/repository/files/README.md"])
+    assert exc.value.stdout == '{"error":"ref is missing, ref is empty"}'
+    assert "ref is missing, ref is empty" in str(exc.value)
+    assert "HTTP 400" in str(exc.value)
+
+
+# Every public helper in `fr.glab`, called with a host. A TABLE rather than
+# eight tests, so a helper added later WITHOUT the keyword-only `host`
+# parameter fails loudly here instead of silently talking to gitlab.com
+# (gh-486; spec §4.C).
+_HOST_FORWARDING_CALLS = {
+    "create_issue": lambda h: create_issue(repo="g/p", title="t", body="b", labels=[], host=h),
+    "view_issue": lambda h: view_issue("g/p", 1, host=h),
+    "close_issue": lambda h: close_issue(repo="g/p", number=1, host=h),
+    "reopen_issue": lambda h: reopen_issue(repo="g/p", number=1, host=h),
+    "edit_issue_body": lambda h: edit_issue_body(repo="g/p", number=1, body="b", host=h),
+    "swap_issue_labels": lambda h: swap_issue_labels(
+        repo="g/p", number=1, add=["a"], remove=[], host=h
+    ),
+    "ensure_label": lambda h: ensure_label(repo="g/p", name="n", host=h),
+    "ensure_labels": lambda h: ensure_labels(
+        repo="g/p", labels=[LabelDef("n", "ededed", "")], host=h
+    ),
+}
+
+
+def test_the_table_covers_every_public_glab_helper() -> None:
+    """The table is only a guard if it is complete — pin it against the
+    module's own public surface so a new helper cannot slip past it."""
+    public = {
+        name
+        for name in dir(glab)
+        if not name.startswith("_")
+        and callable(getattr(glab, name))
+        and getattr(getattr(glab, name), "__module__", "") == "fr.glab"
+    }
+    # Classification/retry helpers take a GlabError or a callable, not a host.
+    public -= {
+        "GlabError",
+        "LabelDef",
+        "is_transient",
+        "is_not_found",
+        "is_already_exists",
+        "with_retry",
+    }
+    assert public == set(_HOST_FORWARDING_CALLS)
+
+
+@pytest.mark.parametrize("name", sorted(_HOST_FORWARDING_CALLS))
+def test_every_helper_forwards_the_host(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    seen: list[str | None] = []
+
+    def _spy(args, *, host=None):  # type: ignore[no-untyped-def]
+        seen.append(host)
+        return "{}"
+
+    monkeypatch.setattr(glab, "_run_glab", _spy)
+    _HOST_FORWARDING_CALLS[name]("gl.corp.com")
+    assert seen == ["gl.corp.com"]
+
+
+class TestRunGlabHost:
+    """`GITLAB_HOST`, not `--hostname`: only the env var is honoured by
+    every glab subcommand (`glab api` takes `--hostname`, `glab label
+    create` does not) — verified live against a self-hosted instance,
+    spec §2.D. And it goes in the CHILD's env only, so one repo's host
+    cannot leak into another repo's call in the same process (gh-486)."""
+
+    def test_run_glab_puts_the_host_in_the_child_env_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: dict[str, object] = {}
+
+        def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+            seen["argv"], seen["env"] = argv, kwargs.get("env")
+            return SimpleNamespace(stdout="ok", stderr="", returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        monkeypatch.delenv("GITLAB_HOST", raising=False)
+        assert glab._run_glab(["api", "user"], host="gl.corp.com") == "ok"
+        env = seen["env"]
+        assert isinstance(env, dict)
+        assert env["GITLAB_HOST"] == "gl.corp.com"
+        assert "--hostname" not in seen["argv"]  # type: ignore[operator]
+        assert "GITLAB_HOST" not in os.environ  # never mutated globally
+
+    def test_run_glab_host_env_inherits_the_rest_of_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A copy of os.environ plus one key — not a one-entry env, which
+        would strip PATH and HOME out from under glab."""
+        seen: dict[str, object] = {}
+
+        def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+            seen["env"] = kwargs.get("env")
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        monkeypatch.setenv("FR_SENTINEL_FOR_TEST", "kept")
+        glab._run_glab(["api", "user"], host="gl.corp.com")
+        env = seen["env"]
+        assert isinstance(env, dict)
+        assert env["FR_SENTINEL_FOR_TEST"] == "kept"
+
+    def test_run_glab_without_a_host_leaves_the_env_alone(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env is None -> the child inherits os.environ unchanged, which is
+        what keeps glab's own git-directory host resolution working (§2.D)."""
+        seen: dict[str, object] = {}
+
+        def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+            seen["env"] = kwargs.get("env", "MISSING")
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        glab._run_glab(["api", "user"])
+        assert seen["env"] is None
+
+
+def test_the_body_alone_still_classifies_as_not_found() -> None:
+    """Makes the second _NOT_FOUND_PATTERN reachable: a 404 whose stderr
+    summary is absent is still a not-found via the body."""
+    err = GlabError("", stderr="", stdout='{"message":"404 File Not Found"}')
+    assert is_not_found(err)
 
 
 class TestIsTransient:
@@ -269,3 +445,121 @@ class TestWithRetry:
         with pytest.raises(glab.GlabError):
             glab.with_retry(op)
         assert attempts["n"] == 1
+
+
+class TestIsNotFound:
+    """`is_not_found` decides whether GitLab said "absent" or said "your
+    request was wrong". Reading the second as the first is what made
+    gh-486 a wrong answer instead of an error."""
+
+    @pytest.mark.parametrize(
+        ("err", "out"),
+        [
+            (GLAB_STDERR_404_FILE, GLAB_STDOUT_404_FILE),
+            (GLAB_STDERR_404_PROJECT, GLAB_STDOUT_404_PROJECT),
+            (GLAB_STDERR_404_TREE, GLAB_STDOUT_404_TREE),
+        ],
+    )
+    def test_every_captured_404_shape_is_not_found(self, err, out):
+        assert is_not_found(GlabError(err.strip(), stderr=err))
+
+    @pytest.mark.parametrize(
+        ("err", "out"),
+        [
+            (GLAB_STDERR_400_MISSING_REF, GLAB_STDOUT_400_MISSING_REF),
+            (GLAB_STDERR_UNAUTHENTICATED, GLAB_STDOUT_UNAUTHENTICATED),
+        ],
+    )
+    def test_a_bad_request_or_auth_failure_is_not_absence(self, err, out):
+        assert not is_not_found(GlabError(err.strip(), stderr=err))
+
+    def test_a_path_containing_404_does_not_read_as_not_found(self):
+        """The probed path is echoed in some glab errors, so a loose
+        `"404" in text` would call a 400 on `errors/404.md` absent."""
+        err = GlabError(
+            "glab: HTTP 400",
+            stderr='glab: HTTP 400\n{"error":"ref is missing"} errors/404.md',
+        )
+        assert not is_not_found(err)
+
+
+class TestAlreadyExists:
+    """`glab label create` has no `--force`, so re-creating a label 409s.
+
+    Captured live 2026-09-19 — note rich WRAPPED the message mid-phrase, which
+    is why `_haystack` normalizes whitespace and why a naive
+    `"already exists" in stderr` test would not have matched:
+    """
+
+    LIVE_409 = (
+        "          \n   ERROR  \n          \n  Post https://gitlab.internal.example/api/v4/"
+        "projects/example-org%2Fscratch-repo/labels: 409 {message: Label already\n"
+        "  exists}.                                        \n\n"
+    )
+
+    def test_the_live_409_reads_as_already_exists(self):
+        assert is_already_exists(GlabError("409", stderr=self.LIVE_409))
+
+    def test_it_matches_across_the_wrap(self):
+        """The whole point: the phrase is split by rich's line break."""
+        assert "already exists" not in self.LIVE_409  # literally absent
+        assert is_already_exists(GlabError("409", stderr=self.LIVE_409))
+
+    def test_a_stray_409_without_the_api_envelope_is_not_already_exists(self):
+        """A bare 409 is not enough, and the asymmetry is why: a match makes
+        `ensure_labels` skip SILENTLY, so a false positive is a label that was
+        never created with no error to say so — less discoverable than the loud
+        abort it replaced. A gateway or proxy 409 must not read as "already
+        there" (phase 7 review, Important #1)."""
+        # This one IS the regression guard: red-green verified against the
+        # pre-fix predicate, which answered True here.
+        assert not is_already_exists(
+            GlabError("gateway", stderr="proxy rejected the request : 409 ")
+        )
+        # This one is a boundary assertion, NOT a guard — the old pattern
+        # (": 409 ", space-delimited) did not match it either. Kept for the
+        # boundary, labelled so it is not mistaken for proof.
+        assert not is_already_exists(GlabError("409", stderr="Error: HTTP 409"))
+
+    def test_the_api_envelope_pairs_with_the_status(self):
+        """The paired form still matches even if the phrase itself were absent."""
+        assert is_already_exists(
+            GlabError("409", stderr="Post .../labels: 409 {message: Label taken}")
+        )
+
+    def test_a_404_or_a_400_is_not_already_exists(self):
+        assert not is_already_exists(GlabError("404", stderr=GLAB_STDERR_404_FILE))
+        assert not is_already_exists(GlabError("400", stderr=GLAB_STDERR_400_MISSING_REF))
+
+    def test_ensure_labels_skips_one_that_exists_and_keeps_going(self, monkeypatch):
+        """The tolerance fr.glab.ensure_label's docstring always claimed.
+
+        Before this, the first pre-existing label aborted the whole
+        `fr apply`, so a second run could never converge (gh-486 f15).
+        """
+        seen = []
+
+        def _fake(*, repo, name, color="ededed", description="", host=None):
+            seen.append(name)
+            if name == "phase:1":
+                raise GlabError("409", stderr=TestAlreadyExists.LIVE_409)
+
+        monkeypatch.setattr(glab, "ensure_label", _fake)
+        glab.ensure_labels(
+            repo="g/p",
+            labels=[
+                LabelDef(name="phase:1", color="ededed", description=""),
+                LabelDef(name="phase:2", color="ededed", description=""),
+            ],
+        )
+        assert seen == ["phase:1", "phase:2"]  # did not stop at the 409
+
+    def test_ensure_labels_still_raises_a_real_failure(self, monkeypatch):
+        def _fake(*, repo, name, color="ededed", description="", host=None):
+            raise GlabError("400", stderr=GLAB_STDERR_400_MISSING_REF)
+
+        monkeypatch.setattr(glab, "ensure_label", _fake)
+        with pytest.raises(GlabError):
+            glab.ensure_labels(
+                repo="g/p", labels=[LabelDef(name="x", color="ededed", description="")]
+            )

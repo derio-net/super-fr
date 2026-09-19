@@ -120,3 +120,27 @@ def test_not_found_degrades(tmp_path: Path) -> None:
     row = st.plans[0]
     assert row.state == "Unreachable"
     assert row.note is not None
+
+
+def test_a_propagating_glaberror_degrades_the_row_and_reaches_fail_note(
+    tmp_path: Path,
+) -> None:
+    """A non-404 GlabError from the cross-repo probe degrades the row
+    (not a crash) and its text reaches `fail_note`, so `fr spec status`
+    shows the real reason instead of a phantom empty plan folder
+    (phase 3, gh-486)."""
+    from fr import glab as _glab
+
+    spec = _spec_with_crossrepo_row(tmp_path)
+    gh = FakeGhClient()
+
+    def boom(repo: str, path: str) -> list[str]:
+        raise _glab.GlabError("glab: HTTP 400", stderr="glab: HTTP 400\n")
+
+    gh.list_dir = boom  # type: ignore[method-assign]
+    st = compute_status(parse_spec(spec), tmp_path, gh=gh)
+    row = st.plans[0]
+    assert row.state == "Unreachable"
+    assert row.note is not None
+    assert "cross-repo read of owner/repo failed" in row.note
+    assert "HTTP 400" in row.note

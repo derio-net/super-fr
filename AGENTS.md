@@ -19,10 +19,17 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`spec|plan|debug`) durable run-state under
     `docs/superpowers/journals/{specs,plans,debug}/` (one subdir per scope so
     the tree is glanceable; archived to `implemented/journals/<scope>/`).
-    `add` (idempotent
-    on `--id`) / `render` (raw, feeds PR bodies) / `check` (fail-closed on open
-    findings). `fr plan create` seeds a plan journal; parsing never depends on
-    one (back-compat). fr-goal & fr-debugging write it as they run.
+    `add` (create-only on `--id` — re-adding an existing id fails loudly and
+    directs the caller to `resolve`) / `resolve` (appends a
+    RESOLUTION RECORD closing a finding; append-only, so the original entry is
+    never rewritten) / `render` (raw, feeds PR bodies) / `check` (fail-closed on
+    findings whose **effective** state — the fold of every record naming them,
+    last one wins — is still open). `fr plan create` seeds a plan journal;
+    parsing never depends on one (back-compat), and a journal with no resolution
+    records folds to exactly what it did before `resolve` existed. fr-goal &
+    fr-debugging write it as they run. The matrix's counterpart verb is
+    `fr acceptance set-status` (in-place, beside `add`): a registry of CURRENT
+    state, deliberately not a log.
   - **`fr models`** (`fr/models.py`, `commands/models_cmd.py`) — `tier → model`
     bindings (`~/.config/fr/models.yaml`, repo override > user) for fr-goal
     subagent dispatch; `PhaseHeader.tier` is the harness-neutral hint.
@@ -61,6 +68,17 @@ uv workspace monorepo, version lockstepped across every manifest (see
     + `TrackedItem`, a structural stand-in for `WorkItem` so `fr` never
     imports `fr_dispatch`; `github.py`'s `GithubTracker` is the one
     concrete adapter). No second adapter exists yet — protocol-level only.
+  - **`fr.harness`** (2026-09-18 spec, `harness-parity-matrix`) — a fourth
+    closed vocabulary, sibling to `fr/workflow` and `fr.capabilities`: the
+    shipped `parity.yaml` (`src/fr/harness/parity.yaml`, loaded via
+    `importlib.resources`, never mirrored — it ships inside the `fr` wheel
+    like any other package data) declares which enforcement/interaction
+    surface is wired on which harness; `observe.py` reads the real
+    registration files (`hooks.json`, `.hermes/config.snippet.yaml`,
+    `fr-opencode-plugin`'s marker comments) independently of the
+    declaration, and `check.py` is the only bridge between the two. CLI:
+    `fr harness parity` (`commands/harness_cmd.py`). `prose.py`'s
+    `scan_prose` is the sibling tool-neutrality scanner over skill prose.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
@@ -100,6 +118,16 @@ No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
 this file and `ci.yml` ever disagree, trust `ci.yml` and fix this file. Run
 `ruff format` then `pytest` yourself before pushing — CI is slow to fail-loud.
 
+Inside an fr-isolation worktree, always `uv run fr ...`, never bare `fr` —
+the PATH `fr` is whatever was last installed globally (the base clone's
+install) and can be older than the worktree's own artifacts. Observed live
+on this repo's `run` cursor after the 4.x→schema_version:2 bump: the global
+4.4.0 `fr` refused to read it (`extra inputs are not permitted`) while
+`uv run fr` read it fine, because `RunState` is `extra="forbid"`. Any minor
+bump that changes an artifact's shape reproduces this for anyone whose
+global `fr` predates it — `uv run fr` from the worktree always matches the
+code you are testing.
+
 ## Skills/rules: canonical source vs. generated mirrors
 
 Never hand-edit a generated file — `scripts/sync-opencode.py` overwrites it
@@ -109,8 +137,9 @@ and a CI tripwire will catch drift anyway:
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
   `fr-plan-override.md`, `no-claude-p-batch.md`), plus the THREE
   repo-local-only rules with no plugin counterpart —
-  `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`
-  and `.claude/rules/explainers-currency.md` (still *sources*, edit them
+  `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`,
+  `.claude/rules/explainers-currency.md` and
+  `.claude/rules/third-party-privacy.md` (still *sources*, edit them
   directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
 - Generated: `.opencode/skills/<name>/SKILL.md` and
   `.opencode/instructions/*.md`. After editing a canonical skill/rule, run
@@ -253,6 +282,19 @@ exists and how it's checked, not a restatement:
   adds tests for an existing row, or ships a surface a `not-implemented` row
   waits on updates the matrix in the *same* PR. Gate: `fr acceptance check`
   via `.github/workflows/acceptance-report.yml`. Driver skill: `fr-acceptance`.
+- **third-party-privacy** (2026-09-19) — live-verification evidence is
+  redacted at capture time: hostnames, orgs, repo names and usernames outside
+  the `derio-net` org never reach a spec, journal, fixture, matrix note, PR body
+  or commit message. Adapted from `derio-net/frank`'s rule of the same name.
+  **Prose only — no tripwire yet**, and the rule says so; building one needs a
+  curated allowlist of the fictional domains the fixtures legitimately use.
+- **harness parity** (2026-09-18) — every shipped enforcement/interaction
+  surface must own a `parity.yaml` row, and no skill may name a
+  harness-specific tool outside a scoped per-harness clause. Tripwires:
+  `tests/unit/test_tripwire_harness_parity.py` (every shipped hook script
+  is paired to a row) and `tests/unit/test_tripwire_skill_tool_neutrality.py`
+  (`fr.harness.prose.scan_prose` over the canonical skills plus both
+  mirrors). CLI: `fr harness parity --check`.
 
 ## PR workflow
 
