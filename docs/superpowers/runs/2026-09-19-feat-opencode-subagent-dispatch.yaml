@@ -3,7 +3,7 @@ run: 2026-09-19-feat-opencode-subagent-dispatch
 workflow: fr-goal@1
 branch: feat/opencode-subagent-dispatch
 started: '2026-09-19T21:33:02+00:00'
-cursor: spec-review
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -13,10 +13,16 @@ steps:
       spec: docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
       journal:spec: docs/superpowers/journals/specs/2026-09-19-opencode-subagent-dispatch.md
   spec-review:
-    state: running
-    at: '2026-09-19T21:52:07+00:00'
+    state: done
+    at: '2026-09-19T21:54:21+00:00'
+    emitted:
+      journal:spec: docs/superpowers/journals/specs/2026-09-19-opencode-subagent-dispatch.md
   plan:
-    state: pending
+    state: done
+    at: '2026-09-19T22:01:09+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-19-opencode-subagent-dispatch
+      journal:plan: docs/superpowers/journals/plans/2026-09-19-opencode-subagent-dispatch.md
   plan-review:
     state: pending
   implement:

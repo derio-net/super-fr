@@ -1,0 +1,127 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — agents as the fourth sync category, smoked against the real binary
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-subagent-mirror
+  skeleton: true
+tasks:
+- number: 1
+  title: The frontmatter translation, red to green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_opencode_agent_mirror.py. Load
+      scripts/sync-opencode.py the way test_tripwire_opencode_commands_sync.py
+      does (importlib.util.spec_from_file_location — the script is not a
+      package). Assert against `canonical_agents()`, which must return
+      `dict[str, str]` of mirror-filename-stem -> expected file CONTENT (the
+      commands category's shape, not the skills category's byte-copy shape,
+      because the two frontmatter dialects differ):
+      (a) exactly one key today, "fr-phase-executor";
+      (b) NO `name:` key in the frontmatter — OpenCode names an agent by its
+          filename;
+      (c) `mode: subagent` present (without it OpenCode does not register a
+          subagent at all);
+      (d) `description:` is a SINGLE-LINE double-quoted scalar, not the folded
+          `>` block the canonical Claude file uses — spec §3.C's install-time
+          rewrite depends on a fixed layout;
+      (e) `permission` is the CLOSED translation of the canonical
+          `tools: Read, Edit, Write, Bash, Grep, Glob`: `edit: allow`,
+          `bash: allow`, AND `task: deny`, `webfetch: deny`. Assert the denies
+          explicitly — Claude `tools:` is an allowlist and OpenCode's defaults
+          are permissive, so an additive translation ships a mirror strictly
+          more powerful than its source (spec-review r3);
+      (f) the markdown body is the canonical file's body verbatim;
+      (g) a do-not-hand-edit banner naming scripts/sync-opencode.py.
+      Parse the frontmatter with yaml.safe_load so the test pins MEANING, and
+      keep one separate literal assertion for (d), a layout fact safe_load
+      erases. Run pytest — fails, canonical_agents does not exist.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in scripts/sync-opencode.py add AGENTS_CANONICAL_DIR =
+      REPO_ROOT/"plugins"/"super-fr"/"agents" and AGENTS_MIRROR_DIR =
+      REPO_ROOT/".opencode"/"agent" — SINGULAR — with a module comment recording
+      that all three documented forms (opencode.json's `agent` key,
+      `.opencode/agents/`, `.opencode/agent/`) were verified to register on
+      opencode 1.18.31, and that the singular form is pinned so nobody
+      re-litigates it. Implement the category's four functions in the SAME shape
+      as the other three: `canonical_agents()` / `mirror_agents()` /
+      `find_agents_drift()` / `sync_agents()`. Reuse the existing
+      `_skill_frontmatter` idiom for the canonical file — do not add a
+      frontmatter library. Map `tools:` to `permission:` through an explicit
+      closed table in the module (Edit/Write -> edit allow, Bash -> bash allow,
+      Read/Grep/Glob -> nothing) plus a constant set of denies for the classes a
+      canonical `tools:` line does not grant (task, webfetch). Render from an
+      explicit f-string template with a fixed key ORDER, not a yaml.safe_dump of
+      the whole frontmatter, so the anchor the installer needs is guaranteed
+      rather than incidental. Wire the category into `main()` — `sync_agents()`
+      alongside the other three, `find_agents_drift()` into the `--check` drift
+      list, the agent count into the summary line. Run the S1 tests — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: the four `find_*_drift` bodies are now near-identical (missing /
+      extra / differing-content over two name->X maps). Extract one shared
+      helper and have all four call it, keeping each public function's name and
+      message wording byte-identical so no existing tripwire message changes.
+      If on reading them the three existing ones differ enough that unifying
+      would distort a message, record `no-refactor-because: P1.T1` in the plan
+      journal with the specific reason instead — do not force it. Re-run the
+      full unit suite; the three pre-existing sync tripwires must still pass.
+- number: 2
+  title: Generate the mirror and smoke it against the real binary
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      SKELETON SMOKE — the minimum runtime, exercised for real. Run
+      `uv run scripts/sync-opencode.py` (no flag) to write
+      .opencode/agent/fr-phase-executor.md, then `--check` to confirm clean, and
+      `git add` the generated mirror. Then run `opencode agent list` from the
+      worktree: confirm the line `fr-phase-executor (subagent)` appears, and
+      that agent's fully-resolved permission array contains edit=allow,
+      bash=allow, task=deny, webfetch=deny. `opencode agent list` dumps absolute
+      paths under the operator's home in unrelated `external_directory` entries
+      — filter to those four keys and record ONLY those in the plan journal
+      (`fr journal add --scope plan --kind discovery`), per
+      .claude/rules/third-party-privacy.md. This is a capture of the real
+      binary's output, never a construction. If the binary is unavailable, STOP
+      and journal a finding — do not substitute a mock and call the skeleton
+      smoked.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      `uv run ruff format packages/ tests/ scripts/`;
+      `uv run ruff check packages/ tests/ scripts/`;
+      `uv run pytest -q --no-cov`. All green before the phase completes.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

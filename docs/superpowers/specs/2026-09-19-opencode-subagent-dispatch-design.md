@@ -325,3 +325,14 @@ this spec, the journal and the PR body carry session ids, token counts and model
 only. No absolute home paths from `opencode agent list` output (it dumps
 `external_directory` permission patterns under the operator's home), and no third-party
 hostnames.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-19-opencode-subagent-dispatch | `derio-net/super-fr` | `2026-09-19-opencode-subagent-dispatch` | — |
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|

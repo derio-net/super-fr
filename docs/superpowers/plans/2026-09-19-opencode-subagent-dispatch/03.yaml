@@ -1,0 +1,104 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Installer — deliver the agents, resolve models from the operator's own bindings
+  tag: agentic
+  tier: mechanical
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - opencode-subagent-installer
+tasks:
+- number: 1
+  title: Delivery, proven by a sandboxed install, red to green
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: create tests/integration/test_install_opencode_agents.py. A text
+      assertion over install.sh cannot show that an install WORKS — that gap is
+      the point of this step. Follow
+      tests/integration/test_install_marketplace_namespace.py for how this repo
+      already sandboxes an install.sh run. Run the delivery with HOME and
+      XDG_CONFIG_HOME pointed at tmp_path (both verified honoured, spec §3.A)
+      and OPENCODE_SKILLS_INSTALL=1, then assert: the four agent files land in
+      <config>/opencode/agent/; a seeded ~/.config/fr/models.yaml binding
+      appears as `model:` on each TIER file and NOT on the base file; and
+      `--uninstall` removes exactly those files while leaving an unrelated,
+      operator-owned agent file in the same directory untouched. Run pytest —
+      fails, install.sh delivers no agents.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: in scripts/install.sh, move the existing "7b. OpenCode skill +
+      command delivery" block to AFTER the `fr` CLI install (step 10) — it now
+      shells out to `fr` — keeping its opt-in gate and wording, and leave a
+      one-line comment at the old position saying where it went and why, so the
+      move is not mistaken for a stray edit. Define OPENCODE_AGENTS_DIR
+      ("$HOME/.config/opencode/agent"). For each .opencode/agent/*.md: derive the
+      tier from the filename suffix; `model="$(fr models resolve --harness
+      opencode --tier "$tier" 2>/dev/null || true)"` — the command prints
+      nothing and exits 0 when unbound, so treat empty as "inherit", never as an
+      error — then write the global copy as the mirror with any top-level
+      `model:` line dropped and, only when $model is non-empty, the resolved
+      line inserted directly after the `mode: subagent` line, via awk anchored
+      on that line. No YAML parsing in the installer. The untiered base agent
+      gets no model. Add the matching removal to the --uninstall block beside
+      the existing OPENCODE_SKILLS_DIR / OPENCODE_COMMANDS_DIR removals,
+      deleting only the agent files super-fr ships — never `rm -rf` the
+      operator's whole agent dir, which may hold their own agents. Run the S1
+      test — green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: the skills, commands and agents loops now each re-derive their
+      target dir and echo a near-identical "Installed X" line. Fold the shared
+      shape into one small shell function if it reads cleaner; if it does not
+      (bash functions over parallel arrays usually do not), record
+      `no-refactor-because: P3.T1` in the plan journal with that reason. Re-run
+      the integration test either way.
+- number: 2
+  title: Pin the contract in fast unit form
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Add tests/unit/test_install_copies_opencode_agents.py, modelled on
+      test_install_copies_opencode_commands.py (text assertions over
+      scripts/install.sh, the fast gate its siblings already have): an
+      OPENCODE_AGENTS_DIR is defined and points at ~/.config/opencode/agent;
+      delivery copies from the repo's .opencode/agent/ mirror; it is gated on
+      the SAME OPENCODE_SKILLS_INSTALL / existing-~/.config/opencode opt-in, not
+      a second gate; --uninstall removes what it created; `fr models resolve
+      --harness opencode` appears in the block; and the block appears AFTER the
+      `fr` CLI install section — assert on index position of two anchors, not a
+      line number, so edits above do not break it.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      ruff format; ruff check; `uv run pytest -q --no-cov`. All green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
