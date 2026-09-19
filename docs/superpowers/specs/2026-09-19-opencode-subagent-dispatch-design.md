@@ -219,17 +219,36 @@ task tool, **with the cost stated as a policy, not hidden**: roughly 7× an inli
 (measured $7.59 vs ~$1), in exchange for the fastest measured wall clock (56.2 min vs
 77.6 / 105.2) and real per-phase context isolation. Decision `d1`.
 
-Naming OpenCode's task tool in prose means adding `task` to
-`TOOL_VOCABULARY["opencode"]`, which currently holds only `tool.execute.before`. Checked
-before proposing it: **no bare `task` token exists in any of the three skill trees
-today** (canonical, `.opencode/skills/`, `.hermes/skills/fr/`), so the addition flags
-nothing retroactively, and it does exactly what the vocabulary is for — forces the
-mention to stay inside a scoped clause.
+Naming OpenCode's task tool in prose means adding it to
+`TOOL_VOCABULARY["opencode"]`, which currently holds only `tool.execute.before`. The
+registered name is the two-word prose form **`task tool`**, not the bare id.
+
+> **Correction (phase 4, finding `r-p4-f1`).** This section previously justified
+> registering the bare `task` with "no bare `task` token exists in any of the three skill
+> trees today". **That was false, and was false on `origin/main`.** There are twelve
+> occurrences — four canonical sites mirrored into three trees — and in every one, `task`
+> is *fr's own plan noun*: "end every task red → green → refactor" (`fr-execute`),
+> "phase number, task number, step", "(task id) in the plan journal", "a separate
+> `REFACTOR + quality gate` **task**" (`fr-plan`). The original claim came from an ad-hoc
+> regex run through this machine's `grep` (which is `ugrep`) that silently matched
+> nothing; re-running `scan_prose`'s own pattern against `origin/main` returns all twelve.
+> A load-bearing premise was checked with a substitute for the real predicate — the same
+> defect shape as testing a feature without exercising it.
+
+So the bare id is unusable: it collides head-on with the repo's core domain vocabulary and
+would fire on every future sentence about a plan task. The two literal alternatives were
+both worse — reword fr's domain language to dodge a regex, or weaken `scan_prose` to
+backticked mentions only, which would blunt #436's class-B closer for every harness.
+
+`task tool` matches the shape a real leak takes ("call the task tool with
+`subagent_type` …"), and `_word_pattern` handles a multi-word name (matching is per line,
+so the clause keeps the phrase on one line). **The trade, stated rather than hidden:** a
+leak written as a bare `` `task` `` outside a scoped clause is *not* caught. It is
+recorded in the vocabulary's own comment and in the test.
 
 `TOOL_VOCABULARY` forbids one name under two harnesses, and `scan_prose` is
-**case-sensitive** (`re.escape` with no `IGNORECASE`), so lowercase `task` — OpenCode's
-actual tool id — cannot collide with Claude Code's `Agent`, nor with a capitalised
-`Task` in unrelated prose (spec-review `r5`).
+**case-sensitive** (`re.escape` with no `IGNORECASE`), so this cannot collide with Claude
+Code's `Agent` nor with a capitalised `Task` in unrelated prose (spec-review `r5`).
 
 Regenerating the mirrors (`scripts/sync-opencode.py`, `scripts/sync-hermes.py`) and
 committing them is part of the change; the sync tripwires fail on drift.
