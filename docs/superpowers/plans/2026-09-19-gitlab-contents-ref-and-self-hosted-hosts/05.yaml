@@ -271,6 +271,13 @@ state:
         path (separate open finding). Closed f8-bridge-discards-derived-host as fixed.
         tests: 118 passed.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-19T18:56:29+00:00'
+    note: 'All 5 tasks (T1-T5) landed. Full quality gate: ruff check/format clean,
+      mypy clean (137 files), full pytest suite 3182 passed/85 skipped/1 failed (tests/integration/test_install_bridge.py,
+      expected pre-existing container failure); macOS-side pre-existing failures (test_run_workspace.py
+      x2, test_workflow_check.py x1) confirmed unchanged. fr acceptance check exits
+      2 on multibackend-gitlab-tracking (deliberate, phase 6 owns the move). Version
+      bumped 4.5.2 -> 4.6.0. Closed journal finding f8-bridge-discards-derived-host
+      as fixed; opened two new open findings (pr_observe backend/host mutual-exclusivity
+      limitation; pr_state host-threading gap) plus discoveries documenting both.'
     observed_prs: []
