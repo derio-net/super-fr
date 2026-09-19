@@ -43,6 +43,7 @@ tomorrow" literal — she watched the whole thing happen once.
 | Narrative shape | Recorded run is the spine; angles annotate it |
 | Angles | Security, Quality, **Continuity**, + Extensibility as closing coda |
 | Recording | Internal **Java training** project (identity redacted); **rendered deck is private**; source is generic and in-repo; **no binaries committed, ever** |
+| Harness | `opencode --auto`, `github-copilot/gpt-5.6-terra`, default effort — same as bc88 |
 | Playback | asciinema-player embedded, 1.5–2×, paused at each annotation moment |
 | Evidence | The measured bc88 comparison, as a 2–3 min beat *after* the run |
 | superpowers contrast | Secondary. Attached to specific moments only; never its own section |
@@ -73,7 +74,7 @@ A `/fr-goal` run already visits the angles in order. This is the talk's outline.
 | Acceptance rows born and defended | Quality | — |
 | Plan as a **folder** with `_meta.yaml` | Continuity | formless plan; checkboxes left unticked |
 | Run cursor advances | Continuity | nothing survives the session |
-| Phase executors dispatched; tier→model | Extensibility | — |
+| ~~Phase executors dispatched; tier→model~~ | — | **does not occur on this harness — see below** |
 | TDD per phase; adversarial review loop | Quality | — |
 | Journal findings; `check` fails on open ones | Quality | — |
 | Merge → archive to `implemented/` | Continuity | specs and plans pile up undifferentiated |
@@ -121,6 +122,57 @@ Resolution: **compress hard and label the compression on screen** — the same
 posture the privacy rule takes on redaction, that stating it beats hiding it.
 Pre-pulling *base image layers* is legitimate and needs no label; we are not
 demonstrating a registry's bandwidth. Everything fr itself does is shown.
+
+## What this harness costs the recording
+
+`fr harness parity` on 2026-09-19, read before recording rather than after.
+Two rows change the plan.
+
+### `subagent-dispatch / opencode: absent` — the Extensibility beat cannot happen
+
+> no isolation-argument dispatch primitive on OpenCode — fr-goal §5's documented
+> fallback runs phases **inline**; correct behaviour, not a gap to fill.
+
+This is not a bug and needs no fix. But it means phase executors are never
+dispatched on camera, and with phases running inline in one session, model tiers
+per workload complexity have nothing to show either. It also explains bc88's
+arm G running **0 subagents in 17 min**, which is why this harness fits the
+budget at all.
+
+So the Extensibility angle surfaces **zero** times in the run, not once. That
+retroactively justifies demoting it to a verbal coda — it is now the only
+option. The coda must say "on this harness, phases run inline" rather than
+implying the listener will see executors fan out.
+
+### `operator-gate / opencode: advisory` — the contract beat can silently not fire
+
+> no operator-question tool exists on OpenCode — the gate cannot mechanically
+> block; the measured failure of #436 instance 2.
+
+**This is the single highest-risk moment in the recording.** "Asked once, then
+left alone" is the heart of the pitch, and on this harness nothing enforces it:
+the skill prose asks the model to batch its questions and end the turn, and a
+model that ignores it simply proceeds. That is not hypothetical — v1's arm A is
+the measured case where it never asked anything at all.
+
+Both question gates are affected: `fr-init`'s interview and `/fr-goal`'s batch.
+
+Mitigated by this being a recording, not a live demo — a bad take is re-recorded.
+But that only works if the take is *checked*, which is why the criterion below
+is a gate and not a hope.
+
+## Recording acceptance — when a take is usable
+
+Checked before anything is torn down, because the evidence is perishable.
+
+1. **Both question gates fired.** `fr-init` interviewed, and `/fr-goal` asked its
+   batch and ended the turn. If either did not, the take is discarded.
+2. **The cursor records a human answered** — `answered_by: operator`, not the
+   agent clearing its own gate.
+3. **A check genuinely failed and was recovered.** This is why those two
+   exercises were chosen; a clean run is a weaker take, not a luckier one.
+4. **The merge request exists** on the operator's fork.
+5. **Annotation offsets were noted live**, not reconstructed afterwards.
 
 ## Time budget (51–59 min)
 
@@ -302,7 +354,10 @@ restriction. Two pairs of claims that look alike and are not.
   `docs/superpowers/workflows/<name>.yaml` **wholesale** over shipped. v1
   authored and ran `presentation-showdown` through exactly that path, so the
   talk can demonstrate it from its own history.
-- Phase executors, model tiers per workload complexity, the three harnesses.
+- Phase executors and model tiers per workload complexity — **verbally, with
+  the caveat that this harness runs phases inline**, so neither appears on
+  screen (see "What this harness costs the recording").
+- The three harnesses.
 - **GitLab**, including self-hosted — see below.
 
 **Not claimable — different features that merely sound the same:**

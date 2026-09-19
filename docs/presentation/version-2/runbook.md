@@ -147,11 +147,20 @@ XDG_CONFIG_HOME=$CFG XDG_DATA_HOME=$DATA GITLAB_HOST=$GITLAB_HOST \
     $RUN_ROOT/demo.cast
 ```
 
-**Harness is an open decision.** bc88 used `opencode --auto` with
-`github-copilot/gpt-5.6-terra`. Two arguments to keep it: the audience's own
-tooling is Copilot-based, and OpenCode's `/fr-goal` ran **0 subagents in
-17 min** where Claude ran 14 subagents in 56 min — decisive for a 15–25 min
-budget. Confirm with the operator before recording.
+**Harness: `opencode --auto`, `github-copilot/gpt-5.6-terra`, default effort**
+— confirmed 2026-09-19, same as bc88. The audience's own tooling is
+Copilot-based, and OpenCode's `/fr-goal` ran **0 subagents in 17 min** where
+Claude ran 14 in 56 — decisive for the budget.
+
+Two consequences of that choice, from `fr harness parity`:
+
+- `subagent-dispatch / opencode: absent` — phases run **inline** (fr-goal §5's
+  documented fallback, correct behaviour). Phase executors and model tiers
+  therefore never appear on camera. This is also *why* the run fits the budget.
+- `operator-gate / opencode: advisory` — no operator-question tool exists on
+  OpenCode, so nothing mechanically enforces the batched-Q&A gate. It fired
+  correctly in bc88's arm G, and failed to fire at all in the earlier arm A.
+  **This is the highest-risk moment in the take.**
 
 ## Measure
 
@@ -183,7 +192,6 @@ them live; recovering them afterwards means re-watching the whole cast.
 | acceptance rows presented | Quality |
 | plan folder + `_meta.yaml` | Continuity |
 | run cursor advances | Continuity |
-| phase executor dispatched | Extensibility |
 | a check FAILS | **Quality — the beat the talk is built on** |
 | journal finding recorded | Quality |
 | MR opened | Continuity |
@@ -203,19 +211,32 @@ prompts, git output and MR URLs. That is a further reason the rendered deck is
 internal-only, and a reason the cast itself must never be committed even if the
 binary-size argument were somehow answered.
 
-## Post-run: harvest harness findings before tearing anything down
+## Take acceptance — run this BEFORE tearing anything down
 
-Carried forward from bc88, where this was a second deliverable rather than a
-footnote. The evidence is perishable — it lives in the cast, the db and the
-cursor.
+Not a post-run curiosity: a take that fails any of these is discarded and
+re-recorded. The evidence is perishable — it lives in the cast, the db and the
+cursor — and the riskiest item (`operator-gate`) is advisory on this harness, so
+it can silently not have happened.
 
 ```bash
-# a human answered the gate; the agent did not clear its own
-grep -n 'answered_by' "$CLONE"/docs/superpowers/runs/*.yaml
+# 1. a human answered the gate; the agent did not clear its own
+grep -n 'answered_by' "$CLONE"/docs/superpowers/runs/*.yaml   # expect: operator
 
-# journal findings must be resolved, not merely present
-cd "$CLONE" && uv run fr journal check
+# 2. the artifacts the pipeline claims to produce actually exist
+ls "$CLONE"/docs/superpowers/specs/ "$CLONE"/docs/superpowers/plans/
+
+# 3. findings were resolved, not merely recorded
+cd "$CLONE" && uv run fr journal check --scope plan --slug <slug>
 ```
+
+By eye, from the cast itself:
+
+- [ ] `fr-init` interviewed — gate 1 of 2 fired
+- [ ] `/fr-goal` asked its batch and **ended the turn** — gate 2 of 2 fired
+- [ ] a check genuinely **failed and was recovered** (this is why those two
+      exercises were chosen; a clean run is a weaker take, not a luckier one)
+- [ ] the merge request exists on the fork
+- [ ] annotation offsets noted live, not reconstructed
 
 This run is also the **first live exercise of the GitLab path end to end**, so
 it doubles as verification for #486. Anything it surfaces gets an issue — with
