@@ -90,6 +90,16 @@ def _default_close_gh_issue(repo: str, issue_number: str, backend: str) -> None:
     caller (including test doubles) satisfies structurally; it's always
     one of the three literal values in practice (both call sites derive
     it via `fr._hosts.backend_for_hostname`/`fr_vk._cardref.BACKEND_FOR_TAG`).
+
+    NOT threading a host here — unlike `pr_observe`'s sibling fetch
+    (gh-486, spec §4.C/§4.D, P5.T5) — is a deliberate, documented limit,
+    not an oversight: the hostname exists one frame up in
+    `_close_linked_gh_issue` (parsed from `pr_url`), but this function's
+    public 3-arg `closer` signature has no room for it, and every test
+    double satisfies that signature structurally. Widening it is a
+    bridge-wide change beyond gh-486's scope. Consequence: auto-closing a
+    linked Issue still targets the SaaS host on a self-hosted instance,
+    and fails non-fatally with a logged warning below.
     """
     client = hostclient.client_for_backend(backend)  # type: ignore[arg-type]
     try:

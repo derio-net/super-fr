@@ -153,6 +153,17 @@ def declared_host(repo_root: Path) -> str | None:
     return host if isinstance(host, str) and host else None
 
 
+def self_hosted_hostname(hostname: str | None) -> str | None:
+    """The hostname, but only when it is NOT a recognized SaaS domain —
+    else None. `github.com`/`gitlab.com` need no override, and naming one
+    would make an ordinary repo look self-hosted. Shared by `host_for`
+    (which has a checkout) and `fr_vk.pr_observe` (which has only a PR
+    URL), so the rule cannot drift between them — see gh-486, spec §4.C."""
+    if hostname and hostname not in DEFAULT_HOST_BACKENDS:
+        return hostname
+    return None
+
+
 def host_for(repo_root: Path) -> str | None:
     """Which instance hostname this repo's forge CLI should talk to: the
     declared `host:`, else the origin's own hostname when it is not a
@@ -166,7 +177,4 @@ def host_for(repo_root: Path) -> str | None:
     declared = declared_host(repo_root)
     if declared:
         return declared
-    hostname = _origin_hostname(repo_root)
-    if hostname and hostname not in DEFAULT_HOST_BACKENDS:
-        return hostname
-    return None
+    return self_hosted_hostname(_origin_hostname(repo_root))

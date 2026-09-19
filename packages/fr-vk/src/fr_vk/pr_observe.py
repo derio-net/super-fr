@@ -45,11 +45,14 @@ def _default_pr_status_fetch(pr_url: str) -> str | None:
     Non-fatal. The backend is resolved from `pr_url`'s own hostname
     (`fr._hosts.backend_for_hostname`) — NOT from any ambient single-repo
     context — since one VK board can hold cards from repos on different
-    backends.
+    backends. The same hostname is threaded through as `host` (via
+    `_hosts.self_hosted_hostname`) whenever it is not a recognized SaaS
+    domain, so a self-hosted GitLab MR URL reaches its own instance
+    rather than glab's gitlab.com default (gh-486; spec §4.C/§4.D).
     """
     hostname = urlparse(pr_url).hostname
     backend = _hosts.backend_for_hostname(hostname)
-    client = hostclient.client_for_backend(backend)
+    client = hostclient.client_for_backend(backend, host=_hosts.self_hosted_hostname(hostname))
     try:
         result = client.pr_status_by_url(pr_url)
     except Exception as e:  # noqa: BLE001 — non-fatal, mirrors the old subprocess posture
