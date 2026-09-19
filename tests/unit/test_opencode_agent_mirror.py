@@ -234,3 +234,32 @@ def test_the_shipped_agent_still_denies_task_and_webfetch() -> None:
     a phase executor from dispatching further subagents."""
     permission = sync_opencode._agent_permission("Read, Edit, Write, Bash, Grep, Glob")
     assert permission == {"edit": "allow", "bash": "allow", "task": "deny", "webfetch": "deny"}
+
+
+# ── review r-p2-f2: two canonical agents can generate one mirror name ────
+#
+# `canonical_agents()` builds `result[f"{stem}-{tier}"]` by plain assignment,
+# so a canonical `fr-phase-executor-hard.md` sitting beside
+# `fr-phase-executor.md` produces the key `fr-phase-executor-hard` twice and
+# the dict keeps the last writer — one agent silently never reaches
+# `.opencode/agent/`. Same silent-loss class as r-p1-f1: this generator must
+# refuse an ambiguity it cannot resolve, not pick a winner.
+
+
+def test_a_canonical_agent_colliding_with_a_generated_tier_name_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    canonical = tmp_path / "agents"
+    canonical.mkdir()
+    source = (REPO_ROOT / "plugins" / "super-fr" / "agents" / "fr-phase-executor.md").read_text()
+    (canonical / "fr-phase-executor.md").write_text(source)
+    # Its own tier expansion claims `fr-phase-executor-hard`, and so does this.
+    (canonical / "fr-phase-executor-hard.md").write_text(source)
+    monkeypatch.setattr(sync_opencode, "AGENTS_CANONICAL_DIR", canonical)
+
+    with pytest.raises(sync_opencode.AgentTranslationError) as exc:
+        sync_opencode.canonical_agents(models_path=tmp_path / "absent.yaml")
+
+    message = str(exc.value)
+    assert "fr-phase-executor-hard" in message
+    assert "fr-phase-executor.md" in message

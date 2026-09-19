@@ -418,28 +418,55 @@ def canonical_agents(*, models_path: Path | None = None) -> dict[str, str]:
         models_path = REPO_ROOT / AGENTS_MODELS_REL
 
     result: dict[str, str] = {}
+    # Which canonical file claimed each generated name, so a collision can
+    # name BOTH sides (review r-p2-f2). Plain assignment silently kept the
+    # last writer, so a canonical `fr-phase-executor-hard.md` beside
+    # `fr-phase-executor.md` made one of them never reach the mirror at all.
+    claimed_by: dict[str, str] = {}
+
+    def claim(name: str, source: str, content: str) -> None:
+        if name in claimed_by:
+            raise AgentTranslationError(
+                f"two canonical agents both produce `.opencode/agent/{name}.md`: "
+                f"{claimed_by[name]} and {source}. Every canonical agent also claims "
+                f"`<name>-<tier>` for each of {', '.join(PHASE_TIERS)}, so an agent "
+                "whose own filename ends in a tier name collides with another's tier "
+                "expansion. Rename one — the generator will not pick a winner."
+            )
+        claimed_by[name] = source
+        result[name] = content
+
     for path in sorted(AGENTS_CANONICAL_DIR.glob("*.md")):
         stem = path.stem
+        source = f"{stem}.md"
         frontmatter = _skill_frontmatter(path)
         _, _, body = path.read_text().split("---", 2)
         description = str(frontmatter.get("description", "")).strip()
         tools = str(frontmatter.get("tools", ""))
 
-        result[stem] = _render_agent(
-            description=description,
-            body=body,
-            tools=tools,
-            model=None,
-            canonical_name=stem,
+        claim(
+            stem,
+            source,
+            _render_agent(
+                description=description,
+                body=body,
+                tools=tools,
+                model=None,
+                canonical_name=stem,
+            ),
         )
 
         for tier in PHASE_TIERS:
-            result[f"{stem}-{tier}"] = _render_agent(
-                description=f"{description} ({tier} tier)",
-                body=body,
-                tools=tools,
-                model=_tier_model(tier, models_path=models_path),
-                canonical_name=stem,
+            claim(
+                f"{stem}-{tier}",
+                source,
+                _render_agent(
+                    description=f"{description} ({tier} tier)",
+                    body=body,
+                    tools=tools,
+                    model=_tier_model(tier, models_path=models_path),
+                    canonical_name=stem,
+                ),
             )
     return result
 
