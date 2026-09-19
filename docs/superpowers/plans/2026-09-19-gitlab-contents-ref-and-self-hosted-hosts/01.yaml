@@ -143,26 +143,40 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:01:28+00:00'
+      note: 'Added _CapturingGlab double + test_file_exists_pins_ref_on_the_contents_endpoint;
+        confirmed RED: AssertionError, endpoint missing ?ref=HEAD'
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:02:08+00:00'
+      note: Added _CONTENTS_REF='HEAD' constant, appended ?ref=HEAD to file_exists's
+        endpoint. Targeted test passes; full file 36/36 passed.
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:02:39+00:00'
+      note: Folded test_file_exists_true_on_success and test_file_exists_false_on_error
+        onto _CapturingGlab, added endpoint assertions to each. ruff format/check
+        clean. Full file 36/36 passed. No behaviour change.
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:09:38+00:00'
+      note: Added GLAB_STDERR_400_MISSING_REF / 404_FILE / 404_PROJECT / 404_TREE
+        / UNAUTHENTICATED module-level fixtures verbatim from spec §2.A. ruff format/check
+        clean; test_real_glabclient.py still 36/36.
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:09:55+00:00'
+      note: 'Gate: ruff format 0 reformatted/354 clean, ruff check all passed, mypy
+        success 137 files, pytest -q --no-cov: 3 failed/3125 passed/80 skipped — the
+        3 failures are pre-existing+unrelated (test_run_workspace.py x2, test_workflow_check.py
+        x1), confirmed via git-stash bisection against pre-phase-1 state and journaled
+        as finding ca6cb2838610. fr acceptance check: exit 2, ONLY multibackend-gitlab-tracking
+        failing, as expected/intended (d4).'
   completion:
-    at: null
-    note: null
+    at: '2026-09-19T17:10:08+00:00'
+    note: 'Phase 1 complete: file_exists pins ref=HEAD via new _CONTENTS_REF constant,
+      request-asserting _CapturingGlab double added and applied to all file_exists
+      tests, live-captured GLAB_STDERR_* fixtures added for phase 3. Full gate clean
+      except the intended acceptance failure.'
     observed_prs: []

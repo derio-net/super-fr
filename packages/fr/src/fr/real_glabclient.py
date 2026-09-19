@@ -43,6 +43,13 @@ from fr.labels import LabelDef
 # nest arbitrarily, and the dash infix is optional across GitLab versions).
 _MR_URL_RE = re.compile(r"^https://[^/]+/(.+?)(?:/-)?/merge_requests/(\d+)/?$")
 
+# GitLab's contents endpoint REQUIRES `ref`; GitHub's equivalent does
+# not, which is why this adapter was written without one (gh-486).
+# HEAD is the server's own default branch, so one call works on a
+# `master` instance and a `main` one alike — live-proven 2026-09-19
+# against a master-default self-hosted instance (spec §2.A).
+_CONTENTS_REF = "HEAD"
+
 
 class RealGlabClient:
     """Wraps `fr.glab` to satisfy the `GhClient` Protocol for GitLab repos."""
@@ -197,7 +204,12 @@ class RealGlabClient:
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         try:
-            _glab._run_glab(["api", f"projects/{encoded_repo}/repository/files/{encoded_path}"])
+            _glab._run_glab(
+                [
+                    "api",
+                    f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}",
+                ]
+            )
             return True
         except _glab.GlabError:
             return False

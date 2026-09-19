@@ -69,3 +69,42 @@ End-to-end fr apply against the live instance, plus enabling and restoring the p
 ### a747ed905ee3 · discovery · no-refactor-because P6.T3
 
 Acceptance-matrix moves via fr acceptance set-status and the final verification sweep. The matrix and its three committed reports are generated artifacts; hand-editing them is what the acceptance-matrix rule forbids.
+
+<!-- fr:journal kind=finding scope=plan id=ca6cb2838610 created=2026-09-19T19:09:17 phase=1 state=open -->
+### ca6cb2838610 · finding [open] · 3 pre-existing pytest failures unrelated to this phase (env-dependent, not caused by this diff) (phase 1)
+
+Full-suite gate (uv run pytest -q --no-cov) shows 3 failed, 3125 passed, 80
+skipped. All 3 are pre-existing and unrelated to Phase 1's diff (only
+packages/fr/src/fr/real_glabclient.py and
+tests/unit/test_real_glabclient.py touched) — confirmed by `git stash` +
+re-running the same 3 tests against the branch's pre-phase-1 state
+(b0d48f7, which is origin/main HEAD f041eae plus 3 docs/plan-only commits):
+identical failures, byte for byte.
+
+1. tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused
+   and ::test_an_external_marker_without_container_evidence_is_refused —
+   both assert a substring of an error message
+   (e.g. "not a linked git worktree") but the actual CLI output has the
+   phrase split across a newline ("...is not a linked git \nworktree...").
+   Root cause: this shell's exported COLUMNS=0 (visible via `env | grep -i
+   column`), which appears to drive Click/Typer's text-wrapping to width 0,
+   breaking mid-phrase. Environment artifact, not a code defect in
+   fr/run/workspace.py's message text itself (the source string has no
+   embedded newline).
+
+2. tests/unit/test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable
+   expects exit_code == 1 when both $FR_SHIPPED_WORKFLOWS_DIR (pointed at
+   an empty dir) and packaged_shipped_workflows_dir() (monkeypatched to
+   None) are defeated, but fr.workflow.resolve.shipped_workflow_dirs()
+   unconditionally appends
+   `Path.home() / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL` regardless of
+   either override — a third, un-mocked fallback. On any machine (or fr-
+   isolation worktree) where the super-fr plugin is actually installed as
+   a Claude Code marketplace, that path holds a real fr-goal.yaml, so the
+   CLI reports "fr-goal: ok" instead of the expected failure. Looks like a
+   genuine test-isolation gap in shipped_workflow_dirs' test coverage, but
+   it is in fr.workflow (unrelated module) and predates this branch —
+   out of scope for a GitLab-contents-ref phase to fix.
+
+Not touched, per this phase's scope boundary. Flagging for the orchestrator
+to decide whether to open a separate issue/PR.

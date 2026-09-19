@@ -28,6 +28,22 @@ def _fake_run_glab_factory(returns: dict[tuple[str, ...], str]):
     return _run
 
 
+# Captured live from glab 1.89.0 against a self-hosted GitLab,
+# 2026-09-19 (spec §2.A). glab writes the API's error body to BOTH
+# stdout and stderr, so `GlabError.stderr` carries the JSON too —
+# which is what keeps a propagated error diagnosable.
+GLAB_STDERR_400_MISSING_REF = 'glab: HTTP 400\n{"error":"ref is missing, ref is empty"}'
+GLAB_STDERR_404_FILE = 'glab: 404 File Not Found (HTTP 404)\n{"message":"404 File Not Found"}'
+GLAB_STDERR_404_PROJECT = (
+    'glab: 404 Project Not Found (HTTP 404)\n{"message":"404 Project Not Found"}'
+)
+GLAB_STDERR_404_TREE = (
+    "glab: 404 invalid revision or path Not Found (HTTP 404)\n"
+    '{"message":"404 invalid revision or path Not Found"}'
+)
+GLAB_STDERR_UNAUTHENTICATED = "ERROR\n\n  Unauthenticated."
+
+
 class TestViewIssue:
     def test_coerces_opened_state_and_plain_string_labels(self, monkeypatch):
         """GitLab's REST/CLI issue shape uses lowercase opened/closed and
@@ -229,17 +245,57 @@ class TestThinPassThroughs:
         assert captured == [{"repo": "group/proj", "labels": defs}]
 
 
+class _CapturingGlab:
+    """Records the args every `_run_glab` call receives.
+
+    Every contents test in this file mocks `_run_glab` as
+    `lambda args: <json>`, which DISCARDS `args` — which is exactly
+    why gh-486 (a missing, mandatory query parameter) was invisible
+    to a green suite. A test that cannot see the request cannot
+    test the request. Accepts **kwargs so it survives Phase 4
+    adding `host=`.
+    """
+
+    def __init__(self, result: str = "{}") -> None:
+        self.calls: list[list[str]] = []
+        self.result = result
+
+    def __call__(self, args: list[str], **kwargs: object) -> str:
+        self.calls.append(list(args))
+        return self.result
+
+    @property
+    def endpoint(self) -> str:
+        return self.calls[-1][-1]
+
+
+def test_file_exists_pins_ref_on_the_contents_endpoint(monkeypatch):
+    """GitLab's files endpoint REQUIRES `ref`; without it the real
+    API answers 400 `{"error":"ref is missing, ref is empty"}` and
+    `file_exists` reported that as "absent" (gh-486)."""
+    cap = _CapturingGlab(json.dumps({"content": "eA=="}))
+    monkeypatch.setattr(_glab, "_run_glab", cap)
+    assert RealGlabClient().file_exists("group/proj", "docs/x.md") is True
+    assert cap.endpoint == ("projects/group%2Fproj/repository/files/docs%2Fx.md?ref=HEAD")
+
+
 class TestContentsApi:
     def test_file_exists_true_on_success(self, monkeypatch):
-        monkeypatch.setattr(_glab, "_run_glab", lambda args: json.dumps({"content": "eA=="}))
+        cap = _CapturingGlab(json.dumps({"content": "eA=="}))
+        monkeypatch.setattr(_glab, "_run_glab", cap)
         assert RealGlabClient().file_exists("group/proj", "docs/x.md") is True
+        assert cap.endpoint == "projects/group%2Fproj/repository/files/docs%2Fx.md?ref=HEAD"
 
     def test_file_exists_false_on_error(self, monkeypatch):
-        def _raise(args):
+        cap = _CapturingGlab()
+
+        def _raise(args, **kwargs):
+            cap(args, **kwargs)
             raise _glab.GlabError("404")
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert RealGlabClient().file_exists("group/proj", "docs/missing.md") is False
+        assert cap.endpoint == ("projects/group%2Fproj/repository/files/docs%2Fmissing.md?ref=HEAD")
 
     def test_read_file_decodes_base64_content(self, monkeypatch):
         import base64
