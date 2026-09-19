@@ -98,38 +98,65 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:08:31+00:00'
+      note: 'RED: test_harness_vocabulary gains test_opencodes_dispatch_tool_is_in_the_vocabulary
+        (+ the equality assertion updated); new tests/unit/test_fr_goal_dispatch_prose.py
+        asserts the retracted claim is gone, the clause names subagent_type/fr-phase-executor-<tier>/task,
+        the cost policy carries a multiple AND a direction, and scan_prose(text)==[].
+        5 failed, 11 passed.'
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:11:23+00:00'
+      note: 'GREEN: TOOL_VOCABULARY[''opencode''] += ''task tool'' (two-word prose
+        form, NOT the bare id — see finding p4-t1-s2-bare-task-token) with the {prompt,description,subagent_type,command}/by-name/no-model
+        comment; fr-goal §5''s OpenCode arm rewritten to dispatch subagent_type: fr-phase-executor-<tier>
+        via the task tool with the cost policy open. Claude Code and Hermes arms untouched.
+        20 passed.'
     P4.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:12:49+00:00'
+      note: 'REFACTOR: arm now states serial dispatch and explains (not asserts) why
+        the tier lives in the agent name; 120-line cap forced two long lines. See
+        journal p4-t1-s3-refactor.'
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:13:22+00:00'
+      note: 'RED: three tests in test_tripwire_harness_parity.py — the subagent-dispatch
+        opencode cell is ''enforced'', carries NO scope_note, and the row summary
+        states the cost policy (multiple + direction, not a sentence). 3 failed, 6
+        passed.'
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:13:48+00:00'
+      note: 'GREEN: subagent-dispatch opencode cell -> {state: enforced}, scope_note
+        deleted entirely; summary now carries the default and its price. 38 passed;
+        fr harness parity --check clean.'
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:14:30+00:00'
+      note: 'REFACTOR: row = short form + explicit pointer to fr-goal §5 as the one
+        home for the figures; clause = the operational form owning $7.59/~$1 and 56.2/77.6/105.2,
+        which the row never repeats. The one token they must share (the multiple)
+        is now PINNED by test_the_row_and_the_clause_state_the_SAME_multiple, and
+        test_the_row_does_not_restate_the_clauses_measured_detail keeps the division
+        from eroding. Drift proven detectable (row 9x vs clause 7x -> mismatch). 15
+        passed.'
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:14:45+00:00'
+      note: 'Both mirrors regenerated: sync-opencode.py (9 skills, 8 instructions,
+        9 commands, 4 agents) and sync-hermes.py (9 skills, 4 rules); both --check
+        clean. .opencode/skills/fr-goal/SKILL.md and .hermes/skills/fr/fr-goal/SKILL.md
+        now carry ''task tool'' and zero occurrences of ''no dispatch primitive''.'
     P4.T4.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T23:19:06+00:00'
+      note: 'Gate: fr harness parity --check clean; pytest -q --no-cov --basetemp=/tmp/sb
+        -> 1 failed, 3269 passed, 80 skipped (the single failure is test_workflow_check::test_cli_all_fails_when_nothing_is_discoverable,
+        pre-existing on origin/main, scoped out in r-p1-f4); ruff format 359 files
+        unchanged; ruff check all passed; mypy 137 source files clean.'
   completion:
-    at: null
+    at: '2026-09-19T23:19:07+00:00'
     note: null
     observed_prs: []

@@ -22,11 +22,12 @@ matrix silent about it.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fr.harness import load_matrix
 from fr.harness.check import check, pairing
-from fr.harness.model import Matrix, parse_matrix
+from fr.harness.model import HarnessState, Matrix, parse_matrix
 from fr.harness.observe import HOOKS_RELPATH, observe, shipped_scripts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -129,6 +130,49 @@ def test_the_dangling_row_detector_fires_on_a_row_for_a_deleted_script() -> None
 def test_this_repos_matrix_agrees_with_its_own_registration_files() -> None:
     findings = check(load_matrix(), observe(REPO_ROOT))
     assert not findings, "harness-parity drift:\n" + "\n".join(f.message for f in findings)
+
+
+# --- subagent-dispatch on OpenCode: the row #493 says was wrong ------------
+
+
+def _cell(surface_id: str, harness: str) -> HarnessState:
+    row = next(s for s in load_matrix().surfaces if s.id == surface_id)
+    return row.harnesses[harness]
+
+
+def test_subagent_dispatch_is_enforced_on_opencode() -> None:
+    """2026-09-19 opencode-subagent-dispatch spec §3.E. Both halves of the
+    surface now ship — the tier agents are defined and installed (phases 1-3)
+    and fr-goal §5 dispatches to them (phase 4) — so the row says `enforced`,
+    not `absent`."""
+    assert _cell("subagent-dispatch", "opencode").state == "enforced"
+
+
+def test_subagent_dispatch_on_opencode_carries_no_scope_note() -> None:
+    """The retired note read "no isolation-argument dispatch primitive on
+    OpenCode". That cannot be the discriminator (#493): Hermes has no
+    isolation argument either and is `enforced`, and the fr-phase-executor
+    carve-out positively FORBIDS one for this agent (fr-goal §6 runs executors
+    inside the workspace that already exists; `fr-phase-executor-guard.sh`
+    refuses the combination). A note that names a requirement of the surface
+    as the reason it is missing is worse than no note — and `enforced` is a
+    state the schema requires no note for, so silence here is the honest
+    declaration rather than an omission."""
+    assert _cell("subagent-dispatch", "opencode").scope_note is None
+
+
+def test_the_subagent_dispatch_summary_carries_the_cost_policy() -> None:
+    """A reader meets the claim and its price in the same place (spec §3.E).
+    Asserted as a multiple and a direction, not a sentence, so rewording the
+    summary does not fail this — dropping the policy does. The measured
+    numbers live in fr-goal §5's clause, not here (P4.T2.S3)."""
+    summary = next(s for s in load_matrix().surfaces if s.id == "subagent-dispatch").summary
+    assert re.search(r"(?<![\w.])7\s*(?:[x×]|times)", summary), (
+        f"the dispatch default's cost multiple is not in the row summary: {summary!r}"
+    )
+    assert "inline" in summary, (
+        f"the multiple is stated with no baseline to be a multiple OF: {summary!r}"
+    )
 
 
 # --- M-4: the invariant that makes `shipped_scripts()` non-recursive safe ---
