@@ -14,10 +14,22 @@ other — plus a stale upstream issue — long enough that nobody re-derived eit
 Three claims, none of which survives contact with the binary:
 
 **1. "OpenCode has no dispatch primitive."** It has two, `@mention` and the task tool.
-This repo's own recorded experiment measured thirteen dispatches through it: arm A of
-`docs/presentation/version-1/experiment/run-metrics.csv`, harness `opencode --auto`,
-13 child sessions each with `parent_id` set. So `fr-goal` on OpenCode *already
-dispatched*, while the skill told the model not to.
+This repo's own recorded experiment measured thirteen dispatches through it: arm A,
+harness `opencode --auto`, 13 child sessions each with `parent_id` set. So `fr-goal` on
+OpenCode *already dispatched*, while the skill told the model not to.
+
+Two caveats on that evidence, both found in spec-review (`r1`, `r2`):
+
+- **The CSV is not on `main`.** `docs/presentation/version-1/experiment/run-metrics.csv`
+  lives on the unmerged branch `feat/presentation-showdown`, so a reader on `origin/HEAD`
+  cannot open the path #494 cites. Re-derived from the file at that ref and quoted here
+  so the numbers stand on their own: 14 arm-A rows, one root plus **13 children**, costs
+  summing to **$7.5906**; root wall-clock **56.2 min** against **77.6** (arm B) and
+  **105.2** (arm C).
+- **Arm A dispatched to the built-in `general` agent**, not to a named custom one — its
+  titles all read `(@general subagent)`. So arm A proves the *primitive*; it does not
+  prove that a **named, tool-restricted** custom agent is invocable. That second half is
+  proved separately, live, in §3.A.
 
 **2. "The blocker is the lack of an isolation-argument dispatch primitive"**
 (`parity.yaml`'s `scope_note`). Self-refuting twice over. Hermes has no isolation
@@ -118,6 +130,25 @@ still what Claude Code reads). Mirror: `.opencode/agent/*.md`.
 The body is carried through unchanged. The mirror carries a generated-file banner, the
 way the commands mirror carries its shape — never hand-edit it.
 
+**The mapping is closed, not additive** (spec-review `r3`). Claude Code's `tools:` is an
+*allowlist* — every tool it omits is denied. OpenCode's permission defaults are
+permissive, so translating only the allowed keys would ship a mirror strictly more
+powerful than its canonical source. The generator therefore also emits explicit denies
+for the capability classes the canonical `tools:` line withholds:
+
+```yaml
+permission:
+  edit: allow      # tools: Edit, Write
+  bash: allow      # tools: Bash
+  task: deny       # canonical tools: has no Agent/Task — see below
+  webfetch: deny   # canonical tools: has no WebFetch
+```
+
+`task: deny` is the load-bearing one. A phase executor that can dispatch further
+subagents breaks the contract its own body states — "phases run serially on one shared
+branch; the worktree has exactly one writer." Verified live that both denies round-trip
+into the resolved permission array.
+
 ### C. Tier → model, given that the call cannot carry one
 
 Because the task tool resolves the agent by name and takes no model, tiering has exactly
@@ -152,6 +183,28 @@ A missing binding is not an error: no `model:` key is written and the agent inhe
 Silent inheritance is the correct degradation here — the alternative is a dispatch that
 fails on an unresolvable model id.
 
+**How install rewrites it** (spec-review `r4`). "install.sh fills `model:`" is a bash
+edit inside YAML frontmatter, which is fragile against an arbitrary layout — so the
+generator does not produce an arbitrary layout. It emits a fixed frontmatter order with
+`description:` as a **single-line double-quoted scalar** (never a folded `>` block, which
+is what the canonical Claude Code file uses) and `mode: subagent` on its own line
+immediately after:
+
+```yaml
+---
+description: "…"
+mode: subagent
+model: …          # present iff resolved
+permission:
+  …
+---
+```
+
+install.sh's rewrite is then one deterministic operation anchored on that known line:
+drop any existing top-level `model:` line, and insert the resolved one after
+`mode: subagent`. No YAML parser in the installer, and no dependence on where a
+hand-edit might have put the key — because nothing hand-edits these files.
+
 ### D. `fr-goal` §5 — the clause that has to change
 
 The `**Harness — dispatch:**` clause is the scoped-clause shape
@@ -168,9 +221,15 @@ task tool, **with the cost stated as a policy, not hidden**: roughly 7× an inli
 
 Naming OpenCode's task tool in prose means adding `task` to
 `TOOL_VOCABULARY["opencode"]`, which currently holds only `tool.execute.before`. Checked
-before proposing it: **no canonical skill contains a bare `task` token today**, so the
-addition flags nothing retroactively, and it does exactly what the vocabulary is for —
-forces the mention to stay inside a scoped clause.
+before proposing it: **no bare `task` token exists in any of the three skill trees
+today** (canonical, `.opencode/skills/`, `.hermes/skills/fr/`), so the addition flags
+nothing retroactively, and it does exactly what the vocabulary is for — forces the
+mention to stay inside a scoped clause.
+
+`TOOL_VOCABULARY` forbids one name under two harnesses, and `scan_prose` is
+**case-sensitive** (`re.escape` with no `IGNORECASE`), so lowercase `task` — OpenCode's
+actual tool id — cannot collide with Claude Code's `Agent`, nor with a capitalised
+`Task` in unrelated prose (spec-review `r5`).
 
 Regenerating the mirrors (`scripts/sync-opencode.py`, `scripts/sync-hermes.py`) and
 committing them is part of the change; the sync tripwires fail on drift.

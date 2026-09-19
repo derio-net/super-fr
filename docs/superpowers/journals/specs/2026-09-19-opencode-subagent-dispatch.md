@@ -29,3 +29,18 @@ Four facts established against the installed binary before any design, not from 
 3. A global `$XDG_CONFIG_HOME/opencode/agent/<name>.md` is discovered with no project config present, and XDG_CONFIG_HOME is honoured — so install.sh has a real target dir AND the install test can sandbox it.
 4. Task-tool input is `{prompt, description, subagent_type, command}`; the agent is resolved by name afterwards. No model parameter — this is what forces agent-per-tier (see d2).
 Upstream `anomalyco/opencode#29616` (custom subagents not invocable) is stale, filed 2026-05-27 and fixed by this version; do not re-derive the limitation from it.
+
+<!-- fr:journal kind=review scope=spec id=r-spec1 created=2026-09-19T23:54:13 -->
+### r-spec1 · review · Spec-review against codebase reality: five findings, all fixed in the spec
+
+Every path, helper and vocabulary the spec names was checked to exist.
+
+r1 — `docs/presentation/version-1/experiment/run-metrics.csv` is NOT on `origin/HEAD`; it lives on the unmerged branch `feat/presentation-showdown`. #494 cites it as though a reader could open it. Fixed: numbers re-derived from the file at that ref and quoted inline (14 arm-A rows = 1 root + 13 children; costs sum to $7.5906; 56.2 / 77.6 / 105.2 root-minutes — all three check out), with the branch named.
+
+r2 — arm A dispatched to the BUILT-IN `general` agent (titles read `(@general subagent)`), not to a named custom agent. So arm A proves the primitive, not the named-tool-restricted-agent half. Fixed: the two halves are now attributed separately, the second to the live §3.A verification.
+
+r3 — the `tools:` -> `permission:` translation was additive and therefore WRONG. Claude Code `tools:` is an allowlist (everything omitted is denied); OpenCode permission defaults are permissive. Translating only the allowed keys ships a mirror strictly MORE powerful than canonical — including the ability to dispatch further subagents, which contradicts the executor body`s own "exactly one writer, phases run serially" contract. Fixed: closed mapping with explicit `task: deny` and `webfetch: deny`; both verified live to round-trip into the resolved permission array.
+
+r4 — §3.C said install.sh "fills `model:`" without saying how, and a bash edit inside arbitrary YAML frontmatter is fragile (the canonical file uses a folded `>` description block). Fixed: the generator emits a FIXED layout — single-line double-quoted `description:`, then `mode: subagent` — so install`s rewrite is one deterministic delete-and-insert anchored on a known line, with no YAML parser in the installer.
+
+r5 — adding `task` to TOOL_VOCABULARY needed two guards stated: no bare `task` token exists in any of the three skill trees today (checked), and `scan_prose` is case-sensitive, so lowercase `task` cannot collide with Claude Code`s `Agent` or a capitalised `Task`.
