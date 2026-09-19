@@ -25,7 +25,7 @@ Note: LLMs are smart. But requirements are messy. And best practices are only wi
 ## Agenda
 
 - **Three stations** - just the agent / superpowers / super-fr
-- **Twelve upgrades** towards fr-goal
+- **Fourteen upgrades** towards fr-goal
 - **Comparison** - just the agent (+ planning) vs `/fr-goal gh#429`
 - **Annotated example** of a full run
 - **Quickstart** - installation and your first goal
@@ -174,6 +174,42 @@ Note: I've just shown you a high level view of the end-result. But that doesn't 
 <div class="col">
 <div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
 
+## Commissioning: `fr init`
+
+- Scans the repo, then interviews you about how you actually work
+- Scaffolds devcontainer profiles: least-privilege `dev`, elevated `admin`
+- Credentials named per profile, injected at run time, never baked in
+- No profile, no isolation — the hard stop is the point
+
+<p class="nav"><a href="#/7/1">detail ↓</a></p>
+</div>
+
+<img class="side" src="../diagrams/up-interview.png" alt="">
+
+Note:             [Upgrade one, commissioning the plant. Before any of the rest can run, the repo has to say what a safe workspace looks like here: which tools, which credentials, how much privilege. fr init scans, then asks — the only interview in the system — and writes devcontainer profiles from the answers. Least-privilege dev for ordinary work, admin when you genuinely need the keys. Secrets stay host-side, named per profile. And if there is no profile, isolation refuses to start rather than quietly degrading to your laptop. That refusal is the feature: every upgrade after this one assumes the cell exists.]
+
+--
+
+## D0 — one interview, then profiles
+
+```
+fr init                      # scan + interview
+fr init scaffold --profile dev
+fr isolation up --branch feat/thing --profile dev
+```
+
+- Profiles live in `.devcontainer/<profile>/`, committed with the repo
+- Secrets are referenced per profile, never written into the image
+
+<p class="nav"><a href="#/7/0">↑ back</a></p>
+
+---
+
+<!-- .slide: class="split" -->
+
+<div class="col">
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
+
 ## Isolation
 
 - Sidecar fence became a mandatory cell: worktree plus container
@@ -185,7 +221,7 @@ Note: I've just shown you a high level view of the end-result. But that doesn't 
 
 <img class="side" src="../diagrams/up-cage.png" alt="">
 
-Note:             [Upgrade one, the cage. Superpowers had using-git-worktrees as an opt-in sidecar. Here isolation is mandatory: worktree plus devcontainer before anything else, every command through the exec bridge, secrets host-side per profile. A brainstorm that dies leaves the base pristine. That sentence alone is worth the profile-setup interview on first run.]
+Note:             [Upgrade two, the cage. Superpowers had using-git-worktrees as an opt-in sidecar. Here isolation is mandatory: worktree plus devcontainer before anything else, every command through the exec bridge, secrets host-side per profile. A brainstorm that dies leaves the base pristine. That sentence alone is worth the profile-setup interview on first run.]
 
 --
 
@@ -223,7 +259,7 @@ fr isolation down --branch feat/thing
 
 <img class="side" src="../diagrams/up-recipe.png" alt="">
 
-Note:             [Upgrade two, the recipe. Superpowers' pipeline lived in skill prose. Here it is data: a shape is an ordered list of steps plus what each step needs and emits. Cli steps are deterministic, nobody interprets them. Agent steps never execute inside fr, it prints a brief, you do the work, you resolve. The gate is the one promised stop. Consequence: the engine is a plain program with no path to a language model. Full file: plugins/super-fr/workflows/fr-goal.yaml, six steps plus two grouped children under implement.]
+Note:             [Upgrade three, the recipe. Superpowers' pipeline lived in skill prose. Here it is data: a shape is an ordered list of steps plus what each step needs and emits. Cli steps are deterministic, nobody interprets them. Agent steps never execute inside fr, it prints a brief, you do the work, you resolve. The gate is the one promised stop. Consequence: the engine is a plain program with no path to a language model. Full file: plugins/super-fr/workflows/fr-goal.yaml, six steps plus two grouped children under implement.]
 
 --
 
@@ -267,7 +303,7 @@ steps:
 
 <img class="side" src="../diagrams/up-conveyor.png" alt="">
 
-Note:             [Upgrade three, the conveyor. Superpowers kept position in chat and checkboxes. The run file is a cursor on your branch: advance runs cli steps and briefs agent ones, resolve is the only way past running. Start validates the shape before provisioning anything, then writes the run inside the workspace. Failure holds the cursor instead of sliding past it.]
+Note:             [Upgrade four, the conveyor. Superpowers kept position in chat and checkboxes. The run file is a cursor on your branch: advance runs cli steps and briefs agent ones, resolve is the only way past running. Start validates the shape before provisioning anything, then writes the run inside the workspace. Failure holds the cursor instead of sliding past it.]
 
 --
 
@@ -310,7 +346,7 @@ steps:
 
 <img class="side" src="../diagrams/up-cord.png" alt="">
 
-Note:             [Upgrade four, the cord. Before: decisions arrived one at a time across days, and anything unanswered got guessed. So exploration first, then a single batched round. Four questions max forces the agent to rank what is truly operator-owned. Unanswered is a stop, never a default. After that the agent owes you no more approvals, it owes you fix passes. Post-merge test plan and model-per-tier questions ride the same round when relevant.]
+Note:             [Upgrade five, the cord. Before: decisions arrived one at a time across days, and anything unanswered got guessed. So exploration first, then a single batched round. Four questions max forces the agent to rank what is truly operator-owned. Unanswered is a stop, never a default. After that the agent owes you no more approvals, it owes you fix passes. Post-merge test plan and model-per-tier questions ride the same round when relevant.]
 
 --
 
@@ -347,7 +383,7 @@ fr run resolve 2026-09-09-feat-presentation-showdown \
 
 <img class="side" src="../diagrams/up-gate.png" alt="">
 
-Note:             [Upgrade five, the gate. Before: suite green, feature not doing the thing. So acceptance rows in docs/acceptance/matrix.yaml, one operator-can-X per row, flipped up only with test evidence. Rows are presented with defenses at brainstorm close. Silent creation is not agreement on scope. The plan links phases to rows and the gate errors on unlinked test-plan specs. Debt stays visible in the pull request, embarrassing by design.]
+Note:             [Upgrade six, the gate. Before: suite green, feature not doing the thing. So acceptance rows in docs/acceptance/matrix.yaml, one operator-can-X per row, flipped up only with test evidence. Rows are presented with defenses at brainstorm close. Silent creation is not agreement on scope. The plan links phases to rows and the gate errors on unlinked test-plan specs. Debt stays visible in the pull request, embarrassing by design.]
 
 --
 
@@ -405,7 +441,7 @@ super-fr adds: Test Plan section (post-merge, operator-driven),
 
 <img class="side" src="../diagrams/up-bay.png" alt="">
 
-Note:             [Upgrade six, the build sheet. Before: the single markdown plan, unmergeable, position kept in the model's head. Per-phase files also kill merge conflicts. Self-review runs before any token burns on implementation: dependency cycles, manual work hiding in agentic phases, unknown acceptance ids. Manual phases back-load by default, the pull request ships them unimplemented and you push to the same branch. Front-load only when agentic work genuinely depends.]
+Note:             [Upgrade seven, the build sheet. Before: the single markdown plan, unmergeable, position kept in the model's head. Per-phase files also kill merge conflicts. Self-review runs before any token burns on implementation: dependency cycles, manual work hiding in agentic phases, unknown acceptance ids. Manual phases back-load by default, the pull request ships them unimplemented and you push to the same branch. Front-load only when agentic work genuinely depends.]
 
 --
 
@@ -466,7 +502,7 @@ super-fr: folder (_meta.yaml, _prose.md, NN.yaml per phase),
 
 <img class="side" src="../diagrams/up-robots.png" alt="">
 
-Note:             [Upgrade seven, the robots. Superpowers already had subagent-driven execution and the iron TDD loop. What changed is the handoff: pickup plus spec plus journal render, discoveries stamped per phase, acceptance rows flipped only on evidence. Tiers route the model per phase, and the one hard rule is enforced by a hook: the executor never gets its own worktree, because a second worktree cannot see the spec and the run looks healthy while doing nothing.]
+Note:             [Upgrade eight, the robots. Superpowers already had subagent-driven execution and the iron TDD loop. What changed is the handoff: pickup plus spec plus journal render, discoveries stamped per phase, acceptance rows flipped only on evidence. Tiers route the model per phase, and the one hard rule is enforced by a hook: the executor never gets its own worktree, because a second worktree cannot see the spec and the run looks healthy while doing nothing.]
 
 --
 
@@ -504,7 +540,7 @@ Demo: details redacted (not accessed; not cleared).
 
 <img class="side" src="../diagrams/up-audit.png" alt="">
 
-Note:             [Upgrade eight, the audit. Two lessons in one slide. Fixes pushed after a premature merge landed on dead branches, so now draft first and the push guard refuses merged-branch pushes. And the healthy-looking run that did nothing: a phase executor in a second worktree cut from main cannot see the spec, so the no-worktree carve-out is enforced by a hook, not by prose. Review findings are fixed with tests or refuted with reasoning, recorded open, fixed, or refuted. The pull request body is rendered from that list.]
+Note:             [Upgrade nine, the audit. Two lessons in one slide. Fixes pushed after a premature merge landed on dead branches, so now draft first and the push guard refuses merged-branch pushes. And the healthy-looking run that did nothing: a phase executor in a second worktree cut from main cannot see the spec, so the no-worktree carve-out is enforced by a hook, not by prose. Review findings are fixed with tests or refuted with reasoning, recorded open, fixed, or refuted. The pull request body is rendered from that list.]
 
 --
 
@@ -557,7 +593,7 @@ Open findings (follow-ups, not blockers):
 
 <img class="side" src="../diagrams/up-paperwork.png" alt="">
 
-Note:             [Upgrade nine, the paperwork. A vanilla agent writes whatever summary occurs to it. Superpowers fixed the template. Here the body is rendered from durable lists: findings and refutations, manual phases marked unimplemented, the test plan verbatim, acceptance debt with defenses. Tracking issues get the same treatment: bodies re-rendered on drift, comments only as explicit mutations like dispatched-in-error. Nothing narrates itself.]
+Note:             [Upgrade ten, the paperwork. A vanilla agent writes whatever summary occurs to it. Superpowers fixed the template. Here the body is rendered from durable lists: findings and refutations, manual phases marked unimplemented, the test plan verbatim, acceptance debt with defenses. Tracking issues get the same treatment: bodies re-rendered on drift, comments only as explicit mutations like dispatched-in-error. Nothing narrates itself.]
 
 ---
 
@@ -578,7 +614,7 @@ Note:             [Upgrade nine, the paperwork. A vanilla agent writes whatever 
 
 <img class="side" src="../diagrams/up-docks.png" alt="">
 
-Note:             [Upgrade ten, the docks. One backend switch instead of a rewrite per forge, dry-run default so every mutation previews first, labels projecting issue state. Harnesses are the sister plants: Claude is the reference with full hook surface, OpenCode ports the edit guard with a documented bash gap, Hermes carries the brief in delegate context. Same CLI everywhere.]
+Note:             [Upgrade eleven, the docks. One backend switch instead of a rewrite per forge, dry-run default so every mutation previews first, labels projecting issue state. Harnesses are the sister plants: Claude is the reference with full hook surface, OpenCode ports the edit guard with a documented bash gap, Hermes carries the brief in delegate context. Same CLI everywhere.]
 
 --
 
@@ -615,7 +651,7 @@ fr apply docs/superpowers/plans/2026-09-09-x --to vk --yes
 
 <img class="side" src="../diagrams/up-crossplant.png" alt="">
 
-Note:             [Upgrade eleven, the group order. A feature touching three repos gets one coordinating spec with an Implementation Plans table, and one plan, branch, and pull request per repo. This session owns its repo outright. Each other repo gets a dispatched agent with its own worktree running the same pipeline from planning onward. Dependencies between plants live in the spec and the merge order, never in a phase's local wiring. Read-only reach extends here too: remote phase files resolve for status, while each repo's journal stays in its own building. Dispatch of cross-repo phases is explicitly not yet wired, and the tool says so instead of pretending.]
+Note:             [Upgrade twelve, the group order. A feature touching three repos gets one coordinating spec with an Implementation Plans table, and one plan, branch, and pull request per repo. This session owns its repo outright. Each other repo gets a dispatched agent with its own worktree running the same pipeline from planning onward. Dependencies between plants live in the spec and the merge order, never in a phase's local wiring. Read-only reach extends here too: remote phase files resolve for status, while each repo's journal stays in its own building. Dispatch of cross-repo phases is explicitly not yet wired, and the tool says so instead of pretending.]
 
 --
 
@@ -651,7 +687,7 @@ Note:             [Upgrade eleven, the group order. A feature touching three rep
 
 <img class="side" src="../diagrams/up-archive.png" alt="">
 
-Note:             [Upgrade twelve, the vault. At this org's volume the plans folder is a work queue, not history. Archive refuses incomplete work and dirty trees, moves plan plus journal plus run as one unit, sweeps fully-implemented specs. Garbage collection is content-matched: merged workspaces reap, open ones stay, unattended runners never leak. Done means archived.]
+Note:             [Upgrade thirteen, the vault. At this org's volume the plans folder is a work queue, not history. Archive refuses incomplete work and dirty trees, moves plan plus journal plus run as one unit, sweeps fully-implemented specs. Garbage collection is content-matched: merged workspaces reap, open ones stay, unattended runners never leak. Done means archived.]
 
 --
 
@@ -667,6 +703,48 @@ docs/superpowers/implemented/
 - Gated mover only: complete phases, clean tree, one unit
 
 <p class="nav"><a href="#/19/0">↑ back</a></p>
+
+
+---
+
+<!-- .slide: class="split" -->
+
+<div class="col">
+<div class="crumb">Stations &gt; <strong>Upgrades</strong> &gt; Comparison &gt; Example &gt; Quickstart &gt; Discussion</div>
+
+## Your own pipeline
+
+- A shape is a yaml manifest: ordered steps, what each needs and emits
+- `fr workflow check` rejects cycles and dangling steps before tokens burn
+- Repo override beats shipped: `docs/superpowers/workflows/<name>.yaml`
+- `/fr-goal <shape>` runs yours; no argument runs the default
+
+<p class="nav"><a href="#/20/1">detail ↓</a></p>
+</div>
+
+<img class="side" src="../diagrams/up-jig.png" alt="">
+
+Note:             [Upgrade fourteen, the changeable jig. Everything you have seen runs on one shape — fr-goal's — but the shape is data, not the engine. Write your own yaml: the steps in order, what each one needs and emits, which are cli and which are agent. Check it, and the checker refuses a graph that cannot run before a single token is spent. Drop it in the repo and it wins over the shipped one. This talk's own experiment ran on a custom shape, not on fr-goal. The pipeline you saw is the default, not the ceiling.]
+
+--
+
+## D15 — a shape, and the check
+
+```yaml
+workflow: presentation-showdown
+schema: 1
+unit: run
+steps:
+  - id: outline
+    kind: agent
+    gate: operator
+    emits: [spec]
+```
+
+- `fr workflow check` — duplicate ids, dangling `needs`, cycles, unknown capabilities
+- Shipped shapes live in the plugin; a repo override replaces one wholesale
+
+<p class="nav"><a href="#/20/0">↑ back</a></p>
 
 ---
 

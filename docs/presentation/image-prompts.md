@@ -177,3 +177,31 @@ composition. A finished car at dawn on an empty test track: long
 straight disappearing ahead, gantry lights, low sun glare, a timing
 gantry in the distance. Cool blue-green palette warming into morning.
 Calm anticipation. No halo anywhere.
+
+## `up-interview.png` — fr init (upgrade one, commissioning)
+
+Dark industrial automotive factory, flat technical illustration, palette
+near-black `#0d1117`, yellow structural steel, no people, no readable text.
+PORTRAIT 3:4 composition, edges falling to pure `#0d1117`. An empty,
+not-yet-commissioned bay being set up: floor-marking tape freshly laid in
+yellow outlining where a cell will stand, a survey tripod and a clipboard
+easel with blank forms, two unpowered robot arms still wrapped and parked,
+a wall-mounted key cabinet with two distinct key hooks — one small and one
+large — and a sealed grey utility box with unconnected hoses coiled beside
+it. Nothing is running: no sparks, no glow, no product. One work lamp lights
+the tape. The mood is preparation and permission, not production — the bay
+is being told what it is allowed to be before anything switches on.
+
+## `up-jig.png` — custom shapes (upgrade fourteen, the changeable jig)
+
+Dark industrial automotive factory, flat technical illustration, palette
+near-black `#0d1117`, yellow fixtures, cyan accent light, no people, no
+readable text. PORTRAIT 3:4 composition, edges falling to pure `#0d1117`.
+A tooling change in progress at a single station: an overhead crane lowering
+one interchangeable jig — an angular yellow fixture frame — onto a machine
+base, while a second and third jig of visibly different geometry wait on a
+rack at the side, each in its own cradle. A pegboard of profile templates
+hangs behind. The machine base is universal; the jigs are what differ. A thin
+cyan alignment line runs along the base to show the incoming jig seating
+correctly. Same line, same robots, different shape — the tooling is the
+variable, not the plant.
