@@ -1,0 +1,23 @@
+schema_version: 2
+run: 2026-09-19-feat-opencode-subagent-dispatch
+workflow: fr-goal@1
+branch: feat/opencode-subagent-dispatch
+started: '2026-09-19T21:33:02+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: blocked
+    at: '2026-09-19T21:33:08+00:00'
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: pending
