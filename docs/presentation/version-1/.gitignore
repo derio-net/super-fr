@@ -1,0 +1,4 @@
+*.html
+*.pptx
+!reveal/index.html
+!reveal/template.html

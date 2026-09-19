@@ -41,3 +41,8 @@ node_modules/
 
 # ad-hoc acceptance report (committed set is report_local.html / report_linked.{html,md})
 docs/acceptance/report.html
+
+# Playwright MCP scratch output (page snapshots, console logs, screenshots).
+# Written into the cwd of whichever session drives the browser, so it lands in
+# the repo root uninvited.
+.playwright-mcp/
