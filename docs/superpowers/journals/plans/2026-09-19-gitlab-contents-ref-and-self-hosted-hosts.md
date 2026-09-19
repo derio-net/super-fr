@@ -268,3 +268,13 @@ that knows their final form.
 
 For P6.T3: the unit-level refs this phase earned are the five files/classes
 named above. Remember fr.acceptance's ref fragment separator is "#", not "::".
+
+<!-- fr:journal kind=discovery scope=plan id=38c9de9aaae3 created=2026-09-19T20:25:52 -->
+### 38c9de9aaae3 · discovery · no-refactor-because P5.T5
+
+S2 IS the refactor: rather than repeating host_for's SaaS-exclusion rule at the pr_observe call site, it extracts _hosts.self_hosted_hostname and points both callers at it, so the rule cannot drift between the one that has a checkout and the one that has only a PR URL. Adding a third step to refactor the two-line extraction the step already performs would be ceremony.
+
+<!-- fr:journal kind=finding scope=plan id=f8-bridge-discards-derived-host created=2026-09-19T20:25:53 phase=4 state=open -->
+### f8-bridge-discards-derived-host · finding [open] · Spec §4.C promised fr_vk.pr_observe would pass the hostname it derives; it discards it (phase 4)
+
+Phase 4's review surfaced that client_for_backend's new host= has no production caller. A bridge audit of fr_vk (per the repo's bridge-audit rule) confirmed the shape and split it in two. pr_observe._default_pr_status_fetch (pr_observe.py:50-52) computes hostname = urlparse(pr_url).hostname, uses it for backend_for_hostname, and drops it — so a bridge tick polling a self-hosted GitLab MR builds RealGlabClient(host=None), and since the bridge runs outside any checkout, glab's own git-directory fallback cannot rescue it either. That is FIXABLE in one line and is now plan task P5.T5, because leaving it would ship a second dead last mile inside the fix for the first one — with the spec's own sentence claiming otherwise. pr_state._default_close_gh_issue (pr_state.py:94) is the harder sibling and is NOT being fixed: it receives only a backend string, the hostname exists one frame up in _close_linked_gh_issue, and the public closer: Callable[[str, str, str], None] signature that every test double satisfies structurally has no room for it. Widening that arity is a bridge-wide change beyond gh-486. Consequence to state plainly in the PR body: after this PR, self-hosted GitLab works for fr apply, fr spec status and the bridge's PR polling, but auto-closing a linked Issue still targets the SaaS host and fails non-fatally with a logged warning. Close the pr_observe half when P5.T5 lands; the pr_state half stays open for its own issue.

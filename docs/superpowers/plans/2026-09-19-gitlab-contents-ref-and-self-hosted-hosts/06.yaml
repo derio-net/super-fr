@@ -19,154 +19,187 @@ tasks:
   title: Read path, through fr's own adapter, against the live instance
   steps:
   - id: P6.T1.S1
-    text: |-
-      The configuration that FAILED in spec §2.D: run from the worktree
+    text: 'The configuration that FAILED in spec §2.D: run from the worktree
+
       (whose origin is GitHub), so glab cannot derive the host from the
-      cwd and only fr's own threading can supply it.
+
+      cwd and only fr''s own threading can supply it.
+
 
       ```bash
-      uv run python - <<'PY'
+
+      uv run python - <<''PY''
+
       from fr.hostclient import client_for_backend
+
       c = client_for_backend("gitlab", host="gitlab.local.gebit.de")
+
       R = "IDermitzakis/devops-scripts"
+
       print("file_exists(README.md) ->", c.file_exists(R, "README.md"))
+
       print("file_exists(no-such.md) ->", c.file_exists(R, "no-such-file.md"))
-      print("list_dir('') ->", sorted(c.list_dir(R, ""))[:6])
+
+      print("list_dir('''') ->", sorted(c.list_dir(R, ""))[:6])
+
       print("read_file(README.md)[:60] ->", repr(c.read_file(R, "README.md")[:60]))
+
       PY
+
       ```
+
 
       Expected: True / False / real entry names / real text. Before this
+
       phase all four were broken (True→False, and read_file raised).
-      Paste the VERBATIM output into the step note — it is the PR's
-      evidence. Any deviation stops the phase.
+
+      Paste the VERBATIM output into the step note — it is the PR''s
+
+      evidence. Any deviation stops the phase.'
   - id: P6.T1.S2
-    text: |-
-      Prove the error is now loud, which is the half a green read cannot
-      show. Force a non-404 by pointing the client at a host with no
-      token, and confirm it RAISES rather than answering False:
+    text: "Prove the error is now loud, which is the half a green read cannot\nshow. Force a non-404 by pointing the client at a host with no\ntoken, and confirm it RAISES rather than answering False:\n\n```bash\nuv run python - <<'PY'\nfrom fr.hostclient import client_for_backend\nfrom fr.glab import GlabError\nc = client_for_backend(\"gitlab\", host=\"gitlab.com\")   # authenticated: no\ntry:\n    print(\"file_exists ->\", c.file_exists(\"IDermitzakis/devops-scripts\", \"README.md\"))\n    print(\"!! FAIL: a non-404 was swallowed as absent\")\nexcept GlabError as e:\n    print(\"raised as designed:\", e)\nPY\n```\n\nRecord the output. A `False` here means Phase 3 did not hold."
+  - id: P6.T1.S3
+    text: 'Prove the OPERATOR-facing path, which the two steps above do not.
+
+      `client_for_backend("gitlab", host=...)` is reachable from a REPL; what
+
+      the spec actually promises is that BACKEND ALONE SUFFICES — `backend:
+
+      gitlab` with the host derived from the git remote. That is claim (a) of
+
+      `gitlab-selfhosted-host-targeting`, and nothing has exercised it live.
+
+
+      Clone the scratch project, give it a profile with NO `host:` key, and ask
+
+      `client_for`, from inside that checkout, what it resolved:
+
 
       ```bash
-      uv run python - <<'PY'
-      from fr.hostclient import client_for_backend
-      from fr.glab import GlabError
-      c = client_for_backend("gitlab", host="gitlab.com")   # authenticated: no
-      try:
-          print("file_exists ->", c.file_exists("IDermitzakis/devops-scripts", "README.md"))
-          print("!! FAIL: a non-404 was swallowed as absent")
-      except GlabError as e:
-          print("raised as designed:", e)
-      PY
+
+      git clone git@gitlab.local.gebit.de:IDermitzakis/devops-scripts.git /tmp/fr-gh486-live
+
+      mkdir -p /tmp/fr-gh486-live/.devcontainer
+
+      printf ''backend: gitlab\n'' > /tmp/fr-gh486-live/.devcontainer/fr-profiles.yaml
+
+
+      uv run python - <<''FRPY''
+
+      from pathlib import Path
+
+      from fr import _hosts, hostclient
+
+      r = Path("/tmp/fr-gh486-live")
+
+      print("detect_backend ->", _hosts.detect_backend(r))
+
+      print("declared_host  ->", _hosts.declared_host(r))
+
+      print("host_for       ->", _hosts.host_for(r))
+
+      c = hostclient.client_for(r)
+
+      print("client         ->", type(c).__name__, "host =", c._host)
+
+      print("file_exists    ->", c.file_exists("IDermitzakis/devops-scripts", "README.md"))
+
+      FRPY
+
       ```
 
-      Record the output. A `False` here means Phase 3 did not hold.
+
+      Expected: `gitlab` / `None` / `gitlab.local.gebit.de` / `RealGlabClient
+
+      host = gitlab.local.gebit.de` / `True` — the host derived from the
+
+      remote, with no `host:` key anywhere. Paste the verbatim output into the
+
+      step note, then remove `/tmp/fr-gh486-live`.'
 - number: 2
   title: 'End-to-end `fr apply`: the acceptance row''s own sentence, demonstrated'
   steps:
   - id: P6.T2.S1
-    text: |-
-      The named project has `issues_access_level: disabled`, so enable
-      Issues first and RECORD the before-state (spec §3 d1 — this
-      mutation is sanctioned, reversible, and must be restored in S4):
-
-      ```bash
-      glab api --hostname gitlab.local.gebit.de \
-        "projects/IDermitzakis%2Fdevops-scripts" | \
-        python3 -c "import sys,json;d=json.load(sys.stdin);print(d['issues_access_level'])"
-      glab api --hostname gitlab.local.gebit.de --method PUT \
-        "projects/IDermitzakis%2Fdevops-scripts" -f issues_access_level=private
-      ```
+    text: "The named project has `issues_access_level: disabled`, so enable\nIssues first and RECORD the before-state (spec §3 d1 — this\nmutation is sanctioned, reversible, and must be restored in S4):\n\n```bash\nglab api --hostname gitlab.local.gebit.de \\\n  \"projects/IDermitzakis%2Fdevops-scripts\" | \\\n  python3 -c \"import sys,json;d=json.load(sys.stdin);print(d['issues_access_level'])\"\nglab api --hostname gitlab.local.gebit.de --method PUT \\\n  \"projects/IDermitzakis%2Fdevops-scripts\" -f issues_access_level=private\n```"
   - id: P6.T2.S2
-    text: |-
-      Build a throwaway two-phase plan targeting the GitLab project in a
-      scratch checkout (NOT this repo's docs/), declare
+    text: 'Build a throwaway two-phase plan targeting the GitLab project in a
+
+      scratch checkout (NOT this repo''s docs/), declare
+
       `backend: gitlab` in its `.devcontainer/fr-profiles.yaml` with NO
+
       `host:` — proving the remote-derived host path, which is the whole
+
       point of Phase 4 — and run the tracking walk:
 
+
       ```bash
+
       uv run fr apply <scratch-plan-dir>          # dry-run: render → observe → diff
+
       uv run fr apply <scratch-plan-dir> --yes    # create the GitLab Issues
+
       uv run fr apply <scratch-plan-dir>          # re-run: diff must be EMPTY (idempotent)
+
       ```
+
 
       Record all three outputs. The third is the real test: a second
+
       apply that wants to change something means observe or diff is
-      misreading GitLab's shapes.
+
+      misreading GitLab''s shapes.'
   - id: P6.T2.S3
-    text: |-
-      Confirm the LABELS, which the acceptance sentence names explicitly
-      (colour and length — GitLab's own constraints, and `glab label
-      create` wants a leading `#` while `LabelDef` stays bare-hex):
-
-      ```bash
-      glab api --hostname gitlab.local.gebit.de \
-        "projects/IDermitzakis%2Fdevops-scripts/labels?per_page=100" | \
-        python3 -c "import sys,json;[print(l['name'],l['color']) for l in json.load(sys.stdin)]"
-      ```
-
-      Every fr label present, each colour a valid 6-hex with the `#`
-      applied once (not `##ededed`), each name within GitLab's length
-      limit. Then close the loop with a state change:
-      `uv run fr apply <scratch-plan-dir> --yes` after ticking a phase,
-      and confirm the Issue's labels swap and its body updates. Record.
+    text: "Confirm the LABELS, which the acceptance sentence names explicitly\n(colour and length — GitLab's own constraints, and `glab label\ncreate` wants a leading `#` while `LabelDef` stays bare-hex):\n\n```bash\nglab api --hostname gitlab.local.gebit.de \\\n  \"projects/IDermitzakis%2Fdevops-scripts/labels?per_page=100\" | \\\n  python3 -c \"import sys,json;[print(l['name'],l['color']) for l in json.load(sys.stdin)]\"\n```\n\nEvery fr label present, each colour a valid 6-hex with the `#`\napplied once (not `##ededed`), each name within GitLab's length\nlimit. Then close the loop with a state change:\n`uv run fr apply <scratch-plan-dir> --yes` after ticking a phase,\nand confirm the Issue's labels swap and its body updates. Record."
   - id: P6.T2.S4
-    text: |-
-      RESTORE, and account for everything created. Delete the throwaway
-      Issues and fr labels, put `issues_access_level` back to its recorded
-      before-state, and list in the step note every object created and
-      removed. An unlisted leftover on the operator's instance is the
-      failure mode here, not a tidiness preference.
-
-      ```bash
-      glab api --hostname gitlab.local.gebit.de --method PUT \
-        "projects/IDermitzakis%2Fdevops-scripts" -f issues_access_level=disabled
-      glab api --hostname gitlab.local.gebit.de \
-        "projects/IDermitzakis%2Fdevops-scripts" | \
-        python3 -c "import sys,json;print(json.load(sys.stdin)['issues_access_level'])"
-      ```
+    text: "RESTORE, and account for everything created. Delete the throwaway\nIssues and fr labels, put `issues_access_level` back to its recorded\nbefore-state, and list in the step note every object created and\nremoved. An unlisted leftover on the operator's instance is the\nfailure mode here, not a tidiness preference.\n\n```bash\nglab api --hostname gitlab.local.gebit.de --method PUT \\\n  \"projects/IDermitzakis%2Fdevops-scripts\" -f issues_access_level=disabled\nglab api --hostname gitlab.local.gebit.de \\\n  \"projects/IDermitzakis%2Fdevops-scripts\" | \\\n  python3 -c \"import sys,json;print(json.load(sys.stdin)['issues_access_level'])\"\n```"
 - number: 3
   title: Move the matrix on evidence, and close the journal
   steps:
   - id: P6.T3.S1
-    text: |-
-      Move the row that was lying. Its honest resting state is `skipped`,
-      NOT `ci`: the live walk is hand-run in this PR and CI does not
-      re-run it, which is precisely what `skipped` means (spec §3 d4).
-
-      ```bash
-      uv run fr acceptance set-status --id multibackend-gitlab-tracking \
-        --status skipped \
-        --level unit=super-fr:tests/unit/test_real_glabclient.py \
-        --level unit=super-fr:tests/unit/test_hostclient.py \
-        --notes "Live-verified <DATE> against a self-hosted GitLab (gh-486): contents reads, end-to-end fr apply with correctly-shaped labels, idempotent re-apply. Transcript in PR #<N>. skipped, not ci: CI cannot reach a private instance, so the live half is not re-run per-PR — the unit half now asserts the REQUEST (the arg-blind mocks that hid gh-486 are gone)."
-      ```
+    text: "Move the row that was lying. Its honest resting state is `skipped`,\nNOT `ci`: the live walk is hand-run in this PR and CI does not\nre-run it, which is precisely what `skipped` means (spec §3 d4).\n\n```bash\nuv run fr acceptance set-status --id multibackend-gitlab-tracking \\\n  --status skipped \\\n  --level unit=super-fr:tests/unit/test_real_glabclient.py \\\n  --level unit=super-fr:tests/unit/test_hostclient.py \\\n  --notes \"Live-verified <DATE> against a self-hosted GitLab (gh-486): contents reads, end-to-end fr apply with correctly-shaped labels, idempotent re-apply. Transcript in PR #<N>. skipped, not ci: CI cannot reach a private instance, so the live half is not re-run per-PR — the unit half now asserts the REQUEST (the arg-blind mocks that hid gh-486 are gone).\"\n```"
   - id: P6.T3.S2
-    text: |-
-      Move the three rows born with this spec from `not-implemented` to
+    text: 'Move the three rows born with this spec from `not-implemented` to
+
       their evidenced states (`gitlab-contents-reads-live` and
+
       `gitlab-selfhosted-host-targeting` → `skipped`, live half hand-run;
+
       `forge-errors-are-not-absence` → `ci`, fully unit-covered), each
+
       with `--level` refs and `--notes` naming the evidence. Then:
 
+
       ```bash
+
       uv run fr acceptance check          # must now exit 0
+
       uv run fr acceptance report --check
+
       uv run fr validate artifacts
+
       ```
 
+
       `fr acceptance check` going from exit 2 to exit 0 IS the deliverable
+
       here — the red CI this branch has carried since its first commit
+
       turns green because the capability was proven, not because the row
-      was quietly edited.
+
+      was quietly edited.'
   - id: P6.T3.S3
-    text: |-
-      Final verification before the PR
+    text: 'Final verification before the PR
+
       (`superpowers:verification-before-completion`): full suite output,
+
       `fr plan self-review docs/superpowers/plans/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts`,
+
       every step ticked, and `fr journal check --scope plan` clean —
+
       closing each fixed finding with `fr journal resolve`, never by
-      re-adding its id. Record the counts; then hand off to `deliver`.
+
+      re-adding its id. Record the counts; then hand off to `deliver`.'
 state:
   steps:
     P6.T1.S1:
@@ -202,6 +235,10 @@ state:
       ticked_at: null
       note: null
     P6.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S3:
       state: ' '
       ticked_at: null
       note: null
