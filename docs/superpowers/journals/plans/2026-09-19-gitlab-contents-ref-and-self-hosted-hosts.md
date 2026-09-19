@@ -364,3 +364,201 @@ The operator chose to fix the bridge's backend resolution in this PR rather than
 ### f10-skill-implied-scaffold-time-warning · finding [fixed] · fr-init's SKILL.md implied fr warns at scaffold time; the warning fires later, at client_for (phase 5)
 
 The skill read 'gh/tea aren't host-threaded yet (gh-486) and fr warns if given one', which reads as though 'fr init scaffold --host ... --backend gitea' warns on the spot. It does not: init_cmd just writes host: into fr-profiles.yaml, and the warning fires the next time hostclient.client_for runs — fr apply, fr isolation up, and so on. Same family as every other finding in this PR: a sentence describing behaviour the code does not have. FIXED to 'so fr warns on next use, not here', reworded to fit because the file sits at exactly the 120-line skill cap that test_skill_validation enforces — the first attempt pushed it to 121 and failed that test, which is how the cap earns its keep. Both generated mirrors regenerated (.opencode, .hermes) and their tripwires re-run.
+
+<!-- fr:journal kind=finding scope=plan id=51477f0cd417-resolved created=2026-09-19T21:25:27 state=fixed resolves=51477f0cd417 -->
+### 51477f0cd417-resolved · finding [fixed] · resolves 51477f0cd417: pr_observe still cannot correctly observe a self-hosted GitLab/Gitea PR by bare URL — backend_for_hostname's SaaS-only heuristic and self_hosted_hostname are mutually exclusive at this call site
+
+backend_for_url resolves the forge from the URL PATH (its hostname only as a fallback), so pr_observe now reaches backend=gitlab WITH a self-hosted host -- the combination phase 5 could not produce, because backend_for_hostname and self_hosted_hostname were mutually exclusive by construction of one DEFAULT_HOST_BACKENDS table.
+
+Landed in P6.T1/P6.T2: fr._hosts._URL_SHAPES + backend_for_url (/merge_requests/ -> gitlab, /-/ -> gitlab, /pulls/ -> gitea, /pull/ -> github, most-specific-first so Gitea is never read as GitHub), and pr_observe._default_pr_status_fetch switched from backend_for_hostname(urlparse(pr_url).hostname) to backend_for_url(pr_url). The test that pinned the host claim stopped monkeypatching backend_for_hostname: nothing about backend resolution is faked in it any more, and it now asserts backend=="gitlab" AND host=="gitlab.corp.example" together.
+
+Live proof, same URLs as the finding, run through the shipped code before and after:
+  https://gitlab.com/g/p/-/merge_requests/7                                     old=gitlab new=gitlab host=None
+  https://gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/merge_requests/7  old=github new=gitlab host=gitlab.local.gebit.de
+  https://github.com/derio-net/super-fr/pull/486                                old=github new=github host=None
+  https://gitea.corp/o/r/pulls/4                                                old=github new=gitea  host=gitea.corp
+
+The Gitea half of the original finding is NARROWED, not closed, and deliberately so: a Gitea PR/MR url (/pulls/N) now resolves correctly, but a Gitea ISSUE url (/issues/N) is byte-identical to GitHub's and still falls through to the hostname, hence to "github". /issues/ is absent from the shape table on purpose -- it cannot discriminate, and replacing a documented limit with a guess is worse than the limit. test_prompt_backend_wording_gitea_hostname_alone_is_not_enough is the tripwire and still passes unchanged.
+
+The VK card carrying its declared backend explicitly (the other option this finding floated) was NOT needed: the URL already carries it.
+
+<!-- fr:journal kind=finding scope=plan id=4d9ab22d64fe-arity created=2026-09-19T21:26:00 phase=6 state=open -->
+### 4d9ab22d64fe-arity · finding [open] · Still open: pr_state's Issue auto-close has the right backend and the wrong host — the blocker is now closer's 3-arg arity, NOT backend resolution (phase 6)
+
+An updated note on 4d9ab22d64fe, which stays OPEN. What changed in phase 6 is
+that its ORIGINAL diagnosis is now half wrong, and the half that is wrong is the
+half a reader would act on first.
+
+4d9ab22d64fe was written when TWO things were missing at this call site: the
+backend and the host. P6.T2 fixed the backend — `_close_linked_gh_issue` now
+resolves it with `_hosts.backend_for_url(pr_url)`, so a self-hosted GitLab MR
+url yields "gitlab" and `_default_close_gh_issue` builds `RealGlabClient`
+instead of `RealGhClient`. Pinned by
+tests/unit/test_bridge_pr_state.py::test_tick_resolves_gitlab_backend_from_a_self_hosted_pr_url.
+
+THE ONE REMAINING BLOCKER IS ARITY, NOT RESOLUTION. The public seam is
+`closer: Callable[[str, str, str], None]` — repo, issue_number, backend. Two
+call sites in fr_vk/pr_state.py (the In-review -> Done cascade, and the Done
+reconcile sweep) plus a test double per test satisfy that 3-tuple structurally.
+The hostname is available one frame up in `_close_linked_gh_issue`, parsed from
+the same `pr_url` the backend comes from; there is simply nowhere to put it.
+Widening the signature (or replacing the bare 3-arg callable with a bound
+closure that carries the host) is a bridge-wide change beyond gh-486, and it is
+a real design decision — the seam is also fr_vk's public injection point for
+tests and for `tick`'s callers.
+
+Net effect on a self-hosted instance after phase 6: the RIGHT adapter aimed at
+the WRONG host. `glab` falls back to gitlab.com, the close fails non-fatally,
+and `pr_state: close <repo>#<n> failed: ...` is logged. The blast radius is a
+missed belt-and-braces backstop — the forge's own close-on-merge already ran —
+not a broken merge or a stuck card.
+
+The docstring at fr_vk/pr_state.py::_default_close_gh_issue was rewritten in
+P6.T2.S2 to say exactly this. Its previous text blamed backend resolution, which
+phase 6 fixed, so leaving it would have pointed the next reader at the wrong
+thing with a confident tone.
+
+<!-- fr:journal kind=discovery scope=plan id=d-selfhosted-support-matrix created=2026-09-19T21:26:28 phase=6 -->
+### d-selfhosted-support-matrix · discovery · Support matrix: which operations work against a self-hosted GitLab after phase 6, and the one that still does not (phase 6)
+
+**One sentence for the PR body: after this PR, self-hosted GitLab works for
+`fr apply`, `fr spec status`, dispatched-agent prompt wording, and the VK
+bridge's PR-status polling; the only operation that still targets the SaaS
+host is the bridge's belt-and-braces Issue auto-close, blocked on `closer`'s
+3-arg arity, not on backend resolution.**
+
+The table, per operation, on a self-hosted GitLab instance:
+
+| operation | resolves backend | reaches the instance | after this PR |
+|---|---|---|---|
+| `fr apply` / contents reads (`fr.real_glabclient`) | from `.devcontainer/fr-profiles.yaml` `backend:`, else origin hostname | yes — `host_for` -> `GITLAB_HOST` | WORKS (gap 1, P4) |
+| `fr spec status` / anything through `hostclient.client_for(repo_root)` | same | yes, same seam | WORKS (gap 1, P4) |
+| VK bridge PR-status polling (`fr_vk.pr_observe`) | from the URL PATH (`/-/merge_requests/`) | yes — `self_hosted_hostname(hostname)` | WORKS (gap 2, P5 host + P6 backend) |
+| dispatched-agent prompt wording (`fr_dispatch.prompt`) | from the URL PATH (`/-/issues/`) | n/a — it only picks words (`glab issue view`, `GitLab Issue gl#N`) | WORKS (P6) |
+| VK bridge Issue auto-close (`fr_vk.pr_state`) | from the URL PATH — CORRECT as of P6 | NO — `closer: Callable[[str, str, str], None]` has no host slot | right adapter, wrong host; fails non-fatally with a logged warning (4d9ab22d64fe-arity, open) |
+| `fr_dispatch.reachability` gate | n/a | no production caller passes `gh=` today | unchanged (f-reachability-traceback, open) |
+
+And the same thing for the two forges that are not GitLab, because the shape
+table changed for them too:
+
+- **Gitea PR/MR urls** (`/pulls/N`) now resolve to `gitea` from the URL alone
+  — previously "github". That is a genuine, unplanned widening.
+- **Gitea ISSUE urls** (`/issues/N`) still resolve to "github", and always
+  will from a URL alone: the path is byte-identical to GitHub's. `/issues/`
+  is deliberately absent from `_URL_SHAPES`; the tripwire is
+  test_prompt_backend_wording_gitea_hostname_alone_is_not_enough.
+- **GitHub Enterprise** is untouched by design — fr threads no host for the
+  `github` backend (spec §1 non-goals) and `gh` resolves its own.
+
+What still requires configuration on a self-hosted GitLab: nothing, for any
+of the URL-only paths above — that was the point of resolving the forge from
+the path rather than from config a bare URL has no access to. `fr apply`
+still needs `backend: gitlab` in `.devcontainer/fr-profiles.yaml` when
+`origin` is not a recognized forge host, and now warns loudly when it falls
+back (P5.T1).
+
+<!-- fr:journal kind=discovery scope=plan id=d-no-refactor-p6t1 created=2026-09-19T21:26:57 phase=6 -->
+### d-no-refactor-p6t1 · discovery · no-refactor-because: P6.T1 (phase 6)
+
+no-refactor-because: P6.T1
+
+One module-level table plus a four-line loop, added beside the function it
+generalizes. The only real refactor candidate is the one this task deliberately
+refuses: `fr_vk.pr_state._REPO_FROM_URL_RE` already enumerates the same four
+path shapes (`pull`/`pulls`/`issues`/`merge_requests`) and looks like an
+obvious thing to share with `_URL_SHAPES`. It must NOT be shared. That regex
+EXTRACTS owner/repo and therefore has to accept every shape including the
+ambiguous `/issues/N`; `_URL_SHAPES` DISCRIMINATES between forges and is
+correct only because it omits `/issues/N`. Folding a permissive parser into a
+discriminating one is precisely the confusion that produced the bug being fixed
+here, so the duplication stays, with the reason written at both sites.
+
+Also refused: giving `backend_for_url` a `default=` or a `strict=` knob. It has
+one caller shape (a URL from a VK card or a tracking_issue) and a documented
+fallback; a knob would be speculative generality on a function whose whole
+value is that it needs no configuration.
+
+<!-- fr:journal kind=discovery scope=plan id=d-no-refactor-p6t2 created=2026-09-19T21:26:57 phase=6 -->
+### d-no-refactor-p6t2 · discovery · no-refactor-because: P6.T2 (phase 6)
+
+no-refactor-because: P6.T2
+
+T2 IS the refactor: it deletes three copies of
+`backend_for_hostname(urlparse(u).hostname)` in favour of one named helper, and
+two now-unused `urlparse` imports went with them (fr_vk/pr_state.py,
+fr_dispatch/prompt.py). There is no structure left to improve afterwards — each
+call site is a single expression.
+
+What the task chose not to clean, and why: `pr_observe._default_pr_status_fetch`
+still computes `hostname = urlparse(pr_url).hostname` for the `host` argument
+while the backend now comes from `pr_url` itself, so the function parses the URL
+twice. Collapsing that (e.g. having `backend_for_url` return a
+`(backend, host)` pair) would put `self_hosted_hostname`'s SaaS-vs-self-hosted
+policy inside the backend resolver, which the spec's §4.D layering split apart
+on purpose: `backend_for_url` answers "which CLI", `self_hosted_hostname`
+answers "which instance", and `pr_state` needs the first without the second.
+Two urlparse calls on a string is not a cost worth paying that with.
+
+The rest of the task is prose (the `_default_close_gh_issue` docstring, the
+`_backend_for_tracking_url` docstring, the module docstrings) and journal
+bookkeeping, neither of which has a refactor step.
+
+<!-- fr:journal kind=discovery scope=plan id=d-phase-renumber-stale-refs created=2026-09-19T21:27:13 phase=6 -->
+### d-phase-renumber-stale-refs · discovery · Three plan-authoring journal entries still say P6.T1-T3 but now describe phase 7 — the mid-run phase insertion invalidated their coordinates (phase 6)
+
+Journal-hygiene trap, recorded so a later reader of this journal is not misled.
+
+The plan gained a NEW phase 6 mid-run (spec §4.C2, `backend_for_url`), and the
+old live-verification phase 6 was renumbered to 7. Three journal entries written
+at plan-authoring time still carry the OLD numbering in their titles and bodies:
+
+  989c646f872a  "no-refactor-because P6.T1"  -> actually P7.T1 (live verification)
+  ff027085b6c5  "no-refactor-because P6.T2"  -> actually P7.T2 (end-to-end fr apply)
+  a747ed905ee3  "no-refactor-because P6.T3"  -> actually P7.T3 (acceptance matrix)
+
+They are correct in substance and wrong in address. A journal is append-only, so
+they are not rewritten; the phase-6 entries added by this phase are
+d-no-refactor-p6t1 / d-no-refactor-p6t2 (explicitly titled, and carrying
+phase=6 metadata the three above do not). If you are reconciling
+no-refactor-because coverage against the plan, read the phase= attribute in the
+HTML comment, not the P<n> in the title: the three stale ones have no phase=
+attribute at all, which is the tell.
+
+General lesson, worth carrying beyond this plan: a `no-refactor-because P<n>.T<m>`
+reference is a coordinate into a mutable numbering. Inserting a phase silently
+invalidates every such reference downstream of it, and nothing in `fr journal
+check` notices, because the strings still parse. Naming the TASK rather than its
+number, or passing --phase so the metadata disagrees loudly with the title, is
+the cheap mitigation.
+
+<!-- fr:journal kind=finding scope=plan id=f-client-for-backend-host-has-no-caller-resolved created=2026-09-19T21:28:55 phase=6 state=fixed resolves=f-client-for-backend-host-has-no-caller -->
+### f-client-for-backend-host-has-no-caller-resolved · finding [fixed] · resolves f-client-for-backend-host-has-no-caller: client_for_backend's new host= parameter has zero production callers — a second dead last mile, in the PR that exists to kill the first one (phase 6)
+
+Closed because its central factual claim is no longer true, and the half that is
+still true is carried by a finding of its own.
+
+The claim was: "client_for_backend's new host= parameter has zero production
+callers -- a second dead last mile". As of P5.T5 plus P6.T2 it has one that
+genuinely fires: fr_vk.pr_observe._default_pr_status_fetch passes
+host=self_hosted_hostname(hostname), and now that the backend comes from
+backend_for_url(pr_url) the pair (backend="gitlab", host="<instance>") is
+reachable for a real self-hosted MR URL -- which is what "dead" meant. Pinned by
+tests/unit/test_pr_observe.py::test_a_self_hosted_pr_url_carries_its_host_into_the_client,
+which no longer monkeypatches backend resolution at all.
+
+The finding's own prediction has been discharged in the direction it named: it
+said "until it lands, 'fr works against self-hosted GitLab' is true for fr apply
+/ fr spec status and false for the VK bridge's PR polling". PR polling is now
+true. See d-selfhosted-support-matrix for the full per-operation table.
+
+THE REMAINDER, EXPLICITLY: the second of the two call sites it counted,
+fr_vk.pr_state._default_close_gh_issue (pr_state.py), still passes no host, and
+the finding correctly said that one "needs a real decision, not a one-liner".
+That decision is now tracked on its own, twice over -- 4d9ab22d64fe and its
+phase-6 update 4d9ab22d64fe-arity, which names closer's 3-arg arity as the sole
+blocker. Keeping this entry open as well would mean two open findings for one
+unfixed thing, which makes `fr journal check` less informative rather than more.
+
+Resolved by the phase-6 executor, not phase 5. If the orchestrator disagrees
+with the partial close, `fr journal add --resolves f-client-for-backend-host-has-no-caller
+--state open` re-opens it; nothing here rewrites the original text.
