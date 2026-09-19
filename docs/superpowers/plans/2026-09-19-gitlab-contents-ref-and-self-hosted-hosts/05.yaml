@@ -233,13 +233,16 @@ state:
       note: 'GREEN: _WARNED_DECLARED_HOSTS guard in client_for, keyed (declared, backend).
         tests/unit/test_hostclient.py tests/unit/test__hosts.py -q --no-cov: 36 passed.'
     P5.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:41:05+00:00'
+      note: 'README: Self-hosted instances paragraph added under Requirements'' forge-CLI
+        bullet.'
     P5.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:41:06+00:00'
+      note: 'fr-init SKILL.md lines 78-80 corrected: --host is optional for GitLab
+        (derived from remote), override-only. Regenerated .opencode mirror; sync-opencode.py
+        --check and test_tripwire_opencode_skills_sync.py both pass.'
     P5.T4.S1:
       state: ' '
       ticked_at: null
