@@ -304,9 +304,7 @@ class TestContentsApi:
 
         def _raise(args, **kwargs):
             cap(args, **kwargs)
-            raise _glab.GlabError(
-                GLAB_STDERR_404_FILE.strip(), stderr=GLAB_STDERR_404_FILE
-            )
+            raise _glab.GlabError(GLAB_STDERR_404_FILE.strip(), stderr=GLAB_STDERR_404_FILE)
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert RealGlabClient().file_exists("group/proj", "docs/missing.md") is False
@@ -391,9 +389,7 @@ class TestContentsApi:
 
         def _raise(args, **kwargs):
             cap(args, **kwargs)
-            raise _glab.GlabError(
-                GLAB_STDERR_404_TREE.strip(), stderr=GLAB_STDERR_404_TREE
-            )
+            raise _glab.GlabError(GLAB_STDERR_404_TREE.strip(), stderr=GLAB_STDERR_404_TREE)
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert RealGlabClient().list_dir("group/proj", "docs/missing") == []

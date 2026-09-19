@@ -188,18 +188,32 @@ def _haystack(err: GlabError) -> str:
     """Lowercase text to pattern-match glab error classification against.
     Shared by `is_transient` and `is_not_found` — each keeps its own
     pattern tuple and docstring; only the construction is common.
-    Includes `stdout` (the API's JSON body, folded into the message by
-    `_run_glab`) so a not-found signalled only in the body — with no
-    "HTTP 404" on stderr — still classifies (gh-486; spec §2.A)."""
+
+    `stdout` is read as well as `stderr`, and for anything `_run_glab`
+    produces that is REDUNDANT: `_run_glab` already folds the body into
+    the message, so `str(err)` carries it. The term earns its place only
+    for a `GlabError` built directly with `stdout=` and no message —
+    which today happens in tests alone. It is kept as the contract for
+    any future construction site: put the body anywhere on the error and
+    classification still sees it. Do not read the term as evidence that
+    a body-only error reaches this function in production; it does not."""
     return (err.stderr + " " + err.stdout + " " + str(err)).lower()
 
 
 def is_transient(err: GlabError) -> bool:
     """True if the error looks like a transient network/server failure
     that warrants retry. False for auth, 404, validation, and unknown
-    errors (fail fast). Patterns are glab's own stderr vocabulary
+    errors (fail fast). Patterns are glab's own network-error vocabulary
     (dial/net-style Go error text), distinct from gh's — see the module
-    docstring and the design doc's capability matrix."""
+    docstring and the design doc's capability matrix.
+
+    Since gh-486 this reads the API's response body too, not just
+    stderr (`_haystack`). That is a wider input than the patterns were
+    written against: a NON-transient error whose body happened to
+    contain "timeout" or "http 5" would now be retried. No captured
+    GitLab error body contains that vocabulary (spec §2.A), and a real
+    gateway timeout SHOULD retry, so the widening is deliberate — but it
+    is a widening, recorded here rather than discovered later."""
     return any(p in _haystack(err) for p in _TRANSIENT_PATTERNS)
 
 
