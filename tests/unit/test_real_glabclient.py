@@ -197,18 +197,22 @@ class TestEditIssueState:
     def test_closed_calls_close_issue(self, monkeypatch):
         captured: list[tuple[str, int]] = []
         monkeypatch.setattr(
-            _glab, "close_issue", lambda *, repo, number: captured.append((repo, number))
+            _glab,
+            "close_issue",
+            lambda *, repo, number, host=None: captured.append((repo, number, host)),
         )
         RealGlabClient().edit_issue_state("group/proj", 42, state="CLOSED")
-        assert captured == [("group/proj", 42)]
+        assert captured == [("group/proj", 42, None)]
 
     def test_open_calls_reopen_issue(self, monkeypatch):
         captured: list[tuple[str, int]] = []
         monkeypatch.setattr(
-            _glab, "reopen_issue", lambda *, repo, number: captured.append((repo, number))
+            _glab,
+            "reopen_issue",
+            lambda *, repo, number, host=None: captured.append((repo, number, host)),
         )
         RealGlabClient().edit_issue_state("group/proj", 42, state="OPEN")
-        assert captured == [("group/proj", 42)]
+        assert captured == [("group/proj", 42, None)]
 
     def test_unknown_state_raises(self):
         with pytest.raises(ValueError, match="unknown issue state"):
@@ -242,14 +246,20 @@ class TestThinPassThroughs:
             "group/proj", 42, add=frozenset({"pr-ready"}), remove=frozenset({"fr:ready"})
         )
         assert captured == [
-            {"repo": "group/proj", "number": 42, "add": ["pr-ready"], "remove": ["fr:ready"]}
+            {
+                "repo": "group/proj",
+                "number": 42,
+                "add": ["pr-ready"],
+                "remove": ["fr:ready"],
+                "host": None,
+            }
         ]
 
     def test_edit_issue_body_delegates(self, monkeypatch):
         captured: list[dict] = []
         monkeypatch.setattr(_glab, "edit_issue_body", lambda **kw: captured.append(kw))
         RealGlabClient().edit_issue_body("group/proj", 42, "new body")
-        assert captured == [{"repo": "group/proj", "number": 42, "body": "new body"}]
+        assert captured == [{"repo": "group/proj", "number": 42, "body": "new body", "host": None}]
 
     def test_ensure_labels_delegates(self, monkeypatch):
         from fr.labels import LabelDef
@@ -258,7 +268,7 @@ class TestThinPassThroughs:
         monkeypatch.setattr(_glab, "ensure_labels", lambda **kw: captured.append(kw))
         defs = [LabelDef("fr:ready", "0E8AE6", "queued")]
         RealGlabClient().ensure_labels("group/proj", defs)
-        assert captured == [{"repo": "group/proj", "labels": defs}]
+        assert captured == [{"repo": "group/proj", "labels": defs, "host": None}]
 
 
 class _CapturingGlab:
@@ -489,3 +499,99 @@ class TestPrStatusByUrl:
 
     def test_returns_none_on_unparseable_url(self):
         assert RealGlabClient().pr_status_by_url("https://example.com/not/an/mr") is None
+
+
+class TestHostThreading:
+    """`RealGlabClient(host=...)` must reach EVERY glab call it makes — a
+    method that forgets is a method that silently talks to gitlab.com
+    (gh-486; spec §4.C)."""
+
+    def test_the_client_carries_its_host_into_every_call(self, monkeypatch):
+        cap = _CapturingGlab(json.dumps({"content": "eA=="}))
+        hosts: list[str | None] = []
+
+        def _spy(args, *, host=None):
+            hosts.append(host)
+            return cap(args)
+
+        monkeypatch.setattr(_glab, "_run_glab", _spy)
+        c = RealGlabClient(host="gl.corp.com")
+        c.file_exists("g/p", "x.md")
+        c.comment_issue("g/p", 1, "hi")
+        assert hosts == ["gl.corp.com", "gl.corp.com"]
+
+    def test_no_host_is_the_default(self, monkeypatch):
+        """Every existing caller constructs RealGlabClient() — that must
+        keep passing host=None, so glab's own resolution still applies."""
+        hosts: list[str | None] = []
+
+        def _spy(args, *, host=None):
+            hosts.append(host)
+            return "{}"
+
+        monkeypatch.setattr(_glab, "_run_glab", _spy)
+        RealGlabClient().comment_issue("g/p", 1, "hi")
+        assert hosts == [None]
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda c: c.file_exists("g/p", "x.md"),
+            lambda c: c.list_dir("g/p", "docs"),
+            lambda c: c.read_file("g/p", "x.md"),
+            lambda c: c.comment_issue("g/p", 1, "hi"),
+            lambda c: c.list_linked_prs("g/p", 1),
+            lambda c: c.pr_status_by_url("https://gl.corp.com/g/p/-/merge_requests/1"),
+        ],
+        ids=[
+            "file_exists",
+            "list_dir",
+            "read_file",
+            "comment_issue",
+            "list_linked_prs",
+            "pr_status_by_url",
+        ],
+    )
+    def test_every_direct_api_call_carries_the_host(self, monkeypatch, call):
+        hosts: list[str | None] = []
+
+        def _spy(args, *, host=None):
+            hosts.append(host)
+            if "related_merge_requests" in " ".join(args):
+                return "[]"  # this one parses a LIST, not an object
+            return json.dumps({"content": "eA==", "state": "opened", "draft": False})
+
+        monkeypatch.setattr(_glab, "_run_glab", _spy)
+        call(RealGlabClient(host="gl.corp.com"))
+        assert hosts == ["gl.corp.com"]
+
+    @pytest.mark.parametrize(
+        ("helper", "call"),
+        [
+            (
+                "create_issue",
+                lambda c: c.create_issue("g/p", title="t", body="b", labels=frozenset()),
+            ),
+            (
+                "swap_issue_labels",
+                lambda c: c.edit_issue_labels("g/p", 1, add=frozenset({"a"}), remove=frozenset()),
+            ),
+            ("close_issue", lambda c: c.edit_issue_state("g/p", 1, state="CLOSED")),
+            ("reopen_issue", lambda c: c.edit_issue_state("g/p", 1, state="OPEN")),
+            ("edit_issue_body", lambda c: c.edit_issue_body("g/p", 1, "b")),
+            ("ensure_labels", lambda c: c.ensure_labels("g/p", ["fr:ready"])),
+            ("view_issue", lambda c: c.view_issue("g/p", 1)),
+        ],
+    )
+    def test_every_delegating_method_forwards_the_host(self, monkeypatch, helper, call):
+        """The write methods go through `fr.glab`'s helpers rather than
+        `_run_glab` directly, so they need their own witness."""
+        seen: list[str | None] = []
+
+        def _spy(*args, **kw):
+            seen.append(kw.get("host"))
+            return {} if helper == "view_issue" else ""
+
+        monkeypatch.setattr(_glab, helper, _spy)
+        call(RealGlabClient(host="gl.corp.com"))
+        assert seen == ["gl.corp.com"]

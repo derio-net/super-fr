@@ -52,10 +52,22 @@ _CONTENTS_REF = "HEAD"
 
 
 class RealGlabClient:
-    """Wraps `fr.glab` to satisfy the `GhClient` Protocol for GitLab repos."""
+    """Wraps `fr.glab` to satisfy the `GhClient` Protocol for GitLab repos.
+
+    `host` names a self-hosted instance and is carried into every glab
+    call this client makes (as the child's GITLAB_HOST — see
+    `fr.glab._run_glab`). `None`, the default, leaves glab's own host
+    resolution alone. The client is deliberately dumb about where the
+    host came from: `fr.hostclient.client_for` resolves it from a
+    checkout, `fr_vk.pr_observe` from a bare PR URL, and neither
+    provenance changes what this class does with it (gh-486; spec §4.C).
+    """
+
+    def __init__(self, *, host: str | None = None) -> None:
+        self._host = host
 
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
-        raw = cast("dict[str, Any]", _glab.view_issue(repo, number))
+        raw = cast("dict[str, Any]", _glab.view_issue(repo, number, host=self._host))
         labels_raw = raw.get("labels", []) or []
         labels = [
             lbl["name"] if isinstance(lbl, dict) and "name" in lbl else lbl for lbl in labels_raw
@@ -81,7 +93,8 @@ class RealGlabClient:
         encoded_repo = quote(repo, safe="")
         try:
             out = _glab._run_glab(
-                ["api", f"projects/{encoded_repo}/issues/{issue_number}/related_merge_requests"]
+                ["api", f"projects/{encoded_repo}/issues/{issue_number}/related_merge_requests"],
+                host=self._host,
             )
         except _glab.GlabError:
             return []
@@ -114,7 +127,9 @@ class RealGlabClient:
             return None
         repo, iid = m.group(1), m.group(2)
         try:
-            out = _glab._run_glab(["mr", "view", iid, "--repo", repo, "--output", "json"])
+            out = _glab._run_glab(
+                ["mr", "view", iid, "--repo", repo, "--output", "json"], host=self._host
+            )
         except _glab.GlabError:
             return None
         raw = json.loads(out)
@@ -140,6 +155,7 @@ class RealGlabClient:
             number=number,
             add=sorted(add),
             remove=sorted(remove),
+            host=self._host,
         )
 
     def edit_issue_state(
@@ -151,15 +167,15 @@ class RealGlabClient:
         reason: str | None = None,
     ) -> None:
         if state == "CLOSED":
-            _glab.close_issue(repo=repo, number=number)
+            _glab.close_issue(repo=repo, number=number, host=self._host)
             return
         if state == "OPEN":
-            _glab.reopen_issue(repo=repo, number=number)
+            _glab.reopen_issue(repo=repo, number=number, host=self._host)
             return
         raise ValueError(f"unknown issue state: {state!r}")
 
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
-        _glab.edit_issue_body(repo=repo, number=number, body=body)
+        _glab.edit_issue_body(repo=repo, number=number, body=body, host=self._host)
 
     def create_issue(
         self,
@@ -174,6 +190,7 @@ class RealGlabClient:
             title=title,
             body=body,
             labels=sorted(labels),
+            host=self._host,
         )
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
@@ -189,12 +206,14 @@ class RealGlabClient:
                 color = getattr(lbl, "color", None) or lbl.get("color", "ededed")
                 description = getattr(lbl, "description", None) or lbl.get("description", "")
                 defs.append(LabelDef(name=name, color=color, description=description))
-        _glab.ensure_labels(repo=repo, labels=defs)
+        _glab.ensure_labels(repo=repo, labels=defs, host=self._host)
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         """Post a comment via `glab issue note` (glab's name for gh's
         `issue comment` — verified directly against `glab issue --help`)."""
-        _glab._run_glab(["issue", "note", str(number), "--repo", repo, "--message", body])
+        _glab._run_glab(
+            ["issue", "note", str(number), "--repo", repo, "--message", body], host=self._host
+        )
 
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
@@ -212,7 +231,8 @@ class RealGlabClient:
                 [
                     "api",
                     f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}",
-                ]
+                ],
+                host=self._host,
             )
             return True
         except _glab.GlabError as exc:
@@ -237,7 +257,8 @@ class RealGlabClient:
                     "api",
                     f"projects/{encoded_repo}/repository/tree"
                     f"?path={encoded_path}&ref={_CONTENTS_REF}",
-                ]
+                ],
+                host=self._host,
             )
         except _glab.GlabError as exc:
             if _glab.is_not_found(exc):
@@ -259,7 +280,8 @@ class RealGlabClient:
             [
                 "api",
                 f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}",
-            ]
+            ],
+            host=self._host,
         )
         data = json.loads(out)
         content = data.get("content", "")

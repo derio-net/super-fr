@@ -250,13 +250,27 @@ state:
         stubs in test_real_glabclient.py needed **kwargs. Kept unconditional deliberately:
         the existing assertions now pin the forwarding too.'
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:14:45+00:00'
+      note: 'RED confirmed, three distinct reasons: TypeError: RealGlabClient() takes
+        no arguments; AttributeError: ''RealGlabClient'' object has no attribute ''_host'';
+        TypeError: client_for_backend() got an unexpected keyword argument ''host''.
+        19 tests red. Went wider than the plan''s three: client_for is exercised for
+        all four resolution cases (declared / self-hosted remote with backend:gitlab
+        only / gitlab.com / github.com / no remote), and RealGlabClient''s coverage
+        is two tables — one per direct _run_glab call site (6), one per delegating
+        write method (7) — so no method can forget the host.'
     P4.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:14:54+00:00'
+      note: 'GREEN: RealGlabClient.__init__(*, host=None) stores _host and threads
+        it into all 13 glab calls (6 direct _run_glab, 7 fr.glab helpers). client_for_backend(backend,
+        *, host=None) passes it to RealGlabClient only — docstring now says it is
+        deliberately provenance-blind and why. client_for resolves it with _hosts.host_for(repo_root)
+        and its docstring records that it is the only layer holding a repo_root, hence
+        the only one that can tell declared from derived. 116 passed across test_real_glabclient/test_hostclient/test_glab;
+        ruff + mypy (137 files) clean. Five existing delegation tests needed host
+        in their captured kwargs — same deviation journaled under d-host-forwarded-unconditionally.'
     P4.T4.S1:
       state: ' '
       ticked_at: null
