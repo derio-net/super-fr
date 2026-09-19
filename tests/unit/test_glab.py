@@ -511,9 +511,14 @@ class TestAlreadyExists:
         never created with no error to say so — less discoverable than the loud
         abort it replaced. A gateway or proxy 409 must not read as "already
         there" (phase 7 review, Important #1)."""
+        # This one IS the regression guard: red-green verified against the
+        # pre-fix predicate, which answered True here.
         assert not is_already_exists(
             GlabError("gateway", stderr="proxy rejected the request : 409 ")
         )
+        # This one is a boundary assertion, NOT a guard — the old pattern
+        # (": 409 ", space-delimited) did not match it either. Kept for the
+        # boundary, labelled so it is not mistaken for proof.
         assert not is_already_exists(GlabError("409", stderr="Error: HTTP 409"))
 
     def test_the_api_envelope_pairs_with_the_status(self):
