@@ -14,10 +14,18 @@ installed `glab` binary's `--help` output (not assumed by analogy):
   `--remove-label`).
 - `glab label create --color` wants a leading `#` (default `#428BCA`);
   `ensure_label` prepends it here — `LabelDef` itself stays bare-hex.
+
+Every public helper takes a keyword-only `host: str | None = None` and
+forwards it to `_run_glab`, which puts it in the child's `GITLAB_HOST`.
+That is how a self-hosted instance is targeted; see `_run_glab` for why it
+is an env var and not `--hostname`, and
+docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+§4.C for the layer that supplies it.
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from collections.abc import Callable
@@ -40,14 +48,29 @@ class GlabError(Exception):
         self.returncode = returncode
 
 
-def _run_glab(args: list[str]) -> str:
-    """Run a glab command and return stdout. Raises GlabError on failure."""
+def _run_glab(args: list[str], *, host: str | None = None) -> str:
+    """Run a glab command and return stdout. Raises GlabError on failure.
+
+    `host` targets a self-hosted instance by putting GITLAB_HOST in the
+    CHILD's environment only — never `os.environ`, so a host resolved for
+    one repo cannot leak into a call for another repo in the same process
+    (gh-486; a bridge tick handles many repos per process).
+
+    The env var is used rather than `--hostname` because only it is
+    honoured by every glab subcommand: `glab api` accepts `--hostname`,
+    `glab label create` does not, and `fr.glab` calls both (verified live
+    against a self-hosted instance — spec §2.D). `host=None` passes
+    `env=None`, so the child inherits this process's environment unchanged
+    and glab's own resolution from the current git directory still
+    applies."""
+    env = {**os.environ, "GITLAB_HOST": host} if host else None
     try:
         result = subprocess.run(
             ["glab", *args],
             capture_output=True,
             text=True,
             check=True,
+            env=env,
         )
     except subprocess.CalledProcessError as exc:
         # glab splits an error across both streams: its own summary on
@@ -71,6 +94,7 @@ def create_issue(
     title: str,
     body: str,
     labels: list[str],
+    host: str | None = None,
 ) -> str:
     """Create a GitLab Issue and return its URL."""
     args = [
@@ -85,33 +109,33 @@ def create_issue(
     ]
     for label in labels:
         args.extend(["--label", label])
-    return _run_glab(args)
+    return _run_glab(args, host=host)
 
 
-def view_issue(repo: str, number: int) -> dict[str, object]:
+def view_issue(repo: str, number: int, *, host: str | None = None) -> dict[str, object]:
     """Fetch an Issue's title, description, labels, state via `glab issue
     view --output json`."""
     import json
 
-    out = _run_glab(["issue", "view", str(number), "--repo", repo, "--output", "json"])
+    out = _run_glab(["issue", "view", str(number), "--repo", repo, "--output", "json"], host=host)
     result: dict[str, object] = json.loads(out)
     return result
 
 
-def close_issue(*, repo: str, number: int) -> None:
+def close_issue(*, repo: str, number: int, host: str | None = None) -> None:
     """Close a GitLab Issue by IID."""
-    _run_glab(["issue", "close", str(number), "--repo", repo])
+    _run_glab(["issue", "close", str(number), "--repo", repo], host=host)
 
 
-def reopen_issue(*, repo: str, number: int) -> None:
+def reopen_issue(*, repo: str, number: int, host: str | None = None) -> None:
     """Reopen a closed GitLab Issue by IID."""
-    _run_glab(["issue", "reopen", str(number), "--repo", repo])
+    _run_glab(["issue", "reopen", str(number), "--repo", repo], host=host)
 
 
-def edit_issue_body(*, repo: str, number: int, body: str) -> None:
+def edit_issue_body(*, repo: str, number: int, body: str, host: str | None = None) -> None:
     """Update the description of an existing Issue via `glab issue update
     --description` (glab's flag name for what gh calls `--body`)."""
-    _run_glab(["issue", "update", str(number), "--repo", repo, "--description", body])
+    _run_glab(["issue", "update", str(number), "--repo", repo, "--description", body], host=host)
 
 
 def swap_issue_labels(
@@ -120,6 +144,7 @@ def swap_issue_labels(
     number: int,
     add: list[str],
     remove: list[str],
+    host: str | None = None,
 ) -> None:
     """Add and remove labels on an Issue in a single glab call.
 
@@ -132,7 +157,7 @@ def swap_issue_labels(
         args.extend(["--label", lbl])
     for lbl in remove:
         args.extend(["--unlabel", lbl])
-    _run_glab(args)
+    _run_glab(args, host=host)
 
 
 def ensure_label(
@@ -141,6 +166,7 @@ def ensure_label(
     name: str,
     color: str = "ededed",
     description: str = "",
+    host: str | None = None,
 ) -> None:
     """Create a label on the target repo.
 
@@ -164,14 +190,14 @@ def ensure_label(
     ]
     if description:
         args.extend(["--description", description])
-    _run_glab(args)
+    _run_glab(args, host=host)
 
 
-def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
+def ensure_labels(*, repo: str, labels: list[LabelDef], host: str | None = None) -> None:
     """Ensure every label exists on the repo with the right color and
     description. First failure propagates (mirrors `fr.gh.ensure_labels`)."""
     for ld in labels:
-        ensure_label(repo=repo, name=ld.name, color=ld.color, description=ld.description)
+        ensure_label(repo=repo, name=ld.name, color=ld.color, description=ld.description, host=host)
 
 
 _TRANSIENT_PATTERNS = (

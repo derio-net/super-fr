@@ -223,17 +223,32 @@ state:
         a host for backend github). tests/unit/test__hosts.py: 21 passed, including
         the three pre-existing host_for tests.'
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:07:55+00:00'
+      note: 'RED confirmed: TypeError: _run_glab() got an unexpected keyword argument
+        ''host''. Wrote three tests, not two: host-in-child-env, no-host (env is None),
+        and a third asserting the env is a COPY of os.environ plus one key — a one-entry
+        env would strip PATH/HOME out from under glab, which the plan''s two tests
+        would not have caught.'
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:07:55+00:00'
+      note: 'GREEN: fr.glab imports os for the first time; _run_glab(args, *, host=None)
+        builds env={**os.environ, ''GITLAB_HOST'': host} per call and passes env=env
+        to subprocess.run (None when no host). tests/unit/test_glab.py: 40 passed.'
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:12:03+00:00'
+      note: 'RED: all 8 table rows failed with TypeError: <helper>() got an unexpected
+        keyword argument ''host''. GREEN after threading host through create_issue/view_issue/close_issue/reopen_issue/edit_issue_body/swap_issue_labels/ensure_label/ensure_labels.
+        Added a 9th test the plan did not call for — test_the_table_covers_every_public_glab_helper
+        — pinning the table against fr.glab''s own public surface, because a table
+        is only a guard if it is complete. DEVIATION: ''every existing test untouched''
+        did not hold. Helpers forward host=host UNCONDITIONALLY (a conditional would
+        mean an if/else in 8 places), so 5 mock.assert_called_once_with([...]) calls
+        in test_glab.py and one fake_ensure stub needed host=None, and the _run_glab
+        stubs in test_real_glabclient.py needed **kwargs. Kept unconditional deliberately:
+        the existing assertions now pin the forwarding too.'
     P4.T3.S1:
       state: ' '
       ticked_at: null

@@ -17,9 +17,12 @@ from fr.real_glabclient import RealGlabClient, _coerce_ci_state
 
 
 def _fake_run_glab_factory(returns: dict[tuple[str, ...], str]):
-    """Build a `_run_glab` stand-in that dispatches by argv prefix."""
+    """Build a `_run_glab` stand-in that dispatches by argv prefix.
 
-    def _run(args: list[str]) -> str:
+    Accepts `**kwargs` so it tolerates the keyword-only `host=` every
+    `_run_glab` call carries since gh-486 (spec §4.C)."""
+
+    def _run(args: list[str], **kwargs: object) -> str:
         for prefix, value in returns.items():
             if tuple(args[: len(prefix)]) == prefix:
                 return value
@@ -151,7 +154,7 @@ class TestListLinkedPrs:
     def test_returns_empty_on_glab_error(self, monkeypatch):
         """Soft-fail: an unreachable MR query shouldn't blow up `fr apply`."""
 
-        def _raise(args):
+        def _raise(args, **kwargs):
             raise _glab.GlabError("transient failure")
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
@@ -160,7 +163,7 @@ class TestListLinkedPrs:
     def test_url_encodes_repo_for_api_path(self, monkeypatch):
         captured: list[list[str]] = []
 
-        def fake(args: list[str]) -> str:
+        def fake(args: list[str], **kwargs: object) -> str:
             captured.append(args)
             return "[]"
 
@@ -216,7 +219,7 @@ class TestCommentIssue:
     def test_uses_note_subcommand(self, monkeypatch):
         """glab's comment command is `issue note`, not `issue comment`."""
         captured: list[list[str]] = []
-        monkeypatch.setattr(_glab, "_run_glab", lambda args: captured.append(args) or "")
+        monkeypatch.setattr(_glab, "_run_glab", lambda args, **kw: captured.append(args) or "")
         RealGlabClient().comment_issue("group/proj", 42, "hello")
         assert captured == [["issue", "note", "42", "--repo", "group/proj", "--message", "hello"]]
 
@@ -432,7 +435,7 @@ class TestPrStatusByUrl:
     def test_parses_url_and_calls_mr_view_by_iid(self, monkeypatch):
         captured: list[list[str]] = []
 
-        def fake(args: list[str]) -> str:
+        def fake(args: list[str], **kwargs: object) -> str:
             captured.append(args)
             return json.dumps({"state": "opened", "draft": False})
 
@@ -446,7 +449,7 @@ class TestPrStatusByUrl:
     def test_nested_group_url(self, monkeypatch):
         captured: list[list[str]] = []
 
-        def fake(args: list[str]) -> str:
+        def fake(args: list[str], **kwargs: object) -> str:
             captured.append(args)
             return json.dumps({"state": "opened", "draft": False})
 
@@ -458,7 +461,7 @@ class TestPrStatusByUrl:
 
     def test_merged_state(self, monkeypatch):
         monkeypatch.setattr(
-            _glab, "_run_glab", lambda args: json.dumps({"state": "merged", "draft": False})
+            _glab, "_run_glab", lambda args, **kw: json.dumps({"state": "merged", "draft": False})
         )
         result = RealGlabClient().pr_status_by_url(
             "https://gitlab.com/group/proj/-/merge_requests/7"
@@ -467,7 +470,7 @@ class TestPrStatusByUrl:
 
     def test_closed_unmerged_state(self, monkeypatch):
         monkeypatch.setattr(
-            _glab, "_run_glab", lambda args: json.dumps({"state": "closed", "draft": False})
+            _glab, "_run_glab", lambda args, **kw: json.dumps({"state": "closed", "draft": False})
         )
         result = RealGlabClient().pr_status_by_url(
             "https://gitlab.com/group/proj/-/merge_requests/7"
@@ -475,7 +478,7 @@ class TestPrStatusByUrl:
         assert result == {"state": "CLOSED", "draft": False}
 
     def test_returns_none_on_error(self, monkeypatch):
-        def _raise(args):
+        def _raise(args, **kwargs):
             raise _glab.GlabError("not found")
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)

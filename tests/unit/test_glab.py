@@ -9,7 +9,9 @@ capability matrix for the concrete differences, e.g. glab's `--description`
 where gh uses `--body`, and glab's `#`-prefixed label color).
 """
 
+import os
 import subprocess
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -20,10 +22,13 @@ from fr.glab import (
     create_issue,
     edit_issue_body,
     ensure_label,
+    ensure_labels,
     is_not_found,
+    reopen_issue,
     swap_issue_labels,
     view_issue,
 )
+from fr.labels import LabelDef
 
 from tests.unit.test_real_glabclient import (
     GLAB_STDERR_400_MISSING_REF,
@@ -64,7 +69,8 @@ class TestCreateIssue:
                     "Implementation plan body.",
                     "--label",
                     "fr:ready",
-                ]
+                ],
+                host=None,
             )
 
     def test_multiple_labels(self) -> None:
@@ -93,7 +99,7 @@ class TestViewIssue:
             assert result["title"] == "T"
             assert result["state"] == "opened"
             mock.assert_called_once_with(
-                ["issue", "view", "42", "--repo", "group/proj", "--output", "json"]
+                ["issue", "view", "42", "--repo", "group/proj", "--output", "json"], host=None
             )
 
 
@@ -101,7 +107,9 @@ class TestCloseIssue:
     def test_close(self) -> None:
         with patch("fr.glab._run_glab") as mock:
             close_issue(repo="group/proj", number=42)
-            mock.assert_called_once_with(["issue", "close", "42", "--repo", "group/proj"])
+            mock.assert_called_once_with(
+                ["issue", "close", "42", "--repo", "group/proj"], host=None
+            )
 
 
 class TestEditIssueBody:
@@ -110,7 +118,8 @@ class TestEditIssueBody:
         with patch("fr.glab._run_glab") as mock:
             edit_issue_body(repo="group/proj", number=42, body="New body.")
             mock.assert_called_once_with(
-                ["issue", "update", "42", "--repo", "group/proj", "--description", "New body."]
+                ["issue", "update", "42", "--repo", "group/proj", "--description", "New body."],
+                host=None,
             )
 
 
@@ -136,7 +145,8 @@ class TestSwapIssueLabels:
                     "in-progress",
                     "--unlabel",
                     "fr:ready",
-                ]
+                ],
+                host=None,
             )
 
     def test_empty_add_and_remove_is_noop(self) -> None:
@@ -178,7 +188,12 @@ class TestEnsureLabels:
         captured: list[dict[str, str]] = []
 
         def fake_ensure(
-            *, repo: str, name: str, color: str = "ededed", description: str = ""
+            *,
+            repo: str,
+            name: str,
+            color: str = "ededed",
+            description: str = "",
+            host: str | None = None,
         ) -> None:
             captured.append(
                 {"repo": repo, "name": name, "color": color, "description": description}
@@ -245,6 +260,113 @@ def test_a_failed_call_keeps_the_api_diagnostic(monkeypatch: pytest.MonkeyPatch)
     assert exc.value.stdout == '{"error":"ref is missing, ref is empty"}'
     assert "ref is missing, ref is empty" in str(exc.value)
     assert "HTTP 400" in str(exc.value)
+
+
+# Every public helper in `fr.glab`, called with a host. A TABLE rather than
+# eight tests, so a helper added later WITHOUT the keyword-only `host`
+# parameter fails loudly here instead of silently talking to gitlab.com
+# (gh-486; spec §4.C).
+_HOST_FORWARDING_CALLS = {
+    "create_issue": lambda h: create_issue(repo="g/p", title="t", body="b", labels=[], host=h),
+    "view_issue": lambda h: view_issue("g/p", 1, host=h),
+    "close_issue": lambda h: close_issue(repo="g/p", number=1, host=h),
+    "reopen_issue": lambda h: reopen_issue(repo="g/p", number=1, host=h),
+    "edit_issue_body": lambda h: edit_issue_body(repo="g/p", number=1, body="b", host=h),
+    "swap_issue_labels": lambda h: swap_issue_labels(
+        repo="g/p", number=1, add=["a"], remove=[], host=h
+    ),
+    "ensure_label": lambda h: ensure_label(repo="g/p", name="n", host=h),
+    "ensure_labels": lambda h: ensure_labels(
+        repo="g/p", labels=[LabelDef("n", "ededed", "")], host=h
+    ),
+}
+
+
+def test_the_table_covers_every_public_glab_helper() -> None:
+    """The table is only a guard if it is complete — pin it against the
+    module's own public surface so a new helper cannot slip past it."""
+    public = {
+        name
+        for name in dir(glab)
+        if not name.startswith("_")
+        and callable(getattr(glab, name))
+        and getattr(getattr(glab, name), "__module__", "") == "fr.glab"
+    }
+    # Classification/retry helpers take a GlabError or a callable, not a host.
+    public -= {"GlabError", "LabelDef", "is_transient", "is_not_found", "with_retry"}
+    assert public == set(_HOST_FORWARDING_CALLS)
+
+
+@pytest.mark.parametrize("name", sorted(_HOST_FORWARDING_CALLS))
+def test_every_helper_forwards_the_host(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    seen: list[str | None] = []
+
+    def _spy(args, *, host=None):  # type: ignore[no-untyped-def]
+        seen.append(host)
+        return "{}"
+
+    monkeypatch.setattr(glab, "_run_glab", _spy)
+    _HOST_FORWARDING_CALLS[name]("gl.corp.com")
+    assert seen == ["gl.corp.com"]
+
+
+class TestRunGlabHost:
+    """`GITLAB_HOST`, not `--hostname`: only the env var is honoured by
+    every glab subcommand (`glab api` takes `--hostname`, `glab label
+    create` does not) — verified live against a self-hosted instance,
+    spec §2.D. And it goes in the CHILD's env only, so one repo's host
+    cannot leak into another repo's call in the same process (gh-486)."""
+
+    def test_run_glab_puts_the_host_in_the_child_env_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: dict[str, object] = {}
+
+        def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+            seen["argv"], seen["env"] = argv, kwargs.get("env")
+            return SimpleNamespace(stdout="ok", stderr="", returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        monkeypatch.delenv("GITLAB_HOST", raising=False)
+        assert glab._run_glab(["api", "user"], host="gl.corp.com") == "ok"
+        env = seen["env"]
+        assert isinstance(env, dict)
+        assert env["GITLAB_HOST"] == "gl.corp.com"
+        assert "--hostname" not in seen["argv"]  # type: ignore[operator]
+        assert "GITLAB_HOST" not in os.environ  # never mutated globally
+
+    def test_run_glab_host_env_inherits_the_rest_of_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A copy of os.environ plus one key — not a one-entry env, which
+        would strip PATH and HOME out from under glab."""
+        seen: dict[str, object] = {}
+
+        def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+            seen["env"] = kwargs.get("env")
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        monkeypatch.setenv("FR_SENTINEL_FOR_TEST", "kept")
+        glab._run_glab(["api", "user"], host="gl.corp.com")
+        env = seen["env"]
+        assert isinstance(env, dict)
+        assert env["FR_SENTINEL_FOR_TEST"] == "kept"
+
+    def test_run_glab_without_a_host_leaves_the_env_alone(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """env is None -> the child inherits os.environ unchanged, which is
+        what keeps glab's own git-directory host resolution working (§2.D)."""
+        seen: dict[str, object] = {}
+
+        def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+            seen["env"] = kwargs.get("env", "MISSING")
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        glab._run_glab(["api", "user"])
+        assert seen["env"] is None
 
 
 def test_the_body_alone_still_classifies_as_not_found() -> None:
