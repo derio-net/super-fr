@@ -216,12 +216,20 @@ class RealGlabClient:
 
     def list_dir(self, repo: str, path: str) -> list[str]:
         """Entry names under `path` via the repository tree endpoint.
-        `[]` on any GlabError — same fail-soft posture as `file_exists`."""
+        `[]` on any GlabError — same fail-soft posture as `file_exists`.
+        `ref` isn't required here (unlike the contents endpoints) — the
+        tree endpoint already defaults to the project's default branch —
+        but is pinned for consistency, live-proven not to regress
+        against a master-default instance 2026-09-19 (spec §2.A)."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         try:
             out = _glab._run_glab(
-                ["api", f"projects/{encoded_repo}/repository/tree?path={encoded_path}"]
+                [
+                    "api",
+                    f"projects/{encoded_repo}/repository/tree"
+                    f"?path={encoded_path}&ref={_CONTENTS_REF}",
+                ]
             )
         except _glab.GlabError:
             return []
@@ -234,7 +242,12 @@ class RealGlabClient:
         trick) — decoded here."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
-        out = _glab._run_glab(["api", f"projects/{encoded_repo}/repository/files/{encoded_path}"])
+        out = _glab._run_glab(
+            [
+                "api",
+                f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}",
+            ]
+        )
         data = json.loads(out)
         content = data.get("content", "")
         return base64.b64decode(content).decode("utf-8")

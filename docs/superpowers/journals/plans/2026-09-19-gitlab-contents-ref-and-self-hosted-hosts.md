@@ -133,3 +133,13 @@ Re-capturing the fixtures through Python (f1) disproved a claim the spec and pla
 ### f3-duplicate-success-test · finding [refuted] · test_file_exists_pins_ref_on_the_contents_endpoint duplicates test_file_exists_true_on_success — kept on purpose (phase 1)
 
 After P1.T1.S3's retrofit both assert success plus the ?ref=HEAD endpoint. The reviewer flagged it without asking for cleanup, and it is refused rather than tidied: the dedicated test is the named regression guard for gh-486 and is what a future reader greps for, while the retrofitted one exists to prove no contents test is arg-blind any more. Collapsing them would delete one of those two purposes, and the cost is four lines.
+
+<!-- fr:journal kind=discovery scope=plan id=8f11693ba656 created=2026-09-19T19:32:31 phase=2 -->
+### 8f11693ba656 · discovery · no-refactor-because P2.T1/P2.T2 (recorded pre-phase; confirmed accurate) (phase 2)
+
+Both tasks' pre-recorded no-refactor-because entries (622acdfb72bb, 21bf60a3ca21) held: T1's fold happened inside S2 as planned, and T2's S1 live-proof (below) cleared S2 to run, whose own fold is part of S2 per the pre-existing note. No separate refactor step was needed for either task.
+
+<!-- fr:journal kind=discovery scope=plan id=0fdf7a0ce59a created=2026-09-19T19:32:41 phase=2 -->
+### 0fdf7a0ce59a · discovery · P2.T2.S1 live proof: ref=HEAD on the tree endpoint is byte-identical to no ref (phase 2)
+
+Ran both forms against gitlab.local.gebit.de, IDermitzakis/devops-scripts, glab 1.89.0: 'projects/IDermitzakis%2Fdevops-scripts/repository/tree?path=' and the same with '&ref=HEAD' appended returned byte-identical JSON (same 8 entries, same ids/order). This cleared P2.T2.S2 to proceed: list_dir now sends &ref=HEAD on the tree endpoint, matching read_file/file_exists, with no behavior change against this live instance.

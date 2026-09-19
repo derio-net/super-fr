@@ -310,14 +310,40 @@ class TestContentsApi:
         assert RealGlabClient().file_exists("group/proj", "docs/missing.md") is False
         assert cap.endpoint == ("projects/group%2Fproj/repository/files/docs%2Fmissing.md?ref=HEAD")
 
+    def test_read_file_pins_ref_on_the_contents_endpoint(self, monkeypatch):
+        """GitLab's files endpoint REQUIRES `ref` (gh-486) — read_file
+        must send it too, same as file_exists."""
+        import base64
+
+        encoded = base64.b64encode(b"hello world").decode("ascii")
+        cap = _CapturingGlab(json.dumps({"content": encoded, "encoding": "base64"}))
+        monkeypatch.setattr(_glab, "_run_glab", cap)
+        assert RealGlabClient().read_file("group/proj", "docs/x.md") == "hello world"
+        assert cap.endpoint == "projects/group%2Fproj/repository/files/docs%2Fx.md?ref=HEAD"
+
     def test_read_file_decodes_base64_content(self, monkeypatch):
         import base64
 
         encoded = base64.b64encode(b"hello world").decode("ascii")
-        monkeypatch.setattr(
-            _glab, "_run_glab", lambda args: json.dumps({"content": encoded, "encoding": "base64"})
-        )
+        cap = _CapturingGlab(json.dumps({"content": encoded, "encoding": "base64"}))
+        monkeypatch.setattr(_glab, "_run_glab", cap)
         assert RealGlabClient().read_file("group/proj", "docs/x.md") == "hello world"
+        assert cap.endpoint == "projects/group%2Fproj/repository/files/docs%2Fx.md?ref=HEAD"
+
+    def test_list_dir_pins_ref_on_the_tree_endpoint(self, monkeypatch):
+        """Live-proven 2026-09-19 (spec §2.A, P2.T2.S1) that ref=HEAD
+        returns identical entries on gitlab.local.gebit.de — kept for
+        the same reason as the contents endpoints (gh-486)."""
+        response = json.dumps(
+            [
+                {"name": "01.yaml", "type": "blob"},
+                {"name": "02.yaml", "type": "blob"},
+            ]
+        )
+        cap = _CapturingGlab(response)
+        monkeypatch.setattr(_glab, "_run_glab", cap)
+        assert RealGlabClient().list_dir("group/proj", "docs/plan") == ["01.yaml", "02.yaml"]
+        assert cap.endpoint == "projects/group%2Fproj/repository/tree?path=docs%2Fplan&ref=HEAD"
 
     def test_list_dir_returns_names(self, monkeypatch):
         response = json.dumps(
@@ -326,15 +352,21 @@ class TestContentsApi:
                 {"name": "02.yaml", "type": "blob"},
             ]
         )
-        monkeypatch.setattr(_glab, "_run_glab", lambda args: response)
+        cap = _CapturingGlab(response)
+        monkeypatch.setattr(_glab, "_run_glab", cap)
         assert RealGlabClient().list_dir("group/proj", "docs/plan") == ["01.yaml", "02.yaml"]
+        assert cap.endpoint == "projects/group%2Fproj/repository/tree?path=docs%2Fplan&ref=HEAD"
 
     def test_list_dir_empty_on_error(self, monkeypatch):
-        def _raise(args):
+        cap = _CapturingGlab()
+
+        def _raise(args, **kwargs):
+            cap(args, **kwargs)
             raise _glab.GlabError("404")
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert RealGlabClient().list_dir("group/proj", "docs/missing") == []
+        assert cap.endpoint == "projects/group%2Fproj/repository/tree?path=docs%2Fmissing&ref=HEAD"
 
 
 class TestPrStatusByUrl:
