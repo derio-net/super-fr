@@ -25,7 +25,7 @@ Design rules baked into every model:
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -124,6 +124,26 @@ class PhaseHeader(BaseModel):
     # dumps when unset, so pre-marker plans stay byte-stable and parse on
     # older readers.
     skeleton: bool = False
+
+
+def _phase_tiers() -> tuple[str, ...]:
+    """Derive the closed tier vocabulary from `PhaseHeader.tier`'s own
+    Literal, rather than re-listing it — a fourth tier then needs exactly
+    one edit (the Literal above), not a hunt for every place that copied it.
+    """
+    annotation = PhaseHeader.model_fields["tier"].annotation
+    for arg in get_args(annotation):
+        literal_args = get_args(arg)
+        if literal_args:
+            return literal_args
+    raise AssertionError("PhaseHeader.tier has no Literal member to derive tiers from")
+
+
+# The closed set of `fr-goal` subagent-dispatch tiers, single-sourced from
+# `PhaseHeader.tier`'s Literal (2026-09-19 opencode-subagent-dispatch spec
+# §3.C — the OpenCode tier-agent generator imports this instead of
+# hardcoding the tier names a second time).
+PHASE_TIERS: tuple[str, ...] = _phase_tiers()
 
 
 class StepState(BaseModel):

@@ -2075,12 +2075,16 @@ rows:
       OpenCode's dispatch call carrying no model parameter.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_agent_mirror.py
     status: not-implemented
-    notes: 'Spec §3.C. Agent-per-tier is the only channel the binary offers (task-tool
-      input is prompt/description/subagent_type/command). Target: unit on the generator''s
-      model baking + install-time resolution; live check that the installed copies carry
-      the operator''s bindings.'
+    notes: 'Phase 2 (2026-09-19-opencode-subagent-dispatch plan) ships the generator
+      half: canonical_agents() now bakes model: per tier from the repo''s docs/superpowers/models.yaml
+      through fr.models.load_models, unit-covered by test_opencode_agent_mirror.py.
+      Status stays not-implemented because the row''s acceptance also needs install.sh''s
+      install-time resolution and a live check that installed copies carry the operator''s
+      bindings (spec §3.C/§3.F) -- that is phase 3''s work, not done yet.'
   - id: opencode-subagent-installer
     capability: OpenCode parity
     acceptance: install.sh delivers the OpenCode phase-executor agents to a consumer

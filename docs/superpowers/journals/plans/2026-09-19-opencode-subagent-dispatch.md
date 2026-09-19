@@ -67,3 +67,13 @@ Phase-1 review. The generated `.opencode/agent/fr-phase-executor.md` body tells 
 ### p1-t3-s1-preexisting-failures-resolved · finding [fixed] · resolves p1-t3-s1-preexisting-failures: Two pytest failures at P1.T3.S1 quality gate pre-date phase 1 and are out of scope
 
 Superseded by r-p1-f3 and r-p1-f4, which re-diagnosed both claims. Claim 1 (duplicate '## Implementation Plans') was NOT pre-existing — it was introduced earlier on this branch during plan scaffolding; stashing the phase's own changes cannot distinguish that from pre-existing-on-main, which is why it read as unrelated. Fixed by the orchestrator; fr validate artifacts now reports 23 artifacts all valid. Claim 2 (test_install_bridge) does not reproduce on the host at all and passes standalone; the three failures that DO reproduce are diagnosed in r-p1-f4 as rich line-wrapping over a long macOS tmp_path (proved by --basetemp=/tmp/sb) and the Claude Code marketplace clone acting as an unneutralised fourth workflow-resolution source. Both are pre-existing on origin/main and out of scope, but for stated reasons rather than as environment state.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-t2-s1-live-smoke created=2026-09-19T22:31:50 phase=2 -->
+### p2-t2-s1-live-smoke · discovery · opencode agent list confirms all four tier agents register (phase 2) (phase 2)
+
+opencode agent list (opencode 1.18.31, from the worktree, after `uv run scripts/sync-opencode.py` + `--check` clean) shows all four tier agents registering: fr-phase-executor (subagent), fr-phase-executor-hard (subagent), fr-phase-executor-mechanical (subagent), fr-phase-executor-standard (subagent). Names only recorded per .claude/rules/third-party-privacy.md — the full dump also lists many external_directory entries under the operator home, omitted here.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-t1-s3-no-refactor created=2026-09-19T22:32:01 phase=2 -->
+### p2-t1-s3-no-refactor · discovery · no-refactor-because: P2.T1.S3 (phase 2)
+
+GREEN (P2.T1.S2) was written directly as one shared _render_agent(description, body, tools, model, canonical_name) used by both the untiered base file and every per-tier file inside canonical_agents() — there was never a duplicated two-path implementation to collapse. Also added fr.types.PHASE_TIERS (derived via typing.get_args off PhaseHeader.tier, the same technique the test uses independently) as the single-sourced tier vocabulary scripts/sync-opencode.py imports, so a fourth tier needs no edit in the generator. No further refactor found.
