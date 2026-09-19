@@ -75,9 +75,9 @@ fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
     --secret GH_TOKEN --secret KUBECONFIG_B64
 ```
 
-For a non-GitHub repo, pass `--backend`/`--host` on EVERY profile call for
-that repo (repo-level, but scaffold reads it fresh per call):
-`fr init scaffold ... --backend gitlab --host gitlab.mycorp.com`.
+For a non-GitHub repo, pass `--backend` on every profile call for that repo.
+`--host` is OPTIONAL for GitLab (derived from the remote, override-only) —
+`gh`/`tea` aren't host-threaded yet (gh-486) and fr warns if given one.
 
 Each call writes:
 

@@ -254,13 +254,22 @@ state:
       note: 'Explainers currency discharged: grep -rli gitlab|backend docs/explainers/
         empty. Journaled as discovery.'
     P5.T5.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:48:24+00:00'
+      note: 'RED confirmed: test_a_self_hosted_pr_url_carries_its_host_into_the_client
+        failed (host=None, backend resolved via real backend_for_hostname). Existing
+        monkeypatched client_for_backend lambdas across test_pr_observe.py updated
+        to accept host= kwarg.'
     P5.T5.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:49:30+00:00'
+      note: 'GREEN: _hosts.self_hosted_hostname extracted, host_for refactored onto
+        it, pr_observe threads host=self_hosted_hostname(hostname). pr_state._default_close_gh_issue
+        documented as the sibling NOT fixed (comment + open finding). Also discovered
+        and journaled: backend_for_hostname/self_hosted_hostname are mutually exclusive
+        by construction, so this fix is inert for pr_observe''s real self-hosted-GitLab-URL
+        path (separate open finding). Closed f8-bridge-discards-derived-host as fixed.
+        tests: 118 passed.'
   completion:
     at: null
     note: null
