@@ -50,7 +50,9 @@ placeholder; the real k8s delivery is ESO→Secret→env per the frank design.
    host-worktree/external mode (operator decision). It also replaces the shared
    token-file with per-exec files, which closes the concurrent-exec race phase 2
    only commented on. It then documents `--secret` within the skill line cap,
-   regenerates mirrors, flips the acceptance rows, and bumps 4.3.0 → 4.4.0.
+   regenerates mirrors, flips the acceptance rows, and bumps the version. Main
+   released 4.4.0 and 4.5.x under the branch, so after the 2026-09-19 rebase the
+   branch re-bumps once from main's tip to 4.6.0.
 6. **[manual] Operator Infisical provisioning + live smoke** — create the
    read-only, short-TTL UA identity, populate the host env vars, and verify a
    real `fr isolation exec --secret` end-to-end. Back-loaded: nothing agentic
