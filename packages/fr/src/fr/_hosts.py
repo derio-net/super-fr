@@ -136,7 +136,12 @@ def backend_for_hostname(hostname: str | None) -> HostBackend:
 _URL_SHAPES: tuple[tuple[re.Pattern[str], HostBackend], ...] = (
     # /-/merge_requests/7 and pre-dash /merge_requests/7 alike
     (re.compile(r"/(?:-/)?merge_requests/\d+(?:/|$)"), "gitlab"),
-    (re.compile(r"/-/issues/\d+(?:/|$)"), "gitlab"),
+    # `/-/work_items/N` is what GitLab's API returns for an Issue since its
+    # work-items migration — the shape a real tracking_issue URL actually has
+    # (captured live 2026-09-19). Missing it meant `fr_dispatch.prompt` still
+    # said "GitHub Issue" for a self-hosted GitLab phase, which is exactly the
+    # thing this table was added to fix.
+    (re.compile(r"/-/(?:issues|work_items)/\d+(?:/|$)"), "gitlab"),
     (re.compile(r"/pulls/\d+(?:/|$)"), "gitea"),
     (re.compile(r"/pull/\d+(?:/|$)"), "github"),
 )

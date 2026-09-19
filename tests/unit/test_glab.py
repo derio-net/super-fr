@@ -23,6 +23,7 @@ from fr.glab import (
     edit_issue_body,
     ensure_label,
     ensure_labels,
+    is_already_exists,
     is_not_found,
     reopen_issue,
     swap_issue_labels,
@@ -293,7 +294,14 @@ def test_the_table_covers_every_public_glab_helper() -> None:
         and getattr(getattr(glab, name), "__module__", "") == "fr.glab"
     }
     # Classification/retry helpers take a GlabError or a callable, not a host.
-    public -= {"GlabError", "LabelDef", "is_transient", "is_not_found", "with_retry"}
+    public -= {
+        "GlabError",
+        "LabelDef",
+        "is_transient",
+        "is_not_found",
+        "is_already_exists",
+        "with_retry",
+    }
     assert public == set(_HOST_FORWARDING_CALLS)
 
 
@@ -473,3 +481,63 @@ class TestIsNotFound:
             stderr='glab: HTTP 400\n{"error":"ref is missing"} errors/404.md',
         )
         assert not is_not_found(err)
+
+
+class TestAlreadyExists:
+    """`glab label create` has no `--force`, so re-creating a label 409s.
+
+    Captured live 2026-09-19 — note rich WRAPPED the message mid-phrase, which
+    is why `_haystack` normalizes whitespace and why a naive
+    `"already exists" in stderr` test would not have matched:
+    """
+
+    LIVE_409 = (
+        "          \n   ERROR  \n          \n  Post https://gitlab.local.gebit.de/api/v4/"
+        "projects/IDermitzakis%2Fdevops-scripts/labels: 409 {message: Label already\n"
+        "  exists}.                                        \n\n"
+    )
+
+    def test_the_live_409_reads_as_already_exists(self):
+        assert is_already_exists(GlabError("409", stderr=self.LIVE_409))
+
+    def test_it_matches_across_the_wrap(self):
+        """The whole point: the phrase is split by rich's line break."""
+        assert "already exists" not in self.LIVE_409  # literally absent
+        assert is_already_exists(GlabError("409", stderr=self.LIVE_409))
+
+    def test_a_404_or_a_400_is_not_already_exists(self):
+        assert not is_already_exists(GlabError("404", stderr=GLAB_STDERR_404_FILE))
+        assert not is_already_exists(GlabError("400", stderr=GLAB_STDERR_400_MISSING_REF))
+
+    def test_ensure_labels_skips_one_that_exists_and_keeps_going(self, monkeypatch):
+        """The tolerance fr.glab.ensure_label's docstring always claimed.
+
+        Before this, the first pre-existing label aborted the whole
+        `fr apply`, so a second run could never converge (gh-486 f15).
+        """
+        seen = []
+
+        def _fake(*, repo, name, color="ededed", description="", host=None):
+            seen.append(name)
+            if name == "phase:1":
+                raise GlabError("409", stderr=TestAlreadyExists.LIVE_409)
+
+        monkeypatch.setattr(glab, "ensure_label", _fake)
+        glab.ensure_labels(
+            repo="g/p",
+            labels=[
+                LabelDef(name="phase:1", color="ededed", description=""),
+                LabelDef(name="phase:2", color="ededed", description=""),
+            ],
+        )
+        assert seen == ["phase:1", "phase:2"]  # did not stop at the 409
+
+    def test_ensure_labels_still_raises_a_real_failure(self, monkeypatch):
+        def _fake(*, repo, name, color="ededed", description="", host=None):
+            raise GlabError("400", stderr=GLAB_STDERR_400_MISSING_REF)
+
+        monkeypatch.setattr(glab, "ensure_label", _fake)
+        with pytest.raises(GlabError):
+            glab.ensure_labels(
+                repo="g/p", labels=[LabelDef(name="x", color="ededed", description="")]
+            )

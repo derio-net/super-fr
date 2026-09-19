@@ -182,6 +182,12 @@ class TestBackendForUrl:
             ("https://gitlab.local.corp/g/sub/p/-/merge_requests/7", "gitlab"),
             ("https://git.corp/g/p/merge_requests/7", "gitlab"),  # pre-dash GitLab
             ("https://gitlab.local.corp/g/p/-/issues/3", "gitlab"),
+            # What GitLab's API actually returns for an Issue since its
+            # work-items migration — the real tracking_issue shape, captured
+            # live 2026-09-19. Missing it left fr_dispatch.prompt saying
+            # "GitHub Issue" for a self-hosted GitLab phase (gh-486 f14).
+            ("https://gitlab.local.gebit.de/IDermitzakis/devops-scripts/-/work_items/1", "gitlab"),
+            ("https://gitlab.corp/group/sub/proj/-/work_items/42", "gitlab"),
             ("https://gitea.corp/o/r/pulls/4", "gitea"),
             ("https://github.corp/o/r/pull/9", "github"),
             ("https://gitlab.com/g/p/-/merge_requests/7", "gitlab"),

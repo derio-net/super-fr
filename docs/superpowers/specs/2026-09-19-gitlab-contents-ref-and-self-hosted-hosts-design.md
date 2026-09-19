@@ -453,6 +453,64 @@ Warnings print to stderr, so JSON output modes are unaffected. `fr._hosts`
 already prints nothing today; the precedent for a library-module warning is
 `isolation/scaffold.py:209`.
 
+### D2. What the live walk found — three more bugs (added 2026-09-19, phase 7)
+
+The issue insisted on live proof because "unit-level evidence was accepted for
+an integration claim". It was right, and more so than expected: the end-to-end
+`fr apply` walk found **three further defects**, none of which any unit test
+could have caught, because each one lives in the gap between what `fr` sends
+and what GitLab sends back.
+
+`fr apply --yes` created two Issues successfully. Every subsequent `fr apply`
+then failed, three times in a row for three different reasons:
+
+**1. `fr` cannot parse the Issue URL GitLab hands it back.**
+`ValueError: not a tracking issue url: …/-/work_items/1`, from
+`_urls.parse_issue_url` via `observe`. GitLab's work-items migration means
+`GET projects/:id/issues` reports `type: ISSUE` with
+`web_url: …/-/work_items/N` — confirmed against the REST API, not inferred
+from glab's stdout. So `fr` stored a URL it would refuse to read.
+`ISSUE_URL_RE` and `_ISSUE_NUM_RE` now accept `(?:issues|work_items)`.
+
+This is **not self-hosted-specific and not a glab quirk** — gitlab.com is
+affected identically. `fr apply` against *any* GitLab repo worked exactly once
+and crashed on every run after. It also silently broke §4.C2's own claim:
+`_URL_SHAPES` only knew `/-/issues/\d+`, so a real tracking-issue URL still
+resolved to `github` and a dispatched GitLab phase's prompt still said "GitHub
+Issue". Note the mechanism — the f11 review fix *narrowed* the bare `/-/`
+marker to `/-/issues/`, and in doing so lost a real shape to an invented
+adversarial input.
+
+**2. `ensure_labels` aborts the whole apply on a label that already exists.**
+`Post …/labels: 409 {message: Label already exists}`. Label ensure runs before
+the Issue writes, the failure propagated, so the pending body updates never
+landed: run 1 created, run 2 failed, permanently. `fr.glab.ensure_label`'s own
+docstring had claimed since 2026-07-09 that "the caller
+(`RealGlabClient.ensure_labels`) tolerates" this — and nothing implemented it.
+`ensure_labels` now skips an already-exists refusal via `is_already_exists`
+and continues, and the docstring names where the tolerance actually lives.
+
+A second lesson arrived inside that error text: rich had wrapped it as
+`Label already\n  exists`, so a plain `"already exists" in stderr` finds
+nothing. `_haystack` therefore **collapses whitespace**, which also hardens
+`is_not_found` and `is_transient` against a wrapped 404 or timeout they would
+silently miss today. It is the same width-dependent wrapping that makes
+`tests/unit/test_run_workspace.py` fail on a Mac and pass in CI.
+
+**3. The body diff never converges, because GitLab strips the trailing
+newline.** `fr` rendered 1270 characters; GitLab stored 1269; `diff.py`
+compared with an exact `!=`. So `fr apply` wanted the identical update forever.
+The comparison now ignores trailing whitespace — in the comparison, not in the
+GitLab adapter, because a trailing newline is not a meaningful body change on
+any forge and having the adapter re-append one GitLab will not keep would be a
+fiction maintained to satisfy a comparison.
+
+**Only after all three did the walk converge**: `--yes`, a clean re-run, then a
+state change (a ticked step) propagating and re-converging immediately. The
+acceptance row was therefore green for a capability broken in **four**
+independent ways — the missing `ref` this issue was filed about, plus these
+three.
+
 ### E. Docs
 
 - **`README.md`** — a "Self-hosted instances" paragraph under the existing

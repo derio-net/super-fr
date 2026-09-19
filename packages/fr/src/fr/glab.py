@@ -171,12 +171,11 @@ def ensure_label(
     """Create a label on the target repo.
 
     Unlike `gh label create --force`, `glab label create` has no
-    documented idempotent-update flag — a pre-existing label name causes
-    an error, which the caller (RealGlabClient.ensure_labels) tolerates
-    (a label that already exists with the right shape is a no-op in
-    effect; a real color/description drift is a rarer, acceptable gap
-    versus GitHub's `--force` convenience, noted for Phase 9's manual
-    verification).
+    idempotent-update flag, so a pre-existing label name raises. That is
+    tolerated by `ensure_labels` below, via `is_already_exists` — NOT by
+    `RealGlabClient.ensure_labels`, which this docstring used to name and
+    which never did it. Colour/description drift on an existing label is
+    left uncorrected; see `ensure_labels` for that trade.
     """
     args = [
         "label",
@@ -194,10 +193,34 @@ def ensure_label(
 
 
 def ensure_labels(*, repo: str, labels: list[LabelDef], host: str | None = None) -> None:
-    """Ensure every label exists on the repo with the right color and
-    description. First failure propagates (mirrors `fr.gh.ensure_labels`)."""
+    """Ensure every label exists on the repo.
+
+    An ALREADY-EXISTS refusal is skipped and the remaining labels are still
+    ensured; any other failure propagates (mirroring `fr.gh.ensure_labels`,
+    which never sees this case because `gh label create --force` updates in
+    place and `glab` has no equivalent).
+
+    This tolerance is what `ensure_label`'s docstring has claimed since the
+    multi-backend design landed, and it was never implemented: the first
+    pre-existing label raised, and because label ensure runs before the Issue
+    writes, the whole `fr apply` aborted. So a GitLab plan could be applied
+    exactly once and never converge — found by gh-486's live walk, not by any
+    test, because every test mocked the failure away.
+
+    What it knowingly gives up: a label whose colour or description has DRIFTED
+    is left as-is rather than corrected, since glab offers no update-in-place.
+    That was already recorded as an accepted gap versus GitHub; it is now
+    accepted here, in the function that acts on it, instead of one layer away.
+    """
     for ld in labels:
-        ensure_label(repo=repo, name=ld.name, color=ld.color, description=ld.description, host=host)
+        try:
+            ensure_label(
+                repo=repo, name=ld.name, color=ld.color, description=ld.description, host=host
+            )
+        except GlabError as exc:
+            if is_already_exists(exc):
+                continue
+            raise
 
 
 _TRANSIENT_PATTERNS = (
@@ -223,7 +246,16 @@ def _haystack(err: GlabError) -> str:
     any future construction site: put the body anywhere on the error and
     classification still sees it. Do not read the term as evidence that
     a body-only error reaches this function in production; it does not."""
-    return (err.stderr + " " + err.stdout + " " + str(err)).lower()
+    raw = err.stderr + " " + err.stdout + " " + str(err)
+    # Whitespace is COLLAPSED, not merely lowercased: glab renders some errors
+    # through rich, which line-wraps them to the console width and so can split
+    # a phrase mid-match — the live 409 arrived as "Label already\n  exists",
+    # where a plain `"already exists" in text` finds nothing. Wrapping also
+    # depends on terminal width, so without this a predicate could pass in CI
+    # and fail on an operator's machine (the same mechanism behind the
+    # width-sensitive failures in tests/unit/test_run_workspace.py). Collapsing
+    # hardens is_not_found and is_transient against the same trap.
+    return " ".join(raw.split()).lower()
 
 
 def is_transient(err: GlabError) -> bool:
@@ -241,6 +273,22 @@ def is_transient(err: GlabError) -> bool:
     gateway timeout SHOULD retry, so the widening is deliberate — but it
     is a widening, recorded here rather than discovered later."""
     return any(p in _haystack(err) for p in _TRANSIENT_PATTERNS)
+
+
+_ALREADY_EXISTS_PATTERNS = (": 409 ", "already exists")
+
+
+def is_already_exists(err: GlabError) -> bool:
+    """True when GitLab refused because the thing is already there.
+
+    `glab label create` has no `--force` (gh's idempotent-update flag), so
+    re-ensuring an existing label 409s. `ensure_labels` treats that as a
+    no-op — see its docstring for why that is the right reading and what it
+    knowingly gives up. Matched on the HTTP status as well as the phrase,
+    because the phrase is rich-wrapped in real output; `_haystack` collapses
+    that whitespace so both forms are reachable (gh-486)."""
+    text = _haystack(err)
+    return any(p in text for p in _ALREADY_EXISTS_PATTERNS)
 
 
 # glab's own not-found vocabulary, captured live 2026-09-19 (spec §2.A).
