@@ -66,6 +66,19 @@ class RealGlabClient:
     def __init__(self, *, host: str | None = None) -> None:
         self._host = host
 
+    def _glab(self, args: list[str]) -> str:
+        """Every direct `glab` invocation this class makes goes through
+        here, so the host is applied in exactly ONE place. A method added
+        later cannot forget it — which it could when each call site
+        repeated `host=self._host` by hand."""
+        return _glab._run_glab(args, host=self._host)
+
+    def _api(self, endpoint: str) -> str:
+        """`glab api <endpoint>` — the shape four of the five read paths
+        use. Kept separate from `_glab` only to stop `["api", ...]` being
+        re-spelled at each call site."""
+        return self._glab(["api", endpoint])
+
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
         raw = cast("dict[str, Any]", _glab.view_issue(repo, number, host=self._host))
         labels_raw = raw.get("labels", []) or []
@@ -92,10 +105,7 @@ class RealGlabClient:
         """
         encoded_repo = quote(repo, safe="")
         try:
-            out = _glab._run_glab(
-                ["api", f"projects/{encoded_repo}/issues/{issue_number}/related_merge_requests"],
-                host=self._host,
-            )
+            out = self._api(f"projects/{encoded_repo}/issues/{issue_number}/related_merge_requests")
         except _glab.GlabError:
             return []
         nodes = json.loads(out) if out else []
@@ -127,9 +137,7 @@ class RealGlabClient:
             return None
         repo, iid = m.group(1), m.group(2)
         try:
-            out = _glab._run_glab(
-                ["mr", "view", iid, "--repo", repo, "--output", "json"], host=self._host
-            )
+            out = self._glab(["mr", "view", iid, "--repo", repo, "--output", "json"])
         except _glab.GlabError:
             return None
         raw = json.loads(out)
@@ -211,9 +219,7 @@ class RealGlabClient:
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         """Post a comment via `glab issue note` (glab's name for gh's
         `issue comment` — verified directly against `glab issue --help`)."""
-        _glab._run_glab(
-            ["issue", "note", str(number), "--repo", repo, "--message", body], host=self._host
-        )
+        self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
 
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
@@ -227,12 +233,8 @@ class RealGlabClient:
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         try:
-            _glab._run_glab(
-                [
-                    "api",
-                    f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}",
-                ],
-                host=self._host,
+            self._api(
+                f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}"
             )
             return True
         except _glab.GlabError as exc:
@@ -252,13 +254,8 @@ class RealGlabClient:
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         try:
-            out = _glab._run_glab(
-                [
-                    "api",
-                    f"projects/{encoded_repo}/repository/tree"
-                    f"?path={encoded_path}&ref={_CONTENTS_REF}",
-                ],
-                host=self._host,
+            out = self._api(
+                f"projects/{encoded_repo}/repository/tree?path={encoded_path}&ref={_CONTENTS_REF}"
             )
         except _glab.GlabError as exc:
             if _glab.is_not_found(exc):
@@ -276,12 +273,8 @@ class RealGlabClient:
         and this method raised on every real instance (gh-486)."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
-        out = _glab._run_glab(
-            [
-                "api",
-                f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}",
-            ],
-            host=self._host,
+        out = self._api(
+            f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}"
         )
         data = json.loads(out)
         content = data.get("content", "")

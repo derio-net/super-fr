@@ -193,3 +193,78 @@ Running the full suite through 'fr isolation exec' (Linux) rather than on the Ma
 ### d-host-forwarded-unconditionally · discovery · Forwarding host unconditionally broke 7 existing assertions — kept anyway, because they now pin the forwarding (phase 4)
 
 P4.T2.S2/S3 planned on 'keyword-only with a None default, so every existing caller and test is untouched'. The first half holds (no production caller changed); the second did not. The helpers call _run_glab(args, host=host) unconditionally, so mock.assert_called_once_with([...]) sees an extra kwarg and fails: 5 sites in tests/unit/test_glab.py, plus a fake_ensure stub missing host=, plus 6 _run_glab stubs in tests/unit/test_real_glabclient.py written as 'def _run(args)' / 'lambda args:'. The alternative — 'if host: _run_glab(args, host=host) else: _run_glab(args)' in eight helpers — was refused: it buys untouched tests with an eight-fold conditional and leaves the forwarding unasserted in the tests that construct the argv. Instead the 5 assertions now read '..., host=None' and the stubs take **kwargs (which _CapturingGlab already did, with a comment anticipating exactly this). Net effect: the argv-shape tests now also witness the host, which is the property a future reader needs.
+
+<!-- fr:journal kind=discovery scope=plan id=d-client-for-resolution-table created=2026-09-19T20:20:06 phase=4 -->
+### d-client-for-resolution-table · discovery · What client_for resolves, for all six repo shapes — run against the shipped code (phase 4)
+
+Executed with uv run python against real git repos in a tmpdir, phase 4 HEAD. Columns: detect_backend / declared_host / host_for / client type / client._host.
+
+declared host (backend: gitlab, host: gl.corp.com, origin github.com) -> gitlab / 'gl.corp.com' / 'gl.corp.com' / RealGlabClient / 'gl.corp.com'
+self-hosted remote (backend: gitlab, origin git@gitlab.local.gebit.de:...) -> gitlab / None / 'gitlab.local.gebit.de' / RealGlabClient / 'gitlab.local.gebit.de'
+gitlab.com remote (no config) -> gitlab / None / None / RealGlabClient / None
+github.com remote (no config) -> github / None / None / RealGhClient / n/a
+no remote, no config -> github / None / None / RealGhClient / n/a
+GHE-ish remote (origin github.corp.com, no config) -> github / None / 'github.corp.com' / RealGhClient / n/a
+
+Row 2 is gh-486 gap 1 closed: 'backend: gitlab' alone now reaches the self-hosted instance. Row 6 is the concrete evidence for why declared_host and host_for must stay separate: host_for DERIVES 'github.corp.com' for a backend fr does not thread, so a warning keyed on host_for would nag a GHE shop about a configuration that works fine (gh resolves the same host itself). declared_host is None there, so phase 5's warning must key on declared_host and stays correctly silent.
+
+Child-env isolation proven in the same run: three _run_glab calls in ONE process with hosts a.example.com / b.example.com / no-host produced child GITLAB_HOST values 'a.example.com' / 'b.example.com' / None, and 'GITLAB_HOST' in os.environ was False afterwards. os.environ is read but never assigned — the only reference in fr/glab.py is the {**os.environ, ...} literal on line 66.
+
+<!-- fr:journal kind=finding scope=plan id=f-client-for-backend-host-has-no-caller created=2026-09-19T20:20:22 phase=4 state=open -->
+### f-client-for-backend-host-has-no-caller · finding [open] · client_for_backend's new host= parameter has zero production callers — a second dead last mile, in the PR that exists to kill the first one (phase 4)
+
+Phase 4 closed gh-486 gap 1 for client_for(repo_root). It did NOT close it for client_for_backend(backend, *, host=None): grep shows exactly two production call sites, fr_vk/pr_observe.py:52 and fr_vk/pr_state.py:94, and neither passes host. So a bridge tick polling a self-hosted GitLab MR URL still constructs RealGlabClient(host=None) and glab still defaults to gitlab.com — the exact failure mode spec §2.D documents ('ERROR Unauthenticated', because the bridge runs outside any GitLab checkout so glab's git-directory fallback cannot save it either).
+
+This is not speculative generality in the sense of f-reachability-traceback: the caller EXISTS and already holds the value. pr_observe._default_pr_status_fetch computes  on the line before, uses it for backend_for_hostname, and then discards it. Passing host=hostname is a one-token change and is exactly what spec §4.C describes ('it can now pass that same hostname as host, which is the case the factory was shaped for'). pr_state is harder — it receives only a backend string derived via BACKEND_FOR_TAG and has no hostname in scope — so that one needs a real decision, not a one-liner.
+
+LEFT OPEN rather than fixed here for two reasons: (1) no phase-4 step covers fr_vk, which is a different package under the bridge-audit rule; (2) touching pr_observe without a bridge test is how the bug being fixed got in. Flagged for the orchestrator: this is a candidate for a phase-5 task or an additive follow-up, and until it lands, 'fr works against self-hosted GitLab' is true for fr apply / fr spec status and false for the VK bridge's PR polling. Worth stating that limit explicitly in the PR body rather than letting the reader infer full coverage from the headline.
+
+<!-- fr:journal kind=discovery scope=plan id=d-journal-body-mangled-by-zsh created=2026-09-19T20:21:07 phase=4 -->
+### d-journal-body-mangled-by-zsh · discovery · Correction: the code fragment elided from f-client-for-backend-host-has-no-caller, and how it got elided (phase 4)
+
+f-client-for-backend-host-has-no-caller has a hole in its third paragraph: it
+reads "pr_observe._default_pr_status_fetch computes  on the line before". A
+backtick-quoted code fragment was eaten by zsh command substitution when the
+entry was written. The missing fragment is the expression
+
+    hostname = urlparse(pr_url).hostname
+
+at packages/fr-vk/src/fr_vk/pr_observe.py:51 — immediately above the
+client_for_backend(backend) call on line 52 that omits the host. Recorded as a
+separate entry rather than rewriting the finding, since a journal is a log.
+
+Operational note for anyone writing journal bodies from a zsh Bash tool: pass
+the body via "$(cat <file>)" written by a quoted heredoc. An inline body
+containing backticks or glob characters is silently mangled, and `fr journal
+add` cannot tell the difference — it received the already-mangled string.
+
+<!-- fr:journal kind=discovery scope=plan id=d-why-acceptance-row-stays-not-implemented created=2026-09-19T20:21:54 phase=4 -->
+### d-why-acceptance-row-stays-not-implemented · discovery · Why gitlab-selfhosted-host-targeting stays not-implemented at the end of phase 4 (phase 4)
+
+Completing phase 4 warned: "phase 4 completed but its acceptance rows are still
+not-implemented: gitlab-selfhosted-host-targeting". The row is deliberately NOT
+moved here, and this is the recorded reason.
+
+The row's acceptance text is a conjunction of three claims:
+  (a) a self-hosted operator reaches their instance by declaring "backend:
+      gitlab" alone;
+  (b) "host:" overrides that;
+  (c) a host declared for a backend fr cannot target SAYS SO.
+
+Phase 4 ships (a) and (b) and unit-covers them
+(tests/unit/test_hostclient.py::TestClientForHost,
+tests/unit/test_real_glabclient.py::TestHostThreading,
+tests/unit/test_glab.py::TestRunGlabHost + test_every_helper_forwards_the_host,
+tests/unit/test__hosts.py::TestHostFor). Claim (c) is phase 5's warning and
+does not exist yet — moving the row to "ci" now would assert a surface that is
+not there, which is the precise failure the acceptance rule exists to stop.
+
+The plan already assigns the move to P6.T3 ("gitlab-selfhosted-host-targeting
+-> skipped, live half hand-run"), so phase 6 owns it. Phase 4 also deliberately
+does not pre-add the unit refs with fr acceptance set-status, because
+d-set-status-cannot-correct-a-ref (phase 3) established that --level can only
+ADD a ref, never correct one — so the refs should be written once, by the phase
+that knows their final form.
+
+For P6.T3: the unit-level refs this phase earned are the five files/classes
+named above. Remember fr.acceptance's ref fragment separator is "#", not "::".

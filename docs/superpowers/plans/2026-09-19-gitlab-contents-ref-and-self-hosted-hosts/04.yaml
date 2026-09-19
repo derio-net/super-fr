@@ -272,14 +272,41 @@ state:
         ruff + mypy (137 files) clean. Five existing delegation tests needed host
         in their captured kwargs — same deviation journaled under d-host-forwarded-unconditionally.'
     P4.T4.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:19:45+00:00'
+      note: 'REFACTOR done. Two private helpers on RealGlabClient: _glab(args) ->
+        _glab._run_glab(args, host=self._host) and _api(endpoint) -> self._glab([''api'',
+        endpoint]). All 6 direct _run_glab call sites (list_linked_prs, pr_status_by_url,
+        comment_issue, file_exists, list_dir, read_file) now route through them, so
+        ''host=self._host'' appears exactly ONCE for direct invocations instead of
+        six times. Four of the six were [''api'', <endpoint>], hence the second helper.
+        The 7 delegating write methods were deliberately NOT abstracted, per the step:
+        they call distinct fr.glab helpers and a wrapper would hide the mapping. 67
+        tests green after the refactor with no test changes — the two tables written
+        in T3 are what made it safe.'
     P4.T4.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:19:53+00:00'
+      note: 'Full gate: ruff format -> 354 files left unchanged; ruff check packages/
+        tests/ -> All checks passed; mypy (4 src trees) -> no issues in 137 source
+        files; uv run pytest -q --no-cov -> 3 failed, 3178 passed, 80 skipped in 184.15s.
+        The 3 failures are exactly the documented pre-existing macOS-environment ones
+        (test_run_workspace x2, test_workflow_check x1) — unchanged from the phase-1
+        baseline and untouched by this diff. fr acceptance check -> ERROR: failing
+        acceptance rows: [''multibackend-gitlab-tracking''] (expected red #1, deliberate
+        until phase 6). fr validate artifacts -> 23 artifact(s) checked, all structurally
+        valid.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-19T18:21:18+00:00'
+    note: 'The last mile is connected: a declared or derived host now reaches the
+      glab subprocess. _hosts.declared_host (raw host: key) split from host_for (declared,
+      else the origin hostname when not a SaaS domain); _run_glab(args, *, host=None)
+      puts GITLAB_HOST in the CHILD env only; all 8 public fr.glab helpers forward
+      it; RealGlabClient(host=...) carries it into all 13 of its glab calls via one
+      private _glab/_api seam; client_for resolves it from repo_root while client_for_backend
+      stays provenance-blind. fr.gh and fr.tea untouched (non-goal, spec §1/d2) —
+      verified by an empty git diff on gh.py/tea.py/real_ghclient.py/real_teaclient.py.
+      Gate: ruff clean, mypy clean (137 files), pytest 3178 passed / 3 pre-existing
+      macOS failures / 80 skipped; fr acceptance check red only on multibackend-gitlab-tracking
+      (deliberate until phase 6). One open finding for phases 5-6: f-client-for-backend-host-has-no-caller.'
     observed_prs: []
