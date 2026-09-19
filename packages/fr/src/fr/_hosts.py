@@ -14,8 +14,23 @@ instead of hardcoding gh). Resolution order:
 3. Else: `"github"` — today's only behavior, preserved so a repo that
    configures nothing sees no change.
 
+Two separate questions about the instance *hostname* are answered here,
+and the split is load-bearing rather than cosmetic (gh-486, spec §4.D):
+
+- `declared_host(repo_root)` — the raw `host:` key, and nothing inferred.
+  An operator expectation, so `hostclient.client_for` may warn when fr
+  cannot honour it for the resolved backend.
+- `host_for(repo_root)` — what a forge CLI should actually be pointed at:
+  the declared host, else the origin's hostname when it is not one of
+  `DEFAULT_HOST_BACKENDS`, else None. A *derived* host is an inference,
+  never an expectation, and must not be warned about: a GitHub Enterprise
+  repo derives one for backend `github`, a configuration that works fine
+  because `gh` resolves the same host itself.
+
 See docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
-for the research behind this design (§1).
+for the research behind this design (§1), and
+docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+§4.C for the host-resolution fallback.
 """
 
 from __future__ import annotations
@@ -106,14 +121,34 @@ def detect_backend(repo_root: Path) -> HostBackend:
     return backend_for_hostname(_origin_hostname(repo_root))
 
 
-def host_for(repo_root: Path) -> str | None:
-    """The optional `host:` key from `.devcontainer/fr-profiles.yaml` —
-    only needed for self-hosted instances (a self-hosted GitLab/Gitea/GHE
-    URL). None when absent; callers fall back to each backend's own SaaS
-    default (gitlab.com / gitea.com / github.com)."""
+def declared_host(repo_root: Path) -> str | None:
+    """The `host:` key from `.devcontainer/fr-profiles.yaml`, and nothing
+    inferred. An operator EXPECTATION, which is why
+    `hostclient.client_for` warns when fr cannot honour it for the
+    resolved backend — see spec §4.D. Use `host_for` to actually target
+    an instance; use this only when the *provenance* matters."""
     try:
         config = profiles_config(repo_root)
     except Exception:  # noqa: BLE001 — same tolerance as detect_backend
         return None
     host = config.get("host")
     return host if isinstance(host, str) and host else None
+
+
+def host_for(repo_root: Path) -> str | None:
+    """Which instance hostname this repo's forge CLI should talk to: the
+    declared `host:`, else the origin's own hostname when it is not a
+    recognized SaaS domain, else None.
+
+    The fallback is what makes `backend: gitlab` sufficient on its own for
+    a self-hosted repo (gh-486 gap 1): the host is already in the remote
+    the operator has. `github.com`/`gitlab.com` return None so nothing
+    changes for a SaaS repo — returning a host there would make every
+    normal repo look self-hosted. Never raises, same as `declared_host`."""
+    declared = declared_host(repo_root)
+    if declared:
+        return declared
+    hostname = _origin_hostname(repo_root)
+    if hostname and hostname not in DEFAULT_HOST_BACKENDS:
+        return hostname
+    return None

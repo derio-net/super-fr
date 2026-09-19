@@ -207,13 +207,21 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:06:36+00:00'
+      note: 'RED confirmed twice, for both stated reasons: (1) ImportError: cannot
+        import name ''declared_host'' from ''fr._hosts''; (2) after the pure rename,
+        assert None == ''gitlab.corp.com'' on host_for(bare). Added _repo_at/_repo_with_remote/_repo_with_profiles
+        helpers (make_repo hardcodes tmp_path/''repo'', so one test could not hold
+        two repos).'
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:06:43+00:00'
+      note: 'GREEN: declared_host holds today''s body verbatim; host_for gains the
+        origin-hostname fallback gated on ''not in DEFAULT_HOST_BACKENDS''. Module
+        docstring now documents both, naming why the split is load-bearing (GHE derives
+        a host for backend github). tests/unit/test__hosts.py: 21 passed, including
+        the three pre-existing host_for tests.'
     P4.T2.S1:
       state: ' '
       ticked_at: null

@@ -20,6 +20,7 @@ from fr._hosts import (
     DEFAULT_HOST_BACKENDS,
     TAG_FOR_BACKEND,
     backend_for_hostname,
+    declared_host,
     detect_backend,
     host_for,
 )
@@ -38,6 +39,28 @@ def write_profiles_yaml(repo: Path, content: str) -> None:
     d = repo / ".devcontainer"
     d.mkdir(parents=True, exist_ok=True)
     (d / "fr-profiles.yaml").write_text(content)
+
+
+def _repo_at(root: Path, *, remote: str | None = None) -> Path:
+    """`make_repo` with a caller-chosen location, so one test can hold
+    several repos with different remotes (host_for's fallback needs a
+    self-hosted repo and a SaaS one side by side)."""
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
+    if remote:
+        subprocess.run(["git", "-C", str(root), "remote", "add", "origin", remote], check=True)
+    return root
+
+
+def _repo_with_remote(root: Path, remote: str) -> Path:
+    return _repo_at(root, remote=remote)
+
+
+def _repo_with_profiles(root: Path, keys: dict[str, str]) -> Path:
+    body = "".join(f"{k}: {v}\n" for k, v in keys.items())
+    repo = _repo_at(root)
+    write_profiles_yaml(repo, body + "profiles:\n  dev:\n    purpose: x\n")
+    return repo
 
 
 class TestDetectBackend:
@@ -102,6 +125,23 @@ class TestHostFor:
     def test_no_profiles_yaml_is_none(self, tmp_path: Path) -> None:
         repo = make_repo(tmp_path, remote="https://github.com/owner/repo.git")
         assert host_for(repo) is None
+
+    def test_declared_host_returns_only_the_explicit_key(self, tmp_path: Path) -> None:
+        """Provenance matters: only a DECLARED host is a promise fr can
+        fail to keep, so only that one earns a warning (spec §4.D)."""
+        repo = _repo_with_profiles(
+            tmp_path / "declared", {"backend": "gitlab", "host": "gl.corp.com"}
+        )
+        assert declared_host(repo) == "gl.corp.com"
+        bare = _repo_with_remote(tmp_path / "bare", "git@gitlab.corp.com:g/p.git")
+        assert declared_host(bare) is None  # derived, not declared
+        assert host_for(bare) == "gitlab.corp.com"  # ...but still resolved
+
+    def test_host_for_ignores_the_saas_hostnames(self, tmp_path: Path) -> None:
+        """github.com / gitlab.com need no override — returning one
+        would make every SaaS repo look self-hosted."""
+        for i, url in enumerate(("git@github.com:o/r.git", "https://gitlab.com/g/p.git")):
+            assert host_for(_repo_with_remote(tmp_path / f"saas{i}", url)) is None
 
 
 def test_default_host_backends_table() -> None:
