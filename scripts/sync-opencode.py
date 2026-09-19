@@ -255,30 +255,76 @@ def sync_commands() -> None:
 # byte-copy like skills/instructions)
 
 # Closed translation of Claude Code's `tools:` allowlist to OpenCode's
-# `permission:` map (spec §3.B). Read/Grep/Glob carry no separate OpenCode
-# permission key, so they are omitted rather than mapped to a no-op entry.
-_TOOL_PERMISSIONS: dict[str, tuple[str, str]] = {
+# `permission:` map (spec §3.B). CLOSED means every tool name this repo may
+# put in a canonical agent appears here — including the ones that map to
+# NOTHING, because OpenCode has no separate permission key for them. A name
+# that maps to `None` is "known, deliberately not a permission"; a name that
+# is absent is an error (review r-p1/f1). The distinction is the whole point:
+# a vocabulary that silently drops what it does not recognise is not closed,
+# and this repo already raises rather than drops in `fr.harness.model`
+# (unknown harness key), `fr.capabilities`, and `_StrictLoader` (duplicate
+# YAML key) for exactly this class of silent loss.
+_TOOL_PERMISSIONS: dict[str, tuple[str, str] | None] = {
     "Edit": ("edit", "allow"),
     "Write": ("edit", "allow"),
+    "NotebookEdit": ("edit", "allow"),
     "Bash": ("bash", "allow"),
+    "WebFetch": ("webfetch", "allow"),
+    "WebSearch": ("webfetch", "allow"),
+    "Agent": ("task", "allow"),
+    "Task": ("task", "allow"),
+    # No OpenCode permission key of their own — implicit, never denied.
+    "Read": None,
+    "Grep": None,
+    "Glob": None,
+    "TodoWrite": None,
 }
-# The capability classes a canonical `tools:` line never grants must be
+# The capability classes a canonical `tools:` line does not grant must be
 # denied explicitly, or the mirror ends up strictly more powerful than its
 # source (spec-review r3): Claude Code's `tools:` is an allowlist, OpenCode's
 # permission defaults are permissive. `task: deny` is the load-bearing one —
 # it is what keeps a phase executor from dispatching further subagents.
-_PERMISSION_DENIES: dict[str, str] = {"task": "deny", "webfetch": "deny"}
+#
+# These are DEFAULTS, filling a gap the allowlist left. They never override a
+# grant (review r-p1/f2): applied with `update()` they did, so a canonical
+# `tools:` line granting WebFetch produced a mirror denying it — an inversion
+# of the very allowlist this function exists to carry.
+_PERMISSION_DEFAULT_DENIES: dict[str, str] = {"task": "deny", "webfetch": "deny"}
 
 
-def _agent_permission(tools: str) -> dict[str, str]:
-    """Translate a canonical `tools:` value into an OpenCode `permission:` map."""
+class AgentTranslationError(ValueError):
+    """A canonical agent names a tool this translation does not know.
+
+    Loud by design: the alternative is a mirror that is quietly less capable
+    than the agent it claims to mirror, with nothing anywhere reporting it.
+    """
+
+
+def _agent_permission(tools: str, *, source: str = "plugins/super-fr/agents/") -> dict[str, str]:
+    """Translate a canonical `tools:` value into an OpenCode `permission:` map.
+
+    Raises `AgentTranslationError` on an unrecognised tool name — a new
+    Claude Code tool, or a typo, both of which must be a decision rather than
+    a silent omission.
+    """
     permission: dict[str, str] = {}
-    for tool in tools.split(","):
-        mapped = _TOOL_PERMISSIONS.get(tool.strip())
+    for raw in tools.split(","):
+        tool = raw.strip()
+        if not tool:
+            continue
+        if tool not in _TOOL_PERMISSIONS:
+            raise AgentTranslationError(
+                f"{source}: `tools:` names {tool!r}, which has no entry in "
+                "_TOOL_PERMISSIONS (scripts/sync-opencode.py). Add it — mapping it to an "
+                "OpenCode permission, or to None if OpenCode has no separate key for it. "
+                "Dropping it would make the mirror quietly less capable than its source."
+            )
+        mapped = _TOOL_PERMISSIONS[tool]
         if mapped is not None:
             key, value = mapped
             permission[key] = value
-    permission.update(_PERMISSION_DENIES)
+    for key, value in _PERMISSION_DEFAULT_DENIES.items():
+        permission.setdefault(key, value)
     return permission
 
 
@@ -298,7 +344,10 @@ def render_agent(name: str, frontmatter: dict[str, object], body: str) -> str:
         description, default_style='"', allow_unicode=True, width=1_000_000
     ).strip()
 
-    permission = _agent_permission(str(frontmatter.get("tools", "")))
+    permission = _agent_permission(
+        str(frontmatter.get("tools", "")),
+        source=f"plugins/super-fr/agents/{name}.md",
+    )
     permission_lines = "\n".join(f"  {key}: {value}" for key, value in permission.items())
 
     banner = (

@@ -331,8 +331,3 @@ hostnames.
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
 | 2026-09-19-opencode-subagent-dispatch | `derio-net/super-fr` | `2026-09-19-opencode-subagent-dispatch` | — |
-
-## Implementation Plans
-
-| Plan | Repo | File | Depends on |
-|------|------|------|------------|

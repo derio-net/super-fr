@@ -18,6 +18,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -103,3 +104,51 @@ def test_do_not_hand_edit_banner_names_the_sync_script() -> None:
     content = sync_opencode.canonical_agents()["fr-phase-executor"]
     assert "scripts/sync-opencode.py" in content
     assert "not edit" in content.lower() or "do not edit" in content.lower()
+
+
+# ── review r-p1: the closed translation must actually be closed ──────────
+#
+# `_agent_permission` looked up each tool in a map of the three it knew and
+# dropped everything else, then applied the constant denies with `update()`.
+# Two consequences, neither of which anything reported:
+#
+#   f1  an unknown tool name — a new one, or a typo — vanished silently, so
+#       the mirror was quietly LESS capable than the canonical agent. A
+#       closed vocabulary that drops what it does not recognise is not
+#       closed; this repo's own `fr.harness.model` and `fr.capabilities`
+#       raise instead, and `_StrictLoader` exists for exactly this class of
+#       silent loss.
+#   f2  `update()` let a constant deny overwrite a mapped grant, so a
+#       canonical `tools:` line GRANTING WebFetch produced a mirror DENYING
+#       it — an inversion of the allowlist the translation claims to carry.
+
+
+def test_an_unknown_tool_name_is_refused_rather_than_dropped() -> None:
+    with pytest.raises(ValueError) as exc:
+        sync_opencode._agent_permission("Bash, Edt")
+    assert "Edt" in str(exc.value)
+    assert "plugins/super-fr/agents" in str(exc.value) or "tools:" in str(exc.value)
+
+
+def test_every_known_tool_maps_or_is_explicitly_implicit() -> None:
+    """Read/Grep/Glob have no OpenCode permission key of their own — they
+    must be KNOWN and map to nothing, not be unknown and dropped."""
+    assert sync_opencode._agent_permission("Read, Grep, Glob") == {
+        "task": "deny",
+        "webfetch": "deny",
+    }
+
+
+def test_a_granted_tool_beats_the_default_deny() -> None:
+    """The canonical `tools:` allowlist is the source of truth. A default
+    deny fills a gap; it never overrides a grant."""
+    assert sync_opencode._agent_permission("Bash, WebFetch")["webfetch"] == "allow"
+    assert sync_opencode._agent_permission("Bash")["webfetch"] == "deny"
+
+
+def test_the_shipped_agent_still_denies_task_and_webfetch() -> None:
+    """The regression guard for the fix above: fr-phase-executor's canonical
+    `tools:` grants neither, so both stay denied — `task: deny` is what keeps
+    a phase executor from dispatching further subagents."""
+    permission = sync_opencode._agent_permission("Read, Edit, Write, Bash, Grep, Glob")
+    assert permission == {"edit": "allow", "bash": "allow", "task": "deny", "webfetch": "deny"}
