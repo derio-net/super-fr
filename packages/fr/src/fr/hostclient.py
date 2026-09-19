@@ -9,6 +9,7 @@ each one re-deriving backend detection itself. See docs/superpowers/specs/
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from fr import _hosts
@@ -16,6 +17,15 @@ from fr.ghclient import GhClient
 from fr.real_ghclient import RealGhClient
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
+
+# Warn-once guard for a DECLARED host fr cannot thread to the resolved
+# backend (gh-486, spec §4.D) — keyed on (host, backend) so a repo that
+# later changes backend gets a fresh warning. Lives here, not in `_hosts`,
+# and is deliberately NOT shared with `_hosts._WARNED_UNKNOWN_HOSTS` (see
+# plan journal no-refactor-because P5.T2): the two warnings key on
+# different things, and coupling them would put hostclient's provenance
+# rule inside `_hosts`, undoing the split spec §4.D introduced.
+_WARNED_DECLARED_HOSTS: set[tuple[str, str]] = set()
 
 
 def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) -> GhClient:
@@ -60,4 +70,15 @@ def client_for(repo_root: Path) -> GhClient:
     is what spec §4.D's warning rests on, so it must stay here rather than
     move down into `client_for_backend`.
     """
-    return client_for_backend(_hosts.detect_backend(repo_root), host=_hosts.host_for(repo_root))
+    backend = _hosts.detect_backend(repo_root)
+    declared = _hosts.declared_host(repo_root)
+    if declared and backend != "gitlab" and (declared, backend) not in _WARNED_DECLARED_HOSTS:
+        _WARNED_DECLARED_HOSTS.add((declared, backend))
+        print(
+            f"warning: host {declared!r} is declared in "
+            ".devcontainer/fr-profiles.yaml but fr does not thread a host "
+            f'to backend "{backend}" — the CLI\'s own host resolution '
+            "applies instead. See gh-486.",
+            file=sys.stderr,
+        )
+    return client_for_backend(backend, host=_hosts.host_for(repo_root))

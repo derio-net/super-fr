@@ -185,3 +185,40 @@ def test_unparseable_remote_falls_back_to_github(tmp_path: Path, bad_remote_url:
             ["git", "-C", str(repo), "remote", "add", "origin", bad_remote_url], check=True
         )
     assert detect_backend(repo) == "github"
+
+
+class TestDetectBackendWarnsOnce:
+    """gh-486 gap 2 (spec §4.D): the silent github fallback for an
+    unrecognized origin host becomes a one-line stderr warning. The
+    RETURN VALUE never changes — only the silence is fixed."""
+
+    def test_an_unrecognized_host_warns_once_and_still_returns_github(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = _repo_with_remote(tmp_path, "git@gitlab.local.corp:g/p.git")
+        assert detect_backend(repo) == "github"
+        first = capsys.readouterr().err
+        assert "gitlab.local.corp" in first and "backend: gitlab" in first
+        assert detect_backend(repo) == "github"
+        assert capsys.readouterr().err == ""  # once per host, not per call
+
+    def test_a_recognized_or_declared_host_is_silent(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recognized = _repo_with_remote(tmp_path / "recognized", "https://github.com/o/r.git")
+        assert detect_backend(recognized) == "github"
+        assert capsys.readouterr().err == ""
+
+        declared = _repo_with_profiles(tmp_path / "declared", {"backend": "gitlab"})
+        assert detect_backend(declared) == "gitlab"
+        assert capsys.readouterr().err == ""
+
+    def test_backend_for_hostname_itself_stays_silent(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """`backend_for_hostname` is called per-PR-URL by `fr_vk.pr_observe`
+        across many repos — it must never warn, or the bridge log becomes
+        noise. Only `detect_backend` warns."""
+        assert backend_for_hostname("gitlab.local.corp") == "github"
+        assert backend_for_hostname("gitlab.local.corp") == "github"
+        assert capsys.readouterr().err == ""

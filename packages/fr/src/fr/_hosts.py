@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -64,6 +65,13 @@ TAG_FOR_BACKEND: dict[HostBackend, str] = {"github": "gh", "gitlab": "gl", "gite
 BACKEND_FOR_TAG: dict[str, HostBackend] = {v: k for k, v in TAG_FOR_BACKEND.items()}
 
 _REMOTE_HOST_RE = re.compile(r"^(?:[\w+.-]+://)?(?:[^@/]+@)?([^/:]+)")
+
+# Warn-once guard for `detect_backend`'s unrecognized-origin-host fallback
+# (gh-486 gap 2, spec §4.D) — module-level and keyed on the bare hostname,
+# since `detect_backend` is called often (fr apply, isolation lifecycle,
+# scaffold) and must not become chatty across repeated calls for the same
+# repo/host.
+_WARNED_UNKNOWN_HOSTS: set[str] = set()
 
 
 def _origin_hostname(repo_root: Path) -> str | None:
@@ -118,7 +126,17 @@ def detect_backend(repo_root: Path) -> HostBackend:
     if explicit == "gitea":
         return "gitea"
 
-    return backend_for_hostname(_origin_hostname(repo_root))
+    hostname = _origin_hostname(repo_root)
+    if hostname and hostname not in DEFAULT_HOST_BACKENDS and hostname not in _WARNED_UNKNOWN_HOSTS:
+        _WARNED_UNKNOWN_HOSTS.add(hostname)
+        print(
+            f"warning: origin host {hostname!r} is not a recognized forge; "
+            'assuming backend "github". Declare it as `backend: gitlab` '
+            "(or gitea) in .devcontainer/fr-profiles.yaml, or run "
+            "`fr init scaffold --backend <b>`.",
+            file=sys.stderr,
+        )
+    return backend_for_hostname(hostname)
 
 
 def declared_host(repo_root: Path) -> str | None:

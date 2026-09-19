@@ -100,3 +100,58 @@ class TestClientForHost:
         client = hostclient.client_for_backend("gitlab")
         assert isinstance(client, RealGlabClient)
         assert client._host is None
+
+
+def _repo_with_remote(root: Path, remote: str) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "remote", "add", "origin", remote], check=True)
+    return root
+
+
+def _repo_with_profiles(root: Path, keys: dict[str, str]) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
+    d = root / ".devcontainer"
+    d.mkdir(parents=True, exist_ok=True)
+    body = "".join(f"{k}: {v}\n" for k, v in keys.items())
+    (d / "fr-profiles.yaml").write_text(body + "profiles:\n  dev:\n    purpose: x\n")
+    return root
+
+
+class TestClientForWarnsOnAnUnthreadedDeclaredHost:
+    """gh-486: an explicitly declared `host:` for a backend fr does not
+    thread (github, gitea) must say so, on stderr, once — spec §4.D."""
+
+    def test_a_declared_host_for_an_unthreaded_backend_warns(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = _repo_with_profiles(tmp_path, {"backend": "gitea", "host": "git.corp.com"})
+        hostclient.client_for(repo)
+        err = capsys.readouterr().err
+        assert "git.corp.com" in err and "gitea" in err
+
+    def test_a_derived_host_for_an_unthreaded_backend_is_silent(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A GitHub Enterprise repo — `backend: github` declared explicitly,
+        no `host:` key — derives a host from its origin remote for a
+        backend fr does not thread, and works fine because `gh` resolves
+        the same host itself. Warning there would be noise on a correct
+        configuration (spec §4.D).
+
+        `backend: github` is declared explicitly so this test isolates
+        client_for's OWN provenance rule (declared vs. derived) from
+        detect_backend's separate unrecognized-origin-host warning
+        (P5.T1), which independently — and correctly — fires for this
+        SAME hostname when no backend is declared at all: an origin-only
+        GHE remote is indistinguishable, by hostname alone, from a truly
+        unrecognized forge, so P5.T1 must still warn there. See the P5.T2
+        journal discovery recording this."""
+        repo = _repo_with_profiles(tmp_path, {"backend": "github"})
+        subprocess.run(
+            ["git", "-C", str(repo), "remote", "add", "origin", "git@github.corp.com:o/r.git"],
+            check=True,
+        )
+        hostclient.client_for(repo)
+        assert capsys.readouterr().err == ""

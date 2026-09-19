@@ -14,152 +14,224 @@ tasks:
   title: 'RED → GREEN: detect_backend says when it is guessing'
   steps:
   - id: P5.T1.S1
-    text: "RED. In `tests/unit/test__hosts.py`:\n\n```python\ndef test_an_unrecognized_host_warns_once_and_still_returns_github(tmp_path, capsys):\n    \"\"\"Behaviour is UNCHANGED — \"github\" is still returned, so no\n    repo's resolution moves. Only the silence is fixed (gh-486\n    gap 2).\"\"\"\n    repo = _repo_with_remote(tmp_path, \"git@gitlab.local.corp:g/p.git\")\n    assert detect_backend(repo) == \"github\"\n    first = capsys.readouterr().err\n    assert \"gitlab.local.corp\" in first and \"backend: gitlab\" in first\n    assert detect_backend(repo) == \"github\"\n    assert capsys.readouterr().err == \"\"   # once per host, not per call\n\ndef test_a_recognized_or_declared_host_is_silent(tmp_path, capsys):\n    ...  # github.com remote, and an explicit backend: — both silent\n```\n\nConfirm RED (nothing is printed today)."
+    text: |-
+      RED. In `tests/unit/test__hosts.py`:
+
+      ```python
+      def test_an_unrecognized_host_warns_once_and_still_returns_github(tmp_path, capsys):
+          """Behaviour is UNCHANGED — "github" is still returned, so no
+          repo's resolution moves. Only the silence is fixed (gh-486
+          gap 2)."""
+          repo = _repo_with_remote(tmp_path, "git@gitlab.local.corp:g/p.git")
+          assert detect_backend(repo) == "github"
+          first = capsys.readouterr().err
+          assert "gitlab.local.corp" in first and "backend: gitlab" in first
+          assert detect_backend(repo) == "github"
+          assert capsys.readouterr().err == ""   # once per host, not per call
+
+      def test_a_recognized_or_declared_host_is_silent(tmp_path, capsys):
+          ...  # github.com remote, and an explicit backend: — both silent
+      ```
+
+      Confirm RED (nothing is printed today).
   - id: P5.T1.S2
-    text: 'GREEN. A module-level `_WARNED_UNKNOWN_HOSTS: set[str] = set()` and,
-
-      in `backend_for_hostname`''s fall-through inside `detect_backend`,
-
+    text: |-
+      GREEN. A module-level `_WARNED_UNKNOWN_HOSTS: set[str] = set()` and,
+      in `backend_for_hostname`'s fall-through inside `detect_backend`,
       one stderr line (precedent: `isolation/scaffold.py:209` warns from a
-
       library module; stderr keeps JSON output modes clean):
 
-
-      `warning: origin host ''<h>'' is not a recognized forge; assuming backend "github". Declare it as `backend: gitlab` (or gitea) in .devcontainer/fr-profiles.yaml, or run `fr init scaffold --backend <b>`.`
-
+      `warning: origin host '<h>' is not a recognized forge; assuming backend "github". Declare it as `backend: gitlab` (or gitea) in .devcontainer/fr-profiles.yaml, or run `fr init scaffold --backend <b>`.`
 
       Warn from `detect_backend` only — NOT from `backend_for_hostname`,
-
       which is called per-PR-URL by `fr_vk.pr_observe` across many repos
-
       and would turn the bridge log into noise. Add a test pinning that
-
-      `backend_for_hostname` itself stays silent. Green.'
+      `backend_for_hostname` itself stays silent. Green.
 - number: 2
   title: 'RED → GREEN: a declared host fr cannot honour says so'
   steps:
   - id: P5.T2.S1
-    text: "RED. In `tests/unit/test_hostclient.py`:\n\n```python\ndef test_a_declared_host_for_an_unthreaded_backend_warns(tmp_path, capsys):\n    repo = _repo_with_profiles(tmp_path, {\"backend\": \"gitea\", \"host\": \"git.corp.com\"})\n    client_for(repo)\n    err = capsys.readouterr().err\n    assert \"git.corp.com\" in err and \"gitea\" in err\n\ndef test_a_DERIVED_host_for_an_unthreaded_backend_is_silent(tmp_path, capsys):\n    \"\"\"A GitHub Enterprise repo derives a host for a backend fr does\n    not thread — and works fine, because gh resolves its own host\n    from the same remote. Warning there would be noise on a correct\n    configuration (spec §4.D).\"\"\"\n    repo = _repo_with_remote(tmp_path, \"git@github.corp.com:o/r.git\")\n    client_for(repo)\n    assert capsys.readouterr().err == \"\"\n```\n\nConfirm RED."
+    text: |-
+      RED. In `tests/unit/test_hostclient.py`:
+
+      ```python
+      def test_a_declared_host_for_an_unthreaded_backend_warns(tmp_path, capsys):
+          repo = _repo_with_profiles(tmp_path, {"backend": "gitea", "host": "git.corp.com"})
+          client_for(repo)
+          err = capsys.readouterr().err
+          assert "git.corp.com" in err and "gitea" in err
+
+      def test_a_DERIVED_host_for_an_unthreaded_backend_is_silent(tmp_path, capsys):
+          """A GitHub Enterprise repo derives a host for a backend fr does
+          not thread — and works fine, because gh resolves its own host
+          from the same remote. Warning there would be noise on a correct
+          configuration (spec §4.D)."""
+          repo = _repo_with_remote(tmp_path, "git@github.corp.com:o/r.git")
+          client_for(repo)
+          assert capsys.readouterr().err == ""
+      ```
+
+      Confirm RED.
   - id: P5.T2.S2
-    text: 'GREEN. In `client_for` (never `client_for_backend`), after resolving
-
+    text: |-
+      GREEN. In `client_for` (never `client_for_backend`), after resolving
       the backend: when `_hosts.declared_host(repo_root)` is set and the
-
       backend is not `gitlab`, print to stderr once per (host, backend):
 
+      `warning: host '<h>' is declared in .devcontainer/fr-profiles.yaml but fr does not thread a host to backend "<b>" — the CLI's own host resolution applies instead. See gh-486.`
 
-      `warning: host ''<h>'' is declared in .devcontainer/fr-profiles.yaml but fr does not thread a host to backend "<b>" — the CLI''s own host resolution applies instead. See gh-486.`
-
-
-      Green. Then `uv run pytest tests/unit/test_hostclient.py tests/unit/test__hosts.py -q --no-cov`.'
+      Green. Then `uv run pytest tests/unit/test_hostclient.py tests/unit/test__hosts.py -q --no-cov`.
 - number: 3
   title: 'Docs: the supported route, and the instruction that is now wrong'
   steps:
   - id: P5.T3.S1
-    text: '`README.md` — under `## Requirements`, after the forge-CLI bullet,
-
+    text: |-
+      `README.md` — under `## Requirements`, after the forge-CLI bullet,
       add a short "Self-hosted instances" block: declare `backend:` in
-
       `.devcontainer/fr-profiles.yaml`; the instance hostname is taken
-
       from the git remote, so nothing else is needed; `host:` overrides it
-
-      when the remote''s hostname is not the API host; fr passes it to
-
+      when the remote's hostname is not the API host; fr passes it to
       `glab` as `GITLAB_HOST`, so the host must be one `glab auth login
-
       --hostname <host>` has a token for; and `gh`/`tea` are not threaded
-
-      yet — fr warns rather than pretending (spec §1 non-goals).'
+      yet — fr warns rather than pretending (spec §1 non-goals).
   - id: P5.T3.S2
-    text: '`plugins/super-fr/skills/fr-init/SKILL.md` — CORRECT lines 78-80.
-
+    text: |-
+      `plugins/super-fr/skills/fr-init/SKILL.md` — CORRECT lines 78-80.
       They currently say to pass `--backend`/`--host` on EVERY profile
-
       call for a non-GitHub repo; after Phase 4 `--host` is optional for
-
       GitLab (derived from the remote) and is the override. Rewrite those
-
       lines accordingly. Then regenerate the mirror and commit it —
-
       `.opencode/skills/` is generated and a tripwire fails on drift:
 
-
       ```bash
-
       uv run --no-project python scripts/sync-opencode.py
-
       uv run --no-project python scripts/sync-opencode.py --check
-
       uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py -q --no-cov
-
-      ```'
+      ```
 - number: 4
   title: Version bump and the currency rules
   steps:
   - id: P5.T4.S1
-    text: 'MINOR bump — this adds a user-visible capability (self-hosted host
-
+    text: |-
+      MINOR bump — this adds a user-visible capability (self-hosted host
       targeting) and changes documented behaviour (a non-404 now
-
       propagates), which is more than a patch:
 
-
       ```bash
-
       uv run --no-project python scripts/bump-version.py minor
-
       uv run --no-project python scripts/bump-version.py --check
-
       uv run fr --version
-
       ```
 
-
       Commit the changed manifests and `uv.lock` together. Never
-
-      hand-edit a version-bearing file.'
+      hand-edit a version-bearing file.
   - id: P5.T4.S2
-    text: 'Explainers currency (`.claude/rules/explainers-currency.md`): a
-
+    text: |-
+      Explainers currency (`.claude/rules/explainers-currency.md`): a
       minor bump is a trigger, so the obligation must be discharged
-
       explicitly rather than ignored. Confirm the finding recorded at
-
       spec time still holds — `grep -rli "gitlab\|backend" docs/explainers/`
-
       returns nothing, so no published page is made stale — and record
-
       that sentence in the plan journal as a `discovery` for the PR body
-
-      to quote. If the grep DOES hit, regenerate that page per the rule''s
-
-      `--isolated` recipe instead.'
+      to quote. If the grep DOES hit, regenerate that page per the rule's
+      `--isolated` recipe instead.
 - number: 5
   title: 'RED -> GREEN: the bridge stops discarding the host it already computed'
   steps:
   - id: P5.T5.S1
-    text: "Found by phase 4's review, and it is this spec's own bug pointed at\nitself. Spec §4.C says `fr_vk.pr_observe` \"can now pass that same\nhostname as `host`\". It does not. `pr_observe.py:50-52` computes\n`hostname = urlparse(pr_url).hostname`, uses it for\n`backend_for_hostname`, and THROWS IT AWAY — so a bridge tick polling a\nself-hosted GitLab MR builds `RealGlabClient(host=None)` and glab falls\nback to gitlab.com. The bridge runs outside any checkout, so glab's own\ngit-directory fallback cannot rescue it either. Shipping phase 4 without\nthis would add a second dead last mile inside the fix for the first one.\n\nRED. In `tests/unit/test_pr_observe.py`:\n\n```python\ndef test_a_self_hosted_pr_url_carries_its_host_into_the_client(monkeypatch):\n    seen = {}\n\n    def _fake(backend, *, host=None):\n        seen[\"backend\"], seen[\"host\"] = backend, host\n        return SimpleNamespace(pr_status_by_url=lambda u: {\"state\": \"MERGED\"})\n\n    monkeypatch.setattr(hostclient, \"client_for_backend\", _fake)\n    _default_pr_status_fetch(\"https://gitlab.corp.example/g/p/-/merge_requests/7\")\n    assert seen == {\"backend\": \"gitlab\", \"host\": \"gitlab.corp.example\"}\n\n\ndef test_a_saas_pr_url_passes_no_host(monkeypatch):\n    # gitlab.com is glab's own default, so naming it would be noise; for\n    # github.com a host is meaningless, since fr threads none for that\n    # backend (spec section 1, non-goals). Both must pass host=None.\n    ...\n```\n\nConfirm RED: today `host` is never passed at all."
+    text: |-
+      Found by phase 4's review, and it is this spec's own bug pointed at
+      itself. Spec §4.C says `fr_vk.pr_observe` "can now pass that same
+      hostname as `host`". It does not. `pr_observe.py:50-52` computes
+      `hostname = urlparse(pr_url).hostname`, uses it for
+      `backend_for_hostname`, and THROWS IT AWAY — so a bridge tick polling a
+      self-hosted GitLab MR builds `RealGlabClient(host=None)` and glab falls
+      back to gitlab.com. The bridge runs outside any checkout, so glab's own
+      git-directory fallback cannot rescue it either. Shipping phase 4 without
+      this would add a second dead last mile inside the fix for the first one.
+
+      RED. In `tests/unit/test_pr_observe.py`:
+
+      ```python
+      def test_a_self_hosted_pr_url_carries_its_host_into_the_client(monkeypatch):
+          seen = {}
+
+          def _fake(backend, *, host=None):
+              seen["backend"], seen["host"] = backend, host
+              return SimpleNamespace(pr_status_by_url=lambda u: {"state": "MERGED"})
+
+          monkeypatch.setattr(hostclient, "client_for_backend", _fake)
+          _default_pr_status_fetch("https://gitlab.corp.example/g/p/-/merge_requests/7")
+          assert seen == {"backend": "gitlab", "host": "gitlab.corp.example"}
+
+
+      def test_a_saas_pr_url_passes_no_host(monkeypatch):
+          # gitlab.com is glab's own default, so naming it would be noise; for
+          # github.com a host is meaningless, since fr threads none for that
+          # backend (spec section 1, non-goals). Both must pass host=None.
+          ...
+      ```
+
+      Confirm RED: today `host` is never passed at all.
   - id: P5.T5.S2
-    text: "GREEN, without duplicating the SaaS rule. `host_for` already decides\n\"is this hostname self-hosted?\" — extract that one line into `_hosts` so\nboth callers share it rather than drifting:\n\n```python\ndef self_hosted_hostname(hostname: str | None) -> str | None:\n    \"\"\"The hostname, but only when it is NOT a recognized SaaS domain —\n    else None. `github.com`/`gitlab.com` need no override, and naming one\n    would make an ordinary repo look self-hosted. Shared by `host_for`\n    (which has a checkout) and `fr_vk.pr_observe` (which has only a PR\n    URL), so the rule cannot drift between them.\"\"\"\n    if hostname and hostname not in DEFAULT_HOST_BACKENDS:\n        return hostname\n    return None\n```\n\n`host_for`'s fallback becomes\n`self_hosted_hostname(_origin_hostname(repo_root))`, and `pr_observe`\npasses `host=_hosts.self_hosted_hostname(hostname)`. Green.\n\nThen document the sibling that is NOT fixed.\n`pr_state._default_close_gh_issue` (`pr_state.py:94`) receives only a\nbackend string; the hostname exists one frame up in\n`_close_linked_gh_issue`, but the public\n`closer: Callable[[str, str, str], None]` signature — which every test\ndouble satisfies structurally — has no room for it, and widening that\narity is a bridge-wide change beyond gh-486. Add a comment at that call\nsite naming the limit, and journal a finding (`--state open`) so the PR\nbody can state it plainly: auto-closing a linked Issue still targets the\nSaaS host on a self-hosted instance, failing non-fatally with a logged\nwarning."
+    text: |-
+      GREEN, without duplicating the SaaS rule. `host_for` already decides
+      "is this hostname self-hosted?" — extract that one line into `_hosts` so
+      both callers share it rather than drifting:
+
+      ```python
+      def self_hosted_hostname(hostname: str | None) -> str | None:
+          """The hostname, but only when it is NOT a recognized SaaS domain —
+          else None. `github.com`/`gitlab.com` need no override, and naming one
+          would make an ordinary repo look self-hosted. Shared by `host_for`
+          (which has a checkout) and `fr_vk.pr_observe` (which has only a PR
+          URL), so the rule cannot drift between them."""
+          if hostname and hostname not in DEFAULT_HOST_BACKENDS:
+              return hostname
+          return None
+      ```
+
+      `host_for`'s fallback becomes
+      `self_hosted_hostname(_origin_hostname(repo_root))`, and `pr_observe`
+      passes `host=_hosts.self_hosted_hostname(hostname)`. Green.
+
+      Then document the sibling that is NOT fixed.
+      `pr_state._default_close_gh_issue` (`pr_state.py:94`) receives only a
+      backend string; the hostname exists one frame up in
+      `_close_linked_gh_issue`, but the public
+      `closer: Callable[[str, str, str], None]` signature — which every test
+      double satisfies structurally — has no room for it, and widening that
+      arity is a bridge-wide change beyond gh-486. Add a comment at that call
+      site naming the limit, and journal a finding (`--state open`) so the PR
+      body can state it plainly: auto-closing a linked Issue still targets the
+      SaaS host on a self-hosted instance, failing non-fatally with a logged
+      warning.
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:35:31+00:00'
+      note: 'RED confirmed: test_an_unrecognized_host_warns_once_and_still_returns_github
+        failed on the assertion (empty stderr) before implementation.'
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:35:31+00:00'
+      note: 'GREEN: module-level _WARNED_UNKNOWN_HOSTS set + one stderr warning in
+        detect_backend''s fallthrough. Added test_backend_for_hostname_itself_stays_silent
+        pinning the sibling never warns. tests/unit/test__hosts.py -q --no-cov: 24
+        passed.'
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:39:29+00:00'
+      note: 'RED confirmed: test_a_declared_host_for_an_unthreaded_backend_warns failed
+        on empty stderr. Silent-on-derived test adjusted (backend: github declared
+        explicitly) to isolate client_for''s own warning from P5.T1''s independent
+        one — see journal discovery.'
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T18:39:29+00:00'
+      note: 'GREEN: _WARNED_DECLARED_HOSTS guard in client_for, keyed (declared, backend).
+        tests/unit/test_hostclient.py tests/unit/test__hosts.py -q --no-cov: 36 passed.'
     P5.T3.S1:
       state: ' '
       ticked_at: null
