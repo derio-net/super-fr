@@ -439,12 +439,15 @@ rows:
       - super-fr:tests/unit/test_glab.py
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test_hostclient.py
-    status: ci
-    notes: RealGlabClient satisfies the GhClient Protocol (mypy-verified) and is reachable
-      from every fr apply CLI command via hostclient.client_for, gated on fr._hosts.detect_backend.
-      Unit-verified against GitLab's own REST/glab-CLI shapes (Phase 2/4, 2026-07-09).
-      Not yet proven against a live GitLab instance -- owed to the plan's back-loaded
-      manual verification phase (Phase 9).
+    status: failing
+    notes: 'RED (gh-486, 2026-09-19): the row was ''ci'' for a capability that does
+      not work. RealGlabClient.file_exists/read_file omitted GitLab''s mandatory ''ref''
+      query parameter, so every contents read failed against a live instance — read_file
+      with a 400, file_exists silently as ''absent''. Reproduced live against gitlab.local.gebit.de.
+      The unit suite was green because every mock is ''lambda args: <json>'', discarding
+      the request. Per .claude/rules/acceptance-matrix.md this is ''failing'' until
+      live proof lands; the row''s own note already admitted the live verification was
+      owed to the plan''s back-loaded Phase 9.'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
@@ -1974,3 +1977,40 @@ rows:
     status: ci
     notes: Focused command tests verify duplicate adds fail loudly and leave journals
       byte-identical.
+  - id: gitlab-contents-reads-live
+    capability: Multi-backend git hosting
+    acceptance: An operator's GitLab-backed repo can be read through fr's contents API
+      — file existence, file text, and directory listing — against a live instance whose
+      default branch is not 'main'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh-486: file_exists/read_file omitted GitLab''s mandatory ref parameter,
+      so both failed against any live instance; file_exists'' catch-all swallow rendered
+      the 400 as ''absent''. Verification is unit (request-args asserted) plus a live
+      transcript from gitlab.local.gebit.de in the PR.'
+  - id: gitlab-selfhosted-host-targeting
+    capability: Multi-backend git hosting
+    acceptance: 'An operator whose GitLab is self-hosted reaches it by declaring ''backend:
+      gitlab'' alone; ''host:'' overrides, and a host declared for a backend fr cannot
+      target says so'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh-486 gap 1: fr init scaffold --host wrote host:, _hosts.host_for read
+      it back, and no production path consumed it. host_for now defaults to the git
+      remote''s hostname and glab receives it as GITLAB_HOST. gh/tea are deliberately
+      not threaded (spec §1 non-goals) and warn instead.'
+  - id: forge-errors-are-not-absence
+    capability: Multi-backend git hosting
+    acceptance: A malformed or unauthorized GitLab request surfaces as an error rather
+      than as 'the file is not there'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh-486: fail-soft turned a bug into a wrong answer. RealGlabClient narrows
+      its swallow to not-found via fr.glab.is_not_found; the GitHub and Gitea adapters
+      keep today''s posture (spec §3 d3).'
