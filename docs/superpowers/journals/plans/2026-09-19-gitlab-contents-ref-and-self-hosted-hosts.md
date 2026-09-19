@@ -153,3 +153,18 @@ Phase 2's review flagged it as cosmetic. Fixed anyway, because spec §4.A's stat
 ### f5-phase2-duplicate-tests · finding [refuted] · read_file/list_dir test pairs look duplicated — same pattern already refuted in phase 1 (phase 2)
 
 The reviewer raised the phase-2 instance of the shape refuted as f3-duplicate-success-test, and explicitly flagged it only to confirm consistency with that prior ruling rather than to ask for a change. Refused for the same reason: the named test is the gh-486 regression guard a future reader greps for, the retrofitted one proves no contents test is arg-blind any more, and collapsing them would delete one of those two purposes.
+
+<!-- fr:journal kind=finding scope=plan id=f-reachability-traceback created=2026-09-19T19:45:32 phase=3 state=open -->
+### f-reachability-traceback · finding [open] · fr_dispatch.reachability has no error rendering for a propagating GlabError (phase 3)
+
+_missing_remotely now lets a non-404 propagate. reachability has no production caller today (apply_cmd.py:141 passes no gh=, check_reachable is test-only), so nothing regresses. Whoever wires gh= into the gate must render a propagating GlabError as a refusal message, not a traceback. Left open deliberately: there is no caller to fix, and fixing an absent caller is how speculative generality gets in.
+
+<!-- fr:journal kind=finding scope=plan id=f2-glaberror-discards-diagnostic-resolved created=2026-09-19T19:48:30 state=fixed resolves=f2-glaberror-discards-diagnostic -->
+### f2-glaberror-discards-diagnostic-resolved · finding [fixed] · resolves f2-glaberror-discards-diagnostic: The spec's 'glab writes the body to both streams' claim was false — GlabError discards the only text that says what went wrong
+
+Landed in P3.T4: GlabError gained a keyword-only stdout field; _run_glab now folds exc.stderr and exc.stdout into both the raised GlabError's fields and its message ('stderr — stdout', empty parts dropped). str(GlabError) now reads 'glab: HTTP 400 — {"error":"ref is missing, ref is empty"}' instead of the old bare 'glab: HTTP 400'. _haystack extended to include stdout, making the previously-unreachable '"message":"404 ' is_not_found pattern reachable. T2's hand-built 400 tests tightened to assert the body text ('ref is missing') is in str(exc.value).
+
+<!-- fr:journal kind=discovery scope=plan id=2b2621a3091a created=2026-09-19T19:50:29 phase=3 -->
+### 2b2621a3091a · discovery · Full-suite gate in this isolation container shows a 4th, different pre-existing failure — environment-dependent, unrelated to this diff (phase 3)
+
+Full gate (uv run fr isolation exec -- uv run pytest -q --no-cov) here shows 1 failed, 3139 passed, 85 skipped: tests/integration/test_install_bridge.py::test_install_bridge_flag_writes_wrapper, failing because the container's cached 'uv tool install fr' lacks --with fr-vk (bridge wrapper not installed). Confirmed unrelated to phase 3 via git stash + re-run: identical failure on the pre-phase-3 tree. The two failures phase 1 recorded (test_run_workspace.py's two COLUMNS/tmp_path-width tests, test_workflow_check.py's shipped-workflow-dir test) do NOT reproduce in this container — both pass here (37 passed) — because this is a Linux isolation-exec container with short tmp paths and no installed marketplace plugin dir, exactly the environment split the phase-1 diagnosis predicted. Net: the set of pre-existing failures is environment-shaped, not a fixed list; none of the three (this one included) are caused by anything phase 3 touched (glab.py, real_glabclient.py, migrate.py's/spec.py's call sites).

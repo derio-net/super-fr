@@ -31,9 +31,12 @@ T = TypeVar("T")
 class GlabError(Exception):
     """Error from a glab CLI invocation."""
 
-    def __init__(self, message: str, *, stderr: str = "", returncode: int = 0) -> None:
+    def __init__(
+        self, message: str, *, stderr: str = "", stdout: str = "", returncode: int = 0
+    ) -> None:
         super().__init__(message)
         self.stderr = stderr
+        self.stdout = stdout
         self.returncode = returncode
 
 
@@ -47,8 +50,18 @@ def _run_glab(args: list[str]) -> str:
             check=True,
         )
     except subprocess.CalledProcessError as exc:
-        msg = exc.stderr.strip() if exc.stderr else f"glab exited with code {exc.returncode}"
-        raise GlabError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
+        # glab splits an error across both streams: its own summary on
+        # stderr, the API's JSON body on stdout. Keeping only stderr
+        # turned "ref is missing, ref is empty" into a bare "glab: HTTP
+        # 400" — the fault named, then forgotten (gh-486; spec §2.A).
+        parts = [s for s in (exc.stderr.strip(), (exc.stdout or "").strip()) if s]
+        msg = " — ".join(parts) or f"glab exited with code {exc.returncode}"
+        raise GlabError(
+            msg,
+            stderr=exc.stderr or "",
+            stdout=exc.stdout or "",
+            returncode=exc.returncode,
+        ) from exc
     return result.stdout.strip()
 
 
@@ -171,14 +184,44 @@ _TRANSIENT_PATTERNS = (
 )
 
 
+def _haystack(err: GlabError) -> str:
+    """Lowercase text to pattern-match glab error classification against.
+    Shared by `is_transient` and `is_not_found` — each keeps its own
+    pattern tuple and docstring; only the construction is common.
+    Includes `stdout` (the API's JSON body, folded into the message by
+    `_run_glab`) so a not-found signalled only in the body — with no
+    "HTTP 404" on stderr — still classifies (gh-486; spec §2.A)."""
+    return (err.stderr + " " + err.stdout + " " + str(err)).lower()
+
+
 def is_transient(err: GlabError) -> bool:
     """True if the error looks like a transient network/server failure
     that warrants retry. False for auth, 404, validation, and unknown
     errors (fail fast). Patterns are glab's own stderr vocabulary
     (dial/net-style Go error text), distinct from gh's — see the module
     docstring and the design doc's capability matrix."""
-    text = (err.stderr + " " + str(err)).lower()
-    return any(p in text for p in _TRANSIENT_PATTERNS)
+    return any(p in _haystack(err) for p in _TRANSIENT_PATTERNS)
+
+
+# glab's own not-found vocabulary, captured live 2026-09-19 (spec §2.A).
+# BOTH markers are anchored deliberately: a bare `"404" in text` would
+# match a PROBED PATH containing 404 and read a genuine 400 as "absent",
+# which is the bug class this function exists to close. The
+# `"message":"404 ` form only becomes reachable once T4 gives GlabError
+# the stdout the API's body arrives on; it is listed now because the
+# vocabulary is one table, not two.
+_NOT_FOUND_PATTERNS = ("http 404", '"message":"404 ')
+
+
+def is_not_found(err: GlabError) -> bool:
+    """True when GitLab said the thing is absent, as opposed to saying
+    the request was wrong or unauthorized.
+
+    `file_exists` may translate ONLY this into `False`. Anything else is
+    a protocol or auth fault and must propagate: a malformed request
+    that reads as "not found" is indistinguishable from an absent file,
+    which is how gh-486 turned a 400 into a wrong answer."""
+    return any(p in _haystack(err) for p in _NOT_FOUND_PATTERNS)
 
 
 def with_retry(

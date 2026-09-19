@@ -20,8 +20,22 @@ from fr.glab import (
     create_issue,
     edit_issue_body,
     ensure_label,
+    is_not_found,
     swap_issue_labels,
     view_issue,
+)
+
+from tests.unit.test_real_glabclient import (
+    GLAB_STDERR_400_MISSING_REF,
+    GLAB_STDERR_404_FILE,
+    GLAB_STDERR_404_PROJECT,
+    GLAB_STDERR_404_TREE,
+    GLAB_STDERR_UNAUTHENTICATED,
+    GLAB_STDOUT_400_MISSING_REF,
+    GLAB_STDOUT_404_FILE,
+    GLAB_STDOUT_404_PROJECT,
+    GLAB_STDOUT_404_TREE,
+    GLAB_STDOUT_UNAUTHENTICATED,
 )
 
 
@@ -207,6 +221,38 @@ class TestGlabErrorFields:
         assert err.returncode == 0
         assert str(err) == "boom"
 
+    def test_default_stdout(self) -> None:
+        assert glab.GlabError("boom").stdout == ""
+
+
+def test_a_failed_call_keeps_the_api_diagnostic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """glab puts its own summary on STDERR and the API's JSON body on
+    STDOUT; `_run_glab` used to build GlabError from stderr alone and
+    discard the body — the part that actually says *what* was wrong
+    (gh-486; spec §2.A)."""
+
+    def _fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+        raise subprocess.CalledProcessError(
+            1,
+            argv,
+            output='{"error":"ref is missing, ref is empty"}',
+            stderr="glab: HTTP 400\n",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    with pytest.raises(GlabError) as exc:
+        glab._run_glab(["api", "projects/g%2Fp/repository/files/README.md"])
+    assert exc.value.stdout == '{"error":"ref is missing, ref is empty"}'
+    assert "ref is missing, ref is empty" in str(exc.value)
+    assert "HTTP 400" in str(exc.value)
+
+
+def test_the_body_alone_still_classifies_as_not_found() -> None:
+    """Makes the second _NOT_FOUND_PATTERN reachable: a 404 whose stderr
+    summary is absent is still a not-found via the body."""
+    err = GlabError("", stderr="", stdout='{"message":"404 File Not Found"}')
+    assert is_not_found(err)
+
 
 class TestIsTransient:
     """glab-specific fixture strings — network/HTTP vocabulary a Go CLI
@@ -269,3 +315,39 @@ class TestWithRetry:
         with pytest.raises(glab.GlabError):
             glab.with_retry(op)
         assert attempts["n"] == 1
+
+
+class TestIsNotFound:
+    """`is_not_found` decides whether GitLab said "absent" or said "your
+    request was wrong". Reading the second as the first is what made
+    gh-486 a wrong answer instead of an error."""
+
+    @pytest.mark.parametrize(
+        ("err", "out"),
+        [
+            (GLAB_STDERR_404_FILE, GLAB_STDOUT_404_FILE),
+            (GLAB_STDERR_404_PROJECT, GLAB_STDOUT_404_PROJECT),
+            (GLAB_STDERR_404_TREE, GLAB_STDOUT_404_TREE),
+        ],
+    )
+    def test_every_captured_404_shape_is_not_found(self, err, out):
+        assert is_not_found(GlabError(err.strip(), stderr=err))
+
+    @pytest.mark.parametrize(
+        ("err", "out"),
+        [
+            (GLAB_STDERR_400_MISSING_REF, GLAB_STDOUT_400_MISSING_REF),
+            (GLAB_STDERR_UNAUTHENTICATED, GLAB_STDOUT_UNAUTHENTICATED),
+        ],
+    )
+    def test_a_bad_request_or_auth_failure_is_not_absence(self, err, out):
+        assert not is_not_found(GlabError(err.strip(), stderr=err))
+
+    def test_a_path_containing_404_does_not_read_as_not_found(self):
+        """The probed path is echoed in some glab errors, so a loose
+        `"404" in text` would call a 400 on `errors/404.md` absent."""
+        err = GlabError(
+            "glab: HTTP 400",
+            stderr='glab: HTTP 400\n{"error":"ref is missing"} errors/404.md',
+        )
+        assert not is_not_found(err)

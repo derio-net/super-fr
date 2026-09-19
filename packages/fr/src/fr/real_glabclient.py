@@ -198,9 +198,10 @@ class RealGlabClient:
 
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
-        projects/:id/repository/files/:path?ref=HEAD`. Any error reads as
-        "not found" — the safe direction (spec-archival callers leave the
-        spec in place on an unresolved lookup).
+        projects/:id/repository/files/:path?ref=HEAD`. A NOT-FOUND reads
+        as absent — the safe direction for spec-archival callers; any
+        other error propagates, because a malformed or unauthorized
+        request is not an absent file (gh-486).
 
         `ref` is MANDATORY on this endpoint; without it GitLab answers 400
         and this probe reported that as "absent" (gh-486)."""
@@ -214,12 +215,16 @@ class RealGlabClient:
                 ]
             )
             return True
-        except _glab.GlabError:
-            return False
+        except _glab.GlabError as exc:
+            if _glab.is_not_found(exc):
+                return False
+            raise
 
     def list_dir(self, repo: str, path: str) -> list[str]:
         """Entry names under `path` via the repository tree endpoint.
-        `[]` on any GlabError — same fail-soft posture as `file_exists`.
+        `[]` on a NOT-FOUND — same fail-soft posture as `file_exists`;
+        any other error propagates, because a malformed or unauthorized
+        request is not an empty directory (gh-486).
         `ref` isn't required here (unlike the contents endpoints) — the
         tree endpoint already defaults to the project's default branch —
         but is pinned for consistency, live-proven not to regress
@@ -234,8 +239,10 @@ class RealGlabClient:
                     f"?path={encoded_path}&ref={_CONTENTS_REF}",
                 ]
             )
-        except _glab.GlabError:
-            return []
+        except _glab.GlabError as exc:
+            if _glab.is_not_found(exc):
+                return []
+            raise
         entries = json.loads(out) if out else []
         return [e["name"] for e in entries if isinstance(e, dict) and "name" in e]
 

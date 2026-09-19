@@ -304,11 +304,40 @@ class TestContentsApi:
 
         def _raise(args, **kwargs):
             cap(args, **kwargs)
-            raise _glab.GlabError("404")
+            raise _glab.GlabError(
+                GLAB_STDERR_404_FILE.strip(), stderr=GLAB_STDERR_404_FILE
+            )
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert RealGlabClient().file_exists("group/proj", "docs/missing.md") is False
         assert cap.endpoint == ("projects/group%2Fproj/repository/files/docs%2Fmissing.md?ref=HEAD")
+
+    def test_file_exists_is_false_on_a_real_404(self, monkeypatch):
+        def _raise(args, **kwargs):
+            raise _glab.GlabError(
+                "glab: 404 File Not Found (HTTP 404)", stderr=GLAB_STDERR_404_FILE
+            )
+
+        monkeypatch.setattr(_glab, "_run_glab", _raise)
+        assert RealGlabClient().file_exists("group/proj", "docs/missing.md") is False
+
+    def test_file_exists_raises_on_a_bad_request(self, monkeypatch):
+        """gh-486: a 400 read as "absent" is a WRONG ANSWER, not a safe
+        default. The caller must be able to tell them apart — and, now
+        that T4 folds both streams into the message, see the API's own
+        diagnostic rather than a bare status code."""
+
+        def _raise(args, **kwargs):
+            raise _glab.GlabError(
+                f"{GLAB_STDERR_400_MISSING_REF.strip()} — {GLAB_STDOUT_400_MISSING_REF}",
+                stderr=GLAB_STDERR_400_MISSING_REF,
+                stdout=GLAB_STDOUT_400_MISSING_REF,
+            )
+
+        monkeypatch.setattr(_glab, "_run_glab", _raise)
+        with pytest.raises(_glab.GlabError) as exc:
+            RealGlabClient().file_exists("group/proj", "docs/x.md")
+        assert "ref is missing" in str(exc.value)
 
     def test_read_file_pins_ref_on_the_contents_endpoint(self, monkeypatch):
         """GitLab's files endpoint REQUIRES `ref` (gh-486) — read_file
@@ -362,11 +391,40 @@ class TestContentsApi:
 
         def _raise(args, **kwargs):
             cap(args, **kwargs)
-            raise _glab.GlabError("404")
+            raise _glab.GlabError(
+                GLAB_STDERR_404_TREE.strip(), stderr=GLAB_STDERR_404_TREE
+            )
 
         monkeypatch.setattr(_glab, "_run_glab", _raise)
         assert RealGlabClient().list_dir("group/proj", "docs/missing") == []
         assert cap.endpoint == "projects/group%2Fproj/repository/tree?path=docs%2Fmissing&ref=HEAD"
+
+    def test_list_dir_is_empty_on_a_real_404(self, monkeypatch):
+        def _raise(args, **kwargs):
+            raise _glab.GlabError(
+                "glab: 404 invalid revision or path Not Found (HTTP 404)",
+                stderr=GLAB_STDERR_404_TREE,
+            )
+
+        monkeypatch.setattr(_glab, "_run_glab", _raise)
+        assert RealGlabClient().list_dir("group/proj", "docs/missing") == []
+
+    def test_list_dir_raises_on_a_bad_request(self, monkeypatch):
+        """Same asymmetry as file_exists: a 400 must not be mistaken for
+        an empty directory (gh-486), and the message carries the API's
+        own diagnostic once T4 folds both streams."""
+
+        def _raise(args, **kwargs):
+            raise _glab.GlabError(
+                f"{GLAB_STDERR_400_MISSING_REF.strip()} — {GLAB_STDOUT_400_MISSING_REF}",
+                stderr=GLAB_STDERR_400_MISSING_REF,
+                stdout=GLAB_STDOUT_400_MISSING_REF,
+            )
+
+        monkeypatch.setattr(_glab, "_run_glab", _raise)
+        with pytest.raises(_glab.GlabError) as exc:
+            RealGlabClient().list_dir("group/proj", "docs/x")
+        assert "ref is missing" in str(exc.value)
 
 
 class TestPrStatusByUrl:

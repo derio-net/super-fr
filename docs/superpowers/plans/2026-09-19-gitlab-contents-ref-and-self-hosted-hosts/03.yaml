@@ -14,87 +14,307 @@ tasks:
   title: 'RED → GREEN: fr.glab.is_not_found, pinned to captured strings'
   steps:
   - id: P3.T1.S1
-    text: "RED. In `tests/unit/test_glab.py`, add a class driven by the\nper-stream fixtures Phase 1 captured (`GLAB_STDERR_*` / `GLAB_STDOUT_*`\nin `tests/unit/test_real_glabclient.py` — import them from there, or\nre-declare; they are verbatim `subprocess.run` output, spec §2.A):\n\n```python\nclass TestIsNotFound:\n    \"\"\"`is_not_found` decides whether GitLab said \"absent\" or said \"your\n    request was wrong\". Reading the second as the first is what made\n    gh-486 a wrong answer instead of an error.\"\"\"\n\n    @pytest.mark.parametrize(\n        (\"err\", \"out\"),\n        [\n            (GLAB_STDERR_404_FILE, GLAB_STDOUT_404_FILE),\n            (GLAB_STDERR_404_PROJECT, GLAB_STDOUT_404_PROJECT),\n            (GLAB_STDERR_404_TREE, GLAB_STDOUT_404_TREE),\n        ],\n    )\n    def test_every_captured_404_shape_is_not_found(self, err, out):\n        assert is_not_found(GlabError(err.strip(), stderr=err))\n\n    @pytest.mark.parametrize(\n        (\"err\", \"out\"),\n        [\n            (GLAB_STDERR_400_MISSING_REF, GLAB_STDOUT_400_MISSING_REF),\n            (GLAB_STDERR_UNAUTHENTICATED, GLAB_STDOUT_UNAUTHENTICATED),\n        ],\n    )\n    def test_a_bad_request_or_auth_failure_is_not_absence(self, err, out):\n        assert not is_not_found(GlabError(err.strip(), stderr=err))\n\n    def test_a_path_containing_404_does_not_read_as_not_found(self):\n        \"\"\"The probed path is echoed in some glab errors, so a loose\n        `\"404\" in text` would call a 400 on `errors/404.md` absent.\"\"\"\n        err = GlabError(\n            \"glab: HTTP 400\",\n            stderr='glab: HTTP 400\\n{\"error\":\"ref is missing\"} errors/404.md',\n        )\n        assert not is_not_found(err)\n```\n\nNOTE the `stdout=` argument is deliberately absent here: `GlabError`\ndoes not accept one until T4. The 404 cases are classified from the\nstderr summary alone, which is why `http 404` must be one of the\npatterns rather than relying on the JSON body. Run: fails on the\nmissing `is_not_found` import."
+    text: |-
+      RED. In `tests/unit/test_glab.py`, add a class driven by the
+      per-stream fixtures Phase 1 captured (`GLAB_STDERR_*` / `GLAB_STDOUT_*`
+      in `tests/unit/test_real_glabclient.py` — import them from there, or
+      re-declare; they are verbatim `subprocess.run` output, spec §2.A):
+
+      ```python
+      class TestIsNotFound:
+          """`is_not_found` decides whether GitLab said "absent" or said "your
+          request was wrong". Reading the second as the first is what made
+          gh-486 a wrong answer instead of an error."""
+
+          @pytest.mark.parametrize(
+              ("err", "out"),
+              [
+                  (GLAB_STDERR_404_FILE, GLAB_STDOUT_404_FILE),
+                  (GLAB_STDERR_404_PROJECT, GLAB_STDOUT_404_PROJECT),
+                  (GLAB_STDERR_404_TREE, GLAB_STDOUT_404_TREE),
+              ],
+          )
+          def test_every_captured_404_shape_is_not_found(self, err, out):
+              assert is_not_found(GlabError(err.strip(), stderr=err))
+
+          @pytest.mark.parametrize(
+              ("err", "out"),
+              [
+                  (GLAB_STDERR_400_MISSING_REF, GLAB_STDOUT_400_MISSING_REF),
+                  (GLAB_STDERR_UNAUTHENTICATED, GLAB_STDOUT_UNAUTHENTICATED),
+              ],
+          )
+          def test_a_bad_request_or_auth_failure_is_not_absence(self, err, out):
+              assert not is_not_found(GlabError(err.strip(), stderr=err))
+
+          def test_a_path_containing_404_does_not_read_as_not_found(self):
+              """The probed path is echoed in some glab errors, so a loose
+              `"404" in text` would call a 400 on `errors/404.md` absent."""
+              err = GlabError(
+                  "glab: HTTP 400",
+                  stderr='glab: HTTP 400\n{"error":"ref is missing"} errors/404.md',
+              )
+              assert not is_not_found(err)
+      ```
+
+      NOTE the `stdout=` argument is deliberately absent here: `GlabError`
+      does not accept one until T4. The 404 cases are classified from the
+      stderr summary alone, which is why `http 404` must be one of the
+      patterns rather than relying on the JSON body. Run: fails on the
+      missing `is_not_found` import.
   - id: P3.T1.S2
-    text: "GREEN. In `packages/fr/src/fr/glab.py`, beside `is_transient`:\n\n```python\n# glab's own not-found vocabulary, captured live 2026-09-19 (spec §2.A).\n# BOTH markers are anchored deliberately: a bare `\"404\" in text` would\n# match a PROBED PATH containing 404 and read a genuine 400 as \"absent\",\n# which is the bug class this function exists to close. The\n# `\"message\":\"404 ` form only becomes reachable once T4 gives GlabError\n# the stdout the API's body arrives on; it is listed now because the\n# vocabulary is one table, not two.\n_NOT_FOUND_PATTERNS = (\"http 404\", '\"message\":\"404 ')\n\n\ndef is_not_found(err: GlabError) -> bool:\n    \"\"\"True when GitLab said the thing is absent, as opposed to saying\n    the request was wrong or unauthorized.\n\n    `file_exists` may translate ONLY this into `False`. Anything else is\n    a protocol or auth fault and must propagate: a malformed request\n    that reads as \"not found\" is indistinguishable from an absent file,\n    which is how gh-486 turned a 400 into a wrong answer.\"\"\"\n    text = _haystack(err)\n    return any(p in text for p in _NOT_FOUND_PATTERNS)\n```\n\nRun the class: green (each captured 404 matches `http 404`). Then run\nall of `tests/unit/test_glab.py`."
+    text: |-
+      GREEN. In `packages/fr/src/fr/glab.py`, beside `is_transient`:
+
+      ```python
+      # glab's own not-found vocabulary, captured live 2026-09-19 (spec §2.A).
+      # BOTH markers are anchored deliberately: a bare `"404" in text` would
+      # match a PROBED PATH containing 404 and read a genuine 400 as "absent",
+      # which is the bug class this function exists to close. The
+      # `"message":"404 ` form only becomes reachable once T4 gives GlabError
+      # the stdout the API's body arrives on; it is listed now because the
+      # vocabulary is one table, not two.
+      _NOT_FOUND_PATTERNS = ("http 404", '"message":"404 ')
+
+
+      def is_not_found(err: GlabError) -> bool:
+          """True when GitLab said the thing is absent, as opposed to saying
+          the request was wrong or unauthorized.
+
+          `file_exists` may translate ONLY this into `False`. Anything else is
+          a protocol or auth fault and must propagate: a malformed request
+          that reads as "not found" is indistinguishable from an absent file,
+          which is how gh-486 turned a 400 into a wrong answer."""
+          text = _haystack(err)
+          return any(p in text for p in _NOT_FOUND_PATTERNS)
+      ```
+
+      Run the class: green (each captured 404 matches `http 404`). Then run
+      all of `tests/unit/test_glab.py`.
   - id: P3.T1.S3
-    text: 'REFACTOR. `is_transient` and `is_not_found` now share the
-
+    text: |-
+      REFACTOR. `is_transient` and `is_not_found` now share the
       lowercase-haystack construction. Extract `_haystack(err)` used by
-
-      both, keeping each function''s own pattern tuple and docstring — the
-
-      vocabularies are deliberately separate tables (see `is_transient`''s
-
+      both, keeping each function's own pattern tuple and docstring — the
+      vocabularies are deliberately separate tables (see `is_transient`'s
       docstring). Re-run `tests/unit/test_glab.py` plus
-
-      `uv run ruff check packages/ tests/`.'
+      `uv run ruff check packages/ tests/`.
 - number: 2
   title: 'RED → GREEN: RealGlabClient stops swallowing non-404s'
   steps:
   - id: P3.T2.S1
-    text: "RED. In `tests/unit/test_real_glabclient.py`:\n\n```python\ndef test_file_exists_is_false_on_a_real_404(monkeypatch):\n    def _raise(args, **kwargs):\n        raise _glab.GlabError(\n            \"glab: 404 File Not Found (HTTP 404)\", stderr=GLAB_STDERR_404_FILE\n        )\n    monkeypatch.setattr(_glab, \"_run_glab\", _raise)\n    assert RealGlabClient().file_exists(\"group/proj\", \"docs/missing.md\") is False\n\n\ndef test_file_exists_raises_on_a_bad_request(monkeypatch):\n    \"\"\"gh-486: a 400 read as \"absent\" is a WRONG ANSWER, not a safe\n    default. The caller must be able to tell them apart.\"\"\"\n    def _raise(args, **kwargs):\n        raise _glab.GlabError(\"glab: HTTP 400\", stderr=GLAB_STDERR_400_MISSING_REF)\n    monkeypatch.setattr(_glab, \"_run_glab\", _raise)\n    with pytest.raises(_glab.GlabError) as exc:\n        RealGlabClient().file_exists(\"group/proj\", \"docs/x.md\")\n    assert \"400\" in str(exc.value)\n```\n\nPlus the same pair for `list_dir` (404 → `[]`, 400 → raises), using\n`GLAB_STDERR_404_TREE`.\n\nDo NOT assert the API's body here — at this point `GlabError` cannot\ncarry it, and asserting it against a hand-built error object would be a\ntest passing on fiction (the exact fault phase 1's review caught). T4\nadds that assertion once it is true.\n\nRun: the 400 tests FAIL — today every error returns False / []."
+    text: |-
+      RED. In `tests/unit/test_real_glabclient.py`:
+
+      ```python
+      def test_file_exists_is_false_on_a_real_404(monkeypatch):
+          def _raise(args, **kwargs):
+              raise _glab.GlabError(
+                  "glab: 404 File Not Found (HTTP 404)", stderr=GLAB_STDERR_404_FILE
+              )
+          monkeypatch.setattr(_glab, "_run_glab", _raise)
+          assert RealGlabClient().file_exists("group/proj", "docs/missing.md") is False
+
+
+      def test_file_exists_raises_on_a_bad_request(monkeypatch):
+          """gh-486: a 400 read as "absent" is a WRONG ANSWER, not a safe
+          default. The caller must be able to tell them apart."""
+          def _raise(args, **kwargs):
+              raise _glab.GlabError("glab: HTTP 400", stderr=GLAB_STDERR_400_MISSING_REF)
+          monkeypatch.setattr(_glab, "_run_glab", _raise)
+          with pytest.raises(_glab.GlabError) as exc:
+              RealGlabClient().file_exists("group/proj", "docs/x.md")
+          assert "400" in str(exc.value)
+      ```
+
+      Plus the same pair for `list_dir` (404 → `[]`, 400 → raises), using
+      `GLAB_STDERR_404_TREE`.
+
+      Do NOT assert the API's body here — at this point `GlabError` cannot
+      carry it, and asserting it against a hand-built error object would be a
+      test passing on fiction (the exact fault phase 1's review caught). T4
+      adds that assertion once it is true.
+
+      Run: the 400 tests FAIL — today every error returns False / [].
   - id: P3.T2.S2
-    text: "GREEN. In `real_glabclient.py`, narrow both swallows:\n\n```python\nexcept _glab.GlabError as exc:\n    if _glab.is_not_found(exc):\n        return False          # or `return []` in list_dir\n    raise\n```\n\nUpdate both docstrings: the fail-soft sentence now reads \"a\nNOT-FOUND reads as absent — the safe direction for spec-archival\ncallers; any other error propagates, because a malformed or\nunauthorized request is not an absent file (gh-486).\"\nRun the file: green."
+    text: |-
+      GREEN. In `real_glabclient.py`, narrow both swallows:
+
+      ```python
+      except _glab.GlabError as exc:
+          if _glab.is_not_found(exc):
+              return False          # or `return []` in list_dir
+          raise
+      ```
+
+      Update both docstrings: the fail-soft sentence now reads "a
+      NOT-FOUND reads as absent — the safe direction for spec-archival
+      callers; any other error propagates, because a malformed or
+      unauthorized request is not an absent file (gh-486)."
+      Run the file: green.
 - number: 3
   title: Prove the call sites behave — the blast radius, asserted not assumed
   steps:
   - id: P3.T3.S1
-    text: "The two live callers each have an existing degradation path (spec\n§4.B). Pin both so a later refactor cannot quietly turn a raise\ninto a crash. In `tests/unit/` add, against a fake client whose\n`file_exists` raises a non-404 `GlabError`:\n\n- `fr.migrate`'s spec-archival probe still returns\n  `(False, \"<row> unresolved locally (cross-repo?) — confirm and\n  re-run\")` — it wraps the probe in `except Exception: pass`, so a\n  raise blocks archival exactly as a False did. Behaviour unchanged;\n  the test says so on purpose.\n- `fr.spec.compute_status` degrades the row and the raised error's\n  text reaches `fail_note` (`cross-repo read of <repo> failed: ...`),\n  so `fr spec status` shows the real reason instead of a phantom\n  empty plan folder.\n\nRun the two new tests plus `uv run pytest -q --no-cov`."
+    text: |-
+      The two live callers each have an existing degradation path (spec
+      §4.B). Pin both so a later refactor cannot quietly turn a raise
+      into a crash. In `tests/unit/` add, against a fake client whose
+      `file_exists` raises a non-404 `GlabError`:
+
+      - `fr.migrate`'s spec-archival probe still returns
+        `(False, "<row> unresolved locally (cross-repo?) — confirm and
+        re-run")` — it wraps the probe in `except Exception: pass`, so a
+        raise blocks archival exactly as a False did. Behaviour unchanged;
+        the test says so on purpose.
+      - `fr.spec.compute_status` degrades the row and the raised error's
+        text reaches `fail_note` (`cross-repo read of <repo> failed: ...`),
+        so `fr spec status` shows the real reason instead of a phantom
+        empty plan folder.
+
+      Run the two new tests plus `uv run pytest -q --no-cov`.
   - id: P3.T3.S2
-    text: 'Record the one caller that is NOT safe yet as a plan-journal
-
+    text: |-
+      Record the one caller that is NOT safe yet as a plan-journal
       finding, so the obligation travels with the code rather than living
-
       only in the spec:
-
-      `fr journal add --scope plan --slug 2026-09-19-gitlab-contents-ref-and-self-hosted-hosts --kind finding --state open --id f-reachability-traceback --phase 3 --title "fr_dispatch.reachability has no error rendering for a propagating GlabError" --body "_missing_remotely now lets a non-404 propagate. reachability has no production caller today (apply_cmd.py:141 passes no gh=, check_reachable is test-only), so nothing regresses. Whoever wires gh= into the gate must render a propagating GlabError as a refusal message, not a traceback. Left open deliberately: there is no caller to fix, and fixing an absent caller is how speculative generality gets in."`'
+      `fr journal add --scope plan --slug 2026-09-19-gitlab-contents-ref-and-self-hosted-hosts --kind finding --state open --id f-reachability-traceback --phase 3 --title "fr_dispatch.reachability has no error rendering for a propagating GlabError" --body "_missing_remotely now lets a non-404 propagate. reachability has no production caller today (apply_cmd.py:141 passes no gh=, check_reachable is test-only), so nothing regresses. Whoever wires gh= into the gate must render a propagating GlabError as a refusal message, not a traceback. Left open deliberately: there is no caller to fix, and fixing an absent caller is how speculative generality gets in."`
 - number: 4
   title: 'RED → GREEN: the propagated error carries the API''s diagnostic'
   steps:
   - id: P3.T4.S1
-    text: "RED. Found by phase 1's review: glab puts its summary on **stderr**\nand the API's JSON on **stdout**, and `_run_glab` builds `GlabError`\nfrom stderr alone — so the only text that says *what* was wrong is\ndiscarded, and `fr` reports a bare `glab: HTTP 400` where the\noperator's shell showed `{\"error\":\"ref is missing, ref is empty\"}`\n(spec §2.A consequence 1). Propagating an unreadable error is half a\nfix. In `tests/unit/test_glab.py`:\n\n```python\ndef test_a_failed_call_keeps_the_api_diagnostic(monkeypatch):\n    def _fake_run(argv, **kwargs):\n        raise subprocess.CalledProcessError(\n            1, argv,\n            output='{\"error\":\"ref is missing, ref is empty\"}',\n            stderr=\"glab: HTTP 400\\n\",\n        )\n    monkeypatch.setattr(subprocess, \"run\", _fake_run)\n    with pytest.raises(GlabError) as exc:\n        _run_glab([\"api\", \"projects/g%2Fp/repository/files/README.md\"])\n    assert exc.value.stdout == '{\"error\":\"ref is missing, ref is empty\"}'\n    assert \"ref is missing, ref is empty\" in str(exc.value)\n    assert \"HTTP 400\" in str(exc.value)\n\n\ndef test_the_body_alone_still_classifies_as_not_found(monkeypatch):\n    \"\"\"Makes the second _NOT_FOUND_PATTERN reachable: a 404 whose\n    stderr summary is absent is still a not-found via the body.\"\"\"\n    err = GlabError(\"\", stderr=\"\", stdout='{\"message\":\"404 File Not Found\"}')\n    assert is_not_found(err)\n```\n\nConfirm both FAIL: `GlabError` has no `stdout`."
+    text: |-
+      RED. Found by phase 1's review: glab puts its summary on **stderr**
+      and the API's JSON on **stdout**, and `_run_glab` builds `GlabError`
+      from stderr alone — so the only text that says *what* was wrong is
+      discarded, and `fr` reports a bare `glab: HTTP 400` where the
+      operator's shell showed `{"error":"ref is missing, ref is empty"}`
+      (spec §2.A consequence 1). Propagating an unreadable error is half a
+      fix. In `tests/unit/test_glab.py`:
+
+      ```python
+      def test_a_failed_call_keeps_the_api_diagnostic(monkeypatch):
+          def _fake_run(argv, **kwargs):
+              raise subprocess.CalledProcessError(
+                  1, argv,
+                  output='{"error":"ref is missing, ref is empty"}',
+                  stderr="glab: HTTP 400\n",
+              )
+          monkeypatch.setattr(subprocess, "run", _fake_run)
+          with pytest.raises(GlabError) as exc:
+              _run_glab(["api", "projects/g%2Fp/repository/files/README.md"])
+          assert exc.value.stdout == '{"error":"ref is missing, ref is empty"}'
+          assert "ref is missing, ref is empty" in str(exc.value)
+          assert "HTTP 400" in str(exc.value)
+
+
+      def test_the_body_alone_still_classifies_as_not_found(monkeypatch):
+          """Makes the second _NOT_FOUND_PATTERN reachable: a 404 whose
+          stderr summary is absent is still a not-found via the body."""
+          err = GlabError("", stderr="", stdout='{"message":"404 File Not Found"}')
+          assert is_not_found(err)
+      ```
+
+      Confirm both FAIL: `GlabError` has no `stdout`.
   - id: P3.T4.S2
-    text: "GREEN. `GlabError.__init__` gains keyword-only `stdout: str = \"\"`\n(so every existing construction and test is untouched), and\n`_run_glab`'s except branch folds both streams into the message:\n\n```python\n# glab splits an error across both streams: its own summary on stderr,\n# the API's JSON body on stdout. Keeping only stderr turned \"ref is\n# missing, ref is empty\" into a bare \"glab: HTTP 400\" — the fault\n# named, then forgotten (gh-486; spec §2.A).\nparts = [s for s in (exc.stderr.strip(), (exc.stdout or \"\").strip()) if s]\nmsg = \" — \".join(parts) or f\"glab exited with code {exc.returncode}\"\nraise GlabError(\n    msg, stderr=exc.stderr or \"\", stdout=exc.stdout or \"\",\n    returncode=exc.returncode,\n) from exc\n```\n\nExtend `_haystack` (extracted in T1.S3) to include `err.stdout`, which\nis what makes `'\"message\":\"404 '` reachable. Run\n`uv run pytest tests/unit/test_glab.py tests/unit/test_real_glabclient.py -q --no-cov`,\nthen the full gate. Finally, tighten T2's 400 test to assert the body\nnow reaches the caller: `assert \"ref is missing\" in str(exc.value)`."
+    text: |-
+      GREEN. `GlabError.__init__` gains keyword-only `stdout: str = ""`
+      (so every existing construction and test is untouched), and
+      `_run_glab`'s except branch folds both streams into the message:
+
+      ```python
+      # glab splits an error across both streams: its own summary on stderr,
+      # the API's JSON body on stdout. Keeping only stderr turned "ref is
+      # missing, ref is empty" into a bare "glab: HTTP 400" — the fault
+      # named, then forgotten (gh-486; spec §2.A).
+      parts = [s for s in (exc.stderr.strip(), (exc.stdout or "").strip()) if s]
+      msg = " — ".join(parts) or f"glab exited with code {exc.returncode}"
+      raise GlabError(
+          msg, stderr=exc.stderr or "", stdout=exc.stdout or "",
+          returncode=exc.returncode,
+      ) from exc
+      ```
+
+      Extend `_haystack` (extracted in T1.S3) to include `err.stdout`, which
+      is what makes `'"message":"404 '` reachable. Run
+      `uv run pytest tests/unit/test_glab.py tests/unit/test_real_glabclient.py -q --no-cov`,
+      then the full gate. Finally, tighten T2's 400 test to assert the body
+      now reaches the caller: `assert "ref is missing" in str(exc.value)`.
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:42:21+00:00'
+      note: 'RED: TestIsNotFound added to tests/unit/test_glab.py, importing GLAB_STDERR_*/GLAB_STDOUT_*
+        fixtures from test_real_glabclient.py. Failed on missing is_not_found import.'
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:42:21+00:00'
+      note: 'GREEN: added _NOT_FOUND_PATTERNS = (''http 404'', ''"message":"404 '')
+        and is_not_found(err) to fr.glab. All 34 tests in test_glab.py pass.'
     P3.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:42:22+00:00'
+      note: 'REFACTOR: extracted _haystack(err) shared by is_transient and is_not_found
+        (done inline with S2''s edit since it was a small 3-line extraction). ruff
+        check clean; test_glab.py still green (34 passed).'
     P3.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:44:06+00:00'
+      note: 'RED: added test_file_exists_is_false_on_a_real_404/test_file_exists_raises_on_a_bad_request
+        + list_dir pair to test_real_glabclient.py; fixed the two pre-existing false-on-error
+        tests to use real not-found fixtures instead of bare GlabError(''404''). Confirmed
+        RED: the two _raises_on_a_bad_request tests failed with ''DID NOT RAISE GlabError''
+        (2 failed, 40 passed).'
     P3.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:44:07+00:00'
+      note: 'GREEN: file_exists/list_dir now catch GlabError, return False/[] only
+        when is_not_found(exc), else re-raise. Docstrings updated per the plan''s
+        wording. 76 passed in test_real_glabclient.py + test_glab.py; ruff check clean.'
     P3.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:45:24+00:00'
+      note: 'Pinned both live callers against a fake client whose file_exists/list_dir
+        raises a non-404 GlabError. No production code changed — both tests passed
+        immediately: fr.migrate._spec_fully_implemented''s existing ''except Exception:
+        pass'' degrades to the same ''unresolved locally (cross-repo?) — confirm and
+        re-run'' note; fr.spec.compute_status''s existing ''except Exception as e:
+        fail_note = f"cross-repo read of {ref.repo} failed: {e}"'' surfaces the GlabError
+        text into the row note. 2 new tests passed; full test_v2_migrate.py + test_spec_status_remote.py
+        green (68 passed).'
     P3.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:45:39+00:00'
+      note: 'Journaled open finding f-reachability-traceback: reachability has no
+        production caller for gh= today, so nothing regresses from narrowing the swallow,
+        but whoever wires it in must render a propagating GlabError as a refusal message.'
     P3.T4.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:48:21+00:00'
+      note: 'RED: added test_a_failed_call_keeps_the_api_diagnostic + test_the_body_alone_still_classifies_as_not_found
+        to test_glab.py, plus TestGlabErrorFields::test_default_stdout. Confirmed
+        RED for the stated reason: GlabError has no stdout attribute/kwarg (AttributeError
+        / TypeError), 3 failed, 34 passed.'
     P3.T4.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T17:48:22+00:00'
+      note: 'GREEN: GlabError gained keyword-only stdout: str = ''''; _run_glab folds
+        stderr+stdout into the message (''glab: HTTP 400 — {"error":"ref is missing,
+        ref is empty"}'' — verified live). _haystack extended to include err.stdout,
+        making the ''"message":"404 '' pattern reachable. Tightened T2''s two 400
+        tests to assert ''ref is missing'' in str(exc.value). test_glab.py + test_real_glabclient.py:
+        79 passed. ruff check + mypy clean.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-19T17:50:45+00:00'
+    note: 'All 4 tasks/9 steps done. is_not_found narrows RealGlabClient''s swallow
+      to genuine not-found; GlabError now carries stdout and _run_glab folds both
+      streams into the message. Two live callers (fr.migrate._spec_fully_implemented,
+      fr.spec.compute_status) proven to already degrade safely on a propagating GlabError
+      — pinned, not changed. f2-glaberror-discards-diagnostic resolved fixed. f-reachability-traceback
+      opened (no production caller yet). Full gate: 147/147 phase-3-touched tests
+      green, ruff+mypy clean; full suite 3139 passed / 1 pre-existing environment-dependent
+      failure (test_install_bridge, confirmed unrelated via git stash) / 85 skipped;
+      acceptance check exits 2 on multibackend-gitlab-tracking as expected until phase
+      6.'
     observed_prs: []

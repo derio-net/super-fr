@@ -2009,8 +2009,16 @@ rows:
       than as 'the file is not there'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh-486: fail-soft turned a bug into a wrong answer. RealGlabClient narrows
-      its swallow to not-found via fr.glab.is_not_found; the GitHub and Gitea adapters
-      keep today''s posture (spec §3 d3).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_glab.py#TestIsNotFound
+      - super-fr:tests/unit/test_real_glabclient.py#TestContentsApi::test_file_exists_raises_on_a_bad_request
+      - super-fr:tests/unit/test_real_glabclient.py#TestContentsApi::test_list_dir_raises_on_a_bad_request
+      - super-fr:tests/unit/test_v2_migrate.py#test_spec_fully_implemented_degrades_on_a_propagating_glab_error
+      - super-fr:tests/unit/test_spec_status_remote.py#test_a_propagating_glaberror_degrades_the_row_and_reaches_fail_note
+    status: ci
+    notes: 'Phase 3 landed the fix: fr.glab.is_not_found narrows RealGlabClient.file_exists/list_dir
+      to swallow ONLY not-found (fr.glab.GlabError classified via captured stderr/stdout
+      vocabulary); any other GlabError (400, 401, 403, ...) now propagates instead of
+      reading as absence. Both live callers (fr.migrate._spec_fully_implemented, fr.spec.compute_status)
+      proven to already degrade safely rather than crash on the propagated error.'
