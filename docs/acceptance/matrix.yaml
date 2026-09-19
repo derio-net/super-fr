@@ -2052,10 +2052,17 @@ rows:
       OpenCode''s own frontmatter, and drift between the two is a CI failure.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §3.B/§3.F. Target: unit (find_agents_drift tripwire, ci) + live (opencode
-      agent list shows the agents from the shipped mirror).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_agent_mirror.py
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py
+    status: ci
+    notes: Phase 2/3 shipped the generator (canonical_agents(), the closed permission
+      translation, drift detection) and its unit coverage; phase 5 live-verified opencode
+      agent list against a scratch dir seeded from the shipped .opencode/agent/ mirror
+      shows fr-phase-executor (subagent) plus the three tier agents, matching Test Plan
+      §5 item 1. CI-pinned by the unit suite plus the install integration tests.
   - id: opencode-subagent-dispatch
     capability: OpenCode parity
     acceptance: An fr-goal run on OpenCode hands a plan phase to the fr-phase-executor
@@ -2064,10 +2071,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
-    status: not-implemented
-    notes: 'Spec §3.D/§5. The claim a mocked test cannot make: evidence is an opencode.db
-      session row with parent_id set and agent = fr-phase-executor*. Cheap free-model
-      dispatch in-PR; the full /fr-goal run is back-loaded post-merge (decision d4).'
+    status: skipped
+    notes: 'Phase 5 live-verified the claim: opencode run --model opencode/nemotron-3.5-lightning-free
+      (free model; opencode/north-mini-code-free the matrix previously cited is gone
+      from the live roster, journaled as p5-t1-model-gone) against a scratch dir seeded
+      from the shipped .opencode/agent/ mirror, dispatching to fr-phase-executor via
+      the task tool, produced an opencode.db session row with parent_id SET (ses_f43ff7108ffe1IPI1VlhU4HtJH)
+      and agent = fr-phase-executor (child ses_f43ff53d3ffeSpvrMspCgoQ85v) — a genuine
+      child session, not the primary role-playing (journaled as p5-t2-live-dispatch-proof).
+      Status stays skipped rather than ci because reproducing this needs a live opencode
+      binary and a live model call, which is not automated in CI. Remaining debt is
+      Test Plan §5 item 5, the back-loaded post-merge full /fr-goal run on a paid model
+      against a real plan phase (spec §5, decision d4) — not done in this PR.'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
@@ -2078,13 +2093,15 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_opencode_agent_mirror.py
-    status: not-implemented
-    notes: 'Phase 2 (2026-09-19-opencode-subagent-dispatch plan) ships the generator
-      half: canonical_agents() now bakes model: per tier from the repo''s docs/superpowers/models.yaml
-      through fr.models.load_models, unit-covered by test_opencode_agent_mirror.py.
-      Status stays not-implemented because the row''s acceptance also needs install.sh''s
-      install-time resolution and a live check that installed copies carry the operator''s
-      bindings (spec §3.C/§3.F) -- that is phase 3''s work, not done yet.'
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py
+    status: ci
+    notes: 'Phase 2 shipped the generator half (per-tier model: baked from docs/superpowers/models.yaml,
+      unit-covered). Phase 3 closed the remaining gap: install.sh''s install-time resolution
+      via fr models resolve --harness opencode --tier <t>, integration-covered by test_a_resolved_binding_lands_as_model_on_each_tier_file_only,
+      test_install_asks_fr_for_every_tier_and_only_for_tiers, test_an_unbound_tier_inherits_rather_than_pinning_an_empty_model
+      (r-p3-f1: non-vacuity proven by mutating the awk anchor). Full acceptance now
+      covered end to end.'
   - id: opencode-subagent-installer
     capability: OpenCode parity
     acceptance: install.sh delivers the OpenCode phase-executor agents to a consumer
@@ -2092,8 +2109,14 @@ rows:
       them.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §3.F. Mirrors the opencode-skills-installer / opencode-commands-installer
-      rows. Also pins the ordering change: delivery must run after the fr CLI step,
-      because it resolves models via fr.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_agents.py
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py
+    status: ci
+    notes: Phase 3 wired agent delivery into install.sh under the same opt-in as skills/commands,
+      ordered after the fr CLI step (needed for model resolution), with --uninstall
+      removing only super-fr's own agent files. Unit-covered by test_install_copies_opencode_agents.py
+      (opt-in gating, ordering, uninstall scope) and integration-covered by test_install_opencode_agents.py
+      (test_install_delivers_four_agents_to_opencode_dir, test_uninstall_removes_only_super_fr_agents).
