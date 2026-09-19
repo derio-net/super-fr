@@ -1,0 +1,29 @@
+# super-fr is a Skill: it is cloned onto every consumer's machine by the
+# marketplace rsync, so a committed binary inflates every install forever and
+# needs a history rewrite to remove. Presentation media lives OUTSIDE the repo
+# and is resolved through an asset manifest; this file is only the backstop for
+# when that discipline slips.
+#
+# Note: version-1/diagrams/ already holds 17 tracked PNGs that predate this
+# rule. Ignoring a pattern does not untrack what is already tracked — these
+# lines stop NEW additions; excising the existing ones is a separate decision,
+# since reclaiming the bytes needs a history rewrite.
+
+# terminal recordings
+*.cast
+
+# video
+*.mp4
+*.webm
+*.mov
+
+# raster stills
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+
+# exported decks
+*.pptx
+*.pdf

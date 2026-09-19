@@ -143,18 +143,32 @@ Its README defines four tasks. Recommended issue composition:
 Tasks 2 + 4 satisfy all four selection criteria: bounded, multi-surface, with a
 built-in failure to recover from, and briefable at shape level.
 
+**Recording is BLOCKED on [#486](https://github.com/derio-net/super-fr/issues/486).**
+The run must not be recorded until the GitLab adapter works live. This is not
+caution about a broken demo — GitLab is the only forge at the audience's
+company, so **the recording's whole claim is that this works on their stack.**
+A run on GitHub would prove nothing to them.
+
 **Setup owed before recording:**
 
-1. `fr-init` to scaffold a Java 17 + Maven devcontainer profile. Previously done
+1. **Remote repointed** ✅ (2026-09-19). `origin` is now the operator's own fork
+   `IDermitzakis/agentic-playground`; the team's `training/ai/...` project is
+   kept as `upstream` with its push URL set to `DISABLED`, verified by dry-run.
+   A `/fr-goal` run opens MRs unattended, so an unreachable push path on
+   another team's repo is a safety property, not tidiness. Issue and MR
+   therefore belong in the operator's namespace.
+2. `fr-init` to scaffold a Java 17 + Maven devcontainer profile. Previously done
    and then reverted (`5d9fd5c "Reverted accidental commits"`), so the repo is
    pristine again — which conveniently makes it a candidate for the live
    `fr-init` in beat 6.
-2. Declare `backend: gitlab` in `.devcontainer/fr-profiles.yaml`. Without it
+3. Declare `backend: gitlab` in `.devcontainer/fr-profiles.yaml`. Without it
    `detect_backend` resolves the self-hosted host to `"github"`.
-3. Create the issue — the project currently has **zero** issues.
-4. **Pre-warm the Maven dependency cache in the image.** A first Maven build
+4. Create the issue from README tasks 2 + 4 — the fork currently has **zero**.
+5. **Pre-warm the Maven dependency cache in the image.** A first Maven build
    downloading the world would dominate the recording and measure the network,
    not the pipeline.
+6. Capture apparatus per `docs/presentation/version-2/runbook.md`, which adapts
+   the corrected bc88 clean-room method to a single GitLab-backed arm.
 
 ## Confidentiality contract
 
