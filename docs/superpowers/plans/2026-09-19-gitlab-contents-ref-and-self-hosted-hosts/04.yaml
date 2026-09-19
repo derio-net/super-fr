@@ -1,0 +1,248 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The last mile — carry the declared host to the subprocess
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - gitlab-selfhosted-host-targeting
+tasks:
+- number: 1
+  title: 'RED → GREEN: _hosts.declared_host and host_for''s remote fallback'
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED. In `tests/unit/test__hosts.py`, extend `TestHostFor`:
+
+      ```python
+      def test_declared_host_returns_only_the_explicit_key(self, tmp_path):
+          """Provenance matters: only a DECLARED host is a promise fr can
+          fail to keep, so only that one earns a warning (spec §4.D)."""
+          repo = _repo_with_profiles(tmp_path, {"backend": "gitlab", "host": "gl.corp.com"})
+          assert declared_host(repo) == "gl.corp.com"
+          bare = _repo_with_remote(tmp_path / "b", "git@gitlab.corp.com:g/p.git")
+          assert declared_host(bare) is None        # derived, not declared
+          assert host_for(bare) == "gitlab.corp.com"  # ...but still resolved
+
+      def test_host_for_ignores_the_saas_hostnames(self, tmp_path):
+          """github.com / gitlab.com need no override — returning one
+          would make every SaaS repo look self-hosted."""
+          for url in ("git@github.com:o/r.git", "https://gitlab.com/g/p.git"):
+              assert host_for(_repo_with_remote(tmp_path / url[4:8], url)) is None
+      ```
+
+      Match the file's existing helper style; add the helpers if absent.
+      Run: fails (`declared_host` does not exist; `host_for` returns None
+      for a self-hosted remote).
+  - id: P4.T1.S2
+    text: |-
+      GREEN. In `packages/fr/src/fr/_hosts.py`, rename today's body to
+      `declared_host` and give `host_for` the fallback:
+
+      ```python
+      def declared_host(repo_root: Path) -> str | None:
+          """The `host:` key from `.devcontainer/fr-profiles.yaml`, and
+          nothing inferred. An operator EXPECTATION, which is why
+          `hostclient.client_for` warns when fr cannot honour it for the
+          resolved backend — see spec §4.D."""
+          # (today's host_for body, unchanged)
+
+      def host_for(repo_root: Path) -> str | None:
+          """Which instance hostname this repo's forge CLI should talk to:
+          the declared `host:`, else the origin's own hostname when it is
+          not a recognized SaaS domain, else None.
+
+          The fallback is what makes `backend: gitlab` sufficient on its
+          own for a self-hosted repo (gh-486 gap 1): the host is already
+          in the remote the operator has. `github.com`/`gitlab.com` return
+          None so nothing changes for a SaaS repo."""
+          declared = declared_host(repo_root)
+          if declared:
+              return declared
+          hostname = _origin_hostname(repo_root)
+          if hostname and hostname not in DEFAULT_HOST_BACKENDS:
+              return hostname
+          return None
+      ```
+
+      Update the module docstring's resolution-order list to describe both.
+      Run `uv run pytest tests/unit/test__hosts.py -q --no-cov`: green,
+      including the three pre-existing `host_for` tests.
+- number: 2
+  title: 'RED → GREEN: _run_glab injects GITLAB_HOST, helpers pass it through'
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED. In `tests/unit/test_glab.py`:
+
+      ```python
+      def test_run_glab_puts_the_host_in_the_child_env_only(monkeypatch):
+          """GITLAB_HOST, not --hostname: only the env var reaches every
+          subcommand (`glab api` takes --hostname, `glab label create`
+          does not) — verified live, spec §2.D."""
+          seen = {}
+          def _fake_run(argv, **kwargs):
+              seen["argv"], seen["env"] = argv, kwargs.get("env")
+              return SimpleNamespace(stdout="ok", stderr="", returncode=0)
+          monkeypatch.setattr(subprocess, "run", _fake_run)
+          monkeypatch.delenv("GITLAB_HOST", raising=False)
+          _run_glab(["api", "user"], host="gl.corp.com")
+          assert seen["env"]["GITLAB_HOST"] == "gl.corp.com"
+          assert "--hostname" not in seen["argv"]
+          assert "GITLAB_HOST" not in os.environ   # never mutated globally
+
+      def test_run_glab_without_a_host_leaves_the_env_alone(monkeypatch):
+          ...  # env is None → the child inherits os.environ unchanged
+      ```
+
+      Run: fails — `_run_glab` takes no `host`.
+  - id: P4.T2.S2
+    text: |-
+      GREEN. `packages/fr/src/fr/glab.py` gains `import os` and:
+
+      ```python
+      def _run_glab(args: list[str], *, host: str | None = None) -> str:
+          """Run a glab command and return stdout. Raises GlabError on failure.
+
+          `host` targets a self-hosted instance by putting GITLAB_HOST in
+          the CHILD's environment only — never `os.environ`, so a host for
+          one repo cannot leak into a call for another in the same process
+          (gh-486). The env var is used rather than `--hostname` because
+          only it is honoured by every glab subcommand (spec §2.D)."""
+          env = {**os.environ, "GITLAB_HOST": host} if host else None
+          ... subprocess.run(["glab", *args], env=env, ...)
+      ```
+
+      Keyword-only with a None default, so every existing caller and test
+      is untouched. Run `tests/unit/test_glab.py`.
+  - id: P4.T2.S3
+    text: |-
+      RED → GREEN, one test for the whole passthrough. Every public helper
+      in `fr.glab` gains `host: str | None = None` (keyword-only) and
+      forwards it. Drive it from a table so a helper added later without
+      the parameter fails loudly:
+
+      ```python
+      @pytest.mark.parametrize("call", [
+          lambda h: create_issue(repo="g/p", title="t", body="b", labels=[], host=h),
+          lambda h: view_issue("g/p", 1, host=h),
+          lambda h: close_issue(repo="g/p", number=1, host=h),
+          lambda h: reopen_issue(repo="g/p", number=1, host=h),
+          lambda h: edit_issue_body(repo="g/p", number=1, body="b", host=h),
+          lambda h: swap_issue_labels(repo="g/p", number=1, add=["a"], remove=[], host=h),
+          lambda h: ensure_label(repo="g/p", name="n", host=h),
+          lambda h: ensure_labels(repo="g/p", labels=[LabelDef("n", "ededed", "")], host=h),
+      ])
+      def test_every_helper_forwards_the_host(monkeypatch, call):
+          seen = []
+          monkeypatch.setattr(_glab, "_run_glab", lambda a, *, host=None: seen.append(host) or "{}")
+          call("gl.corp.com")
+          assert seen == ["gl.corp.com"]
+      ```
+
+      Confirm RED, then thread the parameter through each helper. Green.
+- number: 3
+  title: 'RED → GREEN: RealGlabClient carries the host, hostclient supplies it'
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED. In `tests/unit/test_real_glabclient.py` and
+      `tests/unit/test_hostclient.py`:
+
+      ```python
+      def test_the_client_carries_its_host_into_every_call(monkeypatch):
+          cap = _CapturingGlab(json.dumps({"content": "eA=="}))
+          hosts = []
+          def _spy(args, *, host=None):
+              hosts.append(host)
+              return cap(args)
+          monkeypatch.setattr(_glab, "_run_glab", _spy)
+          c = RealGlabClient(host="gl.corp.com")
+          c.file_exists("g/p", "x.md")
+          c.comment_issue("g/p", 1, "hi")
+          assert hosts == ["gl.corp.com", "gl.corp.com"]
+
+      def test_client_for_resolves_the_host_from_the_repo(tmp_path):
+          repo = _repo_with_profiles(tmp_path, {"backend": "gitlab", "host": "gl.corp.com"})
+          assert client_for(repo)._host == "gl.corp.com"
+
+      def test_client_for_backend_stays_provenance_blind():
+          """fr_vk.pr_observe derives a host from a bare PR URL; the
+          dumb factory must accept it without any config reading."""
+          assert client_for_backend("gitlab", host="gl.corp.com")._host == "gl.corp.com"
+      ```
+
+      Confirm RED.
+  - id: P4.T3.S2
+    text: |-
+      GREEN. `RealGlabClient.__init__(self, *, host: str | None = None)`
+      storing `self._host`, threaded into every `_glab.*` call in the
+      class (the three direct `_run_glab` calls in `list_linked_prs`,
+      `pr_status_by_url`, `comment_issue`, the contents trio, and each
+      delegating write method). `client_for_backend(backend, *, host=None)`
+      passes it to `RealGlabClient` only; `client_for(repo_root)` resolves
+      it with `_hosts.host_for(repo_root)`. Update both docstrings to say
+      which layer knows what. Run
+      `uv run pytest tests/unit/test_real_glabclient.py tests/unit/test_hostclient.py tests/unit/test_glab.py -q --no-cov`.
+- number: 4
+  title: REFACTOR + quality gate
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      REFACTOR. `RealGlabClient` now repeats `host=self._host` at a dozen
+      call sites. Collapse the three direct `_run_glab` uses onto one
+      private `self._api(endpoint)` / `self._glab(args)` helper that
+      applies the host once, so a method added later cannot forget it.
+      Do NOT abstract the delegating write methods — they call distinct
+      `fr.glab` helpers and a wrapper there would only hide the mapping.
+  - id: P4.T4.S2
+    text: |-
+      Full gate: `uv run ruff format packages/ tests/ && uv run ruff check
+      packages/ tests/ && uv run mypy packages/fr/src packages/fr-dispatch/src
+      packages/fr-vk/src packages/fr-cncd/src && uv run pytest -q --no-cov`.
+      Only the intended `fr acceptance check` red remains. Record counts.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

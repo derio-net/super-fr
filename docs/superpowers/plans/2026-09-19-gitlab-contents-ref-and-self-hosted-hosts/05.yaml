@@ -1,0 +1,175 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Loud degradation, docs, and the version bump
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - gitlab-selfhosted-host-targeting
+tasks:
+- number: 1
+  title: 'RED → GREEN: detect_backend says when it is guessing'
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED. In `tests/unit/test__hosts.py`:
+
+      ```python
+      def test_an_unrecognized_host_warns_once_and_still_returns_github(tmp_path, capsys):
+          """Behaviour is UNCHANGED — "github" is still returned, so no
+          repo's resolution moves. Only the silence is fixed (gh-486
+          gap 2)."""
+          repo = _repo_with_remote(tmp_path, "git@gitlab.local.corp:g/p.git")
+          assert detect_backend(repo) == "github"
+          first = capsys.readouterr().err
+          assert "gitlab.local.corp" in first and "backend: gitlab" in first
+          assert detect_backend(repo) == "github"
+          assert capsys.readouterr().err == ""   # once per host, not per call
+
+      def test_a_recognized_or_declared_host_is_silent(tmp_path, capsys):
+          ...  # github.com remote, and an explicit backend: — both silent
+      ```
+
+      Confirm RED (nothing is printed today).
+  - id: P5.T1.S2
+    text: |-
+      GREEN. A module-level `_WARNED_UNKNOWN_HOSTS: set[str] = set()` and,
+      in `backend_for_hostname`'s fall-through inside `detect_backend`,
+      one stderr line (precedent: `isolation/scaffold.py:209` warns from a
+      library module; stderr keeps JSON output modes clean):
+
+      `warning: origin host '<h>' is not a recognized forge; assuming backend "github". Declare it as `backend: gitlab` (or gitea) in .devcontainer/fr-profiles.yaml, or run `fr init scaffold --backend <b>`.`
+
+      Warn from `detect_backend` only — NOT from `backend_for_hostname`,
+      which is called per-PR-URL by `fr_vk.pr_observe` across many repos
+      and would turn the bridge log into noise. Add a test pinning that
+      `backend_for_hostname` itself stays silent. Green.
+- number: 2
+  title: 'RED → GREEN: a declared host fr cannot honour says so'
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED. In `tests/unit/test_hostclient.py`:
+
+      ```python
+      def test_a_declared_host_for_an_unthreaded_backend_warns(tmp_path, capsys):
+          repo = _repo_with_profiles(tmp_path, {"backend": "gitea", "host": "git.corp.com"})
+          client_for(repo)
+          err = capsys.readouterr().err
+          assert "git.corp.com" in err and "gitea" in err
+
+      def test_a_DERIVED_host_for_an_unthreaded_backend_is_silent(tmp_path, capsys):
+          """A GitHub Enterprise repo derives a host for a backend fr does
+          not thread — and works fine, because gh resolves its own host
+          from the same remote. Warning there would be noise on a correct
+          configuration (spec §4.D)."""
+          repo = _repo_with_remote(tmp_path, "git@github.corp.com:o/r.git")
+          client_for(repo)
+          assert capsys.readouterr().err == ""
+      ```
+
+      Confirm RED.
+  - id: P5.T2.S2
+    text: |-
+      GREEN. In `client_for` (never `client_for_backend`), after resolving
+      the backend: when `_hosts.declared_host(repo_root)` is set and the
+      backend is not `gitlab`, print to stderr once per (host, backend):
+
+      `warning: host '<h>' is declared in .devcontainer/fr-profiles.yaml but fr does not thread a host to backend "<b>" — the CLI's own host resolution applies instead. See gh-486.`
+
+      Green. Then `uv run pytest tests/unit/test_hostclient.py tests/unit/test__hosts.py -q --no-cov`.
+- number: 3
+  title: 'Docs: the supported route, and the instruction that is now wrong'
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      `README.md` — under `## Requirements`, after the forge-CLI bullet,
+      add a short "Self-hosted instances" block: declare `backend:` in
+      `.devcontainer/fr-profiles.yaml`; the instance hostname is taken
+      from the git remote, so nothing else is needed; `host:` overrides it
+      when the remote's hostname is not the API host; fr passes it to
+      `glab` as `GITLAB_HOST`, so the host must be one `glab auth login
+      --hostname <host>` has a token for; and `gh`/`tea` are not threaded
+      yet — fr warns rather than pretending (spec §1 non-goals).
+  - id: P5.T3.S2
+    text: |-
+      `plugins/super-fr/skills/fr-init/SKILL.md` — CORRECT lines 78-80.
+      They currently say to pass `--backend`/`--host` on EVERY profile
+      call for a non-GitHub repo; after Phase 4 `--host` is optional for
+      GitLab (derived from the remote) and is the override. Rewrite those
+      lines accordingly. Then regenerate the mirror and commit it —
+      `.opencode/skills/` is generated and a tripwire fails on drift:
+
+      ```bash
+      uv run --no-project python scripts/sync-opencode.py
+      uv run --no-project python scripts/sync-opencode.py --check
+      uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py -q --no-cov
+      ```
+- number: 4
+  title: Version bump and the currency rules
+  steps:
+  - id: P5.T4.S1
+    text: |-
+      MINOR bump — this adds a user-visible capability (self-hosted host
+      targeting) and changes documented behaviour (a non-404 now
+      propagates), which is more than a patch:
+
+      ```bash
+      uv run --no-project python scripts/bump-version.py minor
+      uv run --no-project python scripts/bump-version.py --check
+      uv run fr --version
+      ```
+
+      Commit the changed manifests and `uv.lock` together. Never
+      hand-edit a version-bearing file.
+  - id: P5.T4.S2
+    text: |-
+      Explainers currency (`.claude/rules/explainers-currency.md`): a
+      minor bump is a trigger, so the obligation must be discharged
+      explicitly rather than ignored. Confirm the finding recorded at
+      spec time still holds — `grep -rli "gitlab\|backend" docs/explainers/`
+      returns nothing, so no published page is made stale — and record
+      that sentence in the plan journal as a `discovery` for the PR body
+      to quote. If the grep DOES hit, regenerate that page per the rule's
+      `--isolated` recipe instead.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

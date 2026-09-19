@@ -1,0 +1,91 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '`ref` on `read_file`, and on `list_dir` only if live-proven'
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - gitlab-contents-reads-live
+tasks:
+- number: 1
+  title: 'RED → GREEN: read_file pins ref=HEAD'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. Add, using `_CapturingGlab` from Phase 1:
+
+      ```python
+      def test_read_file_pins_ref_on_the_contents_endpoint(monkeypatch):
+          encoded = base64.b64encode(b"hello world").decode("ascii")
+          cap = _CapturingGlab(json.dumps({"content": encoded, "encoding": "base64"}))
+          monkeypatch.setattr(_glab, "_run_glab", cap)
+          assert RealGlabClient().read_file("group/proj", "docs/x.md") == "hello world"
+          assert cap.endpoint == (
+              "projects/group%2Fproj/repository/files/docs%2Fx.md?ref=HEAD"
+          )
+      ```
+
+      Run it; CONFIRM IT FAILS on the endpoint assertion.
+  - id: P2.T1.S2
+    text: |-
+      GREEN. Append `?ref={_CONTENTS_REF}` to `read_file`'s endpoint. Run
+      the file: the new test and `test_read_file_decodes_base64_content`
+      both pass. Fold the latter onto `_CapturingGlab` too, for the same
+      reason as P1.T1.S3.
+- number: 2
+  title: 'list_dir: verify against the live instance BEFORE changing a working call'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      VERIFY FIRST. `list_dir`'s tree endpoint does NOT need `ref` — it
+      defaults to the default branch, and it demonstrably works today
+      (spec §2.A). Pinning `ref=HEAD` there is for convention, so it must
+      be PROVEN not to regress before it is kept. Run both forms against
+      the live instance and record both outputs in the step note:
+
+      ```bash
+      glab api --hostname gitlab.local.gebit.de \
+        "projects/IDermitzakis%2Fdevops-scripts/repository/tree?path="
+      glab api --hostname gitlab.local.gebit.de \
+        "projects/IDermitzakis%2Fdevops-scripts/repository/tree?path=&ref=HEAD"
+      ```
+
+      If the `ref=HEAD` form returns the same entries: proceed to S2.
+      If it errors or differs: SKIP S2, leave `list_dir` without a ref,
+      and record a plan-journal `discovery` saying the tree endpoint
+      rejects it — the convention is not worth breaking a working call
+      for. Tick with the outcome.
+  - id: P2.T2.S2
+    text: |-
+      CONDITIONAL on S2's proof. RED: add
+      `test_list_dir_pins_ref_on_the_tree_endpoint` asserting the endpoint
+      is `projects/group%2Fproj/repository/tree?path=docs%2Fplan&ref=HEAD`;
+      confirm it fails. GREEN: append `&ref={_CONTENTS_REF}` to
+      `list_dir`'s endpoint. Fold the two existing `list_dir` tests onto
+      `_CapturingGlab`. Run the file plus
+      `uv run ruff format packages/ tests/`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
