@@ -439,15 +439,21 @@ rows:
       - super-fr:tests/unit/test_glab.py
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test_hostclient.py
-    status: failing
-    notes: 'RED (gh-486, 2026-09-19): the row was ''ci'' for a capability that does
-      not work. RealGlabClient.file_exists/read_file omitted GitLab''s mandatory ''ref''
-      query parameter, so every contents read failed against a live instance — read_file
-      with a 400, file_exists silently as ''absent''. Reproduced live against gitlab.local.gebit.de.
-      The unit suite was green because every mock is ''lambda args: <json>'', discarding
-      the request. Per .claude/rules/acceptance-matrix.md this is ''failing'' until
-      live proof lands; the row''s own note already admitted the live verification was
-      owed to the plan''s back-loaded Phase 9.'
+      - super-fr:tests/unit/test__urls.py
+    status: skipped
+    notes: 'LIVE-VERIFIED 2026-09-19 against a self-hosted GitLab (gh-486): fr apply
+      rendered, observed, diffed and applied two phases as GitLab Issues with correctly-shaped
+      labels (#-prefixed 6-hex, applied once), re-ran clean, and propagated a state
+      change then re-converged. Transcript in the PR. The row was previously ''ci''
+      for a capability broken FOUR independent ways, none findable by unit test: the
+      missing mandatory ref parameter; the Issue web_url being /-/work_items/N, which
+      fr stored and then refused to parse (crashing observe on every re-apply, on gitlab.com
+      too); ensure_labels aborting the whole apply on a 409 for a label that already
+      existed, a tolerance its own docstring had claimed since 2026-07-09; and the body
+      diff never converging because GitLab strips the rendered trailing newline. ''skipped'',
+      NOT ''ci'': CI cannot reach a private instance, so the live half is hand-run per-PR.
+      The unit half now asserts the REQUEST and the real captured error vocabulary,
+      so the arg-blind ''lambda args:'' mocks that hid all of this are gone.'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
@@ -1984,12 +1990,18 @@ rows:
       default branch is not 'main'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh-486: file_exists/read_file omitted GitLab''s mandatory ref parameter,
-      so both failed against any live instance; file_exists'' catch-all swallow rendered
-      the 400 as ''absent''. Verification is unit (request-args asserted) plus a live
-      transcript from gitlab.local.gebit.de in the PR.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_real_glabclient.py
+      - super-fr:tests/unit/test__urls.py
+    status: skipped
+    notes: 'Unit half in CI asserts the REQUEST (every contents read pins ref=HEAD,
+      captured via a recording double rather than an arg-discarding mock). Live half
+      hand-run 2026-09-19 against a self-hosted GitLab whose default branch is ''master'',
+      which is why ref=HEAD rather than a branch name: file_exists True for a present
+      file and False for an absent one, list_dir real entries, read_file real text —
+      all four broken before this PR. ''skipped'' because CI cannot reach a private
+      instance.'
   - id: gitlab-selfhosted-host-targeting
     capability: Multi-backend git hosting
     acceptance: 'An operator whose GitLab is self-hosted reaches it by declaring ''backend:
@@ -1997,12 +2009,23 @@ rows:
       target says so'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh-486 gap 1: fr init scaffold --host wrote host:, _hosts.host_for read
-      it back, and no production path consumed it. host_for now defaults to the git
-      remote''s hostname and glab receives it as GITLAB_HOST. gh/tea are deliberately
-      not threaded (spec §1 non-goals) and warn instead.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test__hosts.py
+      - super-fr:tests/unit/test_hostclient.py
+      - super-fr:tests/unit/test_glab.py
+      - super-fr:tests/unit/test_pr_observe.py
+    status: skipped
+    notes: 'All three clauses now hold. (a) ''backend: gitlab'' ALONE suffices — verified
+      live from a checkout with no host: key: host_for derived gitlab.local.gebit.de
+      from the git remote and client_for built a RealGlabClient carrying it. (b) ''host:''
+      overrides the derived value. (c) A host declared for a backend fr cannot target
+      warns once, on next use rather than at scaffold time. Also closes the bare-URL
+      case the config tiers cannot reach: backend_for_url reads the forge off the URL
+      path, so the VK bridge stops resolving a self-hosted GitLab MR to the GitHub adapter.
+      KNOWN LIMIT, stated in the PR: pr_state''s Issue auto-close still targets the
+      SaaS host, blocked on closer''s 3-arg arity, not on backend resolution. ''skipped''
+      because the live half is hand-run.'
   - id: forge-errors-are-not-absence
     capability: Multi-backend git hosting
     acceptance: A malformed or unauthorized GitLab request surfaces as an error rather

@@ -244,17 +244,27 @@ state:
         and the project''s own 6 labels (dep, major-dep, parent-dep, plugin-dep, security,
         test-dep) are untouched.'
     P7.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T20:08:27+00:00'
+      note: 'multibackend-gitlab-tracking: failing -> skipped, with the live transcript
+        and all four root causes named. skipped not ci because CI cannot reach a private
+        instance.'
     P7.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T20:08:28+00:00'
+      note: gitlab-contents-reads-live -> skipped; gitlab-selfhosted-host-targeting
+        -> skipped; forge-errors-are-not-absence -> ci (already moved in phase 3).
+        fr acceptance check now 119 rows OK, exit 0 — green because the capability
+        was proven, not because a row was edited.
     P7.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-19T20:08:28+00:00'
+      note: Full suite 3221 passed / 3 failed (the known pre-existing macOS trio)
+        / 80 skipped. ruff + mypy clean. fr validate artifacts 23/23. fr plan self-review
+        passes. All 7 phases' steps ticked. fr journal check reports 4 open findings
+        DELIBERATELY — resolve has no state for 'true but out of scope', and refuting
+        a correct finding to green a gate is the behaviour this PR argues against;
+        each is named in the PR body.
     P7.T1.S3:
       state: x
       ticked_at: '2026-09-19T20:03:45+00:00'
@@ -263,6 +273,8 @@ state:
         remote), client RealGlabClient host=gitlab.local.gebit.de, file_exists True.
         The spec''s headline claim.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-19T20:08:29+00:00'
+    note: Live verification complete against gitlab.local.gebit.de; three further
+      bugs found and fixed in-phase; project restored exactly as found; matrix moved
+      on evidence.
     observed_prs: []
