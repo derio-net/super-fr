@@ -39,13 +39,13 @@ That is not extra rigor; it is the specific gap that let this ship.
 - Phase 3's `is_not_found` patterns are pinned to strings **captured from
   glab 1.89.0 against the live instance**, not composed from documentation:
 
-  ```
-  400  glab: HTTP 400\n{"error":"ref is missing, ref is empty"}
-  404  glab: 404 File Not Found (HTTP 404)\n{"message":"404 File Not Found"}
-  404  glab: 404 Project Not Found (HTTP 404)\n{"message":"404 Project Not Found"}
-  404  glab: 404 invalid revision or path Not Found (HTTP 404)\n{"message":...}
-  401  ERROR\n\n  Unauthenticated.
-  ```
+  | case | stderr (kept today) | stdout (discarded today) |
+  |---|---|---|
+  | missing `ref` | `glab: HTTP 400` | `{"error":"ref is missing, ref is empty"}` |
+  | absent file | `glab: 404 File Not Found (HTTP 404)` | `{"message":"404 File Not Found"}` |
+  | absent project | `glab: 404 Project Not Found (HTTP 404)` | `{"message":"404 Project Not Found"}` |
+  | absent dir | `glab: 404 invalid revision or path Not Found (HTTP 404)` | `{"message":"404 invalid revision or path Not Found"}` |
+  | no token | rich-boxed `ERROR` / `Unauthenticated.` + padding | *(empty)* |
 
   Two things follow from having the real strings. The `Unauthenticated.` case
   carries **no HTTP code at all**, so a code-sniffing predicate would have
@@ -54,10 +54,22 @@ That is not extra rigor; it is the specific gap that let this ship.
   errors and `errors/404.md` would otherwise make a genuine 400 read as absent
   — the very bug class being closed.
 
-  A third thing is a relief rather than a task: glab writes the API's error
-  body to **both** stdout and stderr, so `GlabError.stderr` already carries
-  `{"error":"ref is missing, ref is empty"}`. A propagated error is diagnosable
-  with no change to `_run_glab`'s message.
+  A third thing turned out to be a **task, not a relief** — and it was found by
+  re-capturing the fixtures through Python instead of a shell, during phase 1's
+  review. glab splits an error across the two streams: its own summary on
+  **stderr**, the API's JSON on **stdout**. `_run_glab` builds `GlabError` from
+  stderr alone, so `{"error":"ref is missing, ref is empty"}` — the only part
+  that says *what* was wrong — is discarded, and `fr`'s error reads `glab: HTTP
+  400`. The operator's shell repro saw a diagnostic that `fr` never sees.
+
+  (An earlier draft of this plan and of spec §2.A claimed the body was on both
+  streams. That came from checking it with `2>&1 1>/dev/null` under zsh, whose
+  `MULTIOS` tees rather than reorders. The lesson is on-topic: a transcript is
+  only evidence of what the capture method could see — which is the same reason
+  `lambda args:` mocks proved nothing.)
+
+  So P3.T4 makes `GlabError` carry `stdout` and folds the body into the
+  message. Propagating an unreadable error is half a fix.
 - Phase 6 does the thing the issue insisted on: live proof in the PR, including
   an **idempotent second `fr apply`** (the first apply proves writes work; the
   second proves `observe`/`diff` read GitLab's shapes correctly) and a full

@@ -28,20 +28,33 @@ def _fake_run_glab_factory(returns: dict[tuple[str, ...], str]):
     return _run
 
 
-# Captured live from glab 1.89.0 against a self-hosted GitLab,
-# 2026-09-19 (spec §2.A). glab writes the API's error body to BOTH
-# stdout and stderr, so `GlabError.stderr` carries the JSON too —
-# which is what keeps a propagated error diagnosable.
-GLAB_STDERR_400_MISSING_REF = 'glab: HTTP 400\n{"error":"ref is missing, ref is empty"}'
-GLAB_STDERR_404_FILE = 'glab: 404 File Not Found (HTTP 404)\n{"message":"404 File Not Found"}'
-GLAB_STDERR_404_PROJECT = (
-    'glab: 404 Project Not Found (HTTP 404)\n{"message":"404 Project Not Found"}'
-)
-GLAB_STDERR_404_TREE = (
-    "glab: 404 invalid revision or path Not Found (HTTP 404)\n"
-    '{"message":"404 invalid revision or path Not Found"}'
-)
-GLAB_STDERR_UNAUTHENTICATED = "ERROR\n\n  Unauthenticated."
+# Captured live from glab 1.89.0 against a self-hosted GitLab instance,
+# 2026-09-19 — verbatim from `subprocess.run(..., capture_output=True)`, not
+# transcribed by eye (spec §2.A).
+#
+# THE STREAM SPLIT IS THE POINT: glab puts its own one-line summary on STDERR
+# and the API's diagnostic JSON on STDOUT. `_run_glab` builds GlabError from
+# stderr alone, so today the body — the part that actually says *what* was
+# wrong — is thrown away. Phase 3 task 4 fixes that; until then any test
+# asserting the body is in `GlabError.stderr` is asserting fiction.
+GLAB_STDERR_400_MISSING_REF = "glab: HTTP 400\n"
+GLAB_STDOUT_400_MISSING_REF = '{"error":"ref is missing, ref is empty"}'
+GLAB_STDERR_404_FILE = "glab: 404 File Not Found (HTTP 404)\n"
+GLAB_STDOUT_404_FILE = '{"message":"404 File Not Found"}'
+GLAB_STDERR_404_PROJECT = "glab: 404 Project Not Found (HTTP 404)\n"
+GLAB_STDOUT_404_PROJECT = '{"message":"404 Project Not Found"}'
+GLAB_STDERR_404_TREE = "glab: 404 invalid revision or path Not Found (HTTP 404)\n"
+GLAB_STDOUT_404_TREE = '{"message":"404 invalid revision or path Not Found"}'
+# An auth failure carries NO HTTP code at all — a predicate that classified by
+# status code would mis-file it. glab renders this one through rich, so the real
+# stderr is a box: '          \n   ERROR  \n          \n  Unauthenticated.' plus
+# right-padding to the console width, then '\n\n'. The padding is
+# WIDTH-DEPENDENT, so pinning it byte-for-byte would make the test pass or fail
+# according to the terminal it ran in — the same fragility that makes
+# tests/unit/test_run_workspace.py red on a Mac and green in CI. Only the
+# load-bearing text is pinned.
+GLAB_STDERR_UNAUTHENTICATED = "   ERROR  \n          \n  Unauthenticated."
+GLAB_STDOUT_UNAUTHENTICATED = ""
 
 
 class TestViewIssue:

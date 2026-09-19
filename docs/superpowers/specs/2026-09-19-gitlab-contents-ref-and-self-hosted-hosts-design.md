@@ -73,6 +73,37 @@ $ glab api --hostname gitlab.local.gebit.de \
 The project's `default_branch` is **`master`** — `ref=HEAD` resolves anyway,
 which is the whole reason to prefer it over a hardcoded branch name.
 
+Captured through `subprocess.run(..., capture_output=True)` — i.e. exactly what
+`fr.glab._run_glab` sees — rather than read off a terminal, because **the two
+streams carry different halves of the error and only one of them survives
+today**:
+
+| case | `stderr` (what `GlabError` keeps) | `stdout` (what `_run_glab` discards) |
+|---|---|---|
+| missing `ref` | `glab: HTTP 400` | `{"error":"ref is missing, ref is empty"}` |
+| absent file | `glab: 404 File Not Found (HTTP 404)` | `{"message":"404 File Not Found"}` |
+| absent project | `glab: 404 Project Not Found (HTTP 404)` | `{"message":"404 Project Not Found"}` |
+| absent dir (tree) | `glab: 404 invalid revision or path Not Found (HTTP 404)` | `{"message":"404 invalid revision or path Not Found"}` |
+| no token for host | rich-boxed `ERROR` / `Unauthenticated.` + width padding | *(empty)* |
+
+Two consequences, both load-bearing:
+
+1. **The operator's repro saw a diagnostic that `fr` never sees.** Typed at a
+   shell, `{"error":"ref is missing, ref is empty"}` is right there. Through
+   `fr`, `GlabError` is built from `stderr` alone, so the error reads
+   `glab: HTTP 400` and the sentence naming the actual fault is dropped on the
+   floor. §4.B therefore also fixes `_run_glab`: making an error *propagate* is
+   worth little if what propagates cannot be read.
+2. **The auth failure carries no HTTP status code at all**, and is rendered
+   through rich with width-dependent padding. A predicate that classified
+   errors by status code would mis-file it, and a fixture pinning that padding
+   byte-for-byte would pass or fail by terminal width.
+
+(An earlier draft of this spec claimed glab wrote the body to *both* streams.
+That was an artifact of zsh's `MULTIOS` mishandling `2>&1 1>/dev/null` in the
+shell used to check it — a reminder that a transcript is only evidence of what
+the capture method could see. The table above was taken from Python.)
+
 `list_dir`'s tree endpoint is unaffected (it defaults to the default branch):
 
 ```
@@ -229,9 +260,29 @@ def is_not_found(err: GlabError) -> bool:
     answer instead of an error."""
 ```
 
-Patterns: `404`, `not found` (glab's stderr renders both `glab: HTTP 404` and
-GitLab's `{"message":"404 Project Not Found"}` body). Exact strings are pinned
-by tests captured from real glab output, not composed.
+Patterns come from the captured strings in §2.A, and are deliberately
+**anchored**: `http 404` (glab's own summary) and `"message":"404 ` (the API
+body). A bare `"404" in text` is refused — the probed path is echoed in some
+glab errors, so `errors/404.md` would make a genuine 400 read as "absent",
+which is the bug class this function exists to close.
+
+**`_run_glab` must also stop discarding stdout**, or the second pattern can
+never match and a propagated error is unreadable (§2.A consequence 1).
+`GlabError` gains a `stdout` field and the message folds the body in:
+
+```python
+# glab splits an error across both streams: its own summary on stderr, the
+# API's JSON on stdout. Keeping only stderr turns "ref is missing, ref is
+# empty" into a bare "glab: HTTP 400" — the fault named, then forgotten.
+parts = [s for s in (exc.stderr.strip(), (exc.stdout or "").strip()) if s]
+msg = " — ".join(parts) or f"glab exited with code {exc.returncode}"
+raise GlabError(msg, stderr=exc.stderr or "", stdout=exc.stdout or "",
+                returncode=exc.returncode) from exc
+```
+
+`stdout` is keyword-only with a `""` default, so every existing `GlabError(...)`
+construction and test is untouched. `is_not_found` and `is_transient` then read
+both streams through one shared `_haystack`.
 
 `RealGlabClient.file_exists` returns `False` only when `is_not_found`, and
 re-raises otherwise. `list_dir` gets the same treatment, for the same reason —
@@ -243,7 +294,9 @@ caches the negative, and degrades the row with a note (`spec.py:45-50` of
 `compute_status` — `except Exception as e: fail_note = f"cross-repo read of
 {ref.repo} failed: {e}"`), so a raised error's text now reaches the operator's
 `fr spec status` row verbatim instead of the row reporting a phantom empty
-folder. `reachability` has no live caller; when
+folder — and with the message fix above, that text is now
+`glab: HTTP 400 — {"error":"ref is missing, ref is empty"}` rather than a bare
+status line. `reachability` has no live caller; when
 it gains one, a propagating error must surface as a refusal message rather than
 a traceback, which is that cutover's obligation and is recorded as a risk (§5).
 
@@ -378,30 +431,34 @@ Unit (CI, `uv run pytest`):
 
 1. `file_exists`, `read_file`, `list_dir` each send `ref=HEAD` — asserted by
    **capturing the request args**, the guard §2.C shows was missing.
-2. `is_not_found` maps real glab stderr strings (404 body, `HTTP 404`) to True
-   and a 400 / auth failure to False.
-3. `file_exists` returns `False` on a not-found and **raises** on a 400.
-4. `list_dir` returns `[]` on a not-found and raises on a 400.
-5. `host_for` returns `host:` when set; the origin hostname when it is
+2. `is_not_found` maps every captured 404 shape (§2.A) to True, and both the
+   400 and the auth failure to False — including that a 400 whose text contains
+   a path like `errors/404.md` does not read as absent.
+3. `GlabError` carries `stdout`, and `_run_glab`'s message contains the API's
+   body: a missing-`ref` failure reads
+   `glab: HTTP 400 — {"error":"ref is missing, ref is empty"}`.
+4. `file_exists` returns `False` on a not-found and **raises** on a 400.
+5. `list_dir` returns `[]` on a not-found and raises on a 400.
+6. `host_for` returns `host:` when set; the origin hostname when it is
    self-hosted; `None` for `github.com`/`gitlab.com`; `None` with no remote.
-6. `_run_glab` puts `GITLAB_HOST` in the child env when a host is given, and
+7. `_run_glab` puts `GITLAB_HOST` in the child env when a host is given, and
    does not touch `os.environ`; omits it when not.
-7. Each `fr.glab` helper forwards `host` to `_run_glab`.
-8. `client_for(repo_root)` builds a `RealGlabClient` carrying the resolved host.
-9. `detect_backend` warns once for an unrecognized host and is silent the
+8. Each `fr.glab` helper forwards `host` to `_run_glab`.
+9. `client_for(repo_root)` builds a `RealGlabClient` carrying the resolved host.
+10. `detect_backend` warns once for an unrecognized host and is silent the
    second time; its return value is unchanged.
-10. `client_for_backend` warns when `host:` is set for `github`/`gitea`.
+11. `client_for_backend` warns when `host:` is set for `github`/`gitea`.
 
 Live (this PR, agent-run, transcript in the PR body — d1):
 
-11. `file_exists` / `read_file` / `list_dir` against
+12. `file_exists` / `read_file` / `list_dir` against
     `IDermitzakis/devops-scripts` on `gitlab.local.gebit.de`, through
     `fr.hostclient.client_for_backend`, from a cwd that is **not** a GitLab
     checkout — the configuration that failed in §2.D.
-12. End-to-end `fr apply` against that project: phases rendered, observed,
+13. End-to-end `fr apply` against that project: phases rendered, observed,
     diffed, applied as GitLab Issues with correctly-shaped labels (colour and
     length) — the acceptance row's own sentence, demonstrated.
-13. `fr spec status` resolving a plan folder from that project (the cross-repo
+14. `fr spec status` resolving a plan folder from that project (the cross-repo
     read that motivated the host override).
 
 Post-merge, operator-driven: none. Everything this spec claims is proven in
