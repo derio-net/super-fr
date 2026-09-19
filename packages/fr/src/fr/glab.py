@@ -25,6 +25,7 @@ docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-desi
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import time
@@ -34,6 +35,8 @@ from typing import TypeVar
 from fr.labels import LabelDef
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 
 class GlabError(Exception):
@@ -219,6 +222,12 @@ def ensure_labels(*, repo: str, labels: list[LabelDef], host: str | None = None)
             )
         except GlabError as exc:
             if is_already_exists(exc):
+                # DEBUG, not a warning: on any re-apply EVERY label already
+                # exists, so warning here would print once per label on every
+                # run and train the operator to ignore it. A skip still leaves
+                # a trail, so a false positive (see `is_already_exists`) is
+                # diagnosable rather than invisible.
+                logger.debug("glab: label %r already exists on %s — skipping", ld.name, repo)
                 continue
             raise
 
@@ -275,20 +284,31 @@ def is_transient(err: GlabError) -> bool:
     return any(p in _haystack(err) for p in _TRANSIENT_PATTERNS)
 
 
-_ALREADY_EXISTS_PATTERNS = (": 409 ", "already exists")
-
-
 def is_already_exists(err: GlabError) -> bool:
     """True when GitLab refused because the thing is already there.
 
     `glab label create` has no `--force` (gh's idempotent-update flag), so
-    re-ensuring an existing label 409s. `ensure_labels` treats that as a
-    no-op — see its docstring for why that is the right reading and what it
-    knowingly gives up. Matched on the HTTP status as well as the phrase,
-    because the phrase is rich-wrapped in real output; `_haystack` collapses
-    that whitespace so both forms are reachable (gh-486)."""
+    re-ensuring an existing label 409s, and `ensure_labels` treats that as a
+    no-op — see its docstring for what that knowingly gives up.
+
+    The phrase alone is enough, and is reachable only because `_haystack`
+    collapses whitespace: real output arrives rich-wrapped as
+    `Label already\n  exists`. A bare 409 is NOT enough on its own and is
+    deliberately paired with the API's `{message:` envelope. Review called
+    the unpaired form out, and the reason it matters is the asymmetry: a
+    match here makes `ensure_labels` skip SILENTLY, so a false positive is a
+    label that was never created and no error to say so — strictly less
+    discoverable than the loud abort this replaced. Pairing keeps a stray
+    gateway or proxy 409 from being read as "already there".
+
+    Like `is_transient` and `is_not_found`, this reads stdout as well as
+    stderr, which is a wider surface than the phrases were written against.
+    That widening is deliberate and recorded rather than discovered.
+    """
     text = _haystack(err)
-    return any(p in text for p in _ALREADY_EXISTS_PATTERNS)
+    if "already exists" in text:
+        return True
+    return " 409 " in text and "{message:" in text
 
 
 # glab's own not-found vocabulary, captured live 2026-09-19 (spec §2.A).
@@ -308,7 +328,11 @@ def is_not_found(err: GlabError) -> bool:
     `file_exists` may translate ONLY this into `False`. Anything else is
     a protocol or auth fault and must propagate: a malformed request
     that reads as "not found" is indistinguishable from an absent file,
-    which is how gh-486 turned a 400 into a wrong answer."""
+    which is how gh-486 turned a 400 into a wrong answer.
+
+    Reads stdout as well as stderr via `_haystack`, which is a wider
+    surface than these patterns were written against — the same deliberate,
+    recorded widening `is_transient` carries."""
     return any(p in _haystack(err) for p in _NOT_FOUND_PATTERNS)
 
 

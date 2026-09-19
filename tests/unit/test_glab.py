@@ -505,6 +505,23 @@ class TestAlreadyExists:
         assert "already exists" not in self.LIVE_409  # literally absent
         assert is_already_exists(GlabError("409", stderr=self.LIVE_409))
 
+    def test_a_stray_409_without_the_api_envelope_is_not_already_exists(self):
+        """A bare 409 is not enough, and the asymmetry is why: a match makes
+        `ensure_labels` skip SILENTLY, so a false positive is a label that was
+        never created with no error to say so — less discoverable than the loud
+        abort it replaced. A gateway or proxy 409 must not read as "already
+        there" (phase 7 review, Important #1)."""
+        assert not is_already_exists(
+            GlabError("gateway", stderr="proxy rejected the request : 409 ")
+        )
+        assert not is_already_exists(GlabError("409", stderr="Error: HTTP 409"))
+
+    def test_the_api_envelope_pairs_with_the_status(self):
+        """The paired form still matches even if the phrase itself were absent."""
+        assert is_already_exists(
+            GlabError("409", stderr="Post .../labels: 409 {message: Label taken}")
+        )
+
     def test_a_404_or_a_400_is_not_already_exists(self):
         assert not is_already_exists(GlabError("404", stderr=GLAB_STDERR_404_FILE))
         assert not is_already_exists(GlabError("400", stderr=GLAB_STDERR_400_MISSING_REF))
