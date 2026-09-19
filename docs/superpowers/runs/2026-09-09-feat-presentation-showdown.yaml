@@ -1,3 +1,4 @@
+schema_version: 2
 run: 2026-09-09-feat-presentation-showdown
 workflow: presentation-showdown@1
 branch: feat/presentation-showdown

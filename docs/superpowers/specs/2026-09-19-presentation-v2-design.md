@@ -143,11 +143,12 @@ Its README defines four exercises. Recommended issue composition:
 The first two satisfy all four selection criteria: bounded, multi-surface, with
 a built-in failure to recover from, and describable without naming anything.
 
-**Recording is BLOCKED on [#486](https://github.com/derio-net/super-fr/issues/486).**
-The run must not be recorded until the GitLab adapter works live. This is not
-caution about a broken demo — GitLab is the only forge at the audience's
-employer, so **the recording's whole claim is that this works on their stack.**
-A run on GitHub would prove nothing to them.
+**UNBLOCKED 2026-09-19** — [#486](https://github.com/derio-net/super-fr/issues/486)
+is fixed (PR #487) and independently re-verified live. With `backend: gitlab`
+declared and no `GITLAB_HOST` exported, `detect_backend` resolves `gitlab`,
+`file_exists` is `True` for files that exist and `False` only for ones that do
+not, `list_dir` and `read_file` both work, and `file_exists` against an
+unreachable host now **raises** instead of reporting absence.
 
 **Setup owed before recording:**
 
@@ -160,8 +161,11 @@ A run on GitHub would prove nothing to them.
 2. `fr-init` to scaffold a Java 17 + Maven devcontainer profile. Previously
    done and then reverted, so the repo is pristine again — which conveniently
    makes it a candidate for the live `fr-init` in beat 6.
-3. Declare `backend: gitlab` in `.devcontainer/fr-profiles.yaml`. Without it
-   `detect_backend` resolves a self-hosted host to `"github"`.
+3. **Declare `backend: gitlab`** in `.devcontainer/fr-profiles.yaml` ✅
+   (2026-09-19). Without it `detect_backend` falls back to `"github"` — now
+   with a loud warning naming the fix, where it used to be silent. Since #487
+   this single key is sufficient: the host is derived from the git remote and
+   reaches `glab` as `GITLAB_HOST` in the child environment.
 4. Create the issue from the two chosen exercises — the fork currently has none.
 5. **Pre-warm the Maven dependency cache in the image.** A first Maven build
    downloading the world would dominate the recording and measure the network,
@@ -228,6 +232,7 @@ restriction. Two pairs of claims that look alike and are not.
   authored and ran `presentation-showdown` through exactly that path, so the
   talk can demonstrate it from its own history.
 - Phase executors, model tiers per workload complexity, the three harnesses.
+- **GitLab**, including self-hosted — see below.
 
 **Not claimable — different features that merely sound the same:**
 
@@ -238,29 +243,20 @@ restriction. Two pairs of claims that look alike and are not.
   for dispatch. `not-implemented`; only `unit:phase` is reachable. Authoring
   and running a shape works; choosing its dispatch granularity does not.
 
-**GitLab — does NOT currently pass.** Tested live on 2026-09-19 against
-a self-hosted GitLab (host redacted), and this is the first time the adapter
-met a real instance. `list_dir` works and the issues endpoint is reachable, but:
+**GitLab — now claimable, live-verified 2026-09-19.** It did not pass when this
+spec was written, and the story is worth the coda's time on its own. The adapter
+had never met a real instance. One check found the contents endpoint omitting
+GitLab's mandatory `ref`; the fix's own live walk then found three more, the
+worst being that GitLab returns `web_url` as `/-/work_items/N`, which `fr` stored
+and then could not parse — crashing `observe` on every re-apply, **on gitlab.com
+identically**. So `fr apply` against any GitLab repo worked exactly once.
 
-- `file_exists` and `read_file` are **broken**. GitLab's
-  `GET /projects/:id/repository/files/:path` requires a `ref` query parameter;
-  `real_glabclient.py` sends none, so the API returns HTTP 400
-  `{"error":"ref is missing, ref is empty"}`.
-- The severity is asymmetric. `read_file` raises; `file_exists` swallows every
-  `GlabError` into `False` under its documented fail-soft posture, so **a
-  malformed request is indistinguishable from an absent file**. The unit suite
-  mocks `_run_glab`, so the missing parameter never reached an API and the
-  tests stayed green — the exact shape of defect that "unit-verified but never
-  proven live" conceals.
-- `_run_glab` never passes `--hostname`, and `GITLAB_HOST` appears **nowhere**
-  in this repo, so there is no documented way to target a self-hosted instance.
-- `_hosts.DEFAULT_HOST_BACKENDS` covers only `github.com` / `gitlab.com`, so
-  a self-hosted GitLab host resolves to `"github"` unless
-  `.devcontainer/fr-profiles.yaml` declares `backend: gitlab`.
+`multibackend-gitlab-tracking` had been `status: ci` — green — throughout, for a
+capability broken four independent ways, because every unit mock discarded the
+request. It now sits at `skipped` with a live-verified note, which is the honest
+level: live verification cannot run in CI.
 
-**Fix is verified and small:** `?ref=HEAD` works and is branch-agnostic
-(this project's default branch is `master`, not `main`). Until it lands, the
-coda may not claim GitLab. Gitea stays unproven and unclaimed by agreement.
+Gitea stays unproven and unclaimed by agreement.
 
 ## Non-goals
 
