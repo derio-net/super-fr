@@ -31,7 +31,7 @@ misleading state. `render` retains its intentional fail-open behavior for malfor
 
 | Plan | Repo | File | Depends on |
 | --- | --- | --- | --- |
-| `2026-09-19-gh-429-journal-hardening` | `derio-net/super-fr` | `docs/superpowers/plans/2026-09-19-gh-429-journal-hardening/` | None |
+| `2026-09-19-gh-429-journal-hardening` | `derio-net/super-fr` | `2026-09-19-gh-429-journal-hardening` | None |
 
 ## Test Plan
 
