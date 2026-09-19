@@ -37,6 +37,57 @@ misleading: one is broken, the other is undeclared.
 Neither is finishable as-is. P needs its regressions fixed; G needs one version
 bump.
 
+## After "CI fails" — both green, by different routes
+
+**Correction to the section above.** I called arm P's two smoke failures
+"regressions". That was too harsh. Its fix commit `1b8dbd3` touches
+`tests/smoke-update.sh` only — and reading it, the old fixture wrote a
+consumer-edited copy with **no recorded base** and asserted the framework
+replacement happens. #88's whole point is that this case must *stop* happening,
+so the pre-existing assertion encoded the behaviour the feature deliberately
+removes. P supplied the base in the fixture, re-pointed the assertion, and left
+comments explaining why. That is a legitimate fixture correction, not a weakened
+test — though it is still a semantic change to a pre-existing test, and a
+reviewer should confirm the now-blocked case is covered elsewhere.
+
+**Why arm G needed two commits, not one.** The gates are sequential and each is
+invisible until the one before it passes. The first CI error was
+`shipped-surface changes require a version bump`. After `56d1bef` supplied the
+bump, a previously-unreachable test failed:
+`test_changelog.py::test_current_version_has_a_change`. `6effb62` added the
+0.22.3 entry. So this is not fr-goal failing to fold a fix in — a single
+"CI fails" prompt can only reveal one gate at a time, and P had only one gate
+to clear.
+
+| | P | G |
+|---|---|---|
+| Commits to green | 1 (`test(update): provide framework base in smoke fixture`) | 2 (version bump, then changelog) |
+| What the fix touched | the test fixture | packaging metadata only |
+| Final CI | ✅ | ✅ |
+
+## The PR bodies
+
+| | P (#89) | G (#90) |
+|---|---|---|
+| Length | 860 chars, 3 sections | **2,499 chars, 8 sections** |
+| Summary | 3 bullets | 5, more precise about behaviour |
+| Verification | 4 commands | 6, incl. `fr plan self-review`, `fr journal check`, `fr acceptance check --added-since` |
+| Artifacts linked | — | spec + plan paths |
+| Review findings | — | **3, each stating what was fixed** |
+| Operator gates | — | **"brainstorm: operator gate answered by the operator"** |
+| Acceptance | — | new CI row, plus an honest note that 6 not-implemented and 5 skipped rows predate the branch |
+| Ready checklist | — | 3 boxes, ticked |
+| **Closes the issue** | ✅ `Closes #88` | ❌ **no closing keyword** |
+
+G's body is the journal rendered: the findings, the gate answer and the
+acceptance delta are all durable records, not prose it composed at the end. The
+`Operator Gates` line is `answered_by: operator` surfacing in the deliverable —
+the artifact chain the deck argues for, visible end to end.
+
+And the inversion is worth keeping: the arm with the richer body **forgot the
+one line that closes the issue**, while the terser arm did not. Ceremony is not
+the same as completeness.
+
 ## Where they agreed
 
 Both invented the **same** mechanism, independently: a consumer-owned
