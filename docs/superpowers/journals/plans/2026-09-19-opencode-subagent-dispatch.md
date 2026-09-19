@@ -87,3 +87,24 @@ Phase-2 review. `_phase_tiers()` walked `get_args(annotation)` looking for a mem
 ### r-p2-f2 · finding [fixed] · Two canonical agents could claim one mirror filename, and the dict kept the last writer (phase 2)
 
 Phase-2 review. `canonical_agents()` builds `result[f"{stem}-{tier}"]` by plain assignment. Every canonical agent also claims `<name>-mechanical|-standard|-hard`, so a canonical `fr-phase-executor-hard.md` sitting beside `fr-phase-executor.md` produces the key `fr-phase-executor-hard` twice — and the dict silently keeps whichever came last, so one agent never reaches `.opencode/agent/` at all. Demonstrated by key-set collision before fixing. This is the same silent-loss class as r-p1-f1, and the second time this generator has preferred a quiet winner to a loud refusal. FIXED: a `claim()` helper records which canonical file claimed each generated name and raises `AgentTranslationError` naming BOTH sides plus the tier-expansion rule that caused the overlap — the generator does not pick a winner. Test: test_a_canonical_agent_colliding_with_a_generated_tier_name_is_refused. Latent today (one canonical agent ships), which is exactly why it was worth closing before a second one exists.
+
+<!-- fr:journal kind=discovery scope=plan id=4919945c2f82 created=2026-09-20T00:53:30 -->
+### 4919945c2f82 · discovery · no-refactor-because: P3.T1.S3
+
+The skills, commands, and agents delivery loops have sufficiently different logic (skills: mkdir + copy; commands: copy from mirror; agents: derive tier + resolve model + awk-rewrite) that a shared shell function would not improve clarity. Each loop's purpose is clear as-is.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f1 created=2026-09-20T01:01:36 phase=3 state=fixed -->
+### r-p3-f1 · finding [fixed] · The whole point of phase 3 — install-time model resolution — had no test, and the file claimed it did (phase 3)
+
+Phase-3 review, and the most serious finding of the run. `tests/integration/test_install_opencode_agents.py` opened with "Verified: ... a seeded ~/.config/fr/models.yaml binding appears as `model:` on each TIER file and NOT on the base file". Nothing asserted it. The only model-related test, `test_tiered_agents_lack_model_when_fr_not_installed`, asserted the OPPOSITE — no model on any file — and justified it as "expected behavior for stubbed tests". So a coverage hole was written up as a feature, and install.sh`s awk rewrite, the entire deliverable of the phase, had never once run with a non-empty model. It could have been broken outright with every test green and the file`s own docstring vouching for it.
+
+This is the defect class this repo keeps closing: a green report over a state nobody verified. It is also the third phase running in which a report`s confident scoping had to be re-checked against the artifact.
+
+FIXED: three tests added, driven by an `fr` stub on the sandbox PATH that answers `models resolve --harness opencode --tier <t>` and logs its argv — `fr models resolve``s own correctness is unit-tested in fr, so what install.sh owes is narrower: that it CALLS it, once per tier with the right arguments, and inserts what comes back where the generator promises the anchor is.
+- test_a_resolved_binding_lands_as_model_on_each_tier_file_only — each tier file carries `model: <resolved>` immediately after `mode: subagent`, exactly one model line, and the base file none.
+- test_install_asks_fr_for_every_tier_and_only_for_tiers — exactly three resolves, one per tier, none for the base, all `--harness opencode`.
+- test_an_unbound_tier_inherits_rather_than_pinning_an_empty_model — an unbound tier gets no key at all, never an empty one.
+
+NON-VACUITY PROVEN by mutation: changing the awk anchor from `/^mode: subagent$/` to a string that cannot match makes 2 of the 3 fail; install.sh was then restored byte-exact (diff -q confirmed). The implementation turned out to be correct — the defect was the absent test and the docstring that covered for it.
+
+Also corrected: the module docstring now describes what is actually asserted, and the degradation test is renamed `test_no_model_is_pinned_when_fr_is_not_on_path_at_all` with its role stated, so it reads as the degradation path it is rather than as coverage of the feature.
