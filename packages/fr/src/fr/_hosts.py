@@ -40,6 +40,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from fr.isolation.types import profiles_config
 
@@ -107,6 +108,37 @@ def backend_for_hostname(hostname: str | None) -> HostBackend:
     if hostname and hostname in DEFAULT_HOST_BACKENDS:
         return DEFAULT_HOST_BACKENDS[hostname]
     return "github"
+
+
+# A forge URL's PATH identifies the forge where its HOSTNAME cannot.
+# `backend_for_hostname` knows two SaaS domains, so every self-hosted
+# instance falls through to "github" — fine as a default for a repo that
+# can declare `backend:`, useless for a bare URL, which is all the VK
+# bridge has (gh-486 gap 2). Ordered most-specific first; `/pulls/` is
+# checked before `/pull/` so Gitea is never read as GitHub.
+_URL_SHAPES: tuple[tuple[str, HostBackend], ...] = (
+    ("/merge_requests/", "gitlab"),  # /-/merge_requests/ and pre-dash alike
+    ("/-/", "gitlab"),  # GitLab's route infix, e.g. /-/issues/
+    ("/pulls/", "gitea"),
+    ("/pull/", "github"),
+)
+
+
+def backend_for_url(url: str) -> HostBackend:
+    """Resolve a backend from a forge URL: its path shape first, its
+    hostname second.
+
+    For `fr_vk.pr_observe`/`pr_state` and `fr_dispatch.prompt`, which hold
+    a URL and no checkout, so `detect_backend`'s config tier is
+    unavailable. `/issues/N` is deliberately NOT a shape: it is both
+    GitHub's and Gitea's, so it falls through to the hostname rather than
+    being guessed — the same documented Gitea boundary as before. See
+    spec §4.C2."""
+    parsed = urlparse(url)
+    for marker, backend in _URL_SHAPES:
+        if marker in parsed.path:
+            return backend
+    return backend_for_hostname(parsed.hostname)
 
 
 def detect_backend(repo_root: Path) -> HostBackend:

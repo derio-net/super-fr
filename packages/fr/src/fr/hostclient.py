@@ -32,9 +32,8 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
     """Return the `GhClient`-shaped adapter for an already-resolved
     backend. The shared dispatch table `client_for()` and any caller with
     its own backend-resolution path (e.g. `fr_vk.pr_observe`, which
-    resolves from a bare PR URL's hostname via
-    `fr._hosts.backend_for_hostname` rather than a local checkout) both
-    go through this.
+    resolves from a bare PR URL via `fr._hosts.backend_for_url` rather
+    than a local checkout) both go through this.
 
     `host` names a self-hosted instance. This function is deliberately
     PROVENANCE-BLIND: it never reads config and cannot tell a declared

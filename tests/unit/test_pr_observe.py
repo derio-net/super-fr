@@ -205,30 +205,30 @@ def test_default_pr_status_fetch_resolves_backend_from_url_hostname(monkeypatch)
     assert seen_backends == ["github", "gitlab"]
 
 
-# --- self-hosted host carried into the client (gh-486, P5.T5) -----------
+# --- self-hosted host carried into the client (gh-486, P5.T5/P6.T2) -----
 #
 # Spec §4.C claimed pr_observe "can now pass that same hostname as host" —
 # it did not (pr_observe.py:50-52 computed the hostname, used it for the
 # backend, and dropped it). A bridge tick polling a self-hosted GitLab MR
 # built RealGlabClient(host=None), and since the bridge runs outside any
 # checkout, glab's own git-directory fallback couldn't rescue it either.
+#
+# P5.T5 threaded the host but could not make it observable: with
+# `backend_for_hostname`, backend=="gitlab" and a non-None self-hosted
+# host were mutually exclusive by construction of one table, so the test
+# below had to monkeypatch the backend away to isolate the host claim.
+# P6 removed that patch — `backend_for_url` reads the forge off the URL
+# path, so the two now hold at the same time for the first time (§4.C2).
 
 
 def test_a_self_hosted_pr_url_carries_its_host_into_the_client(monkeypatch):
-    """`backend_for_hostname` is monkeypatched here rather than left real:
-    for THIS specific hostname it actually resolves "github", not
-    "gitlab" — the same documented, by-design "self-hosted hosts fall
-    through to github without an explicit backend:" heuristic (spec §2.E,
-    test__hosts.py's TestDetectBackend) that a bare PR URL has no config
-    to override. That is a separate, pre-existing limitation of per-URL
-    backend detection (see the P5.T5 journal finding), not something this
-    one-line host-threading fix changes. What THIS test isolates and
-    pins is narrower and still real: once a backend is (however)
-    resolved, the SAME hostname computed for it must reach the client as
-    `host`, not be discarded."""
+    """The whole point of gh-486 gap 2, end to end at this call site and
+    with NOTHING about backend resolution faked: a self-hosted GitLab MR
+    URL must resolve to the `gitlab` adapter AND carry its own instance
+    hostname as `host`. Both halves in one assertion deliberately —
+    either alone is useless (the right CLI aimed at gitlab.com, or the
+    right host handed to `gh`)."""
     import fr_vk.pr_observe as po
-
-    monkeypatch.setattr(po._hosts, "backend_for_hostname", lambda hostname: "gitlab")
 
     seen: dict[str, Any] = {}
 

@@ -23,7 +23,6 @@ import logging
 import re
 from collections.abc import Callable
 from typing import Any, Protocol
-from urllib.parse import urlparse
 
 from fr import _hosts, hostclient
 
@@ -89,17 +88,26 @@ def _default_close_gh_issue(repo: str, issue_number: str, backend: str) -> None:
     public `closer: Callable[[str, str, str], None]` signature every
     caller (including test doubles) satisfies structurally; it's always
     one of the three literal values in practice (both call sites derive
-    it via `fr._hosts.backend_for_hostname`/`fr_vk._cardref.BACKEND_FOR_TAG`).
+    it via `fr._hosts.backend_for_url`/`fr_vk._cardref.BACKEND_FOR_TAG`).
 
     NOT threading a host here — unlike `pr_observe`'s sibling fetch
-    (gh-486, spec §4.C/§4.D, P5.T5) — is a deliberate, documented limit,
-    not an oversight: the hostname exists one frame up in
-    `_close_linked_gh_issue` (parsed from `pr_url`), but this function's
-    public 3-arg `closer` signature has no room for it, and every test
-    double satisfies that signature structurally. Widening it is a
-    bridge-wide change beyond gh-486's scope. Consequence: auto-closing a
-    linked Issue still targets the SaaS host on a self-hosted instance,
-    and fails non-fatally with a logged warning below.
+    (gh-486, spec §4.C/§4.C2) — is a deliberate, documented limit with
+    exactly one cause, and it is **not** backend resolution: as of §4.C2
+    the backend arriving here is correct for a self-hosted instance too
+    (`_close_linked_gh_issue` resolves it via `_hosts.backend_for_url`,
+    off the MR path shape). The blocker is this function's ARITY. The
+    hostname sits one frame up in `_close_linked_gh_issue`, parsed from
+    the same `pr_url`, but the public seam is
+    `closer: Callable[[str, str, str], None]` — repo, issue_number,
+    backend — with two call sites in this module and a test double per
+    test satisfying it structurally. There is no room for a host without
+    widening that signature bridge-wide, which is beyond gh-486's scope.
+
+    Consequence, stated so nobody has to rediscover it: on a self-hosted
+    GitLab instance this builds the RIGHT adapter aimed at the WRONG host
+    (glab's `gitlab.com` default), and the close fails non-fatally with
+    the logged warning below. The practical loss is a missed backstop —
+    the forge's own close-on-merge already ran — not a broken merge.
     """
     client = hostclient.client_for_backend(backend)  # type: ignore[arg-type]
     try:
@@ -116,15 +124,19 @@ def _close_linked_gh_issue(
     closer: Callable[[str, str, str], None],
 ) -> None:
     """Resolve owner/repo from `pr_url`, Issue number from `title`, and
-    backend from `pr_url`'s own hostname, then close.
+    backend from `pr_url` itself, then close.
 
     Guards against a split-source mismatch: if the card title carries an
     `[owner/repo]` that disagrees with the PR url's repo (a recycled / mis-
     linked card), skip the close rather than risk closing the wrong repo's
-    issue N. Backend is resolved from the PR url's hostname (not the
-    title's tag) since that's the authoritative signal for where the PR
-    actually lives — the title's tag may not reflect the real backend yet
-    (see `fr_vk.dispatch.build_card_title`'s docstring).
+    issue N. Backend is resolved from the PR url (not the title's tag)
+    since that's the authoritative signal for where the PR actually lives
+    — the title's tag may not reflect the real backend yet (see
+    `fr_vk.dispatch.build_card_title`'s docstring) — and via
+    `_hosts.backend_for_url`, not the hostname alone: a self-hosted GitLab
+    MR URL has no `gitlab.com` in it, so hostname-only resolution handed
+    its close to `gh` (gh-486, spec §4.C2). The MR path shape names the
+    forge instead.
     """
     if not pr_url or not title:
         return
@@ -142,7 +154,7 @@ def _close_linked_gh_issue(
             issue_num,
         )
         return
-    backend = _hosts.backend_for_hostname(urlparse(pr_url).hostname)
+    backend = _hosts.backend_for_url(pr_url)
     closer(title_repo, str(issue_num), backend)
 
 

@@ -20,6 +20,7 @@ from fr._hosts import (
     DEFAULT_HOST_BACKENDS,
     TAG_FOR_BACKEND,
     backend_for_hostname,
+    backend_for_url,
     declared_host,
     detect_backend,
     host_for,
@@ -165,6 +166,49 @@ class TestBackendForHostname:
 
     def test_none_falls_back_to_github(self) -> None:
         assert backend_for_hostname(None) == "github"
+
+
+class TestBackendForUrl:
+    """gh-486 gap 2 for callers that hold a URL and NO checkout (spec
+    §4.C2). `backend_for_hostname` knows two SaaS domains, so every
+    self-hosted instance fell through to "github" — the VK bridge polling
+    a self-hosted GitLab MR did not merely lose the host, it picked the
+    GitHub CLI. The URL's own PATH names the forge, and needs no config."""
+
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            ("https://gitlab.local.corp/g/p/-/merge_requests/7", "gitlab"),
+            ("https://gitlab.local.corp/g/sub/p/-/merge_requests/7", "gitlab"),
+            ("https://git.corp/g/p/merge_requests/7", "gitlab"),  # pre-dash GitLab
+            ("https://gitlab.local.corp/g/p/-/issues/3", "gitlab"),
+            ("https://gitea.corp/o/r/pulls/4", "gitea"),
+            ("https://github.corp/o/r/pull/9", "github"),
+            ("https://gitlab.com/g/p/-/merge_requests/7", "gitlab"),
+            ("https://github.com/o/r/pull/1", "github"),
+        ],
+    )
+    def test_the_path_shape_names_the_forge(self, url: str, expected: str) -> None:
+        assert backend_for_url(url) == expected
+
+    def test_an_ambiguous_issue_path_falls_back_to_the_hostname(self) -> None:
+        # `/issues/N` is BOTH GitHub's and Gitea's shape, so it cannot
+        # discriminate; the documented Gitea boundary is preserved rather
+        # than guessed at.
+        assert backend_for_url("https://gitea.corp/o/r/issues/3") == "github"
+        assert backend_for_url("https://gitlab.com/g/p/issues/3") == "gitlab"
+
+    def test_a_shapeless_url_falls_back_to_the_hostname(self) -> None:
+        assert backend_for_url("https://gitlab.com/g/p") == "gitlab"
+        assert backend_for_url("not a url") == "github"
+
+    def test_it_stays_silent(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Called per-URL by the bridge across many repos, like
+        `backend_for_hostname` — it must never warn, or the bridge log
+        becomes noise. Only `detect_backend` warns."""
+        assert backend_for_url("https://gitlab.local.corp/g/p/-/merge_requests/7") == "gitlab"
+        assert backend_for_url("https://whatever.corp/o/r") == "github"
+        assert capsys.readouterr().err == ""
 
 
 def test_tag_for_backend_and_inverse() -> None:
