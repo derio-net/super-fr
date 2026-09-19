@@ -11,7 +11,7 @@ check is exact rather than heuristic: re-render and compare byte for byte.
 
 Regenerate with:
 
-    uv run --no-project python docs/presentation/reveal/build.py
+    uv run --no-project python docs/presentation/version-1/reveal/build.py
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DECK = REPO_ROOT / "docs" / "presentation" / "reveal"
+DECK = REPO_ROOT / "docs" / "presentation" / "version-1" / "reveal"
 
 
 def _build_module():
@@ -40,8 +40,8 @@ build = _build_module()
 def test_index_html_is_current_with_slides_md() -> None:
     """index.html is exactly what build.py renders from slides.md."""
     assert build.render() == (DECK / "index.html").read_text(), (
-        "docs/presentation/reveal/index.html is stale with respect to slides.md. "
-        "Run: uv run --no-project python docs/presentation/reveal/build.py"
+        "docs/presentation/version-1/reveal/index.html is stale with respect to slides.md. "
+        "Run: uv run --no-project python docs/presentation/version-1/reveal/build.py"
     )
 
 
