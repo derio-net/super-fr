@@ -239,8 +239,11 @@ it answers the plan-folder half of the reachability probe.
 
 Blast radius, from §2.B: `fr.migrate` already swallows (`except Exception:
 pass`) and blocks archival either way — unchanged. `fr.spec` already catches,
-caches the negative, and degrades the row with a note — now with a truthful
-error instead of a phantom empty folder. `reachability` has no live caller; when
+caches the negative, and degrades the row with a note (`spec.py:45-50` of
+`compute_status` — `except Exception as e: fail_note = f"cross-repo read of
+{ref.repo} failed: {e}"`), so a raised error's text now reaches the operator's
+`fr spec status` row verbatim instead of the row reporting a phantom empty
+folder. `reachability` has no live caller; when
 it gains one, a propagating error must surface as a refusal message rather than
 a traceback, which is that cutover's obligation and is recorded as a risk (§5).
 
@@ -262,6 +265,8 @@ def _run_glab(args: list[str], *, host: str | None = None) -> str:
     env = {**os.environ, "GITLAB_HOST": host} if host else None
     subprocess.run(["glab", *args], env=env, ...)
 ```
+
+(`fr.glab` imports `os` for the first time to do this.)
 
 `GITLAB_HOST` and not `--hostname`, because only the env var covers every
 subcommand (§2.D). Each public helper in `fr.glab` gains a keyword-only
@@ -293,13 +298,28 @@ often and must not become chatty):
    The behaviour is unchanged — `"github"` is still returned, so no repo's
    resolution moves. Only the silence is fixed.
 
-2. **`hostclient.client_for_backend`** — a `host:` is supplied for a backend
-   whose adapter does not thread it (`github`, `gitea`):
+2. **`hostclient.client_for`** — an **explicitly declared** `host:` for a
+   backend whose adapter does not thread it (`github`, `gitea`):
 
-   > `warning: host 'git.example.com' is declared but fr does not yet target a self-hosted instance for backend "github" — the CLI's own host resolution applies. See gh-486.`
+   > `warning: host 'git.example.com' is declared in .devcontainer/fr-profiles.yaml but fr does not thread a host to backend "github" — the CLI's own host resolution applies instead. See gh-486.`
 
-   This is the non-goal in §1 made audible. Accepting a `host:` and ignoring it
+   This is the non-goal in §1 made audible: accepting a `host:` and ignoring it
    in silence is the same class of failure as the bug being fixed.
+
+   **It warns on a declared host only, never a derived one** — and that is why
+   it lives in `client_for` rather than `client_for_backend`. With §4.C's
+   origin-hostname fallback, a **GitHub Enterprise** repo (origin
+   `github.corp.com`) resolves a host for a backend fr does not thread, and
+   would trip this warning on every call — for a configuration that works
+   perfectly well, since `gh` resolves its own host from the same remote. A
+   derived host is an inference; a declared one is an operator expectation fr
+   is quietly failing. Only the second is worth a warning.
+
+   `client_for` is also the only layer that can tell them apart, so `_hosts`
+   exposes both: `declared_host(repo_root)` (the raw `host:` key — today's
+   `host_for` behaviour) and `host_for(repo_root)` (declared, else derived).
+   `client_for_backend` stays provenance-blind, which keeps `fr_vk.pr_observe`
+   — which derives a host from a bare PR URL — correctly silent.
 
 Warnings print to stderr, so JSON output modes are unaffected. `fr._hosts`
 already prints nothing today; the precedent for a library-module warning is
@@ -311,10 +331,15 @@ already prints nothing today; the precedent for a library-module warning is
   backend material (`README.md:466-478`): declare `backend:`, the host is taken
   from the git remote, `host:` overrides it, `GITLAB_HOST` is what reaches
   `glab`, and gh/tea are not threaded yet.
-- **`plugins/super-fr/skills/fr-init/SKILL.md`** — `--host` exists in
-  `fr init scaffold` but the skill does not say when an operator needs it. One
-  sentence: for a self-hosted instance it is optional (derived from the remote)
-  and is the override when the remote is not the API host.
+- **`plugins/super-fr/skills/fr-init/SKILL.md`** — a **correction**, not an
+  addition. Lines 78-80 today instruct the operator to pass `--backend`/`--host`
+  on *every* profile call for a non-GitHub repo
+  (`fr init scaffold ... --backend gitlab --host gitlab.mycorp.com`). After
+  §4.C that is no longer true: `--host` becomes **optional** for GitLab — the
+  host is derived from the git remote — and is the override for when the
+  remote's hostname is not the API host. The skill must say the new thing,
+  because an instruction to set a key that is now redundant is how the dead
+  last mile got built in the first place.
 - **Explainers**: `docs/explainers/` contains no page mentioning a backend or
   GitLab (verified by grep), so no page is made stale. Per
   `.claude/rules/explainers-currency.md` this is recorded in the PR body rather
@@ -344,6 +369,8 @@ Two moves and one new row.
 | The one-time warning becomes noise, or worse, breaks a parser. | stderr only, once per process per host, and `detect_backend`'s return value is unchanged. A test pins that the second call is silent. |
 | Live verification mutates the operator's project. | A private project the operator named. Issues are enabled, the walk runs, Issues are restored to `disabled`; every created Issue and label is listed in the transcript so nothing is left behind unrecorded. |
 | `GITLAB_HOST` in the env could leak into an unrelated `glab` call in the same process. | The env is built per `subprocess.run` call, never assigned to `os.environ`. |
+| A derived host is one `glab` holds no token for, so every call fails. | It fails as glab's own `Unauthenticated`, propagated as `GlabError` — and §4.B now lets that propagate rather than reading it as "file absent". Documented in README beside the derivation, since the fix is `glab auth login --hostname <host>`. |
+| The origin hostname is not the API host (a vanity remote, or SSH on another name). | Exactly what the explicit `host:` key is for. §4.D's warning does not fire in this case, because the operator declared it and the GitLab adapter honours it. |
 
 ## 6. Test plan
 
