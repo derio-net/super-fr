@@ -76,8 +76,8 @@ fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
 ```
 
 For a non-GitHub repo, pass `--backend` on every profile call for that repo.
-`--host` is OPTIONAL for GitLab (derived from the remote, override-only) —
-`gh`/`tea` aren't host-threaded yet (gh-486) and fr warns if given one.
+`--host` is OPTIONAL for GitLab (derived from the remote, override-only);
+`gh`/`tea` aren't host-threaded (gh-486), so fr warns on next use, not here.
 
 Each call writes:
 
