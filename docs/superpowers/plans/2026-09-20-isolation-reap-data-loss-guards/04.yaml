@@ -94,9 +94,11 @@ state:
         were already flipped in phase 3 (journal d-p3-matrix-flipped-early). fr acceptance
         check: 128 rows OK, exit 0.'
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:39:43+00:00'
+      note: 'Version bumped 4.8.0 -> 4.9.0 (minor); bump-version.py --check and fr
+        --version both confirm. Explainers judgement journalled as p4-explainer-cannot-regenerate:
+        fr-isolation.html is not falsified and is sourceless (known gap 1).'
     P4.T2.S3:
       state: ' '
       ticked_at: null

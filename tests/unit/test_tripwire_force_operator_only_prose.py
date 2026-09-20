@@ -34,7 +34,9 @@ SKILL_COPIES = (
 @pytest.mark.parametrize("skill", SKILL_COPIES, ids=lambda p: str(p.relative_to(REPO_ROOT)))
 def test_agent_must_not_reach_for_force_on_its_own_initiative(skill: Path) -> None:
     text = skill.read_text()
-    assert "not reach for `--force`" in text or "not reach for `fr isolation down --force`" in text, (
+    assert (
+        "not reach for `--force`" in text or "not reach for `fr isolation down --force`" in text
+    ), (
         f"{skill.relative_to(REPO_ROOT)} no longer states decision d3's first half — an "
         "agent may not decide to use --force on its own initiative, only when the "
         "operator asks for it. Restore it in the canonical skill and re-sync."
