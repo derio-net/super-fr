@@ -78,17 +78,21 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:57:00+00:00'
+      note: 'RED confirmed: second advance exits 0 and re-prints the identical brief
+        (journal p2-red-t1)'
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:57:50+00:00'
+      note: '_advance_group refuses a running expected key before the pending-picker:
+        exit 2, err_console, nothing written'
     P2.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:58:44+00:00'
+      note: 'Extracted _already_running_refusal(step_id, subject, at, run_id, member_id,
+        item); _resolve_hint widened to item: str|None so the top-level case omits
+        --item from ONE builder. 134 passed.'
     P2.T2.S1:
       state: ' '
       ticked_at: null

@@ -667,7 +667,7 @@ def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -
     }
 
 
-def _resolve_hint(run_id: str, member_id: str, item: str, state: str = "done") -> str:
+def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:
     """The exact `fr run resolve` command that records one grouped unit's
     outcome — the two-flag form `--step <member> --item <head>` that
     `_split_member_id` teaches when someone reaches for the composite.
@@ -688,8 +688,41 @@ def _resolve_hint(run_id: str, member_id: str, item: str, state: str = "done") -
     existing operator-gate hint (`--state done`) already set the precedent.
     A caller that needs to mention the other outcome says so in prose beside
     the command, outside the pasteable span.
+
+    `item` is None for a TOP-LEVEL step, which has no `--item` to address —
+    the flag is simply omitted. One builder rather than two spellings for the
+    same act: the ALREADY RUNNING refusal (§3.A) prints this for both shapes,
+    and a second inline `f"fr run resolve ..."` is exactly how the two would
+    drift apart.
     """
-    return f"fr run resolve {run_id} --step {member_id} --item {item} --state {state}"
+    scope = f" --item {item}" if item is not None else ""
+    return f"fr run resolve {run_id} --step {member_id}{scope} --state {state}"
+
+
+def _already_running_refusal(
+    step_id: str, subject: str, at: str | None, run_id: str, member_id: str, item: str | None
+) -> str:
+    """The #499 refusal, in one renderer for both call sites (spec §3.A).
+
+    `advance_cmd`'s top-level `agent` branch and `_advance_group`'s grouped
+    member differ only in whether the outstanding unit has an `--item`, so
+    they differ only in this function's last argument. Spelled separately,
+    the operator would eventually be shown two different texts for one
+    situation and have no way to tell which was current.
+
+    Both ways forward are named because both are legitimate: waiting is
+    almost always right, and `--redispatch` is the deliberate escape for a
+    genuinely lost agent. Neither pasteable command carries a shell
+    metacharacter (review `r1-f1`) — the `--state failed` alternative is
+    prose OUTSIDE the command, not an alternation inside it.
+    """
+    return (
+        f"[red]{step_id}: {subject} is ALREADY RUNNING (dispatched {at}).[/red]\n"
+        "  Waiting on that agent — do NOT dispatch again.\n"
+        f"  resolve it:      {_resolve_hint(run_id, member_id, item)}"
+        "   (or --state failed)\n"
+        f"  re-brief anyway: fr run advance {run_id} --redispatch"
+    )
 
 
 def _advance_group(
@@ -710,6 +743,26 @@ def _advance_group(
         raise typer.Exit(2) from e
     expected = _expected_group_items(step, phases)
     items = dict(record.items or {})
+    # #499 (spec §3.A): the pending-picker below is `!= "done"`, which cannot
+    # tell `running` from `pending` — so a second `advance` re-emitted a
+    # byte-identical brief for a unit already dispatched. A `running` key is
+    # the refusal's subject, and it wins over any later pending one: the
+    # group is serial by construction (`_resolve_member` refuses a second
+    # writer), so an outstanding unit is the only thing this step is doing.
+    running = next((key for key in expected if items.get(key) == "running"), None)
+    if running is not None:
+        # `_split_member_id` returns (item, member); `_resolve_hint` takes
+        # (member, item). Same two strings, opposite order — do not splat one
+        # into the other (phase 1, `p1-d1`).
+        item, _, member_id = running.rpartition("/")
+        err_console.print(
+            _already_running_refusal(step.id, running, record.at, state.run, member_id, item),
+            # soft_wrap: the refusal's middle line is a command meant to be
+            # pasted, and rich folds at width 80 whenever stderr is not a tty
+            # — exactly when a harness captures it (`p1-f1`, `r1-f2`).
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     pending = next((key for key in expected if items.get(key) != "done"), None)
     if pending is None:
         save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))

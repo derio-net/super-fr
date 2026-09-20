@@ -87,3 +87,20 @@ The hint is printed under 'resolve with:' and is meant to be copy-pasted. In eve
 ### r1-f2 · finding [fixed] · The new composite-id refusal is rendered through the one err_console.print in resolve_cmd that lacks soft_wrap (phase 1)
 
 _find_step's message now ends in the flag pair the reader is supposed to copy, but resolve_cmd's except block printed it without soft_wrap=True, so rich folds it at width 80 whenever stderr is not a tty — which is exactly when a harness captures it. Same defect class as p1-f1, which phase 1 had just fixed one function away, and the same class as the two pre-existing workspace-test failures in p1-f2: an operator-facing refusal that a fold makes unusable. Today's ids are short enough not to fold, so this is prophylactic rather than an observed break — recorded honestly as such. FIXED and pinned by test_the_composite_id_refusal_survives_a_narrow_console.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-red-t1 created=2026-09-20T15:56:54 phase=2 -->
+### p2-red-t1 · discovery · RED for P2.T1: the second advance re-emits a byte-identical brief, exit 0 (phase 2)
+
+Command: uv run pytest tests/unit/test_run_cli.py::test_advance_refuses_a_running_member -q --no-cov
+
+Failure, verbatim (the whole stdout of the SECOND advance is the assertion message, which is the point — it is indistinguishable from the first):
+
+    assert result.exit_code == 2, result.output
+    AssertionError: implement: dispatch brief (phase/1/implement-phase)
+        resolve with: fr run resolve r1 --step implement-phase --item phase/1 --state done   (or --state failed)
+      {"agent": "super-fr:fr-phase-executor", "emits": ["journal:plan"], "for_each": "phase", "gate": null, "group": "implement", "item": "phase/1", "kind": "agent", "needs": ["spec", "plan"], "run": "r1", "skill": null, "step": "implement-phase", "steps": [], "tier": "from_phase", "workflow": "fr-goal@1"}
+
+    assert 0 == 2
+     +  where 0 = <Result okay>.exit_code
+
+Driven through the REAL shipped fr-goal manifest via phase 1s _fr_goal_at_implement, so this is fr-goals own phase/1/implement-phase, not a stand-in.

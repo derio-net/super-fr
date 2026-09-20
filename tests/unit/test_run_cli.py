@@ -2697,3 +2697,40 @@ def test_the_composite_id_refusal_survives_a_narrow_console(tmp_path: Path) -> N
     assert any(
         "--step implement-phase --item phase/1" in line for line in result.output.splitlines()
     ), result.output
+
+
+# --- #499: `advance` refuses a step that is already running (spec §3.A) ----
+
+
+def test_advance_refuses_a_running_member(tmp_path: Path) -> None:
+    """#499, the grouped half. `_advance_group`'s pending-picker was
+    `items.get(key) != "done"`, which cannot tell `running` from `pending`, so
+    a second `advance` re-emitted a byte-identical brief for a unit already
+    dispatched.
+
+    Why this is worse than a papercut (spec §1.1): fr-goal §5 dispatches phase
+    executors into the ONE isolation worktree that already exists —
+    `isolation: "worktree"` is refused for them by design (#420) — so the usual
+    two-agents-one-tree protection is deliberately unavailable. A second brief
+    means two executors editing the same files and committing to the same
+    branch."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert first.exit_code == 0, first.output
+    dispatched_at = load_run_state(repo, "r1").steps["implement"].at
+    assert dispatched_at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    assert "ALREADY RUNNING" in result.output
+    assert "phase/1/implement-phase" in result.output
+    # the refusal names WHEN it was dispatched, off the group record's `at`
+    assert dispatched_at in result.output, result.output
+    # both ways forward, and the resolve one is the two-flag form (#501)
+    assert "fr run resolve r1 --step implement-phase --item phase/1 --state done" in result.output
+    assert "--redispatch" in result.output
+    # nothing a harness could mistake for an instruction to act
+    assert "{" not in result.stdout, result.stdout
