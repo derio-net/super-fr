@@ -243,6 +243,105 @@ def test_start_refuses_to_clobber_an_existing_run(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
+# --- #500: `fr run start` binds the session that started the run ---
+
+
+def _isolation_state_for(repo: Path, branch: str) -> None:
+    """Record an isolation workspace for `branch`, as `fr isolation up` would.
+
+    `_repo` builds a real linked worktree carrying a `.fr-isolation` marker,
+    which is what `ensure_run_workspace` reads — but `sessions.attach` reads
+    the isolation STATE file (`<common .git>/fr/isolation/<branch>.json`), a
+    different artifact that only `up` writes. Without it `attach` raises
+    `IsolationError`, which is the other test's subject.
+    """
+    from fr.isolation.types import IsolationState, save_state
+
+    save_state(
+        IsolationState(
+            repo_root=repo,
+            branch=branch,
+            worktree=repo,
+            profile="host",
+            created_at="2026-09-20T00:00:00+00:00",
+        )
+    )
+
+
+def test_run_start_binds_the_session_when_given_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#500: a run started with `--session` leaves the workspace attributable.
+
+    Every fr-goal workspace reported `sessions=none` because `fr run start`
+    entered isolation itself and never bound the caller (spec §3.C.1).
+    """
+    from fr.isolation.types import load_state
+
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    repo = _repo(tmp_path, branch="feat/x")
+    _isolation_state_for(repo, "feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "start",
+            "cli-only",
+            "--branch",
+            "feat/x",
+            "--run-id",
+            "r1",
+            "--session",
+            "s1",
+            "--harness",
+            "claude-code",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_state(repo, "feat/x")
+    assert state is not None
+    assert [(b.session_id, b.harness) for b in state.sessions] == [("s1", "claude-code")]
+
+
+def test_run_start_warns_but_succeeds_when_attach_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed bind must never cost the operator a started run (spec §3.C.1).
+
+    Bindings are traceability, not enforcement — the edit gate never consults
+    one — so `attach` blowing up warns and the run file still exists.
+    """
+    from fr.isolation import sessions as _sessions
+    from fr.isolation.types import IsolationError
+
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    repo = _repo(tmp_path, branch="feat/x")
+    _isolation_state_for(repo, "feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise IsolationError("no isolation workspace for branch 'feat/x'")
+
+    monkeypatch.setattr(_sessions, "attach", _boom)
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1", "--session", "s1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").is_file()
+    assert "feat/x" in result.stderr
+    assert "could not bind session" in result.stderr
+
+
 # --- Task 2: fr run advance — cli steps ---
 
 

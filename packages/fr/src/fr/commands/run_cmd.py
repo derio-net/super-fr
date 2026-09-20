@@ -36,6 +36,8 @@ from fr.commands.common import resolve_repo_root
 from fr.harness import HARNESSES, load_matrix
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
+from fr.isolation import sessions as _sessions
+from fr.isolation.types import IsolationError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -883,12 +885,56 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
     return None
 
 
+def _bind_session(workspace: Path, branch: str, session: str | None, harness: str) -> None:
+    """Attach `session` to the run's workspace — traceability only (#500, spec §3.C.1).
+
+    `fr run start` enters isolation itself, so before this every fr-goal
+    workspace reported `sessions=none` while sibling workspaces entered via
+    `fr isolation up` carried a uuid: the bind hook's verb regex is
+    start-anchored on `fr isolation (up|exec|down)`, which `fr run start`
+    could not match.
+
+    NON-FATAL by design. Bindings are traceability, not enforcement — the
+    `fr-isolation-required` edit gate reads the `.fr-isolation` marker and
+    never a binding — so a bind that fails must never cost the operator a
+    started run. It warns on stderr, naming the branch, and returns.
+
+    `sessions.attach` resolves its state through `_git_common_dir`, so this
+    works whether the run was born in the base clone's workspace or inside
+    the linked worktree.
+    """
+    if not session:
+        return
+    try:
+        _sessions.attach(workspace, branch, session, harness=harness)
+    except IsolationError as e:
+        # soft_wrap: an operator-facing line rich would otherwise fold at 80
+        # columns whenever stderr is not a tty — i.e. exactly when a harness
+        # captures it (journal p1-f1, r1-f2).
+        err_console.print(
+            f"[yellow]warning: could not bind session {session!r} to branch "
+            f"{branch!r}: {e}[/yellow]",
+            soft_wrap=True,
+        )
+        err_console.print(
+            f"  the run is started; bind it later with: fr isolation attach "
+            f"--session {session} --branch {branch} --harness {harness}",
+            soft_wrap=True,
+        )
+
+
 @run_app.command("start")
 def start_cmd(
     workflow: str = typer.Argument(..., help="Workflow shape name (resolved repo > shipped)."),
     branch: str = typer.Option(..., "--branch", help="Branch this run operates on."),
     run_id: str | None = typer.Option(
         None, "--run-id", help="Override the derived run id (default: date + sanitized branch)."
+    ),
+    session: str | None = typer.Option(
+        None, "--session", help="Bind this agent session to the run's workspace (#500)."
+    ),
+    harness: str = typer.Option(
+        "unknown", "--harness", help="claude | hermes | opencode | unknown (with --session)."
     ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
@@ -1016,6 +1062,11 @@ def start_cmd(
         f"workspace: {workspace} — run every later `fr run` command from there",
         soft_wrap=True,
     )
+    # AFTER `save_run_state` (spec §3.C.1): a bind failure must not be able to
+    # leave a bound workspace with no run in it. The reverse order would make
+    # the failure look like "the session is here" while the cursor the session
+    # was bound for does not exist.
+    _bind_session(workspace, branch, session, harness)
 
 
 @run_app.command("adopt")

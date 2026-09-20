@@ -84,17 +84,22 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:34:27+00:00'
+      note: 'Both tests fail with click''s ''No such option: --session'' (exit 2).
+        Journal p3-red-t1.'
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:35:12+00:00'
+      note: --session/--harness on start_cmd (mirroring isolation_cmd's spelling);
+        _bind_session wraps sessions.attach in try/except IsolationError, warns on
+        stderr naming the branch, exits 0. Both tests pass.
     P3.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:36:15+00:00'
+      note: 'Confirmed: save_run_state -> two stdout prints -> _bind_session, with
+        a comment at the call site saying why the order is load-bearing. tests/unit/test_run_cli.py:
+        144 passed.'
     P3.T2.S1:
       state: ' '
       ticked_at: null

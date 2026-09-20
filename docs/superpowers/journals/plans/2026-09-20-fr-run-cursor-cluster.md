@@ -187,3 +187,20 @@ Phase 1 surfaced three Mac-only suite failures, verified pre-existing (CI green 
 ### r2-ok · review · Phase 2 review: no finding. Gate path, redispatch precedence and the suite state all verified independently (phase 2)
 
 Read the whole diff rather than the report. Checks that mattered: (1) the ALREADY RUNNING branch sits AFTER _gate_pending in advance_cmd, and the gated-brief test was green both before and after the change — the refusal does not bleed into the gate path, which was the one way this could have broken the shipped fr-goal shape at its first step. (2) The top-level branch's save became unconditional, which is correct only because 'running' is refused above it and redispatch+running is the intended fall-through; traced both. (3) 'if redispatch and record.state != \"running\"' sits before the run-complete check, so --redispatch on a finished run reports 'nothing is running (the step is done)' rather than 'run complete' — different from before, and better. (4) Ran the full suite myself: 3 failed, 3303 passed, and the three are EXACTLY the p1-f2 set. CONSIDERED AND DECLINED: the running-check scans 'expected', so a stale running key for a phase removed from the plan mid-run would not be seen. Making it scan 'items' instead is one line but introduces a crash path — 'next(m for m in step.steps if m.id == member_id)' would raise StopIteration on an orphan key — and a plan losing a phase mid-run is drift the plan machinery owns. Left as is, deliberately, recorded so the next reader need not re-derive it.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-red-t1 created=2026-09-20T17:34:21 phase=3 -->
+### p3-red-t1 · discovery · RED for P3.T1: both bind tests fail on the flag not existing, and the state file is a second artifact (phase 3)
+
+`uv run pytest tests/unit/test_run_cli.py -k 'binds_the_session or warns_but_succeeds' -q --no-cov` → 2 failed. Both fail identically, at the click layer:
+
+    Usage: fr run start [OPTIONS] WORKFLOW
+    ╭─ Error ─╮
+    │ No such option: --session │
+    ╰─╯
+    assert 2 == 0
+
+Trap noted and avoided: click's usage error is ALSO exit 2, so a test asserting only `exit_code == 2` would pass with the flag absent. Both of these assert `exit_code == 0` plus a positive fact (the binding, or the stderr text), so neither can pass by accident.
+
+Discovery worth carrying: `_repo` builds a real linked worktree carrying a `.fr-isolation` MARKER, which is what `ensure_run_workspace` reads — but `sessions.attach` reads a DIFFERENT artifact, the isolation STATE file at `<common .git>/fr/isolation/<branch>.json`, which only `fr isolation up` writes. A test that only has the marker gets `IsolationError` from attach, i.e. the warning path. New helper `_isolation_state_for(repo, branch)` writes that state; `state_path` resolves through `_git_common_dir`, so repo_root=the worktree and repo_root=the base clone key to the same file, exactly as spec 3.C.1 says.
+
+`FR_SESSIONS_DIR` is set to tmp in both tests so the per-session index under ~/.cache/fr/sessions is never touched by the suite.
