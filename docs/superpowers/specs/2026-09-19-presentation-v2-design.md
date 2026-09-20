@@ -232,35 +232,66 @@ create, while `seek('50%')` resolved correctly — the player knows the duration
 before it will report it. Read offsets in seconds, or wait for playback to
 start before trusting `getDuration()`.
 
-### But a slideshow cannot be rendered to video
+### How the cast is woven in — verified, 2026-09-20
 
-From the installed `slideshow` skill, emphasis its own:
+The deck is **live** — HyperFrames' own phrasing is *"a live capture of a
+running deck, not a video of slides."* That is what makes this work at all: a
+live deck can host a player running its own clock, where a pre-rendered video
+could not.
 
-> **Do not `hyperframes render` a slideshow into a single MP4.** A deck is
-> authored as several top-level scene compositions … with **no master-root
-> composition**, so `render` resolves only the **first** composition and emits a
-> **silently truncated** MP4 (e.g. 6s of a 40-second deck). A linear main-line
-> export … is **deferred**.
+The slideshow skill sets the governing rule for embedded media:
 
-Supported outputs today are the **live `present` deck** and **per-slide
-`snapshot` stills**. This matters because the plan of record says we stay in
-brainstorming "until the video is rendered" — on this tool, for a slideshow,
-that artefact does not currently exist. Either the deliverable is the live deck,
-or the video comes from screen-recording a presented run, or a non-slideshow
-composition is authored separately for the linear export.
+> Treat native media as the **source of truth** … derive visual state from
+> `media.currentTime`; **do not run a separate timer that can drift away from
+> actual playback**.
 
-Two further constraints from the same reference, relevant to the annotation
-design:
+asciinema-player satisfies it directly. Verified API surface:
 
-- The composition runs inside the **player's iframe**; keypresses and pointer
-  events land on the parent page. Driving `seek()` from deck navigation is a
-  cross-frame call — same-origin, so workable, but not a same-document call.
-- Anything outside the GSAP seek path "must be self-driving". asciinema-player
-  has its own clock, so it qualifies — and self-driving is what we want here:
-  pause the deck on a slide, let the cast run, annotate over it.
-- The standalone harness is explicitly **"a temporary workaround"**; the durable
-  engine-hosted path (`hyperframes preview --slideshow`) has not shipped. Worth
-  knowing before building much on its exact shape.
+| capability | result |
+|---|---|
+| events accepted | `play`, `pause`, `ended`, `input`, **`marker`**, `seeked` |
+| events **rejected** | `timeupdate`, `loadedmetadata` — both throw |
+| `seek(2.0)` / `seek('50%')` | both work |
+| `markers: [[1.0,'Security'],[2.0,'Quality'],[2.8,'Continuity']]` | accepted as a **config array** |
+| `marker` event payload | `{index, time, label}`, fired at each time |
+
+**The design that follows.** Markers are passed at create time, so the angle
+annotation points live in **deck config, not baked into the cast** — they can be
+retimed without re-recording, which matters because the beats are provisional.
+
+- One slide hosts the player with a **deck-wide range**, per the skill's own
+  rule for *"user-controlled evidence videos that may be played from multiple
+  focused slides"*.
+- The **cast is the master clock** for in-slide progression. Its `marker` event
+  reveals the annotation for that angle. No parallel timer, so the rule above is
+  satisfied by construction rather than by discipline.
+- Deck navigation drives the cast through `seek(t)`; `seeked` re-syncs which
+  annotation should be showing after a jump.
+- Fragments stay available for holds that are *not* cast-driven — a title build,
+  a diagram reveal — but they must not also drive in-slide progression, or the
+  two timelines fight for the same job.
+
+**One real constraint:** there is no `timeupdate`. A smooth progress overlay
+cannot be driven off an event; it needs `requestAnimationFrame` sampling
+`getCurrentTime()`. That still reads the source of truth rather than running an
+independent clock, so it stays inside the rule — but it is a hand-rolled loop,
+not a subscription, and should be written as one deliberately.
+
+Also: `getDuration()` returned `undefined` immediately after create while
+`seek('50%')` resolved correctly. Read offsets in seconds; do not trust
+`getDuration()` before playback starts.
+
+### What the deck cannot do: export itself as one MP4
+
+`hyperframes render` on a deck **does not fail** — with no master-root
+composition it resolves only the first slide and writes a silently truncated
+MP4. Supported outputs are `hyperframes present` (the live deck) and
+`hyperframes snapshot` (per-slide stills); linear export is deferred.
+
+This is a fact about `render`, not an obstacle: the deliverable is the live
+deck. If a shareable video is wanted later, it comes from screen-recording a
+presented run — which captures the cast playing at its own rate, exactly as an
+audience sees it.
 
 ## Recording acceptance — when a take is usable
 
