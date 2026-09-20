@@ -244,3 +244,9 @@ Post-merge, operator-driven:
    `journal-check` step and blocks `deliver` on its non-zero exit.
 5. Confirm a run started against the pre-change shape reports drift naming
    `added: journal-check`, and that `fr run adopt --run-id` recovers it.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-20-journal-require-reviews | `derio-net/super-fr` | `2026-09-20-journal-require-reviews` | — |

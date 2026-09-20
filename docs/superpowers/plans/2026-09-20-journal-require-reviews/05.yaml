@@ -1,0 +1,78 @@
+schema_version: 2
+phase:
+  number: 5
+  title: The published explainer must not lag the pipeline it describes
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Verify the renderer BEFORE writing a word
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Per .claude/rules/explainers-currency.md, re-render the
+      UNMODIFIED docs/explainers/01-fr-goal.md and confirm it is
+      byte-identical to the committed 01-fr-goal.html, so the later
+      diff is only what you wrote. Two traps, both documented in that
+      rule and both found by this exact check: run the renderer with
+      the working directory set to the FILESYSTEM ROOT (never inside
+      the worktree, or the project venv's pygments leaks in and
+      codehilite rewrites every code block), and pass `--isolated`
+      (or a globally-installed pygments leaks in the same way
+      whatever the cwd). Command shape:
+        B=~/.claude/plugins/marketplaces/derio-net--blog-craft
+        uv run --isolated --no-project --with markdown --with pyyaml \
+          python "$B/tools/render_explainer.py" \
+          <worktree>/docs/explainers/01-fr-goal.md --style broadsheet \
+          --embed-fonts -o <worktree>/.fr-tmp/01-fr-goal.check.html
+      then diff that against the committed
+      <worktree>/docs/explainers/01-fr-goal.html.
+      Empty diff -> proceed. NON-empty -> STOP and journal a `finding`;
+      do not hand-edit the .html (it carries embedded fonts and a
+      do-not-hand-edit banner) and do not write prose you cannot ship.
+- number: 2
+  title: Update the prose, then regenerate
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Edit docs/explainers/01-fr-goal.md. Read the WHOLE file first and
+      fix every place the step list or the review story appears — at
+      minimum the Overview sentence listing the run's steps, the
+      embedded manifest excerpt if it shows the step list, and the
+      sections narrating the implement/review loop and delivery. Say
+      what actually changed and WHY, in the file's own voice (second
+      person, unhurried, for a reader who has never seen this repo): a
+      review used to be the one step in the pipeline that left no
+      trace, so skipping it and passing it looked identical; now each
+      reviewed phase writes a journal entry and a step of the run
+      refuses to deliver without one. Do not describe the flag's
+      implementation.
+  - id: P5.T2.S2
+    text: |-
+      Regenerate with the exact verified command from P5.T1.S1,
+      writing to docs/explainers/01-fr-goal.html this time. Diff it and
+      confirm the change is ONLY your paragraphs — a diff of hundreds
+      of lines means pygments leaked in and the command was run wrong.
+      Commit .md and .html together. Then
+      `uv run pytest -q --no-cov tests/unit/test_tripwire_explainers_fresh.py`.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

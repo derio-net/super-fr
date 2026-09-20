@@ -1,0 +1,92 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The obligation in prose — fr-goal §6/§7, fr-debugging, and the mirrors
+  tag: agentic
+  tier: mechanical
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - journal-review-entry-per-phase
+tasks:
+- number: 1
+  title: Canonical skill prose
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md §6: after the
+      existing "record each as a plan-scope `finding`" clause, add the
+      review-entry obligation — `fr journal add --scope plan --slug <s>
+      --kind review --phase N` naming the phase and the findings raised
+      (or that none were), and say that `journal-check` fails delivery
+      without it. Keep the section's compressed voice and do not grow
+      it by more than a couple of lines — this file is read in full on
+      every run, so length is a real cost.
+  - id: P4.T1.S2
+    text: |-
+      Edit §7: the journal-check line currently reads as an instruction
+      to the agent. Change it to say the CURSOR runs `journal-check`
+      before `deliver` and its exit code is the verdict — the
+      distinction #430 is about. Mention the drift-recovery
+      (`fr run adopt --run-id`) for runs started against the older
+      shape, since operators will hit it once.
+  - id: P4.T1.S3
+    text: |-
+      Edit plugins/super-fr/skills/fr-debugging/SKILL.md: READ IT FIRST
+      and find where it invokes review. It drives its own fix-PR
+      without the fr-goal cursor, so the gate does not run there
+      automatically — say that plainly and give the same
+      `fr journal add --kind review --phase N` obligation, rather than
+      implying an enforcement that is not wired. A promise of a gate
+      that does not exist is the failure this whole change is about.
+- number: 2
+  title: Mirrors and their tripwires
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Run `uv run --no-project python scripts/sync-opencode.py` (no
+      flag writes) and commit the regenerated
+      .opencode/skills/**/SKILL.md mirrors. Then
+      `uv run --no-project python scripts/sync-opencode.py --check` and
+      `uv run pytest -q --no-cov tests/unit/test_tripwire_opencode_skills_sync.py
+      tests/unit/test_tripwire_opencode_instructions_sync.py
+      tests/unit/test_tripwire_skill_tool_neutrality.py
+      tests/unit/test_skill_validation.py` — all green. The
+      tool-neutrality scanner is the one most likely to object: it
+      forbids naming a harness-specific tool outside a scoped clause,
+      so keep the new prose tool-neutral (`fr journal add` is a CLI,
+      which is fine).
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      ruff format + ruff check + mypy + `uv run pytest -q --no-cov`,
+      same allowance.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

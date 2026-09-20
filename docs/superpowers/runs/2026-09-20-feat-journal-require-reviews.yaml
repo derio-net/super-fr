@@ -3,7 +3,7 @@ run: 2026-09-20-feat-journal-require-reviews
 workflow: fr-goal@1
 branch: feat/journal-require-reviews
 started: '2026-09-20T10:54:43+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,10 +12,11 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
   spec-review:
-    state: running
-    at: '2026-09-20T13:10:59+00:00'
+    state: done
+    at: '2026-09-20T13:12:32+00:00'
   plan:
-    state: pending
+    state: running
+    at: '2026-09-20T13:12:32+00:00'
   plan-review:
     state: pending
   implement:

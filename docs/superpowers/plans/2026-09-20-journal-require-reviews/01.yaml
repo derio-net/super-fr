@@ -1,0 +1,124 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — the CLI surface of `--require-reviews`, and every way it refuses
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - journal-require-reviews-gate
+  skeleton: true
+tasks:
+- number: 1
+  title: The three new options and their argument grammar, red to green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests to the EXISTING journal CLI test module (find it —
+      `grep -rl "journal check" tests/unit` — and put these beside the
+      existing check tests rather than starting a second module).
+      Drive `fr journal check` through the same CliRunner/typer harness
+      those tests use. Assert:
+      (a) `--require-reviews` exists and, on a plan whose phases are
+          ALL incomplete, exits 0 — the flag is inert until something
+          claims to be done;
+      (b) `--require-reviews --scope spec` exits 2 with a message
+          naming that only plan journals have phases (mirror the
+          refusal wording `fr journal handoff` already uses for the
+          same condition — read it, do not invent a second phrasing);
+      (c) `--plan-dir <dir>` with NO `--slug` works, deriving the slug
+          as the plan dir's basename;
+      (d) `--slug <s>` with NO `--plan-dir` works, defaulting the plan
+          dir to docs/superpowers/plans/<s> — the same default
+          `fr journal handoff` documents;
+      (e) NEITHER given exits 2 naming both options;
+      (f) WITHOUT `--require-reviews`, a plan with a completed,
+          unreviewed phase still exits 0 — the back-compat assertion
+          that makes spec D2 real, and the one a future refactor is
+          most likely to break silently.
+      Build the plan fixture with `fr plan create` (or the helper the
+      existing tests already use for a real plan folder) — a
+      hand-written NN.yaml would drift from the schema.
+      Run pytest — fails, the options do not exist.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/journal_cmd.py, add to the
+      `check` command: `require_reviews: bool = typer.Option(False,
+      "--require-reviews", help=...)`, `plan_dir: str | None =
+      typer.Option(None, "--plan-dir", help=...)`, and change `slug`
+      from a required option to `str | None = typer.Option(None,
+      "--slug", ...)`.
+      Resolve slug/plan-dir up front: slug = slug or
+      Path(plan_dir).name when plan_dir is given; neither → exit 2.
+      Refuse `--require-reviews` with scope != "plan" at exit 2.
+      The gate itself is phase 2 — here the flag's only behaviour is
+      the refusals above plus exit 0. Do NOT stub a silently-passing
+      gate that phase 2 then fills in; leave the flag doing exactly
+      what the tests assert, so an unfinished phase 1 cannot look like
+      a working gate. Run the S1 tests — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: `--slug` is now optional on `check` only, while every
+      other journal verb keeps it required — an asymmetry that will
+      puzzle the next reader. Pull the slug/plan-dir resolution into
+      one small module-level helper with a docstring saying WHY it
+      exists (spec §B: the manifest step can interpolate
+      `{{ artifacts.plan }}` but cannot compute its basename, so
+      without this the gate is not expressible as a `kind: cli` step
+      at all). Re-run the tests.
+- number: 2
+  title: Skeleton smoke — the real CLI, on this repo's own plan
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      SKELETON SMOKE, minimum runtime exercised for real rather than
+      through CliRunner: from the worktree run
+      `uv run fr journal check --scope plan --plan-dir
+      docs/superpowers/plans/2026-09-04-worktree-traceability
+      --require-reviews; echo "exit=$?"` and the same command with
+      `--slug 2026-09-04-worktree-traceability` instead, confirming
+      both resolve the same journal and agree. Phase 2 has not built
+      the gate yet, so both exit on the EXISTING open-findings rule or
+      0 — record which, and the exact exit codes, in the journal
+      (`fr journal add --scope plan --kind discovery`). This is the
+      baseline the phase-2 tests are measured against; capturing it
+      after the gate exists would prove nothing.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      `uv run ruff format packages/ tests/`; `uv run ruff check
+      packages/ tests/`; `uv run mypy packages/fr/src
+      packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`;
+      `uv run pytest -q --no-cov`. All green except the one known
+      pre-existing failure
+      (test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable,
+      issues #463/#489) — if anything ELSE fails, it is yours.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

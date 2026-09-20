@@ -1,0 +1,94 @@
+schema_version: 2
+phase:
+  number: 3
+  title: The cursor runs it — a `journal-check` step in the shipped fr-goal shape
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - fr-goal-review-gate-is-cursor-enforced
+tasks:
+- number: 1
+  title: The manifest step, red to green
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: add a test asserting the SHIPPED fr-goal shape (resolve it
+      the way tests/unit/test_tripwire_shipped_workflows.py already
+      does — reuse that discovery, do not hardcode the path) contains a
+      step `journal-check`, that it is `kind: cli`, that its `run`
+      interpolates `{{ artifacts.plan }}` and passes
+      `--require-reviews`, and that it sits strictly BETWEEN
+      `implement` and `deliver` in step order. Order is the whole
+      point: after `deliver` the PR already exists. Run — fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: add to plugins/super-fr/workflows/fr-goal.yaml, between
+      `implement` and `deliver`:
+        - id: journal-check
+          kind: cli
+          needs: [plan]
+          run: fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews
+      Then confirm `uv run fr workflow check` passes for the shape
+      (`plan` is in REPO_TRACKED_ARTIFACTS and is emitted by the
+      earlier `plan` step, so `needs` is satisfiable) and that
+      test_tripwire_shipped_workflows.py is still green. Run — green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: the manifest's header comment enumerates its
+      divergences from spec §4.A and explains the `implement` grouping.
+      Add a short paragraph for `journal-check`: why the gate is a step
+      rather than a line of `deliver`'s prose (#430 — an obligation
+      enforced by an instruction gets absorbed), and that adding it
+      drifts in-flight runs BY DESIGN, recovered with
+      `fr run adopt <plan-dir> --run-id <fresh>`. Re-run.
+- number: 2
+  title: Prove the drift, do not assume it
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      VERIFY the cost the spec claims. This very run
+      (2026-09-20-feat-journal-require-reviews) was started against the
+      pre-change shape, so `uv run fr run status
+      2026-09-20-feat-journal-require-reviews` and then
+      `uv run fr run advance ...` should now report drift naming
+      `added: journal-check`. Capture the ACTUAL message and journal it
+      (`fr journal add --scope plan --kind discovery`), then leave the
+      run stranded — deliver recovers it. If it does NOT drift, that
+      contradicts the spec and run_cmd.py:258; journal a `finding`
+      rather than quietly moving on.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      ruff format + ruff check + mypy + `uv run pytest -q --no-cov`,
+      same allowance.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
