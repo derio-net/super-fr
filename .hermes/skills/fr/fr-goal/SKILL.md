@@ -89,7 +89,7 @@ spec/plan are invisible and writes are denied, yet the dispatch succeeds, so the
 while nothing happens. The two isolations don't compose. (Contrast §2's cross-repo agents, which
 *keep* the flag — each starts a fresh pipeline in a different repo; these share this one's workspace.)
 Hermes `delegate_task(goal, context)` carries the brief in `context`, serial; child loads
-`fr-execute`. OpenCode dispatches the same brief, serially, through its task tool as `subagent_type: fr-phase-executor-<tier>` (untiered `fr-phase-executor` when the phase declares no `tier`) — the call carries no model, so the agent NAME is the only place a tier can live.
+`fr-execute`. OpenCode dispatches the same brief, serially, through its task tool as `subagent_type: fr-phase-executor-<tier>`: the call carries no model, so the agent NAME is the only place a tier can live. Two cases take the untiered `fr-phase-executor` instead — a phase declaring no `tier`, and a tier that is UNRESOLVED (`fr models resolve` prints nothing) — and you journal which: a tier agent with no binding just inherits the session model, a row indistinguishable from a working tiered dispatch, whereas the untiered name makes the absence visible.
 Price stated, not hidden: ~7x an inline run ($7.59 measured against ~$1), bought for the fastest measured wall clock (56.2 min against 77.6 and 105.2) and real per-phase context isolation; inline only when dispatch is unavailable. An executor that both returns and messages: keep the return, log the drop (#461).
 
 ### 6. review-phase — per phase, inside the loop, then push (never a PR)

@@ -2130,10 +2130,30 @@ rows:
       dispatches, rather than being frozen at whatever the last install.sh run resolved.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-opencode-tier-binding-reaches-dispatch-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec gh#498/§3.A. Two failure modes: unbound-then-bound loses the answer
-      silently; bound-then-rebound pins the model the operator moved away from (§1.1,
-      reproduced in a sandbox). Target: unit on the in-place materialiser incl. the
-      stale-binding regression, integration on both triggers (fr models set and install.sh),
-      plus the post-merge live run asserting the session row''s model.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_agents_materialize.py
+      - super-fr:tests/unit/test_models_cmd.py
+      - super-fr:tests/unit/test_fr_goal_dispatch_prose.py
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py
+    status: ci
+    notes: 'not-implemented -> ci: the spec shipped, so the evidence exists and runs
+      on every PR. The loop is closed at the BINDING (§3.A): fr.opencode_agents.materialize_agents
+      rewrites the installed agent files in place, and both triggers go through it —
+      fr models set (unit: test_models_cmd.py, the CLI side effect and its reporting)
+      and scripts/install.sh via the new fr models apply --harness opencode verb (int:
+      test_install_opencode_agents.py, rewritten in phase 2 to drive the REAL fr on
+      the sandbox PATH rather than a stub that could only fake resolve, so it exercises
+      install.sh + repo-over-user resolution + the materialiser end to end). The stale-binding
+      case named by Test Plan item 2 — an agent pinning model <A>, a binding moved to
+      <B>, the agent then reading <B> — is test_opencode_agents_materialize.py::TestMaterializeAgents::test_stale_binding_regression;
+      it is the sharper of §1.1''s two failure modes (a wrong value stated confidently)
+      and the test whose absence let the defect ship in PR #495. The §3.B complement,
+      an UNRESOLVED tier dispatching the untiered fr-phase-executor so the absence is
+      visible in the session row, is prose and is pinned by test_fr_goal_dispatch_prose.py::test_the_clause_instructs_the_untiered_fallback_when_a_tier_is_unresolved.
+      What ci does NOT claim, stated so the row is not the overclaim it was created
+      to correct: no automated level dispatches a real OpenCode subagent and reads back
+      the session row''s model. That live claim stays with opencode-subagent-dispatch,
+      deliberately left at skipped (its scope correction is already in its own notes,
+      finding r-s1) and is this plan''s manual phase 4.'

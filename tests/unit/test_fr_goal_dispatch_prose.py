@@ -116,3 +116,60 @@ def test_the_row_does_not_restate_the_clauses_measured_detail() -> None:
     assert "$" not in summary and "min" not in summary, (
         f"the row summary took on the clause's measured detail: {summary!r}"
     )
+
+
+# 2026-09-20 opencode-tier-binding-reaches-dispatch spec §3.B, decision `d2`,
+# P3.T1. An unresolved tier used to dispatch `fr-phase-executor-<tier>` anyway:
+# the agent inherits the session model, so the session row is indistinguishable
+# from a working tiered dispatch. Dispatching the UNTIERED name instead makes
+# the absence visible in the one artifact anyone checks.
+#
+# `(?![\w-])` is what separates the two names: `fr-phase-executor-<tier>`
+# contains `fr-phase-executor`, so a bare substring test would already pass.
+_UNTIERED_AGENT_RE = re.compile(r"fr-phase-executor(?![\w-])")
+
+# Meaning, not a sentence: any of these says "the tier did not resolve".
+_UNRESOLVED_RE = re.compile(
+    r"unresolv\w*|unbound|no binding|(?:comes? back |returns? |resolves? )?empty"
+    r"|(?:cannot|can't|does not|doesn't|won't) resolve",
+    re.IGNORECASE,
+)
+_JOURNAL_RE = re.compile(r"journal\w*", re.IGNORECASE)
+
+# Wide enough that reordering the clause or splitting the fallback across a
+# line break cannot fail it, narrow enough that the Claude Code arm's own
+# untiered mention at the head of the clause does not reach the tail.
+_NEIGHBOURHOOD = 240
+
+
+def test_the_clause_instructs_the_untiered_fallback_when_a_tier_is_unresolved(
+    dispatch_clause: str,
+) -> None:
+    """The fallback must be stated where the dispatch instruction lives, and
+    stated as BOTH halves: dispatch the untiered name, and journal why. Half of
+    it is the defect — a silent untiered dispatch is another unexplained row."""
+    windows = [
+        dispatch_clause[max(0, m.start() - _NEIGHBOURHOOD) : m.end() + _NEIGHBOURHOOD]
+        for m in _UNTIERED_AGENT_RE.finditer(dispatch_clause)
+    ]
+    assert windows, (
+        "the untiered `fr-phase-executor` is not named in the dispatch clause "
+        "at all, so no reader can be told to fall back to it"
+    )
+    assert any(_UNRESOLVED_RE.search(w) and _JOURNAL_RE.search(w) for w in windows), (
+        "the dispatch clause names the untiered `fr-phase-executor` but never "
+        "ties it to an UNRESOLVED tier and a journal entry — an unresolved tier "
+        "dispatching `fr-phase-executor-<tier>` silently inherits the session "
+        "model (spec §3.B, decision `d2`)"
+    )
+
+
+def test_the_fallback_clause_still_names_no_harness_specific_tool_unscoped(
+    skill_text: str,
+) -> None:
+    """Re-asserted for this edit specifically: the fallback lands in the one
+    clause that legitimately names OpenCode's `task` tool, so an edit there is
+    exactly where a harness-specific mention could escape its scope.
+    `test_the_new_tool_mention_stayed_inside_the_scoped_clause` is the standing
+    guard; this pins it to P3.T1's change."""
+    assert scan_prose(skill_text) == []
