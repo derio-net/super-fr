@@ -311,3 +311,14 @@ Review finding, verified against packages/fr/src/fr/render.py. The bullet went f
 ### p3-tool-neutrality-scope · discovery · The tool-neutrality tripwire scans SKILL.md only — agent files are ungated (phase 3)
 
 Noted by review, not a defect. fr.harness.prose.scan_prose covers */SKILL.md under the three skill trees, so plugins/super-fr/agents/fr-phase-executor.md and the four .opencode/agent/*.md may name Agent and 'task: deny' freely, while the identical sentence one file over in a SKILL.md requires a clause naming all three harnesses. That asymmetry is defensible — an agent file is per-harness by construction — but it means the next contract edit can pass every gate in the agent file and fail in the skill, which is exactly what happened here. Recorded so the next editor is not surprised.
+
+<!-- fr:journal kind=discovery scope=plan id=b87b7e78beec created=2026-09-20T17:08:56 phase=4 -->
+### b87b7e78beec · discovery · The corpus counts this plan, so any ticked-step number written into an artifact is stale the moment the next step is ticked (phase 4)
+
+While writing the goal-dispatch-lint-precision row notes I nearly pinned 'N of the corpus's 2113 agentic steps are ticked'. Measured live during P4.T1 it is 1841; test_dispatch_lint_corpus.py's own docstrings say 1827 (DISPATCH_GATE_TOKEN) and 1835 (test_the_dispatch_gate_scores_zero_on_this_repos_own_plans). All three are 'right' — they were measured at different moments.
+
+The cause is that corpus_plans() reads the LIVE plans root, which contains 2026-09-20-agentic-dispatch-verb-lint itself. Every fr plan edit --tick I run during phase 4 increments the corpus's ticked count. The corpus is self-referential by design (that is what makes the precision claim honest — it measures the repo's real plans, including the one shipping the detector), but it means a ticked count is a moving measurement and does not belong in any artifact that is not regenerated.
+
+What IS stable and safe to cite: plans_parsed=82, agentic_steps=2113, gate hits=0, pattern hits=0 (the tick state changes, the step population does not, until a new plan lands). The floors MIN_PLANS=70 / MIN_AGENTIC_STEPS=1800 are deliberately below the live numbers for exactly this reason.
+
+So the matrix row notes say 'the large majority of the corpus' rather than a number. The two stale docstring counts are cosmetic and pre-existing; left alone rather than churned, since the next tick would stale them again. If anyone wants them accurate, the fix is to state them as a proportion or to drop the absolute.

@@ -100,9 +100,15 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:08:42+00:00'
+      note: 'Three rows moved with fr acceptance set-status (no hand-edit). goal-agentic-dispatch-purity
+        → ci (unit=tests/unit/test_v2_plan_ops.py); goal-dispatch-lint-precision →
+        ci (unit=tests/unit/test_dispatch_lint_corpus.py); goal-executor-refuses-tick
+        → skipped, not ci, with notes saying plainly that only the prose contract
+        is verified and the runtime behaviour is agent-side. fr acceptance check:
+        127 rows OK, ci 104 / skipped 19 / not-implemented 4, exit 0 (which also covers
+        the three regenerated reports).'
     P4.T2.S1:
       state: ' '
       ticked_at: null
