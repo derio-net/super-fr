@@ -497,3 +497,37 @@ journal-require-reviews-gate -> unit=tests/unit/test_journal_cmd.py: covers the 
 ### p6-t3-gate · discovery · Full CI gate is green modulo the three pre-documented tolerated reds (phase 6)
 
 uv run pytest (full, not -q --no-cov) over the whole worktree: 3319 passed, 80 skipped, 3 failed, coverage 91.71% (cov-fail-under=75 satisfied). All 3 failures match the reds this dispatch pre-declared as unrelated-and-tolerated: test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused, test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused (Rich wrap point this machine's long tmp_path pushes into an asserted substring), and test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable (#463/#489). No test introduced or touched by this plan is among them. ruff format/check and mypy over the 4 src trees are clean; bump-version.py --check agrees at 4.9.0.
+
+<!-- fr:journal kind=finding scope=plan id=r-p6-f1 created=2026-09-20T18:48:46 phase=6 state=fixed -->
+### r-p6-f1 · finding [fixed] · Phase 6's commits cited gh-434 — a real but unrelated issue (phase 6)
+
+Both phase 6 commits ended '(gh-434)'. This PR is gh-430. #434 is a real, separate issue (the phases-file tier bug, which has its own worktree on this machine), so the reference was not merely dead — GitHub would have linked this release commit into #434's timeline and this work would appear, permanently, as progress on something it has nothing to do with.
+
+Caught by grepping the branch's own log for issue refs rather than by reading the two messages, which is the check worth keeping: the wrong ref reads perfectly well in isolation.
+
+Fixed rather than annotated, because both commits were local-only (verified with `git branch -r --contains`). Squashed via `git reset --soft HEAD~2` and recommitted with the correct ref; the tree hash before and after is identical, so nothing in the content moved.
+
+<!-- fr:journal kind=review scope=plan id=review-p6 created=2026-09-20T18:48:46 phase=6 -->
+### review-p6 · review · phase 6 review - a wrong issue ref, and every release claim re-run (phase 6)
+
+Reviewed: plan phase 6 (06.yaml), and the diff e147703..HEAD — the acceptance matrix and its three generated reports, the version-bearing manifests, uv.lock, and the phase's own journal entries.
+
+Reviewed by the orchestrator inline: phase 6 makes no product change, so its correctness is entirely a matter of re-running the commands it claims to have run.
+
+Findings raised: 1, fixed.
+  r-p6-f1 commits cited gh-434, a real but unrelated issue   [fixed]
+
+RE-RUN, not taken on trust:
+- `bump-version.py --check` -> 'ok — versions agree', all ten surfaces at 4.9.0; `fr --version` -> 4.9.0. The diff against origin/main over the root pyproject.toml, .claude-plugin/marketplace.json and packages/fr/pyproject.toml contains NOTHING but the version lines — verified by filtering the diff to changed lines and deduplicating, so a stray edit riding along in a release commit would have shown.
+- The bump was VERIFIED rather than re-made, which was the trap: 4.9.0 arrived uncommitted from an earlier session, and `bump-version.py minor` from that state would have landed 4.10.0 and overshot the release this PR owes.
+- `fr acceptance check` -> 127 rows OK (ci 105, skipped 18, not-implemented 4), warnings only, both pre-existing and about archived spec paths unrelated to this PR.
+- `fr validate artifacts` -> 33 artifacts, all structurally valid. No stamp bump and no migration owed, consistent with the spec's Non-goals: nothing here changed an artifact's shape.
+- Working tree clean.
+
+The acceptance-ref reasoning is right and worth recording: phase 6 cited test_journal_model.py::TestReviewedPhases for `journal-review-entry-per-phase` and deliberately did NOT also cite the integration test, on the grounds that cursor-enforcement is the third row's claim and citing it here would repeat r-p3-f2 — a row flipped on evidence covering only half its acceptance. That is the lesson from phase 3 being applied without being told to.
+
+The executor also declined to self-record phase 6's own review entry, noting that doing so would defeat the gate's purpose. Correct, and the reason this run ends with the orchestrator writing review-p6 rather than the phase that wrote the code.
+
+Full gate: 3319 passed, 80 skipped, 3 failed, coverage 91.71% against the 75% floor. The three reds are exactly the pre-existing environment-dependent ones this branch has tolerated throughout — two Rich wrap-point failures in test_run_workspace.py and test_workflow_check.py's discoverability test (#463/#489) — and were re-confirmed unrelated: the only source file this branch changes under packages/ is journal_cmd.py plus journal/model.py.
+
+Assessment: the plan is complete. Deliver.
