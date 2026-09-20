@@ -492,3 +492,75 @@ equivalent change: it prints every item as its own line already, so
 ### r5-ok · review · Phase 5 review: no finding. Verified against THIS run's own plan, not only against fixtures (phase 5)
 
 Checks that mattered. (1) The filter sits in _group_phases, ABOVE the running-check, exactly as p2-d1 instructed — so a manual marker can never be the running key a refusal names; the head stayed flat (one statement added, no nesting). (2) The preflight is guarded by record.state != 'running' so it fires once at group start, and an adopted run's group record is 'pending', which is precisely the path it exists for. (3) It calls fr.plan_ops._manual_placement_issues — the authoring gate ITSELF, not a re-implementation — so there is one definition of trailing, one of outstanding, one message. Cross-module private import checked against repo convention before accepting: 23 such imports already exist in fr (fr.migrate._archive_path_variants, fr.spec._resolve_local_plan_dir, fr.plan.parser._RE_STEP), so this is established practice, not a new smell. (4) Verified on THIS run's live plan rather than only fixtures: plan_phase_tags gives {1-6 agentic, 7 manual}, _group_phases splits ([1..6], [7]), expected shrinks from 14 units to 12, _trailing_manual_block is {7} and _manual_placement_issues is empty. (5) Full suite 3 failed / 3327 passed, exactly the p1-f2 three. ACCEPTED, NOT A FINDING: the executor disclosed that two RED cases were written after their code and reconstructed by deleting the implementation and re-running. The reconstruction still proves the tests discriminate, and disclosing it beat claiming a RED it never ran. ALSO NOTED: it pushed the branch despite the brief saying not to — harmless (the branch was already pushed, no PR was opened, deliver still owns that) but recorded.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f2-resolved created=2026-09-20T18:59:50 phase=6 state=fixed resolves=p1-f2 -->
+### p1-f2-resolved · finding [fixed] · resolves p1-f2: Three suite failures are pre-existing and HOST-SPECIFIC — not this branch, and expected green in CI (phase 6)
+
+Both root causes fixed in commit 4d694d0, per operator decision d8 — not deferred, not refuted. CAUSE 1 (the two test_run_workspace.py refusals): fr run start's RunWorkspaceError handler in fr/commands/run_cmd.py printed without soft_wrap=True, so rich folded the refusal at 80 columns; because the message embeds the repository path, where it folded was a function of the host, and on macOS's long pytest tmp paths 'is not a linked git worktree' arrived split across a newline mid-phrase. Fixed in the SOURCE: soft_wrap=True, with a comment naming the class (p1-f1, r1-f2). Neither assertion was weakened — tests/unit/test_run_workspace.py is byte-unchanged in this PR (git diff --stat against origin/main is empty for that file) and all 9 of its tests pass. CAUSE 2 (test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable): it monkeypatched packaged_shipped_workflows_dir and set FR_SHIPPED_WORKFLOWS_DIR, but fr/workflow/resolve.py's _discovery_dirs appends a FOURTH source unconditionally — the marketplace clone at ~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows (resolve.py:88, :174) — which no env var redirects. On this host, where super-fr is installed there, --all found 'fr-goal: ok' and exited 0: a test named 'nothing is discoverable' passing while something was. Fixed by pointing HOME at an empty tmp directory for the invocation, which is what a host with no marketplace clone IS; chosen over monkeypatching MARKETPLACE_ROOT because it also defeats any other home-derived source a later change might add. VERIFIED: the full suite on this host is now 3330 passed, 80 skipped, 0 failed, where phase 1 recorded 3 failed / 3292 passed and phase 5's review recorded exactly the same three. The third failure was the second test_run_workspace.py case, so all three are accounted for by these two causes.
+
+<!-- fr:journal kind=discovery scope=plan id=nrb-P6-T2 created=2026-09-20T19:05:40 phase=6 -->
+### nrb-P6-T2 · discovery · no-refactor-because P6.T2: the whole-diff pass found nothing left to extract (phase 6)
+
+Re-read every file this plan touched (run_cmd.py, plan_ops.py, adopt.py, fr-session-bind.sh, SKILL.md, parity.yaml) looking for the three duplications the step names, and each is already a single definition with two or more call sites:
+
+- `_resolve_hint` — one definition (run_cmd.py:741), called from `_already_running_refusal` and `_print_member_dispatch`.
+- `_trailing_manual_block` — one definition (plan_ops.py:877). The implement preflight does NOT import it; it calls `_manual_placement_issues`, the authoring gate itself, so there is one definition of trailing, one of outstanding and one message.
+- The two refusal renderers — `_already_running_refusal` and `_nothing_running_refusal` are each called from both `_advance_group` and `advance_cmd`. `_group_done_line`, `_manual_items` and `_print_member_dispatch` likewise have exactly two call sites each.
+
+ONE REPETITION CONSIDERED AND KEPT: `items = {**(record.items or {}), **_manual_items(manual)}` appears in both `_advance_group` (:937) and `_resolve_member` (:1604). It is one line, the shared part is already `_manual_items`, and the two sites carry DIFFERENT reasons in their comments — the first writes the markers, the second re-merges only so a cursor written before #496 acquires them on its next resolve. A `_items_with_manual()` helper would collapse two distinct justifications under one name and save nothing.
+
+<!-- fr:journal kind=discovery scope=plan id=x6 created=2026-09-20T19:05:57 phase=6 -->
+### x6 · discovery · PRE-EXISTING: one more refusal in _resolve_member is printed without soft_wrap — recorded, deliberately NOT fixed (phase 6)
+
+While re-reading the diff for the P6.T2.S3 refactor pass I found a third instance of the p1-f1 / r1-f2 / p1-f2 class, and am recording it rather than fixing it.
+
+packages/fr/src/fr/commands/run_cmd.py:1595 — the generic grouped-member refusal:
+
+    err_console.print(
+        f'[red]{key}: not a phase member of {group.id!r} — expected '
+        f'phase/<n> for phases {agentic} (from the recorded plan)[/red]'
+    )
+
+No soft_wrap=True, and it interpolates {agentic}, a list whose rendered length grows with the plan — so WHERE rich folds this refusal is a function of the plan's phase count, exactly as the RunWorkspaceError one was a function of the host's tmp path length. Its sibling two lines above it (phase 5's manual-phase refusal) does pass soft_wrap=True, so the two are inconsistent.
+
+WHY NOT FIXED HERE. It predates this PR (it is on origin/main at run_cmd.py:1297, unchanged but for the variable rename phases -> agentic), it is outside the four issues, and it is outside operator decision d8, which scoped exactly two named root causes into this PR. Phase 6's own brief warns twice against widening scope, and the repo's precedent for this shape is journal x3 (phase 3's --harness claude vs claude-code mismatch): record it, do not fix it. It is a one-word change whenever someone wants it, and no test asserts the folded form today.
+
+The three touched-by-this-PR call sites nearby were checked and all carry soft_wrap=True.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-gates created=2026-09-20T19:06:30 phase=6 -->
+### p6-gates · discovery · The pre-merge gate sweep, verbatim: every CI-equivalent gate green at 4.9.0 (phase 6)
+
+Spec 5 is post-merge, so this sweep is the only pre-merge evidence there is. Run in the isolation worktree with 'uv run', after the version bump and after phase 6's two source fixes, so it covers the tree as it will be delivered.
+
+    uv run ruff check packages/ tests/
+      All checks passed!                                            (exit 0)
+
+    uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+      Success: no issues found in 138 source files                  (exit 0)
+
+    uv run pytest            # the FULL form, so cov-fail-under=75 is exercised
+      3330 passed, 80 skipped in 219.70s (0:03:39)
+      Required test coverage of 75% reached. Total coverage: 91.76%
+
+    uv run --no-project python scripts/bump-version.py --check
+      ok — versions agree        (all 10 surfaces at 4.9.0)         (exit 0)
+
+    uv run fr acceptance check
+      acceptance matrix check: 129 rows OK ({'ci': 107, 'skipped': 18, 'not-implemented': 4})
+                                                                    (exit 0)
+
+    uv run fr harness parity --check
+      harness parity: declared matrix agrees with the registration files   (exit 0)
+
+    uv run fr validate artifacts
+      33 artifact(s) checked — all structurally valid.              (exit 0)
+
+    uv run python scripts/sync-opencode.py --check
+      .opencode/ mirrors are in sync.                               (exit 0)
+
+    uv run python scripts/sync-hermes.py --check     # not in the plan step; added per p3-d1
+      .hermes/ mirrors are in sync.                                 (exit 0)
+
+THE NUMBER THAT MATTERS: 0 failed. Phase 1 recorded '3 failed, 3292 passed' and every phase since carried the same three; phase 6 task 3 fixed both root causes (finding p1-f2), so the suite is green on this host for the first time in this PR. The count also rose 3327 -> 3330 across phases 5 and 6 with no test deleted or weakened.
+
+NOT RUN, and why: the CI job 'opencode-plugin-test' (bun test inside packages/fr-opencode-plugin). That package is excluded from the uv workspace, this PR does not touch it, and the plan's sweep does not list it.

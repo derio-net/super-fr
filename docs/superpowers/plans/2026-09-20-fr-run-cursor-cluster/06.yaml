@@ -117,17 +117,27 @@ state:
         insertions, 1 deletion, all of them the S2 paragraphs. test_tripwire_explainers_fresh.py:
         3 passed.'
     P6.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T17:06:03+00:00'
+      note: 'scripts/bump-version.py minor: 4.8.0 -> 4.9.0 in 9 files, uv sync run,
+        fr --version reports 4.9.0. Minor because this PR adds fr run advance --redispatch,
+        fr run start --session/--harness and a mandatory refusal.'
     P6.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T17:06:10+00:00'
+      note: 'All eight green, verdicts in journal p6-gates: ruff ''All checks passed!'';
+        mypy ''no issues found in 138 source files''; pytest ''3330 passed, 80 skipped''
+        + ''Required test coverage of 75% reached. Total coverage: 91.76%''; bump
+        --check ''ok — versions agree''; acceptance ''129 rows OK''; parity ''declared
+        matrix agrees''; validate artifacts ''33 artifact(s) checked''; sync-opencode
+        --check in sync (and sync-hermes, per p3-d1).'
     P6.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T17:06:16+00:00'
+      note: 'no-refactor-because: P6.T2 — journal nrb-P6-T2. All three named duplications
+        are already single definitions with two or more call sites; the one repetition
+        left (the manual-items dict merge) is one line with two different justifications
+        and was kept deliberately. One latent unfixed defect recorded as x6.'
     P6.T3.S1:
       state: x
       ticked_at: '2026-09-20T16:59:10+00:00'
