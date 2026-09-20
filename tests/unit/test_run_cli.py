@@ -2438,7 +2438,14 @@ def _transcript_stamp(at: str) -> str:
 def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) -> None:
     """End to end: advance dispatches (and stamps the window's start), the
     harness writes its transcript, resolve reads it back into the SAME
-    accounting record the V1 sizes live in."""
+    accounting record the V1 sizes live in.
+
+    The UNCLAIMED path, so the window is what selects — and since phase 4 the
+    window is offered only for an attempt THIS session dispatched (§4.D.1),
+    the `advance` has to declare the same session the `resolve` does. It used
+    to be a bare `_invoke`, which passed only because the authoring machine
+    was itself a Claude Code session whose id leaked through `os.environ`.
+    """
     from tests.unit.transcript_sessions import dispatched_at
 
     repo = _repo(tmp_path)
@@ -2446,10 +2453,10 @@ def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) 
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
     _started_grouped_with_plan(repo, shipped)
     _seed_journal(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
     at = _accounting(load_run_state(repo, "r1"))["phase/1/code"].at
     assert at is not None
-    root = tmp_path / "projects"
     dispatched_at(root, _transcript_stamp(at), session_id="sess-1", usage=_USAGE)
 
     result = _invoke_measurable(
@@ -2495,6 +2502,176 @@ def test_resolve_records_nothing_when_no_transcript_can_be_read(tmp_path: Path) 
     assert snap.measured_tokens is None
     assert snap.input_tokens is None
     assert snap.handoff_chars > 0, "the V1 estimate survives the missing measurement"
+
+
+# --- cost is per ATTEMPT: a redispatch never overwrites the abandoned spend
+# --- (decision u2, spec §1.B / §4.D, phase 4) -----------------------------
+
+_USAGE_FIRST = {
+    "input_tokens": 3,
+    "cache_creation_input_tokens": 30,
+    "cache_read_input_tokens": 300,
+    "output_tokens": 3000,
+}
+_USAGE_SECOND = {
+    "input_tokens": 7,
+    "cache_creation_input_tokens": 70,
+    "cache_read_input_tokens": 700,
+    "output_tokens": 7000,
+}
+FIRST_TOTAL = 2 * (3 + 30 + 300 + 3000)
+SECOND_TOTAL = 2 * (7 + 70 + 700 + 7000)
+"""The captured subagent fixture has TWO assistant records, so a correct
+reader doubles each figure. The two dispatches are deliberately far apart in
+size: a test where both attempts cost the same cannot tell a swap from a
+match."""
+
+_SAME_INSTANT = "2026-09-20T11:30:00.000Z"
+"""Both subagent transcripts are written at the SAME instant on purpose. No
+time window can separate two dispatches that overlap, and gh#514's
+`select_dispatch` returns NOTHING for an ambiguous window — so every figure
+these tests assert can only have come from selection by AGENT ID."""
+
+
+def _redispatched_unit(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """The u2 regression, run end to end: advance -> claim -> `--abandoned`
+    -> advance -> claim -> resolve, with a real transcript for each attempt.
+
+    Returns `(repo, shipped, transcript root)`. Every invocation declares its
+    session (`CLAUDE_CODE_SESSION_ID`) rather than inheriting the authoring
+    machine's: this phase is ABOUT session identity, so a test that reads it
+    off the environment proves nothing on any other machine.
+    """
+    from tests.unit.transcript_sessions import add_dispatch, write_session
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+
+    def call(argv: list[str]) -> None:
+        result = _invoke_measurable(repo, shipped, argv, root, "sess-1")
+        assert result.exit_code == 0, result.output
+
+    unit = ["--step", "code", "--item", "phase/1"]
+    call(["run", "advance", "r1"])
+    call(["run", "claim", "r1", *unit, "--agent", "a1f1"])
+    add_dispatch(
+        session,
+        timestamp=_SAME_INSTANT,
+        agent_id="a1f1",
+        tool_use_id="toolu_first",
+        usage=_USAGE_FIRST,
+    )
+    call(["run", "claim", "r1", *unit, "--abandoned"])
+    call(["run", "advance", "r1"])
+    call(["run", "claim", "r1", *unit, "--agent", "b2e2"])
+    add_dispatch(
+        session,
+        timestamp=_SAME_INSTANT,
+        agent_id="b2e2",
+        tool_use_id="toolu_second",
+        usage=_USAGE_SECOND,
+    )
+    call(["run", "resolve", "r1", *unit, "--state", "done"])
+    return repo, shipped, root
+
+
+def test_each_attempt_of_a_redispatched_unit_carries_its_own_cost(tmp_path: Path) -> None:
+    """Spec §1.B's live defect, pinned: the v4 shape APPENDED the attempt and
+    OVERWROTE the unit's one cost snapshot, so fr kept an abandoned agent's
+    identity and discarded its spend.
+
+    Two attempts, two estimates, two measurements, neither borrowed."""
+    repo, _shipped, _root = _redispatched_unit(tmp_path)
+
+    first, second = _dispatch_of(repo, "implement", "phase/1/code")
+
+    assert (first.outcome, second.outcome) == ("abandoned", "done")
+    assert first.agent == "a1f1" and second.agent == "b2e2"
+    assert first.estimate is not None, "the abandoned attempt keeps its own estimate"
+    assert second.estimate is not None
+    assert first.measured is not None and first.measured.total == FIRST_TOTAL
+    assert second.measured is not None and second.measured.total == SECOND_TOTAL
+
+
+def test_claim_abandoned_measures_the_attempt_it_closes(tmp_path: Path) -> None:
+    """The spend most worth seeing is the spend that produced nothing (§4.D).
+
+    Measured AT the abandon, not later: the assertion is made before the
+    second `advance` exists, so nothing but `claim --abandoned` can have
+    written it."""
+    from tests.unit.transcript_sessions import add_dispatch, write_session
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+    unit = ["--step", "code", "--item", "phase/1"]
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
+    _invoke_measurable(
+        repo, shipped, ["run", "claim", "r1", *unit, "--agent", "a1f1"], root, "sess-1"
+    )
+    add_dispatch(
+        session,
+        timestamp=_SAME_INSTANT,
+        agent_id="a1f1",
+        tool_use_id="toolu_first",
+        usage=_USAGE_FIRST,
+    )
+
+    result = _invoke_measurable(
+        repo, shipped, ["run", "claim", "r1", *unit, "--abandoned"], root, "sess-1"
+    )
+
+    assert result.exit_code == 0, result.output
+    (only,) = _dispatch_of(repo, "implement", "phase/1/code")
+    assert only.outcome == "abandoned"
+    assert only.measured is not None and only.measured.total == FIRST_TOTAL
+
+
+def test_advance_records_the_session_that_dispatched_the_attempt(tmp_path: Path) -> None:
+    """`session` is derived from fr's OWN environment when the attempt opens,
+    the same way `harness` is (§4.D.1) — it is never reported by the agent."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke_measurable(
+        repo, shipped, ["run", "advance", "r1"], tmp_path / "projects", "sess-7"
+    )
+
+    assert result.exit_code == 0, result.output
+    (opened,) = _dispatch_of(repo, "implement", "phase/1/code")
+    assert opened.session == "sess-7"
+    assert opened.harness == "claude-code"
+
+
+def test_an_attempt_opened_by_a_harness_with_no_session_records_none(tmp_path: Path) -> None:
+    """No session concept, no session — never a guess, and never this
+    process's own id borrowed for a harness that did not report one."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "advance", "r1"],
+        {"FR_HARNESS": "opencode", "CLAUDE_CODE_SESSION_ID": None},
+    )
+
+    assert result.exit_code == 0, result.output
+    (opened,) = _dispatch_of(repo, "implement", "phase/1/code")
+    assert opened.session is None
 
 
 _TWO_UNIT_RUN = """\
@@ -2578,15 +2755,17 @@ def test_status_never_renders_a_measurement_and_an_estimate_the_same_way(
     assert "not measured: no transcript figure for this unit" in flat
     assert "tok est" in flat
     # and each belongs to the right unit — ordering ties figure to key without
-    # depending on where rich decided to wrap
-    band = flat.split("accounting (context sizes")[-1]
+    # depending on where rich decided to wrap. Since phase 4 the figures sit
+    # BENEATH their own attempt inside the steps block rather than in an
+    # accounting section of their own, so the ordering is read over the whole
+    # output; the keys still bracket their figures.
     assert (
-        band.index("phase/1/code")
-        < band.index("measured: 21051 tok")
-        < band.index("phase/2/code")
-        < band.index("not measured:")
+        flat.index("phase/1/code")
+        < flat.index("measured: 21051 tok")
+        < flat.index("phase/2/code")
+        < flat.index("not measured:")
     )
-    assert "measured total: 21051 tok over 1 of 2 dispatched units" in flat
+    assert "measured total: 21051 tok over 1 of 2 dispatched attempts" in flat
 
 
 def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> None:
@@ -2600,7 +2779,7 @@ def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> 
     flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
 
     assert "measured total: none" in flat
-    assert "no transcript figure for any of the 2 dispatched units" in flat
+    assert "no transcript figure for any of the 2 dispatched attempts" in flat
     assert "tok est" in flat
     assert "measured: 21051" not in flat
 
@@ -2626,7 +2805,7 @@ def test_status_renders_a_measured_zero_as_a_measurement(tmp_path: Path) -> None
         "measured: 0 tok billed across the dispatch's turns "
         "(in 0, cache-create 0, cache-read 0, out 0)" in flat
     )
-    assert "measured total: 0 tok over 1 of 2 dispatched units" in flat
+    assert "measured total: 0 tok over 1 of 2 dispatched attempts" in flat
 
 
 def test_status_says_a_measured_figure_came_from_a_transcript(tmp_path: Path) -> None:
@@ -2667,6 +2846,112 @@ def test_status_says_the_measured_figure_is_not_the_estimate(tmp_path: Path) -> 
 
     assert "billed across the dispatch's turns" in flat
     assert "NOT comparable to the one-dispatch" in flat
+
+
+# --- status says what fr can and cannot see (spec §4.D / §4.D.1, phase 4) --
+
+
+def test_status_renders_each_attempts_cost_beneath_its_own_holder(tmp_path: Path) -> None:
+    """EVERY attempt, not just the last. The v4 shape rendered one cost line
+    per unit, so a redispatched unit showed the retry's figures and the
+    abandoned agent's spend was nowhere on screen.
+
+    Ordering is the assertion that ties a figure to a holder without
+    depending on where rich decided to wrap."""
+    repo, shipped, root = _redispatched_unit(tmp_path)
+
+    flat = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-1"))
+
+    assert (
+        flat.index("agent a1f1")
+        < flat.index(f"measured: {FIRST_TOTAL} tok")
+        < flat.index("agent b2e2")
+        < flat.index(f"measured: {SECOND_TOTAL} tok")
+    ), flat
+    # the two quantities stay labelled as different quantities (gh#514)
+    assert flat.count("NOT comparable to the one-dispatch") == 2
+    assert "tok est" in flat
+
+
+def test_status_totals_include_the_abandoned_attempts_spend(tmp_path: Path) -> None:
+    """Totals sum ATTEMPTS. A denominator of units would report better
+    coverage than there is the moment one unit is redispatched."""
+    repo, shipped, root = _redispatched_unit(tmp_path)
+
+    flat = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-1"))
+
+    # 3 dispatched attempts, not 2: the flat `plan` step opened one of its
+    # own, and a denominator that quietly omitted it would report better
+    # coverage than there is.
+    assert (
+        f"measured total: {FIRST_TOTAL + SECOND_TOTAL} tok over 2 of 3 dispatched attempts" in flat
+    )
+
+
+def test_status_says_a_cost_from_another_session_is_not_observable_from_here(
+    tmp_path: Path,
+) -> None:
+    """§4.D.1: the cursor travelled with the branch; the transcripts did not.
+
+    An absent figure that could still arrive ("not measured") and one this
+    session can never produce ("not observable from here") are different
+    facts, and an operator deciding whether to wait needs the difference."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    elsewhere = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-b"))
+    here = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-a"))
+
+    assert "not observable from here" in elsewhere
+    assert "not observable from here" not in here, (
+        "the SAME attempt read from the session that dispatched it is merely unmeasured"
+    )
+    assert "not measured: no transcript figure" in here
+
+
+def test_advance_refusing_another_sessions_holder_says_it_cannot_see_it(tmp_path: Path) -> None:
+    """The second host's first move (§4.D.1). Without this sentence the
+    operator waits on an agent that died with its host — the refusal names a
+    holder, and every other refusal fr prints means "someone is working"."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    result = _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-b")
+
+    assert result.exit_code == 2, result.output
+    flat = _flat(result)
+    assert "ANOTHER session" in flat
+    assert "not observable from here" in flat
+    assert "fr run claim r1 --step code --item phase/1 --abandoned" in flat
+
+
+def test_advance_refusing_its_own_sessions_holder_says_nothing_about_sessions(
+    tmp_path: Path,
+) -> None:
+    """The ordinary case must not acquire the scary sentence: this session's
+    own agent is alive as far as anything here knows."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    result = _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    assert result.exit_code == 2, result.output
+    flat = _flat(result)
+    assert "is ALREADY HELD by" in flat
+    assert "ANOTHER session" not in flat
 
 
 # --- write-claim: one writer at a time (phase 5, contract runtime) ---

@@ -242,10 +242,32 @@ def test_status_still_shows_every_unit_state_and_every_prior_attempt(
                 assert attempt.dispatched in flat, "a recorded attempt vanished from status"
                 if attempt.agent:
                     assert f"agent {attempt.agent}" in flat
+    # Since phase 4 a cost is rendered BENEATH its own attempt rather than as
+    # a `<key>: journal ...` line in an accounting section, so the tie between
+    # key and figure is structural (the block under the unit's line) instead
+    # of textual. Asserting the block is strictly stronger than the prefix
+    # was: it would fail if the figure moved to the wrong unit.
     for key, snap in (legacy.accounting or {}).items():
-        assert f"{key}: journal {snap.journal_entries} entries" in flat
+        block = _unit_block(result.output, key)
+        assert f"journal {snap.journal_entries} entries" in block, (
+            f"{key}'s estimate is not rendered under {key}"
+        )
         if snap.output_tokens is not None:
-            assert f"out {snap.output_tokens}" in flat
+            assert f"out {snap.output_tokens}" in block
+
+
+def _unit_block(output: str, key: str) -> str:
+    """Everything `fr run status` printed UNDER `key`'s own line — its
+    attempts and, since phase 4, each attempt's cost beneath it."""
+    lines = output.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip().startswith(f"{key}:"))
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    block = []
+    for line in lines[start + 1 :]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        block.append(" ".join(line.split()))
+    return " ".join(block)
 
 
 def test_a_synthesized_attempt_is_not_rendered_as_the_orchestrators(tmp_path: Path) -> None:

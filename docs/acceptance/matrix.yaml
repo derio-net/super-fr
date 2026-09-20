@@ -2495,12 +2495,17 @@ rows:
       attempts
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born with the 2026-09-20 unification spec. Pins the live defect of spec
-      1.B: dispatch appends while accounting assigns, so a redispatch kept the abandoned
-      agent''s identity and discarded its spend. Unit gates the PR; live is Test Plan
-      item 16.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_units_access.py
+    status: ci
+    notes: Unit level landed in phase 4 of the unit-record-unification plan. test_each_attempt_of_a_redispatched_unit_carries_its_own_cost
+      runs advance -> claim -> claim --abandoned -> advance -> claim -> resolve end
+      to end and asserts TWO attempts, each with its own estimate and its own measurement
+      (6666 vs 15554 tok, deliberately unequal so a swap cannot pass); test_status_totals_include_the_abandoned_attempts_spend
+      asserts the totals sum both attempts. The live half (Test Plan item 16) is not
+      claimed by this move.
   - id: run-unit-review-evidence
     capability: Run cursor
     acceptance: A review unit cannot be resolved done without journal evidence, so review-skipped
@@ -2665,21 +2670,31 @@ rows:
     acceptance: An abandoned attempt's spend is measured at the moment it is abandoned
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: The spend most worth seeing is the spend that produced nothing. Before this,
-      abandoning a unit discarded its cost entirely.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: Unit level landed in phase 4. test_claim_abandoned_measures_the_attempt_it_closes
+      asserts the measurement is on the attempt BEFORE any second advance exists, so
+      nothing but claim --abandoned can have written it; _claim_abandon now calls _with_measurement
+      over the attempt it just closed.
   - id: run-status-cost-under-holder
     capability: Run cursor
     acceptance: fr run status shows each attempt's cost beneath its holder, with estimate
       and measurement labelled as different quantities
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Carries gh#514''s never-blurred rule through the move: an estimate is one
-      dispatch''s assembled context, a measurement is cumulative billing, and on a real
-      unit they differed by about 1426x.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_upgrade_in_flight.py
+    status: ci
+    notes: Unit level landed in phase 4. test_status_renders_each_attempts_cost_beneath_its_own_holder
+      asserts the ordering agent a1f1 < its measurement < agent b2e2 < its measurement,
+      so a figure cannot be read against the wrong attempt, and that gh#514's NOT comparable
+      to the one-dispatch wording appears once per attempt. test_run_upgrade_in_flight's
+      _unit_block check is now structural (the block under the unit's own line) rather
+      than a key prefix, which is strictly stronger.
   - id: run-review-evidence-cannot-be-faked
     capability: Run cursor
     acceptance: Review evidence must be a review entry for that same phase; a finding,
@@ -2747,13 +2762,16 @@ rows:
       dispatches neither lose nor swap their measurements
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Operator asked whether ''exactly one dispatch'' was a per-phase assumption.
-      It is run-wide and temporal: gh#514 selects a transcript by TIME WINDOW and yields
-      nothing when two overlap. The attempt''s agent id is also the transcript filename,
-      so selection becomes exact under any concurrency; the window stays as the fallback
-      for unclaimed attempts only.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: Unit level landed in phase 4. test_a_claimed_attempt_is_measured_by_its_agent_id_when_dispatches_overlap
+      writes two subagent transcripts at the SAME instant and measures each exactly,
+      with a non-vacuity assertion that measure_dispatch over the window returns nothing
+      for both, so neither figure can have come from the window. select_for_attempt
+      is the one function that decides.
   - id: run-pickup-on-another-host
     capability: Run cursor
     acceptance: A run pushed mid-phase and picked up on another host shows the orphaned
@@ -2762,23 +2780,37 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
     levels: {}
     status: not-implemented
-    notes: 'Operator''s question, and the spec''s first draft had no answer. The cursor
-      travels with the branch; transcripts, session bindings, the agent and uncommitted
-      work do not. The refusal must SAY the holder is from another session and cannot
-      be observed from here, or the operator waits on an agent that died with its host.
-      Live-only in any meaningful sense: two hosts.'
+    notes: 'STAYS not-implemented after phase 4, deliberately. The unit half of its
+      mechanism landed (the refusal now says the holder was dispatched from ANOTHER
+      session and that its cost is not observable from here, and names fr run claim
+      --abandoned: tests/unit/test_run_cli.py::test_advance_refusing_another_sessions_holder_says_it_cannot_see_it,
+      with test_advance_refusing_its_own_sessions_holder_says_nothing_about_sessions
+      pinning that the ordinary refusal does NOT acquire that sentence). But this row''s
+      claim is two REAL hosts — a cursor pushed mid-phase, pulled on another machine
+      whose transcripts and session bindings never travelled — and no unit test can
+      be that. Flipping it on the unit evidence would report a live claim as verified.
+      Owed: a live demonstration, Test Plan item 16''s sibling.'
   - id: run-cost-never-misattributed-across-sessions
     capability: Run cursor
     acceptance: An attempt dispatched from another session or host is never assigned
       this session's subagent costs, and its cost shows as not observable
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'The time-window fallback is actively dangerous across sessions: a window
-      spanning another host''s open attempt can contain exactly one unrelated subagent
-      of THIS session, and gh#514''s select_dispatch would accept it. Each attempt records
-      its session; the window is allowed only when that session is the current one.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'Unit level landed in phase 4. test_the_window_is_refused_for_an_attempt_this_session_did_not_dispatch
+      builds spec 4.D.1 exactly (host B''s own session holds exactly ONE unrelated subagent
+      inside the window) and pins BOTH defences: the transcript is looked up in the
+      RECORDED session''s directory, and select_for_attempt refuses the window unless
+      same_session. Non-vacuity: the same call with same_session=True DOES return the
+      stranger. test_an_attempt_with_no_recorded_session_never_borrows_the_window and
+      test_a_process_with_no_session_of_its_own_measures_nothing_by_window cover the
+      two not-knowing cases; test_status_says_a_cost_from_another_session_is_not_observable_from_here
+      covers the rendering. Mutation-verified: deleting the same_session gate fails
+      3 tests, making locate_session ignore the recorded session fails 2.'
   - id: run-idle-reprompt-opencode
     capability: Harness parity
     acceptance: On OpenCode, an idle run is continued by re-injecting the next command

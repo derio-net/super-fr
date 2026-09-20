@@ -442,33 +442,57 @@ def _accounting_snapshot(
 
 
 def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
-    """`state` with V2 measured tokens folded into unit `key`'s snapshot.
+    """`state` with V2 measured tokens folded into the attempt just CLOSED.
 
-    **Taken when the unit RESOLVES, not when it is dispatched**, and that is
+    **Taken when the attempt closes, not when it is dispatched**, and that is
     a deliberate departure from the plan step's wording (P4.T1.S4 pointed at
     the advance path, where the V1 sizes are recorded). At dispatch time the
-    unit's transcript does not exist yet, so a measurement taken there is
+    transcript does not exist yet, so a measurement taken there is
     structurally always empty — it would pass a test and read zero from every
     real run. The figure lands on the same ATTEMPT the estimate does
     (`Attempt.measured` beside `Attempt.estimate`); only the moment differs.
 
-    The window is `[attempt.dispatched, now]`: that timestamp is taken
-    immediately before the dispatch brief is built (`_advance_group` passes the
-    same moment to `_open_dispatch` and `units.with_estimate`), so it precedes
-    every transcript record of the unit it dispatched, and `now` is this resolve.
-    Serial dispatch makes that window hold exactly one dispatch.
+    Both closers call it: `resolve`, and `claim --abandoned` — an abandoned
+    agent's spend is exactly the spend worth seeing, and before §4.D it was
+    the one spend fr discarded.
 
-    Never a gate and never noisy: a unit with no V1 snapshot, a harness with
-    no reader, a missing or unreadable transcript, or an unattributable window
-    all leave the snapshot untouched — `fr run status` is where that absence
-    is reported, in band, and the V1 estimate stays labeled an estimate.
+    **The window is the attempt's OWN `[dispatched, returned]`** (§4.D). It
+    used to be `[dispatched, now]`, under a docstring asserting *"serial
+    dispatch makes that window hold exactly one dispatch"* — an assumption
+    that is run-wide and temporal rather than per-phase, and that
+    `advance --redispatch` breaks outright: two attempts of one unit put two
+    transcripts in one window, and `select_dispatch` then yields nothing.
+    Selection no longer leans on it. A claimed attempt is matched by its
+    `agent` id, which IS the transcript's filename, so overlap cannot confuse
+    it; the window is the fallback for an attempt nobody claimed.
+
+    Four situations leave `state` untouched, each a fact rather than a
+    shortcut: no attempt at all; no estimate, so no window was ever opened (a
+    flat `kind: agent` step); **`returned is None`**, which covers both an
+    open attempt and every `synthesized` one — a migrated cost carrier fr
+    never dispatched and must never measure; and an attempt that already HAS
+    a measurement, which a later `resolve` over an abandoned attempt must not
+    rewrite.
+
+    Never a gate and never noisy: a harness with no reader, a missing or
+    unreadable transcript, or an unattributable window all leave the cost
+    untouched — `fr run status` reports that absence in band, and the V1
+    estimate stays labeled an estimate.
     """
-    from fr.run.telemetry import measure_unit
+    from fr.run.telemetry import measure_attempt
 
-    start = units.estimated_at(state, key)
-    if start is None:
+    attempt = units.last_attempt(state, key)
+    if attempt is None or attempt.estimate is None:
         return state
-    measured = measure_unit(os.environ, start=start, end=_now())
+    if attempt.returned is None or attempt.measured is not None:
+        return state
+    measured = measure_attempt(
+        os.environ,
+        session=attempt.session,
+        agent=attempt.agent,
+        start=attempt.dispatched,
+        end=attempt.returned,
+    )
     if measured is None:
         return state
     return units.with_measured(
@@ -963,6 +987,8 @@ def _open_dispatch(
     `blocked`, not `running`, so nothing was dispatched and there is nothing
     to hold.
     """
+    from fr.run.telemetry import current_session
+
     record = state.steps[step_id]
     # Detected ONCE and both recorded and used (finding f8): the harness is
     # what turns a tier into a model, so a record that carries the model
@@ -977,6 +1003,14 @@ def _open_dispatch(
             agent_type=agent_type,
             harness=harness,
             model=_resolved_model(repo_root, harness, tier),
+            # Derived from fr's OWN environment, exactly like `harness` — the
+            # agent never reports it (§4.D.1). It is what lets a later session
+            # read the RIGHT transcript directory, and what stops a window
+            # from being borrowed across sessions. `None` for a harness with
+            # no session concept, which reads as "not observable from here"
+            # and never as zero. No hostname beside it: a missing session
+            # directory already says "elsewhere".
+            session=current_session(os.environ),
         ),
     )
     return _with_step(state, step_id, new_record)
@@ -1214,6 +1248,21 @@ def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "d
     return f"fr run resolve {run_id} --step {member_id}{scope} --state {state}"
 
 
+def _dispatched_from_another_session(attempt: UnitAttempt | None) -> bool:
+    """Was `attempt` opened by a session that is NOT this one? (spec §4.D.1)
+
+    A PROOF, never a default. An attempt with no recorded `session` — every
+    one written before the field existed, and every harness with no session
+    concept — is not claimed to be elsewhere, because not knowing where it
+    came from is not the same as knowing it came from somewhere else.
+    """
+    from fr.run.telemetry import dispatched_from_this_session
+
+    if attempt is None or attempt.session is None:
+        return False
+    return not dispatched_from_this_session(os.environ, attempt.session)
+
+
 def _already_running_refusal(
     step_id: str,
     subject: str,
@@ -1256,6 +1305,18 @@ def _already_running_refusal(
         head += f"(dispatched {held.dispatched}) — not yet returned.[/red]\n"
     else:
         head = f"[red]{named} is ALREADY RUNNING (dispatched {at}).[/red]\n"
+    # §4.D.1: every other refusal fr prints means "someone is working". This
+    # one may mean "that agent died with its host" — the cursor travelled with
+    # the branch and nothing else did — and without saying so the operator
+    # waits forever on a holder nothing here can observe. The escape is named
+    # below already; this only says why to reach for it.
+    if _dispatched_from_another_session(held):
+        head += (
+            "  Dispatched from ANOTHER session: this one cannot see whether that agent is "
+            "alive, and its cost is not observable from here. If it died with its host "
+            "(a run picked up on another machine), close it with the `lost agent` line "
+            "below.\n"
+        )
     return (
         head
         + "  Waiting on that agent — do NOT dispatch again.\n"
@@ -1896,10 +1957,96 @@ def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
     return f"{who}{suffix} {attempt.dispatched} -> {attempt.returned} {attempt.outcome}"
 
 
+def _estimate_chars(estimate: ContextEstimate) -> int:
+    """The three SIZES fr assembled, summed — what the `~tok est` divides.
+
+    `journal_entries`/`journal_lines` are counts of things, not characters,
+    and adding them here would inflate the estimate by a number with no unit.
+    """
+    return estimate.handoff_chars + estimate.spec_bytes + estimate.plan_bytes
+
+
+def _cost_observable_here(attempt: UnitAttempt) -> bool:
+    """Could THIS session produce a measurement for `attempt` at all? (§4.D.1)
+
+    False only when the attempt names a session and it is not this one — the
+    cursor travelled with the branch and the transcripts did not. An attempt
+    with no recorded session is not claimed to be elsewhere: not knowing is
+    not the same as knowing, and "not measured" is the honest line there.
+    """
+    from fr.run.telemetry import dispatched_from_this_session
+
+    if attempt.session is None:
+        return True
+    return dispatched_from_this_session(os.environ, attempt.session)
+
+
+def _render_attempt_cost(attempt: UnitAttempt, *, indent: str, console: Console) -> None:
+    """One ATTEMPT's cost, printed BENEATH its own holder line (spec §4.D).
+
+    This is gh#514's `_print_accounting` body, moved: it used to render one
+    line per accounted UNIT in a section of its own, which on a redispatched
+    unit showed the retry's figures and left the abandoned agent's spend —
+    exactly the spend worth seeing — nowhere on screen. Under the holder, a
+    figure cannot be read against the wrong attempt.
+
+    **Two numbers, two quantities, and gh#514's wording is kept verbatim
+    because labelling alone did not convey it.** A `~N tok est` is fr's own
+    4-chars-per-token arithmetic over the context it assembled for ONE
+    dispatch. A `measured: N tok` is the harness's own accounting, cumulative
+    across every turn of that dispatch and overwhelmingly `cache_read`,
+    because each turn re-reads the whole accumulated context. On a real unit
+    they differed by ~1,426x, which reads as a broken estimator unless the
+    line says what it counts.
+
+    An absent measurement is PRINTED, not skipped — leaving an estimate alone
+    with nothing beside it is how an estimate comes to be read as a
+    measurement — and the two reasons it can be absent are different facts:
+    a figure that could still arrive, and one this session can never produce.
+    """
+    estimate = attempt.estimate
+    if estimate is None:
+        return
+    chars = _estimate_chars(estimate)
+    console.print(
+        f"{indent}journal {estimate.journal_entries} entries/"
+        f"{estimate.journal_lines} lines, handoff {estimate.handoff_chars} chars, "
+        f"spec+plan {estimate.spec_bytes + estimate.plan_bytes} chars "
+        f"(~{chars // 4} tok est)",
+        soft_wrap=True,
+    )
+    tokens = attempt.measured
+    if tokens is None and not _cost_observable_here(attempt):
+        console.print(
+            f"{indent}not observable from here: this attempt was dispatched from another "
+            f"session, whose transcripts did not travel with the branch — "
+            f"the ~{chars // 4} tok above is an ESTIMATE",
+            soft_wrap=True,
+        )
+        return
+    if tokens is None:
+        console.print(
+            f"{indent}not measured: no transcript figure for this unit — "
+            f"the ~{chars // 4} tok above is an ESTIMATE",
+            soft_wrap=True,
+        )
+        return
+    console.print(
+        f"{indent}measured: {tokens.total} tok billed across the dispatch's turns "
+        f"(in {tokens.input_tokens}, cache-create {tokens.cache_creation_input_tokens}, "
+        f"cache-read {tokens.cache_read_input_tokens}, out {tokens.output_tokens}) "
+        f"— cumulative harness accounting, NOT comparable to the "
+        f"one-dispatch ~{chars // 4} tok estimate above",
+        soft_wrap=True,
+    )
+
+
 def _render_unit_dispatch(record: StepRecord, key: str, *, indent: str, console: Console) -> None:
-    """Every attempt recorded for `key`, oldest first (case (e))."""
+    """Every attempt recorded for `key`, oldest first (case (e)) — each one
+    followed by its own cost."""
     for attempt in units.attempts(record, key):
         console.print(f"{indent}{_render_dispatch_attempt(attempt)}", soft_wrap=True)
+        _render_attempt_cost(attempt, indent=f"{indent}  ", console=console)
 
 
 def _render_step_and_items(state: RunState, console: Console) -> None:
@@ -1922,108 +2069,77 @@ def _render_step_and_items(state: RunState, console: Console) -> None:
                 _render_unit_dispatch(record, key, indent="      ", console=console)
 
 
-def _print_accounting(state: RunState, dispatched: int | None = None) -> None:
-    """Per-unit context accounting: V1 sizes, and V2 measurements where they
-    exist — never blurred into each other.
+def _print_accounting(state: RunState) -> None:
+    """The cost TOTALS — the closing section of `fr run status`.
 
-    Two numbers appear here and they mean different things. A `~N tok est` is
-    fr's own 4-chars-per-token arithmetic over the context it assembled: a
-    guess, and labeled one everywhere it appears. A `measured: N tok` is the
-    harness's own accounting, read back out of its transcript.
+    The per-attempt detail it used to hold moved under each holder line
+    (`_render_attempt_cost`), because cost is per ATTEMPT now and a section
+    keyed by unit could only show one attempt's figures. What is left is the
+    arithmetic that is genuinely about the whole run.
 
-    They are also not the same QUANTITY, which labeling alone did not convey:
-    the estimate is one dispatch's assembled context, while the measurement is
-    cumulative billing across every turn of that dispatch — overwhelmingly
-    `cache_read`, because each turn re-reads the whole accumulated context.
-    On a real unit of this very run they differed by ~1,426x, which reads as a
-    broken estimator unless the line says what it counts. That ratio is not
-    noise, it is the finding #464 is about.
+    **Totals sum ATTEMPTS**, so a redispatched unit finally contributes both:
+    the abandoned agent's spend is in the figure rather than behind it. The
+    denominator is dispatched ATTEMPTS for the same reason — counting units
+    would report better coverage than there is the moment one unit is
+    redispatched, and an attempt with no estimate at all would vanish from it
+    rather than count against it.
 
-    So an absent measurement is printed, not skipped. Leaving the unit's
-    estimate line alone with nothing beside it is how an estimate comes to be
-    read as a measurement — the quiet degradation this whole rendering exists
-    to prevent. The closing line says how many units carry a real figure, and
-    says `none` rather than `0 tok` when none do: a total of zero over no
-    measurements is a number that looks like an answer.
+    The closing line says `none` rather than `0 tok` when nothing was
+    measured: a total of zero over no measurements is a number that looks like
+    an answer.
     """
     console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
-    accounted = units.accounted_keys(state)
     total = 0
     measured_total = 0
-    measured_units = 0
-    for key in accounted:
-        snap = units.estimate_of(state, key)
-        if snap is None:  # pragma: no cover — `accounted_keys` is what has one
-            continue
-        chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
-        total += chars
-        console.print(
-            f"    {key}: journal {snap.journal_entries} entries/"
-            f"{snap.journal_lines} lines, handoff {snap.handoff_chars} chars, "
-            f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
-            f"(~{chars // 4} tok est)"
-        )
-        tokens = units.measured_of(state, key)
-        if tokens is None:
-            console.print(
-                f"      not measured: no transcript figure for this unit — "
-                f"the ~{chars // 4} tok above is an ESTIMATE",
-                soft_wrap=True,
-            )
-            continue
-        measured_total += tokens.total
-        measured_units += 1
-        console.print(
-            f"      measured: {tokens.total} tok billed across the dispatch's turns "
-            f"(in {tokens.input_tokens}, cache-create {tokens.cache_creation_input_tokens}, "
-            f"cache-read {tokens.cache_read_input_tokens}, out {tokens.output_tokens}) "
-            f"— cumulative harness accounting, NOT comparable to the "
-            f"one-dispatch ~{chars // 4} tok estimate above",
-            soft_wrap=True,
-        )
+    measured_attempts = 0
+    for _key, attempt in units.accounted_attempts(state):
+        assert attempt.estimate is not None  # `accounted_attempts` is what has one
+        total += _estimate_chars(attempt.estimate)
+        if attempt.measured is not None:
+            measured_total += attempt.measured.total
+            measured_attempts += 1
     console.print(f"    total: {total} chars (~{total // 4} tok est)")
-    # Denominator is DISPATCHED units, not accounting rows. A unit that was
-    # dispatched but has no snapshot at all is invisible in the loop above, so
-    # using len(accounting) silently shrinks the denominator to hide it and
-    # reports better coverage than there is.
-    denom = len(accounted) if dispatched is None else dispatched
-    if measured_units:
+    denom = units.dispatched_attempts(state)
+    if measured_attempts:
         console.print(
-            f"    measured total: {measured_total} tok over {measured_units} of "
-            f"{denom} dispatched units (the ~tok estimates above are NOT part of this total)",
+            f"    measured total: {measured_total} tok over {measured_attempts} of "
+            f"{denom} dispatched attempts (the ~tok estimates above are NOT part of this total)",
             soft_wrap=True,
         )
     else:
         console.print(
             f"    measured total: none — no transcript figure for any of the "
-            f"{denom} dispatched units; every ~tok figure above is an estimate",
+            f"{denom} dispatched attempts; every ~tok figure above is an estimate",
             soft_wrap=True,
         )
 
 
-@run_app.command("status")
-def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
-    """Print the cursor, every step's state, and — since phase 5 — who is
-    holding each dispatched unit, since when, and whether it has returned
-    (spec §4.C)."""
-    repo_root = resolve_repo_root()
-    state = _load_or_exit(repo_root, run_id)
-
+def _render_cursor(state: RunState, console: Console) -> None:
+    """The run's own four facts — where it is, and what it is driving."""
     console.print(f"run: {state.run}")
     console.print(f"workflow: {state.workflow}")
     console.print(f"branch: {state.branch}")
     console.print(f"cursor: {state.cursor}")
+
+
+@run_app.command("status")
+def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+    """Print the cursor, every step's state, who is holding each dispatched
+    unit, since when, whether it has returned (spec §4.C) — and what each
+    ATTEMPT cost, beneath its own holder line (§4.D).
+
+    Three sections, and the body is the list of them: `_render_cursor`,
+    `_render_step_and_items` (which delegates one attempt's holder line to
+    `_render_dispatch_attempt` and its cost to `_render_attempt_cost`), and
+    `_print_accounting`'s totals.
+    """
+    repo_root = resolve_repo_root()
+    state = _load_or_exit(repo_root, run_id)
+
+    _render_cursor(state, console)
     _render_step_and_items(state, console)
-    if units.accounted_keys(state):
-        # Count units the cursor actually dispatched, so a dispatched unit with
-        # no snapshot still lands in the denominator rather than vanishing.
-        dispatched = sum(
-            1
-            for record in state.steps.values()
-            for unit_state in units.unit_states(record).values()
-            if unit_state != "queued"
-        )
-        _print_accounting(state, dispatched or None)
+    if units.accounted_attempts(state):
+        _print_accounting(state)
 
 
 @run_app.command("advance")
@@ -2605,11 +2721,17 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
     now-closed one (`_dispatch_needs_open`). This is the sanctioned recovery
     for an executor that is never coming back: nothing can retire it from the
     orchestrator side, so freeing the tree has to be a named operator act.
+
+    It also MEASURES the attempt it closes (§4.D). An agent that produced
+    nothing still burned tokens, and that is the spend most worth seeing —
+    before this, abandoning a unit discarded its cost entirely, and the next
+    `advance`'s estimate overwrote the only trace it had.
     """
     record = state.steps[owner_id]
     _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
     new_record = _close_dispatch(record, key, "abandoned")
-    save_run_state(repo_root, _with_step(state, owner_id, new_record))
+    closed = _with_measurement(_with_step(state, owner_id, new_record), owner_id, key)
+    save_run_state(repo_root, closed)
     console.print(
         f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
     )

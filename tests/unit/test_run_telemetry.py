@@ -26,10 +26,11 @@ from fr.run.telemetry import (
     UsageTotals,
     attribute_dispatches,
     claude_code_session,
+    measure_attempt,
     measure_dispatch,
-    measure_unit,
     read_claude_code,
     reader_for,
+    select_for_attempt,
 )
 
 from tests.unit.transcript_sessions import (
@@ -379,10 +380,10 @@ def test_an_unknown_session_id_locates_nothing(tmp_path: Path) -> None:
     }
 
     assert claude_code_session(env) is None
-    assert measure_unit(env, start=BEFORE, end=AFTER) is None
+    assert measure_attempt(env, session="other", agent=None, start=BEFORE, end=AFTER) is None
 
 
-def test_measure_unit_ties_the_three_together(tmp_path: Path) -> None:
+def test_measure_attempt_ties_the_three_together(tmp_path: Path) -> None:
     session = _session(tmp_path, session_id="abc-123")
     write_agent(session, AGENT_ID, tool_use_id=TOOL_USE_ID)
     env = {
@@ -391,7 +392,7 @@ def test_measure_unit_ties_the_three_together(tmp_path: Path) -> None:
         "FR_TRANSCRIPT_ROOT": str(tmp_path / "projects"),
     }
 
-    measured = measure_unit(env, start=BEFORE, end=AFTER)
+    measured = measure_attempt(env, session="abc-123", agent=None, start=BEFORE, end=AFTER)
 
     assert measured is not None
     assert measured.harness == "claude-code"
@@ -400,7 +401,7 @@ def test_measure_unit_ties_the_three_together(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("env", [{}, {"OPENCODE_BIN": "x"}, {"HERMES_HOME": "/h"}])
 def test_a_harness_with_no_reader_measures_nothing(env: dict[str, str]) -> None:
-    assert measure_unit(env, start=BEFORE, end=AFTER) is None
+    assert measure_attempt(env, session=None, agent=None, start=BEFORE, end=AFTER) is None
 
 
 def test_a_mistyped_fr_harness_degrades_instead_of_raising() -> None:
@@ -413,7 +414,12 @@ def test_a_mistyped_fr_harness_degrades_instead_of_raising() -> None:
     with pytest.raises(HarnessError):
         detect_harness({"FR_HARNESS": "claude-kode"})
 
-    assert measure_unit({"FR_HARNESS": "claude-kode"}, start=BEFORE, end=AFTER) is None
+    assert (
+        measure_attempt(
+            {"FR_HARNESS": "claude-kode"}, session=None, agent=None, start=BEFORE, end=AFTER
+        )
+        is None
+    )
 
 
 def test_a_transcript_with_non_ascii_bytes_is_read_under_a_non_utf8_locale(
@@ -495,3 +501,243 @@ def test_a_transcript_with_non_ascii_bytes_is_read_under_a_non_utf8_locale(
         "a non-ASCII transcript must still be readable under a non-UTF-8 "
         f"locale; got {done.stdout!r}"
     )
+
+
+# --- (e) which transcript is THIS attempt's: (session, agent), never a ----
+# --- borrowed window (spec §4.D / §4.D.1, phase 4) ------------------------
+#
+# Every test below DECLARES its harness and its session. Reading either off
+# the machine is how three tests in this file once passed only because the
+# authoring machine happened to be a Claude Code session — and this section is
+# about session identity, so the environment it asserts over must be the one
+# it wrote.
+
+_THEIRS = {
+    "input_tokens": 5,
+    "cache_creation_input_tokens": 50,
+    "cache_read_input_tokens": 500,
+    "output_tokens": 5000,
+}
+_OURS = {
+    "input_tokens": 9,
+    "cache_creation_input_tokens": 90,
+    "cache_read_input_tokens": 900,
+    "output_tokens": 9000,
+}
+_THEIRS_TOTAL = 2 * (5 + 50 + 500 + 5000)
+_OURS_TOTAL = 2 * (9 + 90 + 900 + 9000)
+
+
+def _env(root: Path, session_id: str | None) -> dict[str, str]:
+    """A declared Claude Code environment — harness and session, never the
+    machine's own."""
+    env = {"FR_HARNESS": "claude-code", "FR_TRANSCRIPT_ROOT": str(root)}
+    if session_id is not None:
+        env["CLAUDE_CODE_SESSION_ID"] = session_id
+    return env
+
+
+def test_a_claimed_attempt_is_measured_by_its_agent_id_when_dispatches_overlap(
+    tmp_path: Path,
+) -> None:
+    """Two dispatches at the SAME instant — the concurrency the window cannot
+    resolve and `--redispatch` produces on purpose. The agent id is also the
+    transcript's filename, so selection is exact; the assertion that the
+    window alone yields NOTHING is what keeps this test non-vacuous."""
+    from tests.unit.transcript_sessions import add_dispatch
+
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+    same = "2026-09-20T11:30:00.000Z"
+    add_dispatch(session, timestamp=same, agent_id="a1f1", tool_use_id="t1", usage=_THEIRS)
+    add_dispatch(session, timestamp=same, agent_id="b2e2", tool_use_id="t2", usage=_OURS)
+
+    first = measure_attempt(
+        _env(root, "sess-1"), session="sess-1", agent="a1f1", start=BEFORE, end=AFTER
+    )
+    second = measure_attempt(
+        _env(root, "sess-1"), session="sess-1", agent="b2e2", start=BEFORE, end=AFTER
+    )
+
+    assert first is not None and first.totals.total == _THEIRS_TOTAL
+    assert second is not None and second.totals.total == _OURS_TOTAL
+    assert measure_dispatch(session, start=BEFORE, end=AFTER) is None, (
+        "non-vacuity: the WINDOW cannot separate these two, so neither figure "
+        "above can have come from it"
+    )
+
+
+def test_an_earlier_sessions_attempt_is_measured_in_that_sessions_directory(
+    tmp_path: Path,
+) -> None:
+    """Same host, new session. The transcript is looked up in the RECORDED
+    session's directory, not the current one — so stopping and resuming on the
+    same machine still measures what the earlier session dispatched."""
+    from tests.unit.transcript_sessions import add_dispatch
+
+    root = tmp_path / "projects"
+    theirs = write_session(root, session_id="sess-old")
+    add_dispatch(
+        theirs,
+        timestamp="2026-09-20T11:30:00.000Z",
+        agent_id="a1f1",
+        tool_use_id="t1",
+        usage=_THEIRS,
+    )
+    write_session(root, session_id="sess-new", slug="-home-user-other")
+
+    measured = measure_attempt(
+        _env(root, "sess-new"), session="sess-old", agent="a1f1", start=BEFORE, end=AFTER
+    )
+
+    assert measured is not None
+    assert measured.totals.total == _THEIRS_TOTAL
+
+
+def test_an_attempt_whose_session_directory_is_absent_is_not_observable(tmp_path: Path) -> None:
+    """Another HOST: the cursor travelled with the branch, the transcripts did
+    not. A missing session directory already says "elsewhere" — which is why
+    no hostname is recorded. Never zero, never guessed."""
+    root = tmp_path / "projects"
+    write_session(root, session_id="sess-here")
+
+    measured = measure_attempt(
+        _env(root, "sess-here"),
+        session="sess-on-another-host",
+        agent="a1f1",
+        start=BEFORE,
+        end=AFTER,
+    )
+
+    assert measured is None
+
+
+def test_the_window_is_refused_for_an_attempt_this_session_did_not_dispatch(
+    tmp_path: Path,
+) -> None:
+    """Spec §4.D.1, exactly: host B resolves host A's open attempt at T2, and
+    the window [T0, T2] contains exactly ONE subagent — one host B dispatched
+    itself, for something unrelated. gh#514's `select_dispatch` accepts it,
+    and that stranger's cost would be recorded against host A's attempt.
+
+    The non-vacuity assertion is the whole test: `select_dispatch` over the
+    very same session DOES return that dispatch, so the refusal can only come
+    from the session check."""
+    from tests.unit.transcript_sessions import add_dispatch
+
+    root = tmp_path / "projects"
+    ours = write_session(root, session_id="sess-b")
+    add_dispatch(
+        ours,
+        timestamp="2026-09-20T11:30:00.000Z",
+        agent_id="unrelated",
+        tool_use_id="t9",
+        usage=_OURS,
+    )
+
+    borrowed = measure_attempt(
+        _env(root, "sess-b"), session="sess-a", agent=None, start=BEFORE, end=AFTER
+    )
+
+    assert borrowed is None, "another session's attempt never borrows this session's spend"
+
+    # TWO independent defences, and the test pins both, because the mutation
+    # that removes either must fail here. (1) fr looks in the RECORDED
+    # session's directory, which on host B does not exist — and it must never
+    # fall back to the current one, which is precisely how the stranger would
+    # be reached. (2) even offered host B's OWN dispatches, the window is shut
+    # unless the attempt was dispatched from this session.
+    assert claude_code_session(_env(root, "sess-b"), "sess-a") is None
+    assert (
+        select_for_attempt(
+            attribute_dispatches(ours), agent=None, start=BEFORE, end=AFTER, same_session=False
+        )
+        is None
+    )
+    stranger = select_for_attempt(
+        attribute_dispatches(ours), agent=None, start=BEFORE, end=AFTER, same_session=True
+    )
+    assert stranger is not None and stranger.agent_id == "unrelated", (
+        "non-vacuity: the window DOES hold exactly one dispatch — gh#514's "
+        "`select_dispatch` accepts it — so only the session check refuses it"
+    )
+
+
+def test_the_window_still_measures_an_unclaimed_attempt_of_this_session(tmp_path: Path) -> None:
+    """The fallback is not removed, only fenced: an UNCLAIMED attempt this
+    same session dispatched has no agent id to match on, and the window is all
+    fr has. Refusing here would delete the measurement of every attempt an
+    orchestrator forgot to claim."""
+    from tests.unit.transcript_sessions import add_dispatch
+
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+    add_dispatch(
+        session,
+        timestamp="2026-09-20T11:30:00.000Z",
+        agent_id="a1f1",
+        tool_use_id="t1",
+        usage=_THEIRS,
+    )
+
+    measured = measure_attempt(
+        _env(root, "sess-1"), session="sess-1", agent=None, start=BEFORE, end=AFTER
+    )
+
+    assert measured is not None and measured.totals.total == _THEIRS_TOTAL
+
+
+def test_an_attempt_with_no_recorded_session_never_borrows_the_window(tmp_path: Path) -> None:
+    """`session is None` — every attempt written before the field existed, and
+    every harness with no session concept. Not knowing is not the same as
+    knowing it was this one, so the window stays shut; the agent-id path,
+    which is exact, still answers."""
+    from tests.unit.transcript_sessions import add_dispatch
+
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+    add_dispatch(
+        session,
+        timestamp="2026-09-20T11:30:00.000Z",
+        agent_id="a1f1",
+        tool_use_id="t1",
+        usage=_THEIRS,
+    )
+    env = _env(root, "sess-1")
+
+    assert measure_attempt(env, session=None, agent=None, start=BEFORE, end=AFTER) is None
+    by_id = measure_attempt(env, session=None, agent="a1f1", start=BEFORE, end=AFTER)
+    assert by_id is not None and by_id.totals.total == _THEIRS_TOTAL
+
+
+def test_a_process_with_no_session_of_its_own_measures_nothing_by_window(tmp_path: Path) -> None:
+    """Symmetric to the above: the attempt names a session, this process has
+    none to compare it to (no `CLAUDE_CODE_SESSION_ID` at all). Equality
+    against an absent value is not a match."""
+    from tests.unit.transcript_sessions import add_dispatch
+
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+    add_dispatch(
+        session,
+        timestamp="2026-09-20T11:30:00.000Z",
+        agent_id="a1f1",
+        tool_use_id="t1",
+        usage=_THEIRS,
+    )
+
+    assert (
+        measure_attempt(_env(root, None), session="sess-1", agent=None, start=BEFORE, end=AFTER)
+        is None
+    )
+
+
+def test_no_hostname_is_recorded_or_read_anywhere_in_telemetry() -> None:
+    """§4.D.1: a missing session directory already says "elsewhere", and a
+    hostname in a public repo's committed cursor is identity nobody needs."""
+    import fr.run.telemetry as telemetry
+
+    source = Path(telemetry.__file__).read_text()
+    assert "gethostname" not in source
+    assert "socket" not in source
+    assert "platform.node" not in source

@@ -298,3 +298,97 @@ Phase 3 reviewed against spec 4.A, 4.B, 4.C, 4.F and artifact-versioning.md. The
 (3) A reader the orchestrator's blast-radius audit MISSED: fr.archive.find_run_for_plan parsed cursors with the live model and skipped unparseable ones, so a not-yet-migrated cursor looked like NO cursor — the migrate preview offered to adopt plans that already had one, and --yes --adopt would have written a SECOND cursor beside any the rewrite refuses. Now falls back to the legacy reader.
 
 Frozen reader intact: legacy.py changed by 8 lines, all in the unfrozen v4_to_v5 rewrite; the four hash-pinned classes are untouched. Live upgrade demonstrated on this run's own cursor: held before, held and still named after. Review's own change: removed units.with_units_carried_forward and its two tests — dead once _complete_step became model_copy(update=...), which carries every field by construction and so closes finding f7's trap structurally rather than by a maintained list.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-cost-surface created=2026-09-21T00:36:35 phase=4 -->
+### p4-cost-surface · discovery · Cost per attempt: the accessor + writer surface phases 5-7 inherit, and the three strings that changed (phase 4)
+
+**What phases 5-7 inherit from the cost flip.** Every attempt now carries its OWN cost, end to end, and nothing reads "the unit's cost" to render or total any more.
+
+**`fr/run/units.py` — three new accessors, four old ones with no caller left.**
+- `last_attempt(state, key)` — the attempt every cost WRITE lands on. It hands back the `Attempt` whole rather than a timestamp, because a measurement needs four of its fields at once: `dispatched`/`returned` (the window) and `(session, agent)` (which transcript).
+- `accounted_attempts(state) -> tuple[(key, Attempt), ...]` — key-sorted, oldest attempt first within a unit. What `fr run status` renders and totals.
+- `dispatched_attempts(state) -> int` — the denominator, now ATTEMPTS. Counting units reported better coverage than there is the moment one unit was redispatched.
+- `estimate_of` / `measured_of` / `estimated_at` / `accounted_keys` still answer the per-UNIT (last-attempt) question and now have ZERO callers in `src/`. See `p4-per-unit-accessors-callerless` — flagged for review, not deleted.
+
+**`_with_measurement` (run_cmd) — four refusals, each a fact.** No attempt; no estimate (no window was ever opened — a flat `kind: agent` step); `returned is None`; already measured. The third is what keeps a `synthesized` attempt unmeasurable by construction: it has no `returned` because fr never knew one, so the migrated cost carrier can never be re-estimated or measured. Before phase 4 it WAS measurable, over a window `[synthesized.dispatched, now]` that could span days. The fourth is what stops a `resolve` after a `claim --abandoned` from rewriting the abandoned attempt's figure.
+
+**Both closers measure.** `resolve` (as before) and `claim --abandoned` (new: `_claim_abandon` now calls `_with_measurement` on the attempt it just closed). The spend that produced nothing is the spend worth seeing.
+
+**Wording that CHANGED and may break a phase-5/6/7 assertion:**
+- `measured total: N tok over X of Y dispatched attempts` — was `dispatched units`. Same for the `none` variant.
+- the per-unit estimate line lost its `<key>: ` prefix; it sits under its attempt now, so the key is the line above.
+- everything else is gh#514's wording verbatim, deliberately: `measured: N tok billed across the dispatch's turns (...) — cumulative harness accounting, NOT comparable to the one-dispatch ~N tok estimate above`, and `not measured: no transcript figure for this unit — the ~N tok above is an ESTIMATE`.
+
+**No shape change to `Attempt`.** `session`, `estimate`, `measured` were all already on the v5 model (phase 3 left `session` unwritten); the registry stays at run v5 and no migration was needed.
+
+<!-- fr:journal kind=decision scope=plan id=p4-session-two-defences created=2026-09-21T00:36:57 phase=4 -->
+### p4-session-two-defences · decision · Cross-session cost: TWO defences, not one — and the 4.D.1 test that passed under the wrong mutation (phase 4)
+
+**Two independent defences, and the spec only names one of them.**
+
+Spec 4.D.1 says a transcript is looked up by `(session, agent)` in the RECORDED session's directory, and that the window fallback is allowed only when the attempt's session is the current one. Implemented, both — and they are genuinely two mechanisms, which the mutation testing proved by accident:
+
+1. **`claude_code_session(env, session=None)` resolves the RECORDED session first** (`session or current_session(env)`). It must NEVER fall back to the current session's directory when the recorded one is absent: that fallback is exactly the road to the stranger. Mutation (`session_id = current_session(env)`): 2 tests fail.
+2. **`select_for_attempt(..., same_session)` shuts the window** for anything this session did not dispatch. Mutation (drop the two-line gate): 3 tests fail.
+
+**The trap I walked into, recorded because it is this repo's recurring one.** My first version of the 4.D.1 test — host B resolving host A's open attempt while B's own session holds exactly one unrelated subagent in the window — passed under mutation (2), because defence (1) had already refused it at the directory lookup. A test that names a mechanism and is defended by a different one is a test that cannot fail for its stated reason. The fix was to assert BOTH layers explicitly in that test (`claude_code_session(env, "sess-a") is None`, and `select_for_attempt(..., same_session=False) is None` with the `same_session=True` call returning the stranger as non-vacuity). Every mutation run printed whether the mutation applied; both did.
+
+**`same_session` is a PROOF, never a default.** `dispatched_from_this_session(env, session)` returns False when EITHER side is None. So:
+- attempt has no `session` (every pre-phase-4 attempt, every harness with no session concept) -> window shut, agent-id path still open (it is exact);
+- this process has no session id -> window shut.
+Not knowing where an attempt came from is not the same as knowing it came from here.
+
+**No hostname, anywhere.** `test_no_hostname_is_recorded_or_read_anywhere_in_telemetry` pins it (no `gethostname`, no `socket`, no `platform.node`). A missing session directory already says "elsewhere", and a hostname in a public repo's committed cursor is identity nobody needs.
+
+**Rename:** `telemetry.measure_unit` is gone; `measure_attempt(env, *, session, agent, start, end)` replaced it. Its four arguments are one attempt's four facts. `measure_dispatch` and `ClaudeCodeReader.measure` gained `agent=` and `same_session=`, both defaulting to the old behaviour so the reader Protocol stays satisfiable by a second harness that has no session concept.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-status-layout created=2026-09-21T00:37:19 phase=4 -->
+### p4-status-layout · discovery · status renders cost beneath each holder; the third absence ('not observable from here') and the refusal's new sentence (phase 4)
+
+**Three sections, four renderers.** `status_cmd`'s body is now four lines: `_render_cursor`, `_render_step_and_items`, and `_print_accounting` behind an `if units.accounted_attempts(state)`. The per-attempt renderers sit under the second: `_render_dispatch_attempt` (the holder line, unchanged) and `_render_attempt_cost` (new — gh#514's `_print_accounting` body, moved verbatim except for the key prefix).
+
+**What it looks like on this run's own cursor** (rendered live before committing):
+
+```
+    phase/3/implement-phase: done
+      agent a6003d674a7d2ef75 (claude-code, claude-fable-5-1) 2026-09-20T21:04:30+00:00 -> 2026-09-20T22:02:04+00:00 done
+        journal 25 entries/197 lines, handoff 20647 chars, spec+plan 73750 chars (~23599 tok est)
+        measured: 56092764 tok billed across the dispatch's turns (in 522, cache-create 643986, cache-read 55292865, out 155391) - cumulative harness accounting, NOT comparable to the one-dispatch ~23599 tok estimate above
+```
+
+That is a 2,377x gap between estimate and measurement on a real phase — the ratio gh#514's wording exists for, now sitting directly under the agent that produced it.
+
+**The third absence.** A cost line with no measurement now has TWO forms, and they are different facts:
+- `not measured: no transcript figure for this unit — the ~N tok above is an ESTIMATE` — a figure that could still arrive;
+- `not observable from here: this attempt was dispatched from another session, whose transcripts did not travel with the branch — the ~N tok above is an ESTIMATE` — one this session can never produce.
+The predicate is `_cost_observable_here` and it is deliberately the same rule as the refusal's (`_dispatched_from_another_session`), both reading `telemetry.dispatched_from_this_session`. An attempt with NO recorded session prints the first, not the second: not knowing is not knowing.
+
+**The refusal.** `_already_running_refusal` gains one sentence when the holder's session is not this one: "Dispatched from ANOTHER session: this one cannot see whether that agent is alive, and its cost is not observable from here. If it died with its host (a run picked up on another machine), close it with the `lost agent` line below." The `lost agent: fr run claim ... --abandoned` line was already there; the sentence is what tells the operator to reach for it rather than wait. `test_advance_refusing_its_own_sessions_holder_says_nothing_about_sessions` pins that the ORDINARY refusal does not acquire it — every other refusal fr prints means "someone is working", and this one must stay distinguishable.
+
+**One test rewritten rather than patched.** `test_run_upgrade_in_flight.py` asserted `f"{key}: journal {n} entries" in flat`, which the moved rendering deletes. It now finds the indented BLOCK under the unit's own line (`_unit_block`) and asserts the estimate is inside it — strictly stronger than the prefix was, because it fails if the figure lands under the wrong unit.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-session-test-discipline created=2026-09-21T00:38:03 phase=4 -->
+### p4-session-test-discipline · discovery · A test that passed only because the machine was a Claude Code session, caught by the phase that made session identity load-bearing (phase 4)
+
+**A test in this file passed only because the authoring machine was a Claude Code session — and phase 4 is the phase that catches that.**
+
+`test_resolve_records_measured_tokens_for_the_unit_it_closes` ran its `advance` through the bare `_invoke` helper (no session declared) and its `resolve` through `_invoke_measurable` (session `sess-1`). Click's `CliRunner(env=...)` MERGES into `os.environ` rather than replacing it, so on a developer machine inside Claude Code the advance inherited the operator's real `CLAUDE_CODE_SESSION_ID`. That did not matter while the window was unconditional. The moment the window required `attempt.session == current session`, the test went red under `env -u CLAUDE_CODE_SESSION_ID` and stayed green without it — the signature the phase brief warned about, reproduced exactly.
+
+Fixed by declaring the session on the `advance` too, with the reason written into the docstring. **Every new test in phase 4 declares both the harness and the session id**; `tests/unit/test_run_telemetry.py`'s `_env` helper exists only to make that the path of least resistance. The full suite was run throughout as `env -u CLAUDECODE -u CLAUDE_PLUGIN_ROOT -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID uv run pytest`.
+
+**The fixture rule held.** The overlap and cross-session cases are built from the CAPTURED transcript (`tests/fixtures/transcripts/`), not authored: `transcript_sessions.add_dispatch` copies the captured orchestrator tool_use record and the captured subagent stream, and re-keys only timestamp / agent id / tool_use id / usage. Two calls with the same timestamp IS the overlap case. Nothing in phase 4 invents a transcript shape.
+
+**One consequence for phases 5-7:** an `fr run advance` from a session fr cannot identify opens an attempt with `session: None`, and such an attempt can only ever be measured by AGENT ID. If nothing claims it, its cost is unrecoverable by design. That is the honest trade for never borrowing a window.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-per-unit-accessors-callerless created=2026-09-21T00:38:17 phase=4 -->
+### p4-per-unit-accessors-callerless · discovery · Four per-unit cost accessors now have no caller in src/ — flagged for review, not deleted (phase 4)
+
+**REVIEW DECISION OWED, same shape as phase 3's `with_units_carried_forward`.**
+
+After phase 4, `units.estimate_of`, `units.measured_of`, `units.estimated_at` and `units.accounted_keys` have **no caller in `src/`**. `_with_measurement` moved to `units.last_attempt` (it needs the whole attempt, not a timestamp), and `fr run status` moved to `units.accounted_attempts` / `units.dispatched_attempts`, because the per-UNIT question cannot see a redispatched unit's earlier attempt — it shows the retry and hides the abandoned spend, which is the defect section 4.D exists to fix.
+
+Verified with a grep that can fail (`grep -rn "units\.<name>(" packages/*/src`, counted): `with_measured` 1, `last_attempt` 1, `accounted_attempts` 2, `dispatched_attempts` 1, and the four above 0.
+
+They are NOT dead the way `with_units_carried_forward` was, which is why I flagged rather than deleted: `tests/unit/test_run_cli.py`'s `_Snapshot`/`_accounting` helpers read a unit's cost through them instead of through the storage — precisely the seam `fr/run/units.py` exists to offer — and `tests/unit/test_run_units_access.py` covers them directly. Deleting them would push those tests onto `.attempts[-1].estimate` and put shape knowledge back into the test file the v5 flip took it out of.
+
+**What review should decide:** keep them as the sanctioned per-unit read (accepting a public surface with no production caller), or delete them and give the tests a different reader. Noted in `fr/run/units.py`'s cost-section comment too, so the question is visible at the code and not only here.

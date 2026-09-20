@@ -55,12 +55,15 @@ __all__ = [
     "ContextEstimate",
     "MeasuredTokens",
     "UnitAttempt",
+    "accounted_attempts",
     "accounted_keys",
     "attempts",
     "dispatch_recorded",
+    "dispatched_attempts",
     "estimate_of",
     "estimated_at",
     "fan_out_states",
+    "last_attempt",
     "measured_of",
     "open_attempt",
     "unit_keys",
@@ -263,12 +266,29 @@ def fan_out_states(state: RunState) -> dict[str, str]:
 
 # --------------------------------------------------------------------- cost
 #
-# Cost is per ATTEMPT (decision u2) and these accessors answer per UNIT, which
-# today means: the unit's LAST attempt. That is the attempt a cost is written
-# to (`advance` estimates the attempt it just opened; `resolve` measures the
-# one it is closing) and, for a migrated v4 cursor, the attempt the rewrite
-# attached the unit's one snapshot to. Earlier attempts keep their own figures
-# on the cursor; nothing here reads them yet.
+# Cost is per ATTEMPT (decision u2), and this section answers at BOTH grains.
+#
+# Per attempt — `last_attempt` (what a writer touches: `advance` estimates the
+# attempt it just opened, `resolve` and `claim --abandoned` measure the one
+# they just closed, and both are the tail), `accounted_attempts` and
+# `dispatched_attempts` (what `fr run status` renders and totals, so a
+# redispatched unit's abandoned spend is in the figures rather than behind
+# them).
+#
+# Per unit — `estimate_of` / `measured_of` / `estimated_at` / `accounted_keys`,
+# which answer for the unit's LAST attempt: that is the attempt a cost was
+# last written to and, for a migrated v4 cursor, the one the rewrite attached
+# the unit's single snapshot to. Never a substitute for the per-attempt view:
+# on a redispatched unit they show the retry and hide the abandoned spend.
+#
+# NOTE for review (phase 4): those four now have NO caller in `src/`. Phase 4
+# re-pointed `_with_measurement` at `last_attempt` and `fr run status` at
+# `accounted_attempts`, and the per-unit question went with them. They are
+# still exercised — `tests/unit/test_run_cli.py`'s `_Snapshot` reads a unit's
+# cost through them rather than through the storage, which is the seam this
+# module exists to offer — so they are not dead in the sense
+# `with_units_carried_forward` was. Flagged rather than deleted so review can
+# decide, the way phase 3 flagged that one.
 
 
 def _owner(state: RunState, key: str) -> str | None:
@@ -278,7 +298,16 @@ def _owner(state: RunState, key: str) -> str | None:
     return None
 
 
-def _last_attempt(state: RunState, key: str) -> UnitAttempt | None:
+def last_attempt(state: RunState, key: str) -> UnitAttempt | None:
+    """`key`'s most recent attempt anywhere in `state`, or `None`.
+
+    The attempt every cost WRITE lands on — `advance` estimates the one it
+    just opened; `resolve` and `claim --abandoned` measure the one they just
+    closed — and both are the tail by construction. Handed back whole rather
+    than as a timestamp, because a measurement needs four of its fields at
+    once: the window edges `dispatched`/`returned`, and the `(session, agent)`
+    pair that says WHICH transcript is this attempt's (§4.D.1).
+    """
     step_id = _owner(state, key)
     if step_id is None:
         return None
@@ -286,12 +315,56 @@ def _last_attempt(state: RunState, key: str) -> UnitAttempt | None:
     return recorded[-1] if recorded else None
 
 
+_last_attempt = last_attempt
+
+
+def accounted_attempts(state: RunState) -> tuple[tuple[str, UnitAttempt], ...]:
+    """Every `(unit key, attempt)` in `state` that carries an estimate —
+    key-sorted, and within a unit oldest attempt first.
+
+    Cost is per ATTEMPT (decision u2), so a REDISPATCHED unit contributes
+    twice and the abandoned attempt's spend — exactly the spend worth seeing
+    — lands in the totals rather than being overwritten by the retry.
+    `accounted_keys` answers the older, per-unit question and is not a
+    substitute: on a unit with two attempts it yields one key, and the
+    earlier figure is invisible.
+    """
+    found = [
+        (key, attempt)
+        for record in state.steps.values()
+        for key, unit in (record.units or {}).items()
+        for attempt in unit.attempts
+        if attempt.estimate is not None
+    ]
+    # `key=` on the key alone: `Attempt` is not orderable, and the sort is
+    # stable, so two attempts of one unit keep their oldest-first order.
+    return tuple(sorted(found, key=lambda pair: pair[0]))
+
+
+def dispatched_attempts(state: RunState) -> int:
+    """How many attempts `state` records at all — the denominator of
+    "measured N of M".
+
+    Attempts, not units: the numerator counts attempts now, so a denominator
+    of units would report better coverage than there is the moment one unit is
+    redispatched. A `synthesized` attempt counts — it carries a real cost
+    snapshot a measurement could still land beside.
+    """
+    return sum(
+        len(unit.attempts)
+        for record in state.steps.values()
+        for unit in (record.units or {}).values()
+    )
+
+
 def accounted_keys(state: RunState) -> tuple[str, ...]:
-    """Every unit key `state` records a cost for, sorted — across all steps.
+    """Every unit key whose LAST attempt records a cost, sorted — across all
+    steps.
 
     Sorted by KEY and not grouped by step: that is what the v4 top-level
     `accounting` map rendered, and the per-step storage must not quietly
-    reorder `fr run status`.
+    reorder `fr run status`. Per UNIT, so it cannot see a redispatched unit's
+    earlier attempt — `accounted_attempts` is what renders and totals those.
     """
     return tuple(
         sorted(
