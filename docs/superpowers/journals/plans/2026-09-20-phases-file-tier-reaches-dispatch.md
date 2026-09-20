@@ -14,3 +14,8 @@ This plan was scaffolded by the very command it fixes. The phases file declared 
 ### d-floor · decision · This plan's fr_version floored at >=4.2.0 rather than the default
 
 Self-review warned that the default '>=3.0.0,<5.0.0' admits both a pre-acceptance (3.7.0) and a pre-skeleton (4.2.0) fr while the plan carries both fields. Floored at the highest, '>=4.2.0,<5.0.0', which also clears the tier probe phase 2 adds (tier landed in 3.12.0). Worth recording because it is the same defect class the phase 2 probe exists to catch, observed on this plan before that probe was written — the existing acceptance and skeleton probes caught it, which is the evidence that the tier probe is the missing third of a working set rather than a new idea.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-preexisting-unrelated-failures created=2026-09-20T13:48:01 phase=1 -->
+### p1-preexisting-unrelated-failures · discovery · 3 pre-existing test failures, unrelated to phase 1 (phase 1)
+
+uv run pytest -q --no-cov shows 3 failures unrelated to this phase's changes: tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused, tests/unit/test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused, and tests/unit/test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable. Confirmed via git stash (reverting phase 1's edits) that all three fail identically on the unmodified worktree — environment-dependent (likely this workspace's own container/worktree evidence, or a discoverable fr-goal workflow shape) rather than caused by the tier fix. Not investigated further; out of phase 1 scope.

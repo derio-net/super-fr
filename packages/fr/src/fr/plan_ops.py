@@ -30,6 +30,7 @@ from fr._urls import is_cross_repo_spec
 from fr.journal.model import journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
+from fr.types import PHASE_TIERS
 
 
 class StepSpec(TypedDict):
@@ -113,6 +114,31 @@ class PhaseSpec:
     # Walking-skeleton marker — emitted only when set (same byte-stability
     # rule as `acceptance`).
     skeleton: bool = False
+    # Harness-neutral complexity hint (2026-07-22 fr-goal-subagent-execution
+    # spec §B.2) — emitted only when set (same byte-stability rule as
+    # `acceptance`/`skeleton`). Validated against `fr.types.PHASE_TIERS` in
+    # `create()`'s pre-flight loop, not left to `PhaseHeader`'s Literal at the
+    # post-write re-parse (#133: that would strand a half-built folder).
+    tier: Literal["mechanical", "standard", "hard"] | None = None
+
+
+def _preflight_phase_error(ps: PhaseSpec) -> str | None:
+    """The first pre-flight validation error for `ps`, or None.
+
+    Each check here mirrors a `PhaseHeader` schema gate that would otherwise
+    only reject at `create()`'s post-write re-parse, stranding a half-built
+    plan folder (#133). One function per phase keeps `create()`'s loop a
+    single readable rule ("for each phase, raise the first pre-flight
+    error") instead of a growing set of inline `if`s.
+    """
+    if ps.number < 1:
+        return f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
+    if ps.tier is not None and ps.tier not in PHASE_TIERS:
+        return (
+            f"phase {ps.number} ({ps.title!r}): tier {ps.tier!r} is not valid, "
+            f"must be one of {list(PHASE_TIERS)}"
+        )
+    return None
 
 
 def create(
@@ -149,14 +175,14 @@ def create(
     # filesystem. A spec missing its '## Implementation Plans' section must
     # fail loud here — not after the folder is half-built — so a re-run after
     # adding the section isn't blocked by a stranded folder (#133). Mirrors how
-    # `fr apply` validates the diff before `--yes` touches GitHub.
-    # Same doctrine for phase numbering: the schema gate (PhaseHeader ge=1)
-    # would only reject at the post-write re-parse, stranding the folder.
+    # `fr apply` validates the diff before `--yes` touches GitHub. Same
+    # doctrine for phase numbering and tier below: their schema gates
+    # (PhaseHeader's `ge=1` and `Literal`) would only reject at the post-write
+    # re-parse, stranding the folder (#434 spec-review finding for tier).
     for ps in phases:
-        if ps.number < 1:
-            raise PlanEditError(
-                f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
-            )
+        error = _preflight_phase_error(ps)
+        if error is not None:
+            raise PlanEditError(error)
     spec_path: Path | None = None
     if spec_str:
         candidate = (repo_root / spec_str).resolve()
@@ -289,12 +315,14 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
         "depends_on": list(ps.depends_on),
         "tracking_issue": None,
     }
+    # Optional header fields are emitted only when set, so plans written
+    # before each field existed stay byte-stable and parse on older readers.
     if ps.acceptance:
-        # Omitted when empty so pre-acceptance plans stay byte-stable.
         phase_header["acceptance"] = list(ps.acceptance)
     if ps.skeleton:
-        # Omitted when unset so pre-marker plans stay byte-stable.
         phase_header["skeleton"] = True
+    if ps.tier is not None:
+        phase_header["tier"] = ps.tier
     return {
         "schema_version": 2,
         "phase": phase_header,
