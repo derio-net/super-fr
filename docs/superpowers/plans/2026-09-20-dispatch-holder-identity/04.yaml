@@ -1,0 +1,121 @@
+schema_version: 2
+phase:
+  number: 4
+  title: advance refuses a held unit (gh-499), --redispatch is the escape, and resolve
+    closes the record
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-refuses-second
+tasks:
+- number: 1
+  title: The refusal, red to green
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests that `fr run advance` on a unit whose last record has `returned is None`:
+      (a) exits 2 and prints NO dispatch brief — assert the absence of the JSON line,
+          because gh-499's complaint is precisely that a brief looks like an instruction
+          to act when the correct action is to wait;
+      (b) names the holder id, agent_type, harness and the dispatched timestamp;
+      (c) says `an unclaimed agent` when no claim was made, and still refuses;
+      (d) prints all three ways forward from spec §4.C (resolve / claim --abandoned /
+          advance --redispatch);
+      (e) does NOT refuse when the last record is closed (a failed unit being retried).
+      Paste failures.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: implement the refusal in advance_cmd and _advance_group. Put the message in
+      ONE module-level function so the flat and grouped paths cannot drift.
+      Re-run; expect green.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: compare the message against gh-499's own "Expected" block — that issue
+      wrote the wording it wanted. Match its shape where it is better than ours. Run
+      ruff, mypy.
+- number: 2
+  title: --redispatch, red to green
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests that `fr run advance <run> --redispatch`:
+      (a) closes the open record `outcome: abandoned` and APPENDS a new one, leaving the
+          old holder's id intact in the list (the forensic trail — review finding r2);
+      (b) prints the brief and exits 0;
+      (c) on a unit with NO open record behaves exactly like a plain advance (it is an
+          escape, not a second mode).
+      Paste failures.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: add the `--redispatch` option to advance_cmd and wire it through
+      `_advance_group`. Re-run; expect green.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: ruff, mypy, and the whole tests/unit/test_run_cli.py file green.
+- number: 3
+  title: resolve closes the record, and accepts a late identity
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: tests that `fr run resolve`:
+      (a) sets `returned` and `outcome` from `--state` on the open record, for both a
+          member and a flat step;
+      (b) `--agent/--harness/--model` fill an UNCLAIMED record (the late fallback,
+          decision d2);
+      (c) `--agent` disagreeing with an already-claimed id is refused, exit 2, naming both;
+      (d) resolving a unit with no open record still works and records nothing — a run
+          adopted from disk has no dispatch history and must not start failing.
+      Paste failures.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: extend resolve_cmd with the three options and the close. Keep the existing
+      "one writer at a time" refusal in `_resolve_member` — it is a different check
+      (another UNIT outstanding) and both must survive. Re-run; expect green.
+  - id: P4.T3.S3
+    text: |-
+      REFACTOR: run the full suite in the background with a bounded wait —
+      `uv run pytest -q --no-cov --basetemp=/tmp/sb` — plus ruff and mypy. Paste tails.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

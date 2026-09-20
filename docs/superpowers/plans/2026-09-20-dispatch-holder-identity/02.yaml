@@ -1,0 +1,64 @@
+schema_version: 2
+phase:
+  number: 2
+  title: advance opens the record — for a grouped member, a flat step, and nothing
+    at all for a gate
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-holder-recorded
+tasks:
+- number: 1
+  title: Opening a dispatch, red to green
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_run_cli.py add tests that `fr run advance`:
+      (a) on a grouped member appends a DispatchRecord at key `phase/<n>/<member-id>`
+          with `dispatched` set, `agent_type` == the step's `agent:`, and `model` ==
+          the resolved tier binding;
+      (b) on a FLAT `kind: agent` step appends one at key `step/<step-id>` — assert the
+          literal `step/` prefix, since spec review finding r1 is that nothing stops a
+          manifest naming a step `phase/1/implement-phase`;
+      (c) on a GATED agent step (the shipped `brainstorm`) opens NO record at all — it
+          is marked `blocked`, not `running`;
+      (d) on an orchestrator-run agent step (`spec-review`, `agent: null`) DOES open one,
+          with `agent_type` None.
+      Run `uv run pytest tests/unit/test_run_cli.py -q --no-cov -k dispatch`; paste failures.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/run_cmd.py add a single helper —
+      `_open_dispatch(state, step, key) -> RunState` — and call it from BOTH the
+      `_advance_group` write-claim (beside `items[pending] = "running"`) and the flat
+      `step.kind == "agent"` branch that sets `state = "running"`. Do not call it from
+      the `_gate_pending` branch: spec §4.B.1's rule is that a record opens exactly when
+      advance moves a unit to `running`. Resolve `model` via fr.models for the step's
+      effective tier (member tier falling back to the group's, as `_build_member_brief`
+      already does); an unresolved tier leaves `model` None rather than guessing.
+      Re-run; expect green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: `_advance_group` already computes the member/group tier fallback for the
+      brief. Make `_open_dispatch` and `_build_member_brief` read the effective tier from
+      ONE helper rather than duplicating the fallback — two copies of a fallback rule is
+      how they drift. Re-run the run-cli tests, ruff, mypy.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

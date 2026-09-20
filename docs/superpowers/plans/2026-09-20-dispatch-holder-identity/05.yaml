@@ -1,0 +1,80 @@
+schema_version: 2
+phase:
+  number: 5
+  title: fr run status answers the question, and fr run check counts the debt
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-holder-recorded
+tasks:
+- number: 1
+  title: status rendering, red to green
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests that `fr run status` prints, indented under each unit:
+      (a) for a held unit, `HELD BY <agent> (<harness>, <model>) since <ts>`;
+      (b) for a settled one, `<agent> (<harness>, <model>) <dispatched> -> <returned> <outcome>`;
+      (c) `held by the orchestrator` when `agent_type` is None (spec §4.B.1);
+      (d) `an unclaimed agent` when the record has no `agent`;
+      (e) every record of a unit with several, oldest first;
+      (f) nothing at all for a run with no dispatch data — a pre-upgrade cursor's status
+          output is byte-identical to before.
+      Paste failures.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: extend status_cmd. Use `soft_wrap=True` on any line carrying a path,
+      timestamp or copy-pasteable command, for the reason the module already documents.
+      Re-run; expect green.
+  - id: P5.T1.S3
+    text: |-
+      REFACTOR: status_cmd is growing three renderers (items, accounting, dispatch).
+      Extract each into a small function so the command body reads as a list of sections.
+      ruff, mypy.
+- number: 2
+  title: check reports open and unclaimed dispatches
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: tests that `fr run check` reports open dispatches and counts unclaimed ones,
+      in the nagging shape `answered_by` already has — visible debt, NOT an error, so
+      the exit code is unchanged by an unclaimed dispatch. Assert the exit code explicitly.
+      Paste failures.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: extend check_cmd. Re-run; expect green.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR: ruff, mypy, full test file green.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

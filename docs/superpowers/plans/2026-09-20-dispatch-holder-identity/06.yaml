@@ -1,0 +1,143 @@
+schema_version: 2
+phase:
+  number: 6
+  title: The prose that makes it happen — skill, agent, parity, mirrors, matrix, version,
+    explainer
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-harness-neutral
+  - run-dispatch-holder-recorded
+  - run-dispatch-refuses-second
+  - run-dispatch-abandon
+tasks:
+- number: 1
+  title: fr-goal §5 and the executor definition
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md §5 so the per-phase loop reads
+      dispatch -> `fr run claim … --agent <id>` -> wait -> `fr run resolve …`. The three
+      harness-specific id sources (Claude Code's returned task id, OpenCode's child
+      session id, Hermes' delegate_task handle) MUST sit inside the existing scoped
+      per-harness clause — `tests/unit/test_tripwire_skill_tool_neutrality.py` fails a
+      skill that names a harness-specific tool outside one. Then run
+      `uv run pytest tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov`.
+  - id: P6.T1.S2
+    text: |-
+      Edit plugins/super-fr/agents/fr-phase-executor.md, adding the spec §4.E clause on
+      long commands and leftover poll loops. Put it where the existing "What you return"
+      / "keep the prose minimal" guidance is, since the two failures compound. Per
+      decision d3 add NO tripwire: there is no hook point for "an agent left a poll loop
+      running", and a test guarding only the wording would be enforcement theatre.
+  - id: P6.T1.S3
+    text: |-
+      REFACTOR: re-read both files as the orchestrator and as the executor. The
+      orchestrator reads `description:`; the executor reads the body. Confirm each
+      audience gets the part it needs where it actually looks (this is exactly the
+      gh-420 root cause — a constraint in the body that only the executor reads).
+- number: 2
+  title: Parity row, mirrors, and the acceptance matrix
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Amend the `subagent-dispatch` row's `summary` in
+      packages/fr/src/fr/harness/parity.yaml: dispatch is now recorded fr-side per unit,
+      so the row points at observable state rather than resting entirely on skill prose
+      being followed (gh-503's fifth motivation). Run `uv run fr harness parity --check`
+      and `uv run pytest tests/unit/test_tripwire_harness_parity.py -q --no-cov`.
+  - id: P6.T2.S2
+    text: |-
+      Run `uv run python scripts/sync-opencode.py` (no flag writes) and commit the
+      regenerated .opencode/ mirrors, then `scripts/sync-opencode.py --check` to confirm
+      no drift. Run the mirror tripwires:
+      `uv run pytest tests/unit/ -q --no-cov -k "opencode and sync"`.
+  - id: P6.T2.S3
+    text: |-
+      Flip the matrix rows with `uv run fr acceptance set-status` — never a hand-edit,
+      never `add` (.claude/rules/acceptance-matrix.md). run-dispatch-holder-recorded,
+      run-dispatch-refuses-second and run-dispatch-abandon move
+      `not-implemented -> ci` with `--level unit=super-fr:tests/unit/test_run_cli.py`
+      (and the model/migration test files where they apply) and `--notes` naming what
+      moved them. run-dispatch-harness-neutral stays `not-implemented` — it is
+      live-only by nature, Test Plan items 13-14, and saying so in `--notes` is the
+      point. Then `uv run fr acceptance check`.
+- number: 3
+  title: Version bump and the published explainer
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor` — MINOR, because this
+      adds a user-visible workflow surface (`fr run claim`, a new mandatory step in
+      fr-goal §5, and a refusal `advance` did not have). Never hand-edit a
+      version-bearing manifest. Commit the changed manifests together with uv.lock, and
+      confirm `uv run --no-project python scripts/bump-version.py --check` passes.
+  - id: P6.T3.S2
+    text: |-
+      docs/explainers/01-fr-goal.md describes the five `fr run` commands and the
+      per-phase dispatch loop, so .claude/rules/explainers-currency.md triggers: a new
+      CLI verb and a changed gate. Update the .md in its existing voice (second person,
+      concrete, explaining WHY), then regenerate the .html. First VERIFY the renderer by
+      re-rendering the UNMODIFIED .md and byte-comparing against the committed .html —
+      that check is what found the pygments trap twice. Run it from `/`, not the
+      worktree, and WITH `--isolated`:
+      `cd / && B=~/.claude/plugins/marketplaces/derio-net--blog-craft && uv run --isolated --no-project --with markdown --with pyyaml python "$B/tools/render_explainer.py" <abs-path>/docs/explainers/01-fr-goal.md --style broadsheet --embed-fonts -o <out>`
+      Only once the unmodified render is byte-identical, render the real one and commit
+      both files. If the renderer cannot be made to reproduce the committed page, do NOT
+      hand-edit the .html: say plainly in the PR body that regeneration is owed and the
+      site is knowingly behind, which the rule explicitly allows.
+  - id: P6.T3.S3
+    text: |-
+      Full gate, backgrounded with a bounded wait, tails pasted:
+      `uv run pytest -q --basetemp=/tmp/sb` (with coverage, as CI runs it),
+      `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run --no-project python scripts/bump-version.py --check`,
+      `uv run fr acceptance check`, `uv run fr validate artifacts`,
+      `uv run fr harness parity --check`, `uv run python scripts/sync-opencode.py --check`,
+      and `cd packages/fr-opencode-plugin && bun test` (CI's opencode-plugin-test job —
+      `uv run pytest` does NOT cover this package).
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

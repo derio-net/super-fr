@@ -399,3 +399,9 @@ instead of resting entirely on skill prose being followed (#503's fifth motivati
 | `run-dispatch-refuses-second` | `fr run advance` refuses a held unit; `--redispatch` is the escape | unit → live |
 | `run-dispatch-abandon` | An abandoned dispatch frees the unit without resolving the step | unit |
 | `run-dispatch-harness-neutral` | The record is written identically on Claude Code and OpenCode | live (both) |
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-09-20-dispatch-holder-identity | `derio-net/super-fr` | `2026-09-20-dispatch-holder-identity` | — |

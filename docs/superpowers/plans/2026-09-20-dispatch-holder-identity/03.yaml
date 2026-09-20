@@ -1,0 +1,93 @@
+schema_version: 2
+phase:
+  number: 3
+  title: fr run claim — the reported identity, idempotent, single-writer, and abandonable
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-abandon
+tasks:
+- number: 1
+  title: The claim verb, red to green
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests in tests/unit/test_run_cli.py for `fr run claim <run> --step <s>
+      [--item phase/<n>] --agent <id> [--harness <h>] [--model <m>]`:
+      (a) fills agent/harness/model on the open record for that unit;
+      (b) refuses (exit 2) a unit with no open record — a claim annotates a dispatch fr
+          made, it does not invent one;
+      (c) is idempotent for the SAME agent id;
+      (d) refuses a DIFFERENT agent while the first is open, naming both ids — this is
+          the two-writers case the whole spec exists for;
+      (e) `--harness` omitted uses fr.harness.detect.detect_harness, and records nothing
+          when detection returns None (no invented "unknown" — review finding r4);
+      (f) an unknown `--harness` value is refused rather than recorded.
+      Paste failures.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: add `claim_cmd` to run_cmd.py's `run_app`. Reuse `_load_or_exit`,
+      `_find_step` and the member/item validation `_resolve_member` already does —
+      extract the shared "which unit key does (--step, --item) name?" logic into one
+      helper instead of writing a second copy, and have `_resolve_member` use it too.
+      Re-run; expect green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: confirm exactly one function now maps (--step, --item) to a unit key,
+      used by claim, resolve and advance. Run ruff + mypy.
+- number: 2
+  title: '--abandoned: closing a dispatch without resolving the step'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests that `fr run claim <run> --step s [--item i] --abandoned`:
+      (a) sets `returned` and `outcome: abandoned` on the open record;
+      (b) leaves `items[key] == "running"` for a grouped member, and leaves the flat
+          step's `state == "running"` — the step is NOT resolved, only the dispatch is;
+      (c) therefore the next `fr run advance` briefs that unit again and appends a
+          SECOND record, with the first still present and closed;
+      (d) refuses when there is no open record, and refuses combined with `--agent`.
+      Paste failures.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement `--abandoned` in claim_cmd. Its help text must say what it is for
+      in one line: an executor that is never coming back cannot be retired from the
+      orchestrator side (spec §1.C), so freeing the tree has to be a named operator act.
+      Re-run; expect green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: read claim_cmd end to end — it now has two modes. If the branching reads
+      as two commands wearing one name, split the body into two small functions behind
+      the one entry point. Run ruff, mypy, and the full run-cli test file.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
