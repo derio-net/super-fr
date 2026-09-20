@@ -109,6 +109,22 @@ Worktree + container PERSIST after PR creation (back-loaded manual phases push t
 - **`down` is the immediate lever** — verifies container + worktree are gone
   before dropping state (never leaked) and refuses an open PR unless `--force`.
 
+### `--force` is operator-requested-and-informed only (decision `d3`)
+
+`--force` bypasses all three reap guards (uncommitted changes, unlanded
+content, an open PR) — one flag, growing blast radius. Decision `d3` attaches
+an obligation the code cannot enforce: an agent must not reach for `--force`
+on its own initiative, only after the operator has asked for it — and when
+the operator asks, the agent first names what would be destroyed, using the
+refusal message's own accounting rather than a guess. What `--force` actually
+does: `git worktree remove --force` removes the worktree and fr's record of
+it; the branch and any commits on it remain in the repo; uncommitted changes
+do not survive. Say that plainly instead of "destroys your work" — that is
+not uniformly true, and overstating it is a false refusal by other means.
+**This is prose with no tripwire behind it** — nothing can test "an agent
+decided by itself" — stated knowingly rather than borrowing the credibility
+of this repo's enforced rules.
+
 ## Recovery (#341) and failure handling
 
 - **Wedged container:** `fr isolation restart [--force]` bounces the devcontainer
