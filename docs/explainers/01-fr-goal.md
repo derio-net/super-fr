@@ -216,6 +216,20 @@ command, or prints the dispatch brief if it is agent work; `fr run resolve`
 records how a dispatched step turned out and answers an operator gate; and
 `fr run check` fails loudly when the cursor is sitting on a failed step.
 
+Advancing twice does not hand out the same work twice. If the step under the
+cursor is already running — an agent was dispatched and has not reported back —
+`fr run advance` refuses, names when that dispatch happened, and gives you the
+two ways forward: resolve the step, or, if you are convinced the agent is truly
+lost, `fr run advance <run-id> --redispatch` to re-issue the brief on purpose.
+The refusal matters more than it might seem. Agent work is a natural place for
+one conversation to end and another to begin, and advancing is the obvious first
+move on the way back in; without the refusal the second advance prints a brief
+indistinguishable from the first, and two agents edit the same worktree at once.
+`--redispatch` re-issues the brief for the unit that is outstanding and nothing
+else: it never selects a different unit, and it refuses in turn when nothing is
+running at all, because reaching for it then means your picture of the run is
+wrong, and saying so is more use than quietly behaving like an ordinary advance.
+
 One more command creates a run rather than moving one. If your `fr` was
 upgraded while a plan was already half-implemented, that work predates the run
 model and has no cursor at all; `fr run adopt <plan-dir>` reconstructs one from
@@ -384,7 +398,8 @@ flowchart TD
     D --> E[Operator completes it on the same PR]
     C -->|Yes| F[Front-load the manual phase]
     F --> G[Deliver reviewed spec and plan, then pause]
-    G --> H[Resume after operator confirmation]
+    G --> H[Operator does the work and ticks the phase]
+    H --> I[Agentic work resumes with nothing outstanding]
 ```
 
 Back-loading is the default. The final PR labels the phase as unimplemented,
@@ -392,6 +407,33 @@ and the operator performs it and records a completion note on the same branch.
 Front-loading is reserved for genuine prerequisites; then the manual
 instructions are themselves the first deliverable
 (`plugins/super-fr/skills/fr-goal/SKILL.md:69-74`).
+
+Where a manual phase may sit is a rule the tooling checks, not a convention you
+are trusted to keep: a manual phase must be in the plan's trailing block, or
+already complete. Turned around, that reads as the reason it exists — no manual
+phase may still be **outstanding** when an agentic phase after it runs. A plan
+shaped that way sends the loop into a phase whose prerequisite is a person who
+has not acted yet, and there is nothing useful left for it to do but wait.
+`fr plan self-review` errors on such a plan, so it fails at the plan-review step
+above, before the first phase is dispatched and while the author is still
+holding the plan. The `implement` step checks the same rule once more before
+dispatching anything, because a plan adopted from disk may never have been
+reviewed at all.
+
+Both halves of the rule turn on *outstanding* rather than on *manual*, and that
+is precisely what keeps front-loading legal. The right-hand branch of the
+diagram above ends with you doing the work and ticking the phase, and that tick
+is not a formality: it is what turns an outstanding prerequisite into a finished
+one. After it, a later agentic phase may depend on the manual phase quite
+happily, because depending on it no longer means waiting for anyone.
+
+A manual phase is never dispatched. The per-phase loop below enumerates the
+agentic phases only; a manual phase is recorded in the run as `manual`, and no
+dispatch brief is built for it under any circumstances — there is no code path
+that could offer human-only work to an agent. Nor is it quietly dropped: the
+run's progress counts only the phases that will be dispatched and names the ones
+that will not, so a tally of finished work never hides a phase that is sitting
+there waiting for you.
 
 ### 6. Build, test, and review in a loop (`implement` and `review`)
 

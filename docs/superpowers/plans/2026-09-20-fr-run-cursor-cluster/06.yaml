@@ -98,17 +98,24 @@ tasks:
 state:
   steps:
     P6.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:52:58+00:00'
+      note: 'Rendered the UNMODIFIED 01-fr-goal.md from / with uv run --isolated --no-project
+        --with markdown --with pyyaml; cmp against the committed 01-fr-goal.html:
+        byte-identical. Renderer pinned before a word was edited.'
     P6.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:53:04+00:00'
+      note: 'Three passages: the five-commands paragraph gains the already-running
+        refusal and --redispatch; the manual-phase section gains the trailing-or-complete
+        rule, where it fires, and ''never dispatched''; the diagram''s front-load
+        branch now ends with the operator ticking the phase.'
     P6.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:53:10+00:00'
+      note: 'Regenerated with the same verified command from /; git diff --stat: 39
+        insertions, 1 deletion, all of them the S2 paragraphs. test_tripwire_explainers_fresh.py:
+        3 passed.'
     P6.T2.S1:
       state: ' '
       ticked_at: null
