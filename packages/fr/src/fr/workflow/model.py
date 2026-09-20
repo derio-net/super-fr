@@ -45,6 +45,21 @@ class Step(BaseModel):
     emits: tuple[str, ...] = ()
     gate: Literal["operator"] | None = None
     tier: str | None = None
+    # Obligations this step must EVIDENCE before it can be resolved `done`
+    # (spec 2026-09-20-unit-record-unification §4.E). Each name is verified by
+    # `fr run resolve --evidence <name>=<journal-entry-id>`, and the verified
+    # id is stored on the unit. `review` is the one name fr knows how to
+    # verify — against the plan journal, by gh#517's own rule — so a step
+    # declaring anything else is refused at resolve time rather than recorded
+    # unverified.
+    #
+    # **Opt-in, per step, empty by default**, which is the whole compatibility
+    # story: a shape declaring none resolves EXACTLY as it did before this
+    # field existed, so repo-authored workflows are untouched until they ask.
+    # It is also a FIELD, not a step: drift (`run_cmd._check_step_drift`)
+    # compares step and member IDS, so adding this to a shipped shape cannot
+    # strand a cursor already in flight the way adding a step does.
+    evidence: tuple[str, ...] = ()
     # Legal for `unit: run` (spec example: `implement`'s `for_each: phase`);
     # an error for `unit: phase` (items are already per-phase) — that
     # unit-dependent conflict is a SEMANTIC check, enforced by

@@ -2512,11 +2512,20 @@ rows:
       and review-passed-clean are different cursor states
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh#430''s claim moved to the cursor: satisfaction is control, content stays
-      journal. Reuses gh#517''s reviewed_phases rule as the verifier. Live is Test Plan
-      item 18.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py#L196
+      - super-fr:tests/unit/test_run_evidence.py#L210
+      - super-fr:tests/unit/test_run_evidence.py#L221
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py#L529
+    status: ci
+    notes: 'Phase 5 landed the gate: fr run resolve --state done on a step declaring
+      evidence: refuses without --evidence review=<journal-entry-id> (exit 2, naming
+      the flag) and stores the verified id in UnitRecord.evidence; --state failed needs
+      none. Exercised on the SHIPPED fr-goal shape by the integration walk, where the
+      bare resolve that used to pass is now refused. Mutation-verified: disabling the
+      missing-evidence refusal fails 3 tests.'
   - id: run-idle-detected
     capability: Run cursor
     acceptance: fr run check --idle distinguishes an advanceable-and-idle run from every
@@ -2701,30 +2710,52 @@ rows:
       or a review of another phase, is refused
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: Without this the evidence gate is satisfiable by any journal id, which would
-      make skipped and passed-clean the same state again with extra steps.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py#L236
+      - super-fr:tests/unit/test_run_evidence.py#L251
+      - super-fr:tests/unit/test_run_evidence.py#L262
+    status: ci
+    notes: 'Verified by gh#517''s own predicate, fr.journal.model.reviews_phase, which
+      reviewed_phases is now the fold of — one rule, two gates. A kind=finding entry
+      tagged phase=1, a review of another phase, and an id no entry carries are each
+      refused. Mutation-verified: bypassing reviews_phase in the resolve path fails
+      exactly the finding and wrong-phase tests.'
   - id: run-legacy-reviews-not-retro-failed
     capability: Run cursor
     acceptance: Reviews resolved before the evidence gate existed are shown as unevidenced
       debt and are never retroactively failed
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: An obligation cannot be enforced backwards in time. Without this, every in-flight
-      run fails its check on the day the plugin updates.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py#L377
+      - super-fr:tests/unit/test_run_evidence.py#L391
+      - super-fr:tests/unit/test_run_evidence.py#L421
+    status: ci
+    notes: 'fr run check reports ''done, unevidenced (predates the evidence gate)''
+      and its exit code is asserted literally both ways (0 on a healthy cursor, still
+      1 on a failed one). Proven end to end on the REAL captured v4 cursor of this feature''s
+      own run, migrated to v5 against the shipped fr-goal shape: both its pre-gate review-phase
+      units are named, nothing invents evidence, exit 0.'
   - id: workflow-without-evidence-unchanged
     capability: Workflow shapes
     acceptance: A repo-authored workflow that declares no evidence resolves its steps
       exactly as before
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: The gate is opt-in per step. Pins that consumer repos' custom shapes are
-      untouched until they ask for it.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py#L153
+      - super-fr:tests/unit/test_run_evidence.py#L168
+      - super-fr:tests/unit/test_run_evidence.py#L182
+      - super-fr:tests/unit/test_run_evidence.py#L337
+    status: ci
+    notes: 'Step.evidence defaults to () and the gate is opt-in per step: the same shape
+      with and without the declaration differs only in that field, and the bare resolve
+      still succeeds without it. The drift test is the other half — adding the field
+      to a member does NOT strand an in-flight cursor, because drift compares step and
+      member ids, not fields.'
   - id: run-stalled-reported-not-failed
     capability: Run cursor
     acceptance: A unit held beyond the threshold is reported with its age and never

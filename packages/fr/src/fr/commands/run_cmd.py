@@ -44,6 +44,7 @@ from fr.journal.model import (
     compose_handoff,
     parse_journal,
     resolve_journal_read_path,
+    reviews_phase,
 )
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
@@ -816,6 +817,258 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
     return rel.as_posix()
 
 
+# ------------------------------------------------------------------ evidence
+#
+# Spec 2026-09-20-unit-record-unification §4.E. The line this draws is §3's:
+# an obligation's SATISFACTION is control, its CONTENT is journal. The cursor
+# records THAT the review happened and WHERE the evidence is — a journal entry
+# id — exactly as `emitted` records that a spec exists and where, without
+# containing the spec. It never copies a finding.
+
+
+def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
+    """`--evidence name=journal-entry-id` pairs, validated against `step`.
+
+    Same five-rule shape as `_parse_emitted` and for the same reasons — split
+    on the FIRST `=`, neither half empty, no duplicate name, and the name must
+    be one the STEP declares. That last rule is what stops evidence becoming
+    decoration: a name the shape never asked for is verified against nothing,
+    so recording it would put an unverified id on the cursor under a heading
+    that reads as proof.
+    """
+    result: dict[str, str] = {}
+    for pair in pairs:
+        name, sep, value = pair.partition("=")
+        if not sep:
+            raise RunStateError(f"--evidence must be 'name=journal-entry-id', got {pair!r}")
+        name = name.strip()
+        if not name:
+            raise RunStateError(f"--evidence has an empty obligation name: {pair!r}")
+        if not value.strip():
+            raise RunStateError(f"--evidence {name}= has an empty value")
+        if name in result:
+            raise RunStateError(
+                f"--evidence {name}= given twice ({result[name]!r} then {value.strip()!r}) — "
+                "one obligation, one entry"
+            )
+        if not step.evidence:
+            raise RunStateError(
+                f"step {step.id!r} declares no evidence, so --evidence {name}= "
+                "would record an id nothing verified"
+            )
+        if name not in step.evidence:
+            declared = ", ".join(sorted(step.evidence))
+            raise RunStateError(
+                f"step {step.id!r} does not require {name!r} evidence; it declares: {declared}"
+            )
+        result[name] = value.strip()
+    return result
+
+
+def _plan_journal_entries(repo_root: Path, state: RunState) -> tuple[str, list[JournalEntry]]:
+    """`(slug, entries)` of this run's PLAN journal — the one place evidence
+    is verified against. Raises `RunStateError` when the run has not recorded
+    a plan yet, which is fail-closed: a gate that cannot read its source does
+    not know whether it passed."""
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        raise RunStateError(
+            "cannot verify evidence — no plan recorded yet (resolve the step "
+            "that emits `plan` first)"
+        )
+    slug = Path(plan_rel).name
+    path = resolve_journal_read_path(repo_root, "plan", slug)
+    if not path.exists():
+        raise RunStateError(
+            f"cannot verify evidence — the plan journal {path} does not exist. "
+            f"Record the review first: fr journal add --scope plan --slug {slug} "
+            "--kind review --phase <n> ..."
+        )
+    try:
+        return slug, parse_journal(path.read_text())
+    except (JournalParseError, OSError) as e:
+        raise RunStateError(
+            f"cannot verify evidence — plan journal {path} is unreadable: {e}"
+        ) from e
+
+
+def _verified_evidence(
+    repo_root: Path,
+    state: RunState,
+    step: Step,
+    *,
+    key: str,
+    phase: int | None,
+    offered: dict[str, str],
+    state_value: str,
+) -> dict[str, str]:
+    """The evidence `key` may be resolved with — or `typer.Exit(2)`.
+
+    Three rules, in this order:
+
+    1. `--state failed` requires nothing. A failed review unit met no
+       obligation, so demanding proof of one would make a failure
+       unreportable — the run would wedge on exactly the outcome the cursor
+       most needs to record.
+    2. Every obligation the step declares must be offered, or the resolve is
+       REFUSED naming the flag. This is gh#430 closed: `review-phase` leaves
+       no artifact of its own, so a skipped review used to resolve identically
+       to one that did the work. Now it cannot reach `done` at all.
+    3. Each offered id is verified against the plan journal with gh#517's OWN
+       rule (`fr.journal.model.reviews_phase`) — a `kind=review` entry
+       carrying `phase=N` for THIS unit's phase. Without that, any id at all
+       satisfies the gate and "skipped" and "passed clean" are the same state
+       again with extra steps.
+
+    Fail-closed on a unit that names no phase (a flat `step/<id>`): `review`
+    evidence is evidence about a PHASE, and fr will say it cannot verify
+    rather than store an id nothing checked.
+    """
+    if not step.evidence:
+        # `_parse_evidence` already refused an offered name the step does not
+        # declare, so there is nothing offered here either — this is the
+        # ordinary, unchanged path every pre-existing shape takes.
+        return {}
+    if state_value != "done" and not offered:
+        return {}
+    # Refuse an obligation fr cannot check BEFORE demanding it. A shape that
+    # asks for something unverifiable is a shape bug, and "you did not pass
+    # --evidence sniff=" would send the operator looking for an entry id that
+    # could never have satisfied it.
+    unverifiable = sorted(name for name in step.evidence if name != "review")
+    if unverifiable:
+        err_console.print(
+            f"[red]{key}: cannot verify {unverifiable[0]!r} evidence — `review` is the only "
+            "obligation fr knows how to verify (against the plan journal)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if phase is None:
+        err_console.print(
+            f"[red]{key}: cannot verify `review` evidence for a unit that names no "
+            "phase — a review is evidence about a phase, and fr will not record an "
+            "id it checked nothing against[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    missing = (
+        [name for name in step.evidence if name not in offered] if state_value == "done" else []
+    )
+    if missing:
+        owed = ", ".join(missing)
+        err_console.print(
+            f"[red]{key}: refused — step {step.id!r} cannot be done without evidence "
+            f"({owed}).[/red]",
+            soft_wrap=True,
+        )
+        for name in missing:
+            err_console.print(
+                f"  pass --evidence {name}=<journal-entry-id>"
+                + (
+                    f", naming the `kind=review` plan-journal entry recorded for phase {phase}"
+                    if name == "review" and phase is not None
+                    else ""
+                ),
+                markup=False,
+                soft_wrap=True,
+            )
+        err_console.print(
+            "  A review that left no journal entry is a review that did not happen "
+            "(spec §4.E) — `--state failed` needs no evidence.",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # Offered evidence is verified whatever the state. `failed` REQUIRES none,
+    # which is not the same as "anything goes": a failed review that did
+    # produce a journal entry may still name it, and an id nothing checked
+    # must never reach the cursor under either state.
+    if not offered:
+        return {}
+    try:
+        slug, entries = _plan_journal_entries(repo_root, state)
+    except RunStateError as e:
+        err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    entry_id = offered["review"]
+    found = next((e for e in entries if e.id == entry_id), None)
+    if found is None:
+        err_console.print(
+            f"[red]{key}: --evidence review={entry_id} names no entry in the plan "
+            f"journal for {slug}[/red]",
+            soft_wrap=True,
+        )
+        err_console.print(
+            f"  fr journal add --scope plan --slug {slug} --kind review --phase {phase} "
+            f'--title "phase {phase} review" '
+            "--body \"<findings raised, by id; or 'no findings'>\"",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not reviews_phase(found, phase):
+        err_console.print(
+            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
+            + (f" for phase {found.phase}" if found.phase is not None else " with no phase")
+            + f" — evidence must be a `kind=review` entry carrying `phase={phase}`, "
+            "the same rule `fr journal check --require-reviews` applies[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return offered
+
+
+def _evidence_owed(manifest: WorkflowManifest) -> dict[str, tuple[Step, ...]]:
+    """`{top-level step id: (every step under it that declares evidence,)}`.
+
+    A group's members are the realistic case (`implement`'s `review-phase`);
+    a flat step declaring evidence is included so a report can never go quiet
+    about a shape that asks for something it never got.
+    """
+    owed: dict[str, tuple[Step, ...]] = {}
+    for step in manifest.steps:
+        candidates = step.steps or (step,)
+        declaring = tuple(s for s in candidates if s.evidence)
+        if declaring:
+            owed[step.id] = declaring
+    return owed
+
+
+def _unevidenced_units(repo_root: Path, state: RunState) -> list[tuple[str, str]]:
+    """`(step id, unit key)` for every unit that is `done` under a step which
+    declares evidence, and carries none — spec §4.E's visible debt.
+
+    **Never a failure, and never an exit code.** These are reviews resolved
+    before the gate existed; the migration cannot invent evidence for them and
+    does not try. An obligation cannot be enforced backwards in time — doing
+    so would fail every in-flight run on the day the plugin updates.
+
+    Fail-SOFT on a manifest it cannot resolve (drifted, renamed, deleted):
+    this is a report line, and a report that turns `fr run check` into an
+    error is a worse outcome than a report that is silent. The exit code of
+    every caller is unchanged either way.
+    """
+    try:
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except (RunStateError, WorkflowError, AdoptError, OSError):
+        return []
+    out: list[tuple[str, str]] = []
+    for step_id, declaring in _evidence_owed(manifest).items():
+        record = state.steps.get(step_id)
+        if record is None:
+            continue
+        for member in declaring:
+            suffix = f"step/{member.id}" if member.id == step_id else f"/{member.id}"
+            for key in units.unit_keys(record):
+                matches = key == suffix if member.id == step_id else key.endswith(suffix)
+                if (
+                    matches
+                    and units.unit_state(record, key) == "done"
+                    and not units.evidence_of(record, key)
+                ):
+                    out.append((step_id, key))
+    return out
+
+
 def _template_context(state: RunState) -> dict[str, str]:
     ctx = {"run.id": state.run, "run.branch": state.branch}
     for record in state.steps.values():
@@ -881,6 +1134,7 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "emits": list(step.emits),
         "gate": step.gate,
         "tier": step.tier,
+        "evidence": list(step.evidence),
         "for_each": step.for_each,
         "steps": [m.model_dump(exclude_none=True) for m in step.steps],
     }
@@ -1210,6 +1464,10 @@ def _build_member_brief(
         "emits": list(member.emits),
         "gate": member.gate,
         "tier": _effective_tier(member, group),
+        # The member's OWN, never the group's: an obligation is a property of
+        # the step that carries it, and inheriting it would make every member
+        # of the loop owe the review member's evidence.
+        "evidence": list(member.evidence),
         "resolved_tier": resolved_tier,
         "for_each": group.for_each,
         "steps": [],
@@ -2049,10 +2307,31 @@ def _render_unit_dispatch(record: StepRecord, key: str, *, indent: str, console:
         _render_attempt_cost(attempt, indent=f"{indent}  ", console=console)
 
 
-def _render_step_and_items(state: RunState, console: Console) -> None:
+def _render_unit_evidence(
+    record: StepRecord, step_id: str, key: str, unevidenced: set[tuple[str, str]], *, indent: str
+) -> None:
+    """A unit's evidence, or the fact that it owes some (§4.E).
+
+    Two lines that never both appear: `evidence: review=<id>` for a unit whose
+    obligation was met, and the debt line for one resolved before the gate
+    existed. A unit under a step that declares no evidence prints neither, so
+    `fr run status` is byte-identical for every shape that never opted in.
+    """
+    evidence = units.evidence_of(record, key)
+    if evidence:
+        shown = " ".join(f"{name}={eid}" for name, eid in sorted(evidence.items()))
+        console.print(f"{indent}evidence: {shown}", soft_wrap=True)
+    elif (step_id, key) in unevidenced:
+        console.print(f"{indent}unevidenced (predates the evidence gate)", soft_wrap=True)
+
+
+def _render_step_and_items(
+    state: RunState, console: Console, unevidenced: set[tuple[str, str]] | None = None
+) -> None:
     """The step/items renderer — unchanged in shape from before this phase
     when a run carries no dispatch data (case (f)): the dispatch lines are
     additive, never a replacement for the existing `items` line."""
+    owed = unevidenced or set()
     for step_id, record in state.steps.items():
         console.print(f"  {step_id}: {record.state}")
         # Two passes, in this order, because a unit WITH a state renders as
@@ -2062,10 +2341,12 @@ def _render_step_and_items(state: RunState, console: Console) -> None:
         for key in units.unit_keys(record):
             if units.unit_state(record, key) is not None:
                 console.print(f"    {key}: {units.unit_state(record, key)}")
+                _render_unit_evidence(record, step_id, key, owed, indent="      ")
                 _render_unit_dispatch(record, key, indent="      ", console=console)
         for key in units.unit_keys(record):
             if units.unit_state(record, key) is None:
                 console.print(f"    {key}:")
+                _render_unit_evidence(record, step_id, key, owed, indent="      ")
                 _render_unit_dispatch(record, key, indent="      ", console=console)
 
 
@@ -2137,7 +2418,7 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     state = _load_or_exit(repo_root, run_id)
 
     _render_cursor(state, console)
-    _render_step_and_items(state, console)
+    _render_step_and_items(state, console, set(_unevidenced_units(repo_root, state)))
     if units.accounted_attempts(state):
         _print_accounting(state)
 
@@ -2347,6 +2628,7 @@ def _resolve_member(
     item: str | None,
     state_value: Literal["done", "failed"],
     emitted_map: dict[str, str],
+    evidence_map: dict[str, str],
     agent: str | None = None,
     harness: str | None = None,
     model: str | None = None,
@@ -2408,6 +2690,19 @@ def _resolve_member(
             "has exactly one writer; resolve the running unit first.[/red]"
         )
         raise typer.Exit(2)
+    # The evidence gate runs BEFORE any write (§4.E). A refusal must leave
+    # the unit exactly as it found it — a half-resolved review is a worse
+    # state than an unresolved one, and is indistinguishable from the skipped
+    # review this gate exists to make impossible.
+    verified = _verified_evidence(
+        repo_root,
+        state,
+        member,
+        key=key,
+        phase=_item_phase(item) if item is not None else None,
+        offered=evidence_map,
+        state_value=state_value,
+    )
     items[key] = state_value
     merged_emitted = {**(grec.emitted or {}), **emitted_map}
     updated = _with_step(
@@ -2415,6 +2710,10 @@ def _resolve_member(
         group.id,
         units.with_unit_states(grec.model_copy(update={"emitted": merged_emitted or None}), items),
     )
+    if verified:
+        updated = _with_step(
+            updated, group.id, units.with_evidence(updated.steps[group.id], key, verified)
+        )
     # The dispatch closes BEFORE `_complete_step` runs, so the closed record
     # is what that rebuild carries forward — and before the `failed` branch
     # too, because a failed unit's holder returned just as surely as a done
@@ -2444,6 +2743,13 @@ def resolve_cmd(
     state_value: str = typer.Option(..., "--state", help="done | failed."),
     emitted: list[str] = typer.Option(
         [], "--emitted", help="'name=path' artifact this step emitted (repeatable)."
+    ),
+    evidence: list[str] = typer.Option(
+        [],
+        "--evidence",
+        help="'name=journal-entry-id' proof of an obligation the step declares "
+        "(repeatable). `review=<id>` is verified against the plan journal: it "
+        "must be a `kind=review` entry carrying this unit's `phase=N`.",
     ),
     item: str | None = typer.Option(
         None,
@@ -2528,6 +2834,11 @@ def resolve_cmd(
         # stays refused (rule 3) rather than silently recorded.
         emits_owner = step if parent is None or step.emits else parent
         emitted_map = _parse_emitted(emitted, repo_root, emits_owner)
+        # Against the STEP itself, never a parent: evidence is an obligation of
+        # the step that carries it (the `review-phase` member), and falling
+        # back to the group the way `emits` does would let a member satisfy an
+        # obligation it never declared.
+        evidence_map = _parse_evidence(evidence, step)
     except (RunStateError, WorkflowError, AdoptError) as e:
         # soft_wrap (review `r1-f2`): `_find_step`'s composite-id message ends
         # in a flag pair the operator copy-pastes, and rich folds at width 80
@@ -2546,6 +2857,7 @@ def resolve_cmd(
             item=item,
             state_value=state_value,  # type: ignore[arg-type]  # validated below
             emitted_map=emitted_map,
+            evidence_map=evidence_map,
             agent=agent,
             harness=harness,
             model=model,
@@ -2661,13 +2973,31 @@ def resolve_cmd(
         )
         raise typer.Exit(2)
 
+    flat_key = _unit_key(repo_root, state, step, None, None)
+    # A flat `step/<id>` unit names no phase, so `review` evidence cannot be
+    # verified for it and `_verified_evidence` refuses rather than records.
+    verified = _verified_evidence(
+        repo_root,
+        state,
+        step,
+        key=flat_key,
+        phase=None,
+        offered=evidence_map,
+        state_value=state_value,
+    )
+    if verified:  # pragma: no cover — unreachable while `review` is the only
+        # verifiable obligation and a flat unit names no phase; kept so a
+        # second obligation cannot land here as a silent no-op.
+        state = _with_step(
+            state, step_id, units.with_evidence(state.steps[step_id], flat_key, verified)
+        )
     # The flat unit's dispatch closes here, keyed through the SAME `_unit_key`
     # `advance` opened it with and `claim` annotates it by — a `step/<id>` key
     # computed a second time by hand is the drift phase 3 removed.
     state = _close_on_resolve(
         state,
         step_id,
-        _unit_key(repo_root, state, step, None, None),
+        flat_key,
         state_value,  # type: ignore[arg-type]  # validated above
         agent=agent,
         harness=harness,
@@ -2907,6 +3237,15 @@ def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     if unclaimed:
         console.print(
             f"{len(unclaimed)} unclaimed dispatch(es) — visible debt, not a failure",
+            soft_wrap=True,
+        )
+    # Reviews resolved before the evidence gate existed (§4.E). Reported, never
+    # failed, and deliberately NOT part of the exit code below: an obligation
+    # cannot be enforced backwards in time, and doing so here would turn every
+    # in-flight run red on the day the plugin updates.
+    for step_id, key in _unevidenced_units(repo_root, state):
+        console.print(
+            f"{step_id}: {key} is done, unevidenced (predates the evidence gate)",
             soft_wrap=True,
         )
     if record is not None and record.state == "failed":

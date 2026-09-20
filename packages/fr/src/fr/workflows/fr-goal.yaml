@@ -95,6 +95,17 @@ steps:
         skill: superpowers:requesting-code-review
         needs: [spec, plan, journal:plan]
         emits: [journal:plan]
+        # The evidence gate (unit-record-unification spec §4.E), and the
+        # structural half of #430. This step is `kind: agent` and leaves no
+        # artifact of its own, so before this an agent that SKIPPED the review
+        # resolved it identically to one that did the work. Now `fr run
+        # resolve --state done` refuses without
+        # `--evidence review=<journal-entry-id>` and verifies that id against
+        # the plan journal by the same rule `journal-check` below applies — a
+        # `kind=review` entry carrying this phase's `phase=N`. Two gates, one
+        # rule, one verifier: `journal-check` remains the gate for a plan with
+        # no cursor, this one for a plan that has one.
+        evidence: [review]
 
   - id: journal-check
     kind: cli

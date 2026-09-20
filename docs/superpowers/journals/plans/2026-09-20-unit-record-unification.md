@@ -405,3 +405,57 @@ MUTATION-VERIFIED independently, printing whether the mutation applied (True): r
 Two executor observations worth keeping: its first cross-session test PASSED under the mutation that removed the session gate, because a second defence (the recorded-session directory lookup) had already refused — a test named for one mechanism and defended by another; it now asserts both layers. And test_resolve_records_measured_tokens_for_the_unit_it_closes had been inheriting the operator's real CLAUDE_CODE_SESSION_ID through the bare invoke helper — the ambient-environment defect a third time (f11 was the first).
 
 REVIEW DECISION (the executor flagged it as owed): units.estimate_of / measured_of / estimated_at / accounted_keys have zero callers under src, and 24 references across four test files including gh#514's migration tests. NOT deleted — that is churn with regression risk for no behaviour gain. But not left as ordinary API either: a per-unit cost read answers for the LAST attempt only, which is the exact shape of the defect this phase fixed, and for a never-redispatched unit the two readings agree, so no other test would notice a new caller. Added tests/unit/test_tripwire_per_unit_cost_reads.py: production code must read cost per attempt. It carries its own positive control, because twice on this branch a verification silently matched nothing and read as a pass.
+
+<!-- fr:journal kind=decision scope=plan id=p5-two-gates-compose created=2026-09-21T01:11:05 phase=5 -->
+### p5-two-gates-compose · decision · The cursor gate fires strictly earlier than journal-check — and one integration test asserted a now-unreachable state (phase 5) (phase 5)
+
+**The gate landed exactly as §4.E specifies, and doing so made one existing test assert a state that can no longer happen.** Recorded here because phase 7 owns the SKILL.md prose and must say the right thing.
+
+`review-phase` now declares `evidence: [review]` in BOTH shipped copies. So inside a cursor-driven fr-goal run, a phase's `kind=review` journal entry must exist **before** `fr run resolve --step review-phase … --state done` is accepted — the resolve verifies it. Which means that by the time the run reaches the `journal-check` step, every phase the cursor walked already has its review on record, and `journal-check` cannot fail for any of them.
+
+That is composition, not redundancy, and the spec already said so ("two gates, one rule, one verifier"): the cursor gate fires **strictly earlier**, and what is left for `fr journal check --require-reviews` is exactly what §4.E reserves for it — a locally-complete phase the cursor never reviewed: a plan with no cursor, an adopted cursor, pre-cursor work, or a plan amended after its group completed.
+
+`tests/integration/test_fr_goal_shape.py::test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed` used to prove the block by walking the loop with NO reviews and then ticking phase 2. Post-gate that walk is unreachable, so the test now grows a FOURTH phase on disk after the group completed and ticks its step — a phase the cursor never dispatched a review for. The composition assertion it existed for (journal-check blocks between `implement` and `deliver`, the cursor does not move, adding the review unblocks it) is unchanged, and the reason for the new spelling is in a comment above it.
+
+**Ordering, decided:** the write-claim refusal ("another unit is still running") fires BEFORE the evidence refusal. Asserted in the integration walk. A second writer is the more urgent fact, and naming the missing `--evidence` there would send the orchestrator off to write a journal entry when what it must do is wait.
+
+`fr journal check --require-reviews` itself is untouched — no flag, no message, no predicate changed. `reviewed_phases` is now the fold of the new `reviews_phase(entry, phase)` predicate rather than holding the rule itself, so the two gates cannot answer differently; `tests/unit/test_journal_model.py` and `test_journal_cmd.py` are green unmodified.
+
+<!-- fr:journal kind=decision scope=plan id=p5-verifier-order created=2026-09-21T01:11:05 phase=5 -->
+### p5-verifier-order · decision · The six ordered rules of the evidence verifier, and the two designs rejected (phase 5) (phase 5)
+
+**Refused, not recorded.** `_verified_evidence` checks in this order, and the order is load-bearing:
+
+1. step declares nothing → return immediately (`_parse_evidence` has already refused any offered name the step does not declare, so there is nothing to carry). This is the unchanged path every pre-existing shape takes.
+2. `--state failed` with nothing offered → return. A failed review unit met no obligation; demanding proof of one would make a failure unreportable and wedge the run on exactly the outcome the cursor most needs.
+3. an obligation that is not `review` → **refuse, "cannot verify"**, before demanding it. A shape asking for something fr cannot check is a shape bug; "you did not pass `--evidence sniff=`" would send the operator hunting for an id that could never have satisfied it.
+4. a unit that names no phase (a flat `step/<id>`) → **refuse, "cannot verify … a review is evidence about a phase"**. A flat step declaring `evidence: [review]` is therefore unresolvable-as-done. Deliberate and fail-closed: the alternative is storing an id nothing checked, under a key that reads as proof. Pinned by `test_a_flat_step_declaring_evidence_is_refused_rather_than_recorded`.
+5. missing declared obligations on `--state done` → refuse, naming `--evidence <name>=<journal-entry-id>`.
+6. verify each offered id against the plan journal — **whatever the state**. `failed` REQUIRES none, which is not the same as "anything goes": a failed review that did produce an entry may still name it, and an unverified id must never reach the cursor under either state.
+
+**Rejected:** making `fr workflow check` refuse `evidence:` on a non-member step. It would fail earlier, which is better, but it is a semantic rule about a unit shape that only `fr run` knows, and the spec does not ask for it. Flagged here for review rather than built.
+
+**Rejected:** inheriting a group's `evidence:` onto its members (the way `emits` falls back). An obligation belongs to the step that carries it; inheritance would make every member of the loop owe the review member's evidence.
+
+**Storage** is `units.with_evidence(record, key, mapping)` — merge, never replace, mirroring `_resolve_member`'s existing `emitted` merge, since a step may carry more than one obligation and they need not arrive in one call. Written AFTER the state write and before `_close_on_resolve`, so `_complete_step`'s `model_copy(update=…)` carries it forward. The gate itself runs BEFORE any write: a refusal leaves the unit exactly as it found it, because a half-resolved review is worse than an unresolved one and indistinguishable from the skipped review this exists to prevent.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-evidence-surface created=2026-09-21T01:11:05 phase=5 -->
+### p5-evidence-surface · discovery · The evidence surface phases 6-7 inherit: the flag, the brief key, the two new report lines, and the drift proof (phase 5) (phase 5)
+
+The whole phase-5 surface, for phases 6 and 7.
+
+**The flag.** `fr run resolve <run> --step <s> [--item phase/<n>] --state done --evidence review=<journal-entry-id>` (repeatable, `name=id`). Same five validation rules as `--emitted` and for the same reasons: split on the FIRST `=`, neither half empty, no duplicate name, and the name must be one the STEP declares — parsed against the step itself, never its parent.
+
+**The manifest.** `Step.evidence: tuple[str, ...] = ()` in `fr/workflow/model.py`. `evidence: [review]` on `review-phase` in both `plugins/super-fr/workflows/fr-goal.yaml` and `packages/fr/src/fr/workflows/fr-goal.yaml` (the two files stay byte-identical; `diff` them after any edit). `fr workflow check fr-goal` → ok.
+
+**The brief carries it.** `_build_brief` and `_build_member_brief` both emit `"evidence": [...]` — the member's OWN, never the group's. `test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields` derives its key set from `Step.model_fields`, so it would have failed had the brief omitted it. Phase 7 can have SKILL.md read the brief rather than hard-code the flag.
+
+**New readers.** `units.evidence_of(record, key) -> dict[str, str]` and `units.with_evidence(record, key, mapping)`; `fr.journal.model.reviews_phase(entry, phase)`; `run_cmd._evidence_owed(manifest)` and `run_cmd._unevidenced_units(repo_root, state)`. `units.py` remains the only module outside `model.py` / `legacy.py` / `fr/artifacts/` that touches the cursor's shape.
+
+**`fr run check` gained a line and NOT an exit code.** `<step>: <key> is done, unevidenced (predates the evidence gate)`, printed to stdout after the open-dispatch lines and before the failed-cursor verdict. **Phase 6 (`--idle`) must not treat it as a stop condition**: it is debt, it is per-unit, and `_unevidenced_units` fails SOFT — an unresolvable or drifted manifest returns `[]` rather than turning a report into an error. `fr run status` renders `evidence: review=<id>` beneath a unit that has it, or `unevidenced (predates the evidence gate)` for one that owes it; a shape that declares no evidence prints neither, so status is byte-identical for every shape that never opted in.
+
+**Manifest drift, proven, not assumed.** `_check_step_drift` compares top-level step ids and a group's recorded member ids — never fields. `test_adding_evidence_to_a_member_does_not_strand_an_in_flight_cursor` starts a run against the shape WITHOUT `evidence:`, rewrites the shipped shape to add it, and asserts the next resolve is refused for MISSING EVIDENCE and not for drift ("different version" absent from the output), then succeeds with a real id. Mutation-verified: making drift compare `m.model_dump_json()` instead of `m.id` fails that test (and 22 others).
+
+**Mutants killed** (each printed whether it applied — the check that cannot fail is the one this branch keeps catching): gate made a no-op → 3 fail, incl. the integration walk; `reviews_phase` bypassed → 2 fail; drift by shape → 23 fail; `check` never reporting the debt → 3 fail.
+
+**Gates:** full suite 3833 passed / 80 skipped, ruff, mypy (4 trees), `fr acceptance check` 170 rows OK, `fr validate artifacts` 48 valid, `fr harness parity --check`, `sync-opencode --check`, `bump-version --check`. No version bump, no SKILL.md edit (phase 7 owns it, at its 120-line cap).

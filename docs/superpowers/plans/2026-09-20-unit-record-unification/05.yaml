@@ -54,30 +54,32 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T22:52:56+00:00'
+      note: 'RED: tests/unit/test_run_evidence.py, 20 failing'
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T22:59:04+00:00'
+      note: 'GREEN: Step.evidence, --evidence on resolve, reviews_phase shared, both
+        shipped shapes'
     P5.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T23:08:17+00:00'
       note: null
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T23:08:18+00:00'
       note: null
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T23:08:18+00:00'
       note: null
     P5.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:11:20+00:00'
+      note: 'REFACTOR: ruff/mypy clean; run-cli, journal and shipped-shape suites
+        green'
   completion:
-    at: null
+    at: '2026-09-20T23:11:26+00:00'
     note: null
     observed_prs: []

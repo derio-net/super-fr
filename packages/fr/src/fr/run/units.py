@@ -42,6 +42,8 @@ reader finds the key by scanning — unit keys are unique across a cursor.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fr.run.model import (
     Attempt,
     ContextEstimate,
@@ -62,6 +64,7 @@ __all__ = [
     "dispatched_attempts",
     "estimate_of",
     "estimated_at",
+    "evidence_of",
     "fan_out_states",
     "last_attempt",
     "measured_of",
@@ -71,6 +74,7 @@ __all__ = [
     "unit_states",
     "with_attempt_appended",
     "with_estimate",
+    "with_evidence",
     "with_last_attempt_replaced",
     "with_measured",
     "with_unit_state",
@@ -234,6 +238,44 @@ def with_last_attempt_replaced(record: StepRecord, key: str, attempt: UnitAttemp
     if not recorded:
         raise KeyError(key)
     return _with_attempts(record, key, (*recorded[:-1], attempt))
+
+
+# --------------------------------------------------------------- evidence
+
+
+def evidence_of(record: StepRecord, key: str) -> dict[str, str]:
+    """`key`'s verified evidence — `{obligation: journal entry id}` (§4.E).
+
+    An empty dict is a real answer and covers two situations the caller does
+    not need to tell apart: a step that declares no obligation at all, and a
+    unit resolved before the gate existed. The SECOND is visible debt — but
+    "which units owe evidence" is a question about the MANIFEST (which steps
+    declare it), not about the cursor, so it is answered by the caller that
+    has one, not guessed at here.
+
+    A copy: the models are frozen, and no reader may hand a caller something
+    that looks mutable but silently is not part of the cursor.
+    """
+    unit = (record.units or {}).get(key)
+    return dict(unit.evidence or {}) if unit is not None else {}
+
+
+def with_evidence(record: StepRecord, key: str, evidence: Mapping[str, str]) -> StepRecord:
+    """`record` with `evidence` MERGED onto `key`'s existing evidence.
+
+    Merged, never replaced, for the same reason `_resolve_member` merges
+    `emitted`: a step may carry more than one obligation and they need not be
+    satisfied in one call. The unit is created (stateless) when absent rather
+    than silently dropping the write — `with_unit_states` already keeps a
+    stateless unit that has evidence, so such a record is representable and
+    must not be lost between here and there.
+    """
+    mapping = _units(record)
+    prior = mapping.get(key)
+    merged = {**(prior.evidence if prior is not None and prior.evidence else {}), **evidence}
+    base = prior.model_dump() if prior is not None else {}
+    mapping[key] = UnitRecord.model_validate({**base, "evidence": merged or None})
+    return _with_units(record, mapping)
 
 
 # ----------------------------------------------------------------- the units
