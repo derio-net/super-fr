@@ -401,3 +401,12 @@ Found while rebasing onto origin/main, which had moved to 4.8.1 with #506 (gh-43
 So the parallel run fixed the exact bug that ate this run's tiers, and this run is the independent evidence that it was real and silent. Both halves matter: #506's ingestion fix stops the drop, and its warning is what makes an already-dropped tier visible at all. Without the warning this plan would have dispatched untiered forever, inheriting the session model, which is the failure d4 was answered to prevent — and indistinguishable from a working tiered dispatch, exactly as fr-goal's skill text warns.
 
 Tiers restored by hand in 01-04.yaml; self-review passes clean. Note the dispatches in this run already happened at the intended models (I passed them explicitly per phase), so nothing was mis-executed — only the plan's record of intent was lost.
+
+<!-- fr:journal kind=finding scope=plan id=origin-main-tripwire-red created=2026-09-20T17:44:28 state=open -->
+### origin-main-tripwire-red · finding [open] · origin/main is red on test_no_merged_but_unarchived_plans — inherited, not caused here
+
+Found by the post-rebase full suite: a FOURTH failure beyond the three known ones. The offender is 2026-09-20-phases-file-tier-reaches-dispatch — the PARALLEL run's plan, merged complete in #506 and never archived. The tripwire's signal is 'complete on origin/main' INTERSECT 'still present in the working tree', so it fires on any checkout of main and on every branch cut from it, including this one. Nothing in this PR causes it and nothing in this PR can fix it without archiving another run's plan folder, which the operator explicitly scoped away from this run.
+
+Worth noting the contrast with p4-status-claims-merged, because they look like the same defect and are not: this tripwire consults origin/main before using the word merged, so it correctly does NOT fire on this branch's own locally-complete-but-unmerged plan. It is the well-built version of the signal. fr status's sweep is the one that asserts a merge it never observed. The tripwire's design is what the status line should copy.
+
+Resolution is one housekeeping command by whoever owns that plan — fr archive 2026-09-20-phases-file-tier-reaches-dispatch — in its own PR. Surfaced to the operator rather than acted on.
