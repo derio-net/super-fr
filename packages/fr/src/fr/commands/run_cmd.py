@@ -618,13 +618,65 @@ def _effective_tier(step: Step, group: Step | None = None) -> str | None:
     return group.tier if group is not None else None
 
 
+PHASE_TIER_SENTINEL = "from_phase"
+"""`Step.tier`'s one non-tier value — the shipped `fr-goal` shape's marker for
+"this unit's tier is whatever the plan's phase header says".
+
+`Step.tier` is a free `str`, not `PhaseHeader.tier`'s closed
+mechanical/standard/hard Literal, precisely so a shape can say this. The
+*brief* passes the sentinel through verbatim, because there it is an
+instruction to the harness: look the phase up. A dispatch RECORD cannot do
+that — it stores what was actually sent — so `_advance_group` resolves it
+first (finding f4). Handing the sentinel straight to `fr models resolve` can
+only ever miss, which is how every real fr-goal dispatch came to record
+`model: null`."""
+
+
+def _phase_header_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
+    """The `tier:` on plan phase `phase_n`'s header, or `None`.
+
+    Reads the plan the same way `_accounting_snapshot` already does. Degrades
+    to `None` on anything unreadable rather than raising: like accounting,
+    this is observability riding along with a dispatch, and it must never be
+    the reason a dispatch fails.
+    """
+    from fr.parser import PlanSchemaError, parse
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        return None
+    try:
+        plan = parse(repo_root / plan_rel)
+    except (PlanSchemaError, OSError):
+        return None
+    return next((p.phase.tier for p in plan.phases if p.phase.number == phase_n), None)
+
+
+def _dispatch_tier(repo_root: Path, state: RunState, tier: str | None, phase_n: int) -> str | None:
+    """`tier` with `PHASE_TIER_SENTINEL` replaced by phase `phase_n`'s own
+    tier — what a dispatch RECORD needs, as opposed to what the brief says.
+
+    An unresolvable sentinel becomes `None`, which `_resolved_model` then
+    records as an absent model: the spec §4.A rule that nothing is ever
+    guessed applies to the sentinel exactly as it does to an unbound tier."""
+    if tier != PHASE_TIER_SENTINEL:
+        return tier
+    return _phase_header_tier(repo_root, state, phase_n)
+
+
 def _resolved_model(repo_root: Path, tier: str | None) -> str | None:
     """The model bound to `tier` for this machine's detected harness, via
     `fr.models.resolve` — repo config overriding user config, the same rule
     `fr models resolve` itself uses. `None` when there is no tier, no
     detected harness, or no binding for the pair: an unresolved tier leaves
-    `model` absent rather than guessed (spec §4.A / P2.T1.S2)."""
-    if tier is None:
+    `model` absent rather than guessed (spec §4.A / P2.T1.S2).
+
+    `PHASE_TIER_SENTINEL` is refused here as well as resolved upstream in
+    `_dispatch_tier`. Callers with no phase in hand — a flat `kind: agent`
+    step — have nothing to resolve it against, and without this guard a
+    models.yaml that happened to carry a `from_phase:` key would bind it,
+    turning a sentinel into a model name by coincidence."""
+    if tier is None or tier == PHASE_TIER_SENTINEL:
         return None
     harness = detect_harness(os.environ)
     if harness is None:
@@ -739,7 +791,7 @@ def _advance_group(
             step.id,
             pending,
             agent_type=member.agent,
-            tier=_effective_tier(member, step),
+            tier=_dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n),
             repo_root=repo_root,
         )
     save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))

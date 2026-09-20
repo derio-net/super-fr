@@ -1822,13 +1822,25 @@ steps:
 _FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
-def _started_grouped_with_plan(repo: Path, shipped: Path) -> str:
+def _started_grouped_with_plan(repo: Path, shipped: Path, *, phase_tier: str | None = None) -> str:
     """Start against the grouped shape and resolve `plan` with a real
-    one-phase plan on disk, so the group can enumerate its items."""
+    one-phase plan on disk, so the group can enumerate its items.
+
+    `phase_tier` writes a `tier:` into the copied fixture's phase header —
+    what the shipped `fr-goal` shape's `tier: from_phase` sentinel points at.
+    """
     import shutil
 
     slug = "2026-05-09-fixture-minimal"
-    shutil.copytree(_FIXTURE_PLAN, repo / "docs" / "superpowers" / "plans" / slug)
+    plan_dir = repo / "docs" / "superpowers" / "plans" / slug
+    shutil.copytree(_FIXTURE_PLAN, plan_dir)
+    if phase_tier is not None:
+        phase_yaml = plan_dir / "01.yaml"
+        phase_yaml.write_text(
+            phase_yaml.read_text().replace(
+                "  tag: agentic\n", f"  tag: agentic\n  tier: {phase_tier}\n", 1
+            )
+        )
     _invoke(repo, shipped, ["run", "start", "grouped", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])  # plan running + brief
     result = _invoke(
@@ -2566,14 +2578,20 @@ def test_advance_grouped_member_opens_a_dispatch_record(
 ) -> None:
     """Case (a): a grouped member's record is keyed like its `items` entry,
     `agent_type` is the member's own `agent:`, and `model` is the resolved
-    tier binding (the member's `tier:`, falling back to the group's — here
-    both are `from_phase`, the shipped `fr-goal` shape's literal tier name)."""
+    tier binding.
+
+    The tier is bound under a REAL tier name (`fr.types.PhaseHeader.tier`'s
+    closed vocabulary), reached through the shape's `from_phase` sentinel and
+    the plan phase header — not under a models.yaml key literally called
+    `from_phase`, which no operator would ever write and which made this
+    assertion pass while real dispatches recorded `model: null` (finding f4).
+    """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _write_repo_models(repo, "claude-code:\n  from_phase: claude-opus-5\n")
+    _started_grouped_with_plan(repo, shipped, phase_tier="hard")
+    _write_repo_models(repo, "claude-code:\n  hard: claude-opus-5\n")
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
@@ -2589,6 +2607,56 @@ def test_advance_grouped_member_opens_a_dispatch_record(
     assert record.model == "claude-opus-5"
     assert record.returned is None
     assert record.outcome is None
+
+
+def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`tier: from_phase` is a SENTINEL, not a tier (finding f4).
+
+    Both `implement` and `implement-phase` carry it in the shipped `fr-goal`
+    shape, and `fr.types.PhaseHeader.tier`'s vocabulary is
+    mechanical/standard/hard — so handing `from_phase` to `fr models resolve`
+    can only ever miss, and every real fr-goal dispatch recorded
+    `model: null`. That is the field dead exactly where #503's cost-attribution
+    motivation needs it. The record resolves the sentinel against the plan's
+    own phase header; the BRIEF deliberately does not (see the test below),
+    because there the sentinel is an instruction to the harness.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, phase_tier="standard")
+    _write_repo_models(repo, "claude-code:\n  standard: claude-sonnet-5\n  hard: claude-opus-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    records = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"]
+    assert records[0].model == "claude-sonnet-5"
+    # The brief still carries the sentinel verbatim — it tells the harness to
+    # look the phase up, which is a different job from recording what was sent.
+    assert '"tier": "from_phase"' in result.output
+
+
+def test_advance_records_no_model_when_the_phase_header_has_no_tier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unresolvable sentinel leaves `model` absent rather than guessed —
+    the same rule as an unbound tier (spec §4.A)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)  # fixture phase header has no tier
+    _write_repo_models(repo, "claude-code:\n  standard: claude-sonnet-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    records = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"]
+    assert records[0].model is None
 
 
 def test_advance_grouped_member_does_not_reopen_a_dispatch_record_while_still_running(
@@ -2643,9 +2711,7 @@ def test_advance_does_not_reopen_a_dispatch_record_while_still_running(
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
-    _invoke(
-        repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"]
-    )
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
     _invoke(repo, shipped, ["run", "advance", "r1"])
@@ -2680,9 +2746,7 @@ def test_advance_orchestrator_run_agent_step_opens_a_dispatch_record_with_no_age
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
-    _invoke(
-        repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"]
-    )
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 

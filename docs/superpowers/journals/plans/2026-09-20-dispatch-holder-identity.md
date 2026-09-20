@@ -81,3 +81,13 @@ matching phase 1's precedent (same warning, same row, completion note left blank
 — the row is shared across phases 1/2/5/6, and P6.T2's own no-refactor-because
 note already says the matrix status flips happen there via `fr acceptance
 set-status`, not per-phase.
+
+<!-- fr:journal kind=finding scope=plan id=f4 created=2026-09-20T14:31:33 phase=2 state=fixed -->
+### f4 · finding [fixed] · tier: from_phase is a sentinel, not a tier — every real fr-goal dispatch recorded model: null (phase 2)
+
+The shipped fr-goal shape carries tier: from_phase on both implement and implement-phase. Step.tier is a free str precisely so a shape can say that; PhaseHeader.tier's vocabulary is mechanical|standard|hard. So _resolved_model handed 'from_phase' to fr models resolve, which can only ever miss — meaning the model field, one of #503's five stated motivations (cost attribution, #464), would have been null on every dispatch that actually goes to a subagent. The one place it matters. FIXED: PHASE_TIER_SENTINEL is named once; _phase_header_tier reads the plan phase's own tier the same way _accounting_snapshot already reads the plan, degrading to None on anything unreadable rather than failing a dispatch; _dispatch_tier resolves the sentinel at the grouped call site, where phase_n is in scope. _resolved_model ALSO refuses the sentinel defensively, because a flat step has no phase to resolve against and a models.yaml carrying a from_phase: key would otherwise bind it by coincidence. The BRIEF still emits from_phase verbatim and a test asserts it: there the sentinel is an instruction to the harness to look the phase up, which is a different job from recording what was sent.
+
+<!-- fr:journal kind=finding scope=plan id=f5 created=2026-09-20T14:31:33 phase=2 state=fixed -->
+### f5 · finding [fixed] · The model assertion passed by binding a models.yaml key literally named from_phase (phase 2)
+
+test_advance_grouped_member_opens_a_dispatch_record wrote 'claude-code:\n  from_phase: claude-opus-5' and asserted model == 'claude-opus-5'. Its own docstring said 'here both are from_phase, the shipped fr-goal shape's literal tier name' — so the gap in f4 was seen and worked around rather than surfaced. No operator would ever write that key: fr models set only accepts the real tiers. A green test over behaviour that does nothing real is the defect class this repo names most often. FIXED: the test now binds a REAL tier and reaches it through the sentinel and the phase header, so it fails if the resolution regresses; two new tests cover the sentinel resolving and an unresolvable sentinel leaving model absent. The _started_grouped_with_plan fixture gained an optional phase_tier so a plan phase header can carry a tier at all.
