@@ -467,3 +467,23 @@ Assessment: phase 5 proceeds.
 ### b19699bc0c0a · discovery · Explainer's SKILL.md line citations had already drifted before this phase touched them (phase 5)
 
 docs/explainers/01-fr-goal.md cites plugins/super-fr/skills/fr-goal/SKILL.md by line range in a dozen places. Phase 3's journal-check insertion and phase 4's line-joins (removing manual wraps) shifted nearly every one of those ranges without anyone updating the explainer — it was never in scope for those phases. Verified each citation against origin/main and current HEAD by diffing the exact cited text, then corrected all twelve ranges (16-32->16-31, 44-47->43-46, 49-56->48-55 x2, 58-64->57-63, 69-74->68-72, 81-95->78-93, 97-102->95-103, 104-114->105-115 x2, 116-120->117-120) plus added a new :99-100 for the journal-check section itself. No tripwire catches this class of drift (line-range citations in prose pointing at line numbers in a different file) - it is the same gap as d-p4-no-tripwire-runs-skill-commands one level over: nothing checks that a cited line range still contains what the citation claims.
+
+<!-- fr:journal kind=review scope=plan id=review-p5 created=2026-09-20T18:37:49 phase=5 -->
+### review-p5 · review · phase 5 review - no findings; citations, render fidelity and claim accuracy verified (phase 5)
+
+Reviewed: plan phase 5 (05.yaml), .claude/rules/explainers-currency.md, and the diff db4087e..b451cb2 - docs/explainers/01-fr-goal.md and its rendered .html.
+
+Reviewed by the orchestrator inline. Phase 5 is documentation whose correctness is checkable by direct verification rather than by judgement, so the checks below were run rather than briefed out.
+
+Findings raised: 0.
+
+VERIFIED, not taken on trust:
+1. Citations. The phase claims it corrected twelve drifted `SKILL.md:<range>` citations. All 17 distinct ranges in the file were checked against the 120-line SKILL.md: none out of range, none inverted. Spot-checked for SEMANTIC accuracy too, since in-range is not correct - `SKILL.md:99-100` lands exactly on `### 7. journal-check`, the section the explainer cites it for, and `95-103` spans the review-loop tail into deliver as claimed.
+2. The rendered page actually carries the new prose (the new heading appears in the .html), so this is not the failure the explainers-currency rule exists to catch - an edited .md with a stale published page.
+3. Diff shape is proportionate: 87 lines of .md, 74 of .html. Hundreds of .html lines would have meant pygments leaked into the render env and codehilite rewrote every code block; it did not, which corroborates the byte-identity check the phase reports passing before any prose was written.
+
+ACCURACY OF THE CLAIMS, which is what a published page gets wrong most easily: the new SSS7 states the limit rather than implying it away - 'This check only confirms that a record exists - it does not reopen the review, re-read what it says, or judge whether it was thorough ... a reviewer who wrote three careless words passes the same way one who wrote three careful paragraphs does.' That matches the spec's Non-goals exactly. It also names the manual-phase exemption. The page does not oversell the gate, which for outward-facing prose about a control is the thing most worth getting right.
+
+Carried as a discovery by the phase itself: the SKILL.md line citations had ALREADY drifted before this phase touched them, and nothing catches that class - the same shape as d-p4-no-tripwire-runs-skill-commands. Recorded, not fixed here.
+
+Assessment: phase 6 proceeds.
