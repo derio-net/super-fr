@@ -138,13 +138,27 @@ state:
         opencode-sync-drift and skill-validation tests all pass; fr harness parity
         --check clean'
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:46:28+00:00'
+      note: 'fr-goal-phase-tiering corrected via fr acceptance set-status: notes now
+        state the row''s unit levels pinned PhaseHeader.tier + fr models resolve IN
+        ISOLATION only, added test_run_cli.py (unit) + test_fr_goal_shape.py (int)
+        evidence, and recorded what''s still not claimed (no automated level dispatches
+        a real subagent and reads back a session row''s model -- stays with opencode-subagent-dispatch
+        at skipped). Fixed a ref-grammar mistake of my own (:: function-suffix is
+        not a valid ref fragment -- fr acceptance check requires the ref to resolve
+        as a real path) by hand-editing the two refs back to file-level, per merge_levels''
+        own docstring: ''removing a ref stays a deliberate edit, not something a status
+        flip does silently.'' fr acceptance report --deterministic regenerated all
+        three committed reports; fr acceptance check exits 0.'
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:46:33+00:00'
+      note: Flipped phase-header-fields-survive-phases-file, plan-self-review-flags-tier-gaps,
+        phase-tier-reaches-the-dispatch-brief not-implemented -> ci via fr acceptance
+        set-status, one command per row, each citing the tests that pin it (test_phases_file_field_coverage.py,
+        test_plan_tier_gates.py, test_run_cli.py + test_fr_goal_shape.py). fr acceptance
+        check exits 0 -- confirms the three generated reports regenerated clean.
     P5.T2.S3:
       state: ' '
       ticked_at: null
