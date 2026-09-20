@@ -490,3 +490,16 @@ uv run fr run resolve 2026-09-20-unit-record-unification-r2 \
 ```
 
 Without `--evidence` that resolve now exits 2 and names the flag. That is intended, not a regression, and this run was deliberately NOT special-cased.
+
+<!-- fr:journal kind=review scope=plan id=rev-p5 created=2026-09-21T01:15:03 phase=5 -->
+### rev-p5 · review · Phase 5 reviewed: the evidence gate verified live by meeting it; two-gate composition upheld (phase 5)
+
+Phase 5 reviewed against spec section 3 and 4.E. No findings.
+
+VERIFIED LIVE on this run's own cursor, as part of actually resolving this phase's review unit, with the cursor's SHA-256 identical after the three refusals: (1) resolve --state done with NO evidence exits 2 and names the flag and the phase; (2) a FINDING id offered as evidence (f-p2-blind-grep) exits 2 — "is a 'finding' entry for phase 2"; (3) ANOTHER phase's review (rev-p4) exits 2 — "is a 'review' entry for phase 4, evidence must carry phase=5". Then this very entry is the evidence that unlocks the unit. Review-skipped and review-passed-clean are now different states because a skipped review cannot reach done at all.
+
+The dispatch brief for review-phase now carries evidence: [review], so an orchestrator is told the obligation before it meets the refusal.
+
+REVIEW DECISION on the one change the executor flagged. It rewrote gh#517's test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed, because the cursor-side gate makes that test's original state unreachable: every phase a cursor walks already has its review by the time journal-check runs. UPHELD. That is the two gates composing, not one replacing the other — the cursor gate fires strictly earlier; journal-check keeps the cases no cursor ever saw (plans with no cursor, and a plan that grows a phase after the group completed, which is the rewritten scenario). Checked the adopt path specifically, since it bit this branch today: fr run adopt leaves review units PENDING, never done (test_adopt_of_an_all_complete_plan_lands_on_the_group_with_review_pending), so an adopted run meets the same evidence gate at resolve time, and 'done, unevidenced' can only come from a MIGRATED pre-gate cursor — which check reports as debt with its exit code unchanged (seen live: phases 1-4 of this run).
+
+Three fail-closed choices accepted as made: a flat step declaring review evidence is refused (a review is evidence about a phase); an obligation other than 'review' is refused at resolve time; a group's evidence is not inherited by its members. The manifest-drift test is the right one — it adds the field mid-flight and asserts the next refusal is for MISSING EVIDENCE, not drift — and it is mutation-verified.
