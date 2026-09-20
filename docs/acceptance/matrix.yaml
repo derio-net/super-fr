@@ -2170,12 +2170,6 @@ rows:
       the session row''s model. That live claim stays with opencode-subagent-dispatch,
       deliberately left at skipped (its scope correction is already in its own notes,
       finding r-s1) and is this plan''s manual phase 4.'
-  - id: run-advance-refuses-running
-    capability: Run state
-    acceptance: An operator re-entering the loop cold is told to wait rather than handed
-      a second dispatch brief for an agent that is still running.
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
   - id: phase-header-fields-survive-phases-file
     capability: fr-goal subagent execution
     acceptance: Every PhaseHeader field an operator writes in a --phases-file survives
@@ -2387,14 +2381,6 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py
     status: ci
-    notes: Grouped member and top-level agent step both refuse re-dispatch with exit
-      2; --redispatch re-briefs only the outstanding unit and exits 2 when none is.
-  - id: run-resolve-teaches-item-flag
-    capability: Run state
-    acceptance: A grouped for_each member id copied from advance's output resolves,
-      or the failure teaches the two flags that do.
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
     notes: 'Closed #499 in phase 4: fr run advance exits 2 on a unit whose dispatch
       record is still open, naming the holder and printing no brief (test_advance_refuses_a_held_unit_and_prints_no_brief,
       test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time, test_the_refusal_says_an_unclaimed_agent_when_nobody_claimed,
@@ -2409,6 +2395,51 @@ rows:
       for re-dispatch without resolving the step
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'Phase 3 shipped fr run claim --abandoned: it closes the record (returned/outcome
+      abandoned) WITHOUT resolving the step, leaving the unit running so the next advance
+      briefs it again (test_claim_abandoned_sets_returned_and_outcome, test_claim_abandoned_leaves_the_grouped_members_item_running,
+      test_claim_abandoned_leaves_the_flat_steps_state_running, test_advance_after_abandon_briefs_again_and_appends_a_second_record),
+      and it refuses a unit with no open record or a stray --agent. Live-verified by
+      closing this run''s own bootstrap-era open records (journal x-abandon-live). Unit
+      is the whole level the spec asks for on this row.'
+  - id: run-dispatch-harness-neutral
+    capability: Harness parity
+    acceptance: The dispatch holder record is written identically on Claude Code and
+      OpenCode, each recording its own harness and agent id
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Live-only by nature: the claim is that two different harnesses produce the
+      same record shape, which no mock can demonstrate - a fixture asserting it would
+      only assert that fr writes what fr writes. DELIBERATELY left not-implemented when
+      its three sibling rows moved to ci in phase 6 of the 2026-09-20 plan: the unit
+      tests that gate those rows say nothing about this one. It closes with post-merge
+      Test Plan items 13 and 14 - a real /fr-goal run on Claude Code recording harness
+      claude-code with a real subagent task id, and the same on OpenCode recording harness
+      opencode with a child session id - transcripts in the PR.'
+  - id: run-advance-refuses-running
+    capability: Run state
+    acceptance: An operator re-entering the loop cold is told to wait rather than handed
+      a second dispatch brief for an agent that is still running.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: Grouped member and top-level agent step both refuse re-dispatch with exit
+      2; --redispatch re-briefs only the outstanding unit and exits 2 when none is.
+  - id: run-resolve-teaches-item-flag
+    capability: Run state
+    acceptance: A grouped for_each member id copied from advance's output resolves,
+      or the failure teaches the two flags that do.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2458,26 +2489,3 @@ rows:
       The marker keys on tag alone, never on completion, so an already-complete front-loaded
       manual phase is recorded manual too — the two writers agree without either parsing
       state.'
-    notes: 'Phase 3 shipped fr run claim --abandoned: it closes the record (returned/outcome
-      abandoned) WITHOUT resolving the step, leaving the unit running so the next advance
-      briefs it again (test_claim_abandoned_sets_returned_and_outcome, test_claim_abandoned_leaves_the_grouped_members_item_running,
-      test_claim_abandoned_leaves_the_flat_steps_state_running, test_advance_after_abandon_briefs_again_and_appends_a_second_record),
-      and it refuses a unit with no open record or a stray --agent. Live-verified by
-      closing this run''s own bootstrap-era open records (journal x-abandon-live). Unit
-      is the whole level the spec asks for on this row.'
-  - id: run-dispatch-harness-neutral
-    capability: Harness parity
-    acceptance: The dispatch holder record is written identically on Claude Code and
-      OpenCode, each recording its own harness and agent id
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Live-only by nature: the claim is that two different harnesses produce the
-      same record shape, which no mock can demonstrate - a fixture asserting it would
-      only assert that fr writes what fr writes. DELIBERATELY left not-implemented when
-      its three sibling rows moved to ci in phase 6 of the 2026-09-20 plan: the unit
-      tests that gate those rows say nothing about this one. It closes with post-merge
-      Test Plan items 13 and 14 - a real /fr-goal run on Claude Code recording harness
-      claude-code with a real subagent task id, and the same on OpenCode recording harness
-      opencode with a child session id - transcripts in the PR.'
