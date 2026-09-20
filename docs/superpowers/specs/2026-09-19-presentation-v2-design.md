@@ -152,28 +152,39 @@ one available** — a phase handed to a separate agent with its own context
 window, visible in the transcript, on a harness where this did not exist a day
 ago.
 
-### But the tiering is currently nominal — fix before recording
+### Tiering: two ways to film it, and they are not equivalent
 
-`install.sh` resolves each tier's model from `fr models` and injects it into the
-installed agent. On this machine all three tiers resolve to the **same** model:
+`install.sh` resolves each tier's model from `fr models` and bakes it into the
+installed agent. All three of this operator's tiers currently resolve to the
+**same** model, so the three agents differ by name only — filming that would
+show three labels bound to one model and prove nothing.
 
-```
-opencode:
-  hard: github-copilot/gpt-5.6-terra
-  mechanical: github-copilot/gpt-5.6-terra
-  standard: github-copilot/gpt-5.6-terra
-```
+There are two routes, and the operator raised the more interesting one.
 
-So the three agents differ by name only. Filming that would show three labels
-bound to one model and prove nothing — the opposite of the point.
+**A — differentiate the bindings, re-run `install.sh`, then record.** Tiering
+genuinely applies. Costs the onboarding moment: with bindings set, fr-goal's
+gate does not ask about models at all.
 
-Differentiate the bindings and re-run `install.sh` before recording. Available
-today include `github-copilot/claude-haiku-4.5` and `gemini-3.8-flash` for
-mechanical work, against `gpt-5.6-terra` or `claude-opus-5` for hard.
+**B — unbind, and let the gate ask on camera.** SKILL.md:47 adds *"a
+model-per-tier one if `fr models resolve` is unbound"* to the batched Q&A, and
+:84 says *"unbound → set at step 1"*. So the question is real onboarding,
+answered live, and it enriches the contract beat with a decision the audience
+watches being made.
 
-This may also **defuse the cost objection**. The $7.59 figure was 13 subagents
-all on one model; putting mechanical phases on a cheap one is exactly what
-tiering is for. Unmeasured, so treat it as a reason to measure, not a claim.
+**B does not currently work, and would film a lie.** `fr models set` writes only
+`~/.config/fr/models.yaml`; nothing re-runs `install.sh` or the sync, so the
+installed agent still carries no `model:` and OpenCode falls back to the session
+model. The operator would be asked, would answer, and tiering would silently not
+happen — on camera, in a talk whose subject is rigour. Reported on
+[#494](https://github.com/derio-net/super-fr/issues/494). Claude Code is
+unaffected, since it resolves the model at dispatch.
+
+**Decision: A for this recording**, unless #494's follow-up closes the loop
+first — in which case B is strictly better and should be preferred.
+
+Differentiating may also **defuse the cost objection**: the $7.59 figure was 13
+subagents all on one model, and putting mechanical phases on a cheap one is what
+tiering is for. Unmeasured — a reason to measure, not a claim to make on camera.
 
 ### `operator-gate / opencode: advisory` — the contract beat can silently not fire
 

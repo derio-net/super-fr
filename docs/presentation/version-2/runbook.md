@@ -239,9 +239,17 @@ grep -n 'answered_by' "$CLONE"/docs/superpowers/runs/*.yaml   # expect: operator
 # 2. the artifacts the pipeline claims to produce actually exist
 ls "$CLONE"/docs/superpowers/specs/ "$CLONE"/docs/superpowers/plans/
 
-# 3. a phase really was dispatched to a subagent (Extensibility beat)
-sqlite3 -readonly "file:$DATA/opencode/opencode.db?mode=ro" \
-  "SELECT agent, parent_id FROM session WHERE agent LIKE 'fr-phase-executor%';"
+# 3. a phase really was dispatched to a subagent (Extensibility beat), AND
+#    tiering resolved. Requested by the gh-494 implementer for their Test Plan:
+#    report agent, model and BOTH token counts back on that issue.
+#    `agent` must read fr-phase-executor-<tier>, not the bare base agent, and
+#    `model` must be the tier's model, not the session default — those are two
+#    separate claims and only `model` proves tiering (see gh-494 comment).
+#    tokens_output = 0 on a paid model is a red flag worth a second look.
+sqlite3 -readonly "file:$DATA/opencode/opencode.db?mode=ro" "
+  SELECT id, parent_id, agent, model, cost, tokens_input, tokens_output
+  FROM session WHERE agent LIKE 'fr-phase-executor%'
+  ORDER BY time_created DESC LIMIT 5;"
 
 # 4. findings were resolved, not merely recorded
 cd "$CLONE" && uv run fr journal check --scope plan --slug <slug>
@@ -255,6 +263,9 @@ By eye, from the cast itself:
       exercises were chosen; a clean run is a weaker take, not a luckier one)
 - [ ] at least one phase dispatched to a subagent — a `session` row with
       `parent_id` set and `agent = fr-phase-executor*`
+- [ ] **`model` on that row is the tier's model, not the session default** —
+      the name resolving does not prove tiering did
+- [ ] results reported back on gh-494 (the implementer asked)
 - [ ] the merge request exists on the fork
 - [ ] annotation offsets noted live, not reconstructed
 
