@@ -53,3 +53,24 @@ Relevant for phase 2/3: any content-guard or dry-run code that also calls
 `_reap_hazard`/queries the worktree should keep this same "worktree missing => no
 hazard, not unverifiable" short-circuit, or it will reproduce the same crash on gc's
 orphan-worktree classification path.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-hostworktree-lifecycle-integration-test-updated created=2026-09-20T13:27:34 phase=1 -->
+### p1-hostworktree-lifecycle-integration-test-updated · discovery · tests/integration/test_hostworktree_lifecycle.py needed updating for the new guard (phase 1)
+
+test_hostworktree_full_lifecycle_no_docker_base_untouched (full suite run, not covered by
+tests/unit/test_isolation.py alone) writes an untracked scratch.txt into the worktree to
+prove exec() runs there and to exercise gc()'s no-PR-dirty "warned" classification, then
+called plain target.down(st, force=False) expecting a normal teardown.
+
+That is now exactly the #435 scenario the phase-1 guard exists to catch: a direct down()
+on a dirty workspace. Updated the test to assert ReapRefused on the plain call (worktree +
+state survive), then complete the teardown with force=True, preserving every other
+assertion (base clone untouched, no docker/devcontainer binaries invoked, gc() still
+"warned" not "reaped").
+
+This was NOT caught by `pytest tests/unit/test_isolation.py` alone -- only surfaced on a
+full `pytest` run, because it lives under tests/integration/. Later phases: re-run the
+FULL suite (not just test_isolation.py) after any change to _reap_hazard / the guard's
+wiring point, since this is the second pre-existing test (after the orphan-worktree pair
+in test_isolation.py) whose fixture happened to construct exactly the dirty-worktree
+shape the new guard now intercepts.

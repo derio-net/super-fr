@@ -137,7 +137,9 @@ class ReapHazard:
     detail: str  # names the branch and what would be lost — see _hazard_detail
 
 
-class ReapRefused(IsolationError):
+class ReapRefused(IsolationError):  # noqa: N818 — a refusal is a decision, not
+    # an "Error" (spec §3.5: gc classifies it as a skip, never a failure); the
+    # name is the spec's own vocabulary (§3.1), kept verbatim.
     """Raised INSTEAD of tearing down, by `_down_worktree_tail`'s hazard check.
     Carries the hazard so gc can classify a refusal as a deliberate skip rather
     than a failure (spec §3.5, phase 3)."""
