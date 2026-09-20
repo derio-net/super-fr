@@ -160,14 +160,36 @@ state:
         test_plan_tier_gates.py, test_run_cli.py + test_fr_goal_shape.py). fr acceptance
         check exits 0 -- confirms the three generated reports regenerated clean.
     P5.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:48:56+00:00'
+      note: 'Bumped 4.8.0 -> 4.8.1 via scripts/bump-version.py patch (9 files + uv.lock);
+        fr --version -> fr 4.8.1. Explainers-currency verdict: NOT a trigger. docs/explainers/01-fr-goal.md''s
+        only tier-related line is the input/boundary table row ''Model per phase tier
+        | ~/.config/fr/models.yaml | Chooses which model implements a phase of a given
+        difficulty'' -- a source+effect summary that says nothing about HOW a tier
+        reaches the plan or the dispatch brief (the from_phase/resolved_tier mechanism
+        this PR fixes), so it is not falsified. The patch bump is not itself a trigger
+        and the pipeline''s shape (workflow steps/gates) is unchanged. Noted but not
+        actioned: the explainer pins fr-plan/SKILL.md:63-84 and :79-84 as source citations
+        (already loose/approximate before this PR, per git history); P5.T1''s rewrap
+        shifted the acceptance-linkage bullet by ~1 line and the new Tier rule now
+        falls inside that 79-84 span -- still thematically adjacent (a Rules-section
+        span), not misleading, and citation-line drift on an internal source pointer
+        is not the behavioral-claim trigger this rule targets. No regeneration owed.'
     P5.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:48:32+00:00'
+      note: 'fr-goal/SKILL.md §5''s ''Model = phase tier via fr models resolve'' clause
+        now reads the brief''s resolved_tier, falling back to the phase header''s
+        tier only when the brief lacks that key (an older fr); resolved_tier: null
+        is stated explicitly as the untiered case the Harness-dispatch clause''s fallback
+        already handles, not a fourth rule. Folded onto one long line (matching the
+        file''s existing style on lines 92-93) to stay under the 120-line cap (119
+        lines, was 120 before this edit -- net add with room to spare). Regenerated
+        the opencode mirror. Gate green: test_fr_goal_dispatch_prose.py, tripwire_opencode_skills_sync,
+        tripwire_skill_tool_neutrality, test_skill_validation all pass; fr harness
+        parity --check clean.'
   completion:
-    at: null
+    at: '2026-09-20T12:56:20+00:00'
     note: null
     observed_prs: []

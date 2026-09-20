@@ -84,3 +84,8 @@ The phase's single load-bearing constraint is that the plan be built by 'fr plan
 ### p4-r1 · review · Phase 4 review: the join bites on the ORIGINAL defect, independently reproduced (phase 4)
 
 No findings. The one claim worth not taking on trust was that the integration test fails on gh#434 itself rather than only on phase 3's addition — a test that only caught the newer half would have been the weaker thing wearing the stronger name. Reproduced independently: deleting the single line 'tier=p.get("tier")' from plan_cmd.py's ingestion loop fails it with resolved_tier=None while the brief still advertises tier='from_phase' — the exact half-closed shape of the original bug — and restoring makes all 10 pass. Also verified the _drive_to_implement extraction did not weaken the pre-existing test it now shares: assertions in that file went 49 -> 57, none removed. Full gate reported by the executor and consistent with the tree: coverage 91.72% against the 75% floor, fr validate artifacts clean, exactly the 3 known pre-existing failures and no fourth.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1-resolved created=2026-09-20T14:48:38 state=fixed resolves=p3-f1 -->
+### p3-f1-resolved · finding [fixed] · resolves p3-f1: resolved_tier exists but no skill tells the orchestrator to read it
+
+P5.T3 shipped: fr-goal/SKILL.md §5's Model= clause now reads the brief's resolved_tier (fallback to the phase header only for a brief with no such key, an older fr), and states explicitly that resolved_tier: null is the untiered case the Harness-dispatch clause's fallback already handles -- not a fourth rule. Mirror regenerated; gate green (test_fr_goal_dispatch_prose.py, opencode-sync and tool-neutrality tripwires, skill validation, fr harness parity --check).
