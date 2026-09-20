@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 StepState = Literal["pending", "running", "done", "failed", "blocked"]
 """A step's lifecycle in run state — distinct from `fr.item_state.ItemState`
@@ -137,6 +137,28 @@ class DispatchRecord(BaseModel):
         if value is not None and value not in HARNESSES:
             raise ValueError(f"harness {value!r} must be one of {HARNESSES}")
         return value
+
+    @model_validator(mode="after")
+    def _returned_and_outcome_are_one_fact(self) -> DispatchRecord:
+        """`outcome` is set exactly when `returned` is.
+
+        Enforced rather than merely documented, because "is this dispatch
+        open?" is the question every reader asks — `fr run status` to name the
+        holder, `fr run advance` to refuse a second one, `fr run check` to
+        count the debt. A half-closed record answers it differently depending
+        on which half a reader happens to look at: `returned` without
+        `outcome` reads as still-held while carrying a return timestamp, and
+        `outcome` without `returned` reads as held forever by an agent that
+        has already finished. Both are the double-dispatch hazard wearing a
+        disguise, so the model refuses them instead of leaving one invariant
+        to be re-derived at every call site."""
+        if (self.returned is None) != (self.outcome is None):
+            raise ValueError(
+                "`returned` and `outcome` are set together or not at all "
+                f"(returned={self.returned!r}, outcome={self.outcome!r}); a record with "
+                "exactly one of them is neither open nor closed"
+            )
+        return self
 
 
 class StepRecord(BaseModel):

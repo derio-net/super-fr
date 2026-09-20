@@ -332,6 +332,92 @@ def test_a_run_with_malformed_dispatch_fails(tmp_path: Path) -> None:
     assert "dispatch" in "\n".join(str(i) for i in report.issues)
 
 
+def test_a_run_with_an_ungrammatical_dispatch_key_fails(tmp_path: Path) -> None:
+    """A dispatch key is `step/<id>` or `phase/<n>/<member>` and nothing else.
+
+    `advance`/`claim`/`resolve` build these keys themselves, so a malformed one
+    only ever arrives by hand-edit or a bad merge — which is exactly the
+    threat model `.claude/rules/artifact-versioning.md` names for a
+    git-tracked, hand-editable artifact, and exactly what
+    `fr validate artifacts` is the diagnostic for.
+    """
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+        GOOD_RUN.replace(
+            "  implement:\n    state: running\n",
+            "  implement:\n    state: running\n"
+            "    dispatch:\n"
+            "      implement-phase:\n"
+            "        - dispatched: '2019-03-04T00:00:00'\n",
+        ),
+    )
+    report = validate_repo(tmp_path)
+    assert not report.ok
+    assert "implement-phase" in "\n".join(str(i) for i in report.issues)
+
+
+def test_a_run_with_two_open_dispatches_for_one_unit_fails(tmp_path: Path) -> None:
+    """At most one open dispatch per unit — the invariant the whole
+    double-dispatch refusal rests on (spec §4.B/§4.C). Two open records mean
+    two writers for one worktree, which is the failure #499 describes."""
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+        GOOD_RUN.replace(
+            "  implement:\n    state: running\n",
+            "  implement:\n    state: running\n"
+            "    dispatch:\n"
+            "      phase/1/implement-phase:\n"
+            "        - dispatched: '2019-03-04T00:00:00'\n"
+            "        - dispatched: '2019-03-04T01:00:00'\n",
+        ),
+    )
+    report = validate_repo(tmp_path)
+    assert not report.ok
+    assert "open" in "\n".join(str(i) for i in report.issues)
+
+
+def test_a_run_whose_open_dispatch_is_not_the_last_attempt_fails(tmp_path: Path) -> None:
+    """ "Open" is defined as the LAST element with no `returned`. An earlier
+    element left open means the list is not the ordered history it claims to
+    be, and every reader that takes `[-1]` would report the wrong holder."""
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+        GOOD_RUN.replace(
+            "  implement:\n    state: running\n",
+            "  implement:\n    state: running\n"
+            "    dispatch:\n"
+            "      phase/1/implement-phase:\n"
+            "        - dispatched: '2019-03-04T00:00:00'\n"
+            "        - dispatched: '2019-03-04T01:00:00'\n"
+            "          returned: '2019-03-04T02:00:00'\n"
+            "          outcome: done\n",
+        ),
+    )
+    report = validate_repo(tmp_path)
+    assert not report.ok
+
+
+def test_a_run_with_an_empty_dispatch_list_fails(tmp_path: Path) -> None:
+    """A unit key with no attempts is a key that means nothing."""
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+        GOOD_RUN.replace(
+            "  implement:\n    state: running\n",
+            "  implement:\n    state: running\n    dispatch:\n      phase/1/implement-phase: []\n",
+        ),
+    )
+    report = validate_repo(tmp_path)
+    assert not report.ok
+
+
 # --- 3. stamps: unknown fails, newer fails closed -------------------------
 
 

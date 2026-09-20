@@ -327,6 +327,12 @@ harness-specific clauses stay scoped per harness, so
 > `until … ; do sleep N; done` left running at handback keeps you non-terminal and resumable
 > indefinitely — a second writer for a tree where `isolation: "worktree"` is forbidden by
 > design (#420). One did exactly this for 11.5 hours (#503).
+>
+> **And read the right exit code.** `pytest … | tail -20` exits with *tail's* status, not
+> pytest's, so a backgrounded gate reports success over a red suite — and the output file stays
+> empty until the process ends, because `tail` cannot emit until its input closes. Write the
+> raw output to a file and tail the *file*, or check `${PIPESTATUS[0]}`. Never report a gate
+> green on the strength of a piped exit code.
 
 No tripwire: there is no hook point for "an agent left a poll loop running", and a test that
 only guarded the wording would be enforcement theatre (decision d3).

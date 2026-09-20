@@ -99,6 +99,9 @@ tasks:
       `uv run fr harness parity --check`, `uv run python scripts/sync-opencode.py --check`,
       and `cd packages/fr-opencode-plugin && bun test` (CI's opencode-plugin-test job —
       `uv run pytest` does NOT cover this package).
+      Capture the EXIT CODE, not a piped one: `pytest … | tail` exits with tail's
+      status and hides a red suite (plan finding f3). Redirect to a file, tail the
+      FILE, and report ${PIPESTATUS[0]} or the unpiped exit code.
 state:
   steps:
     P6.T1.S1:

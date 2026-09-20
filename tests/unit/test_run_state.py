@@ -264,8 +264,41 @@ def test_dispatch_record_is_frozen_and_closed_world() -> None:
 def test_dispatch_record_outcome_accepts_every_documented_value(outcome: str) -> None:
     from fr.run.model import DispatchRecord
 
-    record = DispatchRecord(dispatched="2026-09-20T09:00:00Z", outcome=outcome)  # type: ignore[arg-type]
+    record = DispatchRecord(
+        dispatched="2026-09-20T09:00:00Z",
+        returned="2026-09-20T09:30:00Z",
+        outcome=outcome,  # type: ignore[arg-type]
+    )
     assert record.outcome == outcome
+
+
+def test_dispatch_record_pairs_returned_and_outcome() -> None:
+    """`outcome` is set exactly when `returned` is — the docstring said so
+    before anything enforced it, and "open" is the state every reader keys on.
+
+    A record with `returned` and no `outcome` reads as still-held to
+    `fr run status` while carrying a return timestamp, and one with `outcome`
+    and no `returned` reads as held forever by an agent that already finished.
+    Both are the double-dispatch hazard wearing a disguise, so the model
+    refuses them rather than leaving the invariant to every caller.
+    """
+    from fr.run.model import DispatchRecord
+
+    # Open: neither half set. Closed: both. Both are fine.
+    assert DispatchRecord(dispatched="2026-09-20T09:00:00Z").returned is None
+    assert (
+        DispatchRecord(
+            dispatched="2026-09-20T09:00:00Z",
+            returned="2026-09-20T09:30:00Z",
+            outcome="done",
+        ).outcome
+        == "done"
+    )
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        DispatchRecord(dispatched="2026-09-20T09:00:00Z", returned="2026-09-20T09:30:00Z")
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        DispatchRecord(dispatched="2026-09-20T09:00:00Z", outcome="done")
 
 
 def test_dispatch_record_outcome_rejects_an_unrecognised_value() -> None:

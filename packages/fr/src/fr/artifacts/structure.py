@@ -31,9 +31,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:  # pragma: no cover — typing only, keeps the runtime
+    # import of `fr.run.model` inside the function that needs it (see the
+    # module docstring's note on CLI-entry import cost).
+    from fr.run.model import RunState
 
 # --- shared helpers ------------------------------------------------------
 
@@ -211,6 +216,59 @@ def validate_run(path: Path) -> list[str]:
         problems.append(
             f"`cursor` names `{state.cursor}`, which is not a recorded step (recorded: {known})"
         )
+    problems.extend(_run_dispatch_problems(state))
+    return problems
+
+
+_DISPATCH_KEY_RE = re.compile(r"^(?:step/.+|phase/\d+/.+)$")
+"""A dispatch unit key: `step/<step-id>` for a flat `kind: agent` step,
+`phase/<n>/<member-id>` for a grouped `for_each` member (spec §4.B).
+
+The `step/` namespace is load-bearing rather than decorative: a repo-authored
+step id may itself contain a `/` — `fr.workflow.check.check_workflow` checks
+duplicate ids, dangling `needs`, cycles and unknown capabilities, and
+constrains no characters at all — so without the prefix the two key spaces
+are not provably disjoint."""
+
+
+def _run_dispatch_problems(state: RunState) -> list[str]:
+    """The invariants `StepRecord.dispatch` states but pydantic cannot.
+
+    These live here rather than on the model deliberately. `advance`, `claim`
+    and `resolve` build every key themselves, so a violation only reaches a
+    file by hand-edit or a bad merge — the threat model
+    `.claude/rules/artifact-versioning.md` names for a git-tracked,
+    hand-editable artifact. Refusing them in `parse_run_state` would make a
+    damaged cursor unreadable by the very commands an operator needs in order
+    to repair it; reporting them from `fr validate artifacts` is what makes
+    the damage visible without making it unrecoverable.
+    """
+    problems: list[str] = []
+    for step_id, record in state.steps.items():
+        for key, attempts in (record.dispatch or {}).items():
+            where = f"step `{step_id}` dispatch key `{key}`"
+            if not _DISPATCH_KEY_RE.match(key):
+                problems.append(
+                    f"{where} is not a unit key — expected `step/<step-id>` for a flat "
+                    "agent step or `phase/<n>/<member-id>` for a grouped one"
+                )
+            if not attempts:
+                problems.append(
+                    f"{where} records no attempts; a unit key with no history means nothing"
+                )
+                continue
+            open_at = [i for i, a in enumerate(attempts) if a.returned is None]
+            if len(open_at) > 1:
+                problems.append(
+                    f"{where} has {len(open_at)} open dispatches; at most one unit may be "
+                    "held at a time, or two writers share one worktree"
+                )
+            elif open_at and open_at[0] != len(attempts) - 1:
+                problems.append(
+                    f"{where} leaves attempt {open_at[0] + 1} of {len(attempts)} open while a "
+                    "later one is closed; the open dispatch is the LAST attempt, and every "
+                    "reader takes it from the end"
+                )
     return problems
 
 

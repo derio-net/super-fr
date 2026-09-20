@@ -77,6 +77,9 @@ tasks:
     text: |-
       REFACTOR: run the full suite in the background with a bounded wait —
       `uv run pytest -q --no-cov --basetemp=/tmp/sb` — plus ruff and mypy. Paste tails.
+      Capture the EXIT CODE, not a piped one: `pytest … | tail` exits with tail's
+      status and hides a red suite (plan finding f3). Redirect to a file, tail the
+      FILE, and report ${PIPESTATUS[0]} or the unpiped exit code.
 state:
   steps:
     P4.T1.S1:
