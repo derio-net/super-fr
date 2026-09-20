@@ -2221,3 +2221,40 @@ rows:
       tier (mirrors the acceptance 3.7.0 probe, routed through the shared _version_floor_issue
       helper) and a warning when an agentic phase declares no tier. Both are severity=warn,
       matching acceptance/skeleton, and neither changes an exit code.'
+  - id: goal-agentic-dispatch-purity
+    capability: fr-goal-methodology
+    acceptance: An agentic phase step instructing a subagent dispatch fails fr plan
+      self-review with error severity, naming both escapes (name the outcome, or move
+      it to a [manual] phase)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Mirrors the #252 agentic-purity gate: work assigned to an actor that cannot
+      perform it. fr-phase-executor''s grant has no Agent (OpenCode: task: deny), so
+      a dispatch step is unexecutable by construction and no PreToolUse hook can see
+      it — no tool call is ever made (#428).'
+  - id: goal-dispatch-lint-precision
+    capability: fr-goal-methodology
+    acceptance: The dispatch-verb lint produces zero errors across every agentic step
+      of every plan folder already in the repo
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Pins the brainstorm measurement (43 plans / 1419 agentic steps, 0 hits)
+      in CI. #428''s literal pattern list scored 237 false positives on bare ''dispatch''
+      alone, 16.7% of steps — super-fr is a repo about dispatch. Any future widening
+      that would break super-fr''s own plans fails here.'
+  - id: goal-executor-refuses-tick
+    capability: fr-goal phase executor dispatch
+    acceptance: A phase executor facing a dispatch step it has no tool for reports a
+      BLOCKER and leaves the step unticked
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    levels: {}
+    status: not-implemented
+    notes: '#428 item 2. Today the honest executor reports the deviation AND ticks,
+      so the plan records completion for work nobody performed. Verified at the prose-token
+      level (test_skill_tokens.py) on the canonical agent + fr-execute skill; the runtime
+      behaviour is agent-side and not unit-testable.'

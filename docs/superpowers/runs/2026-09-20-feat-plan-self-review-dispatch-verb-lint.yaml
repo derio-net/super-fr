@@ -1,0 +1,23 @@
+schema_version: 2
+run: 2026-09-20-feat-plan-self-review-dispatch-verb-lint
+workflow: fr-goal@1
+branch: feat/plan-self-review-dispatch-verb-lint
+started: '2026-09-20T10:54:41+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: blocked
+    at: '2026-09-20T10:54:51+00:00'
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: pending
