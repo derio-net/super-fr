@@ -991,6 +991,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # agentic phase is the delivery-infrastructure smoke.
     issues.extend(_skeleton_issues(plan))
 
+    # Tier gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2): the
+    # fr_version floor probe for `tier`, and the untiered-agentic-phase nudge.
+    issues.extend(_tier_issues(plan))
+
     # Refactor-or-justify gate (fr-goal methodology restoration): every
     # multi-step task ends red → green → refactor, or records why not.
     issues.extend(_refactor_issues(plan))
@@ -1145,23 +1149,37 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     # the version gate there and die on a raw "extra field" pydantic error
     # (#352 review). Probe: does the constraint admit any pre-3.7.0 version?
     if linked and plan.meta.fr_version:
-        from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-        try:
-            if SpecifierSet(plan.meta.fr_version).contains("3.6.99", prereleases=True):
-                out.append(
-                    ReviewIssue(
-                        severity="warn",
-                        message=(
-                            f"phases link acceptance rows but fr_version "
-                            f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
-                            f"floor it at '>=3.7.0,<4.0.0'."
-                        ),
-                    )
-                )
-        except InvalidSpecifier:
-            pass  # the parser already fails loud on malformed constraints
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="3.6.99",
+            message=(
+                f"phases link acceptance rows but fr_version "
+                f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
+                f"floor it at '>=3.7.0,<4.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
     return out
+
+
+def _version_floor_issue(
+    fr_version: str, *, probe_version: str, message: str
+) -> ReviewIssue | None:
+    """Shared shape behind the `acceptance:`/`tier:` (and, in principle, any
+    future field's) version-floor probes: does `fr_version` admit
+    `probe_version` (the highest pre-feature release)? If so, a `warn` issue
+    carrying `message`; otherwise `None`. A malformed constraint is left to
+    the parser, which already fails loud elsewhere — swallow silently here
+    rather than duplicate a worse-worded error."""
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
+    try:
+        if SpecifierSet(fr_version).contains(probe_version, prereleases=True):
+            return ReviewIssue(severity="warn", message=message)
+    except InvalidSpecifier:
+        pass  # the parser already fails loud on malformed constraints
+    return None
 
 
 def _has_cycle(graph: dict[int, set[int]], start: int) -> bool:
@@ -1285,6 +1303,52 @@ def _skeleton_overridden(plan: Plan) -> bool:
         return False
     want = f"skeleton-override-{plan.meta.plan}"
     return any(e.kind == "decision" and e.id == want for e in entries)
+
+
+def _tier_issues(plan: Plan) -> list[ReviewIssue]:
+    """`tier` gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2):
+
+    1. Floor probe — same shape as `_acceptance_link_issues`'/`_skeleton_issues`'
+       3.7.0/4.1.1 probes: `tier` is a 3.12.0 schema field on the closed-world
+       `PhaseHeader`, so a plan using it while `fr_version` admits an older fr
+       would pass the version gate and die on a raw "extra field" pydantic
+       error over there.
+    2. Untiered-agentic-phase warning — #498's fail-visibly doctrine moved to
+       plan time: an agentic phase with no `tier` is dispatched untiered,
+       silently inheriting the session model, which was previously
+       indistinguishable from working tiering at every observable point.
+       Manual phases are never dispatched to a model, so a missing tier there
+       is not a gap.
+    """
+    out: list[ReviewIssue] = []
+    tiered = any(ph.phase.tier is not None for ph in plan.phases)
+    if tiered and plan.meta.fr_version:
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="3.11.99",
+            message=(
+                f"phases carry a tier but fr_version {plan.meta.fr_version!r} "
+                f"admits a pre-tier fr — floor it at '>=3.12.0,<5.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
+
+    for ph in plan.phases:
+        if ph.phase.tag != "agentic" or ph.phase.tier is not None:
+            continue
+        out.append(
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"phase {ph.phase.number} is agentic but declares no tier — "
+                    f"it will be dispatched untiered, inheriting the session's "
+                    f"model. Add `tier` to the phase header, one of "
+                    f"{list(PHASE_TIERS)}."
+                ),
+            )
+        )
+    return out
 
 
 def _refactor_issues(plan: Plan) -> list[ReviewIssue]:
