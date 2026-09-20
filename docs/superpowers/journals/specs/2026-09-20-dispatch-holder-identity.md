@@ -39,3 +39,23 @@ After `brgvv3xnw` was reported `killed` at 2026-09-20T10:14:40Z, the parent sess
 ### x4 · discovery · #503's and #499's remaining container hypothesis is now fully ruled out
 
 #503 already corrected the 'long-lived docker run from fr isolation exec' hypothesis it had floated on #499, on the grounds that the worktree and container were gone while the agent stayed resumable. The transcripts close the remaining variant: the background work was a plain host shell promoted by the Bash timeout, named in the executor's own tool_result, with no container involved. Neither the devcontainer nor fr isolation is implicated anywhere in this incident.
+
+<!-- fr:journal kind=review scope=spec id=r1 created=2026-09-20T13:35:40 -->
+### r1 · review · The 'step ids cannot contain /' claim was false — keys now carry an explicit namespace
+
+The draft justified one dispatch map by asserting the two key spaces were disjoint because check_workflow rejects a slash in a step id. Read fr/workflow/check.py: it validates duplicate ids, dangling needs, cycles and unknown capabilities, and constrains no characters at all. A repo-authored manifest with a step named phase/1/implement-phase is accepted today. Fixed by namespacing the flat-step key as step/<id> rather than by adding an id-character rule to fr workflow check, which would be a behaviour change able to fail a manifest some repo already ships.
+
+<!-- fr:journal kind=review scope=spec id=r2 created=2026-09-20T13:35:40 -->
+### r2 · review · dispatch is a LIST per unit — one record per unit destroys the forensics it exists for
+
+A single DispatchRecord per unit is overwritten whenever a failed unit is retried or --redispatch fires, which is exactly the moment the previous holder's identity becomes interesting. #503's third motivation is forensic: 'after the fact, nothing attributes that commit to an agent'. Changed to dict[str, list[DispatchRecord]], oldest first; the open dispatch is the last element when returned is None, and at most one exists because claim/advance refuse to open a second.
+
+<!-- fr:journal kind=review scope=spec id=r3 created=2026-09-20T13:35:41 -->
+### r3 · review · Not every kind: agent step is dispatched to a subagent — say exactly when a record opens
+
+Read the shipped plugins/super-fr/workflows/fr-goal.yaml: only implement and implement-phase carry agent:. brainstorm, spec-review, plan, review-phase and deliver are kind: agent with agent: null — the orchestrator does that work itself. New section 4.B.1 states the rule: a record opens when and only when advance moves a kind: agent unit to running. So a gated step (blocked, not running) opens none, and an orchestrator-run step opens one with agent_type None that status renders 'held by the orchestrator'. Keeping the latter is deliberate: #499's complaint applies verbatim to a step the orchestrator re-advances after a compaction.
+
+<!-- fr:journal kind=review scope=spec id=r4 created=2026-09-20T13:35:41 -->
+### r4 · review · No invented 'unknown' harness value
+
+The draft listed harness as 'claude-code | opencode | hermes | unknown'. fr.harness.model.HARNESSES has five members and no unknown, and fr.harness.detect.detect_harness already returns None when it cannot tell. Recording a fifth name meaning 'we do not know' would put a value in the artifact that no parity row can ever match. harness is now validated against HARNESSES when present and absent otherwise; the provenance table also notes that a detected harness is a guess about the environment, not a claim about the agent.

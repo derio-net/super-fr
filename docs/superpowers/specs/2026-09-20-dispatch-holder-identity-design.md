@@ -139,7 +139,7 @@ This is the load-bearing distinction, and the model encodes it.
 |---|---|
 | `dispatched` | **fr knows it.** `advance` wrote the brief; it timestamps its own act. |
 | `agent_type`, `model` | **fr derives them** from the step and `fr models resolve`. |
-| `agent`, `harness` | **reported.** The orchestrator says what it dispatched. Unverifiable. |
+| `agent`, `harness` | **reported.** The orchestrator says what it dispatched. Unverifiable. (`harness` is detected by fr when not given, which is a guess about the environment, not a claim about the agent.) |
 | `returned`, `outcome` | **reported**, at `resolve` time. |
 
 An unreported `agent` is recorded as absent, never guessed — the same reason
@@ -159,11 +159,16 @@ class DispatchRecord(BaseModel):
     dispatched: str                      # ISO 8601 — fr's own act
     agent: str | None = None             # reported harness agent/task id
     agent_type: str | None = None        # e.g. super-fr:fr-phase-executor
-    harness: str | None = None           # claude-code | opencode | hermes | unknown
+    harness: str | None = None           # one of fr.harness.model.HARNESSES
     model: str | None = None             # the resolved tier binding actually dispatched
     returned: str | None = None          # ISO 8601, set at resolve
     outcome: DispatchOutcome | None = None
 ```
+
+`harness` is validated against `fr.harness.model.HARNESSES` when present and is otherwise
+absent. There is no `"unknown"` member: `fr.harness.detect.detect_harness` already returns
+`None` when it cannot tell, and inventing a fifth harness name to mean "we don't know" would
+put a value in the record that no parity row can ever match.
 
 `abandoned` exists because §1.C found there is no way to retire a non-returning agent from the
 outside. It is the honest terminal state for "this dispatch is never coming back".
@@ -171,18 +176,47 @@ outside. It is the honest terminal state for "this dispatch is never coming back
 ### 4.B Where it hangs: `StepRecord.dispatch`
 
 ```python
-dispatch: dict[str, DispatchRecord] | None = None
+dispatch: dict[str, list[DispatchRecord]] | None = None
 ```
 
-Keyed by the **unit key**, one grammar for both shapes:
+**A list per unit, not one record.** Every attempt is kept, oldest first: a `failed` unit that
+is retried, a `--redispatch` after a lost agent, an `--abandoned` close. #503's third
+motivation is forensic — *"after the fact, nothing attributes that commit to an agent"* — and
+a map that overwrites the previous holder on retry answers that question exactly as badly as
+having no record at all. The **open** dispatch, everywhere below, means the last element when
+its `returned is None`; there is at most one, because §4.C refuses to open a second.
+
+Keyed by the **unit key**, in two explicitly prefixed forms:
 
 - a grouped `for_each` member → `phase/<n>/<member-id>`, exactly the `items` key;
-- a flat `kind: agent` step → the **step id** (`brainstorm`, `deliver`).
+- a flat `kind: agent` step → `step/<step-id>`.
 
-The two key spaces are disjoint by construction: a member key always contains `/`, a step id
-never may (`check_workflow` rejects it). So one dict needs no discriminator field.
+The `step/` prefix is not cosmetic. The first draft of this spec claimed the two key spaces
+were "disjoint by construction, because a step id may not contain `/`" — and that is **false**:
+`fr.workflow.check.check_workflow` validates duplicate ids, dangling `needs`, cycles and
+unknown capabilities, but it does **not** constrain the characters in a step id. A
+repo-authored manifest with a step literally named `phase/1/implement-phase` is accepted
+today. Rather than add an id-character rule to `fr workflow check` — a behaviour change that
+could fail a manifest some repo already ships — the key carries its own namespace.
 
 Optional and defaulted, like `items`, `members` and `accounting` before it.
+
+### 4.B.1 Exactly when a record is opened
+
+**A dispatch record is opened when, and only when, `advance` moves a `kind: agent` unit to
+`running`.** Two consequences, both deliberate:
+
+- **A gated step opens nothing.** `advance` prints a blocked step's brief while marking it
+  `blocked`, not `running` — nothing was dispatched, so there is nothing to hold. `brainstorm`
+  is the shipped example.
+- **An orchestrator-run agent step still opens one.** In the shipped `fr-goal` shape only
+  `implement` and `implement-phase` carry `agent:`; `spec-review`, `plan`, `review-phase` and
+  `deliver` are `kind: agent` with `agent: null` — the orchestrator does that work itself.
+  Their records open with `agent_type: None`, and `fr run status` renders them
+  `held by the orchestrator`. This is the right answer rather than an exception, because #499's
+  complaint is precisely that *nothing distinguishes "not yet dispatched" from "dispatched,
+  awaiting resolve"* — and that is as true of a step the orchestrator runs itself, after a
+  compaction, as it is of a subagent.
 
 ### 4.C CLI
 
@@ -203,14 +237,15 @@ fr run claim <run-id> --step <s> [--item phase/<n>] --abandoned
 - `--abandoned` closes the record (`returned` = now, `outcome: abandoned`) and leaves the
   step's `items` entry `running`, so `advance` will brief it again. This is the sanctioned
   recovery for a lost executor, and it is a deliberate operator act with a name.
-- `--harness` defaults to `fr.harness`'s detected harness rather than `unknown`, so the
-  common call is short.
+- `--harness` defaults to `fr.harness.detect.detect_harness(os.environ)`, so the common call
+  is short; when detection returns `None` the field stays absent rather than guessing.
 
 **`fr run advance`** — opens the record, and refuses a held unit:
 
 - For a `kind: agent` step (flat or member), `advance` writes
-  `DispatchRecord(dispatched=now, agent_type=step.agent, model=<resolved tier>)` alongside the
-  existing `items[key] = "running"` write-claim.
+  `DispatchRecord(dispatched=now, agent_type=step.agent, model=<resolved tier>)` — appended to
+  `dispatch[key]` — alongside the existing `items[key] = "running"` write-claim. For a flat
+  step there is no `items` entry; the record is the whole write-claim.
 - If a record for that unit already exists **and** `returned is None`, `advance` exits **2**:
 
   ```
@@ -223,9 +258,9 @@ fr run claim <run-id> --step <s> [--item phase/<n>] --abandoned
     Re-brief:    fr run advance <run> --redispatch
   ```
 
-  `--redispatch` re-opens a fresh record (the old one closed `outcome: abandoned`,
-  `agent: <previous>`) and prints the brief. The old holder is not forgotten — it is
-  recorded as abandoned, which is the forensic trail #503 asks for.
+  `--redispatch` closes the open record (`outcome: abandoned`) and **appends** a fresh one,
+  then prints the brief. The old holder is not overwritten — it stays in the unit's list,
+  which is the forensic trail #503 asks for.
 - An **unclaimed** open record prints `by an unclaimed agent` in place of the id. The refusal
   still fires: fr knows a brief went out even when nobody said who took it.
 
@@ -321,8 +356,13 @@ instead of resting entirely on skill prose being followed (#503's fifth motivati
 
 1. `DispatchRecord` round-trips through `dump_run_state` / `parse_run_state`; a v2 cursor with
    no `dispatch` key parses unchanged.
-2. `advance` opens a record with `dispatched`, `agent_type` and the resolved `model`, for both
-   a flat agent step and a grouped member.
+2. `advance` opens a record with `dispatched`, `agent_type` and the resolved `model`, keyed
+   `step/<id>` for a flat agent step and `phase/<n>/<member>` for a grouped member.
+2b. A **gated** agent step (`brainstorm`) opens NO record — it is marked `blocked`, not
+   `running` — while an **orchestrator-run** agent step (`spec-review`, `agent: null`) opens one
+   with `agent_type: None`.
+2c. A unit `--redispatch`ed, or failed and retried, keeps BOTH records in `dispatch[key]`,
+   oldest first, with the earlier one closed.
 3. `advance` on a held unit exits 2, names the holder id (and `an unclaimed agent` when none
    was claimed), and prints no brief; `--redispatch` exits 0, closes the old record
    `abandoned`, and prints the brief.
@@ -332,8 +372,8 @@ instead of resting entirely on skill prose being followed (#503's fifth motivati
    `advance` briefs it again.
 6. `resolve` sets `returned`/`outcome`; `resolve --agent` fills an unclaimed record; `resolve
    --agent` disagreeing with a claimed one is refused.
-7. `fr run status` prints the holder line for a held unit and the dispatched→returned pair
-   for a settled one.
+7. `fr run status` prints the holder line for a held unit, the dispatched→returned pair for a
+   settled one, and `held by the orchestrator` for a record with no `agent_type`.
 8. `fr run check` counts open and unclaimed dispatches.
 9. The `run` 2 → 3 migration stamps a readable cursor, refuses an unreadable one, and leaves
    every other cursor migrating (the `run_provenance` invariant).
