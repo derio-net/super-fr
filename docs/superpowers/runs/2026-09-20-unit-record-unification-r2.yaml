@@ -18,19 +18,49 @@ steps:
   plan-review:
     state: done
   implement:
-    state: pending
+    state: running
+    at: '2026-09-20T20:32:10+00:00'
     items:
       phase/1/implement-phase: done
-      phase/2/implement-phase: pending
+      phase/2/implement-phase: running
       phase/3/implement-phase: pending
       phase/4/implement-phase: pending
       phase/5/implement-phase: pending
       phase/6/implement-phase: pending
       phase/7/implement-phase: pending
+      phase/1/review-phase: done
     members:
     - implement-phase
     - review-phase
+    dispatch:
+      phase/1/review-phase:
+      - dispatched: '2026-09-20T20:31:58+00:00'
+        harness: claude-code
+        model: claude-opus-5
+        returned: '2026-09-20T20:32:10+00:00'
+        outcome: done
+      phase/2/implement-phase:
+      - dispatched: '2026-09-20T20:32:10+00:00'
+        agent: a91f8f64811e3a560
+        agent_type: super-fr:fr-phase-executor
+        harness: claude-code
+        model: claude-opus-5
   journal-check:
     state: pending
   deliver:
     state: pending
+accounting:
+  phase/1/review-phase:
+    at: '2026-09-20T20:31:58+00:00'
+    journal_entries: 14
+    journal_lines: 71
+    handoff_chars: 12726
+    spec_bytes: 35299
+    plan_bytes: 36971
+  phase/2/implement-phase:
+    at: '2026-09-20T20:32:10+00:00'
+    journal_entries: 14
+    journal_lines: 71
+    handoff_chars: 12726
+    spec_bytes: 35299
+    plan_bytes: 36971

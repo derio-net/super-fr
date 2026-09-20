@@ -278,7 +278,24 @@ freezes the prior shape as a legacy model, and no migration may validate an old 
 the live one.* Found by auditing the blast radius after the operator called this rewrite
 what it is.
 
-Two edges, decided rather than left to the implementer:
+Three things phase 2 learned from the CAPTURED cursors, which the first draft had wrong or thin:
+
+- **Accounting with no dispatch is the majority shape**, not an edge: most real cursors
+  predate the dispatch record. The synthesized identity-less attempt (step 3 above) is
+  therefore the COMMON migration case, and is tested as such.
+- **One timestamp, not two.** In v5 the moment of dispatch is the attempt's own `dispatched`;
+  `ContextEstimate` deliberately carries no `at`, so the moment cannot be recorded twice and
+  drift. It must be stamped BEFORE the brief is printed — it is the start edge of the
+  measurement window.
+- **The frozen legacy reader drops the `harness` validator on purpose.** `HARNESSES` is a
+  live vocabulary; a harness retired in future would otherwise make every cursor that
+  recorded it unreadable, and so unmigratable — the exact stranding this reader exists to
+  prevent. `extra="forbid"` and the returned/outcome pairing are kept.
+
+Edges, decided rather than left to the implementer. The rewrite refuses — leaving the cursor
+byte-identical — on a partial measurement (below), on an accounting key that no step
+records, and on an accounting entry with no timestamp for a unit that has no attempt; the
+last two occur in no captured cursor and were tested by inducing them from one:
 
 - **A v4 cursor with a PARTIAL measurement** (some of the four token fields) is already
   invalid under gh#514's validator. The migration **refuses that cursor** and names the
