@@ -1124,7 +1124,13 @@ def start_cmd(
     try:
         workspace = ensure_run_workspace(repo_root, branch)
     except RunWorkspaceError as e:
-        err_console.print(f"[red]{e}[/red]")
+        # soft_wrap=True, like every other operator-facing refusal in this
+        # module (p1-f1, r1-f2). This message embeds the repository path, so
+        # rich's fold lands at a different word on every host — on a machine
+        # with long temp paths it broke `is not a linked git worktree` across a
+        # newline mid-phrase. A refusal an operator cannot read, or grep for,
+        # is a bug wherever it appears.
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if workspace.resolve() != repo_root.resolve():

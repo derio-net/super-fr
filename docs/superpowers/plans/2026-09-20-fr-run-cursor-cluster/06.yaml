@@ -129,21 +129,31 @@ state:
       ticked_at: null
       note: null
     P6.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:59:10+00:00'
+      note: 'RED confirmed by reading the output, not assumed: both refusals arrive
+        folded as ''is not a linked git \nworktree'' / ''container evidence'' straddling
+        a newline, with a 116-char macOS tmp_path embedded ahead of them. Host-dependent
+        by construction.'
     P6.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:59:15+00:00'
+      note: 'Fixed the SOURCE: run_cmd.py''s RunWorkspaceError handler now prints
+        with soft_wrap=True, like every other refusal in the module. tests/unit/test_run_workspace.py
+        is byte-unchanged (git diff --stat empty) and all 9 pass.'
     P6.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:59:21+00:00'
+      note: The fourth source is defeated by pointing HOME at an empty tmp dir for
+        the invocation, which is what a host with no marketplace clone actually is
+        — stronger than patching MARKETPLACE_ROOT, since it also covers any later
+        home-derived source. 28 passed.
     P6.T3.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:59:27+00:00'
+      note: 'Full suite: 3330 passed, 80 skipped, 0 failed (was 3 failed / 3327 passed).
+        Finding p1-f2 resolved fixed with both causes and the commit that fixed each;
+        fr journal check --scope plan is clean.'
   completion:
     at: null
     note: null

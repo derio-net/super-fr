@@ -243,6 +243,18 @@ def test_cli_all_fails_when_nothing_is_discoverable(tmp_path: Path, monkeypatch)
     empty_shipped.mkdir()
     # Defeat the wheel-internal copy too, or there is no "nothing" to test.
     monkeypatch.setattr(resolve_mod, "packaged_shipped_workflows_dir", lambda: None)
+    # And the FOURTH source, which is neither of the two above: the marketplace
+    # clone at `~/.claude/plugins/marketplaces/derio-net--super-fr/...`, which
+    # `_discovery_dirs` appends unconditionally and no env var can redirect.
+    # On a host with super-fr actually installed it made this test find
+    # `fr-goal: ok` and exit 0 — a test named "nothing is discoverable" passing
+    # while something was. Pointing HOME at an empty directory is the honest
+    # simulation of the host the test describes, and it defeats any other
+    # home-derived source a later change might add, which patching the one
+    # constant would not.
+    empty_home = tmp_path / "home"
+    empty_home.mkdir()
+    monkeypatch.setenv("HOME", str(empty_home))
 
     result = _invoke(None, repo, empty_shipped, ["workflow", "check", "--all"])
 
