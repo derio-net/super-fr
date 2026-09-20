@@ -300,6 +300,52 @@ def test_self_review_accepts_a_front_loaded_manual_phase_once_ticked(tmp_path):
     assert _placement_issues(plan_dir) == []
 
 
+def test_the_canonical_front_load_shape_survives_its_own_dependency(tmp_path):
+    """Review `r4-f1`. fr-goal §3 front-loads a manual phase "only when
+    agentic work depends on it" — so the dependency IS the definition of
+    front-loading, and the canonical shape is `1 [manual] (ticked, the
+    operator\'s go), 2 agentic depends_on [1]`.
+
+    An earlier draft made the dependency half unconditional over every manual
+    phase, which looks stricter and therefore safer. It is not: it errors on
+    this shape forever, with no remedy that keeps the plan\'s meaning —
+    dropping the dependency discards a true fact about build order, and
+    making phase 2 manual abandons the automation. Both halves of the rule
+    key on *outstanding*, which is what operator decision `d5` chose.
+    """
+    from fr.plan_ops import tick
+
+    plan_dir = _shaped_plan(
+        tmp_path,
+        [(1, "manual", ()), (2, "agentic", (1,)), (3, "agentic", (2,))],
+    )
+    # Unticked, this is the hazard and must error: phase 2 waits on a human.
+    before = _placement_issues(plan_dir)
+    assert before, "an OUTSTANDING front-loaded dependency must still error"
+    assert any("depends_on phase 1" in i.message for i in before), [str(i) for i in before]
+
+    tick(plan_dir, "P1.T1.S1")  # the operator does the work and gives the go
+
+    assert _placement_issues(plan_dir) == []
+
+
+def test_a_dependency_on_an_outstanding_trailing_manual_phase_still_errors(tmp_path):
+    """The other side of `r4-f1`: relaxing the dependency half to *outstanding*
+    must not relax it to nothing. A trailing manual phase is legal by
+    position, and an agentic phase waiting on it while it is unticked is
+    exactly the hazard position alone cannot see."""
+    plan_dir = _shaped_plan(
+        tmp_path,
+        [(1, "agentic", ()), (2, "agentic", (4,)), (3, "agentic", ()), (4, "manual", ())],
+    )
+
+    issues = _placement_issues(plan_dir)
+
+    assert len(issues) == 1, [str(i) for i in issues]
+    assert issues[0].severity == "error"
+    assert "still outstanding" in issues[0].message
+
+
 def test_trailing_manual_block_is_the_maximal_suffix(tmp_path):
     """Phase 5's preflight imports this, so its semantics are pinned here.
 

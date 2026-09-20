@@ -1063,10 +1063,25 @@ def _manual_placement_issues(plan: Plan) -> list[ReviewIssue]:
       POSITION    a manual phase that is neither in the trailing manual
                   block nor already `plan_locally_complete`, with agentic
                   work still to come after it.
-      DEPENDENCY  an agentic phase whose `depends_on` names a manual phase,
-                  whatever the two positions — position alone is not the
-                  invariant, and a *trailing* manual phase reintroduces the
-                  hazard the moment something agentic waits on it.
+      DEPENDENCY  an agentic phase whose `depends_on` names an OUTSTANDING
+                  manual phase, whatever the two positions — position alone
+                  is not the invariant, and a *trailing* manual phase
+                  reintroduces the hazard the moment something agentic waits
+                  on it.
+
+    Both halves key on the same word, *outstanding*, and that is the whole
+    point (review `r4-f1`). An earlier draft made the dependency half
+    unconditional over every manual phase, which read as the stricter and
+    therefore safer choice. It is not: it makes fr-goal §3's **front-load**
+    exception unexpressible, because front-loading is defined by that very
+    dependency — §3 front-loads "only when agentic work depends on it". The
+    canonical front-load shape is `1 [manual] (ticked, the operator's go),
+    2 agentic depends_on [1]`, and the unconditional rule errors on it
+    forever with no remedy that keeps the plan's meaning: "drop the
+    dependency" discards a true fact about the build order, and "make
+    phase 2 manual" abandons the automation. Operator decision `d5` chose
+    "trailing OR already complete" precisely so §3 survived; a dependency on
+    an already-complete manual phase waits on nobody.
 
     The reverse dependency direction is deliberately legal: a trailing
     manual phase may declare backward deps on the agentic work it collects.
@@ -1074,7 +1089,13 @@ def _manual_placement_issues(plan: Plan) -> list[ReviewIssue]:
     out: list[ReviewIssue] = []
     ordered = sorted(plan.phases, key=lambda p: p.phase.number)
     trailing = _trailing_manual_block(plan)
-    manual_numbers = {p.phase.number for p in ordered if p.phase.tag == "manual"}
+    # OUTSTANDING manual phases, not all of them: a manual phase whose steps
+    # are already ticked is work nobody is still owed, so nothing waits on it
+    # (review `r4-f1`). Same predicate the position half uses, so the two
+    # halves cannot disagree about what "outstanding" means.
+    outstanding_manual = {
+        p.phase.number for p in ordered if p.phase.tag == "manual" and not plan_locally_complete(p)
+    }
     for idx, phase in enumerate(ordered):
         n = phase.phase.number
         if phase.phase.tag == "manual":
@@ -1097,15 +1118,17 @@ def _manual_placement_issues(plan: Plan) -> list[ReviewIssue]:
                 )
             )
             continue
-        for dep in sorted(set(phase.phase.depends_on) & manual_numbers):
+        for dep in sorted(set(phase.phase.depends_on) & outstanding_manual):
             out.append(
                 ReviewIssue(
                     severity="error",
                     message=(
                         f"phase {n} is agentic but declares depends_on phase {dep}, "
-                        f"which is `tag: manual` — an agentic phase must never wait "
-                        f"on a human, whatever the two positions. Drop the dependency "
-                        f"from phase {n}, or make phase {n} manual and move both into "
+                        f"which is `tag: manual` and still outstanding — an agentic "
+                        f"phase must never wait on a human, whatever the two "
+                        f"positions. Tick phase {dep}'s steps before the run reaches "
+                        f"phase {n} (fr-goal's front-load: the operator's go), drop "
+                        f"the dependency, or make phase {n} manual and move both into "
                         f"the plan's trailing manual block."
                     ),
                 )

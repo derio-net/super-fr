@@ -209,8 +209,25 @@ has nothing to dispatch. Position-only would have made §3 unexpressible — a d
 riding on a bug-fix cluster.
 
 `depends_on` is checked alongside position, because position alone is not the invariant: an
-agentic phase declaring `depends_on: [4]` where 4 is the trailing manual phase reintroduces the
-hazard by other means. Same rule, same severity.
+agentic phase declaring `depends_on: [4]` where 4 is an **outstanding** trailing manual phase
+reintroduces the hazard by other means. Same rule, same severity.
+
+**Both halves key on *outstanding*, not on *manual*** — and the distinction is load-bearing
+rather than pedantic (review `r4-f1`). Making the dependency half unconditional over every
+manual phase reads as the stricter and therefore safer choice; it is not. fr-goal §3 front-loads
+a manual phase "only when agentic work depends on it", so the dependency *is* what front-loading
+means, and the canonical shape is:
+
+```
+1 [manual]  (ticked — the operator did the work and gave the go)
+2 agentic   depends_on: [1]          <-- the reason phase 1 was front-loaded at all
+```
+
+An unconditional rule errors on that forever, with no remedy that preserves the plan's meaning:
+dropping the dependency discards a true fact about build order, and making phase 2 manual
+abandons the automation. That would make §3 unexpressible — exactly what decision `d5` chose
+"trailing OR already complete" to avoid. A dependency on an already-complete manual phase waits
+on nobody; a dependency on an unticked one still errors, trailing or not.
 
 #### D.2 Where it fires — three places, earliest first
 
