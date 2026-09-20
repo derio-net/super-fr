@@ -716,8 +716,13 @@ def _already_running_refusal(
     metacharacter (review `r1-f1`) — the `--state failed` alternative is
     prose OUTSIDE the command, not an alternation inside it.
     """
+    # A top-level step IS its own outstanding unit, so naming it twice
+    # ("plan: plan is ALREADY RUNNING") reads as a bug in the message. The
+    # group prefix exists to say WHICH group the unit belongs to; when there
+    # is no group there is nothing to prefix.
+    named = subject if subject == step_id else f"{step_id}: {subject}"
     return (
-        f"[red]{step_id}: {subject} is ALREADY RUNNING (dispatched {at}).[/red]\n"
+        f"[red]{named} is ALREADY RUNNING (dispatched {at}).[/red]\n"
         "  Waiting on that agent — do NOT dispatch again.\n"
         f"  resolve it:      {_resolve_hint(run_id, member_id, item)}"
         "   (or --state failed)\n"
@@ -1178,10 +1183,22 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         if step.steps:
             _advance_group(repo_root, state, manifest, step, record)
             return
+        # #499 (spec §3.A): the same rule as `_advance_group`'s, at the other
+        # call site. This sits AFTER the `_gate_pending` block on purpose — a
+        # gated step is `blocked`, never `running`, and its brief is how the
+        # operator's question gets asked, so the two must not interact.
+        if record.state == "running":
+            err_console.print(
+                # subject == step_id and member_id == step_id: a top-level
+                # step is its own unit, and `item=None` drops `--item` from
+                # the resolve hint. Same renderer as the grouped call site.
+                _already_running_refusal(step.id, step.id, record.at, state.run, step.id, None),
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
         brief = _build_brief(step, state)
-        if record.state != "running":
-            new_record = record.model_copy(update={"state": "running", "at": _now()})
-            save_run_state(repo_root, _with_step(state, state.cursor, new_record))
+        new_record = record.model_copy(update={"state": "running", "at": _now()})
+        save_run_state(repo_root, _with_step(state, state.cursor, new_record))
         console.print(f"{step.id}: dispatch brief")
         console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
         return

@@ -430,9 +430,14 @@ def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -
     assert brief["tier"] == "from_phase"
 
 
-def test_advance_agent_step_brief_is_re_emitted_idempotently_while_running(
+def test_advance_refusing_a_running_agent_step_executes_and_writes_nothing(
     tmp_path: Path, monkeypatch
 ) -> None:
+    """Was `..._brief_is_re_emitted_idempotently_while_running`, which asserted
+    exit 0 and a second brief — the #499 behaviour itself, pinned as if it were
+    the contract. The claim worth keeping is the other one: the second
+    `advance` still executes nothing (the no-claude-p-batch half) and now also
+    writes nothing, so the run file is byte-identical across the refusal."""
     import fr.commands.run_cmd as run_cmd
 
     def _boom(*args, **kwargs):
@@ -444,10 +449,14 @@ def test_advance_agent_step_brief_is_re_emitted_idempotently_while_running(
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
     monkeypatch.setattr(run_cmd.subprocess, "run", _boom)  # see the test above
     _invoke(repo, shipped, ["run", "advance", "r1"])
+    before = (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text()
+
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
-    assert result.exit_code == 0, result.output
+
+    assert result.exit_code == 2, result.output
     state = load_run_state(repo, "r1")
     assert state.steps["plan"].state == "running"
+    assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text() == before
 
 
 # --- fr run resolve — the only way an agent step's cursor can move (spec §4.B,
@@ -2734,3 +2743,51 @@ def test_advance_refuses_a_running_member(tmp_path: Path) -> None:
     assert "--redispatch" in result.output
     # nothing a harness could mistake for an instruction to act
     assert "{" not in result.stdout, result.stdout
+
+
+def test_advance_refuses_a_running_top_level_agent_step(tmp_path: Path) -> None:
+    """#499, the ungrouped half. `advance_cmd`'s `agent` branch marked the
+    step `running` only when it was not already, then printed the brief
+    unconditionally — so the state was right and the output lied."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert first.exit_code == 0, first.output
+    dispatched_at = load_run_state(repo, "r1").steps["plan"].at
+    assert dispatched_at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    assert "ALREADY RUNNING" in result.output
+    assert dispatched_at in result.output, result.output
+    # no `--item` for a top-level step: it has no unit to address
+    assert "fr run resolve r1 --step plan --state done" in result.output
+    assert "--item" not in result.output, result.output
+    assert "{" not in result.stdout, result.stdout
+    # and the refusal wrote nothing
+    assert load_run_state(repo, "r1").steps["plan"].at == dispatched_at
+
+
+def test_advance_still_briefs_a_blocked_gated_agent_step(tmp_path: Path) -> None:
+    """Spec §3.A, "Unchanged". A `gate: operator` step is `blocked`, never
+    `running`, and its brief is how the operator's question gets ASKED — the
+    skill named in it is the thing that produces the answer the gate waits
+    for. The #499 refusal sits after `_gate_pending`, so the two never
+    interact and a re-entering orchestrator still sees what to dispatch."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    second = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    for result in (first, second):
+        assert result.exit_code == 0, result.output
+        assert "blocked on operator gate" in result.output
+        assert _brief_of(result.output)["step"] == "brainstorm"
+        assert "ALREADY RUNNING" not in result.output
+    assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"

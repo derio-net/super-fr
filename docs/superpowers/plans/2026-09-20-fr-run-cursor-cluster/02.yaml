@@ -94,17 +94,22 @@ state:
         item); _resolve_hint widened to item: str|None so the top-level case omits
         --item from ONE builder. 134 passed.'
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:59:42+00:00'
+      note: 'RED: top-level refusal test fails (exit 0 + brief re-emitted); the gated-brief
+        test passes already, pinning the untouched path (journal p2-red-t2)'
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T14:01:05+00:00'
+      note: advance_cmd's agent branch refuses record.state == running AFTER the _gate_pending
+        block, same renderer, no --item. 136 passed (one existing test rewritten —
+        journal p2-f1).
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T14:01:51+00:00'
+      note: 'Folded: both call sites now differ only in arguments (T1.S3 extracted
+        the renderer). Refactor here was the subject line — ''plan: plan is ALREADY
+        RUNNING'' collapses to ''plan is ALREADY RUNNING'' when subject == step_id.'
     P2.T3.S1:
       state: ' '
       ticked_at: null

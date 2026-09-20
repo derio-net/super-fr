@@ -104,3 +104,35 @@ Failure, verbatim (the whole stdout of the SECOND advance is the assertion messa
      +  where 0 = <Result okay>.exit_code
 
 Driven through the REAL shipped fr-goal manifest via phase 1s _fr_goal_at_implement, so this is fr-goals own phase/1/implement-phase, not a stand-in.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-red-t2 created=2026-09-20T15:59:36 phase=2 -->
+### p2-red-t2 · discovery · RED for P2.T2: the top-level agent step re-briefs too, and the gated path already behaves (phase 2)
+
+Command: uv run pytest tests/unit/test_run_cli.py -q --no-cov -k "refuses_a_running_top_level or still_briefs_a_blocked" -> 1 failed, 1 passed.
+
+test_advance_refuses_a_running_top_level_agent_step FAILED, verbatim:
+
+    assert result.exit_code == 2, result.output
+    AssertionError: plan: dispatch brief
+      {"agent": null, "emits": ["plan", "journal:plan"], "for_each": null, "gate": null, "kind": "agent", "needs": ["spec"], "run": "r1", "skill": "super-fr:fr-plan", "step": "plan", "steps": [], "tier": "from_phase", "workflow": "agentic@1"}
+
+    assert 0 == 2
+
+test_advance_still_briefs_a_blocked_gated_agent_step PASSED on the first run, as the plan predicted. That is the point of writing it: spec 3.A leaves the gated path untouched, and the only way to know the refusal did not bleed into it is a test that was green BEFORE the change and stays green after. A blocked step is state "blocked", never "running", so the two branches cannot collide - but the new check still has to live after the _gate_pending block for that to stay true.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f1 created=2026-09-20T16:00:59 phase=2 state=fixed -->
+### p2-f1 · finding [fixed] · An existing test pinned the #499 bug as the contract, and had to be rewritten, not deleted (phase 2)
+
+test_advance_agent_step_brief_is_re_emitted_idempotently_while_running (test_run_cli.py:433) asserted exit 0 on the SECOND advance of a running top-level agent step - i.e. it pinned exactly the behaviour #499 reports as the defect. It went red the moment the refusal landed:
+
+    assert result.exit_code == 0, result.output
+    AssertionError: plan: plan is ALREADY RUNNING (dispatched 2026-09-20T13:59:54+00:00).
+        Waiting on that agent - do NOT dispatch again.
+        resolve it:      fr run resolve r1 --step plan --state done   (or --state failed)
+        re-brief anyway: fr run advance r1 --redispatch
+
+    assert 2 == 0
+
+Deleting it would have dropped a claim that is still true and still load-bearing: the monkeypatched subprocess.run boom proves the second advance executes NOTHING (the structural half of no-claude-p-batch). Rewritten as test_advance_refusing_a_running_agent_step_executes_and_writes_nothing, which keeps the boom, asserts exit 2, and adds the stronger claim the refusal makes possible - the run file is byte-identical across it.
+
+A sibling in the grouped section, test_advance_is_idempotent_over_the_snapshot, did NOT go red: its assertion (list(accounting) == ["phase/1/code"]) still holds when the second advance refuses and writes nothing. It passed for the wrong reason for one commit. Task 3 restores its meaning by giving it --redispatch, which is where re-dispatch now lives.
