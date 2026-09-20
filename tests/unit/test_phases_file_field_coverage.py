@@ -79,6 +79,14 @@ _REPRESENTATIVE_VALUES: dict[str, Any] = {
     "skeleton": True,
 }
 
+# Header keys `_build_phase_doc` writes unconditionally. Everything else is
+# emitted ONLY when set, so that plans written before each field existed stay
+# byte-stable and still parse on an older, `extra="forbid"` reader. Deriving
+# the omission set from this rather than listing the omitted fields means a
+# new optional field that someone emits unconditionally fails the test below,
+# which is the half of #434's contract that has no other guard.
+_ALWAYS_EMITTED = {"number", "title", "tag", "depends_on", "tracking_issue"}
+
 
 def _optional_header_fields() -> list[str]:
     return [
@@ -91,6 +99,15 @@ def _optional_header_fields() -> list[str]:
 def test_every_optional_phase_header_field_survives_phases_file(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
+    """Both halves of the contract, derived from the model rather than listed.
+
+    Two phases: the second carries every optional field (and so must round-trip
+    each one), the first carries none (and so must OMIT every field that is not
+    unconditionally emitted). `depends_on: [1]` lives on phase 2 deliberately —
+    on phase 1 it would be a self-dependency, which is invalid per the plan's
+    backward-only rule and would break confusingly the day
+    `_preflight_phase_error` grows a cycle check.
+    """
     optional_fields = _optional_header_fields()
     missing_from_table = [f for f in optional_fields if f not in _REPRESENTATIVE_VALUES]
     assert not missing_from_table, (
@@ -102,29 +119,44 @@ def test_every_optional_phase_header_field_survives_phases_file(
 
     repo = _repo(tmp_path)
     _spec(repo)
-    phase: dict[str, Any] = {
+    bare: dict[str, Any] = {
         "number": 1,
-        "title": "One",
+        "title": "Bare",
         "tasks": [{"number": 1, "title": "t", "steps": [{"id": "P1.T1.S1", "text": "s"}]}],
     }
+    loaded: dict[str, Any] = {
+        "number": 2,
+        "title": "Loaded",
+        "tasks": [{"number": 1, "title": "t", "steps": [{"id": "P2.T1.S1", "text": "s"}]}],
+    }
     for field in optional_fields:
-        phase[field] = _REPRESENTATIVE_VALUES[field]
+        loaded[field] = _REPRESENTATIVE_VALUES[field]
 
     phases_file = tmp_path / "phases.yaml"
-    phases_file.write_text(yaml.dump([phase]))
+    phases_file.write_text(yaml.dump([bare, loaded]))
     monkeypatch.chdir(repo)
 
     result = _create_via_cli(repo, phases_file)
     assert result.exit_code == 0, result.output
 
-    doc = yaml.safe_load(
-        (repo / "docs" / "superpowers" / "plans" / "2026-07-04-toy" / "01.yaml").read_text()
-    )
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-07-04-toy"
+    loaded_header = yaml.safe_load((plan_dir / "02.yaml").read_text())["phase"]
+    bare_header = yaml.safe_load((plan_dir / "01.yaml").read_text())["phase"]
+
     for field in optional_fields:
-        assert field in doc["phase"], (
-            f"{field!r} did not survive --phases-file — header: {doc['phase']!r}"
+        assert field in loaded_header, (
+            f"{field!r} did not survive --phases-file — header: {loaded_header!r}"
         )
-        assert doc["phase"][field] == _REPRESENTATIVE_VALUES[field]
+        assert loaded_header[field] == _REPRESENTATIVE_VALUES[field]
+
+    for field in optional_fields:
+        if field in _ALWAYS_EMITTED:
+            continue
+        assert field not in bare_header, (
+            f"{field!r} was emitted on a phase that never set it, so every plan "
+            "written before the field existed now differs — header: "
+            f"{bare_header!r}"
+        )
 
 
 def test_tier_survives_phases_file(tmp_path: Path, monkeypatch: Any) -> None:
