@@ -56,6 +56,24 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return r
 
 
+def _push_origin(repo: Path) -> None:
+    """Add a real bare origin (fresh, next to `repo`) and push its current
+    HEAD to `main`. NOT part of the `repo` fixture itself: several tests here
+    (the plan-repo validator-wrapper ones) deliberately commit MORE content to
+    local HEAD after the fixture runs and rely on `up()`'s cold-start base
+    resolution seeing that local-only commit — giving the fixture an origin
+    up front would fetch a STALE origin/main and silently cut the new branch
+    from before their commit (#322's own documented behavior), which is not
+    what those tests are about. Callers that need a real origin (the
+    phase-2 unlanded-content guard fetches origin/<default> on every
+    force=False down()) call this themselves, once their repo content is
+    final."""
+    origin = repo.parent / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "main"], check=True)
+
+
 @pytest.fixture()
 def fake_run(monkeypatch: pytest.MonkeyPatch):
     calls: list[list[str]] = []
@@ -72,6 +90,7 @@ def fake_run(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_up_exec_status_down_happy_path(repo: Path, fake_run: list) -> None:
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "vk-iso/t"])
     assert res.exit_code == 0, res.output
     assert "worktree" in res.output
@@ -555,6 +574,7 @@ def test_down_resolves_single_workspace_when_no_branch(repo: Path, fake_run: lis
     # even when a real workspace for the cwd existed). Mirrors exec/restart.
     from fr.isolation.types import list_states
 
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
     res = runner.invoke(app, ["isolation", "down", "--repo", str(repo)])
     assert res.exit_code == 0, res.output
@@ -585,6 +605,7 @@ def test_down_clears_sentinel_when_last_workspace_removed(
     # the Bash gate stops reporting 'fr pipeline active'. The guard's own clear
     # never fires here — it exits early when `down` runs from the worktree cwd
     # (the prescribed workflow), so the Python command must clear eagerly.
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     sdir = _sentinel(tmp_path, repo, monkeypatch)
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
     assert (sdir / "sess.json").exists()
@@ -598,6 +619,7 @@ def test_down_keeps_sentinel_when_other_workspaces_remain(
 ) -> None:
     # #399: tearing down ONE of several workspaces must NOT clear the sentinel —
     # the pipeline is still active for the survivors.
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     sdir = _sentinel(tmp_path, repo, monkeypatch)
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
@@ -778,6 +800,7 @@ def test_down_all_tears_down_and_clears_sentinels(
     # #341 Task 2A: `down --all` tears down every workspace and drops the
     # pipeline sentinel(s) — the explicit escape from the orphaned-sentinel
     # deadlock. gh returns MERGED here, so no open-PR safety kicks in.
+    _push_origin(repo)  # the live reap below needs a real origin to fetch
     sdir = _sentinel(tmp_path, repo, monkeypatch)
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])

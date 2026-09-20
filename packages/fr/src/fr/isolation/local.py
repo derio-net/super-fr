@@ -592,26 +592,36 @@ class LocalWorktreeDevcontainerTarget:
     def _reap_hazard(self, state: IsolationState) -> ReapHazard | None:
         """PURE QUERY — runs no destructive command — so `gc --dry-run` (phase 3)
         can ask exactly the question the live reap path enforces, instead of
-        predicting a different answer.
+        predicting a different answer. `git fetch` is the one exception to
+        "no command that writes": it only advances remote-tracking refs, never
+        a workspace, branch, or working tree (spec §3.4).
 
-        Phase 1 implements the DIRTY-WORKTREE check only (#435): `git status
-        --porcelain` in `state.worktree`. Non-empty output is a hazard — tracked
-        AND untracked alike (decision d1: #435's own lost work was a newly
-        authored, therefore untracked, file). A NON-ZERO return code is also a
-        hazard (`kind="unverifiable"`) rather than being read as clean — the
-        #354 invariant ("a failed query is not evidence of absence") applied to
-        the working tree. Ignored paths (`.venv/`, `.fr-isolation`,
-        `__pycache__/`) never appear in `--porcelain`, so routine workspace
-        clutter cannot wedge the guard.
+        The exits are ordered LOCAL-FIRST, NETWORK-SECOND, and the ordering is
+        load-bearing, not incidental: the free local check must short-circuit
+        before any candidate pays for a fetch.
 
-        Phase 2 adds the unlanded-content check (#467) here, after this one —
-        the cheap local check runs first and short-circuits before any network
-        call.
-
-        A worktree directory that is already gone (removed out-of-band; the
-        `_down_worktree_tail` post-condition check further down treats that as
-        already-torn-down, not a failure) has nothing left to query and nothing
-        left to lose — that is a no-hazard, not an unverifiable one.
+        1. Worktree directory already gone (removed out-of-band) → None, not a
+           hazard — the `_down_worktree_tail` post-condition check further down
+           treats that as already-torn-down. Nothing left to query, nothing
+           left to lose.
+        2. DIRTY WORKTREE (#435, phase 1): `git status --porcelain` in
+           `state.worktree`. Non-empty output is a hazard — tracked AND
+           untracked alike (decision d1: #435's own lost work was a newly
+           authored, therefore untracked, file). A NON-ZERO return code is
+           also a hazard (`kind="unverifiable"`) rather than being read as
+           clean — the #354 invariant ("a failed query is not evidence of
+           absence") applied to the working tree. Ignored paths (`.venv/`,
+           `.fr-isolation`, `__pycache__/`) never appear in `--porcelain`, so
+           routine workspace clutter cannot wedge the guard.
+        3. UNLANDED CONTENT (#467, phase 2): the worktree is clean, but the
+           branch may hold content that never reached `origin/<default>` — a
+           local-only commit, or one pushed to the branch after its PR merged
+           (the #320 orphan, caught for free). Fetches `origin/<default>`
+           first (a stale local ref would misread a genuinely-merged workspace
+           as unlanded), then compares content with `branch_changes_present`.
+           A failed fetch is `kind="unverifiable"`, the same #354 invariant
+           applied to the network call: offline defers a reap, never permits a
+           wrong one.
         """
         if not state.worktree.is_dir():
             return None
@@ -635,6 +645,50 @@ class LocalWorktreeDevcontainerTarget:
                     f"has {len(paths)} uncommitted change(s)",
                     paths,
                     "Commit or stash them.",
+                ),
+            )
+
+        # Phase 2 (#467): the worktree is clean, but the BRANCH may still hold
+        # content that never reached origin/<default> — a local-only commit,
+        # or one pushed to the branch after its PR merged (the #320 orphan).
+        # Fetch first, using the RESOLVED default branch (never the literal
+        # "main" `verify_merge` defaults to — that default is a latent bug for
+        # a repo on master) — a stale local origin/<default> would read every
+        # genuinely-merged workspace as unlanded (spec §3.4). A failed fetch is
+        # itself a hazard, not a pass: the #354 invariant ("a failed query is
+        # not evidence of absence") applied to the network call — offline
+        # defers a reap, it never permits a wrong one.
+        default = self._resolve_default_branch()
+        fetch = self.run(["git", "fetch", "origin", default], cwd=state.worktree)
+        if fetch.returncode != 0:
+            return ReapHazard(
+                kind="unverifiable",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"could not be checked against origin/{default} (git fetch failed)",
+                    [],
+                    "Check connectivity to origin (or that the remote still exists), "
+                    "then re-run `fr isolation down`.",
+                ),
+            )
+        # Deliberately NOT `self.verify_merge(state)` — the tempting reuse and
+        # the wrong one (spec §3.3). verify_merge is fetch + branch_changes_present
+        # + `self._pr(state)`, and that third call shells out to gh/glab/tea; gc
+        # has already made exactly that call one line earlier (`_gc_one`) to
+        # classify the workspace, so reusing verify_merge would buy a SECOND
+        # host-CLI round trip per reap candidate on a host-wide sweep, only to
+        # recompute a PR state the caller is already holding — and then discard
+        # `verified`, which the PR-less merged-by-content path can never
+        # satisfy anyway. Do the two steps this guard actually needs directly.
+        result = branch_changes_present(self.run, state.worktree, state.branch, f"origin/{default}")
+        if result.missing:
+            return ReapHazard(
+                kind="unlanded-content",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"has {len(result.missing)} changed file(s) that are not on origin/{default}",
+                    result.missing,
+                    "Push the branch.",
                 ),
             )
         return None

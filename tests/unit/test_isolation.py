@@ -970,12 +970,17 @@ def test_up_reuse_existing_branch_no_fetch_no_rebase(
 
 
 def _upped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **runner_kw):
+    # A real bare `origin` (main pushed) rather than a plain make_repo(): the
+    # phase-2 unlanded-content guard fetches origin/<default> on every
+    # force=False down(), so every caller of this fixture needs one — not
+    # just the guard's own tests (spec §3.4).
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    repo = make_repo(tmp_path, ["dev"], default="dev")
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
     runner = FakeRunner(**runner_kw)
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     st = target.up(None, "vk-iso/test")
     runner.calls.clear()
+    runner.git_calls.clear()
     return repo, runner, target, st
 
 
@@ -1365,14 +1370,162 @@ def test_down_refuses_dirty_worktree_real_git_host_worktree_mode(
     assert not st.worktree.exists()
 
 
+# ---------- target.down — the unlanded-content reap guard (#467) ----------
+#
+# All of these run through _upped(), whose repo now carries a real bare
+# `origin` with `main` pushed (make_repo_with_origin) — the content guard
+# fetches and compares against a real remote, so it needs one. Tests that
+# only exercise the phase-1 dirty check above never reach the fetch, so they
+# were untouched by that fixture change.
+
+
+def test_down_refuses_local_only_commit_never_landed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #467's own scenario: a commit exists only in the worktree, never pushed
+    # anywhere. branch_changes_present vs origin/main reports it missing.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    assert exc_info.value.hazard.kind == "unlanded-content"
+    assert "feature.txt" in exc_info.value.hazard.detail
+    assert _worktree_remove_calls(runner) == []
+    assert st.worktree.is_dir()
+
+
+def test_down_refuses_commit_pushed_to_branch_after_merge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The #320 orphan: a commit lands on the BRANCH itself after the PR
+    # merged — it reaches origin/<branch> but never origin/<default>, so it
+    # is equally unmerged and equally destroyed by a reap today. The same
+    # content check catches it for free (spec §3.3), with no #320-specific
+    # code.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    _commit_in_worktree(st.worktree, "late.txt", "landed after merge\n")
+    _git_out(st.worktree, "push", "origin", f"HEAD:{st.branch}")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    assert exc_info.value.hazard.kind == "unlanded-content"
+    assert "late.txt" in exc_info.value.hazard.detail
+    assert _worktree_remove_calls(runner) == []
+
+
+def test_down_refuses_as_unverifiable_when_fetch_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Offline (or origin gone) must DEFER a reap, never permit a wrong one
+    # (spec §3.4) — the #354 invariant applied to the network call.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    origin_url = _git_out(repo, "remote", "get-url", "origin")
+    shutil.rmtree(origin_url)  # `git fetch origin <default>` now fails outright
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    assert exc_info.value.hazard.kind == "unverifiable"
+    assert _worktree_remove_calls(runner) == []
+    assert st.worktree.is_dir()
+
+
+def test_down_reaps_clean_worktree_when_content_has_landed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The happy path must survive: squash-style landing (the worktree's own
+    # commit is not on origin/main BY SHA, but its content is) must not
+    # false-refuse.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+
+    target.down(st, force=False)
+
+    assert not st.worktree.exists()
+    assert load_state(repo, st.branch) is None
+
+
+def test_down_content_check_uses_resolved_default_branch_not_literal_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `verify_merge`'s `default_branch: str = "main"` default is a latent bug
+    # for a repo on master — this is what stops the new guard inheriting it.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    _git_out(repo, "push", "origin", "main:refs/heads/master")
+    monkeypatch.setattr(target, "_resolve_default_branch", lambda: "master")
+
+    target.down(st, force=False)  # must not raise — content matches origin/master
+
+    fetches = [c for c in runner.git_calls if c[:2] == ["git", "fetch"]]
+    assert any(c[2:] == ["origin", "master"] for c in fetches)
+    assert not any("main" in c for c in fetches)
+    merge_bases = [c for c in runner.git_calls if c[:2] == ["git", "merge-base"]]
+    assert merge_bases and any("origin/master" in c for c in merge_bases)
+
+
+def test_down_unlanded_content_message_names_paths_and_push_remedy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    detail = exc_info.value.hazard.detail
+    assert st.branch in detail
+    assert "feature.txt" in detail
+    assert "not on origin/main" in detail
+    assert "Push the branch." in detail
+    assert "--force" in detail
+    assert "the branch and any commits on it remain in the repo" in detail
+
+
+def test_down_force_tears_down_unlanded_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    _commit_in_worktree(st.worktree, "feature.txt", "the feature\n")
+
+    target.down(st, force=True)  # the escape still works
+
+    assert not st.worktree.exists()
+    assert load_state(repo, st.branch) is None
+
+
 # ---------- target.gc — host-wide reconciliation (#354 Task B) ----------
 
 
 def _gc_env(tmp_path, monkeypatch, **runner_kw):
     """A repo + runner sharing one HOME cache, plus an `up(branch)` helper that
-    returns the created worktree path. gc discovers across the whole HOME."""
+    returns the created worktree path. gc discovers across the whole HOME.
+
+    A real bare `origin` (main pushed), not a plain make_repo(): the phase-2
+    unlanded-content guard fetches origin/<default> on every live reap, and
+    without a real origin `_resolve_default_branch()` falls through to the
+    `gh` CLI branch, whose FakeRunner-faked stdout (a PR-state JSON blob, not
+    a branch name) is not a valid default-branch name.
+    """
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    repo = make_repo(tmp_path, ["dev"], default="dev")
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
     runner = FakeRunner(**runner_kw)
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
 
@@ -1781,8 +1934,9 @@ def test_gc_image_rmi_failure_is_non_fatal(tmp_path: Path, monkeypatch: pytest.M
 
 
 def _spawn_target(tmp_path, monkeypatch, spawner, **runner_kw):
+    # Real origin, same reason as _gc_env above (phase-2 content guard).
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    repo = make_repo(tmp_path, ["dev"], default="dev")
+    repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
     runner = FakeRunner(**runner_kw)
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner, gc_spawner=spawner)
     return repo, runner, target

@@ -89,3 +89,63 @@ The message said --force would 'destroy them deliberately'. Checked against a re
 ### d-integration-proved-435 · discovery · This repo's own integration suite asserted #435's buggy behaviour as correct (phase 1)
 
 tests/integration/test_hostworktree_lifecycle.py's full-lifecycle test wrote an untracked scratch.txt into the workspace and then asserted that a plain down(force=False) removed the worktree — i.e. it pinned the exact data loss #435 reports, as the expected outcome. The guard turned that test red, which is the strongest single piece of evidence in this change: the bug was not merely unguarded, it was under test. Now asserts ReapRefused + survival, then completes with force=True.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fixture-blast-radius created=2026-09-20T14:01:13 phase=2 -->
+### p2-fixture-blast-radius · discovery · The content guard's real-git fetch turned every no-origin test fixture into a false refusal (phase 2) (phase 2)
+
+Adding the fetch step to _reap_hazard broke far more existing tests than
+test_isolation.py alone: every fixture that built a repo with NO origin
+remote and then called down(force=False) on a MERGED/reap-eligible workspace
+now hit `git fetch origin <default>` failing (rc=128, no remote named
+origin) -> kind="unverifiable" -> ReapRefused, where the test expected a
+clean reap. This is the correct behavior per spec (offline/no-origin defers,
+never reaps wrongly) but the blast radius spanned four files:
+tests/unit/test_isolation.py (_upped, _gc_env, _spawn_target),
+tests/unit/test_isolation_cmd.py (repo fixture, via a NEW _push_origin()
+helper called from the 5 tests that actually reach a live force=False
+reap -- NOT the shared `repo` fixture itself, see below),
+tests/unit/test_isolation_hostworktree.py (_upped, _gc_env, and
+test_up_and_down_fire_the_gc_spawner's own ad hoc repo), and
+tests/unit/test_isolation_sessions_cmd.py (repo fixture).
+
+One trap found by running the full suite (not test_isolation.py alone,
+consistent with phase 1's own discovery about tests/integration/): adding a
+real origin to test_isolation_cmd.py's SHARED `repo` fixture broke two
+validator-wrapper tests
+(test_up_plan_repo_without_validator_wrapper_exits_2 and
+..._with_uncommitted_validator_wrapper_exits_2) for an unrelated reason --
+those tests commit docs/superpowers/plans/ to LOCAL HEAD *after* the fixture
+runs, and up()'s cold-start base resolution (#322) always prefers a fetched
+origin/<default> over local HEAD once an origin remote exists. With origin
+pushed only at fixture-build time (before the plans commit), the new
+isolation branch got cut from a STALE origin/main that doesn't have the
+plans dir at all, so the plan-repo detection (keyed off the branch's start
+point, not local HEAD) silently stopped firing -- exit 0 instead of the
+expected 2. Fixed by NOT adding origin to that shared fixture at all;
+instead a `_push_origin(repo)` helper is called explicitly, once, at the top
+of each of the 5 tests that actually need one (right before any content that
+must ride into the new branch is finalized). Lesson for phase 3 (touches gc
+classification/dry-run/_down_all, which will exercise more of this same
+fixture surface): any fixture using `make_repo`/a bespoke repo with no
+origin, feeding a force=False down() or a live gc() reap, needs checking
+against this same failure mode -- and a fixture that ALSO relies on
+up()'s local-HEAD fallback (#322, --no-fetch tests, no-origin-WARNING
+tests) must NOT be given an origin at all, or that fallback path itself
+stops being exercised.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-basetemp-collision-false-positive created=2026-09-20T14:01:21 phase=2 -->
+### p2-basetemp-collision-false-positive · discovery · A concurrent unrelated pytest run sharing --basetemp=/tmp/sb produced a spurious 'not a git repo' failure (phase 2) (phase 2)
+
+While chasing full-suite regressions, one failure
+(test_up_and_down_fire_the_gc_spawner raising IsolationError "not a git
+repo") turned out to be a false positive: an unrelated concurrent session was
+running its own `uv run pytest --basetemp=/tmp/sb` against a DIFFERENT
+worktree (feat__phase-holder-identity) at the same time, on the same shared
+--basetemp path. The two runs' tmp_path directories collided. Re-running the
+same test alone, and later the full suite, with a unique --basetemp
+(/tmp/sb-p2, /tmp/sb-p2-full) made it pass deterministically. Later phases:
+use a plan/phase-scoped --basetemp path (not the bare /tmp/sb this repo's
+own docs/examples use) when other agents may be running tests concurrently
+on shared infrastructure, and don't chase a "not a git repo" / directory-
+identity failure as a code regression without first checking for another
+pytest process sharing the same basetemp.
