@@ -48,6 +48,7 @@ from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
     AnsweredBy,
+    DispatchRecord,
     PhaseAccounting,
     RunState,
     RunStateError,
@@ -605,6 +606,71 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
     }
 
 
+def _effective_tier(step: Step, group: Step | None = None) -> str | None:
+    """The tier a unit actually dispatches under: its own `tier:` when set,
+    else its group's — `None` when neither has one. `_build_member_brief`
+    and `_open_dispatch`'s `_advance_group` call site both read this ONE
+    helper (P2.T1.S3) rather than each re-deriving the fallback, which is
+    how the two came to duplicate it in the first place. `group=None` for a
+    flat step, which has none to fall back to."""
+    if step.tier is not None:
+        return step.tier
+    return group.tier if group is not None else None
+
+
+def _resolved_model(repo_root: Path, tier: str | None) -> str | None:
+    """The model bound to `tier` for this machine's detected harness, via
+    `fr.models.resolve` — repo config overriding user config, the same rule
+    `fr models resolve` itself uses. `None` when there is no tier, no
+    detected harness, or no binding for the pair: an unresolved tier leaves
+    `model` absent rather than guessed (spec §4.A / P2.T1.S2)."""
+    if tier is None:
+        return None
+    harness = detect_harness(os.environ)
+    if harness is None:
+        return None
+    from fr.commands.models_cmd import REPO_MODELS_REL
+    from fr.models import default_models_path, load_models
+    from fr.models import resolve as resolve_model
+
+    repo_cfg = load_models(repo_root / REPO_MODELS_REL)
+    user_cfg = load_models(default_models_path())
+    return resolve_model(harness, tier, repo_cfg=repo_cfg, user_cfg=user_cfg)
+
+
+def _open_dispatch(
+    state: RunState,
+    step_id: str,
+    key: str,
+    *,
+    agent_type: str | None,
+    tier: str | None,
+    repo_root: Path,
+) -> RunState:
+    """Append a new `DispatchRecord` opening `key`'s hold under `step_id`.
+
+    Spec §4.B.1: called exactly when `advance` moves a unit to `running` —
+    from BOTH `_advance_group`'s write-claim and the flat `kind: agent`
+    branch, and only on the actual transition (both call sites already guard
+    on that). Never called from `_gate_pending`: a gated step is marked
+    `blocked`, not `running`, so nothing was dispatched and there is nothing
+    to hold.
+    """
+    record = state.steps[step_id]
+    dispatch = dict(record.dispatch or {})
+    attempts = list(dispatch.get(key, []))
+    attempts.append(
+        DispatchRecord(
+            dispatched=_now(),
+            agent_type=agent_type,
+            model=_resolved_model(repo_root, tier),
+        )
+    )
+    dispatch[key] = attempts
+    new_record = record.model_copy(update={"dispatch": dispatch})
+    return _with_step(state, step_id, new_record)
+
+
 def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
@@ -625,7 +691,7 @@ def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -
         "needs": list(member.needs),
         "emits": list(member.emits),
         "gate": member.gate,
-        "tier": member.tier if member.tier is not None else group.tier,
+        "tier": _effective_tier(member, group),
         "for_each": group.for_each,
         "steps": [],
     }
@@ -668,6 +734,14 @@ def _advance_group(
     if record.state != "running" or record.items != items:
         record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
         state = _with_step(state, step.id, record)
+        state = _open_dispatch(
+            state,
+            step.id,
+            pending,
+            agent_type=member.agent,
+            tier=_effective_tier(member, step),
+            repo_root=repo_root,
+        )
     save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
     console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
     console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
@@ -1053,7 +1127,16 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         brief = _build_brief(step, state)
         if record.state != "running":
             new_record = record.model_copy(update={"state": "running", "at": _now()})
-            save_run_state(repo_root, _with_step(state, state.cursor, new_record))
+            state = _with_step(state, state.cursor, new_record)
+            state = _open_dispatch(
+                state,
+                state.cursor,
+                f"step/{state.cursor}",
+                agent_type=step.agent,
+                tier=step.tier,
+                repo_root=repo_root,
+            )
+            save_run_state(repo_root, state)
         console.print(f"{step.id}: dispatch brief")
         console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
         return

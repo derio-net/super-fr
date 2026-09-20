@@ -2533,3 +2533,165 @@ def test_gates_never_renders_blank_on_a_pre_provenance_cursor(tmp_path: Path) ->
     assert "brainstorm" in result.output
     assert "provenance not recorded" in result.output
     assert "predates" in result.output
+
+
+# --- dispatch record: opened exactly when `advance` moves a unit to
+# `running` — spec §4.B.1 (Phase 2) ---
+
+_FLAT_AGENT_COLLISION_SHAPE = """
+workflow: flat-agent-collision
+schema: 1
+unit: run
+steps:
+  - id: phase/1/implement-phase
+    kind: agent
+    agent: super-fr:fr-phase-executor
+    tier: standard
+"""
+"""Spec review finding r1: nothing in `check_workflow` stops a step id that
+LOOKS like a grouped member's `items` key. A flat step literally named
+`phase/1/implement-phase` is the adversarial case the `step/` prefix exists
+for — without it this step's dispatch key would collide with a grouped
+member's."""
+
+
+def _write_repo_models(repo: Path, text: str) -> None:
+    path = repo / "docs" / "superpowers" / "models.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def test_advance_grouped_member_opens_a_dispatch_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Case (a): a grouped member's record is keyed like its `items` entry,
+    `agent_type` is the member's own `agent:`, and `model` is the resolved
+    tier binding (the member's `tier:`, falling back to the group's — here
+    both are `from_phase`, the shipped `fr-goal` shape's literal tier name)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _write_repo_models(repo, "claude-code:\n  from_phase: claude-opus-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    dispatch = load_run_state(repo, "r1").steps["implement"].dispatch
+    assert dispatch is not None
+    assert list(dispatch) == ["phase/1/code"]
+    records = dispatch["phase/1/code"]
+    assert len(records) == 1
+    record = records[0]
+    assert record.dispatched
+    assert record.agent_type == "super-fr:fr-phase-executor"
+    assert record.model == "claude-opus-5"
+    assert record.returned is None
+    assert record.outcome is None
+
+
+def test_advance_grouped_member_does_not_reopen_a_dispatch_record_while_still_running(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    dispatch = load_run_state(repo, "r1").steps["implement"].dispatch
+    assert dispatch is not None
+    assert len(dispatch["phase/1/code"]) == 1
+
+
+def test_advance_flat_agent_step_opens_a_dispatch_record_under_the_step_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Case (b) / review r1: the flat key carries the literal `step/`
+    prefix, asserted against a step id that itself reads like a grouped
+    member's key — `phase/1/implement-phase` — so the two key spaces are
+    provably disjoint rather than merely disjoint by convention."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _write_repo_models(repo, "claude-code:\n  standard: claude-sonnet-5\n")
+    _invoke(
+        repo,
+        shipped,
+        ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    dispatch = load_run_state(repo, "r1").steps["phase/1/implement-phase"].dispatch
+    assert dispatch is not None
+    assert list(dispatch) == ["step/phase/1/implement-phase"]
+    record = dispatch["step/phase/1/implement-phase"][0]
+    assert record.agent_type == "super-fr:fr-phase-executor"
+    assert record.model == "claude-sonnet-5"
+    assert record.returned is None
+
+
+def test_advance_does_not_reopen_a_dispatch_record_while_still_running(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    dispatch = load_run_state(repo, "r1").steps["brainstorm"].dispatch
+    assert dispatch is not None
+    assert len(dispatch["step/brainstorm"]) == 1
+
+
+def test_advance_onto_a_gated_agent_step_opens_no_dispatch_record(tmp_path: Path) -> None:
+    """Case (c): a gate marks the step `blocked`, never `running` — nothing
+    was dispatched, so nothing is held (spec §4.B.1)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["brainstorm"].state == "blocked"
+    assert state.steps["brainstorm"].dispatch is None
+
+
+def test_advance_orchestrator_run_agent_step_opens_a_dispatch_record_with_no_agent_type(
+    tmp_path: Path,
+) -> None:
+    """Case (d): a `spec-review`-shaped step (`kind: agent`, no `agent:`)
+    still opens a record — the orchestrator is doing the work itself, and
+    #499's complaint is precisely that this state goes unrecorded otherwise."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"]
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    dispatch = load_run_state(repo, "r1").steps["brainstorm"].dispatch
+    assert dispatch is not None
+    record = dispatch["step/brainstorm"][0]
+    assert record.dispatched
+    assert record.agent_type is None
+    assert record.model is None  # `brainstorm` here carries no `tier:`
+    assert record.returned is None
+    assert record.outcome is None

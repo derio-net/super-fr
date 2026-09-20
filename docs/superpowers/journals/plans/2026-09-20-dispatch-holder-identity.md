@@ -49,3 +49,35 @@ I ran the full suite as `uv run pytest -q --basetemp=... 2>&1 | tail -20` in the
 ### f3-resolved · finding [fixed] · resolves f3: Piping a backgrounded suite through `tail` masks pytest's exit code — the notification said 0 on a red run (phase 1)
 
 Exactly what changed, since the entry named one file it should not have. Changed: spec section 4.E's executor clause gained a paragraph ('And read the right exit code') covering both the masked status and the empty-until-exit output file; plan steps P4.T3.S3 and P6.T3.S3 — the two forward-looking steps that tell a later phase to background the gate and paste tails — now say to redirect to a file, tail the FILE, and report PIPESTATUS[0] or the unpiped code. NOT changed: P1.T3.S2, which the original entry also named. That step is already executed and ticked; rewriting the text of a completed step would edit the record of what was actually done, which is the opposite of what a journal is for. The guidance it needed is carried by the spec clause that ships.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-model-from-phase-unresolved created=2026-09-20T14:26:11 phase=2 -->
+### p2-model-from-phase-unresolved · discovery · advance opens dispatch records; model resolves via fr.models but 'from_phase' itself is not yet a real tier (phase 2)
+
+Implemented per spec §4.B.1: `_open_dispatch` (new helper in run_cmd.py) appends a
+DispatchRecord exactly when `advance` moves a unit to `running` — the flat `kind:
+agent` branch and `_advance_group`'s write-claim both call it; `_gate_pending` does
+not. `model` is resolved via `fr.models.resolve(harness, tier, repo_cfg, user_cfg)`
+with `harness = fr.harness.detect.detect_harness(os.environ)`; an undetectable
+harness or an unbound tier both leave `model: None` rather than guessing (spec §4.A).
+
+Caveat for phase 5/6 (status rendering / harness-neutral acceptance) and anyone
+reading a real run's cursor: the shipped `fr-goal.yaml`'s `implement`/
+`implement-phase` steps carry `tier: from_phase`, a LITERAL string, not yet
+resolved to a real per-phase tier anywhere in `fr run` — `_build_member_brief`'s
+`tier` field already surfaces it unresolved, and this phase's `_open_dispatch`
+deliberately mirrors that exact behaviour (P2.T1.S2 scoped it to reusing
+`_build_member_brief`'s existing fallback, nothing more). So on a real /fr-goal
+run today, `implement`/`implement-phase` dispatch records will carry `model: null`
+unless an operator's models.yaml happens to bind a tier literally named
+`from_phase` — expected, not a bug in this phase, but worth knowing before anyone
+reads a live run's dispatch records and expects a concrete model name there. Real
+per-phase tier resolution (PhaseHeader.tier feeding `from_phase`) is out of this
+spec's scope (see AGENTS.md's note that `FR_GOAL_PHASE_DISPATCH` is "not yet
+resolved from a real manifest end to end").
+
+Also: `fr plan edit --complete-phase 2` warned that acceptance row
+run-dispatch-holder-recorded is still not-implemented. Expected and left as-is,
+matching phase 1's precedent (same warning, same row, completion note left blank)
+— the row is shared across phases 1/2/5/6, and P6.T2's own no-refactor-because
+note already says the matrix status flips happen there via `fr acceptance
+set-status`, not per-phase.
