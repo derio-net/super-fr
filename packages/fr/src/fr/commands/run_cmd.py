@@ -36,6 +36,8 @@ from fr.commands.common import resolve_repo_root
 from fr.harness import HARNESSES, load_matrix
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
+from fr.isolation import sessions as _sessions
+from fr.isolation.types import IsolationError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -43,7 +45,7 @@ from fr.journal.model import (
     parse_journal,
     resolve_journal_read_path,
 )
-from fr.run.adopt import AdoptError, adopt_run, plan_phase_numbers
+from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
@@ -117,6 +119,33 @@ def _step_by_id(manifest: WorkflowManifest, step_id: str) -> Step:
     return step
 
 
+def _split_member_id(manifest: WorkflowManifest, step_id: str) -> tuple[str, str] | None:
+    """`(item, member_id)` if `step_id` is a grouped fan-out's COMPOSITE key
+    (`phase/1/implement-phase`), else `None`.
+
+    The composite is the display id and the `items`-map key — what `fr run
+    status` and `advance` both show — but it is deliberately NOT accepted in
+    `--step` (spec §3.B, journal `d2`). Accepting it and splitting it
+    internally was the issue's own option 2 and was declined: it would leave
+    two spellings of one id, and it would hide the `--item` flag from the
+    operator at the exact moment they need to learn it. So this function
+    exists to *recognise* the composite in order to teach the two flags —
+    never to resolve it.
+
+    Recognition is manifest-driven, not shape-of-string: the tail after the
+    last `/` must name a member of some `for_each` group. An id that merely
+    contains a slash is an ordinary not-found id and gets the ordinary
+    message.
+    """
+    if "/" not in step_id:
+        return None
+    item, _, tail = step_id.rpartition("/")
+    for step in manifest.steps:
+        if step.for_each and any(member.id == tail for member in step.steps):
+            return item, tail
+    return None
+
+
 def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | None]:
     """`(step, parent-group)` for a top-level OR member id — members share the
     flattened id space `check_workflow` validates, so resolving one must find
@@ -127,7 +156,16 @@ def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | N
         for member in step.steps:
             if member.id == step_id:
                 return member, step
-    raise RunStateError(f"step {step_id!r} not found in workflow {manifest.workflow!r}")
+    not_found = f"step {step_id!r} not found in workflow {manifest.workflow!r}"
+    split = _split_member_id(manifest, step_id)
+    if split is not None:
+        item, member_id = split
+        raise RunStateError(
+            f"{not_found}.\n"
+            "It is a grouped `for_each` member, which takes two flags:\n"
+            f"  --step {member_id} --item {item}"
+        )
+    raise RunStateError(not_found)
 
 
 def _unit_key(
@@ -156,16 +194,18 @@ def _unit_key(
             )
             raise typer.Exit(2)
         try:
-            phases = _group_phases(repo_root, state)
+            # (agentic, manual) since gh#496 — a `tag: manual` phase is never
+            # dispatched, so only the agentic list can name a unit key.
+            agentic, _manual = _group_phases(repo_root, state)
         except (RunStateError, AdoptError) as e:
             err_console.print(f"[red]{parent.id}: {e}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
-        expected = _expected_group_items(parent, phases)
+        expected = _expected_group_items(parent, agentic)
         key = f"{item}/{step.id}"
         if key not in expected:
             err_console.print(
                 f"[red]{key}: not a phase member of {parent.id!r} — expected "
-                f"phase/<n> for phases {phases} (from the recorded plan)[/red]"
+                f"phase/<n> for phases {agentic} (from the recorded plan)[/red]"
             )
             raise typer.Exit(2)
         return key
@@ -193,18 +233,82 @@ def _emitted_plan(state: RunState) -> str | None:
     return None
 
 
-def _group_phases(repo_root: Path, state: RunState) -> list[int]:
-    """Phase numbers the grouped fan-out iterates over — from the plan on
-    disk, the one source of which phases exist. Fail-closed: a group advanced
-    before its plan is recorded (or against an unparseable plan) names what
-    is missing instead of dispatching against a guessed phase list."""
+def _group_phases(repo_root: Path, state: RunState) -> tuple[list[int], list[int]]:
+    """`(agentic, manual)` phase numbers, from the plan on disk — the one
+    source of which phases exist.
+
+    **The filter lives here, above everything else** (#496, spec §3.D.3).
+    `_expected_group_items` is the single place that decides which units
+    exist, and BOTH of `_advance_group`'s refusals read that list: filter a
+    manual phase out any later and a `tag: manual` phase can still be the
+    `running` key an ALREADY RUNNING refusal names, or the unit a
+    `--redispatch` re-briefs.
+
+    The split keys on `tag` alone and never on completion. A ticked
+    front-loaded manual phase waits on nobody (review `r4-f1`) but is still
+    not work this run did, so it is recorded as skipped rather than done —
+    and keeping the predicate completion-free is what lets `advance` and
+    `fr run adopt` write identical markers without either parsing state.
+
+    Fail-closed: a group advanced before its plan is recorded (or against an
+    unparseable plan) names what is missing instead of dispatching against a
+    guessed phase list.
+    """
     plan_rel = _emitted_plan(state)
     if plan_rel is None:
         raise RunStateError(
             "cannot dispatch per-phase members — no plan recorded yet "
             "(resolve the step that emits `plan` first)"
         )
-    return plan_phase_numbers(repo_root, plan_rel)
+    tags = plan_phase_tags(repo_root, plan_rel)
+    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
+    manual = sorted(n for n, tag in tags.items() if tag == "manual")
+    return agentic, manual
+
+
+def _manual_items(manual: list[int]) -> dict[str, str]:
+    """The `phase/<n>: manual` markers for every phase the fan-out skipped.
+
+    Item granularity, in the group's own map, so a deliberate omission is
+    visible in `fr run status` beside everything that WAS dispatched — the
+    alternative (leave them out entirely) is how a skipped phase becomes
+    indistinguishable from a phase nobody noticed.
+    """
+    return {f"phase/{n}": MANUAL_ITEM for n in manual}
+
+
+def _item_phase(item: str) -> int | None:
+    """The phase number a `phase/<n>` item names, or None when it names
+    something else. Structural, not a cast: `--item` is operator input, so
+    `phase/four` and `spec/1` must fall through to the generic refusal rather
+    than raise."""
+    head, _, tail = item.partition("/")
+    return int(tail) if head == "phase" and tail.isdigit() else None
+
+
+def _group_done_line(step_id: str, expected: list[str], manual: list[int]) -> str:
+    """The one completion line for a grouped fan-out.
+
+    Printed from both places a group can complete — `_advance_group` (nothing
+    left to dispatch) and `_resolve_member` (the last member's outcome) — so
+    the count and the manual phases it names cannot drift between them.
+
+    The manual phases are named rather than merely counted: "6 members done"
+    over a 4-phase plan reads as an arithmetic bug until the line says which
+    phase was never dispatched and why. It does NOT say "trailing", though
+    the common case is: after review `r4-f1` a manual phase may legitimately
+    be front-loaded-and-already-complete instead, and deciding which from
+    here would be a second definition of "trailing" beside
+    `fr.plan_ops._trailing_manual_block`.
+    """
+    line = f"{step_id}: done ({len(expected)} members done"
+    if manual:
+        phases = ", ".join(f"phase {n}" for n in manual)
+        line += (
+            f"; {phases} `tag: manual`, never dispatched — the plan's own "
+            "steps and the PR are its record"
+        )
+    return line + ")"
 
 
 def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
@@ -234,7 +338,12 @@ def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
 def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     """Every `phase/<n>/<member>` key of a grouped fan-out, in dispatch
     order: phase-major, then member order — implement before review, per
-    phase, never the reverse."""
+    phase, never the reverse.
+
+    `phases` is `_group_phases`'s AGENTIC list: a manual phase produces no
+    expected key at all, so it is neither dispatchable, resolvable, nor
+    countable towards the group's completion.
+    """
     return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
 
 
@@ -1072,6 +1181,200 @@ def _build_member_brief(
     }
 
 
+def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:
+    """The exact `fr run resolve` command that records one grouped unit's
+    outcome — the two-flag form `--step <member> --item <head>` that
+    `_split_member_id` teaches when someone reaches for the composite.
+
+    One builder because two surfaces print it for the same act: `advance`
+    pre-empts the #501 error beside every dispatch brief, and (Phase 2) the
+    ALREADY RUNNING refusal names the command that clears it. Spelled
+    separately they would drift, and an operator who was shown two different
+    commands for one outcome has no way to tell which is current.
+
+    **`--state` is a CONCRETE value, never the alternation `done|failed`**
+    (review `r1-f1`). This string is printed under "resolve with:" and is
+    meant to be pasted. In every POSIX shell `|` is a pipe, so pasting
+    `--state done|failed` RUNS the resolve with `--state done` and then fails
+    with `command not found: failed` — exit 127 over a run whose state has
+    already changed. A line that reports failure while having done the thing
+    is the precise defect class this whole PR exists to remove, and the
+    existing operator-gate hint (`--state done`) already set the precedent.
+    A caller that needs to mention the other outcome says so in prose beside
+    the command, outside the pasteable span.
+
+    `item` is None for a TOP-LEVEL step, which has no `--item` to address —
+    the flag is simply omitted. One builder rather than two spellings for the
+    same act: the ALREADY RUNNING refusal (§3.A) prints this for both shapes,
+    and a second inline `f"fr run resolve ..."` is exactly how the two would
+    drift apart.
+    """
+    scope = f" --item {item}" if item is not None else ""
+    return f"fr run resolve {run_id} --step {member_id}{scope} --state {state}"
+
+
+def _already_running_refusal(
+    step_id: str,
+    subject: str,
+    at: str | None,
+    run_id: str,
+    member_id: str,
+    item: str | None,
+    held: DispatchRecord | None = None,
+) -> str:
+    """The #499 refusal, in one renderer for both call sites (spec §3.A).
+
+    `advance_cmd`'s top-level `agent` branch and `_advance_group`'s grouped
+    member differ only in whether the outstanding unit has an `--item`, so
+    they differ only in this function's last argument. Spelled separately,
+    the operator would eventually be shown two different texts for one
+    situation and have no way to tell which was current.
+
+    Both ways forward are named because both are legitimate: waiting is
+    almost always right, and `--redispatch` is the deliberate escape for a
+    genuinely lost agent. Neither pasteable command carries a shell
+    metacharacter (review `r1-f1`) — the `--state failed` alternative is
+    prose OUTSIDE the command, not an alternation inside it.
+    """
+    # A top-level step IS its own outstanding unit, so naming it twice
+    # ("plan: plan is ALREADY RUNNING") reads as a bug in the message. The
+    # group prefix exists to say WHICH group the unit belongs to; when there
+    # is no group there is nothing to prefix.
+    named = subject if subject == step_id else f"{step_id}: {subject}"
+    # HELD names the agent; RUNNING only names the clock. gh#503 and gh#519
+    # each built this refusal, one from the dispatch record and one from the
+    # `items` map, and the record is strictly the better witness: it knows WHO
+    # is holding the unit, not merely that something is. It is still optional,
+    # because a cursor adopted from disk, or written before the record existed,
+    # has no holder to name — and "ALREADY RUNNING (dispatched <ts>)" is the
+    # honest sentence in that case rather than a fabricated identity.
+    if held is not None:
+        who = _dispatch_holder_label(held)
+        head = f"[red]{named} is ALREADY HELD by {who}{_dispatch_descriptor_suffix(held)} "
+        head += f"(dispatched {held.dispatched}) — not yet returned.[/red]\n"
+    else:
+        head = f"[red]{named} is ALREADY RUNNING (dispatched {at}).[/red]\n"
+    return (
+        head
+        + "  Waiting on that agent — do NOT dispatch again.\n"
+        + f"  resolve it:      {_resolve_hint(run_id, member_id, item)}"
+        "   (or --state failed)\n"
+        f"  lost agent:      fr run claim {run_id} --step {member_id}"
+        + (f" --item {item}" if item else "")
+        + " --abandoned\n"
+        + f"  re-brief anyway: fr run advance {run_id} --redispatch"
+    )
+
+
+def _nothing_running_refusal(subject: str, detail: str, run_id: str) -> str:
+    """`--redispatch` with nothing outstanding (spec §3.A).
+
+    It exits 2 rather than quietly degrading into an ordinary `advance`: the
+    operator reaching for the flag believes an agent is running, and if none
+    is, the mental model is wrong and saying so is the whole point of §3.A.
+    `fr-goal`'s loop never passes the flag, so this strictness costs the
+    normal path nothing.
+
+    Two call sites, one renderer, for the same reason as
+    `_already_running_refusal`: `advance_cmd` catches the step that is not
+    running at all (including every `cli` step, which fr executes inline and
+    so is never `running`), `_advance_group` catches the group that is
+    running with every unit already resolved. `detail` is the only part that
+    differs.
+    """
+    return (
+        f"[red]{subject}: --redispatch, but nothing is running{detail}.[/red]\n"
+        "  --redispatch re-briefs a unit already dispatched; it never starts one.\n"
+        f"  advance normally: fr run advance {run_id}"
+    )
+
+
+def _manual_placement_preflight(repo_root: Path, state: RunState, step_id: str) -> None:
+    """Refuse a whole group whose plan mis-places a manual phase (spec §3.D.2).
+
+    The rule is one invariant — *no manual phase may be outstanding when an
+    agentic phase after it runs* — and `fr plan self-review` is its primary
+    gate, running as fr-goal's `plan-review` `kind: cli` step, where a `cli`
+    step's exit code is its verdict. This is the second enforcement point,
+    for the paths that never pass through the first: a run reached by
+    `fr run adopt`, or driven by a repo-authored shape with no plan-review
+    step, arrives at the fan-out with the plan unchecked.
+
+    It calls `fr.plan_ops._manual_placement_issues` — the authoring gate
+    ITSELF, not a re-implementation of it — so the two points share one
+    definition of "trailing" (`_trailing_manual_block`), one definition of
+    "outstanding", and one message. Spelled twice they would drift, and an
+    operator shown two different texts for one situation has no way to tell
+    which is current.
+
+    Silent when the plan is missing or unparseable: `_group_phases` has
+    already refused the advance for both, naming the cause, and a second
+    refusal here would only mask its message.
+    """
+    from fr.parser import PlanSchemaError, parse
+    from fr.plan_ops import _manual_placement_issues
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:  # pragma: no cover — `_group_phases` refused first
+        return
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError:  # pragma: no cover — `_group_phases` refused first
+        return
+    issues = [i for i in _manual_placement_issues(plan) if i.severity == "error"]
+    if not issues:
+        return
+    detail = "\n".join(f"  {issue.message}" for issue in issues)
+    err_console.print(
+        f"[red]{step_id}: this plan mis-places a manual phase — refusing to "
+        f"dispatch ANY of it.[/red]\n{detail}\n"
+        f"  re-check it with: fr plan self-review {plan_rel}",
+        # soft_wrap: the last line is a command meant to be pasted, and rich
+        # folds at width 80 whenever stderr is not a tty (`p1-f1`, `r1-f2`).
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
+def _print_member_dispatch(
+    step: Step, member: Step, item: str, state: RunState, resolved_tier: str | None
+) -> None:
+    """The three stdout lines a dispatched grouped unit produces, in the one
+    order that is safe to print them.
+
+    Extracted (P5.T2.S3) because the order is an INVARIANT with two separate
+    reasons behind it, and it had accumulated twelve lines of comment at the
+    tail of an already-long `_advance_group` — which is where a future editor
+    appending "just one more line" would never think to look:
+
+    1. **The JSON brief is last.** `run_cmd` treats it as the line a naive
+       `tail -1` parses off stdout (spec §3.B), so the resolve hint goes
+       BEFORE it, never after — the same ordering constraint the
+       gate-degradation notice in `advance_cmd` carries its own comment for.
+       Nothing printed before it may contain a `{`, or the tests' tolerant
+       `output[output.index("{"):]` lifts the wrong span (`p1-d1`).
+    2. **Every line is `soft_wrap=True`.** rich picks width 80 whenever stdout
+       is not a tty — exactly when a harness is piping it — and folding the
+       brief hands `tail -1` a fragment (`p1-f1`); folding the hint makes a
+       pasteable command unpasteable (`r1-f2`).
+
+    Taking `member` rather than its id keeps the dispatch key spelled once:
+    `item/member.id` is the `items`-map key, the display id and the hint's
+    two flags, and `_resolve_hint` takes (member, item) while
+    `_split_member_id` returns (item, member) — opposite orders that are
+    easy to splat into each other by accident.
+    """
+    console.print(f"{step.id}: dispatch brief ({item}/{member.id})", soft_wrap=True)
+    console.print(
+        f"  resolve with: {_resolve_hint(state.run, member.id, item)}   (or --state failed)",
+        soft_wrap=True,
+    )
+    console.print(
+        json.dumps(_build_member_brief(member, step, item, state, resolved_tier), sort_keys=True),
+        soft_wrap=True,
+    )
+
+
 def _advance_group(
     repo_root: Path,
     state: RunState,
@@ -1090,23 +1393,79 @@ def _advance_group(
     learned members) completes here rather than dispatching thin air.
     """
     try:
-        phases = _group_phases(repo_root, state)
+        agentic, manual = _group_phases(repo_root, state)
     except (RunStateError, AdoptError) as e:
         err_console.print(f"[red]{step.id}: {e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
-    expected = _expected_group_items(step, phases)
-    items = dict(record.items or {})
-    pending = next((key for key in expected if items.get(key) != "done"), None)
+    expected = _expected_group_items(step, agentic)
+    # #496 (spec §3.D.3): the manual markers are merged in HERE, above the
+    # running-check, because `items` is what every branch below reads and
+    # every save below writes — the completion path included. They are never
+    # in `expected`, so they cannot be dispatched, resolved or counted.
+    items = {**(record.items or {}), **_manual_items(manual)}
+    # #499 (spec §3.A): the pending-picker below is `!= "done"`, which cannot
+    # tell `running` from `pending` — so a second `advance` re-emitted a
+    # byte-identical brief for a unit already dispatched. A `running` key is
+    # the refusal's subject, and it wins over any later pending one: the
+    # group is serial by construction (`_resolve_member` refuses a second
+    # writer), so an outstanding unit is the only thing this step is doing.
+    running = next((key for key in expected if items.get(key) == "running"), None)
+    if running is not None and not redispatch:
+        # `_split_member_id` returns (item, member); `_resolve_hint` takes
+        # (member, item). Same two strings, opposite order — do not splat one
+        # into the other (phase 1, `p1-d1`).
+        item, _, member_id = running.rpartition("/")
+        err_console.print(
+            _already_running_refusal(
+                step.id,
+                running,
+                record.at,
+                state.run,
+                member_id,
+                item,
+                _held_record(record, running),
+            ),
+            # soft_wrap: the refusal's middle line is a command meant to be
+            # pasted, and rich folds at width 80 whenever stderr is not a tty
+            # — exactly when a harness captures it (`p1-f1`, `r1-f2`).
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if redispatch and running is None:
+        err_console.print(
+            _nothing_running_refusal(
+                step.id, " — every unit of this group is already resolved", state.run
+            ),
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # `--redispatch` re-briefs the OUTSTANDING unit and nothing else: never a
+    # different unit, never a reset to `pending`. Guarded above, so `running`
+    # is not None on that branch.
+    pending = (
+        running if redispatch else next((key for key in expected if items.get(key) != "done"), None)
+    )
     if pending is None:
+        # `_complete_step` copies the PRIOR record's items, so the manual
+        # markers have to be on the record before it runs or a group that
+        # completes here would lose them.
+        if items != (record.items or {}):
+            state = _with_step(state, step.id, record.model_copy(update={"items": items}))
         save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
-        console.print(f"{step.id}: done (all {len(expected)} phase members done)")
+        console.print(_group_done_line(step.id, expected, manual), soft_wrap=True)
         return
+    # Spec §3.D.2 point 2: the preflight, ONCE, before the first unit of this
+    # group is dispatched — `pending` is known and nothing has been saved yet.
+    # Defence in depth behind `fr plan self-review`, not a substitute for it:
+    # a plan reached via `fr run adopt`, or run under a repo-authored shape,
+    # can arrive here without the authoring gate ever having run.
+    if record.state != "running":
+        _manual_placement_preflight(repo_root, state, step.id)
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
     snaps = dict(state.accounting or {})
     snaps[pending] = _accounting_snapshot(repo_root, state, phase_n)
-    items = dict(record.items or {})
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
@@ -1119,19 +1478,13 @@ def _advance_group(
     # (`_dispatch_needs_open`).
     held = _held_record(record, pending)
     if held is not None:
-        if not redispatch:
-            _refuse_held(
-                step.id,
-                pending,
-                held,
-                run_id=state.run,
-                step_flag=member.id,
-                item_flag=item,
-            )
         record = _close_dispatch(record, pending, "abandoned")
         state = _with_step(state, step.id, record)
     needs_dispatch = _dispatch_needs_open(record, pending)
-    if record.state != "running" or record.items != items:
+    # `or redispatch`: on a re-dispatch neither the state nor the item map
+    # moves, so without it the record would keep the ORIGINAL dispatch time
+    # and the next ALREADY RUNNING refusal would name the wrong moment.
+    if redispatch or record.state != "running" or record.items != items:
         record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
         state = _with_step(state, step.id, record)
     if needs_dispatch:
@@ -1145,10 +1498,7 @@ def _advance_group(
         )
     save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
     resolved_tier = _phase_tier(repo_root, state, phase_n)
-    console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
-    console.print(
-        json.dumps(_build_member_brief(member, step, item, state, resolved_tier), sort_keys=True)
-    )
+    _print_member_dispatch(step, member, item, state, resolved_tier)
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
@@ -1183,12 +1533,56 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
     return None
 
 
+def _bind_session(workspace: Path, branch: str, session: str | None, harness: str) -> None:
+    """Attach `session` to the run's workspace — traceability only (#500, spec §3.C.1).
+
+    `fr run start` enters isolation itself, so before this every fr-goal
+    workspace reported `sessions=none` while sibling workspaces entered via
+    `fr isolation up` carried a uuid: the bind hook's verb regex is
+    start-anchored on `fr isolation (up|exec|down)`, which `fr run start`
+    could not match.
+
+    NON-FATAL by design. Bindings are traceability, not enforcement — the
+    `fr-isolation-required` edit gate reads the `.fr-isolation` marker and
+    never a binding — so a bind that fails must never cost the operator a
+    started run. It warns on stderr, naming the branch, and returns.
+
+    `sessions.attach` resolves its state through `_git_common_dir`, so this
+    works whether the run was born in the base clone's workspace or inside
+    the linked worktree.
+    """
+    if not session:
+        return
+    try:
+        _sessions.attach(workspace, branch, session, harness=harness)
+    except IsolationError as e:
+        # soft_wrap: an operator-facing line rich would otherwise fold at 80
+        # columns whenever stderr is not a tty — i.e. exactly when a harness
+        # captures it (journal p1-f1, r1-f2).
+        err_console.print(
+            f"[yellow]warning: could not bind session {session!r} to branch "
+            f"{branch!r}: {e}[/yellow]",
+            soft_wrap=True,
+        )
+        err_console.print(
+            f"  the run is started; bind it later with: fr isolation attach "
+            f"--session {session} --branch {branch} --harness {harness}",
+            soft_wrap=True,
+        )
+
+
 @run_app.command("start")
 def start_cmd(
     workflow: str = typer.Argument(..., help="Workflow shape name (resolved repo > shipped)."),
     branch: str = typer.Option(..., "--branch", help="Branch this run operates on."),
     run_id: str | None = typer.Option(
         None, "--run-id", help="Override the derived run id (default: date + sanitized branch)."
+    ),
+    session: str | None = typer.Option(
+        None, "--session", help="Bind this agent session to the run's workspace (#500)."
+    ),
+    harness: str = typer.Option(
+        "unknown", "--harness", help="claude | hermes | opencode | unknown (with --session)."
     ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
@@ -1226,7 +1620,13 @@ def start_cmd(
     try:
         workspace = ensure_run_workspace(repo_root, branch)
     except RunWorkspaceError as e:
-        err_console.print(f"[red]{e}[/red]")
+        # soft_wrap=True, like every other operator-facing refusal in this
+        # module (p1-f1, r1-f2). This message embeds the repository path, so
+        # rich's fold lands at a different word on every host — on a machine
+        # with long temp paths it broke `is not a linked git worktree` across a
+        # newline mid-phrase. A refusal an operator cannot read, or grep for,
+        # is a bug wherever it appears.
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if workspace.resolve() != repo_root.resolve():
@@ -1316,6 +1716,11 @@ def start_cmd(
         f"workspace: {workspace} — run every later `fr run` command from there",
         soft_wrap=True,
     )
+    # AFTER `save_run_state` (spec §3.C.1): a bind failure must not be able to
+    # leave a bound workspace with no run in it. The reverse order would make
+    # the failure look like "the session is here" while the cursor the session
+    # was bound for does not exist.
+    _bind_session(workspace, branch, session, harness)
 
 
 @run_app.command("adopt")
@@ -1371,12 +1776,20 @@ def adopt_cmd(
     if done:
         console.print(f"  already done: {', '.join(done)}")
     items = _fan_out_items(state)
-    if items:
-        complete = [k for k, v in items.items() if v == "done"]
+    # #496: a `tag: manual` phase is not outstanding work, it is work this run
+    # will never dispatch — counting it in the denominator says "one phase
+    # left to do" about a phase nothing will ever do. Named on its own line
+    # instead of hidden, for the same reason the cursor records it at all.
+    manual = sorted(k for k, v in items.items() if v == MANUAL_ITEM)
+    dispatched = {k: v for k, v in items.items() if v != MANUAL_ITEM}
+    if dispatched:
+        complete = [k for k, v in dispatched.items() if v == "done"]
         # Grouped fan-out keys (`phase/<n>/<member>`) count member outcomes,
         # not phases — label them honestly so "3/3" never reads as reviewed.
-        unit = "phase members" if any(k.count("/") >= 2 for k in items) else "phases"
-        console.print(f"  {len(complete)}/{len(items)} {unit} complete")
+        unit = "phase members" if any(k.count("/") >= 2 for k in dispatched) else "phases"
+        console.print(f"  {len(complete)}/{len(dispatched)} {unit} complete")
+    if manual:
+        console.print(f"  never dispatched (`tag: manual`): {', '.join(manual)}", soft_wrap=True)
     for note in notes:
         console.print(f"  {note}", soft_wrap=True)
     console.print(f"  advance it with: fr run advance {state.run}", soft_wrap=True)
@@ -1586,11 +1999,10 @@ def advance_cmd(
     redispatch: bool = typer.Option(
         False,
         "--redispatch",
-        help="Re-brief a unit that is ALREADY HELD: close its open dispatch "
-        "`abandoned` and append a fresh one. The deliberate escape for a "
-        "genuinely lost agent (gh-499) — the old holder stays in the unit's "
-        "list, which is the forensic trail. On a unit nobody holds this "
-        "changes nothing.",
+        help="Re-brief the unit that is already held: close its open dispatch "
+        "`abandoned` and append a fresh one (gh-499). The deliberate escape for "
+        "a genuinely lost agent — the old holder stays in the unit's list, which "
+        "is the forensic trail. Refuses when nothing is outstanding.",
     ),
 ) -> None:
     """Advance the cursor by one step.
@@ -1606,6 +2018,11 @@ def advance_cmd(
     any kind (gh-499, where an identical second brief read as an instruction
     to dispatch a second `fr-phase-executor` into the one worktree the first
     was already writing). `--redispatch` is the deliberate escape.
+    An `agent` step already `running` is REFUSED (#499, spec §3.A) rather
+    than re-briefed: fr-goal dispatches phase executors into one shared
+    isolation worktree, so a second brief means two writers in one tree.
+    `--redispatch` is the deliberate escape, and refuses in turn when
+    nothing is outstanding.
     """
     repo_root = resolve_repo_root()
     try:
@@ -1625,6 +2042,18 @@ def advance_cmd(
             f"[red]run {state.run!r} has no record for its cursor step "
             f"{state.cursor!r} — workflow {state.workflow!r} changed after "
             "`fr run start`; start a new run[/red]"
+        )
+        raise typer.Exit(2)
+
+    if redispatch and record.state != "running":
+        # Placed before every other branch, including the gate: a `blocked`,
+        # `pending`, `done` or `failed` step has no outstanding dispatch, and
+        # a `cli` step is never `running` at all — fr executes it inline — so
+        # this is also what keeps the flag from becoming a second way to run
+        # a command. Reported rather than silently downgraded (spec §3.A).
+        err_console.print(
+            _nothing_running_refusal(state.cursor, f" (the step is {record.state})", state.run),
+            soft_wrap=True,
         )
         raise typer.Exit(2)
 
@@ -1674,21 +2103,38 @@ def advance_cmd(
         if step.steps:
             _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
             return
+        # #499 (spec §3.A): the same rule as `_advance_group`'s, at the other
+        # call site. This sits AFTER the `_gate_pending` block on purpose — a
+        # gated step is `blocked`, never `running`, and its brief is how the
+        # operator's question gets asked, so the two must not interact.
+        if record.state == "running" and not redispatch:
+            err_console.print(
+                # subject == step_id and member_id == step_id: a top-level
+                # step is its own unit, and `item=None` drops `--item` from
+                # the resolve hint. Same renderer as the grouped call site.
+                _already_running_refusal(
+                    step.id,
+                    step.id,
+                    record.at,
+                    state.run,
+                    step.id,
+                    None,
+                    _held_record(record, _unit_key(repo_root, state, step, None, None)),
+                ),
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
         brief = _build_brief(step, state)
         key = _unit_key(repo_root, state, step, None, None)
         held = _held_record(record, key)
         if held is not None:
-            if not redispatch:
-                _refuse_held(
-                    step.id, key, held, run_id=state.run, step_flag=step.id, item_flag=None
-                )
             record = _close_dispatch(record, key, "abandoned")
             state = _with_step(state, state.cursor, record)
         needs_dispatch = _dispatch_needs_open(record, key)
-        if record.state != "running" or needs_dispatch:
-            if record.state != "running":
-                new_record = record.model_copy(update={"state": "running", "at": _now()})
-                state = _with_step(state, state.cursor, new_record)
+        if redispatch or record.state != "running" or needs_dispatch:
+            if redispatch or record.state != "running":
+                record = record.model_copy(update={"state": "running", "at": _now()})
+                state = _with_step(state, state.cursor, record)
             if needs_dispatch:
                 state = _open_dispatch(
                     state,
@@ -1783,8 +2229,39 @@ def _resolve_member(
     # here (cheap, and already proven readable) only to know when EVERY
     # expected key is done, which is a different question than "is this ONE
     # key valid".
-    expected = _expected_group_items(group, _group_phases(repo_root, state))
-    items = dict(grec.items or {})
+    try:
+        agentic, manual = _group_phases(repo_root, state)
+    except (RunStateError, AdoptError) as e:
+        err_console.print(f"[red]{group.id}: {e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    expected = _expected_group_items(group, agentic)
+    key = f"{item}/{member.id}"
+    if key not in expected:
+        # #496 (spec §3.D.3): a manual phase gets its own message BEFORE the
+        # generic one. "not a phase member — expected phase/<n> for phases
+        # [1,2,3]" reads as a bug in the phase list when phase 4 plainly
+        # exists in the plan; the reason it is absent is a deliberate
+        # omission, and the refusal has to say so.
+        if item is not None and _item_phase(item) in manual:
+            err_console.print(
+                f"[red]{key}: phase {_item_phase(item) if item else None} is `tag: manual` and is "
+                "deliberately never dispatched, so there is no outcome to "
+                "record.[/red]\n"
+                "  Its record is the plan's own steps plus the PR's "
+                '"unimplemented — operator pushes to this PR".',
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        err_console.print(
+            f"[red]{key}: not a phase member of {group.id!r} — expected "
+            f"phase/<n> for phases {agentic} (from the recorded plan)[/red]"
+        )
+        raise typer.Exit(2)
+    # The manual markers are `_advance_group`'s to write (a group can only be
+    # resolved after it was advanced, so they are already here); merged again
+    # only so a cursor written before #496 acquires them on its next resolve
+    # rather than completing with the omission unrecorded.
+    items = {**(grec.items or {}), **_manual_items(manual)}
     if items.get(key) == "done" and state_value == "done":
         err_console.print(f"[red]{key}: already recorded done[/red]")
         raise typer.Exit(2)
@@ -1821,7 +2298,7 @@ def _resolve_member(
         save_run_state(
             repo_root, _complete_step(updated, manifest, group.id, "done", emitted=merged_emitted)
         )
-        console.print(f"{group.id}: done (all {len(expected)} phase members done)")
+        console.print(_group_done_line(group.id, expected, manual), soft_wrap=True)
         return
     save_run_state(repo_root, updated)
     console.print(f"{member.id} {item}: done")
@@ -1919,7 +2396,11 @@ def resolve_cmd(
         emits_owner = step if parent is None or step.emits else parent
         emitted_map = _parse_emitted(emitted, repo_root, emits_owner)
     except (RunStateError, WorkflowError, AdoptError) as e:
-        err_console.print(f"[red]{e}[/red]")
+        # soft_wrap (review `r1-f2`): `_find_step`'s composite-id message ends
+        # in a flag pair the operator copy-pastes, and rich folds at width 80
+        # whenever stderr is not a tty — i.e. exactly when a harness captures
+        # it. Same reason every other hint in this module carries it.
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if parent is not None:

@@ -2170,6 +2170,12 @@ rows:
       the session row''s model. That live claim stays with opencode-subagent-dispatch,
       deliberately left at skipped (its scope correction is already in its own notes,
       finding r-s1) and is this plan''s manual phase 4.'
+  - id: run-advance-refuses-running
+    capability: Run state
+    acceptance: An operator re-entering the loop cold is told to wait rather than handed
+      a second dispatch brief for an agent that is still running.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
   - id: phase-header-fields-survive-phases-file
     capability: fr-goal subagent execution
     acceptance: Every PhaseHeader field an operator writes in a --phases-file survives
@@ -2381,6 +2387,14 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py
     status: ci
+    notes: Grouped member and top-level agent step both refuse re-dispatch with exit
+      2; --redispatch re-briefs only the outstanding unit and exits 2 when none is.
+  - id: run-resolve-teaches-item-flag
+    capability: Run state
+    acceptance: A grouped for_each member id copied from advance's output resolves,
+      or the failure teaches the two flags that do.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
     notes: 'Closed #499 in phase 4: fr run advance exits 2 on a unit whose dispatch
       record is still open, naming the holder and printing no brief (test_advance_refuses_a_held_unit_and_prints_no_brief,
       test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time, test_the_refusal_says_an_unclaimed_agent_when_nobody_claimed,
@@ -2399,6 +2413,51 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py
     status: ci
+    notes: Composite member id refused with the two flags spelled out; advance prints
+      the same command before the JSON brief, and the brief stays the last stdout line.
+  - id: run-start-binds-session
+    capability: Worktree traceability
+    acceptance: A workspace created by fr run start is attributable to the session that
+      started it, so fr isolation status can answer 'where is this session's work?'
+      for an fr-goal run.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_hooks_session_bind.py
+    status: ci
+    notes: Flag, hook and skill prose all landed; the hook case is the one that binds
+      with no agent cooperation, which is why a flag alone was not enough.
+  - id: plan-manual-phase-trailing
+    capability: Plan authoring
+    acceptance: A plan whose manual work an agentic phase would have to wait on is refused
+      at authoring, not discovered mid-run.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_ops.py
+    status: ci
+    notes: severity=error in self_review, which fr-goal runs as its plan-review cli
+      step, so a mis-shaped plan fails before phase 1 dispatches. depends_on checked
+      alongside position.
+  - id: run-manual-phase-never-dispatched
+    capability: Run state
+    acceptance: A manual phase is never offered to an agent, and the cursor still shows
+      it rather than hiding a deliberate omission.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_adopt.py
+    status: ci
+    notes: 'No brief is built for a manual phase on any path; the cursor records phase/<n>:
+      manual so a deliberate omission stays visible; advance and adopt write it identically.
+      The marker keys on tag alone, never on completion, so an already-complete front-loaded
+      manual phase is recorded manual too — the two writers agree without either parsing
+      state.'
     notes: 'Phase 3 shipped fr run claim --abandoned: it closes the record (returned/outcome
       abandoned) WITHOUT resolving the step, leaving the unit running so the next advance
       briefs it again (test_claim_abandoned_sets_returned_and_outcome, test_claim_abandoned_leaves_the_grouped_members_item_running,
