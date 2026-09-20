@@ -2694,3 +2694,53 @@ rows:
       nothing when two overlap. The attempt''s agent id is also the transcript filename,
       so selection becomes exact under any concurrency; the window stays as the fallback
       for unclaimed attempts only.'
+  - id: run-pickup-on-another-host
+    capability: Run cursor
+    acceptance: A run pushed mid-phase and picked up on another host shows the orphaned
+      holder, refuses a double dispatch, and recovers via --abandoned
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Operator''s question, and the spec''s first draft had no answer. The cursor
+      travels with the branch; transcripts, session bindings, the agent and uncommitted
+      work do not. The refusal must SAY the holder is from another session and cannot
+      be observed from here, or the operator waits on an agent that died with its host.
+      Live-only in any meaningful sense: two hosts.'
+  - id: run-cost-never-misattributed-across-sessions
+    capability: Run cursor
+    acceptance: An attempt dispatched from another session or host is never assigned
+      this session's subagent costs, and its cost shows as not observable
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'The time-window fallback is actively dangerous across sessions: a window
+      spanning another host''s open attempt can contain exactly one unrelated subagent
+      of THIS session, and gh#514''s select_dispatch would accept it. Each attempt records
+      its session; the window is allowed only when that session is the current one.'
+  - id: run-idle-reprompt-opencode
+    capability: Harness parity
+    acceptance: On OpenCode, an idle run is continued by re-injecting the next command
+      when the session goes idle
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Verified on the installed OpenCode 1.18.31: session.idle is in the SDK types
+      and /session/{id}/prompt_async is callable by a plugin''s client. Cannot BLOCK
+      a stop, only continue — a weaker tier, declared as such. Stays partial in parity.yaml
+      until a live run proves a plugin-originated prompt on idle executes (the gh#494
+      standard).'
+  - id: run-idle-guard-acts-once-per-position
+    capability: Harness parity
+    acceptance: The idle guard acts at most once per cursor position, so a failing advance
+      cannot trap a session in a loop
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: A guard that always blocks is a trap when advance keeps failing or the model
+      keeps stopping. Host-local memory of the last position acted on, plus Claude Code's
+      stop_hook_active as a second independent brake. Without this the never-wedges
+      claim is false in exactly the case that matters.

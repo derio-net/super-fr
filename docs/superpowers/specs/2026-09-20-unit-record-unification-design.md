@@ -125,6 +125,7 @@ class Attempt(BaseModel):              # was DispatchRecord, now carrying its ow
     agent_type: str | None = None
     harness: str | None = None
     model: str | None = None
+    session: str | None = None                 # harness session that dispatched it (§4.D.1)
     returned: str | None = None
     outcome: Literal["done", "failed", "abandoned"] | None = None
     estimate: ContextEstimate | None = None     # what fr assembled for THIS attempt
@@ -191,6 +192,38 @@ built, already tested.
 - `fr run status`'s accounting section (gh#514's `_print_accounting`, kept) renders per
   attempt, under its unit, beside the holder line. Totals sum attempts, so a redispatched
   unit's total finally includes the abandoned one.
+
+### 4.D.1 Stop, push, pick the run up on another host with another agent
+
+The operator's question, and the first draft had no answer. **The cursor travels with the
+branch. Nothing else does** — not the transcripts (`~/.claude/projects/…` is host-local), not
+the session binding (`~/.cache/fr/sessions/` is host-local), not the agent, and not any work
+the executor had not committed.
+
+gh#514's `measure_unit` finds the transcript from the *current process environment*, so it
+is session-local already: even on the SAME host, a new session cannot measure an attempt a
+previous session dispatched. And the time-window fallback is actively dangerous across
+sessions: host B resolves host A's open attempt at T2, the window `[T0, T2]` happens to
+contain exactly one subagent that host B's *own* session dispatched for something unrelated,
+and that stranger's cost is recorded against host A's attempt. Wrong, and plausible-looking.
+
+So every attempt records the **`session`** that dispatched it — fr derives it from its own
+environment when it opens the attempt, the same way it derives `harness` — and:
+
+- a transcript is looked up by **(session, agent)**, in the *recorded* session's directory,
+  not the current one. Same host, new session: found, measured. Another host: not there.
+- the window fallback is allowed **only when the attempt's session IS the current session**.
+  Otherwise the cost is `not observable from here` — never zero, never guessed, never
+  borrowed. No hostname is recorded: a missing session directory already says "elsewhere",
+  and a hostname in a committed cursor of a public repo is identity nobody needs.
+
+What the second host sees, in order: the phase is **held** (its attempt is open), so
+`advance` refuses — and says the holder was dispatched *from another session and cannot be
+observed from here*, so the operator is not left waiting on an agent that died with its
+host. Recovery is the designed one: `claim --abandoned` (or `advance --redispatch`), which
+re-briefs from the last **commit**; the orphaned attempt stays in the unit's history with its
+cost unobservable. The new session must be bound (`fr isolation up --branch … --session …`)
+for the idle guard to find the run at all.
 
 ### 4.E Evidence (decision u3) — folding in gh#517
 
@@ -286,21 +319,48 @@ Two readings of the one record, both in `fr run check`:
   #503's 11.5-hour executor, visible from fr instead of from the harness's private files.
   Reported, never a failure: fr cannot tell a long phase from a dead agent, and says so.
 
-A Claude Code **`Stop` hook**, `fr-run-idle-guard.sh`, runs `fr run check --idle` for the
-session's bound workspace (gh#500's session binding, already merged, is what makes the
-lookup possible) and blocks the stop with the next command when the run is idle. It stays
-silent in every legitimate case: a pending operator gate, a manual phase, a held unit (a
-turn that ends while a background executor works is *correct* on Claude Code), a failed
-step, a finished run, or no run at all. Fail-open on any error — a guard that wedges a
-session over its own bug is worse than the stop it prevents.
+**One harness-neutral predicate, thin per-harness adapters.** The first draft said
+"OpenCode and Hermes have no Stop hook". That was asserted, not checked — the same error
+gh#494 documents, where a parity row said `absent` for a reason that did not survive the
+binary. The operator supplied a survey of stop-like hooks across harnesses; per this repo's
+standard it is a **lead, not a fact**, so what could be checked on the authoring machine was:
 
-One wrinkle the hook must tolerate, noted rather than fixed here: the session binding
-file records `harness: "claude"` while `fr.harness.HARNESSES` says `"claude-code"` — two
-vocabularies for one fact, from two subsystems. The hook keys on `worktree` only, so it is
-unaffected; unifying the vocabularies is its own small issue.
+| harness | capability tier | basis |
+|---|---|---|
+| Claude Code | **block** — `Stop` hook returns `decision: "block"` + reason | known; exercised in the plan's hook phase |
+| OpenCode 1.18.31 | **re-prompt** — cannot block a stop, can continue the session | **verified installed:** `session.idle` event in the SDK types, and a `/session/{id}/prompt_async` endpoint a plugin's `client` can call |
+| Copilot CLI 1.0.84 | reportedly block (`agentStop`) | hooks system **verified installed** (`hooks` keyed by event; a user hook already exists here); the event's blocking semantics are not |
+| Codex CLI, Agy | reportedly block | not installed here — unverified |
+| Hermes | reportedly **observe** only (non-blocking stop events) | not installed here — unverified; the repo already registers `pre_tool_call` / `pre_llm_call` hooks on it |
 
-This is a new enforcement surface, so it owns a `parity.yaml` row: `enforced` on
-claude-code; `absent` on OpenCode and Hermes with a `scope_note` naming what each lacks.
+So the design splits in two:
+
+- **The predicate is fr's and is harness-neutral:** `fr run check --idle [--format json]`
+  exits 3 on an idle run and prints the next command. Every adapter calls it; none
+  re-derives it.
+- **Adapters are as strong as their harness allows.** Shipped in this PR: Claude Code
+  (**block**, `fr-run-idle-guard.sh`) and OpenCode (**re-prompt**, in `fr-opencode-plugin`:
+  on `session.idle`, if the predicate says idle, send the next command back into the
+  session). The OpenCode adapter stays `partial` in `parity.yaml` until a live run proves a
+  plugin-originated prompt on idle actually executes — the #494 standard. Hermes is
+  `absent` with a scope_note naming the observe-only lead; Codex and Copilot CLI are
+  `unsupported` today across the whole matrix (fr ships nothing for them), and their rows
+  gain a note that a block-tier adapter is ~20 lines once they are onboarded.
+
+Both shipped adapters find the run through the session binding (gh#500, already merged),
+stay silent in every legitimate case — a pending operator gate, a manual phase, a **held**
+unit (a turn that ends while a background executor works is *correct*), a failed step, a
+finished run, no run at all — and fail open on any error.
+
+**The loop breaker.** A guard that always blocks can trap a session: `advance` keeps
+failing, or the model keeps stopping, and the hook keeps refusing. (The operator's survey
+notes one harness ships a built-in cap on consecutive continuations for exactly this.) So
+the guard acts **at most once per cursor position**: it remembers, host-locally, the
+position it last acted on for this session, and lets the stop through if nothing has moved
+since. Claude Code also passes `stop_hook_active` when a continuation was itself caused by
+a stop hook; the guard honours it as a second, independent brake.
+
+This is a new enforcement surface, so it owns a `parity.yaml` row with the states above.
 
 ### 4.H The half no artifact fixes
 
@@ -329,8 +389,9 @@ is explicit about which is which:
   back the next command.
 
 The two compose: prose lowers how often the guard fires; the guard catches what prose
-misses. On OpenCode and Hermes there is no Stop hook, so **prose is all there is**, and the
-`parity.yaml` row says `absent` rather than implying parity. This session is its own
+misses. Where a harness has no shipped adapter — Hermes today — **prose is all there is**,
+and the `parity.yaml` row says so rather than implying parity; on OpenCode the adapter
+continues the session instead of blocking the stop, which is weaker and is declared as such. This session is its own
 evidence: it ran in `explanatory` style and ended turns on reports at several points that
 were not operator gates.
 
@@ -365,7 +426,7 @@ writes a v5 cursor directly. gh#517's `fr journal check --require-reviews` remai
 own worktree the first time that branch meets this version. Checked on 2026-09-20: no other
 open branch bumps the `run` kind, so no third version collision is pending.
 
-**The Stop guard only reaches session-bound runs.** It finds the run through gh#500's
+**The idle guard only reaches session-bound runs.** It finds the run through gh#500's
 session binding. Runs started before that binding existed show `sessions=none` and are
 invisible to it — silent, by the fail-open rule. It protects runs started after this lands,
 or attached by hand with `fr isolation attach`.
@@ -430,7 +491,7 @@ archive an unmigrated one.
 
 ## 7. Acceptance rows
 
-Nineteen rows, grouped by what could go wrong. A rewrite this size is pinned by what it
+Twenty-three rows, grouped by what could go wrong. A rewrite this size is pinned by what it
 could **regress** at least as much as by what it adds — the operator's call, and the audit
 it prompted found a chain-breaking flaw and an unmentioned writer before any code existed.
 
@@ -448,6 +509,7 @@ it prompted found a chain-breaking flaw and an unmentioned writer before any cod
 | id | claim |
 |---|---|
 | `run-adopted-cursor-refuses-double-dispatch` | an adopted cursor with no attempts still refuses to re-brief a running unit |
+| `run-pickup-on-another-host` | a run pushed mid-phase and picked up on another host shows the orphaned holder, refuses a double dispatch, and recovers via `--abandoned` |
 | `run-adopt-writes-unit-records` | `fr run adopt` writes a current cursor; complete phases are done units with no invented attempts |
 
 **Cost**
@@ -457,6 +519,7 @@ it prompted found a chain-breaking flaw and an unmentioned writer before any cod
 | `run-unit-cost-per-attempt` | a redispatched unit keeps every attempt's cost; totals include abandoned attempts |
 | `run-abandoned-attempt-is-measured` | an abandoned attempt's spend is measured when it is abandoned |
 | `run-cost-attributed-by-agent-id` | a claimed attempt's cost is selected by its agent id, so overlapping dispatches neither lose nor swap measurements |
+| `run-cost-never-misattributed-across-sessions` | an attempt dispatched from another session or host is never assigned this session's subagent costs; its cost shows as not observable |
 | `run-status-cost-under-holder` | status shows each attempt's cost beneath its holder, estimate and measurement never blurred |
 
 **Evidence**
@@ -474,6 +537,8 @@ it prompted found a chain-breaking flaw and an unmentioned writer before any cod
 |---|---|
 | `run-idle-detected` | `fr run check --idle` separates an advanceable-and-idle run from every legitimate stop |
 | `run-idle-stop-guard` | on Claude Code, ending a turn on an idle run is blocked with the next command |
+| `run-idle-reprompt-opencode` | on OpenCode, an idle run is continued by re-injecting the next command on `session.idle` |
+| `run-idle-guard-acts-once-per-position` | the guard acts at most once per cursor position, so a failing `advance` cannot trap a session in a loop |
 | `run-idle-guard-allows-waiting` | ending a turn while a dispatched executor works is allowed |
 | `run-idle-guard-never-wedges` | the guard is silent with no bound run and fails open on any fr error |
 | `run-stalled-reported-not-failed` | a unit held past the threshold is reported with its age, never failed |
