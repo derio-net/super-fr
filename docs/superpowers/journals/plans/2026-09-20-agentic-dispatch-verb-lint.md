@@ -342,3 +342,20 @@ Two practical notes for the next editor:
 2. Render the verification probe to the scratchpad, not over the committed page. If the probe is NOT byte-identical you still have the committed page intact to diff against, which is the whole point of doing the check first.
 
 After the real edit the page diff was exactly 5 added / 1 removed lines, all of them the new sentence and its rewrap — which is the outcome the byte-identity check buys you.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4t1 created=2026-09-20T17:17:15 phase=4 -->
+### no-refactor-p4t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+P4.T1 is a single step and produces no code: three fr acceptance set-status invocations that rewrite three rows in place and regenerate the three committed reports. There is nothing to clean up — the row shape is schema-validated by the CLI, the reports are generated, and fr acceptance check (exit 0, 127 rows OK) is the quality gate for the whole task.
+
+One thing WAS redone rather than refactored, and is worth naming because it is the failure class this repo cares about: the first set-status on goal-dispatch-lint-precision cited a test called test_the_pattern_set_scores_zero_even_on_ticked_steps, which does not exist. The real name is test_the_patterns_score_zero_on_every_corpus_step_ticked_or_not. fr acceptance check would NOT have caught it — check validates the --level refs (file paths, fragments stripped) and never reads prose notes, so a fabricated test name in a notes field passes every gate in the repo. Caught by grepping the names back out of the test file before moving on, which is the same grep-the-token-back habit discovery 6a35a818840e recommends for prose contracts. Re-ran set-status with the correct name (ci -> ci, notes replaced) rather than editing YAML.
+
+<!-- fr:journal kind=finding scope=plan id=ebfd1af6071a-resolved created=2026-09-20T17:17:32 phase=4 state=fixed resolves=ebfd1af6071a -->
+### ebfd1af6071a-resolved · finding [fixed] · resolves ebfd1af6071a: Phase 2's two acceptance rows are still not-implemented — phase 4 owes the flip (phase 4)
+
+P4.T1 ran set-status on both rows. goal-agentic-dispatch-purity: not-implemented -> ci, --level unit=super-fr:tests/unit/test_v2_plan_ops.py, notes citing ::test_self_review_errors_on_dispatch_verb_in_agentic_step and ::test_plan_self_review_cli_exits_1_and_names_both_escapes. goal-dispatch-lint-precision: not-implemented -> ci, --level unit=super-fr:tests/unit/test_dispatch_lint_corpus.py, notes citing ::test_the_dispatch_gate_scores_zero_on_this_repos_own_plans (re-measured live at 82 plans / 2113 agentic steps / 0 gate hits / 0 raw pattern hits), plus the ticked-step and corpus-floor siblings. fr acceptance check: 127 rows OK, exit 0, which also verified the three regenerated reports. The finding was right to defer: the flip needed evidence refs and a reason, both of which only existed once phases 2-3 had shipped.
+
+<!-- fr:journal kind=finding scope=plan id=6325b88c63f3-resolved created=2026-09-20T17:17:39 phase=4 state=fixed resolves=6325b88c63f3 -->
+### 6325b88c63f3-resolved · finding [fixed] · resolves 6325b88c63f3: Phase 3's acceptance row goal-executor-refuses-tick is still not-implemented — phase 4 owes the flip, refs below (phase 4)
+
+P4.T1 ran set-status on goal-executor-refuses-tick: not-implemented -> SKIPPED, not ci, with --level unit=super-fr:tests/unit/test_skill_tokens.py. The finding asked for honesty in the notes and got it verbatim: the notes say the two token tests pin that the contract is PRESENT on both surfaces, that they cannot show an executor obeyed it, that the runtime behaviour is agent-side and not unit-testable, that the only demonstration would be a live run against a plan the new lint now refuses to let anyone author, and that on Hermes the prose IS the whole enforcement. Backfill owed is stated explicitly rather than implied. Row moved to skipped so the acceptance report keeps warning about it — legible debt, which is what the finding asked for instead of a green claim.

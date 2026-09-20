@@ -149,14 +149,38 @@ state:
         list rather than an interruption. No refactor beyond that: the change is four
         wrapped lines of prose with no structure to clean up.'
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:16:49+00:00'
+      note: |-
+        Full CI gate, real output, all nine commands.
+
+        1) uv run ruff format packages/ tests/    -> '362 files left unchanged'
+        2) uv run ruff check packages/ tests/     -> 'All checks passed!'
+        3) uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+           -> 'Success: no issues found in 138 source files'
+        4) uv run pytest (FULL, with coverage — not --no-cov)
+           -> 'Required test coverage of 75% reached. Total coverage: 91.78%'
+           -> '3 failed, 3334 passed, 80 skipped in 218.06s (0:03:38)'
+           The three failures are EXACTLY the three journalled as pre-existing in finding 5661437b7bff, same identity, no additions:
+             FAILED tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused
+             FAILED tests/unit/test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused
+             FAILED tests/unit/test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable
+           Host-dependent (rich hard-wraps the asserted substring inside CliRunner; a shipped manifest is discoverable where the third test expects none), not regressions: 'git diff --stat main...HEAD -- packages tests' attribution is in 5661437b7bff and pre-existing-red-root-causes.
+           Passed count moved 3145 -> 3334 across phases 1-3; failed stayed 3.
+        5) uv run fr validate artifacts   -> '33 artifact(s) checked — all structurally valid.' exit 0
+        6) uv run fr acceptance check     -> 'acceptance matrix check: 127 rows OK ({ci: 104, skipped: 19, not-implemented: 4})' exit 0
+        7) uv run fr harness parity --check -> 'harness parity: declared matrix agrees with the registration files' exit 0
+        8) uv run python scripts/sync-opencode.py --check -> '.opencode/ mirrors are in sync.' exit 0
+           Also ran the THIRD mirror the plan does not name (discovery 3ba26d5efb5d): uv run python scripts/sync-hermes.py --check -> exit 0
+        9) uv run --no-project python scripts/bump-version.py --check -> 'ok — versions agree' (4.9.0 everywhere) exit 0
     P4.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:17:05+00:00'
+      note: |-
+        uv run fr plan self-review docs/superpowers/plans/2026-09-20-agentic-dispatch-verb-lint -> "self-review passed", EXIT=0. No detector fix needed; the head anchor held exactly as the step predicted.
+
+        Checked that the pass is real rather than a skip: this plan contributes 25 agentic steps to the corpus (23 ticked at the time of measurement), and re-running _DISPATCH_RES over all 25 with NO exemptions — not the agentic-only one, not the ticked one — gives 0 raw pattern hits. So this plans own dispatch-heavy step text is clean on the PATTERNS themselves, not merely exempt from the gate. A "passed" that the gate had silently skipped would have been the hollow green this whole plan exists to prevent.
   completion:
-    at: null
+    at: '2026-09-20T15:17:58+00:00'
     note: null
     observed_prs: []
