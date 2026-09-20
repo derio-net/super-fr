@@ -247,3 +247,28 @@ Behavioural note carried forward: with --require-reviews, open findings no longe
 Post-fix: 56 tests in test_journal_cmd.py pass, ruff clean, mypy clean over 138 source files, and all four mutations of the new fixes are caught by exactly their intended test.
 
 Assessment: phase 3 proceeds. r-p2-f1 was fixed BEFORE dispatching it, deliberately - phase 3 makes this gate cursor-enforced, and after that a vacuous pass is invisible.
+
+<!-- fr:journal kind=discovery scope=plan id=5bf93baa6de9 created=2026-09-20T17:31:53 phase=3 -->
+### 5bf93baa6de9 · discovery · Adding journal-check drifts this very run, as designed — verbatim message (phase 3)
+
+Ran the two commands P3.T2.S1 names against this run
+(2026-09-20-feat-journal-require-reviews), which was started before
+journal-check existed in the fr-goal manifest.
+
+`uv run fr run status 2026-09-20-feat-journal-require-reviews` still reports
+normally (status does not re-resolve/compare the manifest's step list, only
+the recorded cursor) — cursor: implement, phase/3/implement-phase: running.
+
+`uv run fr run advance 2026-09-20-feat-journal-require-reviews` exits 2 with:
+
+    run '2026-09-20-feat-journal-require-reviews' was started against a
+    different version of 'fr-goal@1' (added: journal-check). A run's cursor
+    is a position in a step list; start a new run rather than advancing this
+    one against a list it was never computed for.
+
+This is exactly the drift `_check_step_drift` (run_cmd.py:258) is designed
+to raise, and confirms the spec's claim (§C / D3): landing journal-check in
+the shipped shape strands every run started against the pre-existing
+step list, on purpose — recovered via `fr run adopt <plan-dir> --run-id
+<fresh>`, which is deliver's (phase 6's) job, not this phase's. Left the run
+stranded as instructed; did not run resolve/adopt/start.
