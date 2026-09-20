@@ -658,6 +658,18 @@ class LocalWorktreeDevcontainerTarget:
         # itself a hazard, not a pass: the #354 invariant ("a failed query is
         # not evidence of absence") applied to the network call — offline
         # defers a reap, it never permits a wrong one.
+        # A repo with NO `origin` remote at all is a different thing from a
+        # fetch that failed, and conflating them made `down` unusable there
+        # (phase-2 review f3). There is no remote for the branch to be behind,
+        # so the content question is unanswerable AND meaningless; and nothing
+        # unrecoverable is at stake, because `git worktree remove` leaves the
+        # branch and its commits in the repo (phase-1 review f2) while guard 2
+        # above still covers the uncommitted work that genuinely has no object.
+        # Refusing here would mean a local-only repo could only ever be reaped
+        # with --force — the one lever an agent may not reach for on its own
+        # (decision d3). Local check, no network.
+        if self.run(["git", "remote", "get-url", "origin"], cwd=state.worktree).returncode != 0:
+            return None
         default = self._resolve_default_branch()
         fetch = self.run(["git", "fetch", "origin", default], cwd=state.worktree)
         if fetch.returncode != 0:
@@ -680,7 +692,31 @@ class LocalWorktreeDevcontainerTarget:
         # recompute a PR state the caller is already holding — and then discard
         # `verified`, which the PR-less merged-by-content path can never
         # satisfy anyway. Do the two steps this guard actually needs directly.
-        result = branch_changes_present(self.run, state.worktree, state.branch, f"origin/{default}")
+        # TOTAL, never raising (phase-2 review f4): `branch_changes_present`
+        # raises IsolationError when `git merge-base` fails (unrelated
+        # histories, a base ref that vanished between the fetch and here).
+        # A guard that raises is worse than one that refuses — `_gc_one`'s
+        # `if dry_run:` arms sit OUTSIDE their `try`, so an exception escaping
+        # here aborts the whole host-wide sweep, breaking gc's documented
+        # "one failed workspace never aborts the sweep" invariant. Unknown
+        # state is not "safe to reap"; it is `unverifiable`, which phase 3
+        # classifies as a skip. Mirrors `_merged_by_content`'s own
+        # `except Exception: return False`.
+        try:
+            result = branch_changes_present(
+                self.run, state.worktree, state.branch, f"origin/{default}"
+            )
+        except Exception as e:
+            return ReapHazard(
+                kind="unverifiable",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"could not be compared with origin/{default} ({e})",
+                    [],
+                    "Check that the branch and origin/"
+                    f"{default} share history, then re-run `fr isolation down`.",
+                ),
+            )
         if result.missing:
             return ReapHazard(
                 kind="unlanded-content",

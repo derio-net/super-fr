@@ -1297,6 +1297,64 @@ def test_down_dirty_worktree_message_names_branch_path_and_force_escape(
     assert "uncommitted changes do not" in detail
 
 
+def test_down_reaps_a_clean_worktree_in_a_repo_with_no_origin_remote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase-2 review f3, real git, docker-less (HostWorktreeTarget).
+
+    A repo with NO `origin` is not a failed fetch. `fr isolation up` supports
+    this case deliberately — it warns "no origin remote — basing <branch> on
+    local HEAD" and proceeds — so `down` refusing it forever would strand a
+    whole class of repo behind --force, the one lever decision d3 says an
+    agent may not reach for on its own. Nothing unrecoverable is at stake
+    either: `git worktree remove` leaves the branch and its commits in the
+    repo (phase-1 review f2), and guard 2 still covers uncommitted work.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    assert subprocess_runner(["git", "remote", "get-url", "origin"], cwd=repo).returncode != 0, (
+        "fixture precondition: this repo must have no origin remote"
+    )
+
+    target = HostWorktreeTarget(repo, runner=subprocess_runner)
+    st = target.up(None, "feat/no-origin")
+    assert st.worktree.is_dir()
+
+    assert target._reap_hazard(st) is None
+    target.down(st, force=False)  # the point: no --force needed
+    assert not st.worktree.exists()
+
+
+def test_reap_hazard_never_raises_when_the_content_comparison_blows_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Phase-2 review f4. `branch_changes_present` raises IsolationError on
+    # unrelated histories. A guard that RAISES is worse than one that refuses:
+    # `_gc_one`'s `if dry_run:` arms sit outside their `try`, so an exception
+    # escaping here would abort the entire host-wide sweep (phase 3 calls
+    # _reap_hazard from exactly there). Unknown state must become an
+    # `unverifiable` hazard, which gc classifies as a skip.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+
+    def _boom(*_args: object, **_kwargs: object) -> object:
+        raise IsolationError("no merge-base for origin/dev and feat/x — unrelated histories?")
+
+    monkeypatch.setattr("fr.isolation.local.branch_changes_present", _boom)
+
+    hazard = target._reap_hazard(st)
+    assert hazard is not None
+    assert hazard.kind == "unverifiable"
+    assert "unrelated histories" in hazard.detail
+
+    # And the same through the live path: refuse, do not raise something gc
+    # would misfile as a teardown failure.
+    with pytest.raises(ReapRefused):
+        target.down(st, force=False)
+    assert _worktree_remove_calls(runner) == []
+
+
 def test_down_dirty_worktree_message_caps_the_listed_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

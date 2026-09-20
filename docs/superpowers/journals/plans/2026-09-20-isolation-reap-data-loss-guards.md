@@ -149,3 +149,13 @@ own docs/examples use) when other agents may be running tests concurrently
 on shared infrastructure, and don't chase a "not a git repo" / directory-
 identity failure as a code regression without first checking for another
 pytest process sharing the same basetemp.
+
+<!-- fr:journal kind=finding scope=plan id=f3 created=2026-09-20T14:05:31 phase=2 state=fixed -->
+### f3 · finding [fixed] · The content guard made a repo with NO origin remote un-reapable without --force (phase 2)
+
+`git fetch origin <default>` exits 128 in a repo with no origin remote, which the guard read as kind=unverifiable — so every `down(force=False)` there refused, forever. This is not hypothetical: `fr isolation up` supports remote-less repos deliberately and says so ('WARNING: no origin remote — basing <branch> on local HEAD'). It is also the root cause of phase 2's four-file fixture churn — the fixtures were made to grow real origins because the guard had made no-origin repos un-reapable; symptom, not cause. And the only way out was --force, the one lever decision d3 forbids an agent from reaching for unprompted. Fixed: a local `git remote get-url origin` (no network) distinguishes 'no remote configured' — no remote to be behind, so no content hazard; the branch and its commits survive a worktree removal per f2, and guard 2 still covers uncommitted work — from 'fetch failed', which stays unverifiable. Regression test drives HostWorktreeTarget with real git, docker-less.
+
+<!-- fr:journal kind=finding scope=plan id=f4 created=2026-09-20T14:05:32 phase=2 state=fixed -->
+### f4 · finding [fixed] · _reap_hazard could raise, and phase 3 would have let that abort the whole gc sweep (phase 2)
+
+`branch_changes_present` raises IsolationError when `git merge-base` fails (unrelated histories, or a base ref that vanished between the fetch and the compare), and _reap_hazard did not catch it. Today that is only a confusing message. In phase 3 it becomes a real bug: the plan has phase 3 call _reap_hazard from `_gc_one`'s `if dry_run:` arms, and those arms sit OUTSIDE their `try` (local.py:865 and :889, verified) — so an escaping exception aborts the entire host-wide sweep, breaking gc's documented invariant that one failed workspace never aborts it. Fixed at the source: the content comparison is wrapped and any exception becomes kind=unverifiable, mirroring _merged_by_content's own `except Exception: return False`. A guard that raises is worse than one that refuses. Phase 3 no longer has to remember this.
