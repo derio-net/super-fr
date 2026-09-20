@@ -68,18 +68,35 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:17:07+00:00'
+      note: 'Added 4 tests to test_run_cli.py: member brief resolves tier (standard)
+        with tier key staying from_phase; resolved_tier None when phase has no tier;
+        group-step _build_brief carries no resolved_tier key; confirmed test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields
+        still passes untouched (exercises _build_brief on a flat agent step). RED:
+        2 new tests fail with KeyError: ''resolved_tier'' as expected.'
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:17:56+00:00'
+      note: '_build_member_brief gains resolved_tier: str | None param, emitted as
+        resolved_tier key; docstring rewritten to explain member-only rationale (D5).
+        _advance_group reads the phase''s tier off the already-parsed plan (parse()
+        reused from fr.parser, same pattern as _accounting_snapshot), degrading to
+        None on PlanSchemaError/OSError. _build_brief left untouched. All 132 tests
+        in test_run_cli.py pass (GREEN), including the 2 new tests from S1 and the
+        exhaustive-echo test unchanged.'
     P3.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:18:47+00:00'
+      note: 'Extracted _phase_tier(repo_root, state, phase_n) -> str | None beside
+        _group_phases: fail-soft (None on no recorded plan, PlanSchemaError, OSError),
+        docstring contrasts its fail-soft stance with _group_phases''s fail-closed
+        one and mirrors _accounting_snapshot''s rationale. _advance_group now a one-line
+        call. uv run pytest tests/unit/test_run_cli.py tests/unit/test_run_adopt.py
+        tests/unit/test_run_provenance.py -q --no-cov: 181 passed. ruff format: 363
+        files unchanged. ruff check: all checks passed. mypy packages/fr/src packages/fr-dispatch/src
+        packages/fr-vk/src packages/fr-cncd/src: no issues in 138 files.'
   completion:
-    at: null
+    at: '2026-09-20T12:24:35+00:00'
     note: null
     observed_prs: []
