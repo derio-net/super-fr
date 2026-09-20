@@ -98,13 +98,16 @@ state:
       ticked_at: null
       note: null
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:58:58+00:00'
+      note: 'GREEN: an agentic phase naming a manual phase in depends_on is an error
+        whatever the positions; the reverse direction stays legal (pinned). 15 passed.'
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:00:02+00:00'
+      note: 'REFACTOR: lifted both checks out of self_review into _manual_placement_issues(plan),
+        matching the file''s existing _workflow_issues/_skeleton_issues/_refactor_issues
+        shape; one pass, two distinct messages (POSITION and DEPENDENCY). 15 passed.'
     P4.T3.S1:
       state: ' '
       ticked_at: null

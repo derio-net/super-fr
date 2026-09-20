@@ -334,3 +334,34 @@ def test_trailing_manual_block_covers_an_all_manual_plan(tmp_path):
     plan_dir = _shaped_plan(tmp_path, [(1, "manual", ()), (2, "manual", ())])
 
     assert _trailing_manual_block(parse(plan_dir)) == {1, 2}
+
+
+def test_self_review_errors_when_an_agentic_phase_depends_on_a_manual_one(tmp_path):
+    """Position alone is not the invariant (spec 3.D.1).
+
+    1,2,3 agentic + 4 trailing manual is a VALID *shape*, so the position
+    rule is silent — but phase 2 declaring `depends_on: [4]` reintroduces
+    the hazard by other means: phase 2 cannot start until a human acts.
+    """
+    plan_dir = _shaped_plan(
+        tmp_path,
+        [(1, "agentic", ()), (2, "agentic", (4,)), (3, "agentic", ()), (4, "manual", ())],
+    )
+
+    issues = _placement_issues(plan_dir)
+
+    assert len(issues) == 1, [str(i) for i in issues]
+    assert issues[0].severity == "error"
+    assert "phase 2" in issues[0].message
+    assert "4" in issues[0].message
+
+
+def test_self_review_allows_a_manual_phase_depending_on_an_agentic_one(tmp_path):
+    """The other direction stays legal: a trailing manual phase may declare
+    backward deps on the agentic work it collects."""
+    plan_dir = _shaped_plan(
+        tmp_path,
+        [(1, "agentic", ()), (2, "agentic", ()), (3, "manual", (1, 2))],
+    )
+
+    assert _placement_issues(plan_dir) == []

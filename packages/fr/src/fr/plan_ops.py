@@ -984,30 +984,7 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # of the plan, so it can be decided before anything is dispatched —
     # fr-goal runs this as its `plan-review` cli step, whose exit code is
     # the verdict, so a mis-shaped plan fails before phase 1 ever leaves.
-    ordered = sorted(plan.phases, key=lambda p: p.phase.number)
-    trailing = _trailing_manual_block(plan)
-    for idx, phase in enumerate(ordered):
-        n = phase.phase.number
-        if phase.phase.tag != "manual" or n in trailing:
-            continue
-        if plan_locally_complete(phase):
-            continue
-        after = next(
-            (p.phase.number for p in ordered[idx + 1 :] if p.phase.tag == "agentic"),
-            None,
-        )
-        issues.append(
-            ReviewIssue(
-                severity="error",
-                message=(
-                    f"phase {n} is `tag: manual` but is neither in the plan's "
-                    f"trailing manual block nor already complete, so agentic "
-                    f"phase {after} would run while a human is still owed work. "
-                    f"Move phase {n} to the end of the plan, or tick its steps "
-                    f"(the operator's go) before the run reaches phase {after}."
-                ),
-            )
-        )
+    issues.extend(_manual_placement_issues(plan))
 
     # The plan's declared workflow shape (spec §4.A.1): it must resolve,
     # and it must be a valid shape. Both are errors — dispatch reads this
@@ -1074,6 +1051,66 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
         )
 
     return issues
+
+
+def _manual_placement_issues(plan: Plan) -> list[ReviewIssue]:
+    """Where a manual phase may sit (#496, 2026-09-20 spec §3.D.1).
+
+    One invariant — *no manual phase may be outstanding when an agentic
+    phase after it runs* — with two ways to break it, so one pass over the
+    phases and two distinct `severity="error"` messages:
+
+      POSITION    a manual phase that is neither in the trailing manual
+                  block nor already `plan_locally_complete`, with agentic
+                  work still to come after it.
+      DEPENDENCY  an agentic phase whose `depends_on` names a manual phase,
+                  whatever the two positions — position alone is not the
+                  invariant, and a *trailing* manual phase reintroduces the
+                  hazard the moment something agentic waits on it.
+
+    The reverse dependency direction is deliberately legal: a trailing
+    manual phase may declare backward deps on the agentic work it collects.
+    """
+    out: list[ReviewIssue] = []
+    ordered = sorted(plan.phases, key=lambda p: p.phase.number)
+    trailing = _trailing_manual_block(plan)
+    manual_numbers = {p.phase.number for p in ordered if p.phase.tag == "manual"}
+    for idx, phase in enumerate(ordered):
+        n = phase.phase.number
+        if phase.phase.tag == "manual":
+            if n in trailing or plan_locally_complete(phase):
+                continue
+            after = next(
+                (p.phase.number for p in ordered[idx + 1 :] if p.phase.tag == "agentic"),
+                None,
+            )
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} is `tag: manual` but is neither in the plan's "
+                        f"trailing manual block nor already complete, so agentic "
+                        f"phase {after} would run while a human is still owed work. "
+                        f"Move phase {n} to the end of the plan, or tick its steps "
+                        f"(the operator's go) before the run reaches phase {after}."
+                    ),
+                )
+            )
+            continue
+        for dep in sorted(set(phase.phase.depends_on) & manual_numbers):
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} is agentic but declares depends_on phase {dep}, "
+                        f"which is `tag: manual` — an agentic phase must never wait "
+                        f"on a human, whatever the two positions. Drop the dependency "
+                        f"from phase {n}, or make phase {n} manual and move both into "
+                        f"the plan's trailing manual block."
+                    ),
+                )
+            )
+    return out
 
 
 def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
