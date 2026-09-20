@@ -3,7 +3,7 @@ run: 2026-09-20-fix-434-phases-file-tier
 workflow: fr-goal@1
 branch: fix/434-phases-file-tier
 started: '2026-09-20T10:54:41+00:00'
-cursor: implement
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -27,8 +27,8 @@ steps:
 
       '
   implement:
-    state: running
-    at: '2026-09-20T12:39:22+00:00'
+    state: done
+    at: '2026-09-20T13:01:56+00:00'
     items:
       phase/1/implement-phase: done
       phase/1/review-phase: done
@@ -38,12 +38,16 @@ steps:
       phase/3/review-phase: done
       phase/4/implement-phase: done
       phase/4/review-phase: done
-      phase/5/implement-phase: running
+      phase/5/implement-phase: done
+      phase/5/review-phase: done
     members:
     - implement-phase
     - review-phase
   deliver:
-    state: pending
+    state: done
+    at: '2026-09-20T13:03:32+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/506
 accounting:
   phase/1/implement-phase:
     at: '2026-09-20T11:37:08+00:00'
@@ -108,3 +112,10 @@ accounting:
     handoff_chars: 12721
     spec_bytes: 14596
     plan_bytes: 41971
+  phase/5/review-phase:
+    at: '2026-09-20T13:01:56+00:00'
+    journal_entries: 20
+    journal_lines: 101
+    handoff_chars: 14432
+    spec_bytes: 14596
+    plan_bytes: 46064
