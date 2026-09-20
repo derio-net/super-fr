@@ -2489,3 +2489,59 @@ rows:
       The marker keys on tag alone, never on completion, so an already-complete front-loaded
       manual phase is recorded manual too — the two writers agree without either parsing
       state.'
+  - id: run-unit-cost-per-attempt
+    capability: Run cursor
+    acceptance: A redispatched unit keeps every attempt's cost, and totals include abandoned
+      attempts
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born with the 2026-09-20 unification spec. Pins the live defect of spec
+      1.B: dispatch appends while accounting assigns, so a redispatch kept the abandoned
+      agent''s identity and discarded its spend. Unit gates the PR; live is Test Plan
+      item 16.'
+  - id: run-unit-review-evidence
+    capability: Run cursor
+    acceptance: A review unit cannot be resolved done without journal evidence, so review-skipped
+      and review-passed-clean are different cursor states
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh#430''s claim moved to the cursor: satisfaction is control, content stays
+      journal. Reuses gh#517''s reviewed_phases rule as the verifier. Live is Test Plan
+      item 18.'
+  - id: run-idle-detected
+    capability: Run cursor
+    acceptance: fr run check --idle distinguishes an advanceable-and-idle run from every
+      legitimate stop
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh#518''s artifact half: exit 3 exactly when the cursor is advanceable,
+      no gate is pending, nothing is held and nothing failed. Six legitimate-stop cases
+      each get their own test, because a false positive here blocks an operator''s turn.'
+  - id: run-idle-stop-guard
+    capability: Harness parity
+    acceptance: On Claude Code, ending a turn on an idle run is blocked with the next
+      command
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: The enforcing artifact gh#518 said did not exist. enforced on claude-code
+      only; absent elsewhere with a scope_note, per the parity rule. Fail-open by design.
+      Live is Test Plan item 17.
+  - id: run-unit-record-migrates
+    capability: Run cursor
+    acceptance: A v4 cursor's items, dispatch and accounting migrate into one unit map
+      with no loss
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: The first body-rewriting run migration (4 to 5). Business-level because every
+      in-flight run on every node rides it the moment the plugin updates; a lossy migration
+      here silently corrupts live cursors.
