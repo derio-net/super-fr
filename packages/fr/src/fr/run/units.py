@@ -1,6 +1,6 @@
 """The ONE module that knows how a run cursor stores a unit.
 
-Spec `2026-09-20-unit-record-unification-design.md` collapses three per-unit
+Spec `2026-09-20-unit-record-unification-design.md` collapsed three per-unit
 maps — `StepRecord.items` (state), `StepRecord.dispatch` (attempts) and the
 top-level `RunState.accounting` (cost) — into a single `StepRecord.units` map
 of `UnitRecord`. Three key spaces over one identity is how a unit's state
@@ -9,42 +9,46 @@ time and silently deleted every dispatch record the day a step completed
 (finding f7), and `_advance_group` had to re-derive the join at four call
 sites.
 
-**This module is the seam that makes that collapse reviewable.** Today it is
-implemented over the OLD shape and changes no behaviour whatsoever; phase 3
-re-implements exactly these functions over `units` and swaps the model, with
-no other file touched. The invariant that buys that is a grep — outside this
-module, `fr/run/model.py`, `fr/run/legacy.py` and `fr/artifacts/`, nothing in
-`packages/fr/src/fr` names `.items`, `.dispatch` or `.accounting` on a cursor.
+**This module is the seam that made that collapse reviewable.** Phase 2 wrote
+it over the OLD shape, changing no behaviour; phase 3 re-implemented exactly
+these functions over `units` and swapped the model, and the callers did not
+move. The invariant that bought that is a grep — outside this module,
+`fr/run/model.py`, `fr/run/legacy.py` and `fr/artifacts/`, nothing in
+`packages/fr/src/fr` names `.units` on a cursor (nor, before it, `.items`,
+`.dispatch` or `.accounting`). Keep it: the next shape change is this file.
 
 So every function here is **pure and shape-neutral**: it speaks of units,
 states, attempts and cost, never of which map a fact lives in. Anything that
-would force a caller to know the storage — "give me the dispatch map" — is
+would force a caller to know the storage — "give me the units map" — is
 deliberately absent.
 
-Two signature choices exist for phase 3 rather than for today:
+Two rules of the v5 shape that this module, and only this module, upholds:
 
-- the cost WRITERS take a `step_id`, the cost READERS do not. Today
-  `accounting` is a top-level map that does not record which step owns a key,
-  so reading needs no step and writing ignores the one it is given; in the v5
-  shape the cost hangs off an attempt inside a step, so the writer needs it
-  and the reader still finds the key by scanning. Taking it now means phase 3
-  changes no call site.
-- `with_estimate` takes `at` explicitly instead of stamping `_now()` itself.
-  The estimate's timestamp is the start of the measurement window, and it is
-  computed *before* the dispatch brief is built; in v5 that same moment is the
-  attempt's `dispatched`. Passing it in keeps those two from drifting apart by
-  a second.
+- **A write to one half of a unit never drops the other.** State and attempts
+  live in ONE record now, so a wholesale state write (`with_unit_states`) is
+  exactly the operation that could delete a unit's history — f7, one shape
+  later. Every writer below edits a `UnitRecord` with `model_copy`, never
+  rebuilds one from the half it was given.
+- **One timestamp.** The moment fr dispatched a unit is its attempt's
+  `dispatched`, and it doubles as the START of that attempt's measurement
+  window. `ContextEstimate` carries no `at`, so the moment cannot be recorded
+  twice and drift; `with_estimate` takes `at=` only to REFUSE an estimate
+  whose moment is not the attempt's own.
+
+The cost WRITERS take a `step_id` and the cost READERS do not: cost hangs off
+an attempt inside one step's record, so a writer must say which, while a
+reader finds the key by scanning — unit keys are unique across a cursor.
 """
 
 from __future__ import annotations
 
 from fr.run.model import (
+    Attempt,
     ContextEstimate,
-    DispatchRecord,
     MeasuredTokens,
-    PhaseAccounting,
     RunState,
     StepRecord,
+    UnitRecord,
 )
 
 __all__ = [
@@ -53,6 +57,7 @@ __all__ = [
     "UnitAttempt",
     "accounted_keys",
     "attempts",
+    "dispatch_recorded",
     "estimate_of",
     "estimated_at",
     "fan_out_states",
@@ -70,12 +75,23 @@ __all__ = [
     "with_units_carried_forward",
 ]
 
-UnitAttempt = DispatchRecord
+UnitAttempt = Attempt
 """What one attempt to hold a unit is, named once so callers never spell the
-concrete class. Phase 3 re-points this at `fr.run.model.Attempt`, which carries
-the same fields plus `session`/`estimate`/`measured` — so a call site that
-constructs `UnitAttempt(dispatched=..., agent_type=..., harness=..., model=...)`
-keeps working unchanged."""
+concrete class. It was `DispatchRecord` until the v5 flip re-pointed it here —
+one line, and `run_cmd.py`, which constructs
+`UnitAttempt(dispatched=..., agent_type=..., harness=..., model=...)` and
+annotates with it throughout, did not change."""
+
+
+def _units(record: StepRecord) -> dict[str, UnitRecord]:
+    """`record`'s unit map as a fresh mutable dict — the only `.units` read."""
+    return dict(record.units or {})
+
+
+def _with_units(record: StepRecord, mapping: dict[str, UnitRecord]) -> StepRecord:
+    """`record` carrying `mapping` — the only `.units` write. An empty map is
+    stored as absent, so a step with no units dumps no `units:` key at all."""
+    return record.model_copy(update={"units": mapping or None})
 
 
 # --------------------------------------------------------------- unit state
@@ -89,7 +105,8 @@ def unit_state(record: StepRecord, key: str) -> str | None:
     recorded, and a `step/<step-id>` unit which by §4.B carries no state at all
     (`StepRecord.state` is that fact's one home).
     """
-    return (record.items or {}).get(key)
+    unit = (record.units or {}).get(key)
+    return None if unit is None else unit.state
 
 
 def unit_states(record: StepRecord) -> dict[str, str]:
@@ -97,9 +114,10 @@ def unit_states(record: StepRecord) -> dict[str, str]:
 
     A copy, always: the models are frozen, and a caller that merges markers
     into this map (`_advance_group`, `_resolve_member`) must not be able to
-    mutate the cursor by accident.
+    mutate the cursor by accident. A `step/<step-id>` unit has no state and is
+    therefore absent here — it is not a unit with the state `None`.
     """
-    return dict(record.items or {})
+    return {key: unit.state for key, unit in (record.units or {}).items() if unit.state is not None}
 
 
 def with_unit_state(record: StepRecord, key: str, state: str) -> StepRecord:
@@ -112,14 +130,34 @@ def with_unit_state(record: StepRecord, key: str, state: str) -> StepRecord:
 def with_unit_states(record: StepRecord, states: dict[str, str]) -> StepRecord:
     """`record` with its unit states replaced wholesale by `states`.
 
-    **Attempts already recorded survive.** That is the whole reason this is a
-    function and not an assignment: in the v5 shape state and attempts live in
-    one record, so a wholesale state write is exactly the operation that could
-    drop a unit's history — the f7 defect, one shape later. Today the two maps
-    are separate and the guarantee is free; it is asserted by a test so that it
-    stays true when it stops being free.
+    **Attempts already recorded survive — always.** State and attempts live in
+    one `UnitRecord`, so this is exactly the operation that could drop a
+    unit's history (the f7 defect, one shape later). Hence:
+
+    - a key in `states` keeps its existing record and only its state moves;
+    - a key NOT in `states` loses its state, but a unit that still has
+      attempts or evidence is kept, stateless, rather than deleted. Callers
+      only ever widen the map (`{**states, **manual_markers}`), so this is a
+      guard and not a live path — but the wrong default here is silent loss.
     """
-    return record.model_copy(update={"items": dict(states) if states else None})
+    existing = _units(record)
+    merged: dict[str, UnitRecord] = {}
+    for key, unit in existing.items():
+        if key in states:
+            continue
+        if unit.attempts or unit.evidence:
+            merged[key] = unit.model_copy(update={"state": None})
+    for key, state in states.items():
+        prior = existing.get(key)
+        merged[key] = (
+            UnitRecord.model_validate({"state": state})
+            if prior is None
+            else UnitRecord.model_validate({**prior.model_dump(), "state": state})
+        )
+    # Order: the caller's order for stated units (it is what `fr run status`
+    # prints and what a diff of the cursor shows), stateless survivors first
+    # only because they were there first.
+    return _with_units(record, merged)
 
 
 # ------------------------------------------------------------------ attempts
@@ -129,7 +167,8 @@ def attempts(record: StepRecord, key: str) -> tuple[UnitAttempt, ...]:
     """Every attempt recorded for `key`, oldest first — empty when there are
     none. An empty tuple is a real answer, never "unknown": a unit fr adopted
     from a plan on disk was genuinely never dispatched."""
-    return tuple((record.dispatch or {}).get(key) or ())
+    unit = (record.units or {}).get(key)
+    return () if unit is None else tuple(unit.attempts)
 
 
 def open_attempt(record: StepRecord, key: str) -> UnitAttempt | None:
@@ -137,12 +176,33 @@ def open_attempt(record: StepRecord, key: str) -> UnitAttempt | None:
 
     The witness of decision u1: a unit is HELD iff this is not `None`. At most
     one attempt is open and it is the LAST one — `validate_run` enforces both —
-    so the tail is the whole answer.
+    so the tail is the whole answer. A `synthesized` attempt is never a hold
+    (`fr.run.model.Attempt.synthesized`): it has no `returned` only because fr
+    never knew one, and its unit may long since be `done`.
     """
     recorded = attempts(record, key)
-    if not recorded or recorded[-1].returned is not None:
+    if not recorded or recorded[-1].returned is not None or recorded[-1].synthesized:
         return None
     return recorded[-1]
+
+
+def dispatch_recorded(record: StepRecord, key: str) -> bool:
+    """Did fr ever RECORD dispatching `key` — is there any witness at all?
+
+    False for a unit with no attempts (adopted from disk, or never reached),
+    and ALSO for one whose only attempt is `synthesized`: that attempt carries
+    a migrated cost snapshot, not a hold, and a cursor that predates the
+    dispatch record has no witness however much it has spent. `advance` falls
+    back to the unit's state in exactly this case and no other (decision u1).
+    """
+    return any(not attempt.synthesized for attempt in attempts(record, key))
+
+
+def _with_attempts(record: StepRecord, key: str, recorded: tuple[UnitAttempt, ...]) -> StepRecord:
+    mapping = _units(record)
+    unit = mapping.get(key) or UnitRecord()
+    mapping[key] = unit.model_copy(update={"attempts": recorded})
+    return _with_units(record, mapping)
 
 
 def with_attempt_appended(record: StepRecord, key: str, attempt: UnitAttempt) -> StepRecord:
@@ -150,11 +210,11 @@ def with_attempt_appended(record: StepRecord, key: str, attempt: UnitAttempt) ->
 
     Never overwrites: a failed unit that is retried, or one `--redispatch`ed
     over a lost agent, keeps every prior attempt. That list is the forensic
-    trail gh-503 asked for.
+    trail gh-503 asked for. The unit's STATE is untouched — and a unit that
+    did not exist yet is created without one, which is exactly right for the
+    one caller that does that: a flat step's `step/<step-id>` unit (§4.B).
     """
-    dispatch = dict(record.dispatch or {})
-    dispatch[key] = [*(dispatch.get(key) or []), attempt]
-    return record.model_copy(update={"dispatch": dispatch})
+    return _with_attempts(record, key, (*attempts(record, key), attempt))
 
 
 def with_last_attempt_replaced(record: StepRecord, key: str, attempt: UnitAttempt) -> StepRecord:
@@ -165,13 +225,13 @@ def with_last_attempt_replaced(record: StepRecord, key: str, attempt: UnitAttemp
     `resolve`'s close all rewrite exactly the tail, because the open attempt
     IS the tail. Callers establish that the unit is held (`open_attempt`);
     this does not re-derive it, so there stays exactly one place that decides
-    what "open" means.
+    what "open" means. A key with no attempt at all is a caller bug and raises
+    `KeyError`, as it did when the attempts had a map of their own.
     """
-    dispatch = dict(record.dispatch or {})
-    recorded = list(dispatch[key])
-    recorded[-1] = attempt
-    dispatch[key] = recorded
-    return record.model_copy(update={"dispatch": dispatch})
+    recorded = attempts(record, key)
+    if not recorded:
+        raise KeyError(key)
+    return _with_attempts(record, key, (*recorded[:-1], attempt))
 
 
 # ----------------------------------------------------------------- the units
@@ -180,30 +240,30 @@ def with_last_attempt_replaced(record: StepRecord, key: str, attempt: UnitAttemp
 def unit_keys(record: StepRecord) -> tuple[str, ...]:
     """Every unit key `record` knows anything about, sorted.
 
-    The union of "has a state" and "has attempts", because both are units. A
-    flat `kind: agent` step records a `step/<step-id>` unit with attempts and
-    no state, and it must not be invisible to a walk.
+    A flat `kind: agent` step records a `step/<step-id>` unit with attempts
+    and no state, and it must not be invisible to a walk.
     """
-    return tuple(sorted({*(record.items or {}), *(record.dispatch or {})}))
+    return tuple(sorted(record.units or {}))
 
 
 def with_units_carried_forward(record: StepRecord, prior: StepRecord) -> StepRecord:
-    """`record`, carrying every unit `prior` recorded — state AND attempts.
+    """`record`, carrying every unit `prior` recorded — state, attempts, cost
+    and evidence, as the ONE object they now are.
 
-    Finding f7's fix, as one function rather than as a field list. Completing
-    a step rebuilds its record from scratch, and carrying the maps forward one
-    at a time is how the whole run's holder history came to be deleted by the
-    act of FINISHING: the only readers are `status`/`check`, so the deletion
-    was silent. Passing the unit data as one thing makes forgetting half of it
-    unexpressible, which is what phase 3 needs — there the two halves are one
-    object and a partial copy would be a new defect in a new shape.
+    Finding f7's fix. Completing a step builds its successor record, and
+    carrying the unit maps forward one at a time is how the whole run's holder
+    history came to be deleted by the act of FINISHING: the only readers were
+    `status`/`check`, so the deletion was silent. In the v5 shape there is one
+    map, so there is nothing left to forget half of.
+
+    `_complete_step` no longer needs it: it now derives the successor with
+    `prior.model_copy(update=…)`, so units — and every other durable field —
+    are carried by DEFAULT rather than by being listed. This remains for any
+    caller that builds a `StepRecord` from scratch and must keep a step's
+    units: the carry should be a decision somebody made, never a field
+    somebody happened to list.
     """
-    return record.model_copy(
-        update={
-            "items": dict(prior.items) if prior.items else None,
-            "dispatch": dict(prior.dispatch) if prior.dispatch else None,
-        }
-    )
+    return _with_units(record, _units(prior))
 
 
 def fan_out_states(state: RunState) -> dict[str, str]:
@@ -223,66 +283,82 @@ def fan_out_states(state: RunState) -> dict[str, str]:
 
 
 # --------------------------------------------------------------------- cost
+#
+# Cost is per ATTEMPT (decision u2) and these accessors answer per UNIT, which
+# today means: the unit's LAST attempt. That is the attempt a cost is written
+# to (`advance` estimates the attempt it just opened; `resolve` measures the
+# one it is closing) and, for a migrated v4 cursor, the attempt the rewrite
+# attached the unit's one snapshot to. Earlier attempts keep their own figures
+# on the cursor; nothing here reads them yet.
+
+
+def _owner(state: RunState, key: str) -> str | None:
+    for step_id, record in state.steps.items():
+        if key in (record.units or {}):
+            return step_id
+    return None
+
+
+def _last_attempt(state: RunState, key: str) -> UnitAttempt | None:
+    step_id = _owner(state, key)
+    if step_id is None:
+        return None
+    recorded = attempts(state.steps[step_id], key)
+    return recorded[-1] if recorded else None
 
 
 def accounted_keys(state: RunState) -> tuple[str, ...]:
     """Every unit key `state` records a cost for, sorted — across all steps.
 
-    Sorted by KEY and not grouped by step, which is what today's top-level
-    `accounting` map renders and therefore what must keep rendering. In
-    practice one step fans out, so every accounted key belongs to it; the
-    ordering is stated here rather than left to the storage so that phase 3's
-    per-step walk cannot quietly reorder `fr run status`.
+    Sorted by KEY and not grouped by step: that is what the v4 top-level
+    `accounting` map rendered, and the per-step storage must not quietly
+    reorder `fr run status`.
     """
-    return tuple(sorted(state.accounting or {}))
-
-
-def _snapshot(state: RunState, key: str) -> PhaseAccounting | None:
-    return (state.accounting or {}).get(key)
+    return tuple(
+        sorted(
+            key
+            for record in state.steps.values()
+            for key, unit in (record.units or {}).items()
+            if unit.attempts and unit.attempts[-1].estimate is not None
+        )
+    )
 
 
 def estimate_of(state: RunState, key: str) -> ContextEstimate | None:
     """What fr assembled for `key` — the V1 sizes — or `None` if unrecorded."""
-    snap = _snapshot(state, key)
-    if snap is None:
-        return None
-    return ContextEstimate(
-        journal_entries=snap.journal_entries,
-        journal_lines=snap.journal_lines,
-        handoff_chars=snap.handoff_chars,
-        spec_bytes=snap.spec_bytes,
-        plan_bytes=snap.plan_bytes,
-    )
+    last = _last_attempt(state, key)
+    return None if last is None else last.estimate
 
 
 def estimated_at(state: RunState, key: str) -> str | None:
     """When fr assembled `key`'s context — the START of its measurement window.
 
-    Written immediately before the dispatch brief, so it precedes every
+    It IS the attempt's `dispatched`: one moment, recorded once. `advance`
+    stamps it before the dispatch brief is built, so it precedes every
     transcript record of the dispatch it measures. `None` when there is no
-    estimate, and also when there is one with no timestamp (a pre-`at`
-    snapshot): both mean the same thing to the only caller — no window, no
-    measurement.
+    estimate — no window, no measurement — which is also what an attempt
+    opened without one (a flat `kind: agent` step) reads as.
     """
-    snap = _snapshot(state, key)
-    return None if snap is None else snap.at
+    last = _last_attempt(state, key)
+    if last is None or last.estimate is None:
+        return None
+    return last.dispatched
 
 
 def measured_of(state: RunState, key: str) -> MeasuredTokens | None:
     """What `key` actually burned, or `None` when nothing was measured.
 
-    A measurement is atomic: a snapshot carrying only some of the four figures
-    is not a small honest number, it is a structural problem
-    (`fr.artifacts.structure.validate_run` reports it as one), so it reads here
-    as no measurement at all rather than as a partial sum.
+    A measurement is atomic, and in this shape that is structural: a
+    `MeasuredTokens` has all four figures or does not exist.
     """
-    snap = _snapshot(state, key)
-    if snap is None:
-        return None
-    values = snap.measured_fields()
-    if any(value is None for value in values.values()):
-        return None
-    return MeasuredTokens.model_validate(values)
+    last = _last_attempt(state, key)
+    return None if last is None else last.measured
+
+
+def _with_last_attempt(state: RunState, step_id: str, key: str, attempt: UnitAttempt) -> RunState:
+    steps = dict(state.steps)
+    steps[step_id] = with_last_attempt_replaced(steps[step_id], key, attempt)
+    return state.model_copy(update={"steps": steps})
 
 
 def with_estimate(
@@ -293,44 +369,48 @@ def with_estimate(
     *,
     at: str,
 ) -> RunState:
-    """`state` with `estimate` recorded for `key` under `step_id`, stamped `at`.
+    """`state` with `estimate` recorded on `key`'s LAST attempt under `step_id`.
 
-    `step_id` is unused today — `accounting` is a top-level map that does not
-    record which step owns a key — and is taken anyway, because in the v5 shape
-    the estimate hangs off an attempt inside that step's record. Recording it
-    now is what lets phase 3 change this body and nothing else.
+    `at` is the moment the estimate was assembled, and it must BE that
+    attempt's `dispatched` — otherwise this raises `ValueError`. That is the
+    "one timestamp" rule with teeth: the estimate is COMPUTED before the brief
+    and the attempt is OPENED after it, and the easy mistake is to let the
+    attempt stamp its own, later, `dispatched` — which silently moves the
+    start of the measurement window past the dispatch it measures. Callers
+    pass the same `at` to both; this checks that they did.
 
-    Callers write this AFTER the attempt is opened, even though `at` was
-    computed before: in v5 there has to be an attempt for the estimate to hang
-    off, and `at` carries the earlier moment so the measurement window still
-    starts before the dispatch it measures.
+    Also raises when `key` has no attempt under `step_id`: an estimate is what
+    fr assembled FOR an attempt, so there is nothing to record it on. fr never
+    synthesizes an attempt at run time — only the 4 -> 5 migration does, once,
+    for cursors that predate the dispatch record.
     """
-    _ = step_id
-    snaps = dict(state.accounting or {})
-    snaps[key] = PhaseAccounting(
-        at=at,
-        journal_entries=estimate.journal_entries,
-        journal_lines=estimate.journal_lines,
-        handoff_chars=estimate.handoff_chars,
-        spec_bytes=estimate.spec_bytes,
-        plan_bytes=estimate.plan_bytes,
+    recorded = attempts(state.steps[step_id], key)
+    if not recorded:
+        raise ValueError(f"unit {key!r} of step {step_id!r} has no attempt to estimate")
+    if recorded[-1].dispatched != at:
+        raise ValueError(
+            f"unit {key!r}: the estimate was assembled at {at!r} but its attempt says it was "
+            f"dispatched at {recorded[-1].dispatched!r} — one moment, recorded once"
+        )
+    return _with_last_attempt(
+        state, step_id, key, recorded[-1].model_copy(update={"estimate": estimate})
     )
-    return state.model_copy(update={"accounting": snaps})
 
 
 def with_measured(state: RunState, step_id: str, key: str, measured: MeasuredTokens) -> RunState:
-    """`state` with `measured` folded in beside `key`'s existing estimate.
+    """`state` with `measured` recorded BESIDE the estimate of `key`'s last
+    attempt under `step_id`.
 
-    Folded IN, never replacing: the estimate and the measurement are different
+    Beside, never replacing: the estimate and the measurement are different
     quantities (one dispatch's assembled context versus cumulative billing
-    across its turns) and `fr run status` is built on showing both. A unit with
-    no estimate at all has no window either, so there is nothing to fold into
-    and `state` comes back unchanged.
+    across its turns) and `fr run status` is built on showing both. A unit
+    whose last attempt has no estimate has no measurement window either, so
+    there is nothing to measure against and `state` comes back unchanged.
     """
-    _ = step_id
-    snaps = dict(state.accounting or {})
-    snap = snaps.get(key)
-    if snap is None:
+    record = state.steps.get(step_id)
+    recorded = attempts(record, key) if record is not None else ()
+    if not recorded or recorded[-1].estimate is None:
         return state
-    snaps[key] = snap.model_copy(update=measured.model_dump())
-    return state.model_copy(update={"accounting": snaps})
+    return _with_last_attempt(
+        state, step_id, key, recorded[-1].model_copy(update={"measured": measured})
+    )

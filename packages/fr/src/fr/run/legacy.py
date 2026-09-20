@@ -231,7 +231,10 @@ def v4_to_v5(data: dict[str, Any]) -> dict[str, Any]:
        most of them) gets **one synthesized attempt** with
        `dispatched = accounting.at` and no identity at all. Stated, not
        invented: that is when fr briefed the unit, and it is the only fact fr
-       has. No agent, no agent_type, no harness, no model, no outcome.
+       has. No agent, no agent_type, no harness, no model, no outcome — and
+       `synthesized: true`, so that the missing `returned` never reads as a
+       hold and the missing `agent_type` never reads as "the orchestrator"
+       (phase 3 found both, end to end, on a migrated in-flight cursor).
     5. The top-level `accounting` map is dropped.
 
     `schema_version` is NOT touched: the migration runner writes the stamp, and
@@ -331,7 +334,10 @@ def _attach_cost(unit: dict[str, Any], key: str, snapshot: dict[str, Any]) -> No
                 "there is nothing to attach its cost to and no moment to synthesize an "
                 "attempt from. fr will not invent one — the cursor is left unchanged."
             )
-        attempts = [{"dispatched": at}]
+        # `synthesized` is what keeps this attempt from reading as a HOLD (it
+        # has no `returned`, and never will) or as orchestrator-run (it has no
+        # `agent_type`): see `fr.run.model.Attempt.synthesized`.
+        attempts = [{"dispatched": at, "synthesized": True}]
         unit["attempts"] = attempts
 
     last = attempts[-1]

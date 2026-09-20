@@ -170,13 +170,21 @@ def test_evidence_maps_an_obligation_to_a_journal_entry_id() -> None:
     assert UnitRecord(state="done", evidence={"review": "rev-p2"}).evidence == {"review": "rev-p2"}
 
 
-# ------------------------------------------------- and none of it is wired yet
+# ---------------------------------------------------------- and now it is wired
 
 
-def test_run_state_still_carries_the_old_three_maps() -> None:
-    """Phase 2 changes no behaviour. `RunState` is untouched — `units` is not
-    a field yet, and the three maps it replaces are all still here."""
-    assert "units" not in StepRecord.model_fields
-    assert "items" in StepRecord.model_fields
-    assert "dispatch" in StepRecord.model_fields
-    assert "accounting" in RunState.model_fields
+def test_run_state_carries_one_unit_map_and_none_of_the_three_it_replaced() -> None:
+    """Phase 3, the flip. `units` is the cursor's ONE per-unit map; `items`,
+    `dispatch` and the top-level `accounting` are gone from the live model and
+    live on only in the frozen `fr.run.legacy`."""
+    assert "units" in StepRecord.model_fields
+    assert "items" not in StepRecord.model_fields
+    assert "dispatch" not in StepRecord.model_fields
+    assert "accounting" not in RunState.model_fields
+
+
+def test_the_storage_models_the_flip_retired_are_gone_from_the_live_module() -> None:
+    import fr.run.model as live
+
+    assert not hasattr(live, "DispatchRecord")
+    assert not hasattr(live, "PhaseAccounting")

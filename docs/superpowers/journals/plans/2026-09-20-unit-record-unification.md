@@ -195,3 +195,93 @@ The orchestrator's own plan step P2.T1.S3 made a grep the phase's exit criterion
 ### rev-p2 · review · Phase 2 reviewed: behaviour-preserving by proof, exit criterion re-verified, three deviations accepted (phase 2)
 
 Phase 2 reviewed against spec 4.A, 4.B, 4.F and the plan. (1) Exit criterion met and re-verified with a grep that can actually fail: zero direct accesses to items/dispatch/accounting outside fr/run/units.py, model.py, legacy.py and fr/artifacts/. (2) ZERO test edits confirmed from git: four new test files, no modified ones — so the refactor is behaviour-preserving by the only proof available, the pre-existing suite (3590 -> 3713 = exactly the 123 new tests). (3) Frozen-source tripwire present (hash-pinned). (4) Three deviations ACCEPTED: ContextEstimate/MeasuredTokens landed a task early because an accessor must return something and returning the storage type would have forced re-porting every caller in phase 3; the legacy reader deliberately DROPS the harness validator, because HARNESSES is a live vocabulary and a retired harness would make every cursor that recorded it unmigratable — the exact stranding the legacy reader exists to prevent; v4_to_v5 refuses two cases beyond the spec's one (an accounting key no step records; accounting with no timestamp on a unit with no attempt), both induced from real captures. (5) Two facts the spec had wrong or thin, now amended: accounting WITHOUT dispatch is the MAJORITY shape across the captured cursors, so the synthesized identity-less attempt is the common migration case, not an edge; and in v5 there is ONE timestamp — the attempt's dispatched — with ContextEstimate carrying no 'at', so the moment cannot be recorded twice and drift. One finding, against the orchestrator's own plan: f-p2-blind-grep.
+
+<!-- fr:journal kind=decision scope=plan id=p3-synthesized-not-a-hold created=2026-09-20T23:46:33 phase=3 -->
+### p3-synthesized-not-a-hold · decision · A synthesized attempt carries cost, never a hold — new Attempt.synthesized marker, NOT in the brief (phase 3) (phase 3)
+
+**The design hole phase 3 found, and the one decision in this phase that was NOT in the brief.** Spec §4.F step 3 has the rewrite synthesize an identity-less attempt (`dispatched = accounting.at`, plus the estimate) for every unit that had a cost snapshot and no dispatch record — the MAJORITY of real units (`p2-fixture-population`). Spec §4.C says a unit is held iff its last attempt is open. The synthesized attempt has no `returned`, because fr never knew one. Put together, every pre-#508 unit of every migrated cursor read as HELD.
+
+Found by running migrated captures end to end, not by reading: `test_open_attempt_is_none_when_every_attempt_returned` went red on `HOLDER` the moment `_state()` was re-pointed at the real rewrite. Consequences, all verified:
+
+1. `fr run check` reported every finished unit of an older cursor as `is open` (it rides the PR body).
+2. **`fr run advance` REFUSED TO RETRY a `failed` unit of an in-flight run**, naming a holder that never existed — v4 simply re-briefed it. This is the one that would have blocked real runs on upgrade day.
+3. `fr run status` rendered it `held by the orchestrator`, because an absent `agent_type` on a RECORDED attempt means exactly that. These units were phase executors.
+
+**Decision: `Attempt.synthesized: Literal[True] | None`, and the witness skips it — "a synthesized attempt carries COST, never a HOLD".** `units.open_attempt` ignores it; new accessor `units.dispatch_recorded(record, key)` answers "is there any WITNESS?" and is what `_hold_on`'s recordless fallback now asks (it used to ask `not attempts`). Net effect: a migrated unit behaves EXACTLY as it did while its cost lived in the v4 `accounting` map, which no witness ever read — `running` is still refused on state (`ALREADY RUNNING (dispatched <at>)`), `failed` is re-briefed and the retry is appended BESIDE the synthesized attempt, `done` is inert.
+
+Rejected: (a) closing the synthesized attempt — needs a `returned` timestamp fr does not have, and `returned`/`outcome` are one fact by model validator; any value would be invented. (b) consulting unit state in the witness (`done`/`failed` => not held) — puts state back into u1's predicate, and the retry path would then append a second OPEN attempt and fail `validate_run`. (c) inferring "synthesized" from "no identity fields at all" — an orchestrator-run review on an undetectable harness with no tier binding looks identical.
+
+Guards: the model REFUSES identity/`returned`/`outcome` on a synthesized attempt; `validate_run` requires it to be the unit's FIRST attempt and never counts it as open. Mutation-verified: dropping the skip in `open_attempt` fails 7 tests, weakening `dispatch_recorded` fails 2.
+
+`legacy.py` WAS edited — `_attach_cost` writes `"synthesized": True` and `v4_to_v5`'s docstring says why. Those are NOT among the four hash-pinned classes; `FROZEN_CLASS_SHA256` is untouched and `test_run_legacy.py` is green. Phase 2's `test_accounting_with_no_dispatch_synthesizes_one_identityless_attempt` now pins `{dispatched, estimate, synthesized}`. Spec §4.A and §4.F amended in place, marked as phase-3 amendments.
+
+**Phases 4-6:** cost accessors (`estimate_of`/`measured_of`/`estimated_at`) read the unit's LAST attempt, synthesized or not — so a `running` synthesized-only unit is still measured at `resolve`, onto the synthesized attempt. Anything that walks `units.attempts()` to reason about HOLDERS or sessions (§4.D.1, §4.G liveness) must skip `synthesized` ones; anything reasoning about COST must not.
+
+<!-- fr:journal kind=finding scope=plan id=p3-phase-key-broader created=2026-09-20T23:46:34 phase=3 state=fixed -->
+### p3-phase-key-broader · finding [fixed] · Spec 4.B's 'phase/<n> is state: manual, always' is refuted by a captured cursor; validate_run enforces 'never any attempts' instead (phase 3) (phase 3)
+
+Spec §4.B said `phase/<n>` is "gh#496's manual-phase marker — `state: manual`, `attempts` empty, always", and the brief repeated it. A captured cursor refutes the "always": `tests/fixtures/run_cursors/v1/2026-09-09-feat-issue-464.yaml` carries `phase/1: pending` .. `phase/5: pending`. That is a FLAT `for_each: phase` step (no member steps), and `fr run adopt` still writes it today (`adopt.build_run_state`'s `else:` branch).
+
+Caught by `test_every_captured_cursor_migrates_all_the_way_to_current`, which asserts `validate_run(path) == []` on every migrated capture: enforcing `state: manual` would have failed `fr validate artifacts` on every such cursor the moment it migrated — turning CI red for a file fr wrote correctly.
+
+**What `validate_run` enforces instead:** a `phase/<n>` unit carries a `state` (any `UnitState`) and NEVER any attempts. That is what the marker and the flat unit have in common, and it is the part that matters: fr dispatches a phase's MEMBERS, never the phase (`advance` refuses a member-less `for_each` outright). Spec §4.B amended in place.
+
+The other §4.B rules are enforced as written: `step/<id>` carries no `state` (and must record SOMETHING — attempts or evidence); `phase/<n>/<member>` must carry one; at most one open attempt and it is the last; unknown key forms refused. Also new: a cursor carrying `units` under `schema_version < 5` is reported (`UNIT_RECORD_SCHEMA_VERSION`) — it replaces the v3 "measured tokens under a v2 stamp" check, which disappeared with `accounting`, and it is exactly the state the migration's crash window leaves.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f-stale-cursor-invisible created=2026-09-20T23:46:34 phase=3 state=fixed -->
+### p3-f-stale-cursor-invisible · finding [fixed] · find_run_for_plan could not see a not-yet-migrated cursor: the migrate preview offered to adopt plans that already had one (phase 3) (phase 3)
+
+§4.F.1's blast-radius audit missed one reader: `fr.archive.find_run_for_plan` — behind both `fr archive` and adoption's "does this plan already have a run?" (`adoptable_plans`). It parsed each cursor with the LIVE model and `continue`d on `RunStateError`. The live model no longer knows `items`, so **a not-yet-migrated cursor was indistinguishable from no cursor.**
+
+Seen live, not theorised: the moment the registry moved to 5, `uv run fr migrate artifacts` (the PREVIEW) over this repo printed "6 in-flight plan(s) have no run cursor" and offered to adopt four plans that already had one. After `--yes` it said 2, correctly.
+
+The preview is merely wrong. The dangerous path is a cursor the 4 -> 5 rewrite REFUSES (partial measurement): it stays v4 indefinitely, and `fr migrate artifacts --yes --adopt` — migration first, adoption second — would then write a SECOND cursor for the same plan beside it.
+
+Fix: `archive._read_any_version` tries the live parser, then `fr.run.legacy.parse_run_state_v4`. `emitted.plan` and `run` are the same facts in every version; nothing is written. RED first: `test_run_adopt.py::test_a_plan_whose_cursor_is_still_in_the_v4_shape_is_not_offered_for_adoption`, on the captured held cursor.
+
+Audited the rest while there (`grep -rnE 'parse_run_state\(|load_run_state\('` over `packages/fr/src/fr`): the only other readers are `commands/run_cmd.py`, all behind the CLI-entry gate (not exempt), so they never see a stale cursor except under `FR_SKIP_MIGRATION=1`. `fr_dispatch`/`fr_vk`/`fr_cncd` still never load a cursor.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-accessors-v5 created=2026-09-20T23:47:20 phase=3 -->
+### p3-accessors-v5 · discovery · The v5 accessor layer: what moved in run_cmd (four places), the one-timestamp wiring and its trap, and what is still unwritten (phase 3) (phase 3)
+
+What the v5 accessor layer looks like, for phases 4-6. `fr/run/units.py` is still the ONLY module outside `model.py`, `legacy.py` and `fr/artifacts/` that touches the shape — re-verified with a grep that can fail (known positive: 11 hits inside `units.py`; outside the four exempt paths, zero attribute accesses to `.units`/`.items`/`.dispatch`/`.accounting`).
+
+**Callers barely moved, as designed.** `run_cmd.py` changed in exactly four places: `_open_dispatch` gained `at=` (below); `_hold_on` asks `units.dispatch_recorded` instead of `not units.attempts`; `_render_dispatch_attempt` has a `synthesized` branch; `_complete_step` is a `model_copy` (below). `adopt.py`, `provenance.py`, `telemetry.py`: zero logic changes.
+
+**ONE timestamp — how it is wired, and the trap.** `_advance_group` takes `estimate_at = _now()` BEFORE assembling the estimate and building the brief, and passes that SAME value to `_open_dispatch(..., at=estimate_at)` (the attempt's `dispatched`) and to `units.with_estimate(..., at=estimate_at)`. `with_estimate` RAISES `ValueError` if `at` is not the last attempt's `dispatched`, or if there is no attempt. The trap: `_now()` has one-second resolution, so wiring the two moments apart almost never shows — hence `test_the_attempt_is_dispatched_at_the_moment_its_estimate_was_assembled`, which makes the clock tick on every read (mutation-verified: drop `at=estimate_at` and it fails with the ValueError). The flat `kind: agent` branch passes no `at` and records no estimate; `_open_dispatch` stamps it there, still before the brief is printed.
+
+**Cost is per ATTEMPT on disk, per UNIT through the accessors.** `estimate_of` / `measured_of` / `estimated_at` / `accounted_keys` answer for the unit's LAST attempt. Earlier attempts keep their own figures on the cursor (`test_cost_is_per_attempt_a_redispatch_does_not_overwrite_the_abandoned_spend`), but NOTHING RENDERS THEM YET and `claim --abandoned` does not measure yet — that is decision u2 / §4.D, phase 4's. `fr run status`'s accounting block is unchanged in shape: one line per accounted unit, key-sorted.
+
+**`with_unit_states` never drops history.** A key omitted from a wholesale state write keeps its attempts/evidence, stateless, instead of being deleted (guard, not a live path — every caller widens the map).
+
+**`_complete_step` is `prior.model_copy(update=…)`** — carry-by-default, so the next durable field on `StepRecord` survives completion without anyone remembering it. `members` with an empty list would now stay `[]` rather than becoming `None`; no writer produces one. `units.with_units_carried_forward` therefore has NO caller in `src/` any more; kept (with its test) for a caller that builds a record from scratch, flagged here so review can delete it instead.
+
+**`dump_run_state` drops an empty `attempts`.** A never-dispatched unit is `{state: done}` on disk — the same bytes the rewrite writes — and `test_a_migrated_capture_and_a_native_dump_are_the_same_data` pins migrated == native for all nine captures. `units` sits after `members` in `StepRecord` so key order matches the rewrite's too.
+
+**Gone from `fr.run.model`:** `DispatchRecord`, `PhaseAccounting`, `MEASURED_TOKEN_FIELDS`, `MEASURED_TOKENS_SCHEMA_VERSION`. New: `UNIT_RECORD_SCHEMA_VERSION = 5`, `Attempt.synthesized`. `UnitRecord.evidence` and `Attempt.session` exist and are UNWRITTEN — phases 5 and 4 respectively.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-migration-module created=2026-09-20T23:47:21 phase=3 -->
+### p3-migration-module · discovery · run 4->5: the migration module, the crash window it survives (not in the spec), and what 'byte-identical' means through a chain (phase 3) (phase 3)
+
+`fr/artifacts/run_unit_record.py` — the first BODY-REWRITING run migration, 4 -> 5 — and what is true of the chain now.
+
+- **Every hop reads with the frozen model.** `run_cursor.cursor_guard` uses `parse_run_state_v4`; `run_dispatch_holder` had its OWN copy of that guard (reading with the live model) and now uses the shared one, so there is one guard, not two. Tripwire: `test_no_run_migration_names_the_live_parser` (regex proven against a known positive in the test itself); behavioural half: `test_each_stamp_only_hop_reads_a_cursor_the_live_model_may_no_longer_know`.
+- **Chain `[2, 3, 4, 5]`, every hop asserted**, from/to both (`test_the_run_kind_is_reachable_all_the_way_from_version_one_to_five`). `test_every_captured_cursor_migrates_all_the_way_to_current` runs the SHIPPED registry over all nine captures and asserts the exact hop list per file, the live parse, and `validate_run == []`.
+- **Build in memory, write once**: `v4_to_v5` -> `write_text_atomic`. No write at all when the rewrite changes nothing (so a unit-less cursor keeps its bytes; the pre-existing "stamps it and rewrites no body" tests still hold). A failing `os.replace` leaves bytes + mtime identical and no temp file.
+- **Refusals** raise `UnreadableRunCursorError` / its subclass `UnconvertibleRunCursorError` (wrapping `RunMigrationError`), naming the field. Note what "byte-identical" means through the CHAIN: a v3 cursor with a partial measurement is honestly stamped 3 -> 4 by the stamp-only hop (it reads fine) and THEN refused at 4 -> 5, so its stamp line moved and its body did not. A v4 one is byte- and mtime-identical. Both asserted.
+- **The crash window — NOT in the spec.** `fn` writes the body, the RUNNER writes the stamp afterwards. A crash between leaves a v5 body under `schema_version: 4`; the frozen reader is `extra="forbid"` and refuses `units`, so a naive `fn` would refuse that file forever — and it is by construction an in-flight run's cursor. `fn` accepts a body that is ALREADY wholly v5 (no legacy map anywhere AND the live model reads it) and returns, letting the runner finish. That is the one legitimate use of the live parser in a migration and is allowed by name in the tripwire. `units` beside a legacy map is still refused. `validate_run` reports the same state (`units` under a stamp < 5).
+
+**This repo's own cursors:** `uv run fr migrate artifacts --yes` migrated all six and — note — does NOT commit ("6 migrated, not committed"); committed by hand as `a3b1d9a`. The rule added to `.claude/rules/artifact-versioning.md` is a five-point section, mirrored by `scripts/sync-opencode.py`.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-live-upgrade created=2026-09-20T23:47:21 phase=3 -->
+### p3-live-upgrade · discovery · run-upgrade-mid-run-keeps-holder, demonstrated live on the cursor dispatching this phase — what happened, step by step (phase 3) (phase 3)
+
+Acceptance row `run-upgrade-mid-run-keeps-holder`, demonstrated LIVE on the cursor that was dispatching this phase (`docs/superpowers/runs/2026-09-20-unit-record-unification-r2.yaml`), in this order:
+
+1. The cursor was v4, UNCOMMITTED, holding an open claimed attempt on `phase/3/implement-phase` (this executor). Committed as-is first (`b7fd771`) — the gate holds back a dirty artifact, and committed bytes are what a capture needs.
+2. **Captured** from `git show b7fd771:<path>` as `tests/fixtures/run_cursors/v4/2026-09-20-unit-record-unification-r2.yaml` (SHA-256 pinned in `NOTE.md`) — the first captured cursor with a HELD unit, which `NOTE.md` had listed as owed since phase 1. There are now NINE captures.
+3. Registry moved to 5. `uv run fr run status <run>` and `fr run check <run>`: both exit 2 with the six-line refusal ("non-interactive ... preview: fr migrate artifacts / apply: fr migrate artifacts --yes / bypass ..."). Expected, and nothing was written.
+4. `uv run fr migrate artifacts` (preview): 6 would migrate. `--yes`: 6 migrated, 0 failed, not committed; nothing was held back because nothing was dirty.
+5. `uv run fr run advance <run>` on the migrated cursor: **exit 2**, "phase/3/implement-phase is ALREADY HELD by agent a6003d674a7d2ef75 (super-fr:fr-phase-executor, claude-code, claude-fable-5-1) (dispatched 2026-09-20T21:04:30+00:00) — not yet returned", and the cursor's SHA-256 was unchanged by the refusal. `fr run check`: exit 0, one open line naming the same holder. `fr run status`: every unit state, all four attempts, all four cost lines incl. the 31,789,276-token measurement on `phase/2/implement-phase`.
+
+The same scenario is `tests/unit/test_run_upgrade_in_flight.py` on the capture, plus `test_the_holder_can_still_resolve_its_unit_after_the_migration` (the held executor's own `resolve` closes THE SAME attempt — one attempt, identity and cost intact). "Equivalent `check` output" is asserted against the FROZEN legacy reader's view of the same capture, an independent path sharing no code with the v5 model.

@@ -172,7 +172,12 @@ def test_accounting_with_no_dispatch_synthesizes_one_identityless_attempt() -> N
     unit = _units(out, "implement")["phase/1/implement-phase"]
     (attempt,) = unit["attempts"]
     assert attempt["dispatched"] == before["accounting"]["phase/1/implement-phase"]["at"]
-    assert set(attempt) == {"dispatched", "estimate"}
+    # ...except the marker that says so. Phase 3 added it after running a
+    # migrated in-flight cursor end to end: with no `returned` the attempt read
+    # as a HOLD (a failed unit could not be retried; every finished unit showed
+    # as open), and with no `agent_type` it read as "the orchestrator".
+    assert set(attempt) == {"dispatched", "estimate", "synthesized"}
+    assert attempt["synthesized"] is True
     assert attempt["estimate"]["handoff_chars"] == 2369
 
 

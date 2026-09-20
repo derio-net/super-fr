@@ -130,6 +130,7 @@ class Attempt(BaseModel):              # was DispatchRecord, now carrying its ow
     outcome: Literal["done", "failed", "abandoned"] | None = None
     estimate: ContextEstimate | None = None     # what fr assembled for THIS attempt
     measured: MeasuredTokens | None = None      # what THIS attempt burned
+    synthesized: Literal[True] | None = None    # migration-made cost carrier, NEVER a hold (§4.F)
 
 class UnitRecord(BaseModel):
     state: UnitState | None = None     # pending|running|done|failed|manual; see §4.B
@@ -149,7 +150,14 @@ Three key forms, each with a rule `validate_run` enforces:
 - `phase/<n>/<member-id>` — a grouped unit. Carries `state`.
 - `step/<step-id>` — a flat `kind: agent` step. **Carries no `state`**: `StepRecord.state` is
   that fact's one home, and this spec exists because facts with two homes drift.
-- `phase/<n>` — gh#496's manual-phase marker. `state: manual`, `attempts` empty, always.
+- `phase/<n>` — a phase fr never dispatches AS a phase: gh#496's manual-phase marker
+  (`state: manual`), or a unit of a flat `for_each: phase` step as `fr run adopt` records it.
+  Carries `state`; `attempts` empty, always.
+  *(Amended in phase 3. The first wording said "`state: manual`, always", and a captured
+  cursor refutes the "always": `tests/fixtures/run_cursors/v1/2026-09-09-feat-issue-464.yaml`
+  carries `phase/1: pending`. Enforcing `manual` would have failed `fr validate artifacts` on
+  every such cursor the moment it migrated. What the two cases share — and what
+  `validate_run` enforces — is that neither ever has an attempt.)*
 
 ### 4.C The witness (decision u1)
 
@@ -291,6 +299,33 @@ Three things phase 2 learned from the CAPTURED cursors, which the first draft ha
   live vocabulary; a harness retired in future would otherwise make every cursor that
   recorded it unreadable, and so unmigratable — the exact stranding this reader exists to
   prevent. `extra="forbid"` and the returned/outcome pairing are kept.
+
+Two things phase 3 learned by running a MIGRATED cursor end to end, neither of which the
+pure rewrite could show:
+
+- **The synthesized attempt must not read as a hold.** It has no `returned` — fr never knew
+  one — and §4.C says a unit is held iff its last attempt is open. Taken together those made
+  every pre-#508 unit of every migrated cursor "held": `fr run check` reported each finished
+  unit as an open dispatch, and, worse, `advance` REFUSED TO RETRY a `failed` unit of an
+  in-flight run, naming a holder that never existed. Closing the attempt instead would have
+  needed a `returned` timestamp fr does not have. So it is marked — `synthesized: true` — and
+  the witness skips it: **a synthesized attempt carries cost, never a hold.** A migrated unit
+  therefore behaves exactly as it did while its cost lived in `accounting`, which no witness
+  ever read: a `running` one is still refused on its state (`ALREADY RUNNING (dispatched
+  <at>)`), a `failed` one is still re-briefed, and the retry's attempt is appended beside it.
+  The model refuses identity or a close on a synthesized attempt; `validate_run` requires it
+  to be the unit's FIRST attempt and never counts it as open.
+- **Nor as "the orchestrator".** On a recorded attempt an absent `agent_type` means the
+  orchestrator ran the unit itself. On a synthesized one it means nobody recorded who did,
+  and the units in question were phase executors. `fr run status` says `holder not recorded
+  (predates the dispatch record)`.
+
+And one reader §4.F.1's audit missed: `fr.archive.find_run_for_plan` (behind both `fr archive`
+and adoption's "does this plan already have a run?") read cursors with the live model and
+skipped what it could not parse — so a not-yet-migrated cursor looked like NO cursor. The
+`fr migrate artifacts` preview offered to adopt four plans in this repo that already had one;
+for a cursor the rewrite refuses, `--yes --adopt` would have written a second cursor beside
+it. It now falls back to the frozen reader: `emitted.plan` is the same fact in every version.
 
 Edges, decided rather than left to the implementer. The rewrite refuses — leaving the cursor
 byte-identical — on a partial measurement (below), on an accounting key that no step

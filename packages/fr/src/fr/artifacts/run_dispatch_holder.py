@@ -21,49 +21,26 @@ claims a shape it does not have, and the migration will never look at it
 again. So `fn` parses first and refuses, which the runner records as that one
 artifact's failure (invariant 3): every other cursor still migrates, the bad
 one stays unstamped, and the next run retries it.
+
+That guard is `fr.artifacts.run_cursor.cursor_guard`, shared with the 1 -> 2
+and 2 -> 3 migrations. This module used to carry its own copy, which read with
+the LIVE run model; the copy went when the guard moved to the frozen legacy
+reader (spec `2026-09-20-unit-record-unification-design.md` §4.F), because a
+rule that has to be applied in three places is a rule that gets applied in two.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, SchemaMigration
+from fr.artifacts.run_cursor import cursor_guard
+from fr.artifacts.runner import MIGRATIONS, SchemaMigration
 
 MIGRATION_NAME = "run-dispatch-holder"
-
-
-class UnreadableRunCursorError(ArtifactMigrationError):
-    """A run file the migration will not stamp, because it cannot read it."""
-
-
-def refuse_unreadable_cursor(path: Path) -> None:
-    """Parse `path` as a run cursor, or raise.
-
-    Deliberately the whole of `fn`: there is no body change to make, so the
-    only way this migration can do harm is by certifying a file it never
-    understood. Goes through `parse_run_state` — the one entry point — rather
-    than a second notion of "valid run state" that could drift from the model.
-
-    Imported inside the function: `fr.artifacts` is imported at CLI entry
-    before every command, and must not drag the run models in with it.
-    """
-    from fr.run.model import RunStateError, parse_run_state
-
-    try:
-        parse_run_state(path.read_text())
-    except (RunStateError, OSError) as e:
-        raise UnreadableRunCursorError(
-            f"{path}: not a readable run cursor, so fr will not stamp it as version 4 "
-            f"({e}). Fix the file by hand — it is left on its current version and will "
-            f"be retried."
-        ) from e
-
 
 RUN_DISPATCH_HOLDER_MIGRATION = SchemaMigration(
     kind="run",
     from_version=3,
     to_version=4,
-    fn=refuse_unreadable_cursor,
+    fn=cursor_guard(4),
     description="run cursor: add the dispatch-holder record (`dispatch`) — stamp only, no "
     "body change",
 )

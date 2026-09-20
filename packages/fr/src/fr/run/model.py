@@ -61,280 +61,6 @@ dispatch is never coming back", recorded while the step itself goes back to
 `running` for a fresh attempt."""
 
 
-class DispatchRecord(BaseModel):
-    """One attempt to hold a unit — a phase member or a flat `kind: agent`
-    step — spanning from `advance`'s own dispatch act to `resolve`'s close.
-
-    Spec §3 draws the line this model exists to keep visible, and every field
-    below sits on one side of it:
-
-    - **fr knows it** — `dispatched`, fr's own timestamp of the act of
-      writing the brief. Nothing here can be wrong about this one, because fr
-      performed it.
-    - **fr derives it** — `agent_type` and `model`, computed from the step
-      definition and `fr models resolve` at the moment `advance` opens the
-      record.
-    - **reported, unverifiable** — `agent`, `harness`, `returned`, `outcome`.
-      The orchestrator claims what it dispatched and how it ended, the same
-      documented terms `AnsweredBy` above already uses for a gate: this is
-      visibility, not enforcement. An unreported `agent` is recorded as
-      absent, never guessed — the same reason `--answered-by` defaults to the
-      weaker claim rather than silently upgrading one nobody made.
-
-    A unit's list of these (`StepRecord.dispatch`, §4.B) is kept oldest
-    first and never overwritten: a failed unit that is retried, or
-    `--redispatch`ed over a lost agent, keeps every prior attempt, which is
-    the forensic trail #503 asks for."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    dispatched: str
-    """ISO 8601 — fr's own act of writing the brief (`advance`). Never absent
-    on a record that exists: this is the one field fr always knows."""
-
-    agent: str | None = None
-    """The harness-reported agent/task id (`fr run claim --agent`). Absent
-    until claimed — an unclaimed dispatch is visible debt (`fr run check`),
-    not a guess at who is holding it."""
-
-    agent_type: str | None = None
-    """E.g. `super-fr:fr-phase-executor` — derived from the step's `agent:`
-    at dispatch time. `None` for an orchestrator-run `kind: agent` step
-    (`agent: null` in the manifest, spec §4.B.1): that is not a missing
-    value, it is `held by the orchestrator`."""
-
-    harness: str | None = None
-    """The harness the orchestrator reported dispatching on, one of
-    `fr.harness.model.HARNESSES`. Detected via
-    `fr.harness.detect.detect_harness` when `--harness` is not given — a
-    guess about the environment, not a claim about the agent — and left
-    absent rather than guessed when detection itself returns `None`. There is
-    no `"unknown"` member: inventing a fifth harness name to mean "we don't
-    know" would put a value here no parity row can ever match."""
-
-    model: str | None = None
-    """The resolved tier binding actually dispatched (`fr models resolve`),
-    derived at `advance` time like `agent_type`."""
-
-    returned: str | None = None
-    """ISO 8601, set at `fr run resolve` (or `claim --abandoned`) — the other
-    half of the dispatched/returned pair spec §1.D says `StepRecord.at` alone
-    cannot give."""
-
-    outcome: DispatchOutcome | None = None
-    """Set alongside `returned`. `None` exactly when `returned` is `None` —
-    the record is still open, and at most one such record may exist per unit
-    (`advance` refuses to open a second, spec §4.C)."""
-
-    @field_validator("harness")
-    @classmethod
-    def _check_harness(cls, value: str | None) -> str | None:
-        """Validated against `fr.harness.model.HARNESSES`, imported rather
-        than re-listed — the same discipline `fr.types.phase_tiers` documents
-        for a closed vocabulary owned by another module."""
-        from fr.harness.model import HARNESSES
-
-        if value is not None and value not in HARNESSES:
-            raise ValueError(f"harness {value!r} must be one of {HARNESSES}")
-        return value
-
-    @model_validator(mode="after")
-    def _returned_and_outcome_are_one_fact(self) -> DispatchRecord:
-        """`outcome` is set exactly when `returned` is.
-
-        Enforced rather than merely documented, because "is this dispatch
-        open?" is the question every reader asks — `fr run status` to name the
-        holder, `fr run advance` to refuse a second one, `fr run check` to
-        count the debt. A half-closed record answers it differently depending
-        on which half a reader happens to look at: `returned` without
-        `outcome` reads as still-held while carrying a return timestamp, and
-        `outcome` without `returned` reads as held forever by an agent that
-        has already finished. Both are the double-dispatch hazard wearing a
-        disguise, so the model refuses them instead of leaving one invariant
-        to be re-derived at every call site."""
-        if (self.returned is None) != (self.outcome is None):
-            raise ValueError(
-                "`returned` and `outcome` are set together or not at all "
-                f"(returned={self.returned!r}, outcome={self.outcome!r}); a record with "
-                "exactly one of them is neither open nor closed"
-            )
-        return self
-
-
-class StepRecord(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    state: StepState
-    at: str | None = None
-    gate: Literal["cleared"] | None = None
-    """An operator gate the operator has answered (`fr run resolve`).
-
-    Separate from `state` on purpose: a gate is an *authorization*, not a
-    lifecycle position, and the two are independent — a `cli` step whose gate
-    was cleared goes back to `pending` so `advance` still executes it and its
-    exit code is still the verdict. Sticky for the life of the run (carried
-    across `_complete_step`), so a retry after a failure does not silently
-    re-block on a question already answered. Absent (`None`) on every step of
-    every pre-existing run file, which is exactly "not answered"."""
-
-    answered_by: AnsweredBy | None = None
-    """Who answered that gate — set only when a gate is CLEARED.
-
-    The same shape as `gate` above and for the same reason: it is an
-    authorization, not a lifecycle position. So it is `None` on every step
-    that has no gate, on a gate that was *declined* (a declined gate was not
-    cleared), and on every step of every run file written before this field
-    existed — which is exactly "no gate was cleared here".
-
-    It is the only durable trace of the failure this field was added for
-    (spec §1): a `gate: operator` step self-resolving on a harness with no
-    operator-question tool. Carried across `_complete_step` like `gate`, or
-    the record would go quiet the moment a cleared `cli` gate's step actually
-    ran — and `fr run check` reads it, so quiet means unreported."""
-
-    emitted: dict[str, str] | None = None
-    exit: int | None = None
-    stdout: str | None = None
-
-    items: dict[str, str] | None = None
-    """Per-item state for a step that fans out (`for_each: phase`).
-
-    Spec §4.B's own illustration of run state carries it —
-    `implement: {state: running, items: {".../phase/1": done, ...}}` — and
-    `fr run adopt` (2026-08-30 §3.E) is the first writer: adopting a plan
-    that is half-implemented has to record WHICH phases are done, or the
-    cursor says `implement` and loses everything that makes the adoption
-    worth having.
-
-    Keys are the plan-relative tail of the §4.D identity grammar
-    (`phase/<n>` for a flat fan-out, `phase/<n>/<member-id>` for a grouped
-    `for_each` with member steps), not a full work-item id: composing the
-    full `<repo>/<spec>/<plan>/phase/<n>` is `fr_dispatch.work_item`'s job
-    and `fr` may not import it (`tests/unit/test_import_direction.py`). The
-    run file already records which plan it is about, in `emitted.plan`, so
-    the tail identifies the item unambiguously within the run.
-
-    Additive and optional, so every run file written without it still
-    parses; no artifact-version bump follows, because the run kind is new in
-    4.0.0 (`fr.artifacts.registry`, `current_version=1`) and no released fr
-    has ever read a run file.
-    """
-
-    members: list[str] | None = None
-    """Member-step ids of a grouped `for_each` step, recorded at build.
-
-    Lets `_check_step_drift` tell a member added/removed after `fr run
-    start` from the ordinary case — without it a shape edit inside the nest
-    would advance silently against a step list the cursor was never computed
-    for. Absent (`None`) on grouped steps of pre-existing run files, where
-    the member check is skipped rather than guessed. Additive and optional,
-    same versioning argument as `items` above.
-    """
-
-    dispatch: dict[str, list[DispatchRecord]] | None = None
-    """Every attempt to hold a unit of this step, oldest first (spec §4.B).
-
-    Keyed by the unit key — a grouped `for_each` member's key matches its
-    `items` entry (`phase/<n>/<member-id>`); a flat `kind: agent` step has no
-    `items` entry at all, so it is keyed `step/<step-id>` instead. The prefix
-    is not cosmetic: a repo-authored step id may itself contain a `/`
-    (`fr.workflow.check.check_workflow` does not forbid it), so without a
-    namespace the two key spaces are not provably disjoint.
-
-    The OPEN dispatch for a key, wherever this docstring or the CLI says it,
-    means the last element of that list when its `returned is None` — there
-    is at most one, because `advance` refuses to open a second (spec §4.C).
-
-    This is a **shape change** (`current_version=3` in
-    `fr.artifacts.registry`, spec §4.D): `StepRecord`/`RunState` are
-    `extra="forbid"`, so a released fr predating this field raises on a
-    cursor that carries it. Additive and optional regardless — absent means
-    exactly "no dispatch recorded for this step", true of every run file
-    written before this field existed.
-    """
-
-
-MEASURED_TOKEN_FIELDS: tuple[str, ...] = (
-    "input_tokens",
-    "cache_creation_input_tokens",
-    "cache_read_input_tokens",
-    "output_tokens",
-)
-"""The four V2 figures `fr.run.telemetry` writes into `PhaseAccounting`.
-
-Named once, here, so the model, the structure validator and the renderer agree
-on what "a measurement" consists of. A measurement is ATOMIC — all four or
-none — which is why the validator can call a partially-filled snapshot a
-structural problem rather than quietly summing three."""
-
-MEASURED_TOKENS_SCHEMA_VERSION = 3
-"""The `run` artifact version these fields FIRST appear in.
-
-Not a second declaration of the kind's `current_version` — that lives in
-`fr.artifacts.registry` and only there, and may move past this. This says
-which version a cursor must declare before it is allowed to carry measured
-tokens, so `validate_run` can report the one state that would otherwise go
-unnoticed: v3 content under a v2 stamp, which no migration would ever revisit
-and which raises in any fr that believes the stamp."""
-
-
-class PhaseAccounting(BaseModel):
-    """Context accounting for one dispatched `(phase, member)` unit — what it
-    is about to re-read (V1), and what it actually cost (V2).
-
-    **V1 — sizes, not tokens.** No harness offers a token API, so V1 measures
-    the context fr itself assembles (journal, composed handoff, spec + plan
-    bytes) and `fr run status` renders token figures explicitly labeled as
-    estimates. Keyed like `items` (`phase/<n>` flat, `phase/<n>/<member>`
-    grouped). Additive and optional: pre-accounting runs parse with
-    `accounting=None`, same versioning argument as `items`/`members`.
-
-    **V2 — measured tokens** (spec §5.C). The four fields below are read from
-    the harness's own transcript by `fr.run.telemetry` when the unit resolves.
-    Unlike the V1 sizes they default to `None`, not `0`, and that distinction
-    is the point: `None` means *no measurement was possible* (no transcript,
-    an unreadable one, an unattributable unit) while `0` is a real, measured
-    zero. `fr run status` never renders the two the same way.
-
-    Adding them is a SHAPE change under `.claude/rules/artifact-versioning.md`
-    — this model is `extra="forbid"`, so an fr that predates the fields raises
-    on a cursor carrying them rather than ignoring them. Hence the `run`
-    kind's stamp bump to 3 and `fr.artifacts.run_telemetry`.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    at: str | None = None
-    journal_entries: int = 0
-    journal_lines: int = 0
-    handoff_chars: int = 0
-    spec_bytes: int = 0
-    plan_bytes: int = 0
-
-    input_tokens: int | None = None
-    cache_creation_input_tokens: int | None = None
-    cache_read_input_tokens: int | None = None
-    output_tokens: int | None = None
-
-    def measured_fields(self) -> dict[str, int | None]:
-        """The four measured figures, by name — `None` where unmeasured."""
-        return {name: getattr(self, name) for name in MEASURED_TOKEN_FIELDS}
-
-    @property
-    def measured_tokens(self) -> int | None:
-        """The four measured figures summed, or `None` for no measurement.
-
-        A measurement is atomic — all four or none — so this never returns a
-        partial sum that would read as a small honest number. A cursor that
-        carries some of the four and not others is a structural problem, and
-        `fr.artifacts.structure.validate_run` reports it as one.
-        """
-        values = list(self.measured_fields().values())
-        if any(value is None for value in values):
-            return None
-        return sum(value for value in values if value is not None)
-
-
 class ContextEstimate(BaseModel):
     """What fr assembled for ONE attempt — `PhaseAccounting`'s V1 half, on its
     own (spec `2026-09-20-unit-record-unification-design.md` §4.A).
@@ -401,10 +127,18 @@ class Attempt(BaseModel):
     """One attempt to hold a unit, carrying its own identity AND its own cost
     (spec §4.A) — `DispatchRecord` plus `session`, `estimate` and `measured`.
 
-    **Not wired into `RunState` yet.** Phase 2 of the unit-record plan adds
-    this model beside the shape that is still live, so phase 3's collapse is a
-    swap rather than a rewrite. Until then `DispatchRecord` above is what a
-    cursor carries.
+    A unit's attempts (`UnitRecord.attempts`) are kept oldest first and never
+    overwritten: a failed unit that is retried, or one `--redispatch`ed over a
+    lost agent, keeps every prior attempt — the forensic trail gh-503 asked
+    for. Which side of the dispatch-holder spec's §3 line each field sits on:
+
+    - **fr knows it** — `dispatched`, fr's own timestamp of the act of
+      dispatching. Stamped BEFORE the brief is built, because it doubles as
+      the start edge of the measurement window (`fr.run.units.estimated_at`):
+      one moment, recorded once.
+    - **fr derives it** — `agent_type`, `model`, `session`, `estimate`.
+    - **reported, unverifiable** — `agent`, `harness`, `returned`, `outcome`.
+      An unreported `agent` is recorded as absent, never guessed.
 
     The three new fields are each the repair of a defect the split shape had:
 
@@ -448,6 +182,30 @@ class Attempt(BaseModel):
     """What THIS attempt burned, written by `resolve` (and by `claim
     --abandoned`, whose spend is exactly the spend worth seeing)."""
 
+    synthesized: Literal[True] | None = None
+    """`True` on the ONE kind of attempt fr did not record when it happened:
+    the attempt the 4 -> 5 migration creates for a unit that had a cost
+    snapshot and no dispatch record (spec §4.F — every cursor that predates
+    the dispatch record, which is most of them). Absent everywhere else.
+
+    **A synthesized attempt carries COST, never a HOLD.** It exists so the
+    unit's estimate and measurement have an attempt to hang off, with
+    `dispatched` = the moment fr briefed it, which is the only fact fr has.
+    It has no `returned`, and that must NOT read as "still held": the unit may
+    be `done`, or `failed` and waiting to be retried, and treating it as held
+    made `advance` refuse to retry a failed unit of an in-flight run the
+    moment the run was migrated, and made `fr run check` report every finished
+    unit of every older cursor as open. It has no `agent_type`, and that must
+    NOT read as "the orchestrator ran it" — which is what an absent
+    `agent_type` means on an attempt fr DID record. Nothing else on the
+    record can tell the two apart, so the record says it.
+
+    The witness (`fr.run.units.open_attempt`) skips it, so a migrated unit
+    behaves exactly as it did while its cost lived in the v4 `accounting` map,
+    which no witness ever read. Stated, not invented: closing it instead would
+    have needed a `returned` timestamp fr never had.
+    """
+
     @field_validator("harness")
     @classmethod
     def _check_harness(cls, value: str | None) -> str | None:
@@ -473,10 +231,38 @@ class Attempt(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _a_synthesized_attempt_claims_nothing_fr_did_not_know(self) -> Attempt:
+        """A synthesized attempt is `dispatched` + cost and NOTHING else.
+
+        Identity or a close on one would be a claim nobody made — and it would
+        also make the record ambiguous again: is this a hold, or not? The
+        marker only means something while the answer stays "never"."""
+        if self.synthesized:
+            claimed = [
+                name
+                for name in (
+                    "agent",
+                    "agent_type",
+                    "harness",
+                    "model",
+                    "session",
+                    "returned",
+                    "outcome",
+                )
+                if getattr(self, name) is not None
+            ]
+            if claimed:
+                raise ValueError(
+                    f"a synthesized attempt carries only `dispatched` and its cost, but this "
+                    f"one also sets {', '.join(claimed)}"
+                )
+        return self
+
 
 UnitState = Literal["pending", "running", "done", "failed", "manual"]
-"""A unit's state in the v5 shape — the values `StepRecord.items` carried as
-bare strings, named (spec §4.B).
+"""A unit's state — the values the v4 `StepRecord.items` map carried as bare
+strings, named (spec §4.B).
 
 `manual` is gh#496's marker for a `tag: manual` phase the fan-out will never
 dispatch; it is a state a unit can be IN, not an outcome, which is why it sits
@@ -486,7 +272,7 @@ STEP, never one of its units."""
 
 class UnitRecord(BaseModel):
     """One unit of one step — its state, every attempt to hold it, and the
-    evidence it produced (spec §4.A). **Not wired into `RunState` yet.**
+    evidence it produced (spec §4.A) — the value type of `StepRecord.units`.
 
     This is the whole point of the unit-record spec: `items`, `dispatch` and
     the top-level `accounting` map were three key spaces over ONE identity,
@@ -504,15 +290,107 @@ class UnitRecord(BaseModel):
 
     attempts: tuple[Attempt, ...] = ()
     """Oldest first; the OPEN attempt is the last one whose `returned` is
-    `None`, and there is at most one. Empty is a real, honest state: a phase
-    `fr run adopt` found already complete was never dispatched by fr, and
-    inventing an attempt to look uniform would be fabrication."""
+    `None` (a `synthesized` one never counts), and there is at most one.
+    Empty is a real, honest state: a phase `fr run adopt` found already
+    complete was never dispatched by fr, and inventing an attempt to look
+    uniform would be fabrication."""
 
     evidence: dict[str, str] | None = None
     """Obligation name -> journal entry id, verified when the unit resolved
     (§4.E). `None` on every unit resolved before the evidence gate existed —
     visible debt reported as `done, unevidenced`, never a retroactive
     failure."""
+
+
+class StepRecord(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    state: StepState
+    at: str | None = None
+    gate: Literal["cleared"] | None = None
+    """An operator gate the operator has answered (`fr run resolve`).
+
+    Separate from `state` on purpose: a gate is an *authorization*, not a
+    lifecycle position, and the two are independent — a `cli` step whose gate
+    was cleared goes back to `pending` so `advance` still executes it and its
+    exit code is still the verdict. Sticky for the life of the run (carried
+    across `_complete_step`), so a retry after a failure does not silently
+    re-block on a question already answered. Absent (`None`) on every step of
+    every pre-existing run file, which is exactly "not answered"."""
+
+    answered_by: AnsweredBy | None = None
+    """Who answered that gate — set only when a gate is CLEARED.
+
+    The same shape as `gate` above and for the same reason: it is an
+    authorization, not a lifecycle position. So it is `None` on every step
+    that has no gate, on a gate that was *declined* (a declined gate was not
+    cleared), and on every step of every run file written before this field
+    existed — which is exactly "no gate was cleared here".
+
+    It is the only durable trace of the failure this field was added for
+    (spec §1): a `gate: operator` step self-resolving on a harness with no
+    operator-question tool. Carried across `_complete_step` like `gate`, or
+    the record would go quiet the moment a cleared `cli` gate's step actually
+    ran — and `fr run check` reads it, so quiet means unreported."""
+
+    emitted: dict[str, str] | None = None
+    exit: int | None = None
+    stdout: str | None = None
+
+    members: list[str] | None = None
+    """Member-step ids of a grouped `for_each` step, recorded at build.
+
+    Lets `_check_step_drift` tell a member added/removed after `fr run
+    start` from the ordinary case — without it a shape edit inside the nest
+    would advance silently against a step list the cursor was never computed
+    for. Absent (`None`) on grouped steps of pre-existing run files, where
+    the member check is skipped rather than guessed.
+    """
+
+    units: dict[str, UnitRecord] | None = None
+    """Every unit of this step — its state, every attempt to hold it, and its
+    cost — under ONE key (spec `2026-09-20-unit-record-unification-design.md`
+    §4.A). Replaces `items` (state), `dispatch` (attempts) and the top-level
+    `RunState.accounting` (cost): three key spaces over one identity, kept in
+    step by call sites that each re-derived the join, which is how a unit's
+    state came to drift from its history.
+
+    Three key forms, each with a rule `fr.artifacts.structure.validate_run`
+    enforces (§4.B):
+
+    - `phase/<n>/<member-id>` — a grouped `for_each` member. Carries `state`.
+    - `step/<step-id>` — a flat `kind: agent` step. Carries **no** `state`:
+      `StepRecord.state` above is that fact's one home. The `step/` prefix is
+      load-bearing, not cosmetic — a repo-authored step id may itself contain
+      a `/` (`fr.workflow.check.check_workflow` constrains no characters), so
+      without a namespace the key spaces are not provably disjoint.
+    - `phase/<n>` — a phase fr never dispatches AS a phase: gh#496's
+      `state: manual` marker, or a unit of a flat `for_each` step that
+      `fr run adopt` recorded. Carries `state`; never any attempts.
+
+    Keys are the plan-relative tail of the work-item identity grammar, not a
+    full work-item id: composing `<repo>/<spec>/<plan>/phase/<n>` is
+    `fr_dispatch.work_item`'s job and `fr` may not import it
+    (`tests/unit/test_import_direction.py`). The run file already records
+    which plan it is about, in `emitted.plan`.
+
+    Only `fr.run.units` reads or writes this map; everything else speaks of
+    units, states, attempts and cost through that module. **A shape change**
+    (`current_version=5`, migration `fr.artifacts.run_unit_record`): this is a
+    field REMOVAL on an `extra="forbid"` model, so the prior shape is frozen
+    in `fr.run.legacy` and every migration reads with that, never with this.
+    """
+
+
+UNIT_RECORD_SCHEMA_VERSION = 5
+"""The `run` artifact version `StepRecord.units` FIRST appears in.
+
+Not a second declaration of the kind's `current_version` — that lives in
+`fr.artifacts.registry` and only there, and may move past this. This says
+which version a cursor must declare before it is allowed to carry `units`, so
+`validate_run` can report the one state that would otherwise go unnoticed: a
+v5 body under an older stamp (the 4 -> 5 migration's crash window, or a bad
+merge), which raises in any fr that believes the stamp."""
 
 
 def current_run_schema_version() -> int:
@@ -557,7 +435,6 @@ class RunState(BaseModel):
     started: str  # ISO 8601; kept as a string for round-trip stability
     cursor: str  # the step id currently active (running/blocked) or next-up
     steps: dict[str, StepRecord]
-    accounting: dict[str, PhaseAccounting] | None = None
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -665,6 +542,16 @@ def dump_run_state(state: RunState) -> str:
     default back to `None`).
     """
     data = state.model_dump(mode="json", exclude_none=True)
+    # A unit fr never dispatched — an adopted `done` phase, a `manual` marker,
+    # a still-`pending` member — dumps as `{state: …}` and nothing else.
+    # `exclude_none` cannot do it (an empty tuple is not `None`), and padding
+    # every such unit with `attempts: []` would both bury the units that DO
+    # have a history and make a native dump differ from what the 4 -> 5
+    # rewrite writes for the same unit.
+    for record in data["steps"].values():
+        for unit in (record.get("units") or {}).values():
+            if not unit.get("attempts"):
+                unit.pop("attempts", None)
     return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
 
 

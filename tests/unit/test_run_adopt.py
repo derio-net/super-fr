@@ -32,6 +32,7 @@ import pytest
 import yaml as _yaml
 from fr.archive import archive_plan_dir, find_run_for_plan
 from fr.cli import app
+from fr.run import units
 from fr.run.adopt import AdoptError, adopt_run, adoptable_plans
 from fr.run.model import load_run_state, run_path
 from typer.testing import CliRunner
@@ -214,7 +215,7 @@ def test_some_phases_complete_lands_on_implement_with_per_phase_state(
     # phase`), which for the shipped fr-goal shape is `implement` — keyed on
     # the first member, since adoption reconstructs implement progress and
     # never review outcomes.
-    assert state.steps["implement"].items == {
+    assert units.unit_states(state.steps["implement"]) == {
         "phase/1/implement-phase": "done",
         "phase/2/implement-phase": "done",
         "phase/3/implement-phase": "pending",
@@ -237,7 +238,7 @@ def test_all_phases_complete_with_no_pr_lands_on_the_group_with_review_pending(
 
     assert state.cursor == "implement"
     assert state.steps["implement"].state == "pending"
-    assert state.steps["implement"].items == {
+    assert units.unit_states(state.steps["implement"]) == {
         "phase/1/implement-phase": "done",
         "phase/2/implement-phase": "done",
         "phase/3/implement-phase": "done",
@@ -262,7 +263,7 @@ def test_an_open_pr_lands_the_cursor_on_deliver(tmp_path: Path, repo_root: Path)
 
     assert state.cursor == "deliver"
     assert state.steps["implement"].state == "done"
-    assert state.steps["implement"].items == {
+    assert units.unit_states(state.steps["implement"]) == {
         "phase/1/implement-phase": "done",
         "phase/2/implement-phase": "done",
     }
@@ -546,7 +547,7 @@ def test_a_plan_with_no_phases_yet_is_in_flight_not_finished(
     state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
 
     assert state.cursor == "implement"
-    assert state.steps["implement"].items is None
+    assert units.unit_keys(state.steps["implement"]) == ()
     assert adoptable_plans(repo) == ()  # ...but it now has a run
 
 
@@ -881,7 +882,7 @@ def test_adopt_against_a_grouped_shape_keys_items_on_the_first_member(
     state = _adopt_grouped(repo, shipped, plan_dir)
 
     assert state.cursor == "implement"
-    assert state.steps["implement"].items == {
+    assert units.unit_states(state.steps["implement"]) == {
         "phase/1/code": "done",
         "phase/2/code": "pending",
         "phase/3/code": "pending",
@@ -903,7 +904,7 @@ def test_adopt_of_an_all_complete_plan_lands_on_the_group_with_review_pending(
     state = _adopt_grouped(repo, shipped, plan_dir)
 
     assert state.cursor == "implement"
-    assert state.steps["implement"].items == {
+    assert units.unit_states(state.steps["implement"]) == {
         "phase/1/code": "done",
         "phase/2/code": "done",
     }
@@ -935,7 +936,7 @@ def test_adoption_records_a_manual_phase_as_manual_not_as_a_member(
 
     state = _adopt_grouped(repo, shipped, plan_dir)
 
-    assert state.steps["implement"].items == {
+    assert units.unit_states(state.steps["implement"]) == {
         "phase/1/code": "done",
         "phase/2/code": "pending",
         "phase/3": "manual",
@@ -954,7 +955,10 @@ def test_adoption_marks_a_complete_manual_phase_manual_too(tmp_path: Path, repo_
 
     state = _adopt_grouped(repo, shipped, plan_dir)
 
-    assert state.steps["implement"].items == {"phase/1": "manual", "phase/2/code": "pending"}
+    assert units.unit_states(state.steps["implement"]) == {
+        "phase/1": "manual",
+        "phase/2/code": "pending",
+    }
 
 
 def test_plan_phase_numbers_delegates_to_the_tag_aware_reader(
@@ -991,3 +995,96 @@ def test_cli_adopt_counts_only_the_phases_that_will_be_dispatched(
     assert result.exit_code == 0, result.output
     assert "2/3 phase members complete" in result.output, result.output
     assert "phase/4" in result.output and "manual" in result.output, result.output
+
+
+# --- adoption writes the v5 shape directly (unit-record spec §4.F.1) ---------
+
+
+def test_adopt_writes_a_current_version_cursor_in_the_unit_record_shape(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """`fr run adopt` is the first WRITER of unit state, so it is the one
+    place a brand-new cursor could still be born in the old shape. It is born
+    current: stamped with the registry's version, carrying `units`, and
+    structurally valid as fr's own validator reads it."""
+    from fr.artifacts.registry import artifact_kind
+    from fr.artifacts.structure import validate_run
+
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=3, complete=2)
+
+    state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
+
+    path = run_path(repo, state.run)
+    raw = _yaml.safe_load(path.read_text())
+    assert raw["schema_version"] == artifact_kind("run").current_version
+    assert "accounting" not in raw
+    implement = raw["steps"]["implement"]
+    assert "items" not in implement and "dispatch" not in implement
+    assert set(implement["units"]) == {
+        "phase/1/implement-phase",
+        "phase/2/implement-phase",
+        "phase/3/implement-phase",
+    }
+    assert validate_run(path) == []
+
+
+def test_a_phase_adoption_found_complete_is_a_done_unit_with_no_attempts(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """fr never dispatched it. An EMPTY history is the honest record of that;
+    inventing an attempt so every `done` unit looks alike would be exactly the
+    fabrication the dispatch-holder spec's §3 forbids — and it would put a
+    `dispatched` timestamp on the cursor for a moment that never happened."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=3, complete=2)
+
+    state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
+
+    record = state.steps["implement"]
+    for key in units.unit_keys(record):
+        assert units.attempts(record, key) == ()
+        assert units.open_attempt(record, key) is None
+    assert units.unit_state(record, "phase/1/implement-phase") == "done"
+    # ...and on disk it is `{state: done}` — no padded `attempts: []`.
+    raw = _yaml.safe_load(run_path(repo, state.run).read_text())
+    assert raw["steps"]["implement"]["units"]["phase/1/implement-phase"] == {"state": "done"}
+    assert raw["steps"]["implement"]["units"]["phase/3/implement-phase"] == {"state": "pending"}
+
+
+# --- a cursor fr has not migrated YET is still a cursor ----------------------
+
+
+def test_a_plan_whose_cursor_is_still_in_the_v4_shape_is_not_offered_for_adoption(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """Found by running `fr migrate artifacts` (the PREVIEW) over this repo the
+    moment the `run` kind moved to 5: it offered to adopt four plans that
+    already HAD a cursor. `find_run_for_plan` read each cursor with the live
+    model, the live model no longer knows `items`, and an unreadable cursor is
+    skipped — so a stale cursor was indistinguishable from no cursor.
+
+    The preview is merely wrong. The dangerous case is a cursor the 4 -> 5
+    rewrite REFUSES (a partial measurement): it stays v4 forever, and
+    `fr migrate artifacts --yes --adopt` would then write a second cursor for
+    the same plan beside it. So the match falls back to the frozen reader —
+    `emitted.plan` is the same fact in every version."""
+    from fr.artifacts.registry import artifact_kind
+
+    fixture = repo_root / "tests/fixtures/run_cursors/v4/2026-09-20-unit-record-unification-r2.yaml"
+    slug = "2026-09-20-unit-record-unification"
+    repo, _shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, slug=slug, phases=3, complete=1)
+    assert adoptable_plans(repo) == (plan_dir,)
+
+    runs = repo / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    stale = runs / fixture.name
+    stale.write_bytes(fixture.read_bytes())
+    assert artifact_kind("run").read_version(stale) < artifact_kind("run").current_version
+
+    assert find_run_for_plan(repo, Path("docs/superpowers/plans") / slug) == fixture.stem
+    assert adoptable_plans(repo) == ()

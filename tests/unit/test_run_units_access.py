@@ -63,13 +63,18 @@ cursor."""
 
 
 def _state(name: str) -> RunState:
-    """The captured cursor `name`, as the live model reads it.
+    """The captured cursor `name`, as the LIVE (v5) model reads it.
 
-    The one seam phase 3 re-points: there it becomes
-    `parse_run_state(dump(v4_to_v5(load(text))))`, and every assertion below
-    is expected to survive unchanged.
+    The one seam phase 3 re-pointed: a captured v1-v4 file goes through the
+    real 4 -> 5 rewrite and is then parsed by the live model. Every assertion
+    below was written against the OLD shape in phase 2 and survived this swap
+    unchanged — which is the proof that the accessor layer is shape-neutral.
     """
-    return parse_run_state((FIXTURES / name).read_text())
+    import yaml
+    from fr.run.legacy import v4_to_v5
+
+    migrated = v4_to_v5(yaml.safe_load((FIXTURES / name).read_text()))
+    return parse_run_state(yaml.safe_dump(migrated, sort_keys=False))
 
 
 # ---------------------------------------------------------------- unit state
@@ -161,16 +166,42 @@ def test_attempts_are_oldest_first() -> None:
     assert got == sorted(got)
 
 
-def test_attempts_of_a_unit_with_a_state_but_no_history_is_empty() -> None:
-    """The majority shape: a unit resolved before the dispatch record existed."""
+def test_a_unit_resolved_before_the_dispatch_record_has_one_synthesized_attempt() -> None:
+    """The majority shape. In the v4 file this unit had a state, a cost
+    snapshot and NO dispatch record; the 4 -> 5 rewrite gave the cost an
+    attempt to hang off. That attempt is marked, carries nothing fr did not
+    know, and is not a witness: fr never RECORDED dispatching this unit."""
     record = _state(HOLDER).steps["implement"]
     assert units.unit_state(record, UNATTEMPTED) == "done"
-    assert units.attempts(record, UNATTEMPTED) == ()
+    (only,) = units.attempts(record, UNATTEMPTED)
+    assert only.synthesized is True
+    assert (only.agent, only.agent_type, only.harness, only.model) == (None, None, None, None)
+    assert only.returned is None and only.outcome is None
+    assert only.estimate is not None
+    assert units.dispatch_recorded(record, UNATTEMPTED) is False
 
 
-def test_attempts_of_an_unrecorded_unit_is_empty() -> None:
+def test_a_synthesized_attempt_is_never_a_hold() -> None:
+    """It has no `returned` only because fr never knew one. Read as a hold it
+    made `advance` refuse to retry a failed unit of a migrated in-flight run,
+    and `fr run check` report every finished unit of an old cursor as open."""
     record = _state(CLUSTER).steps["implement"]
-    assert units.attempts(record, "phase/1/implement-phase") == ()
+    key = "phase/1/implement-phase"
+    assert [a.synthesized for a in units.attempts(record, key)] == [True]
+    assert units.open_attempt(record, key) is None
+
+
+def test_a_unit_with_neither_cost_nor_dispatch_has_no_attempts_at_all() -> None:
+    record = _state(CLUSTER).steps["implement"]
+    assert units.attempts(record, "phase/1/review-phase") == ()
+    assert units.attempts(record, "phase/99/implement-phase") == ()
+    assert units.dispatch_recorded(record, "phase/1/review-phase") is False
+
+
+def test_dispatch_recorded_is_true_once_fr_recorded_any_attempt_even_a_closed_one() -> None:
+    record = _state(HOLDER).steps["implement"]
+    assert units.attempts(record, CLAIMED)[-1].returned is not None
+    assert units.dispatch_recorded(record, CLAIMED) is True
 
 
 def test_open_attempt_is_none_when_every_attempt_returned() -> None:
@@ -212,12 +243,39 @@ def test_with_attempt_appended_keeps_every_prior_attempt() -> None:
 
 def test_with_attempt_appended_opens_a_unit_that_had_none() -> None:
     record = _state(CLUSTER).steps["implement"]
-    key = "phase/1/implement-phase"
+    key = "phase/1/review-phase"
+    assert units.attempts(record, key) == ()
     updated = units.with_attempt_appended(
         record, key, units.UnitAttempt(dispatched="2026-09-20T23:00:00+00:00")
     )
     assert len(units.attempts(updated, key)) == 1
     assert units.unit_state(updated, key) == "done"  # the state it already had survives
+
+
+def test_an_attempt_appended_after_a_synthesized_one_is_the_hold() -> None:
+    """A migrated unit that is dispatched again: the synthesized attempt stays
+    first, as history, and the new one is the witness."""
+    record = _state(CLUSTER).steps["implement"]
+    key = "phase/1/implement-phase"
+    updated = units.with_attempt_appended(
+        record, key, units.UnitAttempt(dispatched="2026-09-20T23:00:00+00:00")
+    )
+    first, second = units.attempts(updated, key)
+    assert first.synthesized is True and second.synthesized is None
+    assert units.open_attempt(updated, key) == second
+    assert units.dispatch_recorded(updated, key) is True
+
+
+def test_with_attempt_appended_on_a_brand_new_key_creates_a_stateless_unit() -> None:
+    """The flat `kind: agent` step's `step/<step-id>` unit (§4.B): attempts,
+    and NO state — `StepRecord.state` is that fact's one home."""
+    record = _state(INFLIGHT).steps["deliver"]
+    updated = units.with_attempt_appended(
+        record, "step/deliver", units.UnitAttempt(dispatched="2026-09-20T23:00:00+00:00")
+    )
+    assert units.unit_state(updated, "step/deliver") is None
+    assert units.unit_states(updated) == {}
+    assert units.unit_keys(updated) == ("step/deliver",)
 
 
 def test_with_last_attempt_replaced_rewrites_only_the_tail() -> None:
@@ -288,7 +346,7 @@ def test_fan_out_states_is_empty_when_no_step_fans_out() -> None:
     state = _state("v1/2026-09-09-feat-issue-464.yaml")
     assert units.fan_out_states(state) or True  # documents the shape either way
     smallest = state.model_copy(
-        update={"steps": {k: v.model_copy(update={"items": None}) for k, v in state.steps.items()}}
+        update={"steps": {k: v.model_copy(update={"units": None}) for k, v in state.steps.items()}}
     )
     assert units.fan_out_states(smallest) == {}
 
@@ -351,6 +409,15 @@ def test_measured_of_reads_all_four_figures_where_they_exist() -> None:
 def test_with_estimate_and_with_measured_round_trip_through_the_accessors() -> None:
     state = _state(CLUSTER)
     key = "phase/9/implement-phase"
+    # An estimate is what fr assembled FOR an attempt, so there has to be one —
+    # opened at the very moment the estimate was computed (one timestamp).
+    steps = dict(state.steps)
+    steps["implement"] = units.with_attempt_appended(
+        units.with_unit_state(steps["implement"], key, "running"),
+        key,
+        units.UnitAttempt(dispatched="2026-09-20T23:00:00+00:00"),
+    )
+    state = state.model_copy(update={"steps": steps})
     written = units.with_estimate(
         state,
         "implement",
@@ -387,3 +454,81 @@ def test_a_partial_measurement_cannot_be_represented() -> None:
     """gh#514's "all four or none" invariant, made structural (spec §4.A)."""
     with pytest.raises(Exception):
         units.MeasuredTokens(input_tokens=1)  # type: ignore[call-arg]
+
+
+# ------------------------------------------------ the rules of the v5 shape
+
+
+def _estimate() -> units.ContextEstimate:
+    return units.ContextEstimate(handoff_chars=3)
+
+
+def test_with_estimate_refuses_a_moment_that_is_not_the_attempts_own() -> None:
+    """ONE timestamp. The estimate is computed before the brief and the attempt
+    opened after it; if the attempt stamped its own later `dispatched`, the
+    measurement window would start AFTER the dispatch it measures — silently.
+    So the mismatch is an error, not a second field."""
+    state = _state(HOLDER)
+    dispatched = units.attempts(state.steps["implement"], CLAIMED)[-1].dispatched
+    assert units.with_estimate(state, "implement", CLAIMED, _estimate(), at=dispatched)
+    with pytest.raises(ValueError, match="one moment"):
+        units.with_estimate(
+            state, "implement", CLAIMED, _estimate(), at="2030-01-01T00:00:00+00:00"
+        )
+
+
+def test_with_estimate_refuses_a_unit_with_no_attempt() -> None:
+    """fr never synthesizes an attempt at run time — only the migration does."""
+    state = _state(CLUSTER)
+    with pytest.raises(ValueError, match="no attempt"):
+        units.with_estimate(
+            state, "implement", "phase/1/review-phase", _estimate(), at="2026-09-20T23:00:00+00:00"
+        )
+
+
+def test_the_measurement_window_starts_at_the_attempts_own_dispatched() -> None:
+    state = _state(HOLDER)
+    last = units.attempts(state.steps["implement"], CLAIMED)[-1]
+    assert last.estimate is not None
+    assert units.estimated_at(state, CLAIMED) == last.dispatched
+
+
+def test_cost_is_per_attempt_a_redispatch_does_not_overwrite_the_abandoned_spend() -> None:
+    """Decision u2. The v4 `accounting` map held ONE snapshot per unit, so a
+    redispatched unit's second estimate overwrote the first — and the
+    abandoned agent's spend, exactly the spend worth seeing, disappeared."""
+    state = _state(HOLDER)
+    first = units.attempts(state.steps["implement"], CLAIMED)[-1]
+    assert first.estimate is not None and first.returned is not None
+    steps = dict(state.steps)
+    steps["implement"] = units.with_attempt_appended(
+        steps["implement"], CLAIMED, units.UnitAttempt(dispatched="2026-09-20T23:00:00+00:00")
+    )
+    state = state.model_copy(update={"steps": steps})
+
+    state = units.with_estimate(
+        state, "implement", CLAIMED, _estimate(), at="2026-09-20T23:00:00+00:00"
+    )
+
+    before, after = units.attempts(state.steps["implement"], CLAIMED)
+    assert before == first, "the earlier attempt keeps its own cost, untouched"
+    assert after.estimate == _estimate()
+
+
+def test_a_wholesale_state_write_never_drops_a_units_attempts() -> None:
+    """State and attempts are ONE record now, so `with_unit_states` is exactly
+    the operation that could delete a unit's history — f7, one shape later."""
+    record = _state(HOLDER).steps["implement"]
+    history = units.attempts(record, CLAIMED)
+    assert history
+
+    rewritten = units.with_unit_states(record, {**units.unit_states(record), CLAIMED: "failed"})
+    assert units.unit_state(rewritten, CLAIMED) == "failed"
+    assert units.attempts(rewritten, CLAIMED) == history
+
+    # Even a write that OMITS the key keeps the history, stateless, rather
+    # than deleting it. No caller narrows the map today; silent loss is the
+    # wrong default for the day one does.
+    narrowed = units.with_unit_states(record, {"phase/1/implement-phase": "done"})
+    assert units.attempts(narrowed, CLAIMED) == history
+    assert units.unit_state(narrowed, CLAIMED) is None

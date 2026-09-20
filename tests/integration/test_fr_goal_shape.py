@@ -26,6 +26,7 @@ import textwrap
 from pathlib import Path
 
 from fr.cli import app
+from fr.run import units
 from fr.run.model import load_run_state
 from fr.workflow.model import Step
 from fr.workflow.resolve import resolve_workflow
@@ -558,7 +559,7 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
     state = load_run_state(root, "r1")
     assert state.cursor == "journal-check"
     assert state.steps["implement"].state == "done"
-    assert len(state.accounting or {}) == 6
+    assert len(units.accounted_keys(state)) == 6
 
     # journal-check is `kind: cli` and self-completes: the toy plan's steps
     # were never ticked, so no phase is locally-complete and none is "owed"

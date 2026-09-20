@@ -47,12 +47,15 @@ reproduces the fixture exactly, from any clone that has the commit).
 | `v3/2026-09-20-fix-434-phases-file-tier.yaml` | `docs/superpowers/implemented/runs/2026-09-20-fix-434-phases-file-tier.yaml` | `da2af6e74867` | `33e31dd09724` | `bbca669fbd16` | `df4e82dd9bfb94aec276c5622880c6fa6d8cba4a1e55948f7c5178aea1cde6f6` | second v3: `accounting` with sizes only, NO measured token figures (the unmeasured case) |
 | `v4/2026-09-20-feat-phase-holder-identity.yaml` | `docs/superpowers/runs/2026-09-20-feat-phase-holder-identity.yaml` | `da2af6e74867` | `a880434b6ec5` | `4a8417423c7c` | `ccbcbc6a5671812b04e5b54fe232f570e1edf15738e50ad53d034fc7138f2da1` | all three maps at once: `items`, `dispatch` (several attempts per unit, claimed and abandoned), `accounting` |
 | `v4/2026-09-20-fix-fr-run-cursor-cluster.yaml` | `docs/superpowers/runs/2026-09-20-fix-fr-run-cursor-cluster.yaml` | `da2af6e74867` | `bd96bebc0263` | `f6cd3dbd0b64` | `f87a94d7f098d70a973721bb42875691d6a7df68af67a9956a21367f66aad0ec` | gh#496's `phase/<n>: manual` marker; no `dispatch` (stamp-migrated 2 -> 4, body untouched) |
+| `v4/2026-09-20-unit-record-unification-r2.yaml` | `docs/superpowers/runs/2026-09-20-unit-record-unification-r2.yaml` | `b7fd771b7141` | `b7fd771b7141` | `a8d7daf57a37` | `2ae23637b2a1ebb91ef280a43ec0234c5777d398c048141ad476b21ef3f6dabd` | IN-FLIGHT WITH A HELD UNIT: `phase/3/implement-phase` carries a claimed, OPEN attempt (`returned` absent) beside closed ones, a real measurement on `phase/2/implement-phase`, and two attempts with no `agent_type` (orchestrator-run reviews). Captured in phase 3, moments before the 4 -> 5 migration rewrote the source |
 
 ## Not captured, and why
 
-- `docs/superpowers/runs/2026-09-20-unit-record-unification.yaml` — this plan's
-  own cursor, the only one carrying a claimed OPEN hold. It was untracked when
-  phase 1 ran, so there are no committed bytes to point at; capture it once it
-  is committed, from `git show`, not from the working tree.
+- (Resolved in phase 3.) This plan's own cursor — the only one carrying a claimed OPEN
+  hold — was untracked when phase 1 ran, so there were no committed bytes to point at.
+  Phase 3 committed it (`b7fd771b7141`) and captured it from `git show` as
+  `v4/2026-09-20-unit-record-unification-r2.yaml`, immediately before migrating the
+  source file to version 5. The `-r2` run superseded the original run id after a
+  manifest-drift recovery (journal `x-p1-lost-dispatch-history`).
 - A natively-written v2 → v3 cursor pair for the same run. None exists: each
   run lived at one version.

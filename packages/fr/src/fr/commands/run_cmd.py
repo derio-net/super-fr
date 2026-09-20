@@ -449,12 +449,13 @@ def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
     the advance path, where the V1 sizes are recorded). At dispatch time the
     unit's transcript does not exist yet, so a measurement taken there is
     structurally always empty — it would pass a test and read zero from every
-    real run. The figure lands in the same `PhaseAccounting` record under the
-    same key; only the moment differs.
+    real run. The figure lands on the same ATTEMPT the estimate does
+    (`Attempt.measured` beside `Attempt.estimate`); only the moment differs.
 
-    The window is `[snapshot.at, now]`: the V1 snapshot's timestamp is written
-    immediately before the dispatch brief is printed, so it precedes every
-    transcript record of the unit it dispatched, and `now` is this resolve.
+    The window is `[attempt.dispatched, now]`: that timestamp is taken
+    immediately before the dispatch brief is built (`_advance_group` passes the
+    same moment to `_open_dispatch` and `units.with_estimate`), so it precedes
+    every transcript record of the unit it dispatched, and `now` is this resolve.
     Serial dispatch makes that window hold exactly one dispatch.
 
     Never a gate and never noisy: a unit with no V1 snapshot, a harness with
@@ -608,26 +609,30 @@ def _complete_step(
     that finally executes the step.
     """
     prior = state.steps.get(step_id)
-    new_record = StepRecord(
-        state=outcome,
-        at=_now(),
-        gate=prior.gate if prior is not None else None,
-        answered_by=answered_by or (prior.answered_by if prior is not None else None),
-        exit=exit_code,
-        stdout=stdout,
-        emitted=dict(emitted) if emitted else None,
-        members=list(prior.members) if prior is not None and prior.members else None,
-    )
-    # A completed grouped step keeps its UNITS — every state and every attempt
-    # — carried as ONE thing (`units.with_units_carried_forward`) rather than
-    # as a list of fields. Finding f7 is why: the two halves used to be copied
-    # separately, the dispatch half was once missed, and the trail gh-503 asked
-    # for ("who was holding this phase, and when") was deleted by the very act
-    # of FINISHING — silently, because only `status`/`check` ever read it. An
+    # The successor is the PRIOR record with the fields completion decides
+    # overwritten — never a record rebuilt from a list of fields to keep.
+    # Finding f7 is why: this used to be `StepRecord(state=…, gate=prior.gate,
+    # members=prior.members, …)`, a hand-maintained carry-forward list, so any
+    # durable field added later was DROPPED at completion by default. The
+    # dispatch history was the one that got caught: the trail gh-503 asked for
+    # ("who was holding this phase, and when") was deleted by the very act of
+    # FINISHING — silently, because only `status`/`check` ever read it — and an
     # adopted flat fan-out went blind the same way (`_fan_out_items` scans
-    # every record for exactly this).
-    if prior is not None:
-        new_record = units.with_units_carried_forward(new_record, prior)
+    # every record for exactly this). Now `gate`, `members`, `units` and
+    # whatever comes next survive unless a line below says otherwise.
+    completion: dict[str, object] = {
+        "state": outcome,
+        "at": _now(),
+        "answered_by": answered_by or (prior.answered_by if prior is not None else None),
+        "exit": exit_code,
+        "stdout": stdout,
+        "emitted": dict(emitted) if emitted else None,
+    }
+    new_record = (
+        prior.model_copy(update=completion)
+        if prior is not None
+        else StepRecord.model_validate(completion)
+    )
     new_state = _with_step(state, step_id, new_record)
     if outcome == "done" and step_id == state.cursor:
         next_id = _next_step_id(manifest, step_id)
@@ -937,8 +942,19 @@ def _open_dispatch(
     agent_type: str | None,
     tier: str | None,
     repo_root: Path,
+    at: str | None = None,
 ) -> RunState:
-    """Append a new `DispatchRecord` opening `key`'s hold under `step_id`.
+    """Append a new attempt opening `key`'s hold under `step_id`.
+
+    `at` is the attempt's `dispatched`, and a caller that also records a
+    context estimate MUST pass the moment it computed that estimate at — taken
+    BEFORE the brief is built. In the v5 shape that one timestamp is both
+    "when fr dispatched this" and the start edge of the attempt's measurement
+    window; letting this function stamp its own `_now()` there would move the
+    window's start AFTER the dispatch it measures, and
+    `units.with_estimate` refuses the mismatch rather than let it pass.
+    Absent, it is stamped here — right for the flat `kind: agent` branch,
+    which records no estimate and still saves before it prints the brief.
 
     Spec §4.B.1: called exactly when `advance` moves a unit to `running` —
     from BOTH `_advance_group`'s write-claim and the flat `kind: agent`
@@ -957,7 +973,7 @@ def _open_dispatch(
         record,
         key,
         UnitAttempt(
-            dispatched=_now(),
+            dispatched=at or _now(),
             agent_type=agent_type,
             harness=harness,
             model=_resolved_model(repo_root, harness, tier),
@@ -967,7 +983,7 @@ def _open_dispatch(
 
 
 def _dispatch_needs_open(record: StepRecord, key: str) -> bool:
-    """Should `advance` append a fresh `DispatchRecord` for `key`?
+    """Should `advance` append a fresh `Attempt` for `key`?
 
     True when nothing has been recorded for it yet, or its last attempt is
     CLOSED (`returned` is not `None`) — an abandoned (`fr run claim
@@ -1022,19 +1038,22 @@ def _hold_on(record: StepRecord, key: str, *, running: bool) -> _Hold | None:
     attempts. No witness is not the same as a witness saying "free", so there
     gh#519's state-based refusal stands, and the caller words it `ALREADY
     RUNNING (dispatched <at>)` because there is no holder to name. A unit
-    with ANY record, even a closed one, never reaches this branch.
+    with ANY record, even a closed one, never reaches this branch. (An attempt
+    the 4 -> 5 migration SYNTHESIZED to carry an old cost snapshot is not a
+    record in this sense — `units.dispatch_recorded` — so a migrated in-flight
+    cursor is refused, and retried, exactly as it was the day before.)
     """
     held = _held_record(record, key)
     if held is not None:
         return _Hold(held)
-    never_recorded = not units.attempts(record, key)
+    never_recorded = not units.dispatch_recorded(record, key)
     return _Hold(None) if running and never_recorded else None
 
 
 def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> StepRecord:
     """Close `key`'s open dispatch: `returned` = now, `outcome` = `outcome`.
 
-    `DispatchRecord` enforces that the two are one fact, so they are written
+    `Attempt` enforces that the two are one fact, so they are written
     in one `model_copy` and never separately. Callers must have established
     that the unit IS held (`_held_record` / `_open_dispatch_record`); this
     helper does not re-derive it, so there is still exactly one place that
@@ -1492,6 +1511,7 @@ def _advance_group(
             agent_type=member.agent,
             tier=_dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n),
             repo_root=repo_root,
+            at=estimate_at,
         )
     save_run_state(
         repo_root, units.with_estimate(state, step.id, pending, estimate, at=estimate_at)
@@ -1859,8 +1879,14 @@ def _dispatch_descriptor_suffix(attempt: UnitAttempt, *, with_agent_type: bool =
 
 
 def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
-    """One `DispatchRecord` as a line of `fr run status`/`fr run check`
+    """One `Attempt` as a line of `fr run status`/`fr run check`
     prose — spec §4.C's illustration, cases (a)-(d) of P5.T1.S1."""
+    if attempt.synthesized:
+        # NOT "held by the orchestrator": this attempt has no `agent_type`
+        # because fr never recorded one, and no `returned` for the same reason.
+        return (
+            f"dispatched {attempt.dispatched} — holder not recorded (predates the dispatch record)"
+        )
     who = _dispatch_holder_label(attempt)
     suffix = _dispatch_descriptor_suffix(attempt)
     if attempt.returned is None:
@@ -2340,7 +2366,7 @@ def resolve_cmd(
     see `_complete_step`).
 
     It is also the CLOSING half of the dispatch pair `advance` opened: the
-    unit's open `DispatchRecord` gets `returned` = now and `outcome` =
+    unit's open `Attempt` gets `returned` = now and `outcome` =
     `--state`, which is what stops `advance` refusing the unit as held.
     `--agent/--harness/--model` attach a late identity to a record nobody
     claimed — the fallback for an orchestrator that never called
@@ -2552,7 +2578,7 @@ def resolve_cmd(
 
 
 def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:
-    """The OPEN (`returned is None`) `DispatchRecord` for `key`, or refuse.
+    """The OPEN (`returned is None`) `Attempt` for `key`, or refuse.
 
     `fr run claim` annotates a dispatch `fr run advance` already made; it
     never invents one (spec §4.C) — a unit with no attempts at all, or whose
@@ -2575,7 +2601,7 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
 
     The step's `items`/`state` are left exactly as they are — still
     `running` — so the next `fr run advance` sees the unit as still pending
-    and briefs it again, appending a fresh `DispatchRecord` alongside this
+    and briefs it again, appending a fresh `Attempt` alongside this
     now-closed one (`_dispatch_needs_open`). This is the sanctioned recovery
     for an executor that is never coming back: nothing can retire it from the
     orchestrator side, so freeing the tree has to be a named operator act.
@@ -2651,7 +2677,7 @@ def claim_cmd(
 ) -> None:
     """Put the orchestrator's reported identity onto the dispatch `fr run
     advance` already opened for a unit (spec §3, §4.C) — the `agent`/
-    `harness` half of `DispatchRecord` that only the orchestrator can report,
+    `harness` half of `Attempt` that only the orchestrator can report,
     fr itself can only derive `agent_type`/`model` and time its own act.
 
     Requires an OPEN dispatch record for the unit: a claim annotates a

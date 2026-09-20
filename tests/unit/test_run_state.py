@@ -129,34 +129,12 @@ def test_pending_step_has_no_null_padding_in_dump() -> None:
     assert "null" not in text
 
 
-# --- V1 context accounting (methodology restoration, phase 4) ---
-
-
-def test_accounting_round_trips_and_defaults_to_absent() -> None:
-    """Per-item context snapshots ride the run file (additive, defaulted —
-    every pre-accounting run still parses with `accounting=None`)."""
-    from fr.run.model import PhaseAccounting
-
-    snap = PhaseAccounting(
-        at="2026-09-09T00:00:01Z",
-        journal_entries=12,
-        journal_lines=180,
-        handoff_chars=2100,
-        spec_bytes=8400,
-        plan_bytes=12500,
-    )
-    state = _sample_state().model_copy(update={"accounting": {"phase/1/code": snap}})
-    assert parse_run_state(dump_run_state(state)) == state
-    assert _sample_state().accounting is None
-    assert "accounting" not in dump_run_state(_sample_state())
-
-
-# --- V2 measured tokens (spec §5.C, phase 4) ------------------------------
+# --- one record per unit (spec 2026-09-20-unit-record-unification §4.A) -----
 #
-# The four figures come from the harness's own transcript, so they are
-# `None` — *no measurement* — wherever no transcript could be read. `None` is
-# not zero: a unit that genuinely spent nothing is a measured zero, and the
-# two must never render as the same thing.
+# `items`, `dispatch` and the top-level `accounting` were three key spaces over
+# ONE identity. The live model is the v5 shape only: `StepRecord.units`. What a
+# v4 cursor looks like is `fr.run.legacy`'s business, tested in
+# `test_run_legacy.py` against captured files.
 
 _MEASURED = {
     "input_tokens": 4,
@@ -166,66 +144,130 @@ _MEASURED = {
 }
 
 
-def test_accounting_carries_four_optional_measured_token_fields() -> None:
-    from fr.run.model import PhaseAccounting
+def _with_units(state: RunState, step_id: str, units: dict) -> RunState:
+    steps = dict(state.steps)
+    steps[step_id] = steps[step_id].model_copy(update={"units": units})
+    return state.model_copy(update={"steps": steps})
 
-    snap = PhaseAccounting(at="2026-09-20T00:00:01Z", handoff_chars=10, **_MEASURED)
-    state = _sample_state().model_copy(update={"accounting": {"phase/1/code": snap}})
+
+def test_a_unit_record_round_trips_with_its_state_attempts_and_cost() -> None:
+    from fr.run.model import Attempt, ContextEstimate, MeasuredTokens, UnitRecord
+
+    held = Attempt(
+        dispatched="2026-09-20T00:00:01Z",
+        agent="add889a7",
+        agent_type="super-fr:fr-phase-executor",
+        harness="claude-code",
+        model="claude-sonnet-5",
+        estimate=ContextEstimate(journal_entries=12, handoff_chars=2100),
+    )
+    closed = Attempt(
+        dispatched="2026-09-19T00:00:01Z",
+        returned="2026-09-19T01:00:00Z",
+        outcome="abandoned",
+        estimate=ContextEstimate(handoff_chars=10),
+        measured=MeasuredTokens(**_MEASURED),
+    )
+    state = _with_units(
+        _sample_state(),
+        "implement",
+        {"phase/1/code": UnitRecord(state="running", attempts=(closed, held))},
+    )
 
     text = dump_run_state(state)
 
     assert "cache_read_input_tokens: 200784" in text
     assert parse_run_state(text) == state
-    assert parse_run_state(text).accounting["phase/1/code"].output_tokens == 1927
+    assert dump_run_state(parse_run_state(text)) == text
+    unit = parse_run_state(text).steps["implement"].units["phase/1/code"]
+    assert unit.attempts[0].measured.output_tokens == 1927
+    assert unit.attempts[1].measured is None, "cost is per ATTEMPT — the open one has none yet"
 
 
-def test_a_pre_telemetry_snapshot_still_parses_and_measures_nothing() -> None:
-    """A run written before these fields existed must not become unreadable —
-    and must not read as a measured zero either."""
-    text = """\
-run: r1
-workflow: fr-goal@1
-branch: feat/x
-started: '2026-09-09T09:00:00Z'
-cursor: implement
-steps:
-  implement:
-    state: running
-accounting:
-  phase/1/code:
-    at: '2026-09-09T09:00:01Z'
-    journal_entries: 3
-    journal_lines: 40
-    handoff_chars: 900
-    spec_bytes: 100
-    plan_bytes: 200
-"""
+def test_units_default_to_absent_and_a_unitless_run_omits_the_key() -> None:
+    assert _sample_state().steps["implement"].units is None
+    assert "units" not in dump_run_state(_sample_state())
 
-    snap = parse_run_state(text).accounting["phase/1/code"]
 
-    assert snap.journal_entries == 3
-    assert snap.input_tokens is None
-    assert snap.cache_creation_input_tokens is None
-    assert snap.cache_read_input_tokens is None
-    assert snap.output_tokens is None
-    assert snap.measured_tokens is None
+def test_a_unit_with_no_attempts_dumps_no_attempts_key() -> None:
+    """An adopted `done` unit and a `manual` marker were never dispatched. They
+    dump as `{state: …}` and nothing else — the same bytes the 4 -> 5 rewrite
+    produces for them, so a migrated cursor and a native one agree."""
+    from fr.run.model import UnitRecord
+
+    state = _with_units(
+        _sample_state(),
+        "implement",
+        {"phase/1/code": UnitRecord(state="done"), "phase/7": UnitRecord(state="manual")},
+    )
+    text = dump_run_state(state)
+    assert "attempts" not in text
+    assert parse_run_state(text) == state
 
 
 def test_a_measured_zero_is_not_no_measurement() -> None:
-    from fr.run.model import PhaseAccounting
+    from fr.run.model import Attempt, MeasuredTokens
 
-    nothing = PhaseAccounting(at="2026-09-20T00:00:01Z")
-    zero = PhaseAccounting(
-        at="2026-09-20T00:00:01Z",
-        input_tokens=0,
-        cache_creation_input_tokens=0,
-        cache_read_input_tokens=0,
-        output_tokens=0,
+    nothing = Attempt(dispatched="2026-09-20T00:00:01Z")
+    zero = Attempt(
+        dispatched="2026-09-20T00:00:01Z",
+        measured=MeasuredTokens(
+            input_tokens=0,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+            output_tokens=0,
+        ),
     )
 
-    assert nothing.measured_tokens is None
-    assert zero.measured_tokens == 0
+    assert nothing.measured is None
+    assert zero.measured is not None and zero.measured.total == 0
     assert nothing != zero
+
+
+@pytest.mark.parametrize(
+    ("where", "fragment"),
+    [
+        ("step", "    items:\n      phase/1/code: done\n"),
+        (
+            "step",
+            "    dispatch:\n      phase/1/code:\n      - dispatched: '2026-09-20T00:00:01Z'\n",
+        ),
+        ("top", "accounting:\n  phase/1/code:\n    at: '2026-09-09T09:00:01Z'\n"),
+    ],
+)
+def test_the_live_parser_refuses_every_map_the_flip_removed(where: str, fragment: str) -> None:
+    """The live model is v5 ONLY and closed-world: a v4 body is refused, by
+    name, rather than half-read. Reading v4 is `fr.run.legacy`'s job, and
+    getting a v4 file to v5 is the migration's — `fr migrate artifacts`."""
+    head = (
+        "run: r1\nworkflow: fr-goal@1\nbranch: feat/x\nstarted: '2026-09-09T09:00:00Z'\n"
+        "cursor: implement\nsteps:\n  implement:\n    state: running\n"
+    )
+    text = head + fragment
+    with pytest.raises(RunStateError, match=fragment.split(":")[0].strip()):
+        parse_run_state(text)
+
+
+_CAPTURED = sorted(
+    (Path(__file__).resolve().parents[1] / "fixtures" / "run_cursors").glob("v*/*.yaml")
+)
+
+
+@pytest.mark.parametrize("path", _CAPTURED, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_migrated_capture_and_a_native_dump_are_the_same_data(path: Path) -> None:
+    """Every captured cursor, rewritten 4 -> 5, parses with the live model and
+    dumps back to the SAME data — nothing invented by the model (no padded
+    `attempts: []`, no defaulted zeros the rewrite did not write), nothing lost."""
+    import yaml
+    from fr.run.legacy import v4_to_v5
+
+    assert _CAPTURED, "no captured cursors — the glob is wrong, not the fixtures"
+    migrated = v4_to_v5(yaml.safe_load(path.read_text()))
+    state = parse_run_state(yaml.safe_dump(migrated, sort_keys=False))
+    redumped = yaml.safe_load(dump_run_state(state))
+    redumped.pop("schema_version")
+    migrated.pop("schema_version", None)
+    assert redumped == migrated
 
 
 # --- Phase 4: gate provenance + the `run` artifact stamp -------------------
@@ -303,7 +345,7 @@ def test_the_current_run_schema_version_comes_from_the_artifact_registry() -> No
     assert current_run_schema_version() == artifact_kind("run").current_version
 
 
-# --- Phase 1 (dispatch-holder-identity): DispatchRecord ---------------------
+# --- Attempt (was DispatchRecord; dispatch-holder-identity phase 1) --------
 #
 # spec `2026-09-20-dispatch-holder-identity-design.md` §4.A/§4.B. `dispatched`
 # is the one field fr writes itself (`advance` timestamps its own act);
@@ -312,9 +354,9 @@ def test_the_current_run_schema_version_comes_from_the_artifact_registry() -> No
 
 
 def test_dispatch_record_requires_dispatched_and_defaults_the_rest_to_none() -> None:
-    from fr.run.model import DispatchRecord
+    from fr.run.model import Attempt
 
-    record = DispatchRecord(dispatched="2026-09-20T09:00:00Z")
+    record = Attempt(dispatched="2026-09-20T09:00:00Z")
     assert record.dispatched == "2026-09-20T09:00:00Z"
     assert record.agent is None
     assert record.agent_type is None
@@ -324,24 +366,24 @@ def test_dispatch_record_requires_dispatched_and_defaults_the_rest_to_none() -> 
     assert record.outcome is None
 
     with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError, missing field
-        DispatchRecord()  # type: ignore[call-arg]
+        Attempt()  # type: ignore[call-arg]
 
 
 def test_dispatch_record_is_frozen_and_closed_world() -> None:
-    from fr.run.model import DispatchRecord
+    from fr.run.model import Attempt
 
-    record = DispatchRecord(dispatched="2026-09-20T09:00:00Z")
+    record = Attempt(dispatched="2026-09-20T09:00:00Z")
     with pytest.raises(Exception):  # noqa: B017 — frozen
         record.agent = "a1"  # type: ignore[misc]
     with pytest.raises(Exception):  # noqa: B017 — extra="forbid"
-        DispatchRecord(dispatched="2026-09-20T09:00:00Z", bogus="x")  # type: ignore[call-arg]
+        Attempt(dispatched="2026-09-20T09:00:00Z", bogus="x")  # type: ignore[call-arg]
 
 
 @pytest.mark.parametrize("outcome", ["done", "failed", "abandoned"])
 def test_dispatch_record_outcome_accepts_every_documented_value(outcome: str) -> None:
-    from fr.run.model import DispatchRecord
+    from fr.run.model import Attempt
 
-    record = DispatchRecord(
+    record = Attempt(
         dispatched="2026-09-20T09:00:00Z",
         returned="2026-09-20T09:30:00Z",
         outcome=outcome,  # type: ignore[arg-type]
@@ -359,12 +401,12 @@ def test_dispatch_record_pairs_returned_and_outcome() -> None:
     Both are the double-dispatch hazard wearing a disguise, so the model
     refuses them rather than leaving the invariant to every caller.
     """
-    from fr.run.model import DispatchRecord
+    from fr.run.model import Attempt
 
     # Open: neither half set. Closed: both. Both are fine.
-    assert DispatchRecord(dispatched="2026-09-20T09:00:00Z").returned is None
+    assert Attempt(dispatched="2026-09-20T09:00:00Z").returned is None
     assert (
-        DispatchRecord(
+        Attempt(
             dispatched="2026-09-20T09:00:00Z",
             returned="2026-09-20T09:30:00Z",
             outcome="done",
@@ -373,70 +415,29 @@ def test_dispatch_record_pairs_returned_and_outcome() -> None:
     )
 
     with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
-        DispatchRecord(dispatched="2026-09-20T09:00:00Z", returned="2026-09-20T09:30:00Z")
+        Attempt(dispatched="2026-09-20T09:00:00Z", returned="2026-09-20T09:30:00Z")
     with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
-        DispatchRecord(dispatched="2026-09-20T09:00:00Z", outcome="done")
+        Attempt(dispatched="2026-09-20T09:00:00Z", outcome="done")
 
 
 def test_dispatch_record_outcome_rejects_an_unrecognised_value() -> None:
-    from fr.run.model import DispatchRecord
+    from fr.run.model import Attempt
 
     with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
-        DispatchRecord(dispatched="2026-09-20T09:00:00Z", outcome="cancelled")  # type: ignore[arg-type]
+        Attempt(dispatched="2026-09-20T09:00:00Z", outcome="cancelled")  # type: ignore[arg-type]
 
 
 def test_dispatch_record_harness_accepts_every_member_of_the_closed_harness_set() -> None:
     from fr.harness.model import HARNESSES
-    from fr.run.model import DispatchRecord
+    from fr.run.model import Attempt
 
     for harness in HARNESSES:
-        record = DispatchRecord(dispatched="2026-09-20T09:00:00Z", harness=harness)
+        record = Attempt(dispatched="2026-09-20T09:00:00Z", harness=harness)
         assert record.harness == harness
 
 
 def test_dispatch_record_harness_rejects_unknown() -> None:
-    from fr.run.model import DispatchRecord
+    from fr.run.model import Attempt
 
     with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
-        DispatchRecord(dispatched="2026-09-20T09:00:00Z", harness="unknown")
-
-
-def test_step_record_dispatch_defaults_to_none_and_a_dispatchless_step_parses_unchanged() -> None:
-    text = """
-run: r
-workflow: fr-goal@1
-branch: b
-started: "2026-08-14T09:00:00Z"
-cursor: a
-steps:
-  a: {state: pending}
-"""
-    state = parse_run_state(text)
-    assert state.steps["a"].dispatch is None
-
-
-def test_a_run_state_carrying_dispatch_round_trips_and_omits_dispatch_when_none() -> None:
-    from fr.run.model import DispatchRecord
-
-    state = _sample_state()
-    held = DispatchRecord(
-        dispatched="2026-08-14T09:00:11Z",
-        agent="add889a7",
-        agent_type="super-fr:fr-phase-executor",
-        harness="claude-code",
-        model="claude-sonnet-5",
-    )
-    steps = dict(state.steps)
-    steps["implement"] = steps["implement"].model_copy(
-        update={"dispatch": {"phase/1/implement-phase": [held]}}
-    )
-    state = state.model_copy(update={"steps": steps})
-
-    text = dump_run_state(state)
-    assert "phase/1/implement-phase" in text
-    round_tripped = parse_run_state(text)
-    assert round_tripped == state
-    assert round_tripped.steps["implement"].dispatch == {"phase/1/implement-phase": [held]}
-
-    # a step with dispatch=None (the default) omits the key entirely
-    assert "dispatch" not in dump_run_state(_sample_state())
+        Attempt(dispatched="2026-09-20T09:00:00Z", harness="unknown")

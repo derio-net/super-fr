@@ -117,7 +117,7 @@ class UsageTotals:
         )
 
     def as_fields(self) -> dict[str, int]:
-        """The four figures, keyed as `PhaseAccounting` names them."""
+        """The four figures, keyed as `fr.run.model.MeasuredTokens` names them."""
         return {key: getattr(self, key) for key in USAGE_KEYS}
 
 

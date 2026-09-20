@@ -2543,13 +2543,20 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_run_v4_to_v5.py
-    status: not-implemented
-    notes: 'Phase 2 builds the 4 to 5 rewrite as a PURE FUNCTION (fr.run.legacy.v4_to_v5)
-      and proves it lossless over all eight captured cursors — but registers no migration
-      and moves no current_version, so nothing on disk migrates yet. Status deliberately
-      stays not-implemented: the row''s acceptance is about a cursor actually migrating,
-      and the unit evidence cited here does not make that true. Phase 3 wires it and
-      flips this row.'
+      - super-fr:tests/unit/test_migration_runner.py
+      - super-fr:tests/unit/test_migration_run_unit_record.py
+      - super-fr:tests/unit/test_run_state.py
+    status: ci
+    notes: 'Phase 3 of 2026-09-20-unit-record-unification: the 4 to 5 migration is REGISTERED
+      (fr.artifacts.run_unit_record, imported by fr/artifacts/__init__.py) and the run
+      kind is at current_version 5, so cursors on disk now migrate. test_migration_runner.py::test_every_captured_cursor_migrates_all_the_way_to_current
+      runs the SHIPPED registry over all nine captured cursors and asserts the live
+      v5 parse, no surviving items/dispatch/accounting, and validate_run == []. test_run_state.py::test_a_migrated_capture_and_a_native_dump_are_the_same_data
+      pins that nothing is invented or lost against a native v5 dump. The pure rewrite
+      stays covered by test_run_v4_to_v5.py. One addition the rewrite did not have in
+      phase 2: the synthesized attempt is marked synthesized: true, so it is never read
+      as a hold. Dogfooded: this repo''s own six cursors were migrated with fr migrate
+      artifacts --yes.'
   - id: run-legacy-cursors-still-migrate
     capability: Artifact migration
     acceptance: A version 1, 2 or 3 run cursor still migrates all the way to the current
@@ -2559,34 +2566,62 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_run_legacy.py
-    status: not-implemented
-    notes: Phase 2 freezes the prior shape as fr.run.legacy (RunStateV4 + parse_run_state_v4)
-      and proves it parses every captured cursor, v1 through v4, with a SHA-256 tripwire
-      keeping it frozen. But no migration reads it yet and the live RunState is unchanged,
-      so the chain this row is really about does not exist. Status deliberately stays
-      not-implemented until phase 3 re-points the hops and asserts the full chain [2,3,4,5].
+      - super-fr:tests/unit/test_migration_runner.py
+      - super-fr:tests/unit/test_migration_run_unit_record.py
+    status: ci
+    notes: 'Phase 3: every run migration now reads with the frozen legacy model (fr.artifacts.run_cursor.cursor_guard
+      uses fr.run.legacy.parse_run_state_v4; run_dispatch_holder lost its own live-model
+      copy of the guard), and the live RunState removed items, dispatch and accounting.
+      test_migration_runner.py::test_every_captured_cursor_migrates_all_the_way_to_current
+      migrates real captured v1 (no stamp at all), v2, v3 and v4 cursors through the
+      shipped chain and asserts the exact hop list per file; test_the_run_kind_is_reachable_all_the_way_from_version_one_to_five
+      asserts every hop, [2, 3, 4, 5]. test_migration_run_unit_record.py::test_no_run_migration_names_the_live_parser
+      is the tripwire (its regex is proven against a known positive inside the test)
+      and test_each_stamp_only_hop_reads_a_cursor_the_live_model_may_no_longer_know
+      is its behavioural half.'
   - id: run-migration-atomic-per-cursor
     capability: Artifact migration
     acceptance: A cursor the body-rewriting migration cannot fully convert is left byte-identical,
       never half-rewritten, and every other cursor still migrates
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'The first run migration that can half-write. A partial v4 measurement is
-      the concrete refusal case: refused and named, never silently dropped to make the
-      new model constructible.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_run_unit_record.py
+      - super-fr:tests/unit/test_migration_runner.py
+    status: ci
+    notes: 'Phase 3: the rewrite is built in memory by the pure v4_to_v5 and written
+      once through write_text_atomic. test_migration_run_unit_record.py::test_a_partial_measurement_is_refused_and_the_file_is_byte_identical
+      and test_a_write_that_fails_leaves_the_cursor_byte_identical (os.replace made
+      to fail) assert bytes AND mtime unchanged and no temp file left; test_the_body_is_written_once_through_the_atomic_writer
+      pins the single write. test_migration_runner.py::test_a_cursor_with_a_partial_measurement_is_left_byte_identical_while_the_rest_migrate
+      runs the shipped runner over one induced-partial capture beside the other captures:
+      exactly one failure, naming output_tokens, and every other cursor reaches 5. The
+      partial case is induced by deleting one line from a real measured capture, because
+      no real cursor carries one. Also covered, and not in the spec: the crash window
+      between the body write and the runner''s stamp (test_a_v5_body_still_stamped_four_is_accepted_not_stranded).'
   - id: run-upgrade-mid-run-keeps-holder
     capability: Artifact migration
     acceptance: A run upgraded while a phase is held still refuses a second dispatch
       and still names the holder
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'The end-to-end claim for an in-flight run: the witness survives the shape
-      change. If this fails, upgrading fr during a run silently re-opens the gh#499
-      hazard.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_upgrade_in_flight.py
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'Phase 3: tests/unit/test_run_upgrade_in_flight.py drives a CAPTURED v4 cursor
+      holding a claimed open attempt (the real cursor of the run that built this feature,
+      captured from git while its phase-3 executor held phase/3) through the shipped
+      migration and then the real CLI. test_a_held_unit_is_still_refused_and_still_names_its_holder_after_the_migration:
+      advance exits 2, names the agent id, agent type, harness, model and dispatch time,
+      prints no brief and writes nothing. test_the_holder_can_still_resolve_its_unit_after_the_migration:
+      the holder''s own resolve closes the same attempt. test_check_reports_exactly_the_open_dispatches_the_v4_cursor_had
+      compares against the frozen legacy reader''s view of the same file. test_run_cli.py::test_a_failed_unit_whose_only_attempt_is_synthesized_can_still_be_retried
+      covers the regression this phase found (a migrated cost snapshot read as a hold).
+      Also demonstrated live on that same cursor before it was committed at version
+      5; see plan journal p3-live-upgrade.'
   - id: run-adopted-cursor-refuses-double-dispatch
     capability: Run cursor
     acceptance: A run adopted from disk, which records no attempts, still refuses to
@@ -2613,11 +2648,18 @@ rows:
       phases are done units with no invented attempts
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: adopt.py is the first WRITER of the old items map and was missing from the
-      spec's first draft. An empty attempt list is the honest record that fr never dispatched
-      that phase.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py
+      - super-fr:tests/unit/test_validate_artifacts.py
+    status: ci
+    notes: 'Phase 3: fr run adopt writes units directly. test_run_adopt.py::test_adopt_writes_a_current_version_cursor_in_the_unit_record_shape
+      asserts the registry''s current stamp, units and no items/dispatch/accounting
+      on disk, and validate_run == []. test_a_phase_adoption_found_complete_is_a_done_unit_with_no_attempts
+      asserts every adopted unit has an EMPTY history and no open attempt, and that
+      a complete phase is exactly {state: done} on disk with no padded attempts list.
+      test_validate_artifacts.py::test_a_done_unit_with_no_attempts_is_valid pins that
+      the validator accepts that shape.'
   - id: run-abandoned-attempt-is-measured
     capability: Run cursor
     acceptance: An abandoned attempt's spend is measured at the moment it is abandoned

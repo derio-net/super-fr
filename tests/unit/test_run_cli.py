@@ -20,9 +20,53 @@ from pathlib import Path
 
 import pytest
 from fr.cli import app
+from fr.run import units
 from fr.run.model import load_run_state
 from fr_dispatch.work_item import run_item_id
 from typer.testing import CliRunner
+
+# --- reading a cursor by MEANING, never by storage ---------------------------
+#
+# These tests were written against three maps (`StepRecord.items`,
+# `StepRecord.dispatch`, top-level `RunState.accounting`) that the v5 cursor
+# folds into one (`StepRecord.units`, spec 2026-09-20-unit-record-unification
+# §4.A). What they ASSERT did not change — "this unit is running", "this unit
+# has one attempt, claimed", "this unit's snapshot measured 100 output tokens"
+# — so they read through `fr.run.units`, the one module that knows the shape,
+# and the next shape change leaves this file alone.
+
+
+def _attempts_by_unit(record) -> dict[str, list] | None:
+    """`{unit key: [attempt, ...]}` for every unit of `record` that has any
+    attempt, or `None` when none does — what `record.dispatch` used to be."""
+    found = {
+        key: list(units.attempts(record, key))
+        for key in units.unit_keys(record)
+        if units.attempts(record, key)
+    }
+    return found or None
+
+
+class _Snapshot:
+    """One unit's cost, flattened the way the v4 `PhaseAccounting` read: the
+    five V1 sizes, the four V2 figures (`None` when unmeasured), and `at`."""
+
+    def __init__(self, state, key: str) -> None:
+        estimate = units.estimate_of(state, key)
+        assert estimate is not None
+        measured = units.measured_of(state, key)
+        self.at = units.estimated_at(state, key)
+        for name in type(estimate).model_fields:
+            setattr(self, name, getattr(estimate, name))
+        for name in units.MeasuredTokens.model_fields:
+            setattr(self, name, None if measured is None else getattr(measured, name))
+        self.measured_tokens = None if measured is None else measured.total
+
+
+def _accounting(state) -> dict[str, _Snapshot]:
+    """`{unit key: snapshot}` for every unit with a recorded cost, key-sorted."""
+    return {key: _Snapshot(state, key) for key in units.accounted_keys(state)}
+
 
 runner_cli = CliRunner()
 
@@ -2022,7 +2066,7 @@ def test_resolve_member_items_completes_the_group_in_order(tmp_path: Path) -> No
     assert first.exit_code == 0, first.output
     mid = load_run_state(repo, "r1")
     assert mid.steps["implement"].state == "running"
-    assert mid.steps["implement"].items == {"phase/1/code": "done"}
+    assert units.unit_states(mid.steps["implement"]) == {"phase/1/code": "done"}
     assert mid.cursor == "implement"
 
     second = _invoke(
@@ -2257,12 +2301,60 @@ def test_advance_records_a_context_snapshot_for_the_dispatched_unit(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
     assert snap.journal_entries == 2
     assert snap.journal_lines == len(journal.read_text().splitlines())
     assert snap.handoff_chars > 0
     assert snap.spec_bytes >= 0
     assert snap.plan_bytes > 0
+
+
+def test_the_attempt_is_dispatched_at_the_moment_its_estimate_was_assembled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ONE timestamp (spec 2026-09-20-unit-record-unification §4.F). The
+    estimate is assembled BEFORE the brief is built and the attempt is opened
+    AFTER it; the attempt's `dispatched` doubles as the start of its
+    measurement window, so it must be the EARLIER moment. If `_open_dispatch`
+    stamped its own clock instead, the window would start after the dispatch
+    it measures — invisibly, because at one-second resolution the two moments
+    are almost always the same string.
+
+    So the clock is made to TICK on every read: each `_now()` call returns a
+    later second. With the two moments wired apart, `units.with_estimate`
+    refuses the mismatch and this `advance` fails."""
+    import datetime as dt
+
+    import fr.commands.run_cmd as run_cmd
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    ticks = iter(range(10_000))
+    start = dt.datetime(2026, 9, 20, 9, 0, 0, tzinfo=dt.UTC)
+    reads: list[str] = []
+
+    def ticking() -> str:
+        moment = (start + dt.timedelta(seconds=next(ticks))).isoformat()
+        reads.append(moment)
+        return moment
+
+    monkeypatch.setattr(run_cmd, "_now", ticking)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    (attempt,) = units.attempts(state.steps["implement"], "phase/1/code")
+    assert attempt.estimate is not None
+    assert units.estimated_at(state, "phase/1/code") == attempt.dispatched
+    assert len(reads) > 1, "the clock was read once — this test cannot tell moments apart"
+    assert attempt.dispatched == reads[0], (
+        "`dispatched` must be the FIRST moment this advance read — before the estimate was "
+        f"assembled and before the brief — not a later one (reads: {reads})"
+    )
 
 
 def test_advance_is_idempotent_over_the_snapshot(tmp_path: Path) -> None:
@@ -2282,7 +2374,7 @@ def test_advance_is_idempotent_over_the_snapshot(tmp_path: Path) -> None:
     second = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
 
     assert second.exit_code == 0, second.output
-    accounting = load_run_state(repo, "r1").accounting
+    accounting = _accounting(load_run_state(repo, "r1"))
 
     assert list(accounting) == ["phase/1/code"]
 
@@ -2355,7 +2447,7 @@ def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) 
     _started_grouped_with_plan(repo, shipped)
     _seed_journal(repo, shipped)
     _invoke(repo, shipped, ["run", "advance", "r1"])
-    at = load_run_state(repo, "r1").accounting["phase/1/code"].at
+    at = _accounting(load_run_state(repo, "r1"))["phase/1/code"].at
     assert at is not None
     root = tmp_path / "projects"
     dispatched_at(root, _transcript_stamp(at), session_id="sess-1", usage=_USAGE)
@@ -2369,7 +2461,7 @@ def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) 
     )
 
     assert result.exit_code == 0, result.output
-    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
     assert snap.input_tokens == 2
     assert snap.cache_creation_input_tokens == 2000
     assert snap.cache_read_input_tokens == 40000
@@ -2399,7 +2491,7 @@ def test_resolve_records_nothing_when_no_transcript_can_be_read(tmp_path: Path) 
     )
 
     assert result.exit_code == 0, result.output
-    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
     assert snap.measured_tokens is None
     assert snap.input_tokens is None
     assert snap.handoff_chars > 0, "the V1 estimate survives the missing measurement"
@@ -2440,9 +2532,24 @@ accounting:
 
 
 def _write_run(repo: Path, text: str, run_id: str = "r9") -> Path:
+    """Write the v4-shaped cursor `text` — THROUGH the real 4 -> 5 rewrite.
+
+    `_TWO_UNIT_RUN` is typed in the v4 shape on purpose and stays that way: it
+    is a pre-dispatch-record cursor (cost, no attempts), which is what most
+    real cursors are, and running it through `fr.run.legacy.v4_to_v5` means
+    every `fr run status` assertion below is made about a MIGRATED cursor —
+    synthesized attempts and all — rather than about a v5 file typed to look
+    like one.
+    """
+    import yaml
+    from fr.artifacts.registry import artifact_kind
+    from fr.run.legacy import v4_to_v5
+
+    data = v4_to_v5(yaml.safe_load(text))
+    data = {"schema_version": artifact_kind("run").current_version, **data}
     path = repo / "docs" / "superpowers" / "runs" / f"{run_id}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
     return path
 
 
@@ -2574,7 +2681,7 @@ def test_advance_marks_the_dispatched_unit_running(tmp_path: Path) -> None:
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
 
     state = load_run_state(repo, "r1")
-    assert state.steps["implement"].items == {"phase/1/code": "running"}
+    assert units.unit_states(state.steps["implement"]) == {"phase/1/code": "running"}
 
 
 def test_resolve_while_another_unit_is_running_is_refused(tmp_path: Path) -> None:
@@ -2988,7 +3095,7 @@ def test_advance_grouped_member_opens_a_dispatch_record(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    dispatch = load_run_state(repo, "r1").steps["implement"].dispatch
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
     assert dispatch is not None
     assert list(dispatch) == ["phase/1/code"]
     records = dispatch["phase/1/code"]
@@ -3024,7 +3131,7 @@ def test_advance_records_the_harness_it_detected_to_resolve_the_model(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    record = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"][0]
+    record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
     assert record.model == "claude-opus-5"
     assert record.harness == "claude-code", "the model's own harness must be recorded with it"
 
@@ -3046,7 +3153,7 @@ def test_advance_records_no_harness_when_detection_is_inconclusive(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    record = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"][0]
+    record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
     assert record.harness is None
     assert record.model is None
 
@@ -3076,7 +3183,7 @@ def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    records = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"]
+    records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
     assert records[0].model == "claude-sonnet-5"
     # The brief still carries the sentinel verbatim — it tells the harness to
     # look the phase up, which is a different job from recording what was sent.
@@ -3098,7 +3205,7 @@ def test_advance_records_no_model_when_the_phase_header_has_no_tier(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    records = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"]
+    records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
     assert records[0].model is None
 
 
@@ -3119,7 +3226,7 @@ def test_advance_grouped_member_does_not_reopen_a_dispatch_record_while_still_ru
     second = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert second.exit_code == 2, second.output
-    dispatch = load_run_state(repo, "r1").steps["implement"].dispatch
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
     assert dispatch is not None
     assert len(dispatch["phase/1/code"]) == 1
 
@@ -3146,7 +3253,7 @@ def test_advance_flat_agent_step_opens_a_dispatch_record_under_the_step_prefix(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    dispatch = load_run_state(repo, "r1").steps["phase/1/implement-phase"].dispatch
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["phase/1/implement-phase"])
     assert dispatch is not None
     assert list(dispatch) == ["step/phase/1/implement-phase"]
     record = dispatch["step/phase/1/implement-phase"][0]
@@ -3168,7 +3275,7 @@ def test_advance_does_not_reopen_a_dispatch_record_while_still_running(
     second = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert second.exit_code == 2, second.output
-    dispatch = load_run_state(repo, "r1").steps["brainstorm"].dispatch
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["brainstorm"])
     assert dispatch is not None
     assert len(dispatch["step/brainstorm"]) == 1
 
@@ -3186,7 +3293,7 @@ def test_advance_onto_a_gated_agent_step_opens_no_dispatch_record(tmp_path: Path
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
     assert state.steps["brainstorm"].state == "blocked"
-    assert state.steps["brainstorm"].dispatch is None
+    assert _attempts_by_unit(state.steps["brainstorm"]) is None
 
 
 def test_advance_orchestrator_run_agent_step_opens_a_dispatch_record_with_no_agent_type(
@@ -3203,7 +3310,7 @@ def test_advance_orchestrator_run_agent_step_opens_a_dispatch_record_with_no_age
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    dispatch = load_run_state(repo, "r1").steps["brainstorm"].dispatch
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["brainstorm"])
     assert dispatch is not None
     record = dispatch["step/brainstorm"][0]
     assert record.dispatched
@@ -3218,7 +3325,7 @@ def test_advance_orchestrator_run_agent_step_opens_a_dispatch_record_with_no_age
 
 
 def _dispatch_of(repo: Path, step_id: str, key: str) -> list:
-    dispatch = load_run_state(repo, "r1").steps[step_id].dispatch
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps[step_id])
     assert dispatch is not None
     return dispatch[key]
 
@@ -3517,7 +3624,7 @@ def test_claim_abandoned_leaves_the_grouped_members_item_running(tmp_path: Path)
 
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
-    assert state.steps["implement"].items == {"phase/1/code": "running"}
+    assert units.unit_states(state.steps["implement"]) == {"phase/1/code": "running"}
     assert state.steps["implement"].state == "running"
 
 
@@ -3870,7 +3977,7 @@ def test_redispatch_on_a_never_dispatched_unit_is_refused_and_records_nothing(
     assert result.exit_code == 2, result.output
     assert "nothing is running" in result.output
     assert "{" not in result.stdout, result.stdout
-    assert not load_run_state(repo, "r1").steps["implement"].dispatch
+    assert not _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
 
 
 def test_redispatch_after_an_abandon_does_not_close_the_closed_record_again(
@@ -4154,7 +4261,7 @@ def test_resolve_a_gated_step_with_no_dispatch_record_still_works(tmp_path: Path
     (repo / "s.md").write_text("# spec\n")
     _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
-    assert load_run_state(repo, "r1").steps["brainstorm"].dispatch is None
+    assert _attempts_by_unit(load_run_state(repo, "r1").steps["brainstorm"]) is None
 
     result = _invoke(
         repo,
@@ -4175,7 +4282,7 @@ def test_resolve_a_gated_step_with_no_dispatch_record_still_works(tmp_path: Path
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
     assert state.steps["brainstorm"].state == "done"
-    assert state.steps["brainstorm"].dispatch is None  # nothing invented
+    assert _attempts_by_unit(state.steps["brainstorm"]) is None  # nothing invented
 
 
 def test_resolve_after_an_abandon_leaves_the_closed_record_alone(tmp_path: Path) -> None:
@@ -4290,7 +4397,7 @@ def test_completing_a_step_does_not_erase_its_dispatch_history(tmp_path: Path) -
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
     assert state.steps["implement"].state == "done"  # the group completed
-    dispatch = state.steps["implement"].dispatch
+    dispatch = _attempts_by_unit(state.steps["implement"])
     assert dispatch is not None, "completing the group deleted its dispatch history"
     assert sorted(dispatch) == ["phase/1/code", "phase/1/peer-review"]
     assert dispatch["phase/1/code"][0].outcome == "done"
@@ -4924,7 +5031,7 @@ def test_advance_refusing_a_running_unit_leaves_the_run_file_alone(tmp_path: Pat
 
     assert result.exit_code == 2, result.output
     assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text() == before
-    assert list(load_run_state(repo, "r1").accounting) == ["phase/1/code"]
+    assert list(_accounting(load_run_state(repo, "r1"))) == ["phase/1/code"]
 
 
 def test_resolve_composite_member_id_teaches_the_two_flags(tmp_path: Path) -> None:
@@ -5097,24 +5204,47 @@ def test_advance_refuses_a_running_top_level_agent_step(tmp_path: Path) -> None:
     assert len(_dispatch_of(repo, "plan", "step/plan")) == 1
 
 
-def _forget_dispatch_records(repo: Path, step_id: str) -> None:
-    """Make `step_id` look the way every cursor written BEFORE the dispatch
-    record existed looks: running, and recording no attempt at all.
+_RECORDLESS_SHAPES = ("adopted", "migrated")
+"""The two ways a v5 cursor holds a `running` unit fr never RECORDED
+dispatching. `adopted`: no attempt at all (`fr run adopt`, or a v2-v4 cursor
+that had no cost snapshot either). `migrated`: exactly one attempt, the
+`synthesized` one the 4 -> 5 rewrite creates to carry a pre-dispatch-record
+cost snapshot — the MAJORITY of real migrated cursors. Neither is a witness."""
+
+
+def _forget_dispatch_records(repo: Path, step_id: str, *, shape: str = "adopted") -> None:
+    """Make `step_id` look the way a cursor written BEFORE the dispatch record
+    existed looks once it reaches v5: running, and with no witness.
 
     That shape is real, not hypothetical — `run` 2 -> 3 -> 4 are stamp-only
-    migrations, so a v2 cursor caught mid-dispatch arrives at v4 exactly like
-    this (gh#517's own cursor did: `deliver: running`, no `dispatch`). Built by
-    letting the real CLI dispatch and then dropping the one map, so everything
-    else about the cursor is what fr wrote.
-    """
-    from fr.run.model import save_run_state
+    migrations, so a v2 cursor caught mid-dispatch arrives exactly like this
+    (gh#517's own cursor did: `deliver: running`, no `dispatch`). Built by
+    letting the real CLI dispatch and then un-recording it, so everything else
+    about the cursor is what fr wrote.
 
+    This is the one place in this file that touches `StepRecord.units`
+    directly: `fr.run.units` deliberately has no "drop the history" verb.
+    """
+    from fr.run.model import Attempt, save_run_state
+
+    assert shape in _RECORDLESS_SHAPES
     state = load_run_state(repo, "r1")
-    record = state.steps[step_id].model_copy(update={"dispatch": None})
+    forgotten = {}
+    for key, unit in (state.steps[step_id].units or {}).items():
+        kept: tuple = ()
+        if shape == "migrated" and unit.attempts and unit.attempts[-1].estimate is not None:
+            last = unit.attempts[-1]
+            kept = (Attempt(dispatched=last.dispatched, estimate=last.estimate, synthesized=True),)
+        if unit.state is not None or kept:
+            forgotten[key] = unit.model_copy(update={"attempts": kept})
+    record = state.steps[step_id].model_copy(update={"units": forgotten or None})
     save_run_state(repo, state.model_copy(update={"steps": {**state.steps, step_id: record}}))
 
 
-def test_a_running_member_with_no_dispatch_record_is_still_refused(tmp_path: Path) -> None:
+@pytest.mark.parametrize("shape", _RECORDLESS_SHAPES)
+def test_a_running_member_with_no_dispatch_record_is_still_refused(
+    tmp_path: Path, shape: str
+) -> None:
     """Decision u1's fallback, grouped half. The record is the witness — but a
     unit that is `running` with NO record has no witness to consult, and "no
     open record" must not be read as "free": that would silently re-open
@@ -5125,8 +5255,11 @@ def test_a_running_member_with_no_dispatch_record_is_still_refused(tmp_path: Pat
     shipped = tmp_path / "shipped"
     _fr_goal_at_implement(repo, shipped)
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
-    _forget_dispatch_records(repo, "implement")
+    _forget_dispatch_records(repo, "implement", shape=shape)
     before = load_run_state(repo, "r1")
+    if shape == "migrated":  # the helper really did leave the synthesized attempt
+        (only,) = units.attempts(before.steps["implement"], "phase/1/implement-phase")
+        assert only.synthesized is True
     dispatched_at = before.steps["implement"].at
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
@@ -5161,7 +5294,8 @@ def test_a_running_flat_step_with_no_dispatch_record_is_still_refused(tmp_path: 
     assert load_run_state(repo, "r1") == before
 
 
-def test_redispatch_is_the_way_out_of_a_recordless_running_unit(tmp_path: Path) -> None:
+@pytest.mark.parametrize("shape", _RECORDLESS_SHAPES)
+def test_redispatch_is_the_way_out_of_a_recordless_running_unit(tmp_path: Path, shape: str) -> None:
     """A refusal with no escape is a wedge. `claim --abandoned` cannot help
     here — there is no record to close — so `--redispatch` has to: it
     re-briefs, and opens the first record this unit has ever had."""
@@ -5169,15 +5303,68 @@ def test_redispatch_is_the_way_out_of_a_recordless_running_unit(tmp_path: Path) 
     shipped = tmp_path / "shipped"
     _fr_goal_at_implement(repo, shipped)
     _invoke(repo, shipped, ["run", "advance", "r1"])
-    _forget_dispatch_records(repo, "implement")
+    _forget_dispatch_records(repo, "implement", shape=shape)
 
     result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
 
     assert result.exit_code == 0, result.output
     assert _brief_of(result.output)["item"] == "phase/1"
-    records = _dispatch_of(repo, "implement", "phase/1/implement-phase")
+    records = [
+        r for r in _dispatch_of(repo, "implement", "phase/1/implement-phase") if not r.synthesized
+    ]
     assert len(records) == 1
     assert records[0].returned is None
+    # ...and the synthesized attempt, where there was one, is still there,
+    # untouched and first: it was never a hold, so it was never "abandoned".
+    every = _dispatch_of(repo, "implement", "phase/1/implement-phase")
+    assert [bool(r.synthesized) for r in every] == (
+        [True, False] if shape == "migrated" else [False]
+    )
+    if shape == "migrated":
+        assert every[0].returned is None and every[0].outcome is None
+
+
+def test_a_failed_unit_whose_only_attempt_is_synthesized_can_still_be_retried(
+    tmp_path: Path,
+) -> None:
+    """The regression that would have blocked real in-flight runs on the day
+    they were migrated. A unit that FAILED before the dispatch record existed
+    had a cost snapshot and no record, and v4 `advance` simply re-briefed it.
+    The 4 -> 5 rewrite gives that snapshot a synthesized attempt with no
+    `returned`; read as a hold, `advance` refuses to retry the unit and names
+    a holder that never existed. It is history, not a hold: the retry opens a
+    NEW attempt beside it, and the cursor stays structurally valid (one open
+    attempt — the synthesized one is never counted as open)."""
+    from fr.artifacts.registry import artifact_kind
+    from fr.run.model import run_path
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    failed = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "implement-phase", "--item", "phase/1"]
+        + ["--state", "failed"],
+    )
+    assert failed.exit_code == 0, failed.output
+    _forget_dispatch_records(repo, "implement", shape="migrated")
+    key = "phase/1/implement-phase"
+    before = load_run_state(repo, "r1").steps["implement"]
+    assert units.unit_state(before, key) == "failed"
+    assert [a.synthesized for a in units.attempts(before, key)] == [True]
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    flat = _squash(result.output)
+    assert "ALREADY HELD" not in flat and "ALREADY RUNNING" not in flat, flat
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["item"] == "phase/1"
+    first, second = units.attempts(load_run_state(repo, "r1").steps["implement"], key)
+    assert first.synthesized is True and first.returned is None, "history, left alone"
+    assert second.synthesized is None and second.returned is None, "the retry is the hold"
+    assert artifact_kind("run").validate(run_path(repo, "r1")) == []
 
 
 def test_advance_still_briefs_a_blocked_gated_agent_step(tmp_path: Path) -> None:
@@ -5228,7 +5415,7 @@ def test_redispatch_re_emits_the_brief_for_the_outstanding_unit_only(tmp_path: P
 
     assert result.exit_code == 0, result.output
     assert _brief_of(result.output)["step"] == "peer-review"
-    items = load_run_state(repo, "r1").steps["implement"].items
+    items = units.unit_states(load_run_state(repo, "r1").steps["implement"])
     assert items == {"phase/1/code": "done", "phase/1/peer-review": "running"}
 
 
@@ -5251,7 +5438,7 @@ def test_redispatch_refreshes_the_dispatch_time_and_that_units_snapshot(
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
     assert state.steps["implement"].at != stale
-    assert list(state.accounting) == ["phase/1/code"]
+    assert list(_accounting(state)) == ["phase/1/code"]
 
 
 def test_redispatch_with_nothing_outstanding_is_refused(tmp_path: Path) -> None:
@@ -5269,7 +5456,7 @@ def test_redispatch_with_nothing_outstanding_is_refused(tmp_path: Path) -> None:
     assert "nothing is running" in result.output
     assert "{" not in result.stdout, result.stdout
     # and it did NOT fall through and dispatch the first pending unit
-    assert load_run_state(repo, "r1").steps["implement"].items in (None, {})
+    assert units.unit_states(load_run_state(repo, "r1").steps["implement"]) == {}
 
 
 def test_redispatch_never_executes_a_cli_step(tmp_path: Path) -> None:
@@ -5365,7 +5552,7 @@ def test_a_manual_phase_is_never_dispatched(tmp_path: Path) -> None:
         b["item"] for b in briefs
     ]
     # (b) the cursor records the deliberate omission
-    items = load_run_state(repo, "r1").steps["implement"].items or {}
+    items = units.unit_states(load_run_state(repo, "r1").steps["implement"])
     assert items.get("phase/4") == "manual", items
     # (c) group completion counts what was dispatched, and names what was not
     done_line = next(
@@ -5403,7 +5590,7 @@ def test_an_already_complete_manual_phase_is_still_recorded_manual(tmp_path: Pat
 
     briefs = [_brief_of(out) for out in outputs if "{" in out]
     assert [b["item"] for b in briefs] == [f"phase/{n}" for n in (2, 2, 3, 3)]
-    items = load_run_state(repo, "r1").steps["implement"].items or {}
+    items = units.unit_states(load_run_state(repo, "r1").steps["implement"])
     assert items.get("phase/1") == "manual", items
 
 
@@ -5454,5 +5641,5 @@ def test_a_middle_manual_phase_is_refused_at_group_start(tmp_path: Path) -> None
     assert "phase 3" in result.output, result.output
     # nothing was briefed, and nothing was claimed
     assert "{" not in result.stdout, result.stdout
-    assert load_run_state(repo, "r1").steps["implement"].items in (None, {})
+    assert units.unit_states(load_run_state(repo, "r1").steps["implement"]) == {}
     assert load_run_state(repo, "r1").steps["implement"].state == "pending"

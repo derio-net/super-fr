@@ -351,7 +351,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 2: `StepRecord.answered_by` — gate provenance (spec
             # `2026-09-18-harness-parity-matrix-design` §3.D.2), migration
             # `fr.artifacts.run_provenance`.
-            # 3: `PhaseAccounting`'s four measured token fields — V2 telemetry
+            # 3: the accounting snapshot's four measured token fields — V2 telemetry
             # (spec `2026-09-20-bounded-executor-handoff-design` §5.C),
             # migration `fr.artifacts.run_telemetry`.
             # 4: `StepRecord.dispatch` — the dispatch-holder record (spec
@@ -365,7 +365,14 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # fr that predates them rather than ignoring them, whatever
             # "optional and defaulted" suggests. `RunState.schema_version`
             # exists so the stamp a migration writes stays readable.
-            current_version=4,
+            # 5: `StepRecord.units` — one record per unit (spec
+            # `2026-09-20-unit-record-unification-design` §4.A/§4.F), migration
+            # `fr.artifacts.run_unit_record`. The first run migration that
+            # REWRITES A BODY, and the first change that REMOVES fields
+            # (`items`, `dispatch`, top-level `accounting`) — which is why the
+            # v1-v4 shape is frozen in `fr.run.legacy` and every hop of the
+            # chain reads with that, never with the live model.
+            current_version=5,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
