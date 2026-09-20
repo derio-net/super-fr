@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 from pathlib import Path
 
 import pytest
@@ -2634,9 +2635,65 @@ def test_advance_prints_the_resolve_command_before_the_json(tmp_path: Path) -> N
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    expected = "fr run resolve r1 --step implement-phase --item phase/1 --state done|failed"
+    expected = "fr run resolve r1 --step implement-phase --item phase/1 --state done"
     assert any(expected in line for line in result.output.splitlines()), result.output
     # The brief is still the last line `tail -1` reads.
     brief = json.loads(result.output.strip().splitlines()[-1])
     assert brief["step"] == "implement-phase"
     assert brief["item"] == "phase/1"
+
+
+def test_the_printed_resolve_command_actually_runs_as_printed(tmp_path: Path) -> None:
+    """Review `r1-f1`. The hint is printed under "resolve with:" and is meant
+    to be PASTED, so the test pastes it: lift the command off stdout, split it
+    the way a shell would, and run it.
+
+    The bug this pins is not cosmetic. The first spelling ended
+    `--state done|failed`, and `|` is a pipe in every POSIX shell — pasting it
+    runs the resolve with `--state done` and THEN dies with
+    `command not found: failed`, exit 127, over a run whose state has already
+    moved. Asserting the absence of a `|` would pass for the wrong reason the
+    moment someone wrote `<done|failed>`; running the line is what actually
+    holds."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+
+    advanced = _invoke(repo, shipped, ["run", "advance", "r1"])
+    hint = next(line for line in advanced.output.splitlines() if "resolve with:" in line).split(
+        "resolve with:", 1
+    )[1]
+
+    # A shell would treat any of these as control operators, not argv.
+    pasteable, _, _ = hint.partition("(or ")
+    assert not set(pasteable) & set("|&;<>()$`"), f"not pasteable: {pasteable!r}"
+
+    argv = shlex.split(pasteable)
+    assert argv[:2] == ["fr", "run"], argv
+    result = _invoke(repo, shipped, argv[1:])  # drop the literal `fr`
+
+    assert result.exit_code == 0, result.output
+    assert "implement-phase phase/1: done" in result.output
+
+
+def test_the_composite_id_refusal_survives_a_narrow_console(tmp_path: Path) -> None:
+    """Review `r1-f2`. `_find_step`'s message ends in the flag pair the reader
+    is supposed to copy, and rich folds at width 80 whenever stderr is not a
+    tty — which is exactly when a harness captures it. Without `soft_wrap` the
+    pair breaks mid-line and the one actionable thing on the page becomes
+    unusable."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert any(
+        "--step implement-phase --item phase/1" in line for line in result.output.splitlines()
+    ), result.output

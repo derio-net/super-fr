@@ -667,7 +667,7 @@ def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -
     }
 
 
-def _resolve_hint(run_id: str, member_id: str, item: str) -> str:
+def _resolve_hint(run_id: str, member_id: str, item: str, state: str = "done") -> str:
     """The exact `fr run resolve` command that records one grouped unit's
     outcome — the two-flag form `--step <member> --item <head>` that
     `_split_member_id` teaches when someone reaches for the composite.
@@ -678,10 +678,18 @@ def _resolve_hint(run_id: str, member_id: str, item: str) -> str:
     separately they would drift, and an operator who was shown two different
     commands for one outcome has no way to tell which is current.
 
-    `done|failed` is left as a literal alternation, not a guess: the caller
-    printing this does not know how the agent will come back.
+    **`--state` is a CONCRETE value, never the alternation `done|failed`**
+    (review `r1-f1`). This string is printed under "resolve with:" and is
+    meant to be pasted. In every POSIX shell `|` is a pipe, so pasting
+    `--state done|failed` RUNS the resolve with `--state done` and then fails
+    with `command not found: failed` — exit 127 over a run whose state has
+    already changed. A line that reports failure while having done the thing
+    is the precise defect class this whole PR exists to remove, and the
+    existing operator-gate hint (`--state done`) already set the precedent.
+    A caller that needs to mention the other outcome says so in prose beside
+    the command, outside the pasteable span.
     """
-    return f"fr run resolve {run_id} --step {member_id} --item {item} --state done|failed"
+    return f"fr run resolve {run_id} --step {member_id} --item {item} --state {state}"
 
 
 def _advance_group(
@@ -727,7 +735,10 @@ def _advance_group(
     # brief is a single JSON line a harness parses off stdout, and this hint
     # must not become the last line a naive `tail -1` reads. Same ordering
     # constraint the gate-degradation notice in `advance_cmd` documents.
-    console.print(f"  resolve with: {_resolve_hint(state.run, member_id, item)}", soft_wrap=True)
+    console.print(
+        f"  resolve with: {_resolve_hint(state.run, member_id, item)}   (or --state failed)",
+        soft_wrap=True,
+    )
     # soft_wrap: without it rich folds this JSON at the console width (80 when
     # stdout is not a tty — i.e. exactly when a harness is piping it), which
     # leaves `tail -1` holding a fragment. `advance_cmd`'s top-level brief
@@ -1316,7 +1327,11 @@ def resolve_cmd(
         emits_owner = step if parent is None or step.emits else parent
         emitted_map = _parse_emitted(emitted, repo_root, emits_owner)
     except (RunStateError, WorkflowError, AdoptError) as e:
-        err_console.print(f"[red]{e}[/red]")
+        # soft_wrap (review `r1-f2`): `_find_step`'s composite-id message ends
+        # in a flag pair the operator copy-pastes, and rich folds at width 80
+        # whenever stderr is not a tty — i.e. exactly when a harness captures
+        # it. Same reason every other hint in this module carries it.
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if parent is not None:

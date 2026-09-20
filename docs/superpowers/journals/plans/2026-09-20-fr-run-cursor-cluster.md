@@ -77,3 +77,13 @@ Both helpers live in `packages/fr/src/fr/commands/run_cmd.py`.
 3. the `json.dumps(...)` brief
 
 Phase 2's ALREADY RUNNING refusal returns BEFORE all three and goes to `err_console` with exit 2, so the invariant 'the JSON brief is the last stdout line' is not at risk there — but anything phase 2 adds to the dispatching path must stay above line 3. `_brief_of` in the tests (`json.loads(output[output.index('{'):])`) is tolerant of a leading hint because the hint contains no brace; do not put a `{` in any line printed before the brief.
+
+<!-- fr:journal kind=finding scope=plan id=r1-f1 created=2026-09-20T15:52:54 phase=1 state=fixed -->
+### r1-f1 · finding [fixed] · The resolve hint printed --state done|failed, which is not pasteable — it pipes (phase 1)
+
+The hint is printed under 'resolve with:' and is meant to be copy-pasted. In every POSIX shell | is a pipe, so pasting 'fr run resolve r1 --step implement-phase --item phase/1 --state done|failed' RUNS the resolve with --state done and then dies with 'command not found: failed', exit 127 — over a run whose state has already moved. A line that reports failure while having done the thing is exactly the defect class this PR exists to remove, reintroduced by the hint that teaches the fix. Demonstrated in a real shell, not reasoned about. FIXED: _resolve_hint gained a state parameter defaulting to 'done' (matching the precedent already set by the operator-gate hint at run_cmd.py:1091) and the caller appends '(or --state failed)' as prose OUTSIDE the pasteable span. Pinned by test_the_printed_resolve_command_actually_runs_as_printed, which lifts the line off stdout, shlex.splits it and RUNS it — and which was confirmed to fail against the old spelling before being kept.
+
+<!-- fr:journal kind=finding scope=plan id=r1-f2 created=2026-09-20T15:52:55 phase=1 state=fixed -->
+### r1-f2 · finding [fixed] · The new composite-id refusal is rendered through the one err_console.print in resolve_cmd that lacks soft_wrap (phase 1)
+
+_find_step's message now ends in the flag pair the reader is supposed to copy, but resolve_cmd's except block printed it without soft_wrap=True, so rich folds it at width 80 whenever stderr is not a tty — which is exactly when a harness captures it. Same defect class as p1-f1, which phase 1 had just fixed one function away, and the same class as the two pre-existing workspace-test failures in p1-f2: an operator-facing refusal that a fold makes unusable. Today's ids are short enough not to fold, so this is prophylactic rather than an observed break — recorded honestly as such. FIXED and pinned by test_the_composite_id_refusal_survives_a_narrow_console.
