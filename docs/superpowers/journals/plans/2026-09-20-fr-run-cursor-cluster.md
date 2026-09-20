@@ -48,3 +48,16 @@ Observed in the RED run: the brief came back as three physical lines, the fold l
 Rich picks width 80 whenever stdout is not a tty — i.e. exactly when a harness is piping it — so this was a live defect, not a test artifact. Fixed in the same edit as the hint line, since spec 3.B's ordering requirement ('the brief must remain the last stdout line a naive tail -1 parses') is meaningless while the brief is not one line.
 
 Phases 2-5 touching `_advance_group`: the print block at the end of that function is now three `console.print` calls, all `soft_wrap=True`, in the order human-line / resolve-hint / JSON. Keep the JSON last.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f2 created=2026-09-20T15:46:06 phase=1 state=open -->
+### p1-f2 · finding [open] · Three suite failures are pre-existing and HOST-SPECIFIC — not this branch, and expected green in CI (phase 1)
+
+`uv run pytest -q --no-cov` on this workspace ends `3 failed, 3292 passed, 80 skipped`. All three predate phase 1 and predate the branch. Proven, not assumed: (a) `git checkout 9b4d903 -- packages/fr/src/fr/commands/run_cmd.py tests/unit/test_run_cli.py` (the plan commit, before any phase-1 code) reproduces exactly the same three; (b) `git diff --stat origin/main...HEAD -- packages/fr/src/fr/run/ packages/fr/src/fr/workflow/ tests/unit/test_run_workspace.py tests/unit/test_workflow_check.py` is EMPTY, so the branch has never touched the code or the tests involved.
+
+Causes, both host-local — they should be green on CI's Linux runners, and a later phase seeing them should not go hunting:
+
+1. `test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused` and `::test_an_external_marker_without_container_evidence_is_refused` — rich folds the refusal at the console width and the assertion's substring straddles the fold (`...is not a linked git \nworktree`). The message embeds `tmp_path`, and macOS pytest tmp paths (`/private/var/folders/dr/<random>/T/pytest-of-<user>/...`) are far longer than Linux's `/tmp/pytest-of-runner/...`, so where the fold lands is a function of the host's tmp path length. A real latent fragility (same class as the p1-f1 soft_wrap defect), but out of phase 1's scope.
+
+2. `test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable` — it monkeypatches `packaged_shipped_workflows_dir` to defeat the wheel-internal copy, but `fr/workflow/resolve.py` has a FOURTH source it does not defeat: `Path.home() / '.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows'` (resolve.py:88, :174). This machine has super-fr installed there, so `--all` finds `fr-goal: ok` and exits 0 where the test wants 1. On a runner with no marketplace install there is nothing to find and it passes.
+
+Left OPEN deliberately: phase 1 must not widen into unrelated fixes, but both are genuine and worth a follow-up issue.

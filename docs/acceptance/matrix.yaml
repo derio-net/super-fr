@@ -2174,11 +2174,12 @@ rows:
       or the failure teaches the two flags that do.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.B. Fires once per phase per run; the old error ('not found in workflow')
-      sent the reader to the shape file instead of the flag list. Advance now also prints
-      the resolve command BEFORE the JSON, so tail -1 still yields parseable JSON.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: Composite member id refused with the two flags spelled out; advance prints
+      the same command before the JSON brief, and the brief stays the last stdout line.
   - id: run-start-binds-session
     capability: Worktree traceability
     acceptance: A workspace created by fr run start is attributable to the session that

@@ -2568,13 +2568,35 @@ def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
 
     step(["run", "start", "fr-goal", "--branch", "b", "--run-id", "r1"])
     step(["run", "advance", "r1"])  # brainstorm: blocked on its operator gate
-    step(["run", "resolve", "r1", "--step", "brainstorm", "--state", "done", "--emitted",
-          f"spec={spec_rel}"])
+    step(
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            f"spec={spec_rel}",
+        ]
+    )
     step(["run", "advance", "r1"])  # spec-review: running
     step(["run", "resolve", "r1", "--step", "spec-review", "--state", "done"])
     step(["run", "advance", "r1"])  # plan: running
-    step(["run", "resolve", "r1", "--step", "plan", "--state", "done", "--emitted",
-          f"plan={plan_rel}"])
+    step(
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "plan",
+            "--state",
+            "done",
+            "--emitted",
+            f"plan={plan_rel}",
+        ]
+    )
     step(["run", "advance", "r1"])  # plan-review: kind cli, executed here
     assert load_run_state(repo, "r1").cursor == "implement"
 
@@ -2612,9 +2634,7 @@ def test_advance_prints_the_resolve_command_before_the_json(tmp_path: Path) -> N
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    expected = (
-        "fr run resolve r1 --step implement-phase --item phase/1 --state done|failed"
-    )
+    expected = "fr run resolve r1 --step implement-phase --item phase/1 --state done|failed"
     assert any(expected in line for line in result.output.splitlines()), result.output
     # The brief is still the last line `tail -1` reads.
     brief = json.loads(result.output.strip().splitlines()[-1])
