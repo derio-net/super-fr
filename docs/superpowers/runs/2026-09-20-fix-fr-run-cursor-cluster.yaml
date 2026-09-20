@@ -32,7 +32,8 @@ steps:
     items:
       phase/1/implement-phase: done
       phase/1/review-phase: done
-      phase/2/implement-phase: running
+      phase/2/implement-phase: done
+      phase/2/review-phase: done
     members:
     - implement-phase
     - review-phase
