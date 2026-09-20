@@ -18,8 +18,8 @@ Verified live on `main` at `a5cd114`:
 | | |
 |---|---|
 | `isolation/local.py:696` | `pr_state == "MERGED"` → `down(state, force=False)` — no precheck of any kind |
-| `isolation/local.py:564` | `_down_worktree_tail`: OPEN-PR guard, then `git worktree remove --force`, unconditionally |
-| `isolation/local.py:810` | `_merged_by_content`: **does** check `git status --porcelain` before it will classify |
+| `isolation/local.py:554` | `_down_worktree_tail`: OPEN-PR guard, then `git worktree remove --force`, unconditionally |
+| `isolation/local.py:812` | `_merged_by_content`: **does** check `git status --porcelain` before it will classify |
 
 The last row is the shape of the defect. The **speculative** path — "I think this
 PR-less branch may have been squash-merged" — refuses to act on a dirty tree. The
@@ -85,9 +85,11 @@ A workspace is never destroyed while it holds work that exists nowhere else.
 - Salvage refs (`refs/fr-salvage/<branch>`) — decision `d3`. #435 offered these only as a
   *weaker fallback* for the case where reaping must stay unconditional, which this change
   ends. A recovery ref nobody knows to look for is its own trap.
-- `external` mode. `ExternalContainerTarget.gc` reports and never reaps
-  (`isolation/external.py:241`), and its `down` removes no worktree — there is nothing
-  here to guard.
+- `external` mode. `ExternalTarget` (`isolation/external.py:54`) is a **standalone**
+  class, not a subclass of the worktree Target, so it never reaches the guarded
+  `_down_worktree_tail` at all. Its `gc` reports and never reaps
+  (`isolation/external.py:241`) and its `down` removes no worktree — an adopted checkout
+  belongs to its preparer. Structurally out of scope, not merely untouched.
 - #432's post-reap guard-denial message. Different failure ("the message after the reap
   is confusing"); this spec is "the reap should not have happened".
 - `verify_merge`'s `default_branch: str = "main"` default, which is latently wrong for a
@@ -132,7 +134,7 @@ evidence of a clean tree. Decision `d1`: tracked and untracked alike, no
 appear in `--porcelain`, so routine workspace clutter cannot wedge the sweep.
 
 This is deliberately the identical predicate `_merged_by_content` already applies at
-`local.py:810`. The asymmetry that caused #435 is closed by making the authoritative path
+`local.py:812`. The asymmetry that caused #435 is closed by making the authoritative path
 ask what the speculative path always asked.
 
 ### 3.3 Guard two — the branch holds content that never landed (#467)
@@ -150,12 +152,20 @@ operator does not care whether commits were *pushed*, they care whether the work
 The repo already owns the right primitive. `branch_changes_present` (`local.py:178`)
 compares final file **content** against a base ref, with per-line containment as a
 fallback, and is documented as squash/rebase/merge-commit safe precisely because an
-ancestry check false-negatives on a squash. `verify_merge` (`local.py:498`) already wraps
-it with the fetch that keeps a stale local ref from producing a wrong answer.
+ancestry check false-negatives on a squash.
 
 So: `missing` non-empty ⇒ hazard, naming the paths. This catches both #467's local-only
 commit and, for free, a commit **pushed** to the branch after the merge — the #320 orphan,
 which is equally unmerged work and equally destroyed today.
+
+**Not** by calling `verify_merge` (`local.py:498`), which is the tempting reuse and the
+wrong one. `verify_merge` is fetch + `branch_changes_present` + **`self._pr(state)`**, and
+that third call shells out to `gh`/`glab`/`tea`. gc has already made exactly that call one
+line earlier (`local.py:694`) to classify the workspace, so reusing `verify_merge` buys a
+second host-CLI round trip per reap candidate on a host-wide sweep, to recompute a PR
+state the caller is holding — and then discards `verified`, since the PR-less
+`merged-by-content` path can never satisfy it. `_reap_hazard` does the two steps it
+actually needs (fetch, then `branch_changes_present`) directly.
 
 ### 3.4 Fetching, and the cost of being conservative
 
@@ -165,7 +175,7 @@ so every genuinely-merged workspace would read as unlanded. `verify_merge` alrea
 `git fetch <remote> <default>`; `_reap_hazard` reuses it, passing the **resolved** default
 branch (`_resolve_default_branch()`) rather than the `"main"` literal default.
 
-Two consequences, both accepted:
+Three consequences, all accepted:
 
 - **One fetch per about-to-be-reaped workspace, per sweep.** Only workspaces that would
   otherwise be destroyed pay it; `open` and `no-pr` verdicts return before the guard runs.
@@ -174,6 +184,18 @@ Two consequences, both accepted:
   instead of reaping. This matches `_merged_by_content`'s documented stance that a stale
   ref "only DEFERS a reap to a later sweep, never causes a wrong one", and it is the
   correct direction: a deferred reap costs disk, a wrong one costs work.
+- **`gc --dry-run` fetches too**, although its `--help` promises "mutate nothing". A fetch
+  writes only remote-tracking refs — it touches no workspace, no branch, and no working
+  tree — and the sweep already makes a network call per workspace (`_pr_from`) in dry-run
+  today. The alternative, skipping the fetch under `--dry-run`, would make the preview
+  answer a *different* question from the live run, which is the one thing a preview may
+  not do.
+
+The `merged-by-content` path now computes `branch_changes_present` twice: once
+unfetched inside `_merged_by_content` to classify, once fetched inside `_reap_hazard` to
+decide. Redundant, and left that way deliberately — they are different questions
+("does this look merged?" vs. "would reaping lose anything?") answered against
+different freshness, and collapsing them would couple a classifier to a guard.
 
 ### 3.5 What gc reports
 
@@ -195,7 +217,7 @@ the documented action list.
 ### 3.6 `--force`, and who is allowed to type it
 
 `--force` becomes the escape for **all three** guards. Its current docstring claim —
-"`--force` bypasses the open-PR guard ONLY" (`local.py:552`) — stops being true and is
+"`--force` bypasses the open-PR guard ONLY" (`local.py:548`) — stops being true and is
 rewritten in the same change, as is its `--help` string, which must now say what is
 destroyed rather than only what is bypassed.
 
@@ -243,6 +265,7 @@ Push the branch, or destroy the work deliberately with
 | **A fetch per candidate workspace slows the opportunistic sweep**, which fires on every `up`/`down`. | Bounded: only reap candidates fetch, the local dirty check short-circuits first, and the sweep is already detached and best-effort. |
 | **Offline hosts stop reaping.** A failed fetch is `unverifiable` ⇒ refuse. | Correct direction, and self-healing on the next online sweep. Disk is cheaper than work. |
 | **`--force`'s blast radius grows** — one flag now bypasses three guards. | The alternative (a flag per guard) makes the destructive path harder to reason about, not safer. Mitigated by the help text (§3.6) and the agent obligation (`d3`). |
+| **A `WorktreeRemove`-hook teardown can now be refused.** `fr isolation down --worktree <path>` is how a harness hook reaps on exit; a dirty workspace makes it exit non-zero. | Correct, and the point: an exit hook is exactly the low-attention moment #435 describes. The message names the branch and the escape. |
 | **A dirty PR-less workspace reports `no-pr`, not the dirty hazard**, because `_merged_by_content` returns `False` before the guard is ever consulted. Its message ("no PR — `fr isolation down` when done") is then mildly misleading. | Documented residual. That path already refuses to reap, so no work is at risk; sharpening its message is cosmetic and out of scope. |
 
 ## 5. Test Plan
@@ -282,7 +305,31 @@ Push the branch, or destroy the work deliberately with
     workspaces still report `would-reap`. This is the false-refusal check; nothing
     offline can stand in for it.
 
-## 6. Evidence hygiene
+## 6. Repo obligations this change carries
+
+- **Version: minor, 4.8.0 → 4.9.0.** A refusal that did not exist before is user-visible
+  behavior in `packages/fr/src/**` plus a shipped skill edit, which AGENTS.md classes as
+  "mandatory behavior" rather than a fix. Bumped with `scripts/bump-version.py minor`;
+  never by hand.
+- **Acceptance matrix:** four rows are already registered against this spec
+  (`isolation-reap-preserves-uncommitted`, `-preserves-unlanded`, `-force-escape`,
+  `-guards-dont-strand`), born `not-implemented` and moved with
+  `fr acceptance set-status` as each level lands.
+- **Artifact versioning: no stamp bump.** Nothing here changes the shape of a plan,
+  journal, run, matrix or spec. `GcAction` is an in-memory value and a CLI rendering, not
+  a persisted artifact, so `fr.artifacts.registry` is untouched — stated so a reviewer
+  does not have to re-derive it.
+- **Explainers:** `docs/explainers/fr-isolation.html` describes the sweep at the level of
+  "every `up`/`down` fires a detached, best-effort sweep" and "teardown re-checks the
+  actual post-condition". A guard that refuses some reaps makes none of that false, so
+  nothing published becomes misleading — but the page arguably owes a sentence, and it
+  **cannot be regenerated**: that page is one of the two with no committed `.md` source
+  (`explainers-currency.md`, known gap 1). The PR body records the omission and its
+  cause rather than passing silently.
+- **OpenCode mirror:** the `fr-isolation` skill edit (§3.6) regenerates through
+  `scripts/sync-opencode.py`; `--check` is part of the gate.
+
+## 7. Evidence hygiene
 
 #435 originates on `derio-homelab/homelab`, inside the `derio-net` orbit, and #467 on this
 repo — no third-party host, org, or repo name enters this spec, its fixtures, or its PR
