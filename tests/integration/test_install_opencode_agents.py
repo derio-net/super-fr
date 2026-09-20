@@ -22,9 +22,11 @@ mattered.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tests.integration.test_install_sh import (  # noqa: F401  (fake_home is a fixture)
     REPO_ROOT,
@@ -165,37 +167,61 @@ def test_uninstall_removes_only_super_fr_agents(
 # owes is narrower and is what these tests pin: that it CALLS it, once per
 # tier with the right arguments, and inserts what comes back in the one place
 # the generator promises the anchor will be.
+#
+# ── review r-p2-f1: the stub had to go, and the tests got better for it ──
+#
+# The above was written when install.sh did the resolution itself, in bash,
+# and a stub `fr` let the test drive it without requiring a real one. The
+# tier-binding fix moves resolution AND the rewrite behind a single
+# `fr models apply --harness opencode`, so a stub that only fakes
+# `models resolve` can no longer fake any of it. All three tests broke —
+# not just the per-tier-call-count one the spec's Test Plan predicted.
+#
+# Rewritten rather than patched, because faking `apply` in shell would mean
+# reimplementing the materialiser in the test and then asserting that a fake
+# did the work: "the code calls the function it calls", which proves nothing
+# about whether a binding lands. Instead the sandbox now gets a thin wrapper
+# around the REAL `fr` — argv logged, then exec'd through — so these three
+# exercise install.sh, the real config resolution and the real materialiser
+# end to end. That is strictly stronger evidence than the stub version ever
+# gave, and it is the same claim #498 is about, minus only the live OpenCode
+# dispatch (plan phase 4).
 
 
-def _stub_fr(home: Path, models: dict[str, str]) -> Path:
-    """Put an `fr` on PATH that answers `models resolve --harness opencode
-    --tier <t>`, and logs every argv it was called with.
+def _real_fr(home: Path) -> Path:
+    """Put the REAL `fr` on the sandbox PATH, wrapped so its argv is logged.
+
+    Resolved from the running interpreter's own bin dir rather than a
+    hardcoded `.venv/bin/fr`, so it follows whatever environment pytest is
+    executing in. `_run_install` restricts PATH to the sandbox bin dir plus
+    the system ones, which is why this has to be planted rather than
+    inherited — and why the wrapper uses an absolute path: the sandbox's own
+    `uv` is a no-op stub that would shadow a real one.
 
     The parameter is `home`, not `fake_home`: that name is an imported
     fixture in this module and shadowing it here would make the helper look
     like a second fixture definition (ruff F811).
     """
+    fr_bin = Path(sys.executable).parent / "fr"
+    if not fr_bin.exists():  # pragma: no cover — defensive
+        pytest.skip(f"no real fr next to the interpreter at {fr_bin}")
     log = home / "fr-calls.log"
-    cases = "\n".join(f'    {tier}) echo "{model}" ;;' for tier, model in sorted(models.items()))
-    stub = home / "bin" / "fr"
-    stub.write_text(
-        "#!/bin/sh\n"
-        f'echo "$*" >> "{log}"\n'
-        'if [ "$1" = "models" ] && [ "$2" = "resolve" ]; then\n'
-        '  tier=""\n'
-        "  while [ $# -gt 0 ]; do\n"
-        '    [ "$1" = "--tier" ] && tier="$2"\n'
-        "    shift\n"
-        "  done\n"
-        '  case "$tier" in\n'
-        f"{cases}\n"
-        "    *) : ;;\n"  # unbound tier: print nothing, exit 0 — fr's real contract
-        "  esac\n"
-        "fi\n"
-        "exit 0\n"
-    )
-    stub.chmod(0o755)
+    wrapper = home / "bin" / "fr"
+    wrapper.write_text(f'#!/bin/sh\necho "$*" >> "{log}"\nexec "{fr_bin}" "$@"\n')
+    wrapper.chmod(0o755)
     return log
+
+
+def _seed_bindings(home: Path, models: dict[str, str]) -> None:
+    """Write the sandboxed user-level models config `fr` will read.
+
+    `_run_install` points XDG_CONFIG_HOME at `<home>/.config`, and
+    `fr.models.xdg_config_home` honours it, so this is the same file a real
+    operator's `fr models set` writes — not a test-only side channel.
+    """
+    path = home / ".config" / "fr" / "models.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"opencode": models}, sort_keys=True))
 
 
 def test_a_resolved_binding_lands_as_model_on_each_tier_file_only(
@@ -206,7 +232,8 @@ def test_a_resolved_binding_lands_as_model_on_each_tier_file_only(
         "standard": "provider/mid-model",
         "hard": "provider/big-model",
     }
-    _stub_fr(home_with_opencode_config, models)
+    _real_fr(home_with_opencode_config)
+    _seed_bindings(home_with_opencode_config, models)
 
     _run_install(home_with_opencode_config)
 
@@ -231,28 +258,38 @@ def test_a_resolved_binding_lands_as_model_on_each_tier_file_only(
     )
 
 
-def test_install_asks_fr_for_every_tier_and_only_for_tiers(
+def test_install_delivers_models_through_one_fr_models_apply_call(
     home_with_opencode_config: Path,
 ) -> None:
-    log = _stub_fr(home_with_opencode_config, {"standard": "provider/mid-model"})
+    """The successor to `..._asks_fr_for_every_tier_and_only_for_tiers`, whose
+    premise the fix removed: per-tier resolution now happens inside `fr`, not
+    in bash, so there is nothing per-tier for install.sh to be counted doing.
+
+    What remains install.sh's own contract, and is what this pins: delivery
+    goes THROUGH `fr` rather than reimplementing resolution in shell, exactly
+    once, for the right harness."""
+    log = _real_fr(home_with_opencode_config)
+    _seed_bindings(home_with_opencode_config, {"standard": "provider/mid-model"})
 
     _run_install(home_with_opencode_config)
 
-    resolves = [line for line in log.read_text().splitlines() if line.startswith("models resolve")]
-    tiers_asked = sorted(line.split("--tier ")[1].split()[0] for line in resolves)
-    assert tiers_asked == ["hard", "mechanical", "standard"], (
-        f"expected one resolve per tier and none for the base agent, got {tiers_asked}"
+    calls = log.read_text().splitlines()
+    applies = [line for line in calls if line.startswith("models apply")]
+    assert applies == ["models apply --harness opencode"], (
+        f"expected exactly one `models apply --harness opencode`, got {applies!r}"
     )
-    for line in resolves:
-        assert "--harness opencode" in line, f"wrong harness in: {line}"
+    assert not [line for line in calls if line.startswith("models resolve")], (
+        "install.sh must not resolve per tier any more — that moved inside fr"
+    )
 
 
 def test_an_unbound_tier_inherits_rather_than_pinning_an_empty_model(
     home_with_opencode_config: Path,
 ) -> None:
-    """`fr models resolve` prints nothing and exits 0 when unbound. Empty means
-    inherit — the key is omitted, never written empty for OpenCode to fail on."""
-    _stub_fr(home_with_opencode_config, {"hard": "provider/big-model"})
+    """An unresolved tier means inherit — the key is omitted entirely, never
+    written empty for OpenCode to try to resolve."""
+    _real_fr(home_with_opencode_config)
+    _seed_bindings(home_with_opencode_config, {"hard": "provider/big-model"})
 
     _run_install(home_with_opencode_config)
 

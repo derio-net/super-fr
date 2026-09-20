@@ -2074,26 +2074,18 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
     status: skipped
-    notes: 'Phase 5 live-verified the claim, and the orchestrator re-verified it independently
-      from the session store. Run: opencode run --model opencode/nemotron-3.5-lightning-free
-      (a free model; opencode/north-mini-code-free, which this matrix previously cited,
-      is GONE from the live roster — journaled as p5-t1-model-gone), instructing a task-tool
-      dispatch to the fr-phase-executor subagent. Evidence is an opencode.db session
-      row with parent_id SET and agent=''fr-phase-executor'', titled by opencode itself
-      ''(@fr-phase-executor subagent)'' — the same shape as the 13 ''(@general subagent)''
-      rows in the recorded arm-A experiment, but with a NAMED custom agent. The child
-      carries a real assistant turn (reasoning + text parts), so it is not the parent
-      role-playing; cost/tokens_output read 0, which is free-tier accounting, not an
-      absent turn. CORRECTION to the original note: that dispatch ran in the fr-isolation
-      WORKTREE, against the committed .opencode/agent/ mirror in situ — not in a scratch
-      dir, as first recorded; session.directory and the assistant message''s path.cwd
-      both say so. Separately verified by the orchestrator: the shipped mirror copied
-      into a bare directory with no opencode.json and no super-fr install registers
-      all four agents as (subagent), which is Test Plan §5 item 1. Status is ''skipped''
-      rather than ''ci'' because reproducing it needs a live opencode binary and a model,
-      neither available in CI. Remaining debt: the post-merge full /fr-goal run on a
-      paid model (spec §5 item 5, plan phase 6), which exercises the skill prose driving
-      the dispatch rather than the primitive alone.'
+    notes: 'SCOPE CORRECTION (gh#498, spec 2026-09-20-opencode-tier-binding-reaches-dispatch
+      §3.C). This row''s evidence — a parented child session with agent=''fr-phase-executor''
+      and a real assistant turn — proves the rewritten fr-goal §5/§6 prose drove a genuine
+      dispatch. It does NOT prove tiering resolved: the two separate only if the session
+      row''s model is asserted against the phase tier''s binding, and it was not. The
+      row''s headline acceptance text should read ''...and the session row''s model
+      matches the phase tier''s binding''; there is no CLI verb that can edit a row''s
+      acceptance text (add refuses an existing id, set-status moves only status/levels/notes,
+      and hand-editing is forbidden), so the correction is recorded here and the tiering
+      claim now lives in its own row, opencode-tier-binding-reaches-dispatch. Follow-up
+      filed for an fr acceptance edit verb. Status unchanged at skipped: still real,
+      still not CI-reproducible without a live binary and model.'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
@@ -2131,3 +2123,37 @@ rows:
       removing only super-fr's own agent files. Unit-covered by test_install_copies_opencode_agents.py
       (opt-in gating, ordering, uninstall scope) and integration-covered by test_install_opencode_agents.py
       (test_install_delivers_four_agents_to_opencode_dir, test_uninstall_removes_only_super_fr_agents).
+  - id: opencode-tier-binding-reaches-dispatch
+    capability: OpenCode parity
+    acceptance: A tier→model binding the operator makes — including one answered mid-run,
+      and one that REPLACES an earlier binding — reaches the agent OpenCode actually
+      dispatches, rather than being frozen at whatever the last install.sh run resolved.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-opencode-tier-binding-reaches-dispatch-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_agents_materialize.py
+      - super-fr:tests/unit/test_models_cmd.py
+      - super-fr:tests/unit/test_fr_goal_dispatch_prose.py
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py
+    status: ci
+    notes: 'not-implemented -> ci: the spec shipped, so the evidence exists and runs
+      on every PR. The loop is closed at the BINDING (§3.A): fr.opencode_agents.materialize_agents
+      rewrites the installed agent files in place, and both triggers go through it —
+      fr models set (unit: test_models_cmd.py, the CLI side effect and its reporting)
+      and scripts/install.sh via the new fr models apply --harness opencode verb (int:
+      test_install_opencode_agents.py, rewritten in phase 2 to drive the REAL fr on
+      the sandbox PATH rather than a stub that could only fake resolve, so it exercises
+      install.sh + repo-over-user resolution + the materialiser end to end). The stale-binding
+      case named by Test Plan item 2 — an agent pinning model <A>, a binding moved to
+      <B>, the agent then reading <B> — is test_opencode_agents_materialize.py::TestMaterializeAgents::test_stale_binding_regression;
+      it is the sharper of §1.1''s two failure modes (a wrong value stated confidently)
+      and the test whose absence let the defect ship in PR #495. The §3.B complement,
+      an UNRESOLVED tier dispatching the untiered fr-phase-executor so the absence is
+      visible in the session row, is prose and is pinned by test_fr_goal_dispatch_prose.py::test_the_clause_instructs_the_untiered_fallback_when_a_tier_is_unresolved.
+      What ci does NOT claim, stated so the row is not the overclaim it was created
+      to correct: no automated level dispatches a real OpenCode subagent and reads back
+      the session row''s model. That live claim stays with opencode-subagent-dispatch,
+      deliberately left at skipped (its scope correction is already in its own notes,
+      finding r-s1) and is this plan''s manual phase 4.'

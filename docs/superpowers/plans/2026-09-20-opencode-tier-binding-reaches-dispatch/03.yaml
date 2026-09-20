@@ -1,0 +1,140 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Prose, acceptance and the bump — make the unresolved case observable
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - opencode-tier-binding-reaches-dispatch
+  - opencode-subagent-dispatch
+tasks:
+- number: 1
+  title: fr-goal §5 gains the untiered fallback, red to green
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: extend tests/unit/test_fr_goal_dispatch_prose.py. Assert the
+      dispatch clause now instructs that an UNRESOLVED tier dispatches the
+      untiered `fr-phase-executor` and is journalled — assert on meaning that
+      survives rewording (the presence of the untiered agent name together
+      with a word indicating the unresolved condition), not an exact
+      sentence. Also assert `scan_prose(text) == []` still holds, since the
+      clause is where the harness-specific tool name lives. Run pytest —
+      fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: edit the OpenCode arm of fr-goal §5's `**Harness — dispatch:**`
+      clause to add the fallback: an unresolved tier dispatches the untiered
+      agent so the absence shows up in the session row as the untiered NAME,
+      rather than as a tier agent silently inheriting the session model,
+      which is indistinguishable from a working tiered dispatch. Keep the
+      clause's three-harness scoping intact. NOTE THE LINE BUDGET: this skill
+      sits exactly at its 120-line cap (test_skill_validation::
+      test_under_120_lines) and the file's convention is long lines rather
+      than more of them — PR #495 hit this same wall. Then regenerate BOTH
+      mirrors: `uv run scripts/sync-opencode.py` and
+      `uv run scripts/sync-hermes.py`, and git add them. Run the S1 tests.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: re-read the whole dispatch clause as an OpenCode reader with
+      no context — it now carries the dispatch instruction, the cost policy,
+      the tier naming AND this fallback, in a file that rations lines. If any
+      of the four has become unreadable under compression, rebalance; if it
+      still reads, record `no-refactor-because: P3.T1` saying so. The prose
+      test proves the instruction is PRESENT, not that it is clear — that
+      judgement is this step's job and cannot be automated.
+- number: 2
+  title: Move the acceptance row, explicitly
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      `fr acceptance set-status --id opencode-tier-binding-reaches-dispatch
+      --status ci --level unit=... --level int=...` with --notes saying why it
+      moved and naming the stale-binding regression test specifically. Leave
+      `opencode-subagent-dispatch` at `skipped`: this PR does not change what
+      its live evidence covers, and its scope correction is already recorded
+      in its notes (finding r-s1 — there is no CLI verb to edit a row's
+      acceptance text, so do NOT hand-edit matrix.yaml to "fix" the headline;
+      that gap is a filed follow-up, not this phase's work). Then
+      `uv run fr acceptance check` clean with all three committed reports
+      regenerated and staged.
+- number: 3
+  title: Version bump
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor` — minor, not
+      patch: `fr models set` gains a user-visible side effect and there is a
+      new CLI verb (`fr models apply`), both of which change what an operator
+      observes. Never hand-edit a version-bearing manifest. Commit the
+      manifests together with uv.lock.
+- number: 4
+  title: Verification before completion
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Full gate, output read rather than assumed: `uv run pytest -q --no-cov
+      --basetemp=/tmp/sb`; `uv run ruff check packages/ tests/ scripts/`;
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
+      packages/fr-cncd/src`; `uv run scripts/sync-opencode.py --check`;
+      `uv run scripts/sync-hermes.py --check`; `uv run fr harness parity
+      --check`; `uv run fr validate artifacts`; `uv run fr acceptance check`;
+      `uv run --no-project python scripts/bump-version.py --check`;
+      `uv run fr journal check --scope plan --slug
+      2026-09-20-opencode-tier-binding-reaches-dispatch`. Every one green
+      before the phase completes.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T09:03:05+00:00'
+      note: 'RED: test_the_clause_instructs_the_untiered_fallback_when_a_tier_is_unresolved
+        failed on the shipped clause (untiered name present, never tied to an unresolved
+        tier + journal); the scan_prose re-assert passed as a non-regression guard.'
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T09:03:06+00:00'
+      note: 'GREEN: OpenCode arm of §5''s dispatch clause now folds the unresolved
+        case into the untiered instruction, on the SAME line (file still exactly 120/120).
+        Both mirrors regenerated via sync-opencode.py + sync-hermes.py. 105 passed
+        across dispatch-prose, skill-validation, tool-neutrality and the opencode
+        sync tripwire.'
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T09:04:09+00:00'
+      note: 'REFACTOR done, not skipped: the re-read found ''when X and when Y'' reading
+        as a conjunction of conditions rather than two cases, and rebalanced the OpenCode
+        arm into two sentences. Journal p3-t1-s3-reread; both mirrors re-synced; 108
+        passed.'
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T09:05:10+00:00'
+      note: 'opencode-tier-binding-reaches-dispatch: not-implemented -> ci via set-status
+        (never a hand-edit), levels unit=test_opencode_agents_materialize.py + test_models_cmd.py
+        + test_fr_goal_dispatch_prose.py, int=test_install_opencode_agents.py; notes
+        name test_stale_binding_regression specifically and state what ci does NOT
+        claim (no automated level reads back a live session row''s model). opencode-subagent-dispatch
+        left at skipped, untouched. fr acceptance check exit 0, 124 rows OK; all three
+        reports regenerated by set-status and staged.'
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T09:05:29+00:00'
+      note: 'bump-version.py minor: 4.7.0 -> 4.8.0 across 9 version-bearing files
+        (no hand-edits), uv sync run by the script, ''fr --version -> fr 4.8.0'';
+        --check reports all ten surfaces agree. Nine manifests + uv.lock staged together.
+        Minor because fr models set gains a user-visible side effect on ~/.config/opencode/agent/
+        and fr models apply is a new verb.'
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-09-20T09:11:04+00:00'
+      note: 'Full gate green except one pre-existing host-side failure (test_workflow_check::test_cli_all_fails_when_nothing_is_discoverable,
+        #489/#463), scoped by stashing only my paths and re-running — identical failure
+        without my diff, and phase 3 changes no Python source. Detail and every command''s
+        actual output in journal p3-d1-gate-one-preexisting-failure.'
+  completion:
+    at: '2026-09-20T09:11:13+00:00'
+    note: null
+    observed_prs: []

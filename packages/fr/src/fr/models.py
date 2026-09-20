@@ -28,11 +28,21 @@ class ModelsError(Exception):
     """Raised when a models config file is structurally invalid."""
 
 
+def xdg_config_home() -> Path:
+    """Base config dir: ``$XDG_CONFIG_HOME``, else ``$HOME/.config``.
+
+    Shared with `fr.opencode_agents.default_config_home`, which needs the
+    SAME resolution (it lives under the same base, at ``opencode/agent/``
+    rather than ``fr/models.yaml``) so the two can never disagree about
+    where "the config dir" is.
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    return Path(xdg) if xdg else Path.home() / ".config"
+
+
 def default_models_path() -> Path:
     """User-level models config, honoring ``$XDG_CONFIG_HOME`` then ``$HOME``."""
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    base = Path(xdg) if xdg else Path.home() / ".config"
-    return base / "fr" / "models.yaml"
+    return xdg_config_home() / "fr" / "models.yaml"
 
 
 def load_models(path: Path) -> ModelsConfig:
@@ -50,6 +60,27 @@ def load_models(path: Path) -> ModelsConfig:
     return out
 
 
+def resolved_config(*, repo_cfg: ModelsConfig, user_cfg: ModelsConfig) -> ModelsConfig:
+    """The whole ``harness → tier → model`` map with repo overriding user,
+    per (harness, tier).
+
+    THE one implementation of the repo-over-user rule. `resolve` is a lookup
+    on this, and `fr models {set,apply,resolve}` all go through it, because
+    the materialiser needs the whole map while `resolve` needs one value —
+    and two functions computing the same rule is how they come to disagree.
+    They did: a falsy repo binding used to shadow a real user one under a
+    plain dict merge, while `resolve` fell through to the user config
+    (review r-p2-f2). A falsy binding is not a binding, so it never shadows.
+    """
+    merged: ModelsConfig = {}
+    for cfg in (user_cfg, repo_cfg):
+        for harness, tiers in cfg.items():
+            for tier, model in tiers.items():
+                if model:
+                    merged.setdefault(harness, {})[tier] = model
+    return merged
+
+
 def resolve(
     harness: str,
     tier: str,
@@ -57,12 +88,11 @@ def resolve(
     repo_cfg: ModelsConfig,
     user_cfg: ModelsConfig,
 ) -> str | None:
-    """Resolve ``(harness, tier) → model`` with repo overriding user; else None."""
-    for cfg in (repo_cfg, user_cfg):
-        model = cfg.get(harness, {}).get(tier)
-        if model:
-            return model
-    return None
+    """Resolve ``(harness, tier) → model`` with repo overriding user; else None.
+
+    A lookup on `resolved_config` rather than its own traversal, so the two
+    cannot drift — see that function's note."""
+    return resolved_config(repo_cfg=repo_cfg, user_cfg=user_cfg).get(harness, {}).get(tier)
 
 
 def set_binding(path: Path, harness: str, tier: str, model: str) -> None:

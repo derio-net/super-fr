@@ -53,29 +53,42 @@ def test_uninstall_removes_opencode_agent_copies() -> None:
 
 def test_install_runs_agents_delivery_after_fr_cli_install() -> None:
     """Agents delivery must run AFTER step 10 (fr CLI install) because it
-    calls `fr models resolve`."""
+    calls `fr models apply`."""
     install = (REPO_ROOT / "scripts" / "install.sh").read_text()
 
     # Find the section markers
     fr_cli_comment = "# 10. fr CLI"
-    # The actual agent delivery implementation is marked by a comment unique to it
-    agents_delivery_comment = "# Derive the tier from the filename suffix"
+    # The materialiser call itself is the stable anchor for the delivery
+    # block now — the awk rewrite it replaced (and the comment that used to
+    # mark it) is gone (phase 2, 2026-09-20-opencode-tier-binding-reaches-dispatch).
+    agents_delivery_marker = "fr models apply --harness opencode"
 
     fr_cli_idx = install.find(fr_cli_comment)
-    agent_delivery_idx = install.find(agents_delivery_comment)
+    agent_delivery_idx = install.find(agents_delivery_marker)
 
     assert fr_cli_idx != -1, "Could not find '# 10. fr CLI' section marker"
-    assert agent_delivery_idx != -1, "Could not find agents delivery implementation"
+    assert agent_delivery_idx != -1, "Could not find the `fr models apply` call"
     assert fr_cli_idx < agent_delivery_idx, (
         "Agents delivery implementation must appear AFTER the fr CLI install block "
-        "(section 10) because it needs `fr models resolve`"
+        "(section 10) because it needs `fr models apply`"
     )
 
 
-def test_install_calls_fr_models_resolve_for_agents() -> None:
-    """Agent delivery must attempt to resolve models using `fr models resolve`."""
+def test_install_delivers_agent_models_through_fr_models_apply() -> None:
+    """Agent model resolution must go through `fr`, not be reimplemented in
+    bash: the per-agent tier regex, the `fr models resolve` loop and the awk
+    frontmatter rewrite are gone, replaced by a plain copy of the agent
+    files followed by one `fr models apply --harness opencode` call."""
     install = (REPO_ROOT / "scripts" / "install.sh").read_text()
-    assert "fr models resolve --harness opencode" in install, (
-        "install.sh must call `fr models resolve --harness opencode` "
-        "to resolve agent models from the operator's bindings"
+    assert "fr models apply --harness opencode" in install, (
+        "install.sh must deliver agent models by calling "
+        "`fr models apply --harness opencode`, not resolving/rewriting in bash"
+    )
+    assert "fr models resolve --harness opencode" not in install, (
+        "per-tier `fr models resolve` in bash must be gone — resolution now "
+        "happens inside `fr models apply`"
+    )
+    assert "awk" not in install, (
+        "install.sh's per-agent frontmatter awk rewrite must be deleted — the "
+        "materialiser (fr.opencode_agents.materialize_agents) is now the only copy"
     )
