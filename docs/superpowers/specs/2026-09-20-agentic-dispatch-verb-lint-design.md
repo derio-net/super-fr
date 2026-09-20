@@ -64,9 +64,15 @@ work.
 
 ### 2.D Measured: #428's literal pattern list is unusable in this repo
 
-Run during the brainstorm over **every agentic step in every parseable plan
-folder** in this repo — `docs/superpowers/plans/` plus
-`docs/superpowers/implemented/plans/`, 43 plans, **1,419 agentic steps**:
+Run during the brainstorm over every agentic step of every plan folder in this
+repo that a modern `fr` can still read — `docs/superpowers/plans/` plus
+`docs/superpowers/implemented/plans/`. The corpus is **43 plan folders /
+1,419 agentic steps**, and the shortfall against the 105 entries on disk is
+itself worth stating: 38 archived plans carry an `fr_version: '>=3.0.0,<4.0.0'`
+pin and are rejected outright by `fr` 4.8.0 (frozen artifacts, never migrated —
+`.claude/rules/artifact-versioning.md` §"What this rule does not cover"), 3 more
+fail `PhaseDoc` validation, and 21 entries are not folders at all. The 43 that
+parse are every live plan plus every archived plan written since the 4.x line:
 
 | Pattern, as #428 proposes it | Hits | Verdict |
 |---|---|---|
@@ -176,10 +182,20 @@ file:line-cited evidence following <protocol>"), or move the dispatch into a
 **The precision claim is pinned in CI, not asserted.** A corpus test runs the
 new detector over every agentic step of every plan folder under
 `docs/superpowers/plans/` and `docs/superpowers/implemented/plans/` and asserts
-**zero** hits. That is the 1,419-step measurement of §2.D, frozen: any future
+**zero** hits — the 1,419-step measurement of §2.D, frozen, so that any future
 widening of the patterns that would break super-fr's own plans fails in CI
-instead of in an operator's run. (Archived plans are read here purely as a
-corpus; nothing rewrites them — see `.claude/rules/artifact-versioning.md`.)
+instead of in an operator's run. Archived plans are read purely as a corpus;
+nothing rewrites them.
+
+That test needs one guard to be worth anything. Plans that do not parse must be
+skipped (§2.D: 41 of them raise `PlanSchemaError`, 38 on a frozen `fr_version`
+pin that will never be satisfied again), and "skip the unreadable, assert zero
+hits on the rest" degrades **silently to a passing test that read nothing** the
+day a schema bump makes every plan unparseable. So the test also asserts a
+**floor on the number of plans it actually parsed** (≥ 30, against today's 43)
+and on agentic steps scanned (≥ 1,000, against today's 1,419). A green corpus
+test must mean the corpus was read — this repo's recurring defect is precisely
+a check that reports success while doing nothing.
 
 ### 4.B The executor contract — refuse the tick (#428 item 2)
 
@@ -199,8 +215,10 @@ performed as written.
 
 Both are mirrored to OpenCode by `scripts/sync-opencode.py`, which regenerates
 `.opencode/skills/fr-execute/SKILL.md` and the four
-`.opencode/agent/fr-phase-executor*.md` tier variants. Tripwires
-(`test_tripwire_opencode_skills_sync.py`) fail on drift.
+`.opencode/agent/fr-phase-executor{,-mechanical,-standard,-hard}.md` tier
+variants. Drift is caught by `test_tripwire_opencode_skills_sync.py` for the
+skill and `test_opencode_agent_mirror.py` for the agent variants — two
+different guards, both must stay green.
 
 ### 4.C fr-plan guidance — where the error is born (#428 item 4)
 
@@ -272,8 +290,10 @@ prose; nothing deploys):
 4. **Fenced code is stripped, inline code is not** — a dispatch verb inside a
    ``` fence yields nothing; the backticked-agent form still errors.
 5. **Corpus regression (§4.A)** — zero errors across every agentic step of
-   every plan folder in `docs/superpowers/plans/` and
-   `docs/superpowers/implemented/plans/`.
+   every *parseable* plan folder in `docs/superpowers/plans/` and
+   `docs/superpowers/implemented/plans/`, **plus** the floor assertions
+   (≥ 30 plans parsed, ≥ 1,000 agentic steps scanned) that stop the test
+   degrading into a green no-op.
 6. **`fr plan self-review` exits 1** on a plan carrying a dispatch step, and
    the message names both escapes.
 7. **Prose tokens** — `test_skill_tokens.py` asserts the executor contract in

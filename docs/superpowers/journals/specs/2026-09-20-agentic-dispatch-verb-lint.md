@@ -19,3 +19,18 @@ When a plan genuinely needs subagent work, it goes in a `[manual]` phase. The li
 ### d4-tiers · decision · Model tiers rebound: claude-code/standard sonnet-5 → opus-5
 
 Operator asked for 'standard & deep -> opus, fast -> sonnet'. fr's real tier vocabulary is `mechanical | standard | hard`, not fast/standard/deep (the question used the wrong names); mapped deep→hard, fast→mechanical. Resulting claude-code config: hard=claude-opus-5 (already bound), standard=claude-opus-5 (CHANGED from claude-sonnet-5), mechanical=claude-sonnet-5 (already bound). All three tiers are now bound, so no phase dispatch in this run can silently inherit the session model. opencode bindings untouched.
+
+<!-- fr:journal kind=review scope=spec id=r1-corpus-honesty created=2026-09-20T15:05:38 -->
+### r1-corpus-honesty · review · Corpus claim was misleading: 43 of 105 plan folders parse, and the test could have gone green reading nothing
+
+Spec review against codebase reality. The draft said the measurement covered 'every parseable plan folder ... 43 plans' without saying what the other 62 were. Census: 43 parse, 41 raise PlanSchemaError (38 of them on a frozen `fr_version: '>=3.0.0,<4.0.0'` pin that fr 4.8.0 can never satisfy — archived artifacts are deliberately never migrated — and 3 on PhaseDoc validation), 21 entries are not folders. Two fixes: §2.D now states the shortfall and why; §4.A's corpus test now asserts a FLOOR on plans parsed (>=30) and agentic steps scanned (>=1000), because 'skip unparseable, assert zero hits' degrades silently into a passing test that read nothing the day a schema bump lands. A green check that verifies nothing is this repo's recurring defect class.
+
+<!-- fr:journal kind=review scope=spec id=r2-agent-mirror-guard created=2026-09-20T15:05:38 -->
+### r2-agent-mirror-guard · review · OpenCode agent-variant drift is guarded by test_opencode_agent_mirror.py, not the skills tripwire
+
+The draft named only test_tripwire_opencode_skills_sync.py as the drift guard for §4.B's two edits. That tripwire covers .opencode/skills/; the four .opencode/agent/fr-phase-executor{,-mechanical,-standard,-hard}.md variants are covered by tests/unit/test_opencode_agent_mirror.py. Both are now named — a plan that runs sync-opencode.py and only checks the skills tripwire would miss agent drift.
+
+<!-- fr:journal kind=review scope=spec id=r3-claims-verified created=2026-09-20T15:05:38 -->
+### r3-claims-verified · review · Every other file, helper and quotation the spec names was verified to exist
+
+Verified in the worktree: fr.plan_ops.self_review and _MANUAL_VERB_RES with its 'Deliberately conservative (precision over recall)' comment quoted verbatim; fr-phase-executor.md's `tools: Read, Edit, Write, Bash, Grep, Glob` (no Agent); .opencode/agent/fr-phase-executor-hard.md's `task: deny`; plugins/super-fr/hooks/fr-phase-executor-guard.sh; tests/unit/test_skill_tokens.py with its FR_PLAN/FR_EXECUTE/FR_PHASE_EXECUTOR constants; fr-plan SKILL.md's 'Pure agentic phases' bullet (the sibling insertion point); fr-execute SKILL.md's Procedure step 3 and Constraints; docs/explainers/01-fr-goal.md line 364's 'manual work hidden inside an agentic phase' (the sibling sentence's insertion point); scripts/sync-opencode.py's handling of all four agent variants. Also confirmed the no-parity-row claim: test_tripwire_harness_parity.py pairs shipped HOOK SCRIPTS to rows (test_every_shipped_hook_script_has_a_parity_row) and no hook ships here.
