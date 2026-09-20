@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -3889,3 +3890,258 @@ def test_resolve_refuses_an_unknown_harness_value(tmp_path: Path) -> None:
 
     assert result.exit_code == 2, result.output
     assert "carrier-pigeon" in _squash(result.output)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — `fr run status` renders the holder; `fr run check` reports the
+# open/unclaimed debt (spec §4.C, §4.B.1). Case letters follow P5.T1.S1.
+# ---------------------------------------------------------------------------
+
+
+def test_status_renders_held_by_and_the_claimed_identity(tmp_path: Path) -> None:
+    """Case (a): a held (open) unit prints `HELD BY <agent> (<harness>,
+    <model>) since <dispatched>`, indented under the unit's own line."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "add889a73824c8413",
+            "--harness",
+            "claude-code",
+            "--model",
+            "claude-opus-5",
+        ],
+    )
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert re.search(
+        r"^ {6}HELD BY agent add889a73824c8413 \(claude-code, claude-opus-5\) since \S+$",
+        result.output,
+        re.MULTILINE,
+    ), result.output
+
+
+def test_status_renders_an_unclaimed_open_dispatch(tmp_path: Path) -> None:
+    """Case (d): nobody has called `claim` yet — `an unclaimed agent`, not a
+    guess and not a blank."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert re.search(
+        r"^ {6}HELD BY an unclaimed agent( \([^)]+\))? since \S+$", result.output, re.MULTILINE
+    ), result.output
+
+
+def test_status_renders_a_settled_dispatch(tmp_path: Path) -> None:
+    """Case (b): a closed record prints `<agent> (<harness>, <model>)
+    <dispatched> -> <returned> <outcome>`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "add889a73824c8413",
+            "--harness",
+            "claude-code",
+            "--model",
+            "claude-opus-5",
+        ],
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+    assert result.exit_code == 0, result.output
+
+    status = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert status.exit_code == 0, status.output
+    assert re.search(
+        r"^ {6}agent add889a73824c8413 \(claude-code, claude-opus-5\) "
+        r"\S+ -> \S+ done$",
+        status.output,
+        re.MULTILINE,
+    ), status.output
+
+
+def test_status_renders_held_by_the_orchestrator(tmp_path: Path) -> None:
+    """Case (c): `agent_type: None` (an orchestrator-run `kind: agent` step,
+    spec §4.B.1) renders `held by the orchestrator`, not a missing value."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # brainstorm: agent_type None
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert re.search(r"^ {6}held by the orchestrator since \S+$", result.output, re.MULTILINE), (
+        result.output
+    )
+
+
+def test_status_shows_every_record_of_a_unit_oldest_first(tmp_path: Path) -> None:
+    """Case (e): a `--redispatch`ed unit keeps every attempt, oldest first —
+    the abandoned holder's line printed before the fresh, unclaimed one."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--agent", "lost-one"],
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    lines = [
+        line
+        for line in result.output.splitlines()
+        if "lost-one" in line or "unclaimed agent" in line
+    ]
+    assert len(lines) == 2, result.output
+    assert "lost-one" in lines[0] and "abandoned" in lines[0]
+    assert "unclaimed agent" in lines[1]
+
+
+def test_status_output_is_byte_identical_for_a_run_with_no_dispatch_data(tmp_path: Path) -> None:
+    """Case (f): a run whose steps never opened a dispatch record — every
+    step here is `kind: cli` — renders exactly as it did before this phase."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output == (
+        "run: r1\n"
+        "workflow: cli-only@1\n"
+        "branch: b\n"
+        "cursor: hello\n"
+        "  hello: pending\n"
+        "  bye: pending\n"
+    )
+
+
+# --- `fr run check` reports open dispatches and counts unclaimed ones -------
+
+
+def test_check_reports_an_open_dispatch_with_its_claimed_holder(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "step/phase/1/implement-phase" in result.output
+    assert "agent a1" in result.output
+
+
+def test_check_counts_an_unclaimed_open_dispatch_as_debt_not_a_failure(tmp_path: Path) -> None:
+    """An unclaimed dispatch is visible debt, the same nagging shape
+    `answered_by` already has (spec §4.C) — it must NOT change the exit code."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # opens, never claimed
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output  # the exit code IS the contract
+    assert "1 unclaimed dispatch" in result.output
+
+
+def test_check_does_not_count_a_closed_dispatch_as_open_or_unclaimed(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "unclaimed" not in result.output
+    assert "step/phase/1/implement-phase" not in result.output
+
+
+def test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaimed(
+    tmp_path: Path,
+) -> None:
+    """An orchestrator-run step (`agent_type: None`) never carries an `agent`
+    by design — it must not inflate the unclaimed count every single run."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "held by the orchestrator" in result.output
+    assert "unclaimed dispatch" not in result.output

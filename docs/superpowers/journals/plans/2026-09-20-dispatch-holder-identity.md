@@ -264,3 +264,69 @@ Three records on this run's cursor were opened by advance in phases 2-3 and coul
 ### x-f7-label-collision · discovery · Commit 3ac2b88's message calls the width fix 'f7'; the journal's f7 is a different finding (phase 4)
 
 The phase-3 review commit message labels the test_run_workspace width fragility 'f7'. No journal entry with that id was ever created for it — it is recorded as the resolution record on x-run-workspace-marker-wrap. Phase 4 then legitimately created finding f7 for the _complete_step deletion. So the two do not collide in the journal (which fr journal check reads), only in one pushed commit message. Not rewriting a pushed commit over a label; recording it here so the PR body, which derives findings from the journal, names f7 as the _complete_step bug and does not inherit the mislabel.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acceptance-row-deferred created=2026-09-20T15:56:18 phase=5 -->
+### p5-acceptance-row-deferred · discovery · p5-acceptance-row-deferred: run-dispatch-holder-recorded left not-implemented at phase completion (phase 5)
+
+fr plan edit --complete-phase 5 warned that acceptance row run-dispatch-holder-recorded
+is still not-implemented. Left as-is, matching the precedent phases 1-4 already recorded
+(p1/p2/p3/p4-acceptance-row-deferred): the status flip is fr acceptance set-status work,
+done in phase 6 per that phase's own steps, not per-phase.
+
+Evidence phase 6 will want, all in tests/unit/test_run_cli.py:
+  test_status_renders_held_by_and_the_claimed_identity
+  test_status_renders_an_unclaimed_open_dispatch
+  test_status_renders_a_settled_dispatch
+  test_status_renders_held_by_the_orchestrator
+  test_status_shows_every_record_of_a_unit_oldest_first
+  test_status_output_is_byte_identical_for_a_run_with_no_dispatch_data
+  test_check_reports_an_open_dispatch_with_its_claimed_holder
+  test_check_counts_an_unclaimed_open_dispatch_as_debt_not_a_failure
+  test_check_does_not_count_a_closed_dispatch_as_open_or_unclaimed
+  test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaimed
+
+Plus a live before/after fr run status and fr run check against this run's own cursor
+(2026-09-20-feat-phase-holder-identity), recorded in x-p5-status-check-live.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p5-status-check-live created=2026-09-20T15:56:35 phase=5 -->
+### x-p5-status-check-live · discovery · x-p5-status-check-live: fr run status/fr run check verified live against this run's own cursor (phase 5)
+
+Ran both commands against 2026-09-20-feat-phase-holder-identity's real cursor before and
+after phase 5's change (before captured by git-stashing only run_cmd.py, exit 0 both times).
+
+BEFORE (dispatch map present on disk, but status/check couldn't render it yet):
+  implement: running
+    phase/2/review-phase: done
+    phase/3/implement-phase: done
+    ...
+  (no holder lines at all — the whole point of the phase)
+
+AFTER:
+  phase/2/review-phase: done
+      the orchestrator 2026-09-20T12:35:32+00:00 -> 2026-09-20T13:38:19+00:00 abandoned
+  phase/3/implement-phase: done
+      agent a5dbd5f0e9bdf3362 (claude-code, claude-sonnet-5) 2026-09-20T12:35:34+00:00 -> 2026-09-20T13:38:19+00:00 abandoned
+  phase/3/review-phase: done
+      the orchestrator (claude-opus-5) 2026-09-20T13:08:36+00:00 -> 2026-09-20T13:38:19+00:00 abandoned
+  phase/4/implement-phase: done
+      agent a5b15f633d8225e2c (claude-code, claude-opus-5) 2026-09-20T13:08:53+00:00 -> 2026-09-20T13:36:11+00:00 done
+  phase/4/review-phase: done
+      the orchestrator (claude-opus-5) 2026-09-20T13:39:21+00:00 -> 2026-09-20T13:39:21+00:00 done
+  phase/5/implement-phase: running
+      HELD BY agent a182c94fe152e508c (claude-code, claude-sonnet-5) since 2026-09-20T13:39:22+00:00
+
+`fr run check` on the same run: exit 0, one line — "implement: phase/5/implement-phase is
+open — HELD BY agent a182c94fe152e508c (claude-code, claude-sonnet-5) since ..." — and no
+"unclaimed dispatch" line, because phase/5's own record was claimed. `fr validate artifacts`:
+33 artifacts, all structurally valid, including this live cursor.
+
+Confirms two design decisions made in this phase, not literally spelled out in spec §4.C's
+illustration:
+  - agent_type: None (an orchestrator-run kind:agent member, e.g. review-phase) renders
+    "the orchestrator" as the WHO, in both the held and settled line shapes — not just the
+    open case the spec's own prose describes. `phase/3/review-phase` and `phase/4/review-phase`
+    are the live evidence this reads sensibly for a CLOSED record too.
+  - `fr run check`'s unclaimed count deliberately EXCLUDES agent_type is None records: an
+    orchestrator-run step never reports an `agent` for itself, so counting it would make
+    every ordinary fr-goal run report permanent "unclaimed" debt on spec-review/review-phase/
+    deliver. Pinned by test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaimed.

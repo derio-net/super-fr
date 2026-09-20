@@ -1344,9 +1344,87 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
         raise typer.Exit(2) from e
 
 
+def _dispatch_holder_label(attempt: DispatchRecord) -> str:
+    """Who to name for `attempt` — the priority spec §4.B.1/§4.C both rely on.
+
+    `agent_type is None` means an orchestrator-run `kind: agent` step (the
+    manifest's own `agent: null`): that is not a missing value, it is the
+    orchestrator doing the work itself, and it never reports an `agent` id
+    for itself. Only once a unit IS dispatched to an actual agent type does
+    an absent `agent` read as `an unclaimed agent` — the same distinction
+    `_refuse_held` already draws for the gh-499 refusal.
+    """
+    if attempt.agent_type is None:
+        return "the orchestrator"
+    if attempt.agent is not None:
+        return f"agent {attempt.agent}"
+    return "an unclaimed agent"
+
+
+def _dispatch_descriptor_suffix(attempt: DispatchRecord) -> str:
+    descriptors = [d for d in (attempt.harness, attempt.model) if d]
+    return f" ({', '.join(descriptors)})" if descriptors else ""
+
+
+def _render_dispatch_attempt(attempt: DispatchRecord) -> str:
+    """One `DispatchRecord` as a line of `fr run status`/`fr run check`
+    prose — spec §4.C's illustration, cases (a)-(d) of P5.T1.S1."""
+    who = _dispatch_holder_label(attempt)
+    suffix = _dispatch_descriptor_suffix(attempt)
+    if attempt.returned is None:
+        if attempt.agent_type is None:
+            return f"held by the orchestrator{suffix} since {attempt.dispatched}"
+        return f"HELD BY {who}{suffix} since {attempt.dispatched}"
+    return f"{who}{suffix} {attempt.dispatched} -> {attempt.returned} {attempt.outcome}"
+
+
+def _render_unit_dispatch(record: StepRecord, key: str, *, indent: str, console: Console) -> None:
+    """Every attempt recorded for `key`, oldest first (case (e))."""
+    for attempt in (record.dispatch or {}).get(key, []):
+        console.print(f"{indent}{_render_dispatch_attempt(attempt)}", soft_wrap=True)
+
+
+def _render_step_and_items(state: RunState, console: Console) -> None:
+    """The step/items renderer — unchanged in shape from before this phase
+    when a run carries no dispatch data (case (f)): the dispatch lines are
+    additive, never a replacement for the existing `items` line."""
+    for step_id, record in state.steps.items():
+        console.print(f"  {step_id}: {record.state}")
+        if record.items:
+            for key in sorted(record.items):
+                console.print(f"    {key}: {record.items[key]}")
+                _render_unit_dispatch(record, key, indent="      ", console=console)
+        if record.dispatch:
+            for key in sorted(record.dispatch):
+                if record.items and key in record.items:
+                    continue  # already rendered nested under its `items` line
+                console.print(f"    {key}:")
+                _render_unit_dispatch(record, key, indent="      ", console=console)
+
+
+def _render_accounting(state: RunState, console: Console) -> None:
+    if not state.accounting:
+        return
+    console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
+    total = 0
+    for key in sorted(state.accounting):
+        snap = state.accounting[key]
+        chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
+        total += chars
+        console.print(
+            f"    {key}: journal {snap.journal_entries} entries/"
+            f"{snap.journal_lines} lines, handoff {snap.handoff_chars} chars, "
+            f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
+            f"(~{chars // 4} tok est)"
+        )
+    console.print(f"    total: {total} chars (~{total // 4} tok est)")
+
+
 @run_app.command("status")
 def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
-    """Print the cursor and every step's state."""
+    """Print the cursor, every step's state, and — since phase 5 — who is
+    holding each dispatched unit, since when, and whether it has returned
+    (spec §4.C)."""
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
 
@@ -1354,25 +1432,8 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     console.print(f"workflow: {state.workflow}")
     console.print(f"branch: {state.branch}")
     console.print(f"cursor: {state.cursor}")
-    for step_id, record in state.steps.items():
-        console.print(f"  {step_id}: {record.state}")
-        if record.items:
-            for key in sorted(record.items):
-                console.print(f"    {key}: {record.items[key]}")
-    if state.accounting:
-        console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
-        total = 0
-        for key in sorted(state.accounting):
-            snap = state.accounting[key]
-            chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
-            total += chars
-            console.print(
-                f"    {key}: journal {snap.journal_entries} entries/"
-                f"{snap.journal_lines} lines, handoff {snap.handoff_chars} chars, "
-                f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
-                f"(~{chars // 4} tok est)"
-            )
-        console.print(f"    total: {total} chars (~{total // 4} tok est)")
+    _render_step_and_items(state, console)
+    _render_accounting(state, console)
 
 
 @run_app.command("advance")
@@ -2027,15 +2088,32 @@ def claim_cmd(
     )
 
 
+def _open_dispatches(state: RunState) -> list[tuple[str, str, DispatchRecord]]:
+    """Every currently-open `(step_id, key, DispatchRecord)` in `state`,
+    steps in cursor order and keys sorted within a step.
+
+    Reuses `_held_record` — the one notion of "is this unit held" in the
+    module — rather than re-deriving "the last attempt is open" here."""
+    open_dispatches: list[tuple[str, str, DispatchRecord]] = []
+    for step_id, record in state.steps.items():
+        for key in sorted(record.dispatch or {}):
+            held = _held_record(record, key)
+            if held is not None:
+                open_dispatches.append((step_id, key, held))
+    return open_dispatches
+
+
 @run_app.command("check")
 def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Freshness gate: non-zero when the cursor sits on a failed step.
 
     It also REPORTS every operator gate the agent cleared itself (spec
-    §3.D.3) — and does not fail on one. The exit code stays exactly what it
-    was: `check` is a narrow freshness gate, and making an agent-cleared gate
-    non-zero would turn every legitimate non-interactive dispatch red, which
-    is the hard refusal the operator rejected. The enforcement is that the
+    §3.D.3), every currently open dispatch, and how many of those are
+    unclaimed (spec §4.C) — none of it changes the exit code. The exit code
+    stays exactly what it was: `check` is a narrow freshness gate, and
+    making an open or unclaimed dispatch non-zero would turn every ordinary
+    in-flight run red, which is the same hard-refusal shape the operator
+    already rejected for an agent-cleared gate. The enforcement is that the
     same list rides the delivered PR body, where a human reads it.
     """
     repo_root = resolve_repo_root()
@@ -2050,6 +2128,20 @@ def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         console.print(
             f"{gate.step}: operator gate cleared by the agent (answered_by: agent) — "
             "no operator answered it",
+            soft_wrap=True,
+        )
+    open_dispatches = _open_dispatches(state)
+    for step_id, key, held in open_dispatches:
+        console.print(
+            f"{step_id}: {key} is open — {_render_dispatch_attempt(held)}",
+            soft_wrap=True,
+        )
+    unclaimed = [
+        held for _, _, held in open_dispatches if held.agent_type is not None and held.agent is None
+    ]
+    if unclaimed:
+        console.print(
+            f"{len(unclaimed)} unclaimed dispatch(es) — visible debt, not a failure",
             soft_wrap=True,
         )
     if record is not None and record.state == "failed":
