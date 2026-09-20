@@ -12,8 +12,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
+    ReapRefused,
     branch_changes_present,
     subprocess_runner,
 )
@@ -1071,6 +1073,14 @@ def test_down_raises_when_worktree_remove_fails(
 ) -> None:
     # Container tears down cleanly, but the worktree remove fails while the dir
     # still exists (a stray dir git no longer tracks) → raise, keep state.
+    #
+    # force=True here — not exercising the open-PR/reap-hazard escape, but
+    # because the stray dir left by `_orphan_worktree` is no longer a git
+    # repository at all (its gitdir was pruned), so the #435 reap-hazard guard
+    # (which now runs first) would itself refuse it as "unverifiable" — see
+    # test_down_reap_hazard_guard_precedes_worktree_remove_failure below for
+    # that precedence, asserted directly. force=True skips straight to the
+    # worktree-remove post-condition check this test targets.
     repo, runner, target, st = _upped(
         tmp_path,
         monkeypatch,
@@ -1078,8 +1088,27 @@ def test_down_raises_when_worktree_remove_fails(
     )
     _orphan_worktree(repo, st, keep_dir=True)
     with pytest.raises(IsolationError, match="worktree remove failed"):
-        target.down(st, force=False)
+        target.down(st, force=True)
     assert load_state(repo, "vk-iso/test") is not None, "state must survive a worktree failure"
+
+
+def test_down_reap_hazard_guard_precedes_worktree_remove_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The #435 guard runs BEFORE `_teardown_container`/worktree removal (spec
+    # §3.1's "one enforcement site"), so a stray, no-longer-a-git-repo
+    # directory is refused as unverifiable rather than reaching the
+    # worktree-remove failure above — the guard shadows it, deliberately.
+    repo, runner, target, st = _upped(
+        tmp_path,
+        monkeypatch,
+        stdout={"docker": "abc123 running\n", "gh": '{"state": "MERGED", "url": "u"}'},
+    )
+    _orphan_worktree(repo, st, keep_dir=True)
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+    assert exc_info.value.hazard.kind == "unverifiable"
+    assert load_state(repo, "vk-iso/test") is not None
 
 
 def test_down_completes_when_worktree_already_gone(
@@ -1166,6 +1195,160 @@ def test_down_no_container_skips_rmi(tmp_path: Path, monkeypatch: pytest.MonkeyP
     )
     target.down(st, force=False)
     assert not any(c[0:2] == ["docker", "rmi"] for c in runner.argv_for("docker"))
+
+
+# ---------- target.down — the dirty-worktree reap guard (#435) ----------
+
+
+def _worktree_remove_calls(runner: FakeRunner) -> list[list[str]]:
+    return [c for c in runner.git_calls if c[:3] == ["git", "worktree", "remove"]]
+
+
+def test_down_refuses_when_worktree_has_a_tracked_edit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    tracked = st.worktree / "README.md"
+    tracked.write_text(tracked.read_text() + "one more line\n")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    assert exc_info.value.hazard.kind == "dirty-worktree"
+    # Load-bearing: the removal must never have RUN, not merely that the raise
+    # happened — asserting only the exception would pass even if the removal
+    # ran first and the raise came after.
+    assert _worktree_remove_calls(runner) == []
+    assert st.worktree.is_dir()
+
+
+def test_down_refuses_when_worktree_has_an_untracked_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # d1: #435's own lost work was a newly-authored (untracked) file — the
+    # carve-out #435 floated ("untracked is fine to ignore") is rejected.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    (st.worktree / "new-phase.md").write_text("newly authored, never committed\n")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    assert exc_info.value.hazard.kind == "dirty-worktree"
+    assert _worktree_remove_calls(runner) == []
+    assert st.worktree.is_dir()
+
+
+def test_down_refuses_as_unverifiable_when_status_query_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #354 invariant applied to the working tree: a FAILED query is not
+    # evidence of a clean tree. Corrupt the linked worktree's gitfile so a real
+    # `git status --porcelain` exits non-zero while the directory still exists.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    (st.worktree / ".git").write_text("gitdir: /nonexistent/not-a-real-gitdir\n")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    assert exc_info.value.hazard.kind == "unverifiable"
+    assert _worktree_remove_calls(runner) == []
+    assert st.worktree.is_dir()
+
+
+def test_down_dirty_worktree_message_names_branch_path_and_force_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    (st.worktree / "new-phase.md").write_text("newly authored, never committed\n")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    detail = exc_info.value.hazard.detail
+    assert st.branch in detail
+    assert "new-phase.md" in detail
+    assert "--force" in detail
+
+
+def test_down_dirty_worktree_message_caps_the_listed_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A hazard on a many-file branch must not produce a wall of text — first
+    # few, then "+N more" (spec §3.1 refactor note).
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    for i in range(8):
+        (st.worktree / f"scratch-{i}.md").write_text("uncommitted\n")
+
+    with pytest.raises(ReapRefused) as exc_info:
+        target.down(st, force=False)
+
+    detail = exc_info.value.hazard.detail
+    assert "+3 more" in detail
+    assert detail.count("scratch-") == 5
+
+
+def test_down_force_tears_down_a_dirty_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    (st.worktree / "new-phase.md").write_text("newly authored, never committed\n")
+
+    target.down(st, force=True)  # the escape still works
+
+    assert not st.worktree.exists()
+    assert load_state(repo, st.branch) is None
+
+
+def test_down_reaps_clean_landed_worktree_unaffected_by_new_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The happy path must not regress: a clean, merged workspace still reaps.
+    repo, runner, target, st = _upped(
+        tmp_path, monkeypatch, stdout={"gh": '{"state": "MERGED", "url": "u"}'}
+    )
+    target.down(st, force=False)
+    assert not st.worktree.exists()
+    assert load_state(repo, st.branch) is None
+
+
+def test_down_refuses_dirty_worktree_real_git_host_worktree_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Skeleton smoke (P1.T2.S1): no FakeRunner, real git, real subprocess_runner
+    driving HostWorktreeTarget — docker-less by construction
+    (`_teardown_container` is a no-op, hostworktree.py), so this needs no daemon
+    and runs in CI. There is no `gh` remote configured on this throwaway repo, so
+    `_pr` returns None and the OPEN-PR guard is inert — isolating exactly the new
+    guard. No repo-registered marker exists for "real subprocess" tests (checked
+    pyproject.toml's [tool.pytest.ini_options]; --strict-markers is set and
+    nothing beyond the builtin `parametrize` is registered), so this is a plain
+    test like the rest of this file's real-git fixtures (e.g.
+    test_branch_changes_present_squash) rather than inventing a marker scheme."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = make_repo(tmp_path)
+    target = HostWorktreeTarget(repo, runner=subprocess_runner)
+    st = target.up(None, "feat/real-dirty-worktree")
+
+    (st.worktree / "new-note.md").write_text("uncommitted work\n")
+
+    with pytest.raises(ReapRefused):
+        target.down(st, force=False)
+    assert st.worktree.is_dir(), "refusal must not have deleted the worktree"
+
+    target.down(st, force=True)  # the escape still works
+    assert not st.worktree.exists()
 
 
 # ---------- target.gc — host-wide reconciliation (#354 Task B) ----------

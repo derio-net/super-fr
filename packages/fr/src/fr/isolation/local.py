@@ -128,6 +128,46 @@ class GcAction:
     detail: str = ""
 
 
+@dataclass(frozen=True)
+class ReapHazard:
+    """Work that a reap would destroy, and how to keep it (spec 2026-09-20
+    isolation-reap-data-loss-guards §3.1)."""
+
+    kind: str  # "dirty-worktree" | "unlanded-content" | "unverifiable"
+    detail: str  # names the branch and what would be lost — see _hazard_detail
+
+
+class ReapRefused(IsolationError):
+    """Raised INSTEAD of tearing down, by `_down_worktree_tail`'s hazard check.
+    Carries the hazard so gc can classify a refusal as a deliberate skip rather
+    than a failure (spec §3.5, phase 3)."""
+
+    def __init__(self, hazard: ReapHazard) -> None:
+        self.hazard = hazard
+        super().__init__(hazard.detail)
+
+
+def _hazard_detail(branch: str, headline: str, paths: list[str]) -> str:
+    """One shared voice for every reap-hazard message (spec §3.8) — phases 2
+    and 3 add two more callers (unlanded-content, unverifiable-fetch), and all
+    three must read as the same product, not three ad hoc f-strings.
+
+    Caps the listed paths so a hazard on a 200-file branch doesn't produce a
+    wall of text: the first few, then `+N more`.
+    """
+    lines = [f"isolation: {branch} {headline} — refusing to reap (nothing was deleted)."]
+    if paths:
+        shown = paths[:5]
+        rest = len(paths) - len(shown)
+        listed = ", ".join(shown) + (f", +{rest} more" if rest > 0 else "")
+        lines.append(f"  {listed}")
+    lines.append(
+        "Commit or stash them, or destroy them deliberately with "
+        f"`fr isolation down --branch {branch} --force`."
+    )
+    return "\n".join(lines)
+
+
 def _branch_added_lines(
     run: Runner, repo_root: Path, merge_base: str, branch: str, path: str
 ) -> list[str]:
@@ -529,6 +569,54 @@ class LocalWorktreeDevcontainerTarget:
             "fetched": fetched,
         }
 
+    def _reap_hazard(self, state: IsolationState) -> ReapHazard | None:
+        """PURE QUERY — runs no destructive command — so `gc --dry-run` (phase 3)
+        can ask exactly the question the live reap path enforces, instead of
+        predicting a different answer.
+
+        Phase 1 implements the DIRTY-WORKTREE check only (#435): `git status
+        --porcelain` in `state.worktree`. Non-empty output is a hazard — tracked
+        AND untracked alike (decision d1: #435's own lost work was a newly
+        authored, therefore untracked, file). A NON-ZERO return code is also a
+        hazard (`kind="unverifiable"`) rather than being read as clean — the
+        #354 invariant ("a failed query is not evidence of absence") applied to
+        the working tree. Ignored paths (`.venv/`, `.fr-isolation`,
+        `__pycache__/`) never appear in `--porcelain`, so routine workspace
+        clutter cannot wedge the guard.
+
+        Phase 2 adds the unlanded-content check (#467) here, after this one —
+        the cheap local check runs first and short-circuits before any network
+        call.
+
+        A worktree directory that is already gone (removed out-of-band; the
+        `_down_worktree_tail` post-condition check further down treats that as
+        already-torn-down, not a failure) has nothing left to query and nothing
+        left to lose — that is a no-hazard, not an unverifiable one.
+        """
+        if not state.worktree.is_dir():
+            return None
+        status = self.run(["git", "status", "--porcelain"], cwd=state.worktree)
+        if status.returncode != 0:
+            return ReapHazard(
+                kind="unverifiable",
+                detail=_hazard_detail(
+                    state.branch,
+                    "could not be checked for uncommitted changes (git status failed)",
+                    [],
+                ),
+            )
+        paths = [line[3:] for line in (status.stdout or "").splitlines() if line.strip()]
+        if paths:
+            return ReapHazard(
+                kind="dirty-worktree",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"has {len(paths)} uncommitted change(s)",
+                    paths,
+                ),
+            )
+        return None
+
     def down(self, state: IsolationState, force: bool = False) -> None:
         """Tear down the workspace, verifying each destructive step's
         POST-CONDITION before deleting the bookkeeping (#354 Task A).
@@ -552,18 +640,22 @@ class LocalWorktreeDevcontainerTarget:
         self._spawn_gc()
 
     def _down_worktree_tail(self, state: IsolationState, force: bool) -> None:
-        """PR guard → environment teardown → verified worktree removal → marker +
-        state retirement. Shared with `HostWorktreeTarget` (#... isolation host
-        modes): the ONLY per-mode difference is `_teardown_container`, which the
-        host-worktree mode overrides to a no-op (no docker), so the guard, the
-        post-condition verification, and the marker/state cleanup stay identical
-        across modes."""
+        """PR guard → reap-hazard guard → environment teardown → verified
+        worktree removal → marker + state retirement. Shared with
+        `HostWorktreeTarget` (#... isolation host modes): the ONLY per-mode
+        difference is `_teardown_container`, which the host-worktree mode
+        overrides to a no-op (no docker), so both guards, the post-condition
+        verification, and the marker/state cleanup stay identical across modes."""
         pr = self._pr(state)
         if pr and pr.get("state") == "OPEN" and not force:
             raise IsolationError(
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
+        if not force:
+            hazard = self._reap_hazard(state)
+            if hazard is not None:
+                raise ReapRefused(hazard)
         self._teardown_container(state)
         wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
