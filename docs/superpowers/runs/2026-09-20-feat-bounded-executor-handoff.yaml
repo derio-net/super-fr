@@ -3,7 +3,7 @@ run: 2026-09-20-feat-bounded-executor-handoff
 workflow: fr-goal@1
 branch: feat/bounded-executor-handoff
 started: '2026-09-20T10:55:13+00:00'
-cursor: implement
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -27,8 +27,8 @@ steps:
 
       '
   implement:
-    state: running
-    at: '2026-09-20T15:34:03+00:00'
+    state: done
+    at: '2026-09-20T15:55:11+00:00'
     items:
       phase/1/implement-phase: done
       phase/1/review-phase: done
@@ -39,12 +39,13 @@ steps:
       phase/4/implement-phase: done
       phase/4/review-phase: done
       phase/5/implement-phase: done
-      phase/5/review-phase: running
+      phase/5/review-phase: done
     members:
     - implement-phase
     - review-phase
   deliver:
-    state: pending
+    state: running
+    at: '2026-09-20T15:55:12+00:00'
 accounting:
   phase/1/implement-phase:
     at: '2026-09-20T12:10:54+00:00'
@@ -121,3 +122,7 @@ accounting:
     handoff_chars: 39347
     spec_bytes: 24860
     plan_bytes: 36311
+    input_tokens: 194
+    cache_creation_input_tokens: 410877
+    cache_read_input_tokens: 11056202
+    output_tokens: 33846
