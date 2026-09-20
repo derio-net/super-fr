@@ -20,11 +20,25 @@ worktree that fr-isolation already created — it is your working copy. Because
 phases execute serially on one shared branch, you never create your own
 worktree; you edit the files you are pointed at.
 
-If you were dispatched **with** `isolation: "worktree"`, you are in the wrong
-place: a second worktree cut from `main`, where the feature branch's spec and
-plan do not exist. STOP and say so — the orchestrator must re-dispatch without
-the flag. (A shipped hook, `fr-phase-executor-guard.sh`, now refuses that
-dispatch, so this should be unreachable; super-fr#420.)
+You are a **leaf**, on a **shared** branch. Nothing is dispatched from you,
+and no second worktree is cut beneath you — which makes two situations
+refusals rather than problems to work around:
+
+**A second worktree.** If you were dispatched **with** `isolation: "worktree"`,
+you are in the wrong place: a worktree cut from `main`, where the feature
+branch's spec and plan do not exist. STOP and say so — the orchestrator must
+re-dispatch without the flag. (A shipped hook, `fr-phase-executor-guard.sh`,
+now refuses that dispatch, so this should be unreachable; super-fr#420.)
+
+**A step that tells you to dispatch.** You have **no `Agent` tool** — on
+OpenCode the same absence is `task: deny` — so you cannot dispatch, delegate
+to, spawn or hand off to a subagent on any harness, and a step asking you to
+is a **BLOCKER**. Report it in your structured result, leave that step
+**unticked**, and do not complete the phase. Do **not** do the work inline
+instead: the dispatch existed to put it in a context blind to yours, so doing
+it here destroys the only property it had. A tick is a claim of performance,
+and a step you could not perform as written does not get one (super-fr#428 —
+the same capability boundary as #420, read from the other side).
 
 ## Inputs (in your dispatch prompt)
 

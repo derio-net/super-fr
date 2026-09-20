@@ -228,3 +228,71 @@ so if a PlanSchemaError message ever contains a "[/...]"-shaped token — a step
 Shape of the fix, when someone takes it: rich.markup.escape at the interpolation boundary, i.e. escape the DATA and leave the literal markup alone — escape(str(e)) inside an f-string whose "[red]" tags are author-written. A blanket markup=False would also kill the intended colouring. A tripwire over packages/fr/src/fr/commands/ for print(f"...{...}") without escape() is plausible but needs care: many interpolations are values the author knows are safe (ints, enum members, already-escaped text), so the useful rule is probably narrower — "no unescaped interpolation of an exception or of file-sourced text".
 
 Closes when that issue ships. Until then, any command that echoes parsed-file content is one bracket away from crashing on the error it exists to report.
+
+<!-- fr:journal kind=finding scope=plan id=1e6e265c4887 created=2026-09-20T16:52:24 phase=3 state=fixed -->
+### 1e6e265c4887 · finding [fixed] · The contract prose tripped the tool-neutrality tripwire — naming `Agent` in a skill needs an all-harness clause (phase 3)
+
+Writing the #428 contract into fr-execute/fr-plan named two harness-specific tools (`Agent`, `task: deny`), and tests/unit/test_tripwire_skill_tool_neutrality.py failed on four files — both canonical skills and both .opencode mirrors:
+
+  plugins/super-fr/skills/fr-execute/SKILL.md:74: names 'Agent' (claude-code) outside a scoped clause naming more than one harness
+  plugins/super-fr/skills/fr-plan/SKILL.md:81: names 'Agent' (claude-code) outside a scoped clause ...
+
+The agent file (plugins/super-fr/agents/fr-phase-executor.md) is NOT scanned — only skills are — so the same sentence is legal there and illegal one file over. That asymmetry is correct (the agent file is already per-harness by construction, and its four .opencode variants are generated) but it is a trap for anyone writing the same contract into both.
+
+FIXED two different ways, deliberately:
+
+1. fr-execute keeps the concrete tools inside a `**Harness — dispatch:**` clause naming all three supported harnesses (fr.harness.prose requires len(SUPPORTED_HARNESSES) == 3 labels in the span). Worth the four lines: the clause is where the Hermes fact had to be stated, and it is the load-bearing one — Claude Code omits `Agent` from the frontmatter grant and OpenCode's generated agent sets `task: deny`, but on Hermes NOTHING denies a further `delegate_task` (.hermes/config.snippet.yaml registers hooks only; there is no per-agent tool grant). On that harness the prose contract is the entire enforcement, which is exactly why spec §4.B insists the contract live in the skill and not only in the Claude Code agent file.
+
+2. fr-plan drops the tool names entirely — "the phase executor has no dispatch tool on any harness" — because the bullet is operator-facing planning guidance where the per-harness mechanics are noise, and a clause there would cost three lines against a hard line cap (see the sibling finding).
+
+<!-- fr:journal kind=finding scope=plan id=06f27ad3cc42 created=2026-09-20T16:52:53 phase=3 state=fixed -->
+### 06f27ad3cc42 · finding [fixed] · Both skills phase 3 must edit sat at exactly the 120-line cap, so every new line was paid for out of neighbouring prose (phase 3)
+
+tests/unit/test_skill_validation.py::test_under_120_lines is a hard cap (<= 120, no allowlist). Before phase 3, fr-execute/SKILL.md and fr-plan/SKILL.md were BOTH at exactly 120 — measured by stashing this phase's diff. So §4.B's and §4.C's prose could not simply be added: fr-execute went to 137 and fr-plan to 127 on the first green pass, and both failed.
+
+This is a structural fact about editing these two files, not a one-off: a cap that is already met means the next contract someone ships has the same bill, and the obvious way to pay it — rewrapping — is the exact move the sibling test test_no_hyphenated_word_is_broken_across_lines exists to catch (a line ending in letter+hyphen renders as a space, and its docstring records three such defects introduced by precisely this pressure).
+
+Paid, keeping content, by compressing prose adjacent to the edit rather than dropping any norm:
+
+fr-execute (-17 to land at 120): intro and announce merged; "When creating the PR for an agentic phase:" folded into the heading and the `fr pickup` title-template pointer into the bullet it describes; label-lifecycle intro, the `closed` bullet and the `fr apply` tail each one line tighter; step 1's pickup output note 4 -> 3 lines; step 5's PR caveat 7 -> 7 with tighter wording to free the surrounding lines; step 6's idempotence note re-wrapped; the v1-migration preamble 2 -> 1; and the new Constraints bullet cut to a single line ("A dispatch instruction is a BLOCKER, never a tick or a skip (step 3)").
+
+fr-plan (-7): intro and announce merged; the `NN.yaml` bullet and the cross-repo-completeness bullet one line tighter each; "## Dependency declarations" four bullets folded into the sentence they restated (-4); the new outcomes bullet written in 6 lines rather than 7.
+
+Everything removed was redundancy or restatement; no rule, pointer or token disappeared (test_skill_validation's per-skill required tokens, "flip"/"fr acceptance" for fr-execute and "acceptance:"/"fr acceptance add" for fr-plan, all still pass, as do the fr pickup / fr apply / pr-ready / TDD-cycle pins).
+
+One casualty worth naming: fr-execute's paragraph says "A tick claims performance" where the agent file says "A tick is a claim of performance" — the fuller phrasing measured at 121 lines. If anyone reclaims a line there, spend it on that sentence.
+
+<!-- fr:journal kind=discovery scope=plan id=3ba26d5efb5d created=2026-09-20T16:52:54 phase=3 -->
+### 3ba26d5efb5d · discovery · P3.T2.S1 names two mirror guards; there are THREE mirrors — .hermes/skills/fr/ has its own script and tripwire (phase 3)
+
+The plan step says: run scripts/sync-opencode.py, then verify test_tripwire_opencode_skills_sync.py and test_opencode_agent_mirror.py. Both were green — and the full suite still failed on tests/unit/test_tripwire_hermes_skills_sync.py::test_mirror_has_no_drift, because .hermes/skills/fr/ is a THIRD byte-for-byte mirror of plugins/super-fr/skills/, regenerated by a DIFFERENT script (scripts/sync-hermes.py, which also writes .hermes/SOUL.d/super-fr-rules.md from the shipped rules).
+
+So any edit to a canonical SKILL.md owes three commands, not one:
+
+  uv run python scripts/sync-opencode.py     # .opencode/skills, instructions, commands, 4 agent variants
+  uv run python scripts/sync-hermes.py       # .hermes/skills/fr/, .hermes/SOUL.d/
+  uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_opencode_agent_mirror.py tests/unit/test_tripwire_hermes_skills_sync.py -q --no-cov
+
+Not a defect in the plan so much as a documentation gap that the plan inherited: AGENTS.md's "Skills/rules: canonical source vs. generated mirrors" section names only sync-opencode.py and its two tripwires. The Hermes mirror exists, is tracked, and is gated in CI by the same full-suite run, so the only thing missing is the pointer. Worth adding to AGENTS.md in a future pass (out of scope for #428, which touches no mirror machinery).
+
+<!-- fr:journal kind=discovery scope=plan id=6a35a818840e created=2026-09-20T16:53:06 phase=3 -->
+### 6a35a818840e · discovery · A prose-token test is blind to the markup it sits in: '**no `Agent` tool`' passed every assertion (phase 3)
+
+While refactoring P3.T1.S4 I typed "**no \`Agent\` tool\`" into fr-execute — a bold-open with a backtick where the bold-close belonged, which renders as a stray literal run rather than bold text. tests/unit/test_skill_tokens.py stayed green through it, because the token it pins ("no \`Agent\` tool") is a substring of the malformed string.
+
+Caught by eye on the grep-back, not by a test. That is the honest limit of a token test and it is the right limit — pinning rendered markup would mean rendering the skill, which nothing in this repo does — but it is worth stating where the tests live: these assertions defend that a CONTRACT is still stated, not that it is stated well or even legibly. The same blindness covers a token that survives inside a sentence whose meaning has been inverted.
+
+Cheap mitigation used here, and recommended for the next prose edit: after the tests go green, grep the token back with context (grep -n "Agent\` tool" on all three surfaces) and read the line, rather than trusting the green.
+
+<!-- fr:journal kind=finding scope=plan id=6325b88c63f3 created=2026-09-20T16:53:29 phase=3 state=open -->
+### 6325b88c63f3 · finding [open] · Phase 3's acceptance row goal-executor-refuses-tick is still not-implemented — phase 4 owes the flip, refs below (phase 3)
+
+Same shape as ebfd1af6071a (the two phase-2 rows), left open for the same reason: the plan assigns matrix work to P4.T1, and .claude/rules/acceptance-matrix.md requires the move to carry evidence refs plus a --notes reason via `fr acceptance set-status`, which is a phase-4 shape. `fr plan edit --complete-phase 3` warned as designed.
+
+The ref phase 4 needs now exists:
+
+  goal-executor-refuses-tick -> super-fr:tests/unit/test_skill_tokens.py::test_fr_phase_executor_names_the_dispatch_refusal and ::test_fr_execute_names_the_dispatch_refusal
+
+Be honest in the --notes about what those prove: they pin that the prose contract is PRESENT on both surfaces (agent file and fr-execute skill), which is all a prose contract can be checked for automatically. They cannot show an executor obeyed it. The only thing that can is a live run against a plan containing a dispatch step — and #428's whole design is that such a plan no longer passes `fr plan self-review`, so the enforcement pair is: the lint stops the step being authored (pinned by executable tests in test_v2_plan_ops.py / test_dispatch_lint_corpus.py), and the prose catches a step that predates the lint or arrives from outside.
+
+Closes when P4.T1 runs set-status on it.

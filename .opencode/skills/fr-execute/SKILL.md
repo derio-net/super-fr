@@ -7,9 +7,8 @@ description: >
 
 # fr-execute
 
-Implements a single phase from a plan.
-
-**Announce at start:** "I'm using fr-execute to implement this phase."
+Implements a single phase from a plan. **Announce at start:** "I'm using
+fr-execute to implement this phase."
 
 ## Mode selection
 
@@ -18,36 +17,29 @@ Implements a single phase from a plan.
 | Issue URL/number (dispatch repo) | Dispatched: read assignment from Issue body — it embeds the spec link, plan `_prose.md`, and phase `NN.yaml` inline (repo checkout stays the source of truth) |
 | (plan_dir, phase number) | Local: direct arguments |
 
-## PR format (unified)
-
-When creating the PR for an agentic phase:
+## PR format (unified) — for an agentic phase's PR
 
 - **Title:** `[{owner}/{repo}] {slug} · Phase {n}/{total} · {phase_title}` —
-  matches the Issue title shape so VK / GH / PR surfaces align.
+  matches the Issue title shape so VK / GH / PR surfaces align; the
+  `fr pickup` output below is the canonical template.
 - **Body:** first content block is the tracking block copied verbatim from
   the Issue body (the `📦 Repo:` / `📋 Plan:` / … lines plus the
   `**Goal (from plan):**` paragraph). Then proceed with your PR summary.
 
-The `fr pickup` output below provides the canonical PR title template.
-
 ## Label lifecycle (no manual transition verbs in v2)
 
-The Issue moves: `fr:ready → fr:in-progress → fr:pr-ready → closed`. v2 has no
-manual transition verbs — every label flip is derived from what the
-renderer can observe on the Issue plus its linked PRs:
+The Issue moves `fr:ready → fr:in-progress → fr:pr-ready → closed`; every flip
+is derived from what the renderer observes on the Issue plus its linked PRs:
 
-- **`fr:ready`:** the phase has a `tracking_issue` but no assignee, no draft
-  PR, and no open non-draft PR.
+- **`fr:ready`:** a `tracking_issue`, no assignee, no draft or non-draft PR.
 - **`fr:in-progress`:** the Issue has an assignee OR a draft linked PR.
 - **`fr:pr-ready`:** an open non-draft, non-merged linked PR exists.
-- **closed:** `state.completion.at` is set on the phase AND a merged PR is
-  observed AND no open linked PR remains (per `_phase_complete` in
-  `render.py`).
+- **closed:** `state.completion.at` set AND a merged PR observed AND no open
+  linked PR remains (per `_phase_complete` in `render.py`).
 
-The `fr apply` step at the end of the phase pushes whichever transitions the
-renderer projects from current GitHub state. To trigger `fr:in-progress`,
-assign yourself to the Issue (or open a draft PR); to trigger `fr:pr-ready`,
-take the PR out of draft.
+`fr apply` at the end of the phase pushes whichever transitions the renderer
+projects from current GitHub state. Assign yourself to the Issue (or open a
+draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
 
 ## Procedure
 
@@ -56,9 +48,8 @@ take the PR out of draft.
    fr pickup <plan-dir> --phase N
    ```
    Output is markdown: phase title, dependency reminder, PR title template,
-   tasks + steps, and a pointer to `_prose.md` for plan-level context.
-   The `Depends on:` line surfaces blockers — if any blocker phase is not
-   yet `Complete`, stop and report.
+   tasks + steps, a pointer to `_prose.md`. The `Depends on:` line surfaces
+   blockers — if any is not yet `Complete`, stop and report.
 
 2. **Implement** (`superpowers:executing-plans`, parallel phases: `subagent-driven-development`):
    end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal.
@@ -69,6 +60,15 @@ take the PR out of draft.
    # or, to record a deliberate skip:
    fr plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state - --note "<reason>"
    ```
+
+   **Harness — dispatch:** the executor is a leaf everywhere — Claude Code
+   grants it **no `Agent` tool**, OpenCode's agent sets `task: deny`, and on
+   Hermes only this contract stops a further `delegate_task`. A tick claims
+   performance, so a step telling you to dispatch, delegate to, spawn or hand
+   off to a subagent is a **BLOCKER**, not a deviation and not a `--state -`
+   skip: report it, leave the step **unticked**, and do not complete the
+   phase. Never do that work inline instead: the dispatch existed to put it in
+   a context blind to this one, so doing it here destroys that (#428).
 
 4. **Mark the phase complete (after every step is ticked):**
    ```bash
@@ -81,35 +81,35 @@ take the PR out of draft.
    on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows
    (`fr acceptance add`) — defended at PR time, never silent scope drift.
 
-5. **Open the PR.** Delegate to `superpowers:finishing-a-development-branch`.
-   Use the PR title from `fr pickup` and the body shape above.
-   **Caveat — under fr-goal LOCAL mode, do NOT open a per-phase PR.** Push the
-   branch only; the single PR is fr-goal's step 8, opened (as a draft) by the
-   orchestrator *after* its review pass — opening here reorders deliver ahead
-   of review and reintroduces the #320 merge-race. Per-phase PRs remain the
-   behaviour for the standalone **dispatched** (Issue/VK) flow only.
+5. **Open the PR** via `superpowers:finishing-a-development-branch`, with the
+   `fr pickup` title and the body shape above. **Caveat — under fr-goal LOCAL
+   mode, do NOT open a per-phase PR:** push the branch only; the single PR is
+   fr-goal's step 8, opened as a draft by the orchestrator *after* its review
+   pass — opening here reorders deliver ahead of review and reintroduces the
+   #320 merge-race. Per-phase PRs are the standalone **dispatched** (Issue/VK)
+   flow only.
 
 6. **Reconcile GitHub state:**
    ```bash
    fr apply <plan-dir>           # preview the projected mutations
    fr apply <plan-dir> --yes     # push label / state changes
    ```
-   `fr apply` is idempotent. **Safe to run before your PR merges** —
-   renderer needs BOTH `completion.at` AND a merged PR observed before
-   projecting CLOSED, so this only sets `pr-ready`. Re-run after merge
-   (or let the runner) to close.
+   `fr apply` is idempotent and **safe before your PR merges** — the renderer
+   needs BOTH `completion.at` AND a merged PR observed before projecting
+   CLOSED, so this only sets `pr-ready`. Re-run after merge (or let the
+   runner) to close.
 
 ## Constraints
 
 - Don't touch other phases. One phase = one PR, except fr-goal LOCAL mode
   (step 5's caveat) — never open a per-phase PR there.
 - Stop if blocked — report what's missing.
+- A dispatch instruction is a BLOCKER, never a tick or a skip (step 3).
 - Step IDs: `P<n>.T<n>.S<n>`.
 
 ## v1 plan migration
 
-If you encounter a `.md` plan file (not a folder), it's a v1 plan that needs
-migration to the v2 plan-as-folder format before any execution:
+A `.md` plan file (not a folder) is a v1 plan; migrate before executing:
 
 ```bash
 fr migrate v1-to-v2           # preview (default)
