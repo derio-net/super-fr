@@ -5,6 +5,7 @@ phase:
   tag: agentic
   depends_on: []
   tracking_issue: null
+  tier: standard
   skeleton: true
 tasks:
   - number: 1

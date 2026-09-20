@@ -142,7 +142,10 @@ def create_cmd(
 
     --phases-file YAML shape:
       - {number, title, tag (agentic|manual), depends_on: [N,...],
+          acceptance ([row-ids], acceptance-matrix rows this phase advances),
           skeleton (bool, walking-skeleton marker for the first agentic phase),
+          tier (mechanical|standard|hard, harness-neutral dispatch complexity
+            hint; agentic phases should set one, see fr-plan),
           tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
       - ...
 
@@ -165,6 +168,7 @@ def create_cmd(
                     tasks=tuple(p.get("tasks") or ()),
                     acceptance=tuple(p.get("acceptance") or ()),
                     skeleton=bool(p.get("skeleton", False)),
+                    tier=p.get("tier"),
                 )
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"

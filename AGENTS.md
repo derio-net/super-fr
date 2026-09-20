@@ -146,6 +146,12 @@ and a CI tripwire will catch drift anyway:
   `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
   the regenerated mirror — `test_tripwire_opencode_skills_sync.py` /
   `test_tripwire_opencode_instructions_sync.py` fail on drift.
+- Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md`. There
+  are **TWO** mirrors, not one — `scripts/sync-hermes.py` is the second sync,
+  guarded by `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill
+  and running only `sync-opencode.py` leaves that tripwire red, which is how
+  it was found (gh#434, phase 5: an unexplained "fourth" test failure in a
+  PR that had touched no Hermes file). Run BOTH after any skill edit.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —
