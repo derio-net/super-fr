@@ -1,7 +1,8 @@
 schema_version: 2
 phase:
   number: 5
-  title: Ship it — executor context discipline, the two owed issues, acceptance flips, release
+  title: Ship it — executor context discipline, the two owed issues, acceptance flips,
+    release
   tag: agentic
   tier: standard
   depends_on:
@@ -19,195 +20,160 @@ tasks:
   title: Executor context discipline — red, green, refactor
   steps:
   - id: P5.T1.S1
-    text: "RED: extend tests/unit/test_skill_tokens.py. Assert the sixth norm appears in\nplugins/super-fr/agents/fr-phase-executor.md\
-      \ AND in all four\n.opencode/agent/fr-phase-executor*.md mirrors:\n(a) do not re-derive from the\
-      \ code what the handoff already states;\n(b) read the narrowest thing that answers the question,\
-      \ and do not re-read a\n    file you already read this session unless you changed it;\n(c) never\
-      \ paste verbatim tool output into the return.\nIn the same test, assert the EXISTING #461 norm (\"\
-      the return value is the only\nreporting channel\") in the same five files — this is how #461 is\
-      \ closed here:\nby verification, not by new prose. Confirm red on the three new lines."
+    text: |-
+      RED: extend tests/unit/test_skill_tokens.py. Assert the sixth norm appears in
+      plugins/super-fr/agents/fr-phase-executor.md AND in all four
+      .opencode/agent/fr-phase-executor*.md mirrors:
+      (a) do not re-derive from the code what the handoff already states;
+      (b) read the narrowest thing that answers the question, and do not re-read a
+          file you already read this session unless you changed it;
+      (c) never paste verbatim tool output into the return.
+      In the same test, assert the EXISTING #461 norm ("the return value is the only
+      reporting channel") in the same five files — this is how #461 is closed here:
+      by verification, not by new prose. Confirm red on the three new lines.
   - id: P5.T1.S2
-    text: 'GREEN: add the sixth norm to the Contract section of
-
+    text: |-
+      GREEN: add the sixth norm to the Contract section of
       plugins/super-fr/agents/fr-phase-executor.md, beside the existing five.
-
       Say WHY in one clause — cache reads accumulate as context size summed over
-
-      turns, so an executor''s own re-reads dominate its cost.
-
-      Run scripts/sync-opencode.py; commit the regenerated mirrors.'
+      turns, so an executor's own re-reads dominate its cost.
+      Run scripts/sync-opencode.py; commit the regenerated mirrors.
   - id: P5.T1.S3
-    text: 'GREEN (spec B2): fr-goal section 5''s dispatch-brief guidance currently coexists
-
-      with #461''s observation that the orchestrator''s own prompts asked for verbatim
-
+    text: |-
+      GREEN (spec B2): fr-goal section 5's dispatch-brief guidance currently coexists
+      with #461's observation that the orchestrator's own prompts asked for verbatim
       test output. Make the caller agree with the contract: the brief asks for a
-
       pass/fail summary and journal ids, never pasted output.
-
       Edit plugins/super-fr/skills/fr-goal/SKILL.md, then sync mirrors.
-
-      Mind the line cap the harness-parity run hit — check before adding.'
+      Mind the line cap the harness-parity run hit — check before adding.
   - id: P5.T1.S4
-    text: 'REFACTOR: read the contract section as a whole.
-
+    text: |-
+      REFACTOR: read the contract section as a whole.
       Six norms is enough that ordering and overlap matter -- check the new one does
-
       not restate the existing "keep the prose minimal" line, and that the section
-
       still reads as a list of rules rather than an essay. Re-run
-
       `scripts/sync-opencode.py --check`. If nothing needs changing, record
-
-      `no-refactor-because: P5.T1` (--phase 5).'
+      `no-refactor-because: P5.T1` (--phase 5).
 - number: 2
   title: The two issues d4 owes
   steps:
   - id: P5.T2.S1
-    text: 'File issue 1: backfill V2 transcript telemetry for OpenCode and Hermes.
-
-      Include what phase 4 learned about Claude Code''s shape and what is unknown for
-
-      the other two. Reference this spec and #464 item 3.'
+    text: |-
+      File issue 1: backfill V2 transcript telemetry for OpenCode and Hermes.
+      Include what phase 4 learned about Claude Code's shape and what is unknown for
+      the other two. Reference this spec and #464 item 3.
   - id: P5.T2.S2
-    text: 'File issue 2: investigate importing harness-level testing from
-
+    text: |-
+      File issue 2: investigate importing harness-level testing from
       derio-net/agnostic-fr ("convert any repo to agent-agnostic form, proven by
-
       cross-harness conformance tests (deterministic mock-model driven)").
-
       Frame the question this repo actually has: super-fr ships surfaces to four
-
       harnesses and can only unit-test the wiring, which is exactly what
-
-      `fr harness parity` and the neutrality tripwire work around. Reference #464.'
+      `fr harness parity` and the neutrality tripwire work around. Reference #464.
 - number: 3
   title: Acceptance, docs currency, version
   steps:
   - id: P5.T3.S1
-    text: 'Flip all four rows with `fr acceptance set-status --id <id> --status ci
-
-      --notes ''<why it moved>'' --level unit=super-fr:<test path>` — never a
-
-      hand-edit, and --notes is required. Then `fr acceptance check`.'
+    text: |-
+      Flip all four rows with `fr acceptance set-status --id <id> --status ci
+      --notes '<why it moved>' --level unit=super-fr:<test path>` — never a
+      hand-edit, and --notes is required. Then `fr acceptance check`.
   - id: P5.T3.S2
-    text: 'Explainers currency (.claude/rules/explainers-currency.md): this PR changes a
-
-      shipped skill''s surface and a CLI verb, so check whether
-
+    text: |-
+      Explainers currency (.claude/rules/explainers-currency.md): this PR changes a
+      shipped skill's surface and a CLI verb, so check whether
       docs/explainers/01-fr-goal.md describes any of it. If it does, edit the .md AND
-
       regenerate the .html with the marketplace renderer, run with BOTH `--isolated`
-
       and from `/` — verify by re-rendering the UNMODIFIED .md first and confirming
-
-      byte-identity with the committed page. If it does not, say so in the PR body.'
+      byte-identity with the committed page. If it does not, say so in the PR body.
   - id: P5.T3.S3
-    text: 'Version bump: this changes plugins/super-fr/skills, plugins/super-fr/agents and
-
+    text: |-
+      Version bump: this changes plugins/super-fr/skills, plugins/super-fr/agents and
       packages/fr/src, and adds a mandatory behaviour (`--phase`/`--global`) plus a new
-
       capability (measured telemetry) — a MINOR bump.
-
       `uv run --no-project python scripts/bump-version.py minor`, then `--check`.
-
-      Commit the changed manifests and uv.lock together. Never hand-edit a version.'
+      Commit the changed manifests and uv.lock together. Never hand-edit a version.
   - id: P5.T3.S4
-    text: 'REFACTOR + confirm the three committed reports are consistent.
-
+    text: |-
+      REFACTOR + confirm the three committed reports are consistent.
       `fr acceptance set-status` regenerates all three renderings; confirm none is
-
       stale (`uv run fr acceptance check` fails when a committed report is missing or
-
       stale). If the explainer was regenerated, confirm the byte-for-byte check on the
-
       UNMODIFIED source passed first, so the page diff is only what you wrote.
-
-      Otherwise record `no-refactor-because: P5.T3` (--phase 5).'
+      Otherwise record `no-refactor-because: P5.T3` (--phase 5).
 - number: 4
   title: Full gate and the honest report
   steps:
   - id: P5.T4.S1
-    text: 'Run the whole CI gate locally and paste the real summary lines:
-
+    text: |-
+      Run the whole CI gate locally and paste the real summary lines:
       `uv run pytest -q --no-cov`, `uv run ruff check packages/ tests/`,
-
       `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
-
       `uv run --no-project python scripts/bump-version.py --check`,
-
       `uv run fr acceptance check`, `uv run fr validate artifacts`,
-
       `uv run fr workflow check`.
-
       Then `cd packages/fr-opencode-plugin && bun test` (it is in CI as
-
       opencode-plugin-test and `uv run pytest` does NOT cover it).
-
       Three tests are known to fail on macOS for reasons recorded in #489 — if you
-
       see exactly those, say which and why they are not yours; if you see anything
-
-      else, it is yours.'
+      else, it is yours.
   - id: P5.T4.S2
-    text: 'Refactor pass across everything this plan added, or record
-
+    text: |-
+      Refactor pass across everything this plan added, or record
       `no-refactor-because: P5.T5` (--phase 5). Then `fr journal check --scope plan`
-
       and close any finding that is fixed with `fr journal resolve`, never by
-
-      re-adding its id.'
+      re-adding its id.
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:15:50+00:00'
       note: null
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:15:51+00:00'
       note: null
     P5.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:15:51+00:00'
       note: null
     P5.T1.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:15:52+00:00'
       note: null
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:17:45+00:00'
       note: null
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:17:46+00:00'
       note: null
     P5.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:18:44+00:00'
       note: null
     P5.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:19:33+00:00'
       note: null
     P5.T3.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:19:54+00:00'
       note: null
     P5.T3.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:20:07+00:00'
       note: null
     P5.T4.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:25:27+00:00'
       note: null
     P5.T4.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T15:26:11+00:00'
       note: null
   completion:
-    at: null
+    at: '2026-09-20T15:26:15+00:00'
     note: null
     observed_prs: []

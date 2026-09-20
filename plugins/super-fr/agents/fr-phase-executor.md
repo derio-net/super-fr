@@ -71,6 +71,12 @@ dispatch, so this should be unreachable; super-fr#420.)
   of the real thing, taken once — never built from a guess alongside the parser.
 - **The return value is the only reporting channel.** Report the structured result
   back; do not also send it as a message (super-fr#461).
+- **Context discipline.** Do not re-derive from the code what the handoff already
+  states; read the narrowest thing that answers the question (`grep`/`sed -n` over
+  a range, not the whole file), and do not re-read a file you have already read
+  this session unless you changed it; never paste verbatim tool output into the
+  return — cache reads accumulate as context size summed over turns, so an
+  executor's own re-reads dominate its cost.
 
 ## What you return
 

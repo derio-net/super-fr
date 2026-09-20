@@ -81,8 +81,8 @@ so NOT dispatched (`fr apply --yes` refuses). `implement` is a grouped `for_each
 dependency order, dispatch ONE phase-executor for `implement-phase` — brief = `fr pickup` + spec
 + `fr journal handoff --scope plan --phase N`: TDD (`superpowers:test-driven-development`),
 journals discoveries/findings (`fr journal add … --phase N`), ticks steps / completes the phase, returns a
-structured result — the handoff IS the context. Model = phase `tier` via `fr models resolve
---harness <h>` (unbound → set at step 1); blocked → run inline; never a manual phase.
+structured result — pass/fail summary and journal ids, never pasted output (return is the only
+reporting channel, #461) — the handoff IS the context. Model = phase `tier` via `fr models resolve --harness <h>` (unbound → set at step 1); blocked → run inline; never a manual phase.
 **Harness — dispatch:** Claude Code uses the `fr-phase-executor` Agent without `isolation: "worktree"`
 — **mustn't**, not "needn't" (#420, hook-refused): the flag cuts a *second* worktree from main where
 spec/plan are invisible and writes are denied, yet the dispatch succeeds, so the run looks healthy

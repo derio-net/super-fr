@@ -2164,12 +2164,15 @@ rows:
       including within dependency phases.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Measured before-state 2026-09-20: phase 6 of 2026-09-18-harness-parity-matrix
-      re-reads 26 fixed findings in full (37,556 chars of an 83,131-char handoff). Bar
-      is O(1) per closed entry, deliberately NOT non-monotonic growth — decisions and
-      discoveries from dependency phases carry forward value and must keep rendering.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_handoff_bound.py#test_a_closed_entry_costs_a_constant_regardless_of_its_body_size
+      - super-fr:tests/unit/test_handoff_bound.py#test_but_growing_an_open_findings_body_does_grow_the_handoff
+    status: ci
+    notes: 'Phase 5 (2026-09-20-bounded-executor-handoff): the O(1)-per-closed-entry
+      bound is pinned by test_handoff_bound.py''s positive and inverse-guard cases —
+      growing a closed entry''s body does not grow the handoff, growing an open finding''s
+      body does.'
   - id: handoff-entries-always-tagged
     capability: fr-goal-cost
     acceptance: Writing a plan-scope journal entry forces an explicit choice between
@@ -2192,23 +2195,32 @@ rows:
       the agent.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Attacks the ~90% term the handoff bound cannot reach: cache reads accumulate
-      as context size summed over turns, so an executor''s own re-reads dominate. Mirrors
-      to the four .opencode/agent files; pinned by the existing token tripwire.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_skill_tokens.py#test_fr_phase_executor_and_all_opencode_mirrors_carry_the_context_discipline_norm
+      - super-fr:tests/unit/test_skill_tokens.py#test_fr_goal_dispatch_brief_asks_for_a_summary_not_pasted_output
+      - super-fr:tests/unit/test_opencode_agent_mirror.py#test_body_is_canonical_body_verbatim
+    status: ci
+    notes: 'Phase 5 (2026-09-20-bounded-executor-handoff): the sixth contract norm and
+      the pre-existing #461 return-only norm are pinned in the canonical agent and all
+      four OpenCode mirrors by a dedicated tripwire test, plus fr-goal''s own dispatch-brief
+      guidance agreeing with the contract (spec §5.B2).'
   - id: run-telemetry-measured-claude-code
     capability: fr-goal-cost
     acceptance: fr run status reports real per-phase token figures parsed from the Claude
       Code transcript, and degrades loudly to a labeled estimate when it cannot.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Feasibility verified 2026-09-20 and CORRECTED by the phase-1 capture: message.usage
-      carries input/cache_creation/cache_read/output (plus more keys a parser must project
-      away). Attribution is NOT isSidechain+parentUuid in one stream — the orchestrator
-      stream is isSidechain:false throughout and each subagent has its own subagents/agent-<agentId>.jsonl,
-      correlated by its companion .meta.json toolUseId. sessionId is the orchestrator''s
-      and cwd is the launch dir, so neither identifies a unit. OpenCode and Hermes stay
-      V1 estimates per d4 (follow-up issue owed).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+      - super-fr:tests/unit/test_run_cli.py#test_resolve_records_measured_tokens_for_the_unit_it_closes
+      - super-fr:tests/unit/test_run_cli.py#test_status_never_renders_a_measurement_and_an_estimate_the_same_way
+      - super-fr:tests/unit/test_run_cli.py#test_status_says_out_loud_when_nothing_could_be_measured
+      - super-fr:tests/unit/test_migration_run_telemetry.py
+    status: ci
+    notes: 'Phase 5 (2026-09-20-bounded-executor-handoff): the Claude Code V2 reader/attributor
+      (test_run_telemetry.py, 26 tests incl. isSidechain-filter and sessionId/cwd guards),
+      the end-to-end advance-then-resolve path, the loud-degradation half of the acceptance
+      sentence (measured vs. estimate rendering never conflated, absence said out loud),
+      and the run-cursor migration/validator all run in CI.'
