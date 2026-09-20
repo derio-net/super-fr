@@ -25,7 +25,7 @@ Design rules baked into every model:
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -124,6 +124,48 @@ class PhaseHeader(BaseModel):
     # dumps when unset, so pre-marker plans stay byte-stable and parse on
     # older readers.
     skeleton: bool = False
+
+
+def phase_tiers(annotation: object | None = None) -> tuple[str, ...]:
+    """Derive the closed tier vocabulary from `PhaseHeader.tier`'s own
+    Literal, rather than re-listing it — a fourth tier then needs exactly
+    one edit (the Literal above), not a hunt for every place that copied it.
+
+    Handles the bare `Literal[...]` as well as the `Literal[...] | None` the
+    field carries today (review r-p2-f1). The union form yields a Literal
+    MEMBER whose own `get_args` gives the strings; the bare form yields the
+    strings directly. Reading only the first shape meant that dropping the
+    `| None` — making `tier` required, a reasonable schema change — would
+    raise at IMPORT time, taking `scripts/sync-opencode.py` down with it,
+    with a message about a "Literal member" that told the reader nothing.
+
+    `annotation` is a parameter purely so this is testable against shapes the
+    field does not currently have; callers pass nothing.
+    """
+    if annotation is None:
+        annotation = PhaseHeader.model_fields["tier"].annotation
+
+    args = get_args(annotation)
+    # Union form: find the Literal member and unwrap it.
+    for arg in args:
+        literal_args = get_args(arg)
+        if literal_args:
+            return tuple(str(a) for a in literal_args)
+    # Bare form: `get_args` already gave the Literal's own values.
+    if args and all(isinstance(a, str) for a in args):
+        return tuple(str(a) for a in args)
+    raise TypeError(
+        f"cannot derive the phase tier vocabulary from {annotation!r}: expected a "
+        "Literal of tier names, or a union containing one. If PhaseHeader.tier's "
+        "shape changed, update fr.types.phase_tiers to match."
+    )
+
+
+# The closed set of `fr-goal` subagent-dispatch tiers, single-sourced from
+# `PhaseHeader.tier`'s Literal (2026-09-19 opencode-subagent-dispatch spec
+# §3.C — the OpenCode tier-agent generator imports this instead of
+# hardcoding the tier names a second time).
+PHASE_TIERS: tuple[str, ...] = phase_tiers()
 
 
 class StepState(BaseModel):

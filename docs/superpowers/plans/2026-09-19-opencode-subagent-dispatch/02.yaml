@@ -1,0 +1,97 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Tier agents — one per PhaseHeader.tier, model baked from repo config
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-subagent-tiering
+tasks:
+- number: 1
+  title: Tier expansion and the model source, red to green
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: extend tests/unit/test_opencode_agent_mirror.py.
+      (a) `canonical_agents()` returns FOUR entries for the one canonical file:
+          "fr-phase-executor" plus "-mechanical", "-standard", "-hard". Derive
+          the expected tier names in the TEST from the Literal on
+          `fr.types.PhaseHeader.tier` (typing.get_args) rather than hardcoding
+          three strings — the tier set is closed in fr.types and the generator
+          must follow it, not shadow it;
+      (b) with NO repo docs/superpowers/models.yaml, no entry carries a `model:`
+          key at all — a missing binding means inherit, never a written-but-empty
+          key OpenCode would try to resolve;
+      (c) with a fixture repo models.yaml binding opencode's three tiers, each
+          TIER file carries `model: <that tier's value>` and the untiered base
+          file still carries none;
+      (d) when present, the `model:` line sits immediately after the
+          `mode: subagent` line — the anchor the installer rewrites against;
+      (e) each tier file's `description:` names its tier so `opencode agent
+          list` is self-explaining, while the body stays canonical verbatim.
+      Drive (b)/(c) through a parameter or module-level path the test
+      monkeypatches — the test must NOT write into the real repo's
+      docs/superpowers/. Run pytest — fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: import the tier vocabulary from fr.types (single source of truth —
+      a fourth tier must not need an edit here) and expand `canonical_agents()`
+      to emit base + one file per tier. Resolve each tier's model by reading the
+      repo's docs/superpowers/models.yaml through `fr.models.load_models`, keyed
+      `opencode` — the same file and the same loader `fr models` itself uses, so
+      the two cannot disagree about what the repo says. Omit the `model:` key
+      entirely when unresolved. Run the S1 tests — green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: the base and tier renders now share everything but the
+      description suffix and the optional model line. Collapse to one
+      `_render_agent(stem, description, body, model)` used by both, so a future
+      frontmatter key cannot be added to one path and forgotten on the other.
+      Re-run the unit suite.
+- number: 2
+  title: Regenerate and smoke all four
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Run `uv run scripts/sync-opencode.py`, confirm super-fr's OWN mirror now
+      holds four files and NONE carries a `model:` key (this repo has no
+      docs/superpowers/models.yaml — that is the expected, committed,
+      deterministic state, and it is what keeps CI reproducible). `--check`
+      clean. Then `opencode agent list` from the worktree: all four register as
+      `(subagent)`. Journal the four names only.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      ruff format; ruff check; `uv run pytest -q --no-cov`;
+      `uv run scripts/sync-opencode.py --check`. All green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-19T22:39:41+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-19T22:39:42+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-19T22:39:42+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-19T22:39:42+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-19T22:39:43+00:00'
+      note: null
+  completion:
+    at: '2026-09-19T22:39:46+00:00'
+    note: null
+    observed_prs: []
