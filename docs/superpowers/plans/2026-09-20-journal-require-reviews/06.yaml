@@ -16,100 +16,90 @@ tasks:
   title: Flip the acceptance rows with their evidence
   steps:
   - id: P6.T1.S1
-    text: 'For each of the three rows, `uv run fr acceptance set-status
-
+    text: |-
+      For each of the three rows, `uv run fr acceptance set-status
       --id <id> --status ci --level unit=super-fr:<the actual test
-
       file> --notes "<why it moved>"`. Use the real test paths written
-
       in phases 1-3, not guesses. `set-status` regenerates all three
-
       committed reports; commit them. Then `uv run fr acceptance check`
-
-      — clean.'
+      — clean.
 - number: 2
   title: Version and artifacts
   steps:
   - id: P6.T2.S1
-    text: 'VERIFY the version bump rather than making it. The worktree ALREADY
-
+    text: |-
+      VERIFY the version bump rather than making it. The worktree ALREADY
       carries an uncommitted 4.8.0 -> 4.9.0 bump left by an earlier session on
-
       this branch (plan journal, discovery `pre-existing-bump`), and 4.9.0 is
-
       exactly the minor bump this PR owes for a new CLI flag plus a new
-
       mandatory workflow step (AGENTS.md). Running `bump-version.py minor`
-
       again from that dirty tree would land 4.10.0 and overshoot.
-
       So: confirm `git diff` over the version-bearing surfaces is version-only
-
       (five `version = "4.9.0"` lines plus the JSON version keys in
-
       .claude-plugin/marketplace.json, packages/fr-opencode-plugin/package.json
-
-      and both plugins'' plugin.json, and NOTHING else); confirm
-
+      and both plugins' plugin.json, and NOTHING else); confirm
       `uv run --no-project python scripts/bump-version.py --check` passes;
-
       confirm `uv run fr --version` reads 4.9.0. Only then commit those
-
       manifests together with uv.lock if it moved. If the diff turns out NOT to
-
       be version-only, stop and journal a finding — do not silently absorb an
-
-      unrelated edit into a release commit.'
+      unrelated edit into a release commit.
   - id: P6.T2.S2
-    text: '`uv run fr validate artifacts` — clean. No stamp bump is owed
-
+    text: |-
+      `uv run fr validate artifacts` — clean. No stamp bump is owed
       (spec Non-goals: no artifact schema changed), so this should pass
-
       with no migration. If it does NOT, stop: something in this plan
-
       changed a shape the spec said it would not, and
-
       .claude/rules/artifact-versioning.md then requires a stamp bump,
-
-      a registered migration and a structure validator in THIS PR.'
+      a registered migration and a structure validator in THIS PR.
 - number: 3
   title: Full gate
   steps:
   - id: P6.T3.S1
-    text: '`uv run ruff format packages/ tests/ scripts/`; `uv run ruff check
-
+    text: |-
+      `uv run ruff format packages/ tests/ scripts/`; `uv run ruff check
       packages/ tests/ scripts/`; `uv run mypy packages/fr/src
-
       packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`;
-
       `uv run --no-project python scripts/bump-version.py --check`;
-
       `uv run pytest` (the FULL run CI gates, cov-fail-under=75 included
-
       — not `-q --no-cov`). Report the real output. The single known
-
       pre-existing failure (#463/#489) is the only tolerated red;
-
-      anything else is this PR''s.'
+      anything else is this PR's.
 state:
   steps:
     P6.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:40:22+00:00'
+      note: 'Flipped journal-require-reviews-gate and journal-review-entry-per-phase
+        to ci with real test refs (test_journal_cmd.py, test_journal_model.py); fr-goal-review-gate-is-cursor-enforced
+        already ci from phase 3, left as-is. fr acceptance check: 127 rows OK.'
     P6.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:40:29+00:00'
+      note: 'Verified pre-existing 4.8.0->4.9.0 bump: diff over version-bearing surfaces
+        is version-only (pyproject.toml, marketplace.json, uv.lock uncommitted; 7
+        other manifests already committed in earlier phase commits). bump-version.py
+        --check passes, fr --version reads 4.9.0. Adopted, not re-bumped.'
     P6.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:40:29+00:00'
+      note: 'fr validate artifacts: 33 artifact(s) checked — all structurally valid.
+        No migration needed.'
     P6.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:45:31+00:00'
+      note: 'ruff format: 366 files unchanged. ruff check: all checks passed. mypy
+        (4 src trees): success, no issues in 138 files. bump-version.py --check: ok.
+        Full uv run pytest (not -q --no-cov): 3319 passed, 80 skipped, 3 failed in
+        217.08s, coverage 91.71% (>=75% required). The 3 failures are exactly the
+        pre-documented tolerated reds: test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused,
+        test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused
+        (Rich wrap point on this machine''s tmp_path length), and test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable
+        (#463/#489). No new failures introduced by this branch.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-20T16:46:30+00:00'
+    note: Rows flipped, version verified, artifacts validated, full gate green modulo
+      the 3 pre-documented tolerated reds. Phase 6 (final phase) locally complete;
+      orchestrator review + journal review entry still owed per fr-goal's review-per-phase
+      pattern (journal check --require-reviews currently reports phase 6 owed, as
+      expected pre-review).
     observed_prs: []

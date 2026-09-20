@@ -2163,10 +2163,15 @@ rows:
       a plan-journal entry with kind=review naming that phase number'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
-    levels: {}
-    status: not-implemented
-    notes: Emitted by fr-goal §6 / fr-debugging prose via the existing `fr journal add
-      --kind review --phase N`; no schema change.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: 'reviewed_phases (the pure fold fr journal check --require-reviews reads)
+      pinned directly: a phased kind=review entry contributes its phase number, an unphased
+      one contributes nothing, two reviews of the same phase fold to one element, and
+      no-entries folds to the empty set (test_journal_model.py::TestReviewedPhases).
+      The consuming CLI gate is the separate journal-require-reviews-gate row.'
   - id: journal-require-reviews-gate
     capability: journal
     acceptance: '`fr journal check --scope plan --require-reviews` exits non-zero when
@@ -2174,10 +2179,17 @@ rows:
       0 once one does'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
-    levels: {}
-    status: not-implemented
-    notes: Manual-tagged phases are exempt (spec D4) and the exemption is named in the
-      failure message. Fail-closed (exit 2) on an unreadable plan.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: 'fr journal check --require-reviews fully exercised: exits 1 on a completed
+      non-manual phase with no review entry naming it (test_require_reviews_fails_on_a_completed_phase_with_no_review),
+      exits 0 once one exists (test_require_reviews_passes_once_the_phase_is_reviewed),
+      manual phases exempt per spec D4 (test_manual_phase_is_exempt_and_the_message_names_the_exemption),
+      inert without a completed phase (test_require_reviews_is_inert_when_all_phases_incomplete),
+      back-compat without the flag (test_without_require_reviews_completed_unreviewed_phase_still_exits_zero),
+      and non-plan scope refusal (test_require_reviews_refuses_non_plan_scope).'
   - id: fr-goal-review-gate-is-cursor-enforced
     capability: workflow
     acceptance: fr-goal's run cursor executes the review gate before deliver, so a run

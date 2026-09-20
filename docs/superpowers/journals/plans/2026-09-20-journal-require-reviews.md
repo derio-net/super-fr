@@ -487,3 +487,13 @@ ACCURACY OF THE CLAIMS, which is what a published page gets wrong most easily: t
 Carried as a discovery by the phase itself: the SKILL.md line citations had ALREADY drifted before this phase touched them, and nothing catches that class - the same shape as d-p4-no-tripwire-runs-skill-commands. Recorded, not fixed here.
 
 Assessment: phase 6 proceeds.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-t1-refs created=2026-09-20T18:40:50 phase=6 -->
+### p6-t1-refs · discovery · Acceptance rows flipped with refs matched to each row's actual acceptance clause (phase 6)
+
+journal-require-reviews-gate -> unit=tests/unit/test_journal_cmd.py: covers the CLI gate's full claim (fails on completed+unreviewed non-manual phase, passes once reviewed, manual exemption, inert pre-completion, back-compat without the flag, non-plan-scope refusal). journal-review-entry-per-phase -> unit=tests/unit/test_journal_model.py::TestReviewedPhases: pins the pure fold a kind=review entry with phase=N contributes, which is exactly what that row's acceptance text claims (a machine-readable trace exists) - the CLI consumption of that fold is the separate journal-require-reviews-gate row, so citing test_fr_goal_shape.py here would have repeated r-p3-f2's mistake of covering half a claim under the wrong row. fr-goal-review-gate-is-cursor-enforced left untouched (already ci from phase 3, refs still correct). fr acceptance check: 127 rows OK, no new warnings introduced.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-t3-gate created=2026-09-20T18:45:40 phase=6 -->
+### p6-t3-gate · discovery · Full CI gate is green modulo the three pre-documented tolerated reds (phase 6)
+
+uv run pytest (full, not -q --no-cov) over the whole worktree: 3319 passed, 80 skipped, 3 failed, coverage 91.71% (cov-fail-under=75 satisfied). All 3 failures match the reds this dispatch pre-declared as unrelated-and-tolerated: test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused, test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused (Rich wrap point this machine's long tmp_path pushes into an asserted substring), and test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable (#463/#489). No test introduced or touched by this plan is among them. ruff format/check and mypy over the 4 src trees are clean; bump-version.py --check agrees at 4.9.0.
