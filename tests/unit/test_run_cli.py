@@ -2533,3 +2533,67 @@ def test_gates_never_renders_blank_on_a_pre_provenance_cursor(tmp_path: Path) ->
     assert "brainstorm" in result.output
     assert "provenance not recorded" in result.output
     assert "predates" in result.output
+
+
+# --- #501: the composite member id teaches its two flags (spec §3.B) --------
+
+_SHIPPED_FR_GOAL = (
+    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+)
+
+
+def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
+    """Drive the REAL shipped `fr-goal` manifest to its `implement` group.
+
+    #501 is a message about `fr-goal`'s own ids (`phase/1/implement-phase`,
+    workflow `'fr-goal'`), so the fixture is the shipped file itself rather
+    than a convenient stand-in — this is the walking skeleton's proof that
+    the CLI harness reaches the real runtime.
+    """
+    import shutil
+
+    shipped.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_SHIPPED_FR_GOAL, shipped / "fr-goal.yaml")
+
+    spec_rel = "docs/superpowers/specs/2026-09-20-fixture-design.md"
+    (repo / spec_rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / spec_rel).write_text("# Fixture\n")
+    slug = "2026-05-09-fixture-minimal"
+    plan_rel = f"docs/superpowers/plans/{slug}"
+    shutil.copytree(_FIXTURE_PLAN, repo / plan_rel)
+
+    def step(argv: list[str]) -> None:
+        result = _invoke(repo, shipped, argv)
+        assert result.exit_code == 0, f"{argv}: {result.output}"
+
+    step(["run", "start", "fr-goal", "--branch", "b", "--run-id", "r1"])
+    step(["run", "advance", "r1"])  # brainstorm: blocked on its operator gate
+    step(["run", "resolve", "r1", "--step", "brainstorm", "--state", "done", "--emitted",
+          f"spec={spec_rel}"])
+    step(["run", "advance", "r1"])  # spec-review: running
+    step(["run", "resolve", "r1", "--step", "spec-review", "--state", "done"])
+    step(["run", "advance", "r1"])  # plan: running
+    step(["run", "resolve", "r1", "--step", "plan", "--state", "done", "--emitted",
+          f"plan={plan_rel}"])
+    step(["run", "advance", "r1"])  # plan-review: kind cli, executed here
+    assert load_run_state(repo, "r1").cursor == "implement"
+
+
+def test_resolve_composite_member_id_teaches_the_two_flags(tmp_path: Path) -> None:
+    """#501: `advance` prints `phase/1/implement-phase`, and pasting it into
+    `--step` was refused with "not found in workflow", which sends the reader
+    to the shape file instead of to the flag list."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/implement-phase
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "--step implement-phase" in result.output
+    assert "--item phase/1" in result.output

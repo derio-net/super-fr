@@ -81,17 +81,26 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:34:33+00:00'
+      note: 'RED: test_resolve_composite_member_id_teaches_the_two_flags fails on
+        today''s message "step ''phase/1/implement-phase'' not found in workflow ''fr-goal''"
+        — the real shipped fr-goal manifest, driven to its implement group by real
+        CLI calls.'
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:35:01+00:00'
+      note: 'GREEN inline in _find_step: a slash-bearing id whose tail matches a member
+        of some for_each group raises the three-line message teaching --step <member>
+        --item <head>. Every other not-found id keeps the original one-line message.
+        Test passes.'
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:35:45+00:00'
+      note: 'REFACTOR: extracted _split_member_id(manifest, step_id) -> tuple[item,
+        member_id] | None, docstring citing spec 3.B / journal d2 for why the composite
+        is recognised but never accepted. _find_step calls it; the not-found prefix
+        is built once. All 130 tests in tests/unit/test_run_cli.py pass.'
     P1.T2.S1:
       state: ' '
       ticked_at: null

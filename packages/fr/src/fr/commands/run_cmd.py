@@ -115,6 +115,33 @@ def _step_by_id(manifest: WorkflowManifest, step_id: str) -> Step:
     return step
 
 
+def _split_member_id(manifest: WorkflowManifest, step_id: str) -> tuple[str, str] | None:
+    """`(item, member_id)` if `step_id` is a grouped fan-out's COMPOSITE key
+    (`phase/1/implement-phase`), else `None`.
+
+    The composite is the display id and the `items`-map key — what `fr run
+    status` and `advance` both show — but it is deliberately NOT accepted in
+    `--step` (spec §3.B, journal `d2`). Accepting it and splitting it
+    internally was the issue's own option 2 and was declined: it would leave
+    two spellings of one id, and it would hide the `--item` flag from the
+    operator at the exact moment they need to learn it. So this function
+    exists to *recognise* the composite in order to teach the two flags —
+    never to resolve it.
+
+    Recognition is manifest-driven, not shape-of-string: the tail after the
+    last `/` must name a member of some `for_each` group. An id that merely
+    contains a slash is an ordinary not-found id and gets the ordinary
+    message.
+    """
+    if "/" not in step_id:
+        return None
+    item, _, tail = step_id.rpartition("/")
+    for step in manifest.steps:
+        if step.for_each and any(member.id == tail for member in step.steps):
+            return item, tail
+    return None
+
+
 def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | None]:
     """`(step, parent-group)` for a top-level OR member id — members share the
     flattened id space `check_workflow` validates, so resolving one must find
@@ -125,7 +152,16 @@ def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | N
         for member in step.steps:
             if member.id == step_id:
                 return member, step
-    raise RunStateError(f"step {step_id!r} not found in workflow {manifest.workflow!r}")
+    not_found = f"step {step_id!r} not found in workflow {manifest.workflow!r}"
+    split = _split_member_id(manifest, step_id)
+    if split is not None:
+        item, member_id = split
+        raise RunStateError(
+            f"{not_found}.\n"
+            "It is a grouped `for_each` member, which takes two flags:\n"
+            f"  --step {member_id} --item {item}"
+        )
+    raise RunStateError(not_found)
 
 
 def _emitted_plan(state: RunState) -> str | None:

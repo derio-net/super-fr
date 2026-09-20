@@ -24,3 +24,16 @@ This task runs the gate sweep and flips one acceptance row. The refactor for thi
 ### nrb-P6-T1 · discovery · no-refactor-because P6.T1
 
 This task verifies the external renderer, edits three passages of published prose, and regenerates the HTML. The .html is generated and must never be hand-edited (explainers-currency.md); the .md is narrative prose for a reader who has never seen this repo. Neither has code structure to improve. The plan's whole-diff refactor pass is P6.T2.S3.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-red-t1 created=2026-09-20T15:34:34 phase=1 -->
+### p1-red-t1 · discovery · RED for P1.T1: the shipped fr-goal manifest IS drivable to implement in a unit test (phase 1)
+
+`uv run pytest tests/unit/test_run_cli.py -k composite -q --no-cov` failed with:
+
+    assert '--step implement-phase' in "step 'phase/1/implement-phase' not found in workflow 'fr-goal'\n"
+
+That is today's message verbatim, produced by the real runtime: the new helper `_fr_goal_at_implement` copies `plugins/super-fr/workflows/fr-goal.yaml` into the test's shipped dir and walks it with real `fr run` invocations — start, advance (brainstorm blocks on its operator gate), resolve brainstorm --emitted spec=, advance, resolve spec-review, advance, resolve plan --emitted plan=, advance (executes the `plan-review` `kind: cli` step for real). Cursor lands on `implement`.
+
+Two facts phases 2-5 can rely on:
+1. `plan-review` (`run: fr plan self-review {{ artifacts.plan }}`) EXITS 0 against `tests/unit/fixtures/v2_plan_minimal` even though it prints a complaint that the fixture's spec does not resolve. So the cli step does not block the walk. It does shell out to whatever `fr` is on PATH (the venv's, under `uv run pytest`), which is the one environmental coupling in this helper.
+2. The ambient `CLAUDECODE=1` in a Claude Code session makes `_gate_degradation_notice()` return None, so the gated `brainstorm` advance prints no notice and exits 0. A test that cares about the notice must use `_invoke_as_harness`.
