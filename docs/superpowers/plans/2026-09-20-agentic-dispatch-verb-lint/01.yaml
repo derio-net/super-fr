@@ -4,6 +4,7 @@ phase:
   title: Skeleton — the real-plan corpus harness, with floors that stop it going green
     on nothing
   tag: agentic
+  tier: standard
   depends_on: []
   tracking_issue: null
   acceptance:

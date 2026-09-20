@@ -3,6 +3,7 @@ phase:
   number: 4
   title: Release surfaces — acceptance flips, minor bump, explainer, full gate
   tag: agentic
+  tier: standard
   depends_on:
   - 3
   tracking_issue: null

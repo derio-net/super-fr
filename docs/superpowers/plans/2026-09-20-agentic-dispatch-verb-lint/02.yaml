@@ -4,6 +4,7 @@ phase:
   title: The detector — imperative-head dispatch verbs with an agent-shaped object,
     at error severity
   tag: agentic
+  tier: hard
   depends_on:
   - 1
   tracking_issue: null

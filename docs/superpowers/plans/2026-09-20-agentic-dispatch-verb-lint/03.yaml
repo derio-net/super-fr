@@ -4,6 +4,7 @@ phase:
   title: The executor contract that refuses the tick, and the fr-plan guidance that
     prevents the step
   tag: agentic
+  tier: standard
   depends_on:
   - 2
   tracking_issue: null
