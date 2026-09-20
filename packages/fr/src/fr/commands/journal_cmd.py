@@ -398,11 +398,32 @@ def check(
         try:
             plan = parse(plan_path)
         except (PlanSchemaError, OSError) as e:
+            # `markup=False, soft_wrap=True`, not a bare print (review r-p2-f4):
+            # pydantic's error text carries `[type=missing, input_value=...]`,
+            # which Rich parses as a style tag and SILENTLY DROPS — the most
+            # diagnostic half of the message vanishing from a fail-closed exit.
+            # Wrapping likewise folds the absolute plan path mid-token.
             err_console.print(
-                f"[red]cannot check --require-reviews: plan {plan_path} is not "
-                f"parseable ({e})[/red]"
+                f"cannot check --require-reviews: plan {plan_path} is not parseable ({e})",
+                markup=False,
+                soft_wrap=True,
             )
             raise typer.Exit(2) from e
+        # A plan that parses to ZERO phases must not read as "nothing owed"
+        # (review r-p2-f1). `parse` silently ignores any file not matching
+        # `NN.yaml`, so a phase file misnamed `1.yaml` or `02.yml` yields
+        # `phases == ()` — and a plan with real, complete, unreviewed phases
+        # would sail through green. That is the vacuous pass this gate exists
+        # to abolish, so it is refused rather than reported as clean. Spec §B:
+        # a gate that cannot read the plan does not know whether it passed.
+        if not plan.phases:
+            err_console.print(
+                f"cannot check --require-reviews: plan {plan_path} has no phase files "
+                "(NN.yaml, zero-padded) — refusing rather than reporting a vacuous pass",
+                markup=False,
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
         # Which completion predicate, and why it matters (spec §B): NOT
         # `_phase_complete` (needs an observed merged PR that never exists
         # during an fr-goal run — a gate built on it would pass every plan
@@ -422,10 +443,19 @@ def check(
                 f"[red]{len(missing)} phase(s) owed a review, none recorded: {phases_str}[/red]"
             )
             for n in missing:
+                # `soft_wrap=True` is load-bearing, not cosmetic (review
+                # r-p2-f2): this line ENDS IN A COMMAND the reader is meant to
+                # paste. Rich folds at column 80 in any non-TTY — a pipe, CI,
+                # or `fr run advance` executing the `kind: cli` step, which is
+                # precisely the consumer spec D3 designed this for — turning
+                # one command into three broken ones. Same convention and same
+                # reason as `run_cmd.py`'s gate lines and `archive_cmd.py`.
                 err_console.print(
                     f"  fr journal add --scope plan --slug {resolved_slug} --kind review "
                     f'--phase {n} --title "phase {n} review" '
-                    "--body \"<findings raised, by id; or 'no findings'>\""
+                    "--body \"<findings raised, by id; or 'no findings'>\"",
+                    markup=False,
+                    soft_wrap=True,
                 )
             err_console.print("(manual phases are exempt from --require-reviews — spec D4)")
             failed = True

@@ -159,3 +159,91 @@ PhaseDoc's step id field validates against the pattern ^P\d+\.T\d+\.S\d+$ (pydan
 ### 3ec6e6b36cec · discovery · Phase 2 gate: implementation summary and predicate choice confirmed live (phase 2)
 
 Implemented reviewed_phases(entries) -> set[int] in fr/journal/model.py (pure fold: kind==review and phase is not None) and wired the owed-vs-present comparison into fr journal check's require_reviews branch in fr/commands/journal_cmd.py, using fr.render.plan_locally_complete (NOT _phase_complete) and excluding phase.tag == 'manual' per spec D4. The exemption is applied at the check call site, not inside the predicate, per spec (plan_locally_complete stays tag-agnostic for its other three callers). Confirmed via test_every_step_ticked_but_completion_at_unset_is_still_owed_a_review (P2.T2.S1c) that a phase with every step ticked and completion.at unset is correctly flagged owed — this is the test the phase exists for, and it would pass silently under either of the two wrong predicates named in the spec. Composition with the pre-existing open-findings gate: both checks run unconditionally, the open-findings line prints first and is byte-identical to its old wording, and exit is 1 if either check fails, 2 if the plan cannot be parsed (fail-closed) or scope/derivation is unsatisfiable. Deleted the phase-1 '# NOT YET IMPLEMENTED' comment (r-p1-f4's fix point) now that the gate is real.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f1 created=2026-09-20T16:12:15 phase=2 state=fixed -->
+### r-p2-f1 · finding [fixed] · A plan parsing to zero phases made the gate exit 0 having evaluated nothing (phase 2)
+
+fr.parser.parse silently ignores any file not matching ^NN\.yaml$ and does not require that any phase file exist (only parse_strict does). So a plan folder with a valid _meta.yaml and a phase file misnamed `1.yaml`, `02.yml` or `phase-02.yaml` yields plan.phases == (), owed == set(), and exit 0 with NO OUTPUT AT ALL - on a plan holding a real, complete, UNREVIEWED phase.
+
+Proved directly: copying this plan's own _meta.yaml and 01.yaml into a dir as `1.yaml` gives plan.phases == () and an empty owed set.
+
+Same shape as phase 1's r-p1-f1 fail-open, and materially worse once phase 3 makes the gate cursor-enforced: after that a vacuous pass is invisible, because the run simply proceeds to deliver.
+
+Fixed: `if not plan.phases` is exit 2, refusing rather than reporting a vacuous pass. Mutation-verified - replacing the guard with `if False` fails exactly the new test and nothing else.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f2 created=2026-09-20T16:12:15 phase=2 state=fixed -->
+### r-p2-f2 · finding [fixed] · The remediation command was folded by Rich into three broken shell commands (phase 2)
+
+P2.T2.S3 made the failure message the declared product of phase 2, and the message ends in a command the reader is meant to paste. err_console has markup and wrapping on, so in any non-TTY - a pipe, CI, or `fr run advance` executing the kind:cli step, i.e. exactly the consumer spec D3 designed this for - Rich folds at the terminal width.
+
+Observed: `fr journal add --scope plan --slug ... --kind` / `review --phase 2 --title ...` / `'no findings'>"` - three lines, which paste as a command missing its --kind value, a command-not-found, and a syntax error.
+
+The repo already has this convention with the reason written down (run_cmd.py's gate lines, archive_cmd.py, workflow_cmd.py all pass soft_wrap=True). Fixed with markup=False, soft_wrap=True.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f3 created=2026-09-20T16:12:15 phase=2 state=fixed -->
+### r-p2-f3 · finding [fixed] · The test class docstring still described the gate as unimplemented (phase 2)
+
+TestCheckRequireReviews' docstring read 'Phase 1 (skeleton) ... the gate itself is phase 2 ... the flag's only observable behaviour is its refusals plus exit 0' - false of seven of its own tests. P2.T2.S4 deleted the equivalent disclaimer from journal_cmd.py for exactly this reason and left this one standing. Fixed: the docstring now describes the gate, and names why it was stale.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f4 created=2026-09-20T16:12:16 phase=2 state=fixed -->
+### r-p2-f4 · finding [fixed] · Rich markup silently ate the most diagnostic half of the fail-closed message (phase 2)
+
+The parse-failure print interpolated pydantic's error text into a markup-enabled console. Pydantic ends its errors with `[type=missing, input_value=..., input_type=dict]`, which Rich parses as a style tag and DROPS - so a fail-closed exit 2 named the file and then withheld the reason, leaving orphaned trailing spaces where the detail had been. Pre-existing in `handoff`; newly copied here.
+
+Fixed with markup=False, soft_wrap=True. Pinning it needed a test of its own: the repo's other fail-closed tests raise errors with no brackets in them, so nothing could have caught this. Mutation-verified.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f5 created=2026-09-20T16:12:16 phase=2 state=fixed -->
+### r-p2-f5 · finding [fixed] · The OSError arm of the fail-closed except was unpinned (phase 2)
+
+Narrowing `except (PlanSchemaError, OSError)` to `except PlanSchemaError` left every test green, because both existing fail-closed tests raise PlanSchemaError. The arm is correct and reachable - fr.parser reads the PHASE files outside its own try-block - just untested.
+
+Fixed with a test that makes `01.yaml` a DIRECTORY (still matching the phase-file regex, so parse reaches read_text and raises IsADirectoryError). Note the first version of that test broke _meta.yaml instead, which is read INSIDE parse's try and surfaces as PlanSchemaError - it would have exercised the arm it was written to pin nothing about.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f6 created=2026-09-20T16:12:16 phase=2 state=fixed -->
+### r-p2-f6 · finding [fixed] · The documented 'open findings print FIRST' ordering was asserted by nothing (phase 2)
+
+The source comment claims the open-findings line prints first and always, so composition with the reviews gate never reorders or swallows it. Both composition assertions were membership tests, which pass with the two gates' output interleaved. Fixed with an index comparison. (The reviewer also noted, correctly, that the composition test does not prove the reviews gate affects the EXIT CODE - removing `failed = True` leaves it green because the seeded open finding alone gives exit 1. That is covered by tests (a), (c) and (d), so there is no coverage hole; the test is simply weaker than its docstring implied.)
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f7 created=2026-09-20T16:12:17 phase=2 state=fixed -->
+### r-p2-f7 · finding [fixed] · _write_plan had become a duplicate of _write_plan_phases (phase 2)
+
+Two test helpers identical apart from the phases argument. Collapsed the first into a call to the second.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p2-conftest-width created=2026-09-20T16:12:17 phase=2 -->
+### d-p2-conftest-width · discovery · conftest's wide-terminal fixture silently disables any test ABOUT wrapping (phase 2)
+
+Found while mutation-testing my own fix for r-p2-f2: the first version of the anti-wrapping test PASSED with soft_wrap removed, i.e. asserted nothing.
+
+Cause: tests/conftest.py's autouse `_wide_terminal` fixture sets COLUMNS=200 for every in-process CLI test. It exists for a good reason, documented at tests/conftest.py:49 - Rich wraps to the terminal width, so an assertion naming a PATH passes or fails depending on how long pytest's tmp root happens to be on the machine running the suite, which really did break test_archive_cmd.py once. But a test whose subject IS the wrapping cannot see anything at 200 columns.
+
+The fixture's own docstring names the escape: 'output that must survive a NARROW terminal has its own test that sets COLUMNS=40 explicitly, and that test still overrides this.' The fixed test sets COLUMNS=80.
+
+Worth recording because the trap is invisible: the test looks right, passes, and proves nothing - and it is the same defect class as the two pre-existing test_run_workspace.py failures this branch tolerates, which fail because this machine's long tmp_path pushes a Rich wrap point into an asserted substring.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-09-20T16:12:38 phase=2 -->
+### review-p2 · review · phase 2 review - 7 findings, all fixed, predicate proved by mutation (phase 2)
+
+Reviewed: spec SSB (the completion-predicate subsection above all), plan phase 2 (02.yaml, including the lettered test list (a)-(g) in P2.T2.S1), and the diff 8fdc2fb..cc9430c - packages/fr/src/fr/journal/model.py, packages/fr/src/fr/commands/journal_cmd.py and both test modules.
+
+Performed by an independent reviewer subagent with no session context, which MUTATION-TESTED rather than read: 7 mutations, each restored and md5-verified. Both of its Important findings were then reproduced by the orchestrator before any fix was written.
+
+Findings raised: 7, all fixed.
+  r-p2-f1 a zero-phase plan exited 0 having evaluated nothing   [fixed]
+  r-p2-f2 the remediation command was folded into 3 broken ones [fixed]
+  r-p2-f3 the test class docstring still said 'unimplemented'   [fixed]
+  r-p2-f4 Rich markup ate the fail-closed diagnostic            [fixed]
+  r-p2-f5 the OSError arm was unpinned                          [fixed]
+  r-p2-f6 the 'open findings print FIRST' claim was unasserted   [fixed]
+  r-p2-f7 a duplicated test helper                              [fixed]
+
+THE THING THIS PHASE EXISTED TO GET RIGHT is right, and is proved right rather than asserted. Mutating the predicate to `completion.at is not None` fails EXACTLY ONE test - test_every_step_ticked_but_completion_at_unset_is_still_owed_a_review - and modelling `_phase_complete` during an fr-goal run (the predicate forced False, since no merged PR is ever observed) fails four. The permanent-no-op failure mode the spec warns about is caught by the suite, not merely argued against in prose.
+
+Also confirmed: `reviewed_phases` is pure (fr/journal/model.py imports only pathlib, typing, pydantic - no fr.types/fr.render/fr.parser); the manual exemption is applied at the CALL SITE, leaving plan_locally_complete untouched and spec.py/diff.py/archive.py unaffected; `except (PlanSchemaError, OSError)` is neither too narrow nor too broad - a deliberate AttributeError inside the gate propagates rather than being reported as 'unparseable'; the greppable 'N open finding(s)' line is character-for-character unchanged against 8fdc2fb; P2.T2.S4 really did delete phase 1's disclaimer.
+
+Every fix above was mutation-verified by the orchestrator before being called done - and that mattered: the first versions of TWO of the new tests passed with the code under test mutated, i.e. asserted nothing. One of them failed for a reason worth knowing, recorded as discovery d-p2-conftest-width.
+
+Behavioural note carried forward: with --require-reviews, open findings no longer short-circuit, so an unparseable plan now exits 2 rather than 1. Correct under SSB's fail-closed rule, but a change for anything keying on exit 1.
+
+Post-fix: 56 tests in test_journal_cmd.py pass, ruff clean, mypy clean over 138 source files, and all four mutations of the new fixes are caught by exactly their intended test.
+
+Assessment: phase 3 proceeds. r-p2-f1 was fixed BEFORE dispatching it, deliberately - phase 3 makes this gate cursor-enforced, and after that a vacuous pass is invisible.

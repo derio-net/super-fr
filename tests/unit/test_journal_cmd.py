@@ -348,10 +348,18 @@ class TestCheck:
 
 
 class TestCheckRequireReviews:
-    """Phase 1 (skeleton): `--require-reviews`, `--plan-dir` and optional
-    `--slug` are CLI plumbing only here — the gate itself (owed vs. present
-    reviews) is phase 2. Here the flag's only observable behaviour is its
-    refusals plus exit 0 on everything else."""
+    """`fr journal check --require-reviews`: its argument grammar, its
+    refusals, and the gate itself.
+
+    The gate fails when a phase the plan LOCALLY claims is done
+    (`fr.render.plan_locally_complete` — `completion.at` set, or every step
+    ticked) carries no `kind=review` journal entry naming it. Manual-tagged
+    phases are exempt (spec D4) and the exemption is stated in the failure
+    message rather than applied silently.
+
+    (This docstring described the flag as unimplemented until review r-p2-f3
+    — the same stale-disclaimer shape the gate's own source comment was
+    deleted for one step earlier.)"""
 
     def _seed_open_finding(self, slug: str, finding_id: str = "f1") -> None:
         """Give `slug`'s journal one OPEN finding.
@@ -374,19 +382,11 @@ class TestCheckRequireReviews:
         assert res.exit_code == 0, res.output
 
     def _write_plan(self, root: Path, slug: str):
-        from fr.plan_ops import PhaseSpec, create
+        """One trivial agentic phase — the degenerate case of
+        `_write_plan_phases` (review r-p2-f7)."""
+        from fr.plan_ops import PhaseSpec
 
-        (root / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
-        create(
-            repo_root=root,
-            slug=slug,
-            spec=None,
-            target_repo="derio-net/test",
-            fr_version=">=3.0.0,<5.0.0",
-            phases=[PhaseSpec(number=1, title="One", tasks=())],
-            prose="# x\n",
-        )
-        return root / "docs" / "superpowers" / "plans" / slug
+        return self._write_plan_phases(root, slug, [PhaseSpec(number=1, title="One", tasks=())])
 
     def _write_plan_phases(self, root: Path, slug: str, phases):
         from fr.plan_ops import create
@@ -768,6 +768,42 @@ class TestCheckRequireReviews:
 
         assert res.exit_code == 2, res.output
 
+    def test_the_fail_closed_diagnostic_is_not_eaten_by_rich_markup(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Pydantic's error text must reach the operator intact
+        (review r-p2-f4).
+
+        A validation error ends in `[type=missing, input_value=..., input_type=
+        dict]` — the most diagnostic half of it. Rich parses `[...]` as a style
+        tag and SILENTLY DROPS it, so a fail-closed exit 2 would name the file
+        and then withhold the reason. `markup=False` is what keeps it; nothing
+        pinned that, because the repo's other fail-closed tests raise errors
+        with no brackets in them.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        bad = root / "docs" / "superpowers" / "plans" / "RR23"
+        bad.mkdir(parents=True)
+        # A `_meta.yaml` that parses as YAML but fails PlanMeta validation, so
+        # the error carries pydantic's bracketed detail.
+        (bad / "_meta.yaml").write_text("schema_version: 2\n")
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR23",
+                "--plan-dir", "docs/superpowers/plans/RR23", "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 2, res.output
+        assert "not parseable" in res.output
+        assert "[type=missing" in res.output, (
+            "Rich ate the bracketed pydantic detail — the fail-closed exit "
+            f"named the file but withheld the reason: {res.output!r}"
+        )
+
     def test_composition_reports_both_open_findings_and_owed_reviews(
         self, tmp_path: Path, monkeypatch
     ) -> None:
@@ -789,6 +825,109 @@ class TestCheckRequireReviews:
         assert res.exit_code == 1, res.output
         assert "1 open finding(s): f14" in res.output
         assert "--phase 1" in res.output
+        # The source comment claims the open-findings line prints FIRST and
+        # always; nothing asserted it until review r-p2-f6. Membership alone
+        # would pass with the two gates' output interleaved or reordered.
+        assert res.output.index("open finding(s)") < res.output.index("owed a review")
+
+    def test_a_plan_with_no_recognised_phase_files_is_refused_not_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A vacuous pass is a fail-open (review r-p2-f1).
+
+        `fr.parser.parse` silently ignores any file not matching `NN.yaml`, so
+        a phase file misnamed `1.yaml` (or `02.yml`, or `phase-02.yaml`) makes
+        `plan.phases` empty — and a plan holding a real, COMPLETE, UNREVIEWED
+        phase would then exit 0 with no output at all. That is the state the
+        spec's Background condemns: satisfaction and violation looking the
+        same. Refuse instead, per §B's fail-closed rule.
+        """
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR20")
+        complete_phase(plan_dir, 1)
+        # Misname the phase file exactly as a careless hand-edit would.
+        (plan_dir / "01.yaml").rename(plan_dir / "1.yaml")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR20", "--require-reviews"]
+        )
+
+        assert res.exit_code == 2, res.output
+        assert "no phase files" in res.output
+
+    def test_the_remediation_command_is_not_wrapped_across_lines(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The failure message ends in a command meant to be pasted
+        (review r-p2-f2).
+
+        Rich folds at the terminal width in any non-TTY — a pipe, CI, or
+        `fr run advance` running the `kind: cli` step, which is exactly the
+        consumer the cursor-enforced gate was designed for. Folded, the one
+        command pastes as three broken ones.
+
+        `COLUMNS` is set NARROW here, deliberately. conftest's autouse
+        `_wide_terminal` fixture pins every CLI test at 200 columns so path
+        assertions stop depending on how long `tmp_path` happens to be — and
+        that wide default silently disables any test *about* wrapping. Written
+        without this override, this test passed with `soft_wrap` removed
+        (mutation-verified), i.e. it asserted nothing. conftest names this
+        override as the supported escape.
+        """
+        from fr.plan_ops import complete_phase
+
+        monkeypatch.setenv("COLUMNS", "80")
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR21-a-deliberately-long-slug-to-force-the-fold")
+        complete_phase(plan_dir, 1)
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan",
+                "--slug", "RR21-a-deliberately-long-slug-to-force-the-fold",
+                "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 1, res.output
+        command_lines = [ln for ln in res.output.splitlines() if "fr journal add" in ln]
+        assert len(command_lines) == 1, res.output
+        line = command_lines[0]
+        for fragment in ("--scope plan", "--kind review", "--phase 1", "--title", "--body"):
+            assert fragment in line, f"{fragment!r} fell off the command line: {line!r}"
+
+    def test_an_unreadable_plan_file_is_fail_closed(self, tmp_path: Path, monkeypatch) -> None:
+        """The `OSError` arm of the fail-closed except was unpinned
+        (review r-p2-f5): narrowing it to `PlanSchemaError` alone left every
+        test green, because both existing fail-closed tests raise
+        `PlanSchemaError`. `fr.parser` reads the PHASE files outside its own
+        try-block (`parser.py:201`), so `OSError` is reachable there — whereas
+        `_meta.yaml` is read INSIDE it and surfaces as `PlanSchemaError`. The
+        first version of this test broke `_meta.yaml` and so exercised the very
+        arm it was written to pin nothing about."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR22")
+        complete_phase(plan_dir, 1)
+        # A DIRECTORY named `01.yaml` still matches the phase-file regex
+        # (which matches on the name), so `parse` reaches `read_text` and
+        # raises IsADirectoryError — an OSError, not a PlanSchemaError.
+        (plan_dir / "01.yaml").unlink()
+        (plan_dir / "01.yaml").mkdir()
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR22", "--require-reviews"]
+        )
+
+        assert res.exit_code == 2, res.output
+        assert "not parseable" in res.output
 
     def test_a_resolved_finding_does_not_resurface_under_require_reviews(
         self, tmp_path: Path, monkeypatch
