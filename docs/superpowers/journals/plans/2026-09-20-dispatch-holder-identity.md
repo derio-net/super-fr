@@ -239,3 +239,28 @@ The evidence phase 6 will want is in tests/unit/test_run_cli.py, all added here:
   test_a_flat_agent_step_is_refused_the_same_way
   test_advance_onto_a_still_held_agent_step_refuses_and_still_executes_nothing
 plus the six --redispatch tests and the thirteen resolve/close tests in the same file.
+
+<!-- fr:journal kind=discovery scope=plan id=x-f7-mutation-verified created=2026-09-20T15:38:52 phase=4 -->
+### x-f7-mutation-verified · discovery · f7's fix mutation-verified: the pinning test genuinely catches the deletion (phase 4)
+
+Phase 4's f7 (a grouped step's entire dispatch history deleted by _complete_step) is the most consequential finding of the run, so the fix was checked rather than taken on report. Removed the single carry-forward line from _complete_step: test_completing_a_step_does_not_erase_its_dispatch_history FAILS. Restored it: passes. The test is load-bearing, not decorative. Worth restating the executor's own note, because it generalises beyond this PR: _complete_step builds a fresh StepRecord and carries fields across BY HAND, so any durable field added to StepRecord in future is dropped at completion by default. That is a trap with no compiler or type-checker behind it — extra='forbid' catches unknown keys, not forgotten ones.
+
+<!-- fr:journal kind=discovery scope=plan id=x-refusal-verified-independently created=2026-09-20T15:38:52 phase=4 -->
+### x-refusal-verified-independently · discovery · The gh-499 refusal verified independently on this run's live cursor (phase 4)
+
+Re-ran the executor's live check rather than accepting the transcript. fr run advance against a run whose phase/4/implement-phase was genuinely held: exit 2; zero JSON brief lines on stdout (asserted by counting, since gh-499's complaint is precisely that a brief reads as an instruction to act); the holder named with agent id, agent_type and harness plus the dispatch timestamp; three copy-pastable escapes carrying the unit's own --step/--item. The run file's sha256 was byte-identical before and after, so the refusal writes nothing. That is gh-499's 'Expected' block satisfied on a real run, not a fixture.
+
+<!-- fr:journal kind=discovery scope=plan id=x-model-captured-at-dispatch-time created=2026-09-20T15:38:52 phase=4 -->
+### x-model-captured-at-dispatch-time · discovery · A mid-run models.yaml change proved model records the binding AT DISPATCH TIME (phase 4)
+
+phase/3/implement-phase recorded model claude-sonnet-5 at 12:35Z; phase/3/review-phase recorded claude-opus-5 at 13:08Z — both resolve tier 'standard'. Investigated as a suspected resolution bug. It is not one: ~/.config/fr/models.yaml was modified at 13:00Z (mtime), rebinding standard from claude-sonnet-5 to claude-opus-5, and no executor ran fr models set (checked every subagent transcript). So the two records disagree because the operator's config changed between them, and each captured what was actually resolved when its dispatch happened. That is the field behaving exactly as intended — a config that changes mid-run does not retroactively rewrite what was dispatched — and it is a better demonstration of why model is recorded per-dispatch rather than derived on read than any test could be.
+
+<!-- fr:journal kind=discovery scope=plan id=x-abandon-live created=2026-09-20T15:38:53 phase=4 -->
+### x-abandon-live · discovery · --abandoned live-verified by closing this run's own bootstrap-era open records (phase 4)
+
+Three records on this run's cursor were opened by advance in phases 2-3 and could never be closed by their own resolve, because resolve-closes-the-record is phase 4's P4.T3 and their steps were resolved before it existed: phase/2/review-phase, phase/3/implement-phase, phase/3/review-phase. Left alone they would have made this PR's own artifact permanently claim three held units that nothing holds — the feature contradicted by its own dogfooding. Closed each with fr run claim --abandoned (rc=0 each); fr validate artifacts still reports all 33 structurally valid, including the at-most-one-open and open-is-last invariants. abandoned is the honest outcome here: not 'it failed', but 'no resolve will ever close this', which is exactly what section 1.C defines it for. Live evidence for the run-dispatch-abandon acceptance row. Unrelated but worth recording: the first attempt reported rc=2 three times because of a zsh/bash difference, not the feature — zsh does not word-split an unquoted parameter, so  passed one joined argument.
+
+<!-- fr:journal kind=discovery scope=plan id=x-f7-label-collision created=2026-09-20T15:38:53 phase=4 -->
+### x-f7-label-collision · discovery · Commit 3ac2b88's message calls the width fix 'f7'; the journal's f7 is a different finding (phase 4)
+
+The phase-3 review commit message labels the test_run_workspace width fragility 'f7'. No journal entry with that id was ever created for it — it is recorded as the resolution record on x-run-workspace-marker-wrap. Phase 4 then legitimately created finding f7 for the _complete_step deletion. So the two do not collide in the journal (which fr journal check reads), only in one pushed commit message. Not rewriting a pushed commit over a label; recording it here so the PR body, which derives findings from the journal, names f7 as the _complete_step bug and does not inherit the mislabel.
