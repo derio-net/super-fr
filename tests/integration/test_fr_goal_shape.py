@@ -322,6 +322,66 @@ def _walk_brief(output: str) -> dict:
     return json.loads(output[output.index("{") :])
 
 
+def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, plan_rel: str) -> None:
+    """Start a run and walk it to the `implement` group, resolving each
+    preceding step with the artifact it emits.
+
+    `plan-review` is `kind: cli` and EXECUTES the real `fr plan self-review`
+    against `plan_rel`, so the plan handed in must pass it.
+    """
+    assert _fr(root, ["run", "start", "fr-goal", "--branch", branch, "--run-id", run_id])
+    _fr(root, ["run", "advance", run_id])  # brainstorm: gate + brief
+    assert (
+        _fr(
+            root,
+            [
+                "run",
+                "resolve",
+                run_id,
+                "--step",
+                "brainstorm",
+                "--state",
+                "done",
+                "--emitted",
+                f"spec={spec_rel}",
+            ],
+        ).exit_code
+        == 0
+    )
+    _fr(root, ["run", "advance", run_id])  # spec-review brief
+    assert (
+        _fr(root, ["run", "resolve", run_id, "--step", "spec-review", "--state", "done"]).exit_code
+        == 0
+    )
+    _fr(root, ["run", "advance", run_id])  # plan brief
+    assert (
+        _fr(
+            root,
+            [
+                "run",
+                "resolve",
+                run_id,
+                "--step",
+                "plan",
+                "--state",
+                "done",
+                "--emitted",
+                f"plan={plan_rel}",
+            ],
+        ).exit_code
+        == 0
+    )
+    out = _fr(root, ["run", "advance", run_id])  # plan-review executes for real
+    assert out.exit_code == 0, out.output
+    assert load_run_state(root, run_id).cursor == "implement"
+
+
+def _next_member_brief(root: Path, run_id: str) -> dict:
+    out = _fr(root, ["run", "advance", run_id])
+    assert out.exit_code == 0, out.output
+    return _walk_brief(out.output)
+
+
 def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path) -> None:
     """The operator-visible proof: review fires inside every phase iteration
     (the next brief after an implement return is that phase's review, never
@@ -336,52 +396,9 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
     )
     plan_rel = _toy_plan(root)
 
-    assert _fr(root, ["run", "start", "fr-goal", "--branch", "feat/walk", "--run-id", "r1"])
-    _fr(root, ["run", "advance", "r1"])  # brainstorm: gate + brief
-    assert (
-        _fr(
-            root,
-            [
-                "run",
-                "resolve",
-                "r1",
-                "--step",
-                "brainstorm",
-                "--state",
-                "done",
-                "--emitted",
-                "spec=docs/spec.md",
-            ],
-        ).exit_code
-        == 0
-    )
-    _fr(root, ["run", "advance", "r1"])  # spec-review brief
-    assert (
-        _fr(root, ["run", "resolve", "r1", "--step", "spec-review", "--state", "done"]).exit_code
-        == 0
-    )
-    _fr(root, ["run", "advance", "r1"])  # plan brief
-    assert (
-        _fr(
-            root,
-            [
-                "run",
-                "resolve",
-                "r1",
-                "--step",
-                "plan",
-                "--state",
-                "done",
-                "--emitted",
-                f"plan={plan_rel}",
-            ],
-        ).exit_code
-        == 0
-    )
     # plan-review EXECUTES the real self-review: the skeleton-marked,
     # single-step toy plan passes it.
-    assert _fr(root, ["run", "advance", "r1"]).exit_code == 0
-    assert load_run_state(root, "r1").cursor == "implement"
+    _drive_to_implement(root, "r1", "feat/walk", "docs/spec.md", plan_rel)
 
     seen: list[tuple[str, str]] = []
     for n in (1, 2, 3):
@@ -472,3 +489,121 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
         ).exit_code
         == 0
     )
+
+
+# ---------------------------------------------------------------------------
+# The join, end to end (#434, phase 4): a tier DECLARED IN A PHASES FILE
+# reaches the member dispatch brief.
+#
+# Every link of this chain already had unit coverage while the chain itself
+# was broken: `--phases-file` ingestion dropped `tier` on the floor, so the
+# plan header never carried one, so `_phase_tier` had nothing to read. The
+# load-bearing constraint here is therefore that the plan is scaffolded
+# through the REAL `fr plan create --phases-file` CLI — a test that writes
+# `tier:` into `01.yaml` itself would have passed throughout the bug's life
+# and proved nothing.
+# ---------------------------------------------------------------------------
+
+_DECLARED_TIER = "hard"
+
+_TIERED_PHASES_FILE = f"""\
+- number: 1
+  title: A tiered phase
+  tier: {_DECLARED_TIER}
+  skeleton: true
+  tasks:
+    - number: 1
+      title: t
+      steps:
+        - id: P1.T1.S1
+          text: Run the checks
+- number: 2
+  title: A phase declaring no tier
+  depends_on: [1]
+  tasks:
+    - number: 1
+      title: t
+      steps:
+        - id: P2.T1.S1
+          text: Run the checks
+"""
+
+
+def test_a_phases_file_tier_reaches_the_dispatch_brief(tmp_path: Path, monkeypatch) -> None:
+    """Ingestion → plan → run → brief, in one walk.
+
+    The tier asserted on the brief is the one `_TIERED_PHASES_FILE` declared;
+    nothing in this test ever writes a phase header. Phase 2 declares no tier,
+    and its brief must say so explicitly (`resolved_tier: None`) rather than
+    inheriting phase 1's or omitting the key.
+    """
+    root = _workspace(tmp_path, "feat/tier")
+    (root / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "superpowers" / "plans").mkdir(parents=True, exist_ok=True)
+    spec_rel = "docs/superpowers/specs/2026-09-20-tier-join-design.md"
+    (root / spec_rel).write_text(
+        "# Tier join\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+    phases_file = tmp_path / "phases.yaml"
+    phases_file.write_text(_TIERED_PHASES_FILE)
+
+    # `fr plan create` resolves its repo root from the cwd.
+    monkeypatch.chdir(root)
+    slug = "2026-09-20-tier-join"
+    created = _fr(
+        root,
+        [
+            "plan",
+            "create",
+            "--slug",
+            slug,
+            "--target-repo",
+            "derio-net/super-fr",
+            "--spec",
+            spec_rel,
+            "--fr-version",
+            ">=4.2.0,<5.0.0",
+            "--phases-file",
+            str(phases_file),
+        ],
+    )
+    assert created.exit_code == 0, created.output
+    plan_rel = f"docs/superpowers/plans/{slug}"
+
+    _drive_to_implement(root, "r1", "feat/tier", spec_rel, plan_rel)
+
+    # Phase 1 declared `tier: hard` in the PHASES FILE — both its members'
+    # briefs must resolve to it.
+    for member in ("implement-phase", "review-phase"):
+        brief = _next_member_brief(root, "r1")
+        assert (brief["step"], brief["item"]) == (member, "phase/1"), brief
+        assert brief["resolved_tier"] == _DECLARED_TIER, (
+            f"the tier the phases file declared ({_DECLARED_TIER!r}) did not reach "
+            f"the {member} brief: {brief!r}"
+        )
+        assert (
+            _fr(
+                root,
+                [
+                    "run",
+                    "resolve",
+                    "r1",
+                    "--step",
+                    member,
+                    "--item",
+                    "phase/1",
+                    "--state",
+                    "done",
+                ],
+            ).exit_code
+            == 0
+        )
+
+    # Phase 2 declared none: the key is present and explicitly null, so a
+    # harness reading it cannot mistake "unset" for "inherited".
+    brief = _next_member_brief(root, "r1")
+    assert (brief["step"], brief["item"]) == ("implement-phase", "phase/2"), brief
+    assert "resolved_tier" in brief, brief
+    assert brief["resolved_tier"] is None, brief

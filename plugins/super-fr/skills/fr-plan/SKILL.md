@@ -64,31 +64,31 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 
 - TDD (`superpowers:test-driven-development`): red → green → refactor — or a recorded `no-refactor-because:`
   (task id) in the plan journal. No speculative generality; no silent skipping.
-- **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a
-  separate `REFACTOR + quality gate` **task** for larger ones. Omit only with justification;
-  `fr plan self-review` enforces it (single-step tasks, manual phases, ticked tasks exempt).
-- **Walking skeleton first:** the first agentic phase smokes delivery infrastructure (CI green
-  on a trivial test, minimum runtime exercised, fixtures captured never constructed). Mark it
-  `skeleton: true` — self-review errors without it (override: spec-scope `skeleton-override-*`).
-- **Pure agentic phases:** an agentic phase must be fully agent-completable
-  end-to-end. Collect ALL manual work (secrets, UI operations, deploy actions,
-  cluster-dependent config) into a dedicated `[manual]` phase — never author a
-  manual step into an agentic phase planning to defer it. `fr plan
-  self-review` enforces this with error severity (#252).
-- **Acceptance linkage:** a phase that advances a matrix row carries
-  `acceptance: [row-ids]` in its header. `fr plan self-review` errors when the
-  spec has a Test Plan but zero linked rows (matrix present) and on unknown
-  ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when decomposition exposes a missed
-  business acceptance — flagged as an addition, defended at PR time, never ironed over.
+- **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a separate
+  `REFACTOR + quality gate` **task** for larger ones. Omit only with justification; `fr plan
+  self-review` enforces it (single-step tasks, manual phases, ticked tasks exempt).
+- **Walking skeleton first:** the first agentic phase smokes delivery infrastructure (CI green on a
+  trivial test, minimum runtime exercised, fixtures captured never constructed). Mark it `skeleton:
+  true` — self-review errors without it (override: spec-scope `skeleton-override-*`).
+- **Pure agentic phases:** an agentic phase must be fully agent-completable end-to-end. Collect
+  ALL manual work (secrets, UI operations, deploy actions, cluster-dependent config) into a
+  dedicated `[manual]` phase — never author a manual step into an agentic phase planning to defer
+  it. `fr plan self-review` enforces this with error severity (#252).
+- **Acceptance linkage:** a phase that advances a matrix row carries `acceptance: [row-ids]` in its
+  header. `fr plan self-review` errors when the spec has a Test Plan but zero linked rows (matrix
+  present) and on unknown ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when
+  decomposition exposes a missed business acceptance — flagged as an addition, defended at PR time,
+  never ironed over.
+- **Tier:** every agentic phase declares `tier: mechanical | standard | hard` (`fr.types.PHASE_TIERS`;
+  manual phases don't — never dispatched). fr-goal resolves it via `fr models resolve`; omit it and
+  dispatch is untiered, inheriting the session model — self-review warns when missing.
 - No placeholders: every step has actual code, commands, expected output.
-- Bite-sized steps: 2-5 minutes each. Prefer 4–6 phases: every additional phase re-reads the
-  accumulated handoff, so cost grows superlinearly with phase count (`fr run status` shows the
-  per-phase accounting).
+- Bite-sized steps: 2-5 minutes each. Prefer 4–6 phases: every additional phase re-reads the accumulated
+  handoff, so cost grows superlinearly with phase count (`fr run status` shows the per-phase accounting).
 - Use BEGIN/END markers for full-file embeds, not nested fences.
-- **Cross-repo completeness:** If the spec lists multiple plans across repos,
-  write ALL of them before offering the execution handoff. For each target
-  repo: scaffold the plan in that repo's `docs/superpowers/plans/` directory.
-  `fr plan create` updates the spec table automatically.
+- **Cross-repo completeness:** If the spec lists multiple plans across repos, write ALL of them
+  before offering the execution handoff. For each target repo: scaffold the plan in that repo's
+  `docs/superpowers/plans/` directory. `fr plan create` updates the spec table automatically.
 
 ## Dependency declarations
 
