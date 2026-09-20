@@ -34,13 +34,23 @@ _MODE_ANCHOR = "mode: subagent"
 
 @dataclass(frozen=True)
 class Change:
-    """One rewritten agent file — so a caller can report what happened
-    rather than claim silently that a binding took effect."""
+    """One agent file this function looked at and acted on — so a caller can
+    report what happened rather than claim silently that a binding took
+    effect.
+
+    `problem` is set when the file could NOT be rewritten, in which case
+    nothing was written and `new_model` is None (review r-p1/f3). It exists
+    because the first version appended a Change unconditionally: when the
+    `mode: subagent` anchor was absent the rewrite inserted nothing, yet the
+    report still named the model — a materialiser claiming success while
+    doing nothing, which is the exact defect class this spec was written to
+    fix, one level in."""
 
     path: Path
     tier: str
     old_model: str | None
     new_model: str | None
+    problem: str | None = None
 
 
 def default_config_home() -> Path:
@@ -65,28 +75,56 @@ def _tier_for_stem(stem: str) -> str | None:
     return None
 
 
-def _existing_model(lines: list[str]) -> str | None:
-    for line in lines:
+def _split_frontmatter(lines: list[str]) -> tuple[list[str], list[str]] | None:
+    """``(frontmatter_lines, rest)`` including both ``---`` fences in the
+    first part, or None when the file has no closing fence.
+
+    The rewrite MUST be scoped to the frontmatter (review r-p1/f1). The
+    first version ran over the whole file, so a markdown BODY line beginning
+    ``model:`` — a future agent documenting its own frontmatter, say — was
+    silently deleted. install.sh's awk had the same flaw (``/^model:/
+    { next }``) and no way to know where the frontmatter ended; in Python
+    there is no excuse for not knowing."""
+    if not lines or lines[0].rstrip("\n") != "---":
+        return None
+    for index in range(1, len(lines)):
+        if lines[index].rstrip("\n") == "---":
+            return lines[: index + 1], lines[index + 1 :]
+    return None
+
+
+def _existing_model(frontmatter: list[str]) -> str | None:
+    for line in frontmatter:
         if line.startswith("model:"):
             return line[len("model:") :].strip()
     return None
 
 
-def _rewrite(lines: list[str], *, model: str | None) -> list[str]:
-    """Drop every top-level ``model:`` line, then insert the resolved one
-    directly after the ``mode: subagent`` anchor line. Unresolved means no
-    key at all is written — never an empty one, which OpenCode would try to
-    resolve. Structurally, at most one ``model:`` line can ever land in the
-    output: the only place one is appended is right after the one anchor
-    line, and every existing ``model:`` line is filtered out first."""
-    out: list[str] = []
-    for line in lines:
-        if line.startswith("model:"):
-            continue
-        out.append(line)
-        if model and line.rstrip("\n") == _MODE_ANCHOR:
-            out.append(f"model: {model}\n")
-    return out
+def _rewrite(lines: list[str], *, model: str | None) -> list[str] | None:
+    """The file's lines with its frontmatter ``model:`` key set to `model`,
+    or None when the file's shape makes that impossible.
+
+    Drops every ``model:`` line in the FRONTMATTER ONLY, then inserts the
+    resolved one directly after the ``mode: subagent`` anchor. Unresolved
+    means no key at all — never an empty one, which OpenCode would try to
+    resolve. Returns None (rather than a file with the key silently missing)
+    when there is no closing ``---`` fence, or when a model is wanted and the
+    anchor is absent: an unwritable file must be reported, not
+    half-written."""
+    split = _split_frontmatter(lines)
+    if split is None:
+        return None
+    frontmatter, rest = split
+
+    kept = [line for line in frontmatter if not line.startswith("model:")]
+    if model is None:
+        return kept + rest
+
+    anchors = [i for i, line in enumerate(kept) if line.rstrip("\n") == _MODE_ANCHOR]
+    if not anchors:
+        return None
+    at = anchors[0]
+    return kept[: at + 1] + [f"model: {model}\n"] + kept[at + 1 :] + rest
 
 
 def materialize_agents(config_home: Path, *, models_cfg: ModelsConfig) -> list[Change]:
@@ -113,10 +151,41 @@ def materialize_agents(config_home: Path, *, models_cfg: ModelsConfig) -> list[C
         if tier is None:
             continue
         model = bindings.get(tier)
-        lines = agent_file.read_text().splitlines(keepends=True)
-        old_model = _existing_model(lines)
-        if old_model == model:
+        current = agent_file.read_text()
+        lines = current.splitlines(keepends=True)
+        split = _split_frontmatter(lines)
+        old_model = _existing_model(split[0]) if split else None
+
+        rewritten = _rewrite(lines, model=model)
+        if rewritten is None:
+            # Unwritable shape — report it, write nothing. Never an exception:
+            # an operator with one hand-edited agent file must still be able to
+            # run `fr models set` (spec §3.A).
+            changes.append(
+                Change(
+                    path=agent_file,
+                    tier=tier,
+                    old_model=old_model,
+                    new_model=None,
+                    problem=(
+                        "no `---` frontmatter fence"
+                        if split is None
+                        else "no `mode: subagent` anchor to insert `model:` after"
+                    ),
+                )
+            )
             continue
-        agent_file.write_text("".join(_rewrite(lines, model=model)))
+
+        desired = "".join(rewritten)
+        if desired == current:
+            # Compare RENDERED content, not just the model value (review
+            # r-p1/f2): a correct model in the wrong position used to compare
+            # equal and be left misplaced, so the "immediately after the
+            # anchor" invariant this module documents did not hold for every
+            # file it had seen. Idempotence is preserved — an
+            # already-correct file is still not rewritten.
+            continue
+
+        agent_file.write_text(desired)
         changes.append(Change(path=agent_file, tier=tier, old_model=old_model, new_model=model))
     return changes

@@ -14,6 +14,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from fr.opencode_agents import materialize_agents
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIRROR_DIR = REPO_ROOT / ".opencode" / "agent"
@@ -164,3 +165,104 @@ class TestMaterializeAgents:
 
         assert sentinel.read_text() == sentinel_content
         assert sibling.read_text() == sibling_content
+
+
+# ── review r-p1: three defects found by probing the module directly ──────
+#
+# f3 is the serious one and it is this spec's own defect class, one level in:
+# when the `mode: subagent` anchor is absent (a hand-edited file, or a future
+# generator change), `_rewrite` inserts nothing — but a Change was appended
+# regardless, so the function REPORTED writing a model it had not written.
+# A materialiser whose whole job is "make the binding real, and say so"
+# cannot be allowed to say so falsely.
+#
+# f1: the rewrite ran over the WHOLE file, so a markdown BODY line beginning
+# `model:` — a future agent documenting its own frontmatter, say — was
+# silently deleted. Inherited from install.sh's awk (`/^model:/ { next }`),
+# which had no way to know where the frontmatter ended.
+#
+# f2: the `old_model == model` early-skip left a correct-but-MISPLACED
+# `model:` line alone, so the "immediately after the anchor" invariant the
+# module documents did not actually hold for every file it had seen.
+
+
+def _seed(agent_dir: Path, name: str, content: str) -> Path:
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    path = agent_dir / name
+    path.write_text(content)
+    return path
+
+
+def test_a_file_missing_the_anchor_is_reported_as_a_problem_not_a_change(
+    tmp_path: Path,
+) -> None:
+    """f3. Nothing is written, and the report says so — the one thing this
+    function must never do is claim a binding took effect when it did not."""
+    agent_dir = tmp_path / "opencode" / "agent"
+    path = _seed(
+        agent_dir,
+        "x-hard.md",
+        '---\ndescription: "x"\npermission:\n  edit: allow\n---\nbody\n',
+    )
+    before = path.read_text()
+
+    changes = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
+
+    assert len(changes) == 1
+    (change,) = changes
+    assert change.problem is not None, "a file that could not be rewritten must say so"
+    assert "mode: subagent" in change.problem
+    assert change.new_model is None, "must not claim a model it did not write"
+    assert path.read_text() == before, "a file it cannot rewrite must be left untouched"
+
+
+def test_a_body_line_beginning_model_is_not_eaten(tmp_path: Path) -> None:
+    """f1. The rewrite is scoped to the frontmatter; the body is content."""
+    agent_dir = tmp_path / "opencode" / "agent"
+    path = _seed(
+        agent_dir,
+        "y-hard.md",
+        '---\ndescription: "y"\nmode: subagent\n---\n'
+        "Frontmatter keys you may set:\n\nmodel: <provider/id>\n\nEnd.\n",
+    )
+
+    materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
+
+    body = path.read_text().split("---\n", 2)[2]
+    assert "model: <provider/id>" in body, "the body's own prose must survive"
+    frontmatter = path.read_text().split("---\n", 2)[1]
+    assert "model: provider/B" in frontmatter
+
+
+def test_a_correct_but_misplaced_model_is_moved_to_the_anchor(tmp_path: Path) -> None:
+    """f2. The early-skip compared model VALUES, so a right value in the
+    wrong place was left there and the documented invariant quietly failed."""
+    agent_dir = tmp_path / "opencode" / "agent"
+    path = _seed(
+        agent_dir,
+        "z-hard.md",
+        '---\nmodel: provider/B\ndescription: "z"\nmode: subagent\n---\nbody\n',
+    )
+
+    materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
+
+    lines = path.read_text().splitlines()
+    assert lines.count("model: provider/B") == 1
+    assert lines[lines.index("mode: subagent") + 1] == "model: provider/B"
+
+
+def test_an_already_correct_file_is_not_rewritten(tmp_path: Path) -> None:
+    """The other half of f2: idempotence must survive the fix — a file that
+    already renders correctly reports no change and is not touched."""
+    agent_dir = tmp_path / "opencode" / "agent"
+    path = _seed(
+        agent_dir,
+        "w-hard.md",
+        '---\ndescription: "w"\nmode: subagent\nmodel: provider/B\n---\nbody\n',
+    )
+    before = path.stat().st_mtime_ns
+
+    changes = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
+
+    assert changes == []
+    assert path.stat().st_mtime_ns == before, "an already-correct file must not be rewritten"
