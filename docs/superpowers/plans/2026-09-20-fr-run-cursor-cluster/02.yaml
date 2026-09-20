@@ -111,17 +111,25 @@ state:
         the renderer). Refactor here was the subject line — ''plan: plan is ALREADY
         RUNNING'' collapses to ''plan is ALREADY RUNNING'' when subject == step_id.'
     P2.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T14:02:58+00:00'
+      note: 'RED: 5 redispatch tests fail with ''No such option: --redispatch'' (journal
+        p2-red-t3 — click''s usage exit is also 2, so the message assertions are what
+        hold)'
     P2.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T14:05:03+00:00'
+      note: '--redispatch added to advance_cmd and threaded into _advance_group: re-briefs
+        the outstanding unit only, refreshes at, refuses (exit 2) when nothing is
+        running — including every cli step, which is never ''running''. 141 passed.'
     P2.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T14:11:59+00:00'
+      note: 'Refactor: extracted _nothing_running_refusal (two call sites, one text);
+        flattened _advance_group''s branch into refuse/refuse/select. Gates: ruff
+        format+check clean, mypy 138 files clean, pytest 3 failed (the known host-specific
+        p1-f2 set) 3303 passed. Row run-advance-refuses-running: not-implemented ->
+        ci.'
   completion:
     at: null
     note: null

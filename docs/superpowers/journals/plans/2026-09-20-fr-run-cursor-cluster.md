@@ -136,3 +136,44 @@ test_advance_agent_step_brief_is_re_emitted_idempotently_while_running (test_run
 Deleting it would have dropped a claim that is still true and still load-bearing: the monkeypatched subprocess.run boom proves the second advance executes NOTHING (the structural half of no-claude-p-batch). Rewritten as test_advance_refusing_a_running_agent_step_executes_and_writes_nothing, which keeps the boom, asserts exit 2, and adds the stronger claim the refusal makes possible - the run file is byte-identical across it.
 
 A sibling in the grouped section, test_advance_is_idempotent_over_the_snapshot, did NOT go red: its assertion (list(accounting) == ["phase/1/code"]) still holds when the second advance refuses and writes nothing. It passed for the wrong reason for one commit. Task 3 restores its meaning by giving it --redispatch, which is where re-dispatch now lives.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-red-t3 created=2026-09-20T16:02:52 phase=2 -->
+### p2-red-t3 · discovery · RED for P2.T3: five redispatch tests, and two of them nearly passed for the wrong reason (phase 2)
+
+Command: uv run pytest tests/unit/test_run_cli.py -q --no-cov -k redispatch -> 5 failed, 136 deselected.
+
+Failure, verbatim:
+
+    assert result.exit_code == 0, result.output
+    AssertionError: Usage: fr run advance [OPTIONS] RUN_ID
+      Try fr run advance --help for help.
+      No such option: --redispatch
+
+    assert 2 == 0
+
+Worth recording: click exits 2 on an unknown option, which is the SAME code the refusal uses. So the two refusal tests (nothing outstanding, cli step) would have gone green on exit code alone while the flag did not exist at all - the "reports success while doing nothing" shape this whole PR is about. What actually held them red is the message assertion (`nothing is running` in result.output) and the state assertion beside it. Any later phase adding a refusal test to this file should assert the MESSAGE, never the bare 2.
+
+Also pinned here: _backdate(repo, step_id) rewinds a step records `at` to 2026-01-01T00:00:00+00:00 before the re-dispatch. _now() has SECOND resolution, so two advances in one test usually land on the same string and an "at moved" assertion would be a coin flip. Phases 3-7 asserting a refreshed timestamp should reuse it.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-d1 created=2026-09-20T16:12:16 phase=2 -->
+### p2-d1 · discovery · What phases 3-7 inherit: _advance_group's new shape, two refusal renderers, and the --redispatch contract (phase 2)
+
+All in packages/fr/src/fr/commands/run_cmd.py.
+
+_advance_group is now (repo_root, state, manifest, step, record, *, redispatch: bool = False). Its head is FLAT on purpose - three statements before any dispatch work, in this order:
+
+  1. running = next((k for k in expected if items.get(k) == "running"), None)
+  2. if running is not None and not redispatch: -> _already_running_refusal, exit 2
+  3. if redispatch and running is None: -> _nothing_running_refusal, exit 2
+  4. pending = running if redispatch else next((k for k in expected if items.get(k) != "done"), None)
+  5. if pending is None: complete the group, return
+
+PHASE 5 (manual filter + preflight) adds to the SAME function. Put the manual filter inside _expected_group_items or immediately after it, i.e. ABOVE line 1 - `expected` is the one place that decides which units exist, and both refusals above read it. Filtering later would mean a manual phase can still be the `running` key. The preflight belongs after line 5 and before the snapshot/items write, where `pending` is known and nothing has been saved yet. An earlier draft nested these as if/elif/else with the type annotation buried in a branch; it typechecked but the next person adding a rule had to re-derive the precedence. Keep it flat.
+
+Two renderers, both returning a string with rich markup and printed with soft_wrap=True:
+- _already_running_refusal(step_id, subject, at, run_id, member_id, item) - collapses "plan: plan is" to "plan is" when subject == step_id; item=None drops --item.
+- _nothing_running_refusal(subject, detail, run_id) - `detail` is the only per-call-site difference.
+
+_resolve_hint now takes item: str | None (None omits --item). Its (member, item) argument order is still the opposite of _split_member_id`s (item, member) return - p1-d1`s trap is unchanged.
+
+--redispatch contract, pinned by five tests: it re-briefs the OUTSTANDING unit only; never selects a different unit; never resets an item to pending; refreshes the record`s `at` (hence `or redispatch` in the save guard - neither state nor items moves on a re-dispatch, so without it the next refusal would name the original dispatch); rewrites only that unit`s accounting snapshot; and exits 2 when nothing is running. advance_cmd holds a guard `if redispatch and record.state != "running"` BEFORE every other branch, which is also what keeps the flag away from cli steps (a cli step is executed inline and is never `running`) and away from the gated path.

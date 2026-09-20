@@ -730,8 +730,37 @@ def _already_running_refusal(
     )
 
 
+def _nothing_running_refusal(subject: str, detail: str, run_id: str) -> str:
+    """`--redispatch` with nothing outstanding (spec §3.A).
+
+    It exits 2 rather than quietly degrading into an ordinary `advance`: the
+    operator reaching for the flag believes an agent is running, and if none
+    is, the mental model is wrong and saying so is the whole point of §3.A.
+    `fr-goal`'s loop never passes the flag, so this strictness costs the
+    normal path nothing.
+
+    Two call sites, one renderer, for the same reason as
+    `_already_running_refusal`: `advance_cmd` catches the step that is not
+    running at all (including every `cli` step, which fr executes inline and
+    so is never `running`), `_advance_group` catches the group that is
+    running with every unit already resolved. `detail` is the only part that
+    differs.
+    """
+    return (
+        f"[red]{subject}: --redispatch, but nothing is running{detail}.[/red]\n"
+        "  --redispatch re-briefs a unit already dispatched; it never starts one.\n"
+        f"  advance normally: fr run advance {run_id}"
+    )
+
+
 def _advance_group(
-    repo_root: Path, state: RunState, manifest: WorkflowManifest, step: Step, record: StepRecord
+    repo_root: Path,
+    state: RunState,
+    manifest: WorkflowManifest,
+    step: Step,
+    record: StepRecord,
+    *,
+    redispatch: bool = False,
 ) -> None:
     """Dispatch the next pending `(phase, member)` unit of a grouped step.
 
@@ -755,7 +784,7 @@ def _advance_group(
     # group is serial by construction (`_resolve_member` refuses a second
     # writer), so an outstanding unit is the only thing this step is doing.
     running = next((key for key in expected if items.get(key) == "running"), None)
-    if running is not None:
+    if running is not None and not redispatch:
         # `_split_member_id` returns (item, member); `_resolve_hint` takes
         # (member, item). Same two strings, opposite order — do not splat one
         # into the other (phase 1, `p1-d1`).
@@ -768,7 +797,20 @@ def _advance_group(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    pending = next((key for key in expected if items.get(key) != "done"), None)
+    if redispatch and running is None:
+        err_console.print(
+            _nothing_running_refusal(
+                step.id, " — every unit of this group is already resolved", state.run
+            ),
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # `--redispatch` re-briefs the OUTSTANDING unit and nothing else: never a
+    # different unit, never a reset to `pending`. Guarded above, so `running`
+    # is not None on that branch.
+    pending = (
+        running if redispatch else next((key for key in expected if items.get(key) != "done"), None)
+    )
     if pending is None:
         save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
         console.print(f"{step.id}: done (all {len(expected)} phase members done)")
@@ -784,7 +826,10 @@ def _advance_group(
     # Unconditional (not setdefault): a retried failed unit is running again,
     # not still failed.
     items[pending] = "running"
-    if record.state != "running" or record.items != items:
+    # `or redispatch`: on a re-dispatch neither the state nor the item map
+    # moves, so without it the record would keep the ORIGINAL dispatch time
+    # and the next ALREADY RUNNING refusal would name the wrong moment.
+    if redispatch or record.state != "running" or record.items != items:
         record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
         state = _with_step(state, step.id, record)
     save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
@@ -1106,7 +1151,15 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
 
 
 @run_app.command("advance")
-def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+def advance_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    redispatch: bool = typer.Option(
+        False,
+        "--redispatch",
+        help="Re-emit the brief for the unit already running (a lost agent). "
+        "Refuses when nothing is running.",
+    ),
+) -> None:
     """Advance the cursor by one step.
 
     `kind: cli` executes directly (exit code + stdout captured; cursor
@@ -1115,6 +1168,12 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     gate is unanswered marks `blocked` and executes nothing; an `agent` step
     still prints its brief there, since the gate stops the run, not the
     harness's view of what the step is. `fr run resolve` answers the gate.
+
+    An `agent` step already `running` is REFUSED (#499, spec §3.A) rather
+    than re-briefed: fr-goal dispatches phase executors into one shared
+    isolation worktree, so a second brief means two writers in one tree.
+    `--redispatch` is the deliberate escape, and refuses in turn when
+    nothing is outstanding.
     """
     repo_root = resolve_repo_root()
     try:
@@ -1134,6 +1193,18 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             f"[red]run {state.run!r} has no record for its cursor step "
             f"{state.cursor!r} — workflow {state.workflow!r} changed after "
             "`fr run start`; start a new run[/red]"
+        )
+        raise typer.Exit(2)
+
+    if redispatch and record.state != "running":
+        # Placed before every other branch, including the gate: a `blocked`,
+        # `pending`, `done` or `failed` step has no outstanding dispatch, and
+        # a `cli` step is never `running` at all — fr executes it inline — so
+        # this is also what keeps the flag from becoming a second way to run
+        # a command. Reported rather than silently downgraded (spec §3.A).
+        err_console.print(
+            _nothing_running_refusal(state.cursor, f" (the step is {record.state})", state.run),
+            soft_wrap=True,
         )
         raise typer.Exit(2)
 
@@ -1181,13 +1252,13 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
 
     if step.kind == "agent":
         if step.steps:
-            _advance_group(repo_root, state, manifest, step, record)
+            _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
             return
         # #499 (spec §3.A): the same rule as `_advance_group`'s, at the other
         # call site. This sits AFTER the `_gate_pending` block on purpose — a
         # gated step is `blocked`, never `running`, and its brief is how the
         # operator's question gets asked, so the two must not interact.
-        if record.state == "running":
+        if record.state == "running" and not redispatch:
             err_console.print(
                 # subject == step_id and member_id == step_id: a top-level
                 # step is its own unit, and `item=None` drops `--item` from

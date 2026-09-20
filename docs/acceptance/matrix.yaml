@@ -2163,11 +2163,12 @@ rows:
       a second dispatch brief for an agent that is still running.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
-    levels: {}
-    status: not-implemented
-    notes: Spec 3.A. Matters because fr-goal phase executors share ONE isolation worktree
-      by design (#420), so the usual two-agents-one-tree protection is unavailable.
-      --redispatch is the deliberate escape; exit 2 matches every other refusal in fr.commands.run_cmd.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: Grouped member and top-level agent step both refuse re-dispatch with exit
+      2; --redispatch re-briefs only the outstanding unit and exits 2 when none is.
   - id: run-resolve-teaches-item-flag
     capability: Run state
     acceptance: A grouped for_each member id copied from advance's output resolves,

@@ -2137,20 +2137,29 @@ def test_advance_records_a_context_snapshot_for_the_dispatched_unit(
     assert snap.plan_bytes > 0
 
 
-def test_advance_is_idempotent_over_the_snapshot(tmp_path: Path) -> None:
-    """Re-dispatching the same unit (advance while running) refreshes the one
-    snapshot rather than stacking them."""
+def test_advance_refusing_a_running_unit_leaves_the_run_file_alone(tmp_path: Path) -> None:
+    """Was `test_advance_is_idempotent_over_the_snapshot`: "re-dispatching the
+    same unit (advance while running) refreshes the one snapshot rather than
+    stacking them". A plain `advance` no longer re-dispatches at all (#499),
+    so that claim moved to `--redispatch`
+    (`test_redispatch_refreshes_the_dispatch_time_and_that_units_snapshot`).
+
+    Kept, because the refusal has a claim of its own and this test was still
+    passing for the WRONG reason without it: nothing at all is written, so the
+    whole run file is byte-identical across the refused call."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
     _started_grouped_with_plan(repo, shipped)
     _seed_journal(repo, shipped)
     _invoke(repo, shipped, ["run", "advance", "r1"])
-    _invoke(repo, shipped, ["run", "advance", "r1"])
+    before = (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text()
 
-    accounting = load_run_state(repo, "r1").accounting
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
-    assert list(accounting) == ["phase/1/code"]
+    assert result.exit_code == 2, result.output
+    assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text() == before
+    assert list(load_run_state(repo, "r1").accounting) == ["phase/1/code"]
 
 
 def test_status_reports_snapshots_and_a_total(tmp_path: Path) -> None:
@@ -2791,3 +2800,160 @@ def test_advance_still_briefs_a_blocked_gated_agent_step(tmp_path: Path) -> None
         assert _brief_of(result.output)["step"] == "brainstorm"
         assert "ALREADY RUNNING" not in result.output
     assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
+
+
+_BACKDATED = "2026-01-01T00:00:00+00:00"
+
+
+def _backdate(repo: Path, step_id: str) -> str:
+    """Rewind a step record's `at` so a refresh is observable.
+
+    `_now()` has second resolution, so two `advance`s in one test run land on
+    the same timestamp far more often than not — asserting "`at` moved" would
+    be a coin flip. Backdating makes the claim deterministic.
+    """
+    from fr.run.model import save_run_state
+
+    state = load_run_state(repo, "r1")
+    record = state.steps[step_id].model_copy(update={"at": _BACKDATED})
+    save_run_state(repo, state.model_copy(update={"steps": {**state.steps, step_id: record}}))
+    return _BACKDATED
+
+
+def test_redispatch_re_emits_the_brief_for_the_outstanding_unit_only(tmp_path: Path) -> None:
+    """`--redispatch` is the deliberate escape for a genuinely lost agent. It
+    re-briefs the unit that IS outstanding — never a different one, and never
+    by resetting anything already recorded back to pending."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/code
+    assert (
+        _invoke(
+            repo,
+            shipped,
+            ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+        ).exit_code
+        == 0
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/peer-review
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "peer-review"
+    items = load_run_state(repo, "r1").steps["implement"].items
+    assert items == {"phase/1/code": "done", "phase/1/peer-review": "running"}
+
+
+def test_redispatch_refreshes_the_dispatch_time_and_that_units_snapshot(
+    tmp_path: Path,
+) -> None:
+    """It refreshes `at` — so the ALREADY RUNNING refusal that follows names
+    the re-dispatch, not the original — and rewrites that unit's accounting
+    snapshot rather than stacking a second one."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/code
+    stale = _backdate(repo, "implement")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["implement"].at != stale
+    assert list(state.accounting) == ["phase/1/code"]
+
+
+def test_redispatch_with_nothing_outstanding_is_refused(tmp_path: Path) -> None:
+    """Spec §3.A: it exits 2 rather than quietly degrading into an ordinary
+    advance. The operator reaching for the flag believes an agent is running;
+    if none is, the mental model is wrong and saying so is the point."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 2, result.output
+    assert "nothing is running" in result.output
+    assert "{" not in result.stdout, result.stdout
+    # and it did NOT fall through and dispatch the first pending unit
+    assert load_run_state(repo, "r1").steps["implement"].items in (None, {})
+
+
+def test_redispatch_never_executes_a_cli_step(tmp_path: Path) -> None:
+    """A `cli` step is never `running` — fr executes it inline — so the flag
+    has nothing to re-brief there and must not become a second way to run a
+    command."""
+    repo = _repo(tmp_path, branch="feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 2, result.output
+    assert "nothing is running" in result.output
+    assert load_run_state(repo, "r1").steps["hello"].state == "pending"
+
+
+def test_redispatch_re_briefs_a_running_top_level_step(tmp_path: Path) -> None:
+    """The escape exists at both call sites, or the ungrouped half of #499
+    would be a wedge with no way out."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    stale = _backdate(repo, "plan")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "plan"
+    state = load_run_state(repo, "r1")
+    assert state.steps["plan"].state == "running"
+    assert state.steps["plan"].at != stale
+
+
+def test_the_refusals_two_commands_actually_run_as_printed(tmp_path: Path) -> None:
+    """Review `r1-f1`, applied to the new surface. The refusal's whole point is
+    that it names both ways forward, so both have to be pasteable: no shell
+    metacharacter anywhere in the span a reader would copy, and the
+    `--state failed` alternative kept OUTSIDE the command as prose. This lifts
+    `re-brief anyway:` off the refusal and RUNS it, rather than asserting the
+    absence of a `|` — which would pass for the wrong reason the moment
+    someone wrote `<done|failed>`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    refusal = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert refusal.exit_code == 2, refusal.output
+    lines = refusal.output.splitlines()
+
+    resolve_span, _, _ = (
+        next(line for line in lines if "resolve it:" in line)
+        .split("resolve it:", 1)[1]
+        .partition("(or ")
+    )
+    assert not set(resolve_span) & set("|&;<>()$`"), f"not pasteable: {resolve_span!r}"
+
+    rebrief = next(line for line in lines if "re-brief anyway:" in line).split(
+        "re-brief anyway:", 1
+    )[1]
+    assert not set(rebrief) & set("|&;<>()$`"), f"not pasteable: {rebrief!r}"
+    argv = shlex.split(rebrief)
+    assert argv[:2] == ["fr", "run"], argv
+
+    result = _invoke(repo, shipped, argv[1:])  # drop the literal `fr`
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "implement-phase"
