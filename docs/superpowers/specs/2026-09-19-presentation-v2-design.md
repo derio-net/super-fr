@@ -152,40 +152,43 @@ one available** — a phase handed to a separate agent with its own context
 window, visible in the transcript, on a harness where this did not exist a day
 ago.
 
-### Tiering: two ways to film it, and they are not equivalent
+### Tiering: route B, and the recording IS the Test Plan
 
-`install.sh` resolves each tier's model from `fr models` and bakes it into the
-installed agent. All three of this operator's tiers currently resolve to the
-**same** model, so the three agents differ by name only — filming that would
-show three labels bound to one model and prove nothing.
+**Decision reversed 2026-09-20.** [#498](https://github.com/derio-net/super-fr/issues/498)
+is fixed by PR #504, and that fix's own **post-merge Test Plan requires exactly
+the take we wanted to film**:
 
-There are two routes, and the operator raised the more interesting one.
+> From unbound, in a real `/fr-goal` run on OpenCode: answer the tier question,
+> then show a `session` row where `agent = fr-phase-executor-<tier>` **and**
+> `model` is the answered model. It proves the answer reached the dispatched
+> agent *inside the run that asked for it* — the half no unit test can buy.
 
-**A — differentiate the bindings, re-run `install.sh`, then record.** Tiering
-genuinely applies. Costs the onboarding moment: with bindings set, fr-goal's
-gate does not ask about models at all.
+So the onboarding moment the operator asked for is not a nice-to-have. It is
+the evidence super-fr needs, and this recording is the only planned run that can
+produce it. **Route B — start unbound, let the gate ask, answer on camera.**
 
-**B — unbind, and let the gate ask on camera.** SKILL.md:47 adds *"a
-model-per-tier one if `fr models resolve` is unbound"* to the batched Q&A, and
-:84 says *"unbound → set at step 1"*. So the question is real onboarding,
-answered live, and it enriches the contract beat with a decision the audience
-watches being made.
+Verified live before committing to it:
 
-**B does not currently work, and would film a lie.** `fr models set` writes only
-`~/.config/fr/models.yaml`; nothing re-runs `install.sh` or the sync, so the
-installed agent still carries no `model:` and OpenCode falls back to the session
-model. The operator would be asked, would answer, and tiering would silently not
-happen — on camera, in a talk whose subject is rigour. Filed as
-[#498](https://github.com/derio-net/super-fr/issues/498). Claude Code is
-unaffected, since it resolves the model at dispatch.
+| Step | Result |
+|---|---|
+| remove `opencode` bindings, `fr models apply --harness opencode` | `model:` stripped from all three tier agents |
+| `fr models resolve --harness opencode --tier hard` | empty → **the gate will fire** |
+| `fr models set … --tier hard --model …` | materialised into the installed agent, and it **names the file it wrote** |
+| siblings | untouched |
+| untiered `fr-phase-executor` | never carries a model, by design |
 
-**Decision: A for this recording**, unless [#498](https://github.com/derio-net/super-fr/issues/498)
-closes the loop first — in which case B is strictly better and should be
-preferred.
+PR #504 also added the observability this needs: an **unresolvable tier
+dispatches the untiered agent**, so a tiering failure shows up as the untiered
+*name* in the session row rather than a tier agent silently inheriting the
+session model — a row that would otherwise be indistinguishable from success.
 
-Differentiating may also **defuse the cost objection**: the $7.59 figure was 13
-subagents all on one model, and putting mechanical phases on a cheap one is what
-tiering is for. Unmeasured — a reason to measure, not a claim to make on camera.
+**Preflight consequence:** the machine must be **unbound before recording**, and
+the bindings answered during the run must genuinely differ per tier, or the beat
+shows three labels resolving to one model. Restoring the operator's pre-existing
+bindings is a *teardown* step, not a setup one.
+
+Cost note unchanged: differentiating may offset the ~7× subagent cost by putting
+mechanical phases on a cheap model. Unmeasured — measure in the dry run.
 
 ### `operator-gate / opencode: advisory` — the contract beat can silently not fire
 
@@ -214,9 +217,23 @@ Checked before anything is torn down, because the evidence is perishable.
    agent clearing its own gate.
 3. **A check genuinely failed and was recovered.** This is why those two
    exercises were chosen; a clean run is a weaker take, not a luckier one.
-4. **At least one phase was dispatched to a subagent** — a `session` row with
-   `parent_id` set and `agent = fr-phase-executor*`. This is also #494's own
-   acceptance, and the Extensibility beat exists on camera only if it holds.
+4. **The dispatch evidence — this run owes it to two open Test Plans.**
+   One query answers both (#494's asked for cost and tokens; #504's for the
+   unbound→answered path):
+
+   ```sql
+   select id, parent_id, agent, model, cost, tokens_input, tokens_output
+   from session where agent like 'fr-phase-executor%'
+   order by time_created desc limit 5;
+   ```
+
+   - `agent` reads `fr-phase-executor-<tier>`, **not** the bare untiered name —
+     the bare name now means the tier failed to resolve (#504 d2).
+   - `model` is the model answered **during this run**, not the session default.
+     `agent` proves the prose drove the dispatch; only `model` proves tiering.
+   - `tokens_output = 0` on a paid model is a red flag — #494's implementer
+     asked specifically. On the free smoke it was 8, so non-zero but small.
+   - Report back on both issues.
 5. **The merge request exists** on the operator's fork.
 6. **Annotation offsets were noted live**, not reconstructed afterwards.
 

@@ -102,6 +102,39 @@ Assert it rather than trusting the path:
 git -C "$CLONE" config user.email    # must be the work address
 ```
 
+## Tier bindings — start UNBOUND, on purpose
+
+[#504](https://github.com/derio-net/super-fr/pull/504)'s post-merge Test Plan
+needs a run that begins with no OpenCode tier bindings, answers the tier
+question, and then shows the answered model on the dispatched agent. This
+recording is the only planned run that can produce it, and it is also the
+onboarding beat we wanted. Verified working on 2026-09-20.
+
+```bash
+# BEFORE recording — back this up first, it is the operator's real config
+cp ~/.config/fr/models.yaml ~/.config/fr/models.yaml.bak
+
+python3 - <<'EOF'
+import yaml, pathlib
+p = pathlib.Path.home()/'.config/fr/models.yaml'
+d = yaml.safe_load(p.read_text()); d.pop('opencode', None)
+p.write_text(yaml.safe_dump(d))
+EOF
+
+fr models apply --harness opencode        # strips model: from the tier agents
+fr models resolve --harness opencode --tier hard   # MUST print nothing
+```
+
+Answer the on-camera question with **genuinely different models per tier**
+(e.g. a cheap one for mechanical, a strong one for hard) — same-model answers
+would show three labels resolving to one model and prove nothing.
+
+```bash
+# AFTER recording — teardown, not setup
+cp ~/.config/fr/models.yaml.bak ~/.config/fr/models.yaml
+fr models apply --harness opencode
+```
+
 ## Preflight — assert, never assume
 
 Every line below failed silently in a previous run. That is why each is an
@@ -130,11 +163,15 @@ git -C "$CLONE" push --dry-run origin master
 git -C "$CLONE" push --dry-run upstream master && \
   { echo "FAIL: upstream is pushable"; exit 1; }
 
-# 5. the repo is PRISTINE — fr-init must have nothing to find
+# 5. tier bindings are UNBOUND, so the on-camera question fires (gh-504)
+test -z "$(fr models resolve --harness opencode --tier hard)" || \
+  { echo "FAIL: hard tier is bound; the tier question will not fire"; exit 1; }
+
+# 6. the repo is PRISTINE — fr-init must have nothing to find
 test ! -e "$CLONE/.devcontainer" || { echo "FAIL: .devcontainer exists; fr-init is in the recording"; exit 1; }
 test -z "$(git -C "$CLONE" status --porcelain)" || { echo "FAIL: dirty tree"; exit 1; }
 
-# 6. base image layers pre-pulled, so the build shows fr's work and not a download
+# 7. base image layers pre-pulled, so the build shows fr's work and not a download
 docker image inspect "$BASE_IMAGE" >/dev/null 2>&1 || docker pull "$BASE_IMAGE"
 ```
 
@@ -160,10 +197,10 @@ Two consequences of that choice, from `fr harness parity`:
   `agent = fr-phase-executor-hard`, its own cost and tokens). The Extensibility
   beat is back on the spine.
 
-  **Two things to do before recording.** (a) The tier bindings currently
-  resolve all three tiers to the *same* model, so the three agents differ by
-  name only — differentiate them in `fr models` and re-run `install.sh`, or the
-  beat shows three labels bound to one model. (b) **Re-time the run.**
+  **This run owes evidence to two open Test Plans** — see "Tier bindings"
+  below and take-acceptance item 3. (a) Start **unbound**, so the gate asks the
+  model-per-tier question on camera and #504's Test Plan is satisfied.
+  (b) **Re-time the run.**
   Dispatched phases cost and take more than inline (the measured subagent arm:
   $7.59 and 56.2 min vs ~$1 inline) and the budget is 15–25 min. Tiering
   mechanical phases onto a cheap model may offset it — unmeasured, so measure
@@ -263,9 +300,15 @@ By eye, from the cast itself:
       exercises were chosen; a clean run is a weaker take, not a luckier one)
 - [ ] at least one phase dispatched to a subagent — a `session` row with
       `parent_id` set and `agent = fr-phase-executor*`
-- [ ] **`model` on that row is the tier's model, not the session default** —
-      the name resolving does not prove tiering did
-- [ ] results reported back on gh-494 (the implementer asked)
+- [ ] **`model` on that row is the model answered DURING this run**, not the
+      session default — `agent` proves the prose drove the dispatch, only
+      `model` proves tiering resolved
+- [ ] `agent` is a **tiered** name; the bare `fr-phase-executor` now means the
+      tier failed to resolve (gh-504 d2), so it reads as a failed take
+- [ ] `tokens_output` is non-zero on the paid model (gh-494 asked; the free
+      smoke gave 8 — small but non-zero)
+- [ ] results reported back on **gh-494 and gh-504**, both of which are waiting
+      on this run
 - [ ] the merge request exists on the fork
 - [ ] annotation offsets noted live, not reconstructed
 
