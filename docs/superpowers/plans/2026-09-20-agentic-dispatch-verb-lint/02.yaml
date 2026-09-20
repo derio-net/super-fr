@@ -50,20 +50,33 @@ tasks:
       add the dispatch-capability gate. Three module constants and one
       helper, then wire it into the existing per-agentic-phase loop in
       `self_review` (the same loop that runs the #252 step scan, so the
-      agentic-only and `state == "x"` exemptions come for free — keep them):
-        _DISPATCH_VERB     dispatch|delegate to|spawn|hand off to|fan out to,
-                           with inflections
-        _AGENT_OBJECT      agent|subagent|sub-agent|executor|researcher|
-                           reviewer|reader (plural-tolerant), OR a backticked
-                           `plugin:name`, OR a bare plugin:name whose name
-                           contains one of those words
-        _RE_DISPATCH_HEAD  (start of text | after [.;:!?\n]) + optional
-                           connective (then|and|next|finally|also) +
-                           _DISPATCH_VERB + up to ~60 same-sentence chars +
-                           _AGENT_OBJECT, IGNORECASE
-        _RE_DISPATCH_MECHANISM   subagent_type | Task tool | Agent tool |
-                           "use the <X> agent"
-      and `_strip_fenced_code(text)` which removes ```…``` blocks ONLY.
+      agentic-only and `state == "x"` exemptions come for free — keep them).
+      Spec §4.A is normative; the shapes are:
+      ```
+      _DISPATCH_VERB     dispatch|delegate to|spawn|hand off to|fan out to,
+                         with inflections
+      _AGENT_OBJECT      agent|subagent|sub-agent|executor|researcher|
+                         reviewer|reader (plural-tolerant), OR a backticked
+                         `plugin:name`, OR a bare plugin:name whose name
+                         contains one of those words
+      _RE_DISPATCH_HEAD  INSTRUCTION BOUNDARY + optional connective
+                         (then|and|next|finally|also) + _DISPATCH_VERB +
+                         up to ~60 same-sentence chars + _AGENT_OBJECT
+      _RE_DISPATCH_MECHANISM   (use|call|invoke) the <X>
+                         (agent|subagent|Task tool|Agent tool), OR
+                         subagent_type immediately followed by : or =
+      ```
+      An INSTRUCTION BOUNDARY is start-of-text, real punctuation (.;:!?), or
+      a list marker starting a line — NEVER a bare newline. Step text is
+      hard-wrapped prose, so a bare-newline boundary lets a SOFT WRAP fake an
+      imperative: measured, it flagged phase 3's own step for saying
+      "...spawn or\nhand off to a subagent is a BLOCKER", which describes the
+      contract rather than instructing anything. Likewise the mechanism
+      tokens need the instructional frame: the bare nominal forms flagged 3
+      corpus steps and all 3 were THIS plan describing what the executor
+      lacks. Both refinements come from running the detector over the corpus,
+      not from taste — re-measure if you change either.
+      Also write `_strip_fenced_code(text)` which removes ```…``` blocks ONLY.
       Inline backticks MUST survive: the backticked agent name is the object,
       and stripping them turns the #428 case into "Dispatch   per post" and
       blinds the detector (spec §4.A). Comment that, and comment WHY the head
@@ -99,11 +112,18 @@ tasks:
       GREEN: make them pass (most should already, from P2.T1.S2 — fix the
       detector where they do not; do NOT weaken a test to fit the code).
       Then add the corpus regression to
-      tests/unit/test_dispatch_lint_corpus.py: run the detector over
-      `agentic_steps()` and assert ZERO hits, with the failure message
-      printing the offending plan slug, step id and matched text so a future
-      widening is diagnosable from the CI log alone. This pins the
-      brainstorm's 1419-step / 0-hit measurement.
+      tests/unit/test_dispatch_lint_corpus.py. Run the REAL
+      `fr.plan_ops.self_review` over `corpus_plans()` and assert no issue
+      belonging to this gate survives — filter by a stable token in the
+      message (e.g. "#428"), never by re-applying the regexes to raw step
+      text. That is the whole reason phase 1 exposes parsed plans:
+      `self_review` already applies agentic-only and `state == "x"` in one
+      loop, and 1826 of the corpus's 2113 agentic steps are ticked, so a test
+      that re-implemented the exemptions would be free to drift from the
+      shipped gate and would be measuring a lint nobody runs.
+      The failure message must print the offending plan slug, step id and the
+      matched text, so a future widening is diagnosable from the CI log
+      alone. This pins the 82-plan / 2113-step / 0-hit measurement.
       `uv run pytest tests/unit/test_dispatch_lint_corpus.py tests/unit/test_v2_plan_ops.py -q --no-cov`.
   - id: P2.T2.S3
     text: |-
