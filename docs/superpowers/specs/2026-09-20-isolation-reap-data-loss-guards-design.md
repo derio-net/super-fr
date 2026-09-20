@@ -239,23 +239,40 @@ actually got, rather than asserting one.
 
 ### 3.8 The message
 
-Refusals name the branch, the hazard, and the three ways out — the shape #435 asked for:
+Refusals name the branch, the hazard, and the ways out — the shape #435 asked for. The
+remedy clause is **per hazard**, and the `--force` sentence says what `--force` *does*
+rather than what it destroys:
 
 ```
-isolation: fix/sitia-site-services is merged but its worktree has 7 uncommitted
-changes — refusing to reap (nothing was deleted).
+isolation: fix/sitia-site-services has 7 uncommitted change(s) — refusing to reap
+(nothing was deleted).
   docs/superpowers/specs/...-design.md, docs/.../phase-04.md, +5 more
-Commit or stash them, or destroy them deliberately with
-`fr isolation down --branch fix/sitia-site-services --force`.
+Commit or stash them.
+Or reap it anyway with `fr isolation down --branch fix/sitia-site-services --force`,
+which removes the worktree and fr's record of it (the branch and any commits on it
+remain in the repo; uncommitted changes do not).
 ```
 
 ```
-isolation: fix/issue-464 is merged but 2 file(s) changed on the branch are not on
-origin/main — refusing to reap (nothing was deleted).
+isolation: fix/issue-464 has 2 changed file(s) that are not on origin/main —
+refusing to reap (nothing was deleted).
   packages/fr/src/fr/isolation/local.py, tests/unit/test_isolation_gc.py
-Push the branch, or destroy the work deliberately with
-`fr isolation down --branch fix/issue-464 --force`.
+Push the branch.
+Or reap it anyway with `fr isolation down --branch fix/issue-464 --force`, which
+removes the worktree and fr's record of it (the branch and any commits on it remain
+in the repo; uncommitted changes do not).
 ```
+
+Both halves of that last clause are load-bearing, and were **verified against real git**
+during phase 1's review: `git worktree remove --force` removes the working tree and its
+administrative files and does **not** delete the branch or its commits. So the two issues
+are not equally severe, and the message must not flatten them — #435's uncommitted edits
+were never objects and are gone for good, while #467's local-only commit survives on a
+branch ref that `fr isolation status` no longer points at, which is what the issue itself
+says ("the commit objects likely survive in the shared store, but nothing in fr points
+back at them"). Overstating `--force` is not a harmless exaggeration: an operator who
+believes it deletes their commits will not use it, which is a false refusal by other
+means.
 
 ## 4. Risks
 

@@ -74,3 +74,18 @@ FULL suite (not just test_isolation.py) after any change to _reap_hazard / the g
 wiring point, since this is the second pre-existing test (after the orphan-worktree pair
 in test_isolation.py) whose fixture happened to construct exactly the dirty-worktree
 shape the new guard now intercepts.
+
+<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-20T13:34:56 phase=1 state=fixed -->
+### f1 · finding [fixed] · The shared message helper hardcoded one remedy clause that was wrong for two of the three hazards (phase 1)
+
+`_hazard_detail` appended a fixed 'Commit or stash them, or destroy them deliberately with --force' to every hazard. For kind=unverifiable — already reachable in phase 1, when `git status` itself fails — 'them' has no referent; and phase 2's unlanded-content way out is to PUSH, not to stash. Fixed: `remedy` is now a required per-hazard argument, so the helper still gives one voice without giving one answer. Tests assert the unverifiable hazard does NOT carry the dirty-tree remedy.
+
+<!-- fr:journal kind=finding scope=plan id=f2 created=2026-09-20T13:34:56 phase=1 state=fixed -->
+### f2 · finding [fixed] · The --force line overstated what a forced reap destroys — verified against real git (phase 1)
+
+The message said --force would 'destroy them deliberately'. Checked against a real throwaway repo: `git worktree remove --force` removes the working tree and its admin files and does NOT delete the branch or its commits (branch ref and SHA both survived). So the two issues differ in severity and the message must not flatten them — #435's uncommitted edits were never objects and are unrecoverable, while #467's local-only commit survives on a branch ref fr simply no longer points at, which is what #467 itself says. Fixed: the sentence now states what --force does ('removes the worktree and fr's record of it; the branch and any commits on it remain in the repo; uncommitted changes do not'). Not pedantry — an operator who believes --force deletes their commits will not use it, which is a false refusal by other means. Spec §3.8's examples corrected to match.
+
+<!-- fr:journal kind=discovery scope=plan id=d-integration-proved-435 created=2026-09-20T13:34:57 phase=1 -->
+### d-integration-proved-435 · discovery · This repo's own integration suite asserted #435's buggy behaviour as correct (phase 1)
+
+tests/integration/test_hostworktree_lifecycle.py's full-lifecycle test wrote an untracked scratch.txt into the workspace and then asserted that a plain down(force=False) removed the worktree — i.e. it pinned the exact data loss #435 reports, as the expected outcome. The guard turned that test red, which is the strongest single piece of evidence in this change: the bug was not merely unguarded, it was under test. Now asserts ReapRefused + survival, then completes with force=True.

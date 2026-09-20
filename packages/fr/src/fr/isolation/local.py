@@ -149,10 +149,26 @@ class ReapRefused(IsolationError):  # noqa: N818 — a refusal is a decision, no
         super().__init__(hazard.detail)
 
 
-def _hazard_detail(branch: str, headline: str, paths: list[str]) -> str:
+def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) -> str:
     """One shared voice for every reap-hazard message (spec §3.8) — phases 2
     and 3 add two more callers (unlanded-content, unverifiable-fetch), and all
     three must read as the same product, not three ad hoc f-strings.
+
+    `remedy` is per-hazard and NOT optional: the three hazards do not have the
+    same way out, and a single hardcoded clause was wrong for two of them
+    (phase-1 review f1). "Commit or stash them" has no referent when the
+    hazard is that `git status` itself failed, and the way out of unlanded
+    content is to push, not to stash.
+
+    The `--force` sentence deliberately says what --force *does* rather than
+    "destroys the work", because that is not uniformly true (phase-1 review
+    f2, verified against real git): `git worktree remove --force` removes the
+    working tree and fr's state record, and does NOT delete the branch or its
+    commits. So a forced reap of a DIRTY tree is unrecoverable (uncommitted
+    edits were never objects), while a forced reap of an unlanded COMMIT
+    leaves the branch ref intact and recoverable. Overstating it is not a
+    harmless exaggeration — an operator who believes --force deletes their
+    commits will not use it, which is a false refusal by other means.
 
     Caps the listed paths so a hazard on a 200-file branch doesn't produce a
     wall of text: the first few, then `+N more`.
@@ -163,9 +179,11 @@ def _hazard_detail(branch: str, headline: str, paths: list[str]) -> str:
         rest = len(paths) - len(shown)
         listed = ", ".join(shown) + (f", +{rest} more" if rest > 0 else "")
         lines.append(f"  {listed}")
+    lines.append(remedy)
     lines.append(
-        "Commit or stash them, or destroy them deliberately with "
-        f"`fr isolation down --branch {branch} --force`."
+        f"Or reap it anyway with `fr isolation down --branch {branch} --force`, "
+        "which removes the worktree and fr's record of it (the branch and any "
+        "commits on it remain in the repo; uncommitted changes do not)."
     )
     return "\n".join(lines)
 
@@ -605,6 +623,7 @@ class LocalWorktreeDevcontainerTarget:
                     state.branch,
                     "could not be checked for uncommitted changes (git status failed)",
                     [],
+                    "Fix the worktree so `git status` runs there, then re-run `fr isolation down`.",
                 ),
             )
         paths = [line[3:] for line in (status.stdout or "").splitlines() if line.strip()]
@@ -615,6 +634,7 @@ class LocalWorktreeDevcontainerTarget:
                     state.branch,
                     f"has {len(paths)} uncommitted change(s)",
                     paths,
+                    "Commit or stash them.",
                 ),
             )
         return None

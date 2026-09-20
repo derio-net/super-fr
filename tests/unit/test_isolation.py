@@ -1259,6 +1259,12 @@ def test_down_refuses_as_unverifiable_when_status_query_fails(
     assert exc_info.value.hazard.kind == "unverifiable"
     assert _worktree_remove_calls(runner) == []
     assert st.worktree.is_dir()
+    # Phase-1 review f1: the remedy clause is per-hazard. "Commit or stash
+    # them" has no referent when the hazard is that `git status` itself
+    # failed, so this hazard must NOT carry the dirty-tree remedy.
+    detail = exc_info.value.hazard.detail
+    assert "Commit or stash" not in detail
+    assert "`git status` runs there" in detail
 
 
 def test_down_dirty_worktree_message_names_branch_path_and_force_escape(
@@ -1276,6 +1282,14 @@ def test_down_dirty_worktree_message_names_branch_path_and_force_escape(
     assert st.branch in detail
     assert "new-phase.md" in detail
     assert "--force" in detail
+    assert "Commit or stash them." in detail
+    # Phase-1 review f2, verified against real git: `git worktree remove
+    # --force` does NOT delete the branch or its commits, so the message says
+    # what --force does rather than claiming it destroys "the work". For a
+    # DIRTY tree the uncommitted part genuinely is unrecoverable, and the
+    # sentence must say both halves.
+    assert "the branch and any commits on it remain in the repo" in detail
+    assert "uncommitted changes do not" in detail
 
 
 def test_down_dirty_worktree_message_caps_the_listed_paths(
