@@ -91,3 +91,51 @@ The shipped fr-goal shape carries tier: from_phase on both implement and impleme
 ### f5 · finding [fixed] · The model assertion passed by binding a models.yaml key literally named from_phase (phase 2)
 
 test_advance_grouped_member_opens_a_dispatch_record wrote 'claude-code:\n  from_phase: claude-opus-5' and asserted model == 'claude-opus-5'. Its own docstring said 'here both are from_phase, the shipped fr-goal shape's literal tier name' — so the gap in f4 was seen and worked around rather than surfaced. No operator would ever write that key: fr models set only accepts the real tiers. A green test over behaviour that does nothing real is the defect class this repo names most often. FIXED: the test now binds a REAL tier and reaches it through the sentinel and the phase header, so it fails if the resolution regresses; two new tests cover the sentinel resolving and an unresolvable sentinel leaving model absent. The _started_grouped_with_plan fixture gained an optional phase_tier so a plan phase header can carry a tier at all.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-abandon-needs-reopen-fix created=2026-09-20T14:54:11 phase=3 -->
+### p3-abandon-needs-reopen-fix · discovery · abandon requires advance's reopen guard to key off the dispatch record, not items/state (phase 3)
+
+Spec §4.C's `--abandoned` leaves `items[key]`/step `state` at `running` on purpose (only the
+dispatch closes, not the step) — but `_advance_group`'s and the flat branch's existing
+"do not reopen a dispatch while nothing changed" guard compared `record.state`/`record.items`
+before vs after, which stay byte-identical across an abandon. So a plain `advance` right after
+`claim --abandoned` reprinted the same brief (that part already worked, unconditionally) but
+never appended the second `DispatchRecord` the plan's P3.T2.S1(c) test requires — the forensic
+trail would have silently stopped at the abandoned entry.
+
+Added `_dispatch_needs_open(record, key)`: True when `key` has no dispatch attempts yet, or its
+last attempt is CLOSED (`returned is not None`); False while the last attempt is OPEN (the
+genuine idempotent-while-running case, unchanged). Both `_advance_group` and `advance_cmd`'s
+flat `kind: agent` branch now gate `_open_dispatch` on this instead of solely on the
+items/state diff. Phase 4's own "does NOT refuse when the last record is closed" case
+(P4.T1.S1(e), a failed unit retried) is the same predicate — `_dispatch_needs_open` is written
+so phase 4 can reuse it rather than re-deriving "is the last record for this key closed" a
+second time.
+
+<!-- fr:journal kind=finding scope=plan id=x-run-workspace-marker-wrap created=2026-09-20T14:55:06 phase=3 state=open -->
+### x-run-workspace-marker-wrap · finding [open] · test_run_workspace.py: two marker-refusal tests fail on this host — rich line-wrapping, not this phase (phase 3)
+
+Full-suite run (uv run pytest -q --no-cov, backgrounded + bounded-polled) surfaced 3 failures,
+not the 1 already journalled as x-workflow-check-env:
+
+- tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused
+- tests/unit/test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused
+- tests/unit/test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable (the known one)
+
+Verified pre-existing and unrelated to this phase: `git stash` (removing every change phase 3
+made) and re-running just the two new failures reproduces them identically on aeb4e14 (the
+phase-2 commit this phase started from). Root cause looks environment-dependent: the refusal
+message wraps at this host's terminal width, e.g. "...is not a linked git \nworktree..." —
+the assertion checks for the substring "linked git worktree" (with a space), which a
+newline-broken wrap defeats. Not chased further per the dispatch brief's "known pre-existing
+failure, do not chase it" instruction, which named only x-workflow-check-env; recording this
+one too so phase 4+ (or whichever phase next runs the full suite) doesn't mistake it for a
+regression it introduced.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-acceptance-row-deferred created=2026-09-20T14:55:15 phase=3 -->
+### p3-acceptance-row-deferred · discovery · run-dispatch-abandon left not-implemented at phase completion, matching phases 1/2 precedent (phase 3)
+
+`fr plan edit --complete-phase 3` warned that acceptance row `run-dispatch-abandon` is still
+not-implemented. Left as-is, same precedent phase 2's journal already recorded for
+`run-dispatch-holder-recorded`: the status flip is `fr acceptance set-status` work, done in
+phase 6 per that phase's own no-refactor-because notes, not per-phase.

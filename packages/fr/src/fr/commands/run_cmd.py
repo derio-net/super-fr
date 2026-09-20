@@ -129,6 +129,61 @@ def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | N
     raise RunStateError(f"step {step_id!r} not found in workflow {manifest.workflow!r}")
 
 
+def _unit_key(
+    repo_root: Path,
+    state: RunState,
+    step: Step,
+    parent: Step | None,
+    item: str | None,
+) -> str:
+    """The `StepRecord.dispatch`/`items` key a `(--step, --item)` pair names —
+    spec §4.B's two key spaces (`phase/<n>/<member-id>` for a grouped member,
+    `step/<step-id>` for a flat one) computed in exactly ONE place, so
+    `claim`, `_resolve_member` and `advance`'s own flat-step key can never
+    drift apart (P3.T1.S3). `step`/`parent` are `_find_step`'s own return
+    shape — `parent` is `None` for a top-level step, the group for a member.
+
+    Exits 2 (printing to `err_console`) for every input shape that cannot
+    name a unit: a member given no `--item`, a non-member given one, or an
+    `--item` naming a phase this run's recorded plan does not have.
+    """
+    if parent is not None:
+        if item is None:
+            err_console.print(
+                f"[red]{step.id}: a member outcome must address a phase item — "
+                "pass --item phase/<n>[/red]"
+            )
+            raise typer.Exit(2)
+        try:
+            phases = _group_phases(repo_root, state)
+        except (RunStateError, AdoptError) as e:
+            err_console.print(f"[red]{parent.id}: {e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+        expected = _expected_group_items(parent, phases)
+        key = f"{item}/{step.id}"
+        if key not in expected:
+            err_console.print(
+                f"[red]{key}: not a phase member of {parent.id!r} — expected "
+                f"phase/<n> for phases {phases} (from the recorded plan)[/red]"
+            )
+            raise typer.Exit(2)
+        return key
+    if item is not None:
+        if step.steps:
+            members = ", ".join(m.id for m in step.steps)
+            err_console.print(
+                f"[red]{step.id}: a group outcome must address a member step "
+                f"({members}) — pass --step <member> --item phase/<n>[/red]"
+            )
+        else:
+            err_console.print(
+                f"[red]{step.id}: --item is only for members of a grouped "
+                f"`for_each` step — {step.id!r} has no members[/red]"
+            )
+        raise typer.Exit(2)
+    return f"step/{step.id}"
+
+
 def _emitted_plan(state: RunState) -> str | None:
     """The recorded repo-relative plan path, wherever the shape put it."""
     for record in state.steps.values():
@@ -723,6 +778,24 @@ def _open_dispatch(
     return _with_step(state, step_id, new_record)
 
 
+def _dispatch_needs_open(record: StepRecord, key: str) -> bool:
+    """Should `advance` append a fresh `DispatchRecord` for `key`?
+
+    True when nothing has been recorded for it yet, or its last attempt is
+    CLOSED (`returned` is not `None`) — an abandoned (`fr run claim
+    --abandoned`) or failed-and-retried unit is not currently held, so
+    re-dispatching it opens a NEW hold rather than silently leaving the old,
+    closed one as the only record. False while the last attempt is still
+    OPEN: that is the idempotent "still running" case `advance` already
+    handles by re-printing the same brief without touching `dispatch` at all
+    (`test_advance_*_does_not_reopen_a_dispatch_record_while_still_running`).
+    """
+    attempts = (record.dispatch or {}).get(key)
+    if not attempts:
+        return True
+    return attempts[-1].returned is not None
+
+
 def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
@@ -783,9 +856,16 @@ def _advance_group(
     # Unconditional (not setdefault): a retried failed unit is running again,
     # not still failed.
     items[pending] = "running"
+    # `dispatch` reopens independently of `items`/`state`: an `--abandoned`
+    # unit leaves BOTH unchanged (still "running") so its hold looks
+    # unchanged to this comparison, yet its last dispatch record is CLOSED —
+    # exactly the case a fresh hold must open a new record for
+    # (`_dispatch_needs_open`).
+    needs_dispatch = _dispatch_needs_open(record, pending)
     if record.state != "running" or record.items != items:
         record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
         state = _with_step(state, step.id, record)
+    if needs_dispatch:
         state = _open_dispatch(
             state,
             step.id,
@@ -1177,17 +1257,21 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             _advance_group(repo_root, state, manifest, step, record)
             return
         brief = _build_brief(step, state)
-        if record.state != "running":
-            new_record = record.model_copy(update={"state": "running", "at": _now()})
-            state = _with_step(state, state.cursor, new_record)
-            state = _open_dispatch(
-                state,
-                state.cursor,
-                f"step/{state.cursor}",
-                agent_type=step.agent,
-                tier=step.tier,
-                repo_root=repo_root,
-            )
+        key = _unit_key(repo_root, state, step, None, None)
+        needs_dispatch = _dispatch_needs_open(record, key)
+        if record.state != "running" or needs_dispatch:
+            if record.state != "running":
+                new_record = record.model_copy(update={"state": "running", "at": _now()})
+                state = _with_step(state, state.cursor, new_record)
+            if needs_dispatch:
+                state = _open_dispatch(
+                    state,
+                    state.cursor,
+                    key,
+                    agent_type=step.agent,
+                    tier=step.tier,
+                    repo_root=repo_root,
+                )
             save_run_state(repo_root, state)
         console.print(f"{step.id}: dispatch brief")
         console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
@@ -1249,12 +1333,6 @@ def _resolve_member(
     as a failed step. Whole-group completion (`resolve --step <group>`) stays
     available for harnesses that do not address members.
     """
-    if item is None:
-        err_console.print(
-            f"[red]{member.id}: a member outcome must address a phase item — "
-            "pass --item phase/<n>[/red]"
-        )
-        raise typer.Exit(2)
     grec = state.steps.get(group.id)
     if grec is None:  # pragma: no cover — drift guarantees top-level records
         err_console.print(f"[red]{group.id}: no step record in run {state.run!r}[/red]")
@@ -1271,19 +1349,12 @@ def _resolve_member(
             "the group first, then resolve its members[/red]"
         )
         raise typer.Exit(2)
-    try:
-        phases = _group_phases(repo_root, state)
-    except (RunStateError, AdoptError) as e:
-        err_console.print(f"[red]{group.id}: {e}[/red]", soft_wrap=True)
-        raise typer.Exit(2) from e
-    expected = _expected_group_items(group, phases)
-    key = f"{item}/{member.id}"
-    if key not in expected:
-        err_console.print(
-            f"[red]{key}: not a phase member of {group.id!r} — expected "
-            f"phase/<n> for phases {phases} (from the recorded plan)[/red]"
-        )
-        raise typer.Exit(2)
+    key = _unit_key(repo_root, state, member, group, item)
+    # `_unit_key` already validated `key` against the expected set; recomputed
+    # here (cheap, and already proven readable) only to know when EVERY
+    # expected key is done, which is a different question than "is this ONE
+    # key valid".
+    expected = _expected_group_items(group, _group_phases(repo_root, state))
     items = dict(grec.items or {})
     if items.get(key) == "done" and state_value == "done":
         err_console.print(f"[red]{key}: already recorded done[/red]")
@@ -1530,6 +1601,179 @@ def resolve_cmd(
     )
     save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
+
+
+def _open_dispatch_record(record: StepRecord, key: str) -> DispatchRecord:
+    """The OPEN (`returned is None`) `DispatchRecord` for `key`, or refuse.
+
+    `fr run claim` annotates a dispatch `fr run advance` already made; it
+    never invents one (spec §4.C) — a unit with no attempts at all, or whose
+    last attempt is already closed, has nothing open to annotate."""
+    attempts = (record.dispatch or {}).get(key) or []
+    if not attempts or attempts[-1].returned is not None:
+        err_console.print(
+            f"[red]{key}: no open dispatch — nothing to claim. `fr run claim` "
+            "annotates a dispatch `fr run advance` already made; it does not "
+            "invent one. Advance the run first.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return attempts[-1]
+
+
+def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) -> None:
+    """Close `key`'s open dispatch as `abandoned`, WITHOUT resolving the step
+    it belongs to (spec §4.C, §1.C).
+
+    The step's `items`/`state` are left exactly as they are — still
+    `running` — so the next `fr run advance` sees the unit as still pending
+    and briefs it again, appending a fresh `DispatchRecord` alongside this
+    now-closed one (`_dispatch_needs_open`). This is the sanctioned recovery
+    for an executor that is never coming back: nothing can retire it from the
+    orchestrator side, so freeing the tree has to be a named operator act.
+    """
+    record = state.steps[owner_id]
+    _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
+    dispatch = dict(record.dispatch or {})
+    attempts = list(dispatch[key])
+    attempts[-1] = attempts[-1].model_copy(update={"returned": _now(), "outcome": "abandoned"})
+    dispatch[key] = attempts
+    new_record = record.model_copy(update={"dispatch": dispatch})
+    save_run_state(repo_root, _with_step(state, owner_id, new_record))
+    console.print(
+        f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
+    )
+
+
+def _claim_identity(
+    repo_root: Path,
+    state: RunState,
+    owner_id: str,
+    key: str,
+    *,
+    agent: str,
+    harness: str | None,
+    model: str | None,
+) -> None:
+    """Fill `key`'s open dispatch record with the orchestrator's reported
+    `agent`/`harness`/`model` (spec §3, §4.C).
+
+    Idempotent for the SAME `agent` id (re-claiming just refreshes
+    `harness`/`model` when given again); refuses a DIFFERENT one while the
+    first is still open, naming both — the two-writers hazard this whole
+    feature exists to make visible.
+    """
+    record = state.steps[owner_id]
+    open_record = _open_dispatch_record(record, key)
+    if open_record.agent is not None and open_record.agent != agent:
+        err_console.print(
+            f"[red]{key}: already claimed by {open_record.agent!r} — refusing to "
+            f"also claim it for {agent!r}. The worktree has exactly one writer; "
+            "resolve it or `fr run claim --abandoned` the first claim before "
+            "making a second.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    dispatch = dict(record.dispatch or {})
+    attempts = list(dispatch[key])
+    attempts[-1] = open_record.model_copy(
+        update={
+            "agent": agent,
+            "harness": harness if harness is not None else open_record.harness,
+            "model": model if model is not None else open_record.model,
+        }
+    )
+    dispatch[key] = attempts
+    new_record = record.model_copy(update={"dispatch": dispatch})
+    save_run_state(repo_root, _with_step(state, owner_id, new_record))
+    console.print(f"{key}: claimed by {agent}", soft_wrap=True)
+
+
+@run_app.command("claim")
+def claim_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    step_id: str = typer.Option(..., "--step", help="Step id (or member id) to claim."),
+    item: str | None = typer.Option(
+        None,
+        "--item",
+        help="Phase item (phase/<n>) this claim is for — required when --step "
+        "names a member of a grouped `for_each` step.",
+    ),
+    agent: str | None = typer.Option(
+        None, "--agent", help="The harness-reported agent/task id claiming this dispatch."
+    ),
+    harness: str | None = typer.Option(
+        None,
+        "--harness",
+        help="One of fr.harness's HARNESSES; defaults to "
+        "fr.harness.detect.detect_harness(), recording nothing when it cannot tell.",
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="The model actually dispatched, if known."
+    ),
+    abandoned: bool = typer.Option(
+        False,
+        "--abandoned",
+        help="Close this dispatch as abandoned WITHOUT resolving its step — the "
+        "sanctioned recovery when an executor is never coming back (spec §1.C), since "
+        "nothing can retire it from the orchestrator side; the step stays `running` so "
+        "the next `fr run advance` briefs the unit again.",
+    ),
+) -> None:
+    """Put the orchestrator's reported identity onto the dispatch `fr run
+    advance` already opened for a unit (spec §3, §4.C) — the `agent`/
+    `harness` half of `DispatchRecord` that only the orchestrator can report,
+    fr itself can only derive `agent_type`/`model` and time its own act.
+
+    Requires an OPEN dispatch record for the unit: a claim annotates a
+    dispatch `fr run advance` made, it does not invent one. Re-claiming the
+    SAME agent id is idempotent; a DIFFERENT one while the first is open is
+    refused, naming both — the two-writers hazard this whole feature exists
+    to make visible. `--abandoned` closes the record instead, for a dispatch
+    that is never returning; see its own help text.
+    """
+    if abandoned and agent is not None:
+        err_console.print(
+            "[red]--abandoned closes a dispatch; it does not also claim one — "
+            "pass --agent or --abandoned, not both[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not abandoned and agent is None:
+        err_console.print(
+            "[red]--agent is required (or pass --abandoned to close without one)[/red]"
+        )
+        raise typer.Exit(2)
+    if harness is not None and harness not in HARNESSES:
+        err_console.print(f"[red]--harness must be one of {list(HARNESSES)}, got {harness!r}[/red]")
+        raise typer.Exit(2)
+
+    repo_root = resolve_repo_root()
+    try:
+        state = load_run_state(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+        step, parent = _find_step(manifest, step_id)
+        key = _unit_key(repo_root, state, step, parent, item)
+    except (RunStateError, WorkflowError, AdoptError) as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
+
+    owner_id = parent.id if parent is not None else step.id
+    if abandoned:
+        _claim_abandon(repo_root, state, owner_id, key)
+        return
+
+    resolved_harness = harness
+    if resolved_harness is None:
+        try:
+            resolved_harness = detect_harness(os.environ)
+        except HarnessError as e:
+            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+    assert agent is not None  # guarded above: not abandoned => agent is required
+    _claim_identity(
+        repo_root, state, owner_id, key, agent=agent, harness=resolved_harness, model=model
+    )
 
 
 @run_app.command("check")

@@ -2759,3 +2759,404 @@ def test_advance_orchestrator_run_agent_step_opens_a_dispatch_record_with_no_age
     assert record.model is None  # `brainstorm` here carries no `tier:`
     assert record.returned is None
     assert record.outcome is None
+
+
+# --- `fr run claim` — the reported identity, idempotent, single-writer, and
+# abandonable (spec §4.C, Phase 3) ---
+
+
+def _dispatch_of(repo: Path, step_id: str, key: str) -> list:
+    dispatch = load_run_state(repo, "r1").steps[step_id].dispatch
+    assert dispatch is not None
+    return dispatch[key]
+
+
+def test_claim_fills_agent_harness_model_on_the_open_record(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # opens the dispatch record
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "add889a73824c8413",
+            "--harness",
+            "claude-code",
+            "--model",
+            "claude-opus-5",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.agent == "add889a73824c8413"
+    assert record.harness == "claude-code"
+    assert record.model == "claude-opus-5"
+    assert record.returned is None
+    assert record.outcome is None
+
+
+def test_claim_refuses_a_unit_with_no_open_record(tmp_path: Path) -> None:
+    """A claim annotates a dispatch `fr run advance` already made; it does
+    not invent one — no `advance` was ever run here."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "no open dispatch" in result.output
+
+
+def test_claim_is_idempotent_for_the_same_agent(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    claim_argv = [
+        "run",
+        "claim",
+        "r1",
+        "--step",
+        "phase/1/implement-phase",
+        "--agent",
+        "a1",
+        "--harness",
+        "claude-code",
+    ]
+
+    first = _invoke(repo, shipped, claim_argv)
+    second = _invoke(repo, shipped, claim_argv)
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    records = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")
+    assert len(records) == 1
+    assert records[0].agent == "a1"
+
+
+def test_claim_refuses_a_different_agent_while_the_first_is_open(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a2"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "a1" in result.output
+    assert "a2" in result.output
+
+
+def test_claim_omitted_harness_uses_detect_harness(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+        {"CLAUDECODE": "1"},
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.harness == "claude-code"
+
+
+def test_claim_records_no_harness_when_detection_returns_none(tmp_path: Path) -> None:
+    """No invented `"unknown"` member (review finding r4) — an undetectable
+    harness leaves the field absent, exactly like an unbound tier leaves
+    `model` absent."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+        {},
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.harness is None
+
+
+def test_claim_refuses_an_unknown_harness_value(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "a1",
+            "--harness",
+            "carrier-pigeon",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "carrier-pigeon" in result.output
+
+
+def test_claim_resolves_a_grouped_members_unit_key(tmp_path: Path) -> None:
+    """The shared `_unit_key` path — `--step code --item phase/1` names the
+    same key `advance` opened under `implement`'s `dispatch`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--agent",
+            "a1",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "implement", "phase/1/code")[0]
+    assert record.agent == "a1"
+
+
+def test_claim_agent_required_without_abandoned(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "claim", "r1", "--step", "phase/1/implement-phase"])
+
+    assert result.exit_code == 2, result.output
+    assert "--agent" in result.output
+
+
+# --- `--abandoned`: closing a dispatch without resolving the step (spec
+# §4.C, §1.C, Phase 3 Task 2) ---
+
+
+def test_claim_abandoned_sets_returned_and_outcome(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.returned is not None
+    assert record.outcome == "abandoned"
+
+
+def test_claim_abandoned_leaves_the_flat_steps_state_running(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    state = load_run_state(repo, "r1")
+    assert state.steps["phase/1/implement-phase"].state == "running"
+
+
+def test_claim_abandoned_leaves_the_grouped_members_item_running(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--abandoned"],
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["implement"].items == {"phase/1/code": "running"}
+    assert state.steps["implement"].state == "running"
+
+
+def test_advance_after_abandon_briefs_again_and_appends_a_second_record(
+    tmp_path: Path,
+) -> None:
+    """The next `advance` sees the unit as still pending (`items`/`state`
+    untouched by `--abandoned`) and re-briefs it, appending a SECOND
+    `DispatchRecord` — the first stays in the list, closed."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--abandoned"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "dispatch brief" in result.output
+    records = _dispatch_of(repo, "implement", "phase/1/code")
+    assert len(records) == 2
+    assert records[0].outcome == "abandoned"
+    assert records[0].returned is not None
+    assert records[1].returned is None
+    assert records[1].outcome is None
+
+
+def test_advance_after_abandon_briefs_a_flat_step_again_too(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    records = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")
+    assert len(records) == 2
+    assert records[0].outcome == "abandoned"
+    assert records[1].returned is None
+
+
+def test_claim_abandoned_refuses_when_no_open_record(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "no open dispatch" in result.output
+
+
+def test_claim_abandoned_refuses_combined_with_agent(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "a1",
+            "--abandoned",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "--abandoned" in result.output
