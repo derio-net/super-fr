@@ -2157,3 +2157,49 @@ rows:
       the session row''s model. That live claim stays with opencode-subagent-dispatch,
       deliberately left at skipped (its scope correction is already in its own notes,
       finding r-s1) and is this plan''s manual phase 4.'
+  - id: isolation-reap-preserves-uncommitted
+    capability: Isolation teardown
+    acceptance: 'Uncommitted work in a workspace whose PR merged survives every reap
+      path (gc sweep, `fr isolation down`, `down --all`): fr refuses, names the branch
+      and the files, and deletes nothing.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels: {}
+    status: not-implemented
+    notes: '#435. Today the authoritative MERGED path calls down(force=False) with no
+      worktree check at all, while the speculative _merged_by_content path already has
+      one — the asymmetry this closes.'
+  - id: isolation-reap-preserves-unlanded
+    capability: Isolation teardown
+    acceptance: A merged workspace holding work that is not on origin/<default> — an
+      unpushed commit, or one pushed after the merge — survives every reap path; fr
+      refuses and names the files that would be lost.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels: {}
+    status: not-implemented
+    notes: '#435 (#467 sibling) plus the #320 orphan for free. Content-based against
+      origin/<default> (decision d2), not @{upstream}: auto-delete-branch means the
+      remote branch is usually gone by then.'
+  - id: isolation-reap-force-escape
+    capability: Isolation teardown
+    acceptance: 'The operator can still destroy a workspace deliberately with `--force`,
+      which bypasses every reap guard but never the #354 teardown post-condition verification.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels: {}
+    status: not-implemented
+    notes: Preserves the single documented escape while widening its scope from open-PR-only.
+      The companion obligation — an agent may not reach for --force unprompted (decision
+      d3) — is skill prose with no tripwire, stated as such.
+  - id: isolation-reap-guards-dont-strand
+    capability: Isolation teardown
+    acceptance: A genuinely merged, clean, fully-landed workspace is still reaped, and
+      `gc --dry-run` predicts the live outcome (would-skip when the live run would refuse).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'The false-refusal regression: a conservative guard that never reaps turns
+      gc into a permanent warner. Offline legs are unit-pinnable; the host-wide sweep
+      across real workspaces is Test Plan item 16, post-merge.'
