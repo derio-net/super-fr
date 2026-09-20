@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from fr.commands import isolation_cmd
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import subprocess_runner
+from fr.isolation.local import ReapRefused, subprocess_runner
 from fr.isolation.types import load_state
 
 
@@ -91,8 +91,15 @@ def test_hostworktree_full_lifecycle_no_docker_base_untouched(
     assert mine.action == "warned" and st.worktree.is_dir()
     assert not [a for a in actions if a.verdict == "dangling-image"]
 
-    # down: worktree + state gone
-    target.down(st, force=False)
+    # down: the #435 dirty-worktree guard now refuses a plain down() on this
+    # still-dirty workspace (the scratch.txt written above) — the worktree and
+    # state must survive the refusal, then --force tears it down as usual.
+    with pytest.raises(ReapRefused):
+        target.down(st, force=False)
+    assert st.worktree.is_dir()
+    assert load_state(repo, "feat/slug") is not None
+
+    target.down(st, force=True)
     assert not st.worktree.exists()
     assert load_state(repo, "feat/slug") is None
 

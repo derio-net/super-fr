@@ -1869,6 +1869,96 @@ def test_advance_grouped_step_dispatches_the_first_pending_member(tmp_path: Path
     assert state.steps["implement"].state == "running"
 
 
+def test_advance_grouped_step_member_brief_resolves_the_phases_tier(tmp_path: Path) -> None:
+    """D5: `tier` stays the manifest literal (`from_phase`); `resolved_tier`
+    carries the actual tier of the phase the member brief names — read off
+    the plan already parsed for `_accounting_snapshot`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)  # fixture phase 1 carries tier: standard
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    brief = _brief_of(result.output)
+    assert brief["tier"] == "from_phase"
+    assert brief["resolved_tier"] == "standard"
+
+
+def test_advance_grouped_step_member_brief_resolved_tier_is_none_when_the_phase_declares_no_tier(
+    tmp_path: Path,
+) -> None:
+    """The dispatch-time observable form of phase 2's untiered-plan warning:
+    an agentic phase with no `tier` in its header resolves to `None`, not a
+    guess and not a refusal (fail soft, matching the accounting snapshot)."""
+    import shutil
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    slug = "2026-05-09-fixture-minimal-notier"
+    dest = repo / "docs" / "superpowers" / "plans" / slug
+    shutil.copytree(_FIXTURE_PLAN, dest)
+    phase_file = dest / "01.yaml"
+    phase_file.write_text(phase_file.read_text().replace("  tier: standard\n", ""))
+    _invoke(repo, shipped, ["run", "start", "grouped", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # plan running + brief
+    resolved = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "plan",
+            "--state",
+            "done",
+            "--emitted",
+            f"plan=docs/superpowers/plans/{slug}",
+        ],
+    )
+    assert resolved.exit_code == 0, resolved.output
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    brief = _brief_of(result.output)
+    assert brief["tier"] == "from_phase"
+    assert brief["resolved_tier"] is None
+
+
+def test_build_brief_the_group_step_itself_carries_no_resolved_tier() -> None:
+    """A group spans every phase, so there is no single tier to resolve —
+    only an item-scoped member brief can answer the question (D5).
+    `_build_brief` is the group/flat builder (untouched by D5); called
+    directly on a `for_each` step with nested members, the same one
+    `_advance_group`'s gated branch prints for a blocked group."""
+    from fr.commands.run_cmd import _build_brief
+    from fr.run.model import RunState
+    from fr.workflow.model import Step
+
+    group = Step(
+        id="implement",
+        kind="agent",
+        for_each="phase",
+        steps=(Step(id="code", kind="agent", agent="super-fr:fr-phase-executor"),),
+    )
+    state = RunState(
+        run="r1",
+        workflow="grouped@1",
+        branch="b",
+        started="2026-09-20T00:00:00Z",
+        cursor="implement",
+        steps={},
+    )
+
+    brief = _build_brief(group, state)
+
+    assert "resolved_tier" not in brief
+
+
 def test_resolve_member_items_completes_the_group_in_order(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"

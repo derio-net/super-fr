@@ -44,8 +44,10 @@ steps:
     - implement-phase
     - review-phase
   deliver:
-    state: running
-    at: '2026-09-20T15:55:12+00:00'
+    state: done
+    at: '2026-09-20T16:00:27+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/514
 accounting:
   phase/1/implement-phase:
     at: '2026-09-20T12:10:54+00:00'

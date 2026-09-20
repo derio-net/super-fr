@@ -150,6 +150,30 @@ def _group_phases(repo_root: Path, state: RunState) -> list[int]:
     return plan_phase_numbers(repo_root, plan_rel)
 
 
+def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
+    """The tier phase `phase_n` declares in its header on the plan this run
+    recorded, or `None` when it declares none, no plan is recorded yet, or
+    the plan is unparseable.
+
+    Fail-soft by design (unlike `_group_phases`, which fails closed): this is
+    an observability field, not a dispatch precondition, and refusing to
+    dispatch over an unreadable OPTIONAL tier would be a new failure mode for
+    a field whose whole point is that a phase may legitimately not set it.
+    Mirrors `_accounting_snapshot`'s stance next to it ("observability must
+    not break execution") rather than `_group_phases`'s.
+    """
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        return None
+    from fr.parser import PlanSchemaError, parse
+
+    try:
+        plan = parse(repo_root / plan_rel)
+    except (PlanSchemaError, OSError):
+        return None
+    return next((p.phase.tier for p in plan.phases if p.phase.number == phase_n), None)
+
+
 def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     """Every `phase/<n>/<member>` key of a grouped fan-out, in dispatch
     order: phase-major, then member order — implement before review, per
@@ -639,13 +663,26 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
     }
 
 
-def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -> dict[str, Any]:
+def _build_member_brief(
+    member: Step, group: Step, item: str, state: RunState, resolved_tier: str | None
+) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
     Same keys as the step brief (so a harness parses one shape) plus `group`
-    (the fan-out step's id) and `item` (the `phase/<n>` unit). `tier` and
-    `for_each` fall back to the group's when the member leaves them unset —
-    the common case, where the group declares the dispatch policy once.
+    (the fan-out step's id), `item` (the `phase/<n>` unit) and
+    `resolved_tier`. `tier` and `for_each` fall back to the group's when the
+    member leaves them unset — the common case, where the group declares the
+    dispatch policy once.
+
+    `resolved_tier` is member-only (D5): `tier` keeps the manifest's literal
+    meaning — for the shipped `fr-goal` shape, the sentinel `"from_phase"` —
+    so `resolved_tier` carries what that sentinel actually resolves to for
+    THIS item: the tier declared on the named phase's header, or `None` when
+    the phase declares none (the dispatch-time observable form of phase 2's
+    untiered-plan warning). It has no analogue on the group/flat brief
+    (`_build_brief`, left untouched): a group spans every phase, so there is
+    no single tier to resolve there, and a confidently-wrong value would be
+    worse than an absent one.
     """
     return {
         "run": state.run,
@@ -660,6 +697,7 @@ def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -
         "emits": list(member.emits),
         "gate": member.gate,
         "tier": member.tier if member.tier is not None else group.tier,
+        "resolved_tier": resolved_tier,
         "for_each": group.for_each,
         "steps": [],
     }
@@ -703,8 +741,11 @@ def _advance_group(
         record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
         state = _with_step(state, step.id, record)
     save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
+    resolved_tier = _phase_tier(repo_root, state, phase_n)
     console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
-    console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
+    console.print(
+        json.dumps(_build_member_brief(member, step, item, state, resolved_tier), sort_keys=True)
+    )
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
