@@ -121,17 +121,22 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:41:03+00:00'
+      note: 'RED: tests/unit/test_fr_plan_tier_prose.py added, both tests fail — fr-plan/SKILL.md
+        never mentions tier, mirror never names any tier'
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:41:26+00:00'
+      note: 'GREEN: added Tier rule to fr-plan/SKILL.md Rules section beside acceptance
+        linkage; sync-opencode.py regenerated the mirror; both tests pass'
     P5.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:43:10+00:00'
+      note: 'REFACTOR+neutrality gate: rewrapped Rules bullets to fit test_under_120_lines
+        (120 exactly, was 129 after the new clause); tier prose, tool-neutrality,
+        opencode-sync-drift and skill-validation tests all pass; fr harness parity
+        --check clean'
     P5.T2.S1:
       state: ' '
       ticked_at: null
