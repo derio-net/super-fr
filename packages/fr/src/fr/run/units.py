@@ -72,7 +72,6 @@ __all__ = [
     "with_measured",
     "with_unit_state",
     "with_unit_states",
-    "with_units_carried_forward",
 ]
 
 UnitAttempt = Attempt
@@ -244,26 +243,6 @@ def unit_keys(record: StepRecord) -> tuple[str, ...]:
     and no state, and it must not be invisible to a walk.
     """
     return tuple(sorted(record.units or {}))
-
-
-def with_units_carried_forward(record: StepRecord, prior: StepRecord) -> StepRecord:
-    """`record`, carrying every unit `prior` recorded — state, attempts, cost
-    and evidence, as the ONE object they now are.
-
-    Finding f7's fix. Completing a step builds its successor record, and
-    carrying the unit maps forward one at a time is how the whole run's holder
-    history came to be deleted by the act of FINISHING: the only readers were
-    `status`/`check`, so the deletion was silent. In the v5 shape there is one
-    map, so there is nothing left to forget half of.
-
-    `_complete_step` no longer needs it: it now derives the successor with
-    `prior.model_copy(update=…)`, so units — and every other durable field —
-    are carried by DEFAULT rather than by being listed. This remains for any
-    caller that builds a `StepRecord` from scratch and must keep a step's
-    units: the carry should be a decision somebody made, never a field
-    somebody happened to list.
-    """
-    return _with_units(record, _units(prior))
 
 
 def fan_out_states(state: RunState) -> dict[str, str]:

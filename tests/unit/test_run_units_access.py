@@ -315,24 +315,6 @@ def test_unit_keys_includes_a_unit_that_has_attempts_but_no_state() -> None:
 # -------------------------------------------------- carrying units forward
 
 
-def test_units_carried_forward_keeps_states_and_attempts_together() -> None:
-    """Finding f7: `_complete_step` once dropped every dispatch record at the
-    moment a step completed, because it carried the maps forward one at a
-    time. One function carries the whole unit record or nothing does."""
-    prior = _state(HOLDER).steps["implement"]
-    fresh = prior.model_copy(update={"items": None, "dispatch": None, "state": "done"})
-    carried = units.with_units_carried_forward(fresh, prior)
-    assert units.unit_states(carried) == units.unit_states(prior)
-    for key in units.unit_keys(prior):
-        assert units.attempts(carried, key) == units.attempts(prior, key)
-
-
-def test_units_carried_forward_from_a_step_with_no_units_records_nothing() -> None:
-    prior = _state(INFLIGHT).steps["deliver"]
-    carried = units.with_units_carried_forward(prior.model_copy(update={"state": "done"}), prior)
-    assert units.unit_keys(carried) == ()
-
-
 # ------------------------------------------------------------ the fan-out map
 
 
