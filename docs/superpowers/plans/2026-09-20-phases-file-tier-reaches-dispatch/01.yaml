@@ -1,0 +1,150 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — tier survives --phases-file, smoked through the real CLI
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - phase-header-fields-survive-phases-file
+  skeleton: true
+  tier: standard
+tasks:
+- number: 1
+  title: The round-trip, red to green — derived coverage first, instance second
+  steps:
+  - id: P1.T1.S1
+    text: |
+      RED. Create `tests/unit/test_phases_file_field_coverage.py` with TWO tests,
+      both driving the real CLI through `typer.testing.CliRunner` and `fr.cli.app`
+      (never `create()` directly — the defect lives in the CLI ingestion layer,
+      so a test that calls `create()` would have passed throughout).
+
+      1. `test_every_optional_phase_header_field_survives_phases_file` — derived,
+         not restated. Build the phases-file mapping from
+         `fr.types.PhaseHeader.model_fields`: for each field that is optional
+         (has a default) and is not `tracking_issue`, supply a representative
+         value (`tier` -> "hard", `acceptance` -> ["row-a"], `skeleton` -> True),
+         scaffold a plan, and assert the dumped `01.yaml` header carries each one.
+         Fail loudly on a field the table has no value for, so the NEXT field
+         added to `PhaseHeader` fails this test instead of being silently skipped
+         — that silent-skip is the same shape as the whitelist bug itself.
+      2. `test_tier_survives_phases_file` — the instance-level companion for
+         gh#434, asserting `doc["phase"]["tier"] == "hard"`.
+
+      Reuse the repo/spec fixture shape from
+      `tests/unit/test_plan_acceptance_links.py` (`_repo`, `_spec`); the spec's
+      `## Implementation Plans` header must be `| Plan | Repo | File | Depends on |`
+      or `create()` refuses pre-flight.
+
+      Run: `uv run pytest tests/unit/test_phases_file_field_coverage.py -q --no-cov`
+      Expect BOTH to fail on `tier` (KeyError on the header dict). Paste the
+      failure into the step note — a red step with no recorded red is not red.
+  - id: P1.T1.S2
+    text: |
+      GREEN. Three edits, mirroring `acceptance`/`skeleton` exactly:
+
+      1. `packages/fr/src/fr/plan_ops.py` — add to `PhaseSpec` (after `skeleton`):
+         `tier: Literal["mechanical", "standard", "hard"] | None = None`
+      2. `packages/fr/src/fr/plan_ops.py`, `_build_phase_doc` — emit beside its
+         two siblings, after the `skeleton` block:
+         `if ps.tier is not None: phase_header["tier"] = ps.tier`
+         Position follows the existing emitter (appended after `tracking_issue`),
+         NOT `PhaseHeader`'s declaration order. Key order in the dump is cosmetic
+         — `PhaseHeader` parses either — and matching the emitter keeps the
+         function one rule instead of two.
+      3. `packages/fr/src/fr/commands/plan_cmd.py`, the `--phases-file` loop —
+         add `tier=p.get("tier"),` to the `PhaseSpec(...)` construction.
+
+      Run the same pytest command; expect both green. Then confirm byte-stability:
+      a phases file with NO tier must produce a header with no `tier` key at all.
+  - id: P1.T1.S3
+    text: |
+      REFACTOR. `_build_phase_doc` now carries three near-identical
+      `if <field>: phase_header[...] = ...` blocks, each re-stating the same
+      byte-stability rationale in its own comment. Collapse the three comments
+      into ONE statement of the rule above the group ("optional header fields are
+      emitted only when set, so plans written before each field existed stay
+      byte-stable and parse on older readers"), keeping the three explicit
+      conditionals — they read better than a loop over a table and each has a
+      different truthiness test (`if ps.acceptance` vs `if ps.skeleton` vs
+      `if ps.tier is not None`).
+
+      In the same step, fix `create_cmd`'s `--phases-file` docstring: it documents
+      `skeleton` but neither `acceptance` nor `tier`. Document all three.
+
+      Run: `uv run pytest tests/unit/test_phases_file_field_coverage.py tests/unit/test_plan_acceptance_links.py -q --no-cov`
+      plus `uv run ruff format packages/ tests/` and `uv run ruff check packages/ tests/`.
+- number: 2
+  title: An invalid tier must be refused pre-flight, not after the folder exists
+  steps:
+  - id: P1.T2.S1
+    text: |
+      RED. Add `test_an_invalid_tier_is_refused_without_stranding_the_folder` to
+      the same file. A phases file carrying `tier: hrad` must:
+      exit non-zero; name the bad value and the legal set in the message; and
+      leave NO plan folder on disk
+      (`assert not (repo / "docs/superpowers/plans" / slug).exists()`).
+
+      Expect failure on the third assertion: `PhaseHeader`'s `Literal` only rejects
+      at `create()`'s POST-WRITE re-parse, by which time the folder is half-built.
+      That is #133's failure mode — the stranded folder blocks the corrected re-run
+      — and it is why `create()` already has a pre-flight loop whose comment says
+      "validate every external precondition BEFORE mutating the filesystem".
+
+      Record the actual observed behaviour in the step note (does it traceback, or
+      raise PlanEditError? does the folder survive?) — the note is the evidence
+      that the pre-flight gap was real and not assumed.
+  - id: P1.T2.S2
+    text: |
+      GREEN. Extend `create()`'s existing pre-flight loop (the one raising
+      `PlanEditError` for `ps.number < 1`) with a tier check, sourcing the legal
+      set from `fr.types.PHASE_TIERS` rather than restating the Literal — the same
+      derive-don't-restate rule `fr.opencode_agents` already follows:
+
+      `if ps.tier is not None and ps.tier not in PHASE_TIERS: raise PlanEditError(...)`
+
+      with a message naming the phase, the bad value, and the legal set.
+      Run the test; expect green, folder absent.
+  - id: P1.T2.S3
+    text: |
+      REFACTOR. The pre-flight loop now performs two unrelated validations inline.
+      Extract `_preflight_phase_error(ps) -> str | None` returning the message or
+      `None`, so the loop reads as "for each phase, raise the first pre-flight
+      error" and a third check is one added branch in a named function rather than
+      another inline `if` in a growing loop.
+
+      Full gate: `uv run pytest -q --no-cov` (whole suite — the emitter changed,
+      so every plan-writing test is in scope), `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`, and
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

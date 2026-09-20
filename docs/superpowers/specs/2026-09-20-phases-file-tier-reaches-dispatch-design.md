@@ -292,3 +292,4 @@ constraints).
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-09-20-phases-file-tier-reaches-dispatch | `derio-net/super-fr` | `2026-09-20-phases-file-tier-reaches-dispatch` | — |

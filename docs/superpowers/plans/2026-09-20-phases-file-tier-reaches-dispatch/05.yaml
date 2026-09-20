@@ -1,0 +1,124 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Prose, mirrors, matrix and the bump — make fr-goal's claim true
+  tag: agentic
+  depends_on:
+  - 2
+  - 4
+  tracking_issue: null
+  acceptance:
+  - phase-header-fields-survive-phases-file
+  - plan-self-review-flags-tier-gaps
+  - phase-tier-reaches-the-dispatch-brief
+  tier: standard
+tasks:
+- number: 1
+  title: fr-plan instructs the tier it never mentioned
+  steps:
+  - id: P5.T1.S1
+    text: |
+      RED. Add `tests/unit/test_fr_plan_tier_prose.py` pinning that
+      `plugins/super-fr/skills/fr-plan/SKILL.md` instructs a tier on agentic
+      phases and names the three tiers, and that `.opencode/skills/fr-plan/SKILL.md`
+      carries the same clause. Model it on the existing
+      `tests/unit/test_fr_goal_dispatch_prose.py`, which pins fr-goal's dispatch
+      clauses the same way.
+
+      Run it; expect failure — the string `tier` does not appear in fr-plan's
+      SKILL.md at all today, which is the whole of break 2.
+  - id: P5.T1.S2
+    text: |
+      GREEN. Add the clause to `plugins/super-fr/skills/fr-plan/SKILL.md`'s
+      `## Rules`, beside the acceptance-linkage rule it most resembles: every
+      AGENTIC phase declares `tier: mechanical | standard | hard` in its header;
+      manual phases do not. Say what it buys (fr-goal resolves it to a model per
+      harness via `fr models resolve`) and what its absence costs (dispatched
+      untiered, inheriting the session model — now warned by self-review).
+
+      This is what makes fr-goal section 3's existing claim — "fr-plan tags each
+      phase a tier" — true rather than aspirational.
+
+      Then regenerate the mirror: `uv run python scripts/sync-opencode.py`
+      (no flag writes; `--check` verifies). NEVER hand-edit
+      `.opencode/skills/fr-plan/SKILL.md` — a tripwire fails on drift.
+      Verify with `uv run python scripts/sync-opencode.py --check`.
+  - id: P5.T1.S3
+    text: |
+      REFACTOR + neutrality gate. Skill prose is covered by
+      `tests/unit/test_tripwire_skill_tool_neutrality.py` (no harness-specific
+      tool named outside a scoped per-harness clause) and by the opencode sync
+      tripwires. Run:
+      `uv run pytest tests/unit/test_fr_plan_tier_prose.py tests/unit/test_tripwire_skill_tool_neutrality.py tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_skill_validation.py -q --no-cov`
+      and `uv run fr harness parity --check`.
+- number: 2
+  title: The matrix stops overclaiming, and the version moves
+  steps:
+  - id: P5.T2.S1
+    text: |
+      Correct the overclaim. Row `fr-goal-phase-tiering` sits at `status: ci`
+      claiming "fr-plan annotates each phase with a tier; the orchestrator
+      dispatches that phase's subagent at the mapped model", while its unit levels
+      pin `PhaseHeader.tier` and `fr models resolve` in ISOLATION — nothing pinned
+      that a planner's tier reaches a plan, and until this PR it could not.
+
+      Use `fr acceptance set-status` (never a hand-edit), keeping `ci` but adding
+      the new evidence refs and recording in `--notes` what the row did NOT pin
+      before and does now, and what it still does not claim (no automated level
+      dispatches a real subagent and reads back a session row's model; that stays
+      with `opencode-subagent-dispatch` at `skipped`).
+  - id: P5.T2.S2
+    text: |
+      Flip this spec's three rows `not-implemented -> ci` with
+      `fr acceptance set-status --id <id> --status ci --notes "<why it moved>"
+      --level unit=<ref>` (and `--level int=<ref>` for the row phase 4 advanced),
+      one command per row, each naming the tests that now pin it.
+
+      Then `uv run fr acceptance check` — it fails when any committed report is
+      stale, so this also proves the three generated reports were regenerated.
+  - id: P5.T2.S3
+    text: |
+      Bump and verify. `uv run --no-project python scripts/bump-version.py patch`
+      (4.8.0 -> 4.8.1; spec D3). It also runs `uv sync` and verifies
+      `uv run fr --version` — commit the changed manifests and `uv.lock` together.
+      Never hand-edit a version-bearing surface.
+
+      Explainers-currency check: read `docs/explainers/01-fr-goal.md` for any
+      statement this PR falsifies. A patch bump is not itself a trigger, and the
+      pipeline's shape is unchanged; if the prose does describe tier reaching
+      dispatch, regenerate the `.html` per the rule (from `/`, with `--isolated`)
+      or state in the PR body that regeneration is owed. Record which applies.
+
+      Final gate: `uv run --no-project python scripts/bump-version.py --check`,
+      `uv run pytest`, `uv run fr acceptance check`, `uv run fr validate artifacts`,
+      `uv run fr journal check --scope plan`.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

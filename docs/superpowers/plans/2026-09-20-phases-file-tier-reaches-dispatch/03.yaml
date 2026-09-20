@@ -1,0 +1,85 @@
+schema_version: 2
+phase:
+  number: 3
+  title: The dispatch brief resolves from_phase into resolved_tier
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - phase-tier-reaches-the-dispatch-brief
+  tier: standard
+tasks:
+- number: 1
+  title: resolved_tier on the member brief, additive and item-scoped
+  steps:
+  - id: P3.T1.S1
+    text: |
+      RED. Add tests to `tests/unit/test_run_cli.py` beside the existing grouped
+      `for_each` tests (see `test_run_cli.py:1864`, which already asserts
+      `brief["group"] == "implement"` — reuse that fixture shape):
+
+      1. a member brief for a phase whose header carries `tier: hard` has
+         `brief["resolved_tier"] == "hard"` while `brief["tier"] == "from_phase"`
+         (the manifest literal is UNCHANGED — that is the whole point of D5);
+      2. a member brief for a phase with no tier has
+         `brief["resolved_tier"] is None`;
+      3. the GROUP brief has no `resolved_tier` key at all — a group spans every
+         phase, so there is no single tier to resolve, and inventing one would be
+         the confident-wrong-value failure this repo keeps rediscovering.
+
+      Also assert `test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields`
+      (test_run_cli.py:920) still passes untouched: it drives a FLAT agent step, so
+      it exercises `_build_brief`, not `_build_member_brief`. Confirming that is
+      what makes the additive key safe.
+
+      Run: `uv run pytest tests/unit/test_run_cli.py -q --no-cov`; expect the three
+      new ones to fail on the missing key.
+  - id: P3.T1.S2
+    text: |
+      GREEN. In `packages/fr/src/fr/commands/run_cmd.py`:
+
+      - give `_build_member_brief` a `resolved_tier: str | None` parameter and emit
+        it as a `"resolved_tier"` key;
+      - in `_advance_group`, read the tier off the phase it already computed
+        (`phase_n`). The plan is already parsed there for `_accounting_snapshot`
+        (`from fr.parser import parse`), so this is a read, not a new I/O path.
+        Degrade to `None` on anything unreadable — the accounting snapshot next to
+        it already takes that stance ("observability must not break execution"),
+        and refusing a dispatch over an unreadable tier would be a new failure mode
+        for a field that is optional by design;
+      - leave `_build_brief` (the group/flat builder, run_cmd.py:571) untouched.
+
+      Update `_build_member_brief`'s docstring: it currently says the member brief
+      has the "same keys as the step brief ... plus `group` and `item`". That is
+      now three extra keys, and the docstring must say WHY `resolved_tier` is
+      member-only.
+  - id: P3.T1.S3
+    text: |
+      REFACTOR. Pull the "tier of phase N in this run's plan" read out of
+      `_advance_group` into a small named helper beside `_group_phases`
+      (`_phase_tier(repo_root, state, phase_n) -> str | None`), so `_advance_group`
+      stays a dispatch-sequencing function and the fail-soft behaviour has one
+      documented home rather than being an inline `try` in the middle of the
+      claim-writing sequence.
+
+      Run `uv run pytest tests/unit/test_run_cli.py tests/unit/test_run_adopt.py tests/unit/test_run_provenance.py -q --no-cov`,
+      then ruff format / check and mypy as in phase 1.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

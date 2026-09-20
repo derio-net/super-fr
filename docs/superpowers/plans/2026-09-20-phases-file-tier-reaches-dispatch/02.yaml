@@ -1,0 +1,123 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Self-review learns the two gates acceptance and skeleton already have
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - plan-self-review-flags-tier-gaps
+  tier: standard
+tasks:
+- number: 1
+  title: The fr_version floor probe for tier
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED. Add `tests/unit/test_plan_tier_gates.py`. First test: a plan whose
+      phases carry `tier` while `_meta.yaml`'s `fr_version` is the default
+      `>=3.0.0,<5.0.0` must produce a `warn` from `fr plan self-review` naming
+      the under-floored constraint. A second test pins the negative: the same plan
+      with `fr_version: '>=3.12.0,<5.0.0'` produces NO such warning.
+
+      Build the plan with the CLI (`fr plan create --phases-file` with a tier),
+      which phase 1 made possible — this test literally could not have been
+      written before it.
+
+      Run: `uv run pytest tests/unit/test_plan_tier_gates.py -q --no-cov`; expect
+      the first to fail (no such warning exists).
+  - id: P2.T1.S2
+    text: |
+      GREEN. Add `_tier_issues(plan) -> list[ReviewIssue]` to `plan_ops.py` and
+      call it from `self_review` beside `_acceptance_link_issues(plan)` and
+      `_skeleton_issues(plan)`.
+
+      The probe mirrors `_acceptance_link_issues`' 3.7.0 version probe exactly,
+      with 3.12.0 as the floor (`tier` landed in commit 4e04e6e, released 3.12.0):
+      when any phase carries a tier and `plan.meta.fr_version` is set, warn if
+      `SpecifierSet(...).contains("3.11.99", prereleases=True)`, suggesting
+      `'>=3.12.0,<5.0.0'`. Keep the `except InvalidSpecifier: pass` — the parser
+      already fails loud on malformed constraints, so swallowing here avoids a
+      duplicate, worse-worded error.
+
+      `severity="warn"`, never `"error"`: only `error` affects the exit code
+      (`plan_cmd.py:366`), and this must not turn any gate red.
+  - id: P2.T1.S3
+    text: |
+      REFACTOR. The 3.7.0 probe in `_acceptance_link_issues` and this 3.12.0 one
+      are now the same seven lines twice. Extract a shared
+      `_version_floor_issue(...)` helper returning `ReviewIssue | None` and call it
+      from both, so a third field's floor probe is one call.
+
+      Re-run `uv run pytest tests/unit/test_plan_tier_gates.py tests/unit/test_plan_acceptance_links.py -q --no-cov`
+      — the acceptance probe's existing tests are the regression net proving the
+      extraction preserved its behaviour, so they must pass UNCHANGED. Do not edit
+      them to fit the refactor; if they fail, the refactor is wrong.
+- number: 2
+  title: The untiered agentic phase warning
+  steps:
+  - id: P2.T2.S1
+    text: |
+      RED. Two more tests in `test_plan_tier_gates.py`: an AGENTIC phase with no
+      `tier` produces a `warn` naming the phase number and saying the dispatch
+      falls back to the untiered executor; a MANUAL phase with no tier produces
+      NOTHING (manual phases are never dispatched to a model, so a tier on one is
+      meaningless and its absence is not a gap).
+
+      Run; expect the first to fail.
+  - id: P2.T2.S2
+    text: |
+      GREEN. Extend `_tier_issues` with the second gate. The message must say what
+      the operator can do about it, not just that something is missing — name the
+      field, the legal values (from `PHASE_TIERS`), and the consequence
+      (dispatched untiered, inheriting the session model).
+
+      This is #498's fail-visibly doctrine moved to plan time: the untiered
+      fallback is correct behaviour, but it was previously indistinguishable from
+      working tiering at every observable point.
+  - id: P2.T2.S3
+    text: |
+      REFACTOR + verify the accepted blast radius. `severity="warn"` means no exit
+      code changes, but both gates WILL now fire on this repo's own plans — that
+      was disclosed to the operator and accepted (spec D2), and it must be
+      demonstrated rather than assumed.
+
+      Run `uv run fr plan self-review` over every live plan in
+      `docs/superpowers/plans/` and record in the step note, per plan, which of the
+      two warnings fire and that the exit code is still 0. If any plan exits
+      non-zero, STOP — a warn leaked into error severity, and that is a defect in
+      this phase, not a pre-existing condition.
+
+      Then: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
