@@ -75,3 +75,22 @@ re-enters its context:
 - the ids of journal entries you added (so the orchestrator can render them).
 
 Keep the prose minimal; the journal holds the detail.
+
+## Long commands, and what you must not leave behind
+
+**A foreground `Bash` call that exceeds 120 seconds is moved to the background by
+the harness — you do not get to opt out**, and a full test suite in this repo is
+well past that. So run a long suite with `run_in_background` *deliberately*, wait
+on it with a **bounded** loop, and before you hand back make sure nothing you
+started is still polling. An unbounded `until … ; do sleep N; done` alive at
+handback keeps you **non-terminal and resumable indefinitely** — a second writer
+for a tree where `isolation: "worktree"` is forbidden by design (#420). One
+executor did exactly this for 11.5 hours (#503): it returned a clean result, and
+the orchestrator had no way to tell it apart from a finished agent.
+
+**And read the right exit code.** `pytest … | tail -20` exits with *tail's*
+status, not pytest's, so a gate reports success over a red suite — and the output
+file stays empty until the process ends, because `tail` cannot emit until its
+input closes. Write the raw output to a file and tail the *file*, or check
+`${PIPESTATUS[0]}`. Never report a gate green on the strength of a piped exit
+code.

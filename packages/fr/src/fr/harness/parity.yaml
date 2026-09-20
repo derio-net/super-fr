@@ -162,7 +162,7 @@ surfaces:
 
   - id: subagent-dispatch
     kind: interaction
-    summary: The pipeline's ability to hand a phase to a subagent for isolated execution. Dispatch is the default wherever a harness has a primitive, at roughly 7x the cost of running the phase inline; fr-goal §5's dispatch clause is the one home for the measured figures and the rule.
+    summary: The pipeline's ability to hand a phase to a subagent for isolated execution. Dispatch is the default wherever a harness has a primitive, at roughly 7x the cost of running the phase inline; fr-goal §5's dispatch clause is the one home for the measured figures and the rule. Every dispatch is now recorded fr-side per unit — `fr run advance` opens a DispatchRecord carrying the agent type, the resolved model and the harness that resolved it, `fr run claim --agent <id>` names the holder in that harness's own id vocabulary, `fr run resolve` closes it — so this row points at observable state in the run cursor (`fr run status`, `fr run check`) instead of resting entirely on the skill prose being followed, and a still-held unit is refused a second dispatch identically on every harness (gh-503, gh-499).
     harnesses:
       claude-code: {state: enforced}
       opencode: {state: enforced}

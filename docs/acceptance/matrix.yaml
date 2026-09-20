@@ -2163,32 +2163,56 @@ rows:
       the dispatched to returned pair once it settles
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
-    levels: {}
-    status: not-implemented
-    notes: Born with the 2026-09-20 spec. Unit level gates the PR; the live level needs
-      a real /fr-goal dispatch, since a fixture cannot show an identity was recorded
-      for a real subagent (#486 precedent).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_state.py
+      - super-fr:tests/unit/test_validate_artifacts.py
+    status: ci
+    notes: 'Unit level landed in phases 1-5: DispatchRecord round-trips (test_run_state.py),
+      fr run advance opens a record with agent_type/model/harness and fr run claim names
+      the holder, and fr run status renders both the HELD BY line and the dispatched->returned
+      pair (test_status_renders_held_by_and_the_claimed_identity, test_status_renders_a_settled_dispatch,
+      test_status_renders_held_by_the_orchestrator, test_status_shows_every_record_of_a_unit_oldest_first).
+      fr validate artifacts accepts a cursor carrying dispatch. Verified live against
+      this feature''s own run cursor (journal x-p5-status-check-live). The live level
+      - a real /fr-goal dispatch on a real subagent id - is Test Plan item 13, post-merge;
+      ci here gates the unit half, which is what CI can prove.'
   - id: run-dispatch-refuses-second
     capability: Run cursor
     acceptance: fr run advance refuses to re-brief a phase unit that is already held,
       naming the holder, and --redispatch is the deliberate escape
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Closes #499. Business-level because the failure it prevents is two fr-phase-executors
-      writing one worktree, where #420 forbids the usual isolation protection.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'Closed #499 in phase 4: fr run advance exits 2 on a unit whose dispatch
+      record is still open, naming the holder and printing no brief (test_advance_refuses_a_held_unit_and_prints_no_brief,
+      test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time, test_the_refusal_says_an_unclaimed_agent_when_nobody_claimed,
+      test_the_refusal_prints_all_three_ways_forward), and --redispatch closes the old
+      record abandoned and appends a fresh one (test_redispatch_closes_the_holder_abandoned_and_appends_a_fresh_record).
+      Mutation-verified, and verified live against this feature''s own run cursor writing
+      nothing (journal x-refusal-live, x-refusal-verified-independently). Test Plan
+      item 15 repeats it live post-merge.'
   - id: run-dispatch-abandon
     capability: Run cursor
     acceptance: An operator can declare a dispatch abandoned, freeing the phase unit
       for re-dispatch without resolving the step
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'The recovery path for the #503 incident: an executor that never returns
-      cannot be retired from the orchestrator side, so the close must be an explicit
-      operator act.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'Phase 3 shipped fr run claim --abandoned: it closes the record (returned/outcome
+      abandoned) WITHOUT resolving the step, leaving the unit running so the next advance
+      briefs it again (test_claim_abandoned_sets_returned_and_outcome, test_claim_abandoned_leaves_the_grouped_members_item_running,
+      test_claim_abandoned_leaves_the_flat_steps_state_running, test_advance_after_abandon_briefs_again_and_appends_a_second_record),
+      and it refuses a unit with no open record or a stray --agent. Live-verified by
+      closing this run''s own bootstrap-era open records (journal x-abandon-live). Unit
+      is the whole level the spec asks for on this row.'
   - id: run-dispatch-harness-neutral
     capability: Harness parity
     acceptance: The dispatch holder record is written identically on Claude Code and
@@ -2198,5 +2222,10 @@ rows:
     levels: {}
     status: not-implemented
     notes: 'Live-only by nature: the claim is that two different harnesses produce the
-      same record shape, which no mock can demonstrate. Post-merge Test Plan items 13
-      and 14.'
+      same record shape, which no mock can demonstrate - a fixture asserting it would
+      only assert that fr writes what fr writes. DELIBERATELY left not-implemented when
+      its three sibling rows moved to ci in phase 6 of the 2026-09-20 plan: the unit
+      tests that gate those rows say nothing about this one. It closes with post-merge
+      Test Plan items 13 and 14 - a real /fr-goal run on Claude Code recording harness
+      claude-code with a real subagent task id, and the same on OpenCode recording harness
+      opencode with a child session id - transcripts in the PR.'

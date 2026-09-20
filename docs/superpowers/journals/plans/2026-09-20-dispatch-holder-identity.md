@@ -335,3 +335,69 @@ illustration:
 ### f8 · finding [fixed] · advance detected the harness to resolve the model, then threw it away (phase 5)
 
 Seen in the live status output phase 5 produced: 'the orchestrator (claude-opus-5)' — a model with no harness beside it. _resolved_model called detect_harness(os.environ) privately to pick the binding and discarded the result, so a record could carry model=claude-opus-5 with harness=null while fr knew at that exact moment which harness chose it. A tier does not resolve to a model in the abstract; it resolves for a harness, so the two belong to the same record. Worse for an orchestrator-run step (agent_type None): nothing ever claims one, so nothing would fill the harness in later — permanently half-described. FIXED: _open_dispatch detects once, records it, and PASSES it to _resolved_model, which no longer detects anything itself; the recorded harness is therefore by construction the one that chose the recorded model. Two tests. Two existing tests needed their fixtures corrected rather than their assertions weakened: both had been pinning the absence this fixes, and both ran advance on the ambient environment — which in this process is a Claude Code session, so they were asserting against whatever the machine happened to be. They now declare their harness explicitly (one undetectable, one pinned via FR_HARNESS), which is what they always meant.
+
+<!-- fr:journal kind=finding scope=plan id=f9 created=2026-09-20T16:16:16 phase=6 state=fixed -->
+### f9 · finding [fixed] · The explainer's SKILL.md line references went stale the moment §5 was rewritten (phase 6)
+
+docs/explainers/01-fr-goal.md cites fr-goal/SKILL.md by LINE RANGE in six places. Rewriting §5 to add the claim loop shrank it by three lines (the 120-line skill cap forced repacking rather than appending), so every reference below it pointed three lines high: ':81-95' for the implement loop landed mid-clause, ':97-102' straddled the §6/§7 boundary, ':104-114' and ':116-120' likewise. Nothing checks these — test_tripwire_explainers_fresh.py compares the rendered page against its own source's headings, not the source's claims about another file. FIXED by re-deriving all four against the new heading boundaries and switching them to whole-section ranges (:78-91 implement, :92-97 review-phase, :99-111 deliver, :113-117 close-out), which survive a body edit that does not move a heading. Worth knowing for the next skill edit: a published page can be made wrong by a diff that never touches it.
+
+<!-- fr:journal kind=discovery scope=plan id=x-explainer-render-verified created=2026-09-20T16:16:27 phase=6 -->
+### x-explainer-render-verified · discovery · x-explainer-render-verified: the unmodified re-render came back byte-identical before anything was written (phase 6)
+
+Per .claude/rules/explainers-currency.md, the renderer was verified BEFORE the real render: rendered the UNMODIFIED docs/explainers/01-fr-goal.md from / (not the worktree) with 'uv run --isolated --no-project --with markdown --with pyyaml python $B/tools/render_explainer.py ... --style broadsheet --embed-fonts' to a scratch file, and 'cmp' against the committed 01-fr-goal.html reported no difference — byte-identical, exit 0. Both load-bearing flags held on this host: from / and --isolated. The real render afterwards produced a 62-line HTML diff consisting only of the paragraphs actually written (the 'Six commands' rewrite, the new 'Who is holding this phase right now?' section, the implement-loop paragraph) — no codehilite explosion, no reflowed code blocks. That is what the verification buys: the page diff is exactly the prose diff.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p6-audience-audit created=2026-09-20T16:16:44 phase=6 -->
+### x-p6-audience-audit · discovery · x-p6-audience-audit: P6.T1.S3's re-read, and the one asymmetry it confirmed is correct (phase 6)
+
+Re-read both files as each audience, per the gh-420 root cause (a constraint living only where the wrong reader looks).
+
+ORCHESTRATOR reads the agent's 'description:' frontmatter. It already carries the one thing an orchestrator must not get wrong - dispatch WITHOUT isolation: 'worktree', with the reason - and nothing phase 6 added belongs there: the long-command/poll-loop clause is executor behaviour the orchestrator cannot control.
+
+EXECUTOR reads the body. It now carries the §4.E clause next to 'What you return', where it belongs: both failures are about the handback (one leaves you non-terminal, the other reports a green gate over a red suite).
+
+The asymmetry worth stating: NOTHING in the executor definition mentions 'fr run claim', and that is correct, not an omission. An executor cannot claim its own dispatch - it does not know its own harness-assigned id; only the orchestrator that dispatched it ever sees that. So the claim lives entirely in fr-goal §5, and the recovery moves (claim --abandoned, advance --redispatch) live there too, beside the 'executor lost' case that is the only time an orchestrator needs them. A reader of either file gets the whole of its own job.
+
+Cross-check performed both ways: every body constraint the orchestrator must act on is dual-sited (#461's return-not-message is in §5's dispatch clause; 'never open a PR' is in §6/§7), and every §5 duty the executor must honour is in its own body.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p6-cited-test-names created=2026-09-20T16:16:59 phase=6 -->
+### x-p6-cited-test-names · discovery · x-p6-cited-test-names: two test names written into an acceptance note from memory did not exist (phase 6)
+
+The first 'fr acceptance set-status --id run-dispatch-refuses-second' note cited test_advance_refuses_a_held_unit_by_name and test_the_refusal_prints_no_brief. Neither exists: the real ones are test_advance_refuses_a_held_unit_and_prints_no_brief and test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time. Caught by grepping tests/unit/test_run_cli.py for every name before moving on, and corrected with a second set-status (ci -> ci, allowed, notes rewritten) before anything was committed.
+
+Why it matters beyond a typo: matrix notes are evidence refs a later reader greps for. A row whose notes name a test that does not exist reads exactly like a row whose test was deleted - the acceptance-matrix checks verify the LEVEL paths (files), not the test names inside the prose. So the discipline is: paste test names from a grep, never from recall. The phase-5 handoff (p5-acceptance-row-deferred) did this correctly by listing the names verbatim, which is why the holder-recorded row's note needed no correction.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p6-f6-f8-placement created=2026-09-20T16:17:17 phase=6 -->
+### x-p6-f6-f8-placement · discovery · x-p6-f6-f8-placement: where the two user-visible side fixes were folded into the prose (phase 6)
+
+This PR carries two fixes that are user-visible beyond the dispatch record, and phase 6 had to decide where they belong.
+
+f6 (fr plan create --phases-file silently dropped every phase tier): the explainer's implement section now states plainly that 'Each phase carries a difficulty tier, assigned when the plan was written, and that tier is what chooses the model the phase is implemented with.' That sentence was FALSE for --phases-file plans before f6 - the tier existed in the plan prose and never reached dispatch, so every record showed model: null. Stating the behaviour rather than narrating the bug is the right register for a published explainer; the bug itself is in the journal and the PR body.
+
+f8 (advance detected the harness to resolve the model, then discarded it): surfaced in both fr-goal §5 ('harness beside model: a tier resolves FOR a harness, never in the abstract') and, at length, in the explainer's new section ('A tier does not resolve to a model in the abstract; it resolves for a particular harness, so the two are kept in the same record'). It is also now in the parity row's summary, which names agent type, model AND the harness that resolved it as what advance records.
+
+Neither got its own explainer section: both are properties of the dispatch record the new section already introduces, and a second section would have split one idea in two.
+
+<!-- fr:journal kind=finding scope=plan id=f10 created=2026-09-20T16:19:47 phase=6 state=fixed -->
+### f10 · finding [fixed] · Phase 6's mirror step named only sync-opencode.py — the HERMES mirror drifted and the full suite caught it (phase 6)
+
+P6.T2.S2 says 'run scripts/sync-opencode.py and commit the regenerated .opencode/ mirrors', and the tripwires it names are the opencode ones ('-k "opencode and sync"'). All of that passed. But super-fr mirrors canonical skills to TWO harnesses: scripts/sync-hermes.py writes .hermes/skills/fr/<name>/SKILL.md and .hermes/SOUL.d/super-fr-rules.md, guarded by tests/unit/test_tripwire_hermes_skills_sync.py::test_mirror_has_no_drift. Editing plugins/super-fr/skills/fr-goal/SKILL.md therefore drifted the Hermes mirror too, and the targeted tripwire run could not see it - only the FULL suite did, which is exactly why the phase's last step runs the whole thing.
+
+FIXED: ran 'uv run python scripts/sync-hermes.py' (no flag writes), which regenerated .hermes/skills/fr/fr-goal/SKILL.md, then '--check' (in sync) and the tripwire (green).
+
+The general shape, worth carrying: a step that names ONE generator by name is a step that will be followed literally. Anyone editing a canonical skill/rule in this repo runs BOTH sync scripts - AGENTS.md's 'Skills/rules: canonical source vs. generated mirrors' section documents the opencode half in detail and the hermes half only by implication.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p6-notification-said-zero created=2026-09-20T16:19:59 phase=6 -->
+### x-p6-notification-said-zero · discovery · x-p6-notification-said-zero: the harness's own completion notice reported exit 0 for a suite that exited 1 (phase 6)
+
+Phase 6 ran the full gate backgrounded as 'uv run pytest -q > file 2>&1; echo $? > file.rc'. The harness's task-completion notification read 'Background command "Run full test suite in background" completed (exit code 0)' - the exit status of the compound command (the trailing 'echo'), not of pytest. The .rc file said 1, and the suite had two failures (the hermes mirror drift of f10, plus the known-preexisting x-workflow-check-env).
+
+This is finding f3 recurring in a different disguise: f3 was 'pytest | tail exits with tail's status'; this is 'anything appended after pytest owns the exit code the harness reports'. The defence is identical and is the only one that works: write the raw status to a file and read the FILE. Had the notification been trusted, phase 6 would have committed a red tree and reported it green - which is precisely the failure class this plan's own executor clause (now in plugins/super-fr/agents/fr-phase-executor.md) warns about.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-harness-neutral-deferred created=2026-09-20T16:23:41 phase=6 -->
+### p6-harness-neutral-deferred · discovery · p6-harness-neutral-deferred: run-dispatch-harness-neutral stays not-implemented, on purpose, and its notes say so (phase 6)
+
+fr plan edit --complete-phase 6 warned that acceptance row run-dispatch-harness-neutral is still not-implemented. Unlike phases 1-5's deferrals (which were 'phase 6 will flip it'), this one is final for this PR and the warning is expected.
+
+The row claims the dispatch record is written IDENTICALLY on Claude Code and OpenCode, each recording its own harness and agent id. No unit test can show that: a fixture asserting it would only assert that fr writes what fr writes, and the harness half comes from detect_harness reading a real environment. It closes with post-merge Test Plan items 13 and 14 - a real /fr-goal run on each harness, transcripts in the PR.
+
+The other three rows moved not-implemented -> ci in this phase via fr acceptance set-status (run-dispatch-holder-recorded, run-dispatch-refuses-second, run-dispatch-abandon). This one's --notes were rewritten in place (not-implemented -> not-implemented) to record the deliberate decision rather than leaving it looking like an oversight - which is the whole point of the acceptance-matrix rule's 'statuses move explicitly, never silently', applied to a status that deliberately did not move.

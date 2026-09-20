@@ -146,6 +146,13 @@ and a CI tripwire will catch drift anyway:
   `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
   the regenerated mirror — `test_tripwire_opencode_skills_sync.py` /
   `test_tripwire_opencode_instructions_sync.py` fail on drift.
+- **There are TWO mirror generators, and one canonical edit drifts both.**
+  `scripts/sync-hermes.py` writes `.hermes/skills/fr/<name>/SKILL.md` and
+  `.hermes/SOUL.d/super-fr-rules.md`, guarded by
+  `test_tripwire_hermes_skills_sync.py`. Run **both** scripts after touching a
+  canonical skill/rule. Running only `sync-opencode.py` leaves a green targeted
+  tripwire run and a red full suite, which is how the Hermes mirror drifted in
+  gh-503 phase 6.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —

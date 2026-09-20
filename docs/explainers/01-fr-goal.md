@@ -210,11 +210,12 @@ workspace. It holds the shape's name, the branch, the **cursor** — the step th
 run is currently on — and one record per step: pending, running, blocked on a
 gate, done, or failed, along with the paths of whatever that step produced.
 
-Five commands move it. `fr run start` begins a run; `fr run status` prints
+Six commands move it. `fr run start` begins a run; `fr run status` prints
 where it is; `fr run advance` executes the step under the cursor if it is a
-command, or prints the dispatch brief if it is agent work; `fr run resolve`
-records how a dispatched step turned out and answers an operator gate; and
-`fr run check` fails loudly when the cursor is sitting on a failed step.
+command, or prints the dispatch brief if it is agent work; `fr run claim`
+records which agent took that brief; `fr run resolve` records how a dispatched
+step turned out and answers an operator gate; and `fr run check` fails loudly
+when the cursor is sitting on a failed step.
 
 One more command creates a run rather than moving one. If your `fr` was
 upgraded while a plan was already half-implemented, that work predates the run
@@ -233,6 +234,47 @@ directory. That is why the run arrives in the pull request alongside the code:
 a reviewer can see which steps ran, what each one emitted, and where the run
 paused, without having been present for it. When the plan is archived after
 merge, its run record is archived with it.
+
+### Who is holding this phase right now?
+
+That question sounds like idle curiosity until a phase has been running for an
+hour and you cannot tell whether the agent doing it is alive. It came up for
+real: eight phase executors were dispatched across two runs, and hours later the
+harness still listed one of them as running, with no way to tell from the run
+record whether that was a stuck agent or an accounting artifact.
+
+So a dispatch is now written down as it happens. When `fr run advance` prints a
+brief, it records that it did — the kind of agent the brief was for, the model
+the phase's difficulty tier resolved to, the harness that resolved it, and the
+moment it went out. A tier does not resolve to a model in the abstract; it
+resolves *for* a particular harness, so the two are kept in the same record
+rather than leaving a model sitting there with nothing to explain where it came
+from. What `fr` cannot know is *which* agent picked the brief up, because only
+the orchestrator that dispatched it ever sees that identifier. That is what
+`fr run claim <run-id> --step <step> --item phase/<n> --agent <id>` is for, and
+it is called immediately after dispatching rather than when the agent returns —
+an identity that only arrives on the way back cannot answer a question you have
+while you are waiting. `fr run status` then shows each phase with its holder and
+since when, and `fr run check` counts dispatches that are still open, or that
+nobody claimed, as visible debt rather than as errors.
+
+The same record doubles as a lock. Ask `fr run advance` to brief a phase whose
+dispatch is still open and it refuses: exit code 2, naming the holder, printing
+no brief at all. That refusal matters more here than it would elsewhere, because
+every phase executor works in the *same* isolated worktree — it is deliberately
+denied one of its own, since a second worktree would strand it on the main
+branch where the spec and plan do not yet exist. Two executors briefed for one
+phase would therefore be two writers in one checkout, with nothing else standing
+between them.
+
+When an executor genuinely is not coming back, two named moves get you out
+rather than one improvised one. `fr run claim … --abandoned` closes the record
+without resolving the step, so the phase is free and the next `fr run advance`
+briefs it again; `fr run advance <run-id> --redispatch` does the closing and the
+re-briefing in a single step. Neither erases the previous holder. The records
+accumulate per phase, oldest first, so the pull request carries the whole
+history of who was asked to do what — including the attempt that was abandoned,
+which is usually the one worth reading.
 
 ### 1. Establish the boundary before everything else (`fr run start`)
 
@@ -345,7 +387,7 @@ during the spec review rather than asking for another approval
 
 Not every promise can be automated immediately. Any remaining acceptance debt
 stays visible in the final pull request instead of being quietly described as
-done (`plugins/super-fr/skills/fr-goal/SKILL.md:104-114`).
+done (`plugins/super-fr/skills/fr-goal/SKILL.md:99-111`).
 
 ### 4. Turn the design into a checkable plan (`plan` and `plan-review`)
 
@@ -403,13 +445,21 @@ discovered. It writes a failing test, implements the behavior, and cleans up
 without changing that behavior. This test-first cycle is commonly called
 **TDD**, or test-driven development.
 
+Each phase carries a difficulty **tier**, assigned when the plan was written,
+and that tier is what chooses the model the phase is implemented with. Every
+turn of the loop is the same four moves: dispatch the executor, claim the
+dispatch so the run knows who is holding this phase, wait for it, then resolve
+the phase with how it went. The claim is a single extra command, and it is what
+makes an unattended run inspectable from outside — see *Who is holding this
+phase right now?* above.
+
 The work stays in the original isolated workspace, so the design reasoning, the
 plan, and your answers all remain in reach. The journal is what carries context
 from one phase to the next: findings, decisions, and discoveries are written
 down rather than being remembered, which is what makes a phase handover
 survivable at all. Progress is recorded step by step, and acceptance rows are
 updated only when there is honest test evidence
-(`plugins/super-fr/skills/fr-goal/SKILL.md:81-95`,
+(`plugins/super-fr/skills/fr-goal/SKILL.md:78-91`,
 `plugins/super-fr/skills/fr-execute/SKILL.md:79-82`).
 
 At each completed phase the agent reviews the spec, plan, and code together — the
@@ -419,14 +469,14 @@ with tests. It may reject a finding only with explicit, factual reasoning;
 silent dismissal is not allowed. Each finding is recorded as open, fixed, or
 refuted, and that durable list — not anyone's memory of the review — is what
 the pull-request description is later written from
-(`plugins/super-fr/skills/fr-goal/SKILL.md:97-102`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:92-97`).
 
 ### 7. Keep delivery in draft until the checks pass (`deliver`)
 
 The agent opens one **draft pull request**, a visible change that GitHub marks as
 not ready to merge. It remains a draft while reviews and fixes continue. Only
 after the full test suite and plan checks pass does `fr-goal` mark it ready for
-your review (`plugins/super-fr/skills/fr-goal/SKILL.md:104-114`).
+your review (`plugins/super-fr/skills/fr-goal/SKILL.md:99-111`).
 
 This ordering follows a recurring failure: implementers opened mergeable PRs
 before orchestration review, operators merged them, and later fixes were pushed
@@ -464,7 +514,7 @@ part, records the result, and continues until the plan passes or a failure
 requires recovery. It then reports any remaining acceptance debt, confirms plan
 completion, archives the plan, its journal, and its run record through a
 housekeeping PR, and tears down isolation or lets garbage collection reap it
-(`plugins/super-fr/skills/fr-goal/SKILL.md:116-120`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:113-117`).
 
 ### When one goal spans several repositories
 

@@ -76,13 +76,9 @@ Resolve `--emitted plan=<path>`.
 is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli` steps self-complete).
 
 ### 5. implement — grouped per-phase loop, journal-fed, TDD
-The run's workspace is the working copy (`fr isolation exec`); spec/plan aren't on main yet,
-so NOT dispatched (`fr apply --yes` refuses). `implement` is a grouped `for_each`: per phase in
-dependency order, dispatch ONE phase-executor for `implement-phase` — brief = `fr pickup` + spec
-+ `fr journal handoff --scope plan --phase N`: TDD (`superpowers:test-driven-development`),
-journals discoveries/findings (`fr journal add`), ticks steps / completes the phase, returns a
-structured result — the handoff IS the context. Model = phase `tier` via `fr models resolve
---harness <h>` (unbound → set at step 1); blocked → run inline; never a manual phase.
+The run's workspace is the working copy (`fr isolation exec`); spec/plan aren't on main yet, so NOT dispatched (`fr apply --yes` refuses). `implement` is a grouped `for_each`: per phase in dependency order, dispatch ONE phase-executor for `implement-phase` — brief = `fr pickup` + spec + `fr journal handoff --scope plan --phase N`: TDD (`superpowers:test-driven-development`), journals discoveries/findings (`fr journal add`), ticks steps / completes the phase, returns a structured result — the handoff IS the context. Model = phase `tier` via `fr models resolve --harness <h>` (unbound → set at step 1); blocked → run inline; never a manual phase.
+**Per phase the loop is dispatch → claim → wait → resolve.** The moment a dispatch goes out, name its holder: `fr run claim <run-id> --step implement-phase --item phase/<n> --agent <id>` (`--harness` defaults to what fr detects, `--model` when you know it). It annotates the record `advance` already opened — fr times its own act and resolves the tier's model, but only YOU know which agent took it — so "who is holding phase 2 *right now*" is answerable while it matters, not only after the return (#503). `advance` then REFUSES a unit whose record is still open: exit 2, naming the holder, no brief printed — #499's double-dispatch hazard, now backed by recorded state instead of inferred from `items`.
+Executor lost, or never coming back? `fr run claim <run-id> --step implement-phase --item phase/<n> --abandoned` closes the record and leaves the unit `running`, so the next `advance` briefs it again; `fr run advance <run-id> --redispatch` closes it and re-briefs in one move. Neither erases the old holder — records accumulate oldest-first per unit, which is the trail #503 asked for. `fr run status` shows who holds each unit and since when (harness beside model: a tier resolves FOR a harness, never in the abstract); `fr run check` counts open and unclaimed dispatches as debt, not failure.
 **Harness — dispatch:** Claude Code uses the `fr-phase-executor` Agent without `isolation: "worktree"`
 — **mustn't**, not "needn't" (#420, hook-refused): the flag cuts a *second* worktree from main where
 spec/plan are invisible and writes are denied, yet the dispatch succeeds, so the run looks healthy
@@ -90,6 +86,7 @@ while nothing happens. The two isolations don't compose. (Contrast §2's cross-r
 *keep* the flag — each starts a fresh pipeline in a different repo; these share this one's workspace.)
 Hermes `delegate_task(goal, context)` carries the brief in `context`, serial; child loads
 `fr-execute`. OpenCode dispatches the same brief, serially, through its task tool as `subagent_type: fr-phase-executor-<tier>`: the call carries no model, so the agent NAME is the only place a tier can live. Two cases take the untiered `fr-phase-executor` instead — a phase declaring no `tier`, and a tier that is UNRESOLVED (`fr models resolve` prints nothing) — and you journal which: a tier agent with no binding just inherits the session model, a row indistinguishable from a working tiered dispatch, whereas the untiered name makes the absence visible.
+The `--agent` id you claim with is whatever that dispatch handed you: on Claude Code the task id the `Agent` call returns, on OpenCode the child session id its task tool returns, on Hermes the `delegate_task` handle. Never invent one — an unclaimed record still refuses a second dispatch, it just can't say who it is waiting on.
 Price stated, not hidden: ~7x an inline run ($7.59 measured against ~$1), bought for the fastest measured wall clock (56.2 min against 77.6 and 105.2) and real per-phase context isolation; inline only when dispatch is unavailable. An executor that both returns and messages: keep the return, log the drop (#461).
 
 ### 6. review-phase — per phase, inside the loop, then push (never a PR)
