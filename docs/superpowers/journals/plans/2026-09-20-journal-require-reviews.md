@@ -462,3 +462,8 @@ Carried as a discovery: d-p4-no-tripwire-runs-skill-commands. No gate executes o
 Post-fix: 109 skill/mirror/neutrality/integration tests pass.
 
 Assessment: phase 5 proceeds.
+
+<!-- fr:journal kind=discovery scope=plan id=b19699bc0c0a created=2026-09-20T18:35:31 phase=5 -->
+### b19699bc0c0a · discovery · Explainer's SKILL.md line citations had already drifted before this phase touched them (phase 5)
+
+docs/explainers/01-fr-goal.md cites plugins/super-fr/skills/fr-goal/SKILL.md by line range in a dozen places. Phase 3's journal-check insertion and phase 4's line-joins (removing manual wraps) shifted nearly every one of those ranges without anyone updating the explainer — it was never in scope for those phases. Verified each citation against origin/main and current HEAD by diffing the exact cited text, then corrected all twelve ranges (16-32->16-31, 44-47->43-46, 49-56->48-55 x2, 58-64->57-63, 69-74->68-72, 81-95->78-93, 97-102->95-103, 104-114->105-115 x2, 116-120->117-120) plus added a new :99-100 for the journal-check section itself. No tripwire catches this class of drift (line-range citations in prose pointing at line numbers in a different file) - it is the same gap as d-p4-no-tripwire-runs-skill-commands one level over: nothing checks that a cited line range still contains what the citation claims.
