@@ -2319,7 +2319,10 @@ def test_status_never_renders_a_measurement_and_an_estimate_the_same_way(
     flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
 
     # the measured unit: the four figures, named as measured
-    assert "measured: 21051 tok (in 1, cache-create 1000, cache-read 20000, out 50)" in flat
+    assert (
+        "measured: 21051 tok billed across the dispatch's turns "
+        "(in 1, cache-create 1000, cache-read 20000, out 50)" in flat
+    )
     # the estimated unit: still an estimate, and SAID to be one
     assert "not measured: no transcript figure for this unit" in flat
     assert "tok est" in flat
@@ -2332,7 +2335,7 @@ def test_status_never_renders_a_measurement_and_an_estimate_the_same_way(
         < band.index("phase/2/code")
         < band.index("not measured:")
     )
-    assert "measured total: 21051 tok over 1 of 2 units" in flat
+    assert "measured total: 21051 tok over 1 of 2 dispatched units" in flat
 
 
 def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> None:
@@ -2346,7 +2349,7 @@ def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> 
     flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
 
     assert "measured total: none" in flat
-    assert "no transcript figure for any of the 2 units" in flat
+    assert "no transcript figure for any of the 2 dispatched units" in flat
     assert "tok est" in flat
     assert "measured: 21051" not in flat
 
@@ -2368,19 +2371,51 @@ def test_status_renders_a_measured_zero_as_a_measurement(tmp_path: Path) -> None
 
     flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
 
-    assert "measured: 0 tok (in 0, cache-create 0, cache-read 0, out 0)" in flat
-    assert "measured total: 0 tok over 1 of 2 units" in flat
+    assert (
+        "measured: 0 tok billed across the dispatch's turns "
+        "(in 0, cache-create 0, cache-read 0, out 0)" in flat
+    )
+    assert "measured total: 0 tok over 1 of 2 dispatched units" in flat
 
 
-def test_status_names_the_harness_whose_transcript_it_read(tmp_path: Path) -> None:
-    """A number with no provenance is the thing this phase exists to avoid."""
+def test_status_says_a_measured_figure_came_from_a_transcript(tmp_path: Path) -> None:
+    """A number with no provenance is the thing this phase exists to avoid.
+
+    Named for what it checks. It was previously called
+    `test_status_names_the_harness_whose_transcript_it_read`, which the body
+    could not deliver: `_with_measurement` keeps only the four figures, so the
+    cursor has no record of WHICH harness produced them and the rendering
+    cannot name one. A test whose name asserts more than its body is the exact
+    defect this repo keeps finding; renaming is the honest fix, and carrying
+    provenance into the cursor is the follow-up (v1 stores figures; which agent
+    produced them stays recoverable from the transcript).
+    """
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_run(repo, _TWO_UNIT_RUN)
 
     flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
 
-    assert "measured from the harness transcript" in flat
+    assert "cumulative harness accounting" in flat
+
+
+def test_status_says_the_measured_figure_is_not_the_estimate(tmp_path: Path) -> None:
+    """The two numbers are labeled differently AND are different quantities.
+
+    The estimate is one dispatch's assembled context; the measurement is
+    cumulative billing across every turn of that dispatch, dominated by
+    cache re-reads. On a real unit of the run that built this they differed by
+    ~1,426x, which reads as a broken estimator unless the line says what it
+    counts.
+    """
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_run(repo, _TWO_UNIT_RUN)
+
+    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
+
+    assert "billed across the dispatch's turns" in flat
+    assert "NOT comparable to the one-dispatch" in flat
 
 
 # --- write-claim: one writer at a time (phase 5, contract runtime) ---

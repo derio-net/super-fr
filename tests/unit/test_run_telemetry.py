@@ -16,6 +16,9 @@ subagent metadata's `toolUseId`.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -411,3 +414,84 @@ def test_a_mistyped_fr_harness_degrades_instead_of_raising() -> None:
         detect_harness({"FR_HARNESS": "claude-kode"})
 
     assert measure_unit({"FR_HARNESS": "claude-kode"}, start=BEFORE, end=AFTER) is None
+
+
+def test_a_transcript_with_non_ascii_bytes_is_read_under_a_non_utf8_locale(
+    tmp_path: Path,
+) -> None:
+    """Transcripts are JSON — UTF-8 by specification — so the reader must not
+    consult the process locale.
+
+    `Path.read_text()` with no `encoding=` uses the preferred encoding. In a
+    container or CI image with no `C.UTF-8` (PEP 538 coercion has nothing to
+    coerce to) that is US-ASCII, and every transcript carrying one non-ASCII
+    byte raises `UnicodeDecodeError` — which this module turns into `None`,
+    i.e. "no measurement", indistinguishable from "no transcript exists". The
+    whole feature would be dead and say nothing. Reproduced against a real
+    transcript under `LC_ALL=C` before the fix.
+
+    This runs OUT OF PROCESS on purpose. The first version of this test
+    monkeypatched `locale.getpreferredencoding` and passed with the bug still
+    in place: `Path.read_text()` resolves its encoding below the Python name
+    that was patched, so the test proved nothing. A process cannot change its
+    own locale after start, so the only honest way to assert this is to start
+    one that has the hostile locale — the same reason
+    `test_registration_rides_the_package_import_not_the_callers_memory` is a
+    subprocess test.
+    """
+    transcript = tmp_path / "agent-x.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "isSidechain": True,
+                "message": {
+                    "usage": {
+                        "input_tokens": 1,
+                        "cache_creation_input_tokens": 2,
+                        "cache_read_input_tokens": 3,
+                        "output_tokens": 4,
+                    },
+                    # A real dispatch brief routinely carries an em dash, a
+                    # curly quote or a section sign.
+                    "content": "phase 4 — the executor's brief §5.C",
+                },
+            },
+            # ensure_ascii=False, or json escapes the em dash to \\u2014 and the
+            # fixture is pure ASCII — which is how the first version of this
+            # test passed with the bug still in place. Real transcripts are not
+            # escaped: one sampled on this machine carries 9,189 non-ASCII
+            # bytes.
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    probe = (
+        "import sys, json\n"
+        "from pathlib import Path\n"
+        "from fr.run.telemetry import read_claude_code\n"
+        f"t = read_claude_code(Path({str(transcript)!r}))\n"
+        "print(json.dumps(None if t is None else t.total))\n"
+    )
+    env = {
+        **os.environ,
+        "LC_ALL": "C",
+        "LANG": "C",
+        "PYTHONUTF8": "0",
+        "PYTHONCOERCECLOCALE": "0",
+    }
+    done = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=Path(__file__).resolve().parents[2],
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout.strip()) == 10, (
+        "a non-ASCII transcript must still be readable under a non-UTF-8 "
+        f"locale; got {done.stdout!r}"
+    )

@@ -975,7 +975,9 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
         raise typer.Exit(2) from e
 
 
-def _print_accounting(accounting: Mapping[str, PhaseAccounting]) -> None:
+def _print_accounting(
+    accounting: Mapping[str, PhaseAccounting], dispatched: int | None = None
+) -> None:
     """Per-unit context accounting: V1 sizes, and V2 measurements where they
     exist — never blurred into each other.
 
@@ -983,6 +985,14 @@ def _print_accounting(accounting: Mapping[str, PhaseAccounting]) -> None:
     fr's own 4-chars-per-token arithmetic over the context it assembled: a
     guess, and labeled one everywhere it appears. A `measured: N tok` is the
     harness's own accounting, read back out of its transcript.
+
+    They are also not the same QUANTITY, which labeling alone did not convey:
+    the estimate is one dispatch's assembled context, while the measurement is
+    cumulative billing across every turn of that dispatch — overwhelmingly
+    `cache_read`, because each turn re-reads the whole accumulated context.
+    On a real unit of this very run they differed by ~1,426x, which reads as a
+    broken estimator unless the line says what it counts. That ratio is not
+    noise, it is the finding #464 is about.
 
     So an absent measurement is printed, not skipped. Leaving the unit's
     estimate line alone with nothing beside it is how an estimate comes to be
@@ -1016,23 +1026,29 @@ def _print_accounting(accounting: Mapping[str, PhaseAccounting]) -> None:
         measured_total += measured
         measured_units += 1
         console.print(
-            f"      measured: {measured} tok "
+            f"      measured: {measured} tok billed across the dispatch's turns "
             f"(in {snap.input_tokens}, cache-create {snap.cache_creation_input_tokens}, "
             f"cache-read {snap.cache_read_input_tokens}, out {snap.output_tokens}) "
-            f"— measured from the harness transcript",
+            f"— cumulative harness accounting, NOT comparable to the "
+            f"one-dispatch ~{chars // 4} tok estimate above",
             soft_wrap=True,
         )
     console.print(f"    total: {total} chars (~{total // 4} tok est)")
+    # Denominator is DISPATCHED units, not accounting rows. A unit that was
+    # dispatched but has no snapshot at all is invisible in the loop above, so
+    # using len(accounting) silently shrinks the denominator to hide it and
+    # reports better coverage than there is.
+    denom = len(accounting) if dispatched is None else dispatched
     if measured_units:
         console.print(
             f"    measured total: {measured_total} tok over {measured_units} of "
-            f"{len(accounting)} units (the ~tok estimates above are NOT part of this total)",
+            f"{denom} dispatched units (the ~tok estimates above are NOT part of this total)",
             soft_wrap=True,
         )
     else:
         console.print(
             f"    measured total: none — no transcript figure for any of the "
-            f"{len(accounting)} units; every ~tok figure above is an estimate",
+            f"{denom} dispatched units; every ~tok figure above is an estimate",
             soft_wrap=True,
         )
 
@@ -1053,7 +1069,15 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             for key in sorted(record.items):
                 console.print(f"    {key}: {record.items[key]}")
     if state.accounting:
-        _print_accounting(state.accounting)
+        # Count units the cursor actually dispatched, so a dispatched unit with
+        # no snapshot still lands in the denominator rather than vanishing.
+        dispatched = sum(
+            1
+            for record in state.steps.values()
+            for key, item_state in (record.items or {}).items()
+            if item_state != "queued"
+        )
+        _print_accounting(state.accounting, dispatched or None)
 
 
 @run_app.command("advance")

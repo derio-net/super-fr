@@ -130,7 +130,16 @@ def _read_records(path: Path) -> list[dict[str, Any]] | None:
     there is no evidence it is a transcript at all.
     """
     try:
-        text = path.read_text()
+        # encoding="utf-8" explicitly: JSON is UTF-8 by specification, but
+        # `read_text()` with no encoding consults the PROCESS LOCALE. Under a
+        # container or CI image with no C.UTF-8 (PEP 538 coercion then has
+        # nothing to coerce to), preferred encoding is US-ASCII and every
+        # transcript carrying one non-ASCII byte raises — returning None, which
+        # is indistinguishable from "no transcript exists". The feature would be
+        # 100% dead and say nothing. Reproduced against a real transcript with
+        # LC_ALL=C. This file is written by another program in a spec'd
+        # encoding; fr's own files keep the repo's bare-read_text convention.
+        text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
     records: list[dict[str, Any]] = []
@@ -310,7 +319,11 @@ def attribute_dispatches(session: Path) -> list[Dispatch]:
         agent_id = transcript.name[len("agent-") : -len(".jsonl")]
         meta_path = subagents / f"agent-{agent_id}.meta.json"
         try:
-            meta = json.loads(meta_path.read_text())
+            # Same reason as `_read_records`, and worse in kind here: this
+            # UnicodeDecodeError is swallowed by the `continue`, so one
+            # non-ASCII character in a dispatch `description` would silently
+            # unattribute that agent rather than failing loudly.
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
         if not isinstance(meta, dict):
