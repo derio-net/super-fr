@@ -1247,25 +1247,21 @@ def _skeleton_issues(plan: Plan) -> list[ReviewIssue]:
             )
         )
     if marked and plan.meta.fr_version:
-        # Same floor probe as `acceptance:` (#352 review): a plan that marks a
+        # Same floor probe as `acceptance:` (#352 review) and `tier:` — and it
+        # says so, so it goes through the same helper. A plan that marks a
         # skeleton while its fr_version admits a pre-marker fr passes here and
         # dies on a raw "extra field" pydantic error over there.
-        from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-        try:
-            if SpecifierSet(plan.meta.fr_version).contains("4.1.1", prereleases=True):
-                out.append(
-                    ReviewIssue(
-                        severity="warn",
-                        message=(
-                            "a phase marks the skeleton but fr_version "
-                            f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
-                            "floor it at '>=4.2.0,<5.0.0'."
-                        ),
-                    )
-                )
-        except InvalidSpecifier:
-            pass  # the parser already fails loud on malformed constraints
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="4.1.1",
+            message=(
+                "a phase marks the skeleton but fr_version "
+                f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
+                "floor it at '>=4.2.0,<5.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
     return out
 
 

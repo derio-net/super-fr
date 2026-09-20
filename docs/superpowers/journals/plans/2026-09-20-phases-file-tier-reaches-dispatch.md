@@ -49,3 +49,8 @@ tests/unit/fixtures/v2_plan_minimal is the 'clean plan' baseline used by 30+ tes
 ### p2-matrix-deferred · discovery · The completion warning about acceptance row plan-self-review-flags-tier-gaps still not-implemented is expected -- deferred to Phase 5 (phase 2)
 
 'fr plan edit --complete-phase 2' printed a warning that its linked acceptance row (plan-self-review-flags-tier-gaps) is still not-implemented. Checked 05.yaml: P5.T2.S2 explicitly flips this row (plus phase-header-fields-survive-phases-file and phase-tier-reaches-the-dispatch-brief) to ci together, citing evidence refs, as part of the plan's designed matrix-bundling. Left it alone in phase 2 rather than preempting phase 5's task.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f2 created=2026-09-20T14:14:30 phase=2 state=fixed -->
+### p2-f2 · finding [fixed] · Two of three floor probes extracted, leaving the third claiming to be the same (phase 2)
+
+P2.T1.S3 extracted _version_floor_issue from the acceptance (3.7.0) and tier (3.12.0) probes as the plan asked, but _skeleton_issues' 4.1.1 probe kept its own inline copy — while its comment read 'Same floor probe as acceptance: (#352 review)'. Three instances of one pattern, two extracted, one left, and the one left ASSERTING it is the same: a later reader cannot tell whether skeleton's probe is deliberately different or merely missed. That ambiguity is the cost the extraction was meant to remove. Routed it through the helper too (the comment now says so), dropping 10 lines. Regression net: all 11 skeleton-gate tests plus the 88 tests across test_plan_tier_gates / test_plan_acceptance_links / test_v2_plan_ops pass UNCHANGED — none were edited to fit.
