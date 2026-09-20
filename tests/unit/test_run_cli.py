@@ -1931,13 +1931,71 @@ steps:
 _FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
-def _started_grouped_with_plan(repo: Path, shipped: Path) -> str:
-    """Start against the grouped shape and resolve `plan` with a real
-    one-phase plan on disk, so the group can enumerate its items."""
+def _plan_with_tags(
+    repo: Path,
+    shapes: list[tuple[int, str, tuple[int, ...]]],
+    *,
+    slug: str = "2026-09-20-tagged",
+) -> str:
+    """Scaffold a real plan whose phases are exactly `(number, tag, deps)`.
+
+    Built inline rather than copied from a fixture folder for the reason
+    spec §1.4 measured: no plan folder on disk — live, archived or fixture —
+    has a manual phase anywhere but its trailing block, so the shapes #496
+    is about can only be constructed. One task, one step per phase, so
+    `plan_locally_complete` is decided purely by whether the test ticks it.
+    """
+    from fr.plan_ops import PhaseSpec, create
+
+    specs = repo / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True, exist_ok=True)
+    spec_rel = f"docs/superpowers/specs/{slug}-design.md"
+    (repo / spec_rel).write_text(
+        "# Tagged\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+    create(
+        repo_root=repo,
+        slug=slug,
+        spec=spec_rel,
+        target_repo="derio-net/test",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=n,
+                title=f"Phase {n}",
+                tag=tag,  # type: ignore[arg-type]
+                depends_on=deps,
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": f"P{n}.T1.S1", "text": "do the thing"}],
+                    },
+                ),
+            )
+            for n, tag, deps in shapes
+        ],
+        prose="# x\n",
+    )
+    return f"docs/superpowers/plans/{slug}"
+
+
+def _started_grouped_with_plan(repo: Path, shipped: Path, plan_rel: str | None = None) -> str:
+    """Start against the grouped shape and resolve `plan` with a real plan on
+    disk, so the group can enumerate its items.
+
+    Defaults to the one-phase `v2_plan_minimal` fixture; `plan_rel` lets a
+    test supply a plan of its own shape (`_plan_with_tags`), which is the
+    only way to fan out over a manual phase.
+    """
     import shutil
 
-    slug = "2026-05-09-fixture-minimal"
-    shutil.copytree(_FIXTURE_PLAN, repo / "docs" / "superpowers" / "plans" / slug)
+    if plan_rel is None:
+        slug = "2026-05-09-fixture-minimal"
+        shutil.copytree(_FIXTURE_PLAN, repo / "docs" / "superpowers" / "plans" / slug)
+        plan_rel = f"docs/superpowers/plans/{slug}"
     _invoke(repo, shipped, ["run", "start", "grouped", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])  # plan running + brief
     result = _invoke(
@@ -1952,11 +2010,11 @@ def _started_grouped_with_plan(repo: Path, shipped: Path) -> str:
             "--state",
             "done",
             "--emitted",
-            f"plan=docs/superpowers/plans/{slug}",
+            f"plan={plan_rel}",
         ],
     )
     assert result.exit_code == 0, result.output
-    return f"docs/superpowers/plans/{slug}"
+    return plan_rel
 
 
 def test_advance_grouped_step_dispatches_the_first_pending_member(tmp_path: Path) -> None:
@@ -3056,3 +3114,163 @@ def test_the_refusals_two_commands_actually_run_as_printed(tmp_path: Path) -> No
 
     assert result.exit_code == 0, result.output
     assert _brief_of(result.output)["step"] == "implement-phase"
+
+
+# --- #496: the run model never offers a manual phase, and never hides one ---
+#
+# Spec §3.D.3. `for_each: phase` enumerates AGENTIC phases only; the phases it
+# skips are recorded in the same `items` map as `phase/<n>: manual`, so the
+# omission is deliberate and visible rather than silent. `items` values are
+# already free-form strings, so none of this is a schema change.
+
+
+def _drive_the_group(repo: Path, shipped: Path) -> list[str]:
+    """advance → resolve until the group stops briefing, returning every
+    stdout it produced along the way.
+
+    The assertion that matters is over the WHOLE transcript — "no brief was
+    ever built for phase 4" is a claim about every dispatch the run made, not
+    about the one a single `advance` happened to emit.
+    """
+    outputs: list[str] = []
+    for _ in range(20):
+        advanced = _invoke(repo, shipped, ["run", "advance", "r1"])
+        outputs.append(advanced.output)
+        assert advanced.exit_code == 0, advanced.output
+        if "{" not in advanced.output:
+            return outputs  # the group completed instead of briefing a unit
+        brief = _brief_of(advanced.output)
+        resolved = _invoke(
+            repo,
+            shipped,
+            [
+                "run",
+                "resolve",
+                "r1",
+                "--step",
+                brief["step"],
+                "--item",
+                brief["item"],
+                "--state",
+                "done",
+            ],
+        )
+        outputs.append(resolved.output)
+        assert resolved.exit_code == 0, resolved.output
+        if "implement: done" in resolved.output:
+            return outputs  # the last member's resolve completed the group
+    raise AssertionError("the group never completed")
+
+
+def test_a_manual_phase_is_never_dispatched(tmp_path: Path) -> None:
+    """#496, spec §3.D.3. Three agentic phases and a trailing `[manual]` one:
+    the fan-out enumerates six units (3 phases × 2 members), never seven, and
+    the phase it skipped is named in the cursor and at group completion."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(
+        repo,
+        [(1, "agentic", ()), (2, "agentic", ()), (3, "agentic", ()), (4, "manual", ())],
+    )
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+
+    outputs = _drive_the_group(repo, shipped)
+
+    # (a) no brief was ever built for the manual phase
+    briefs = [_brief_of(out) for out in outputs if "{" in out]
+    assert [b["item"] for b in briefs] == [f"phase/{n}" for n in (1, 1, 2, 2, 3, 3)], [
+        b["item"] for b in briefs
+    ]
+    # (b) the cursor records the deliberate omission
+    items = load_run_state(repo, "r1").steps["implement"].items or {}
+    assert items.get("phase/4") == "manual", items
+    # (c) group completion counts what was dispatched, and names what was not
+    done_line = next(
+        line for out in outputs for line in out.splitlines() if "implement: done" in line
+    )
+    assert "6 members done" in done_line, done_line
+    assert "phase 4" in done_line and "manual" in done_line, done_line
+    # (d) and `fr run status` shows it beside every other item
+    status = _invoke(repo, shipped, ["run", "status", "r1"])
+    assert "phase/4: manual" in status.output, status.output
+
+
+def test_an_already_complete_manual_phase_is_still_recorded_manual(tmp_path: Path) -> None:
+    """The fan-out filters on `tag: manual` alone — completion does not enter
+    into it (review `r4-f1` draws the outstanding/manual distinction for the
+    AUTHORING rule; this pins what the RUNTIME does with the other case).
+
+    fr-goal §3's front-load shape is `1 [manual] (ticked, the operator's go),
+    2 agentic`, and a ticked manual phase waits on nobody — but it is still
+    not work this run did. Recording it `done` would claim a dispatch that
+    never happened; recording it `manual` says what is true and keeps the two
+    writers of `items` (`advance` and `fr run adopt`) able to agree without
+    either of them consulting completion.
+    """
+    from fr.plan_ops import tick
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "manual", ()), (2, "agentic", ()), (3, "agentic", ())])
+    tick(repo / plan_rel, "P1.T1.S1")
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+
+    outputs = _drive_the_group(repo, shipped)
+
+    briefs = [_brief_of(out) for out in outputs if "{" in out]
+    assert [b["item"] for b in briefs] == [f"phase/{n}" for n in (2, 2, 3, 3)]
+    items = load_run_state(repo, "r1").steps["implement"].items or {}
+    assert items.get("phase/1") == "manual", items
+
+
+def test_resolving_a_manual_phase_member_names_the_tag(tmp_path: Path) -> None:
+    """Spec §3.D.3. "not a phase member of 'implement' — expected phase/<n>
+    for phases [1]" reads as a bug in the phase list when phase 2 plainly
+    exists in the plan. The key is absent because it was deliberately never
+    dispatched, and the refusal has to say which of the two it is."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "agentic", ()), (2, "manual", ())])
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/code
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/2", "--state", "done"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "`tag: manual`" in result.output, result.output
+    assert "phase 2" in result.output, result.output
+    assert "not a phase member" not in result.output, result.output
+
+
+def test_a_middle_manual_phase_is_refused_at_group_start(tmp_path: Path) -> None:
+    """Spec §3.D.2 point 2 — the preflight, defence in depth.
+
+    `fr plan self-review` is the primary gate, but this shape (a repo-authored
+    one, like an `fr run adopt`ed run) has no `plan-review` step, so the plan
+    reaches the fan-out unchecked. `1 agentic, 2 manual (unticked), 3 agentic`
+    is the one shape the rule forbids: phase 3 would run while a human is
+    still owed phase 2. It is refused before ANY unit is dispatched — the
+    hazard is the plan's, not this phase's.
+    """
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "agentic", ()), (2, "manual", ()), (3, "agentic", ())])
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    assert "phase 2 is `tag: manual`" in result.output, result.output
+    assert "phase 3" in result.output, result.output
+    # nothing was briefed, and nothing was claimed
+    assert "{" not in result.stdout, result.stdout
+    assert load_run_state(repo, "r1").steps["implement"].items in (None, {})
+    assert load_run_state(repo, "r1").steps["implement"].state == "pending"

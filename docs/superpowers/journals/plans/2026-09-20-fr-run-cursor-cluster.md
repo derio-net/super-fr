@@ -311,3 +311,179 @@ MY defect, not the executor's: the phase brief said 'an agentic phase may not de
 ### r4-ok · review · Phase 4 review: one finding (r4-f1, fixed). The corpus sweep and the 'no inline fixes needed' claim both hold (phase 4)
 
 Verified rather than accepted. (1) The 'no inline test plans needed fixing' claim is proven POSITIVELY in journal p4-d1 — a table of all seven inline manual-phase constructions with why each is compliant — not inferred from an absence of failures, which is what the spec budgeted for. (2) The one non-compliant inline shape (test_render_deps.py:323, phase 2 manual with agentic phases after it) was correctly LEFT ALONE: it never reaches self_review, and rewriting a render fixture to satisfy an authoring gate it does not call would be ceremony. Weakening the rule for it was never on the table. (3) Re-ran the corpus sweep myself: all 5 live plans, zero manual-placement issues, this plan (trailing [manual] phase 7) included. (4) Full suite: 3 failed / 3319 passed, exactly the p1-f2 three. (5) _trailing_manual_block's semantics are pinned by three direct tests, not just by name, which is what phase 5 needs to import it safely. ONE FINDING, r4-f1, fixed in review — see that entry.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-red created=2026-09-20T18:37:09 phase=5 -->
+### p5-red · discovery · RED for phase 5: all four tests failed, and each failure is the defect named in its own words (phase 5)
+
+Every RED was observed against real runtime, not reasoned about. Two of the four needed the code temporarily reverted to be shown honestly (I had implemented T2's two branches inside T1's GREEN edit; rather than claim a RED I never ran, I copied run_cmd.py aside, deleted the preflight call and the manual branch of _resolve_member, re-ran, captured the output below, and restored).
+
+P5.T1.S1 — `uv run pytest tests/unit/test_run_cli.py -q --no-cov -k test_a_manual_phase_is_never_dispatched`:
+
+    E  AssertionError: ['phase/1', 'phase/1', 'phase/2', 'phase/2', 'phase/3', 'phase/3', ...]
+    E  Left contains 2 more items, first extra item: 'phase/4'
+
+Two briefs WERE built for the trailing manual phase — #496 verbatim.
+
+Same command, `-k test_an_already_complete_manual_phase_is_still_recorded_manual`:
+
+    E  assert ['phase/1', ...] == ['phase/2', 'phase/3', 'phase/3']
+    E  At index 0 diff: 'phase/1' != 'phase/2'
+
+P5.T2.S1(b) — `-k names_the_tag`:
+
+    E  AssertionError: phase/2/code: not a phase member of 'implement' — expected
+       phase/<n> for phases [1] (from the recorded plan)
+
+The spec's complaint made concrete: phase 2 plainly exists in the plan, so "expected phases [1]" reads as a bug in the phase list rather than as a deliberate omission.
+
+P5.T2.S1(c) — `-k middle_manual`:
+
+    E  AssertionError: implement: dispatch brief (phase/1/code)
+    E  assert 0 == 2
+
+A plan shaped `1 agentic, 2 manual (unticked), 3 agentic` — the one shape §3.D.1 forbids — dispatched its first unit happily, exit 0.
+
+P5.T2.S1(a) — `uv run pytest tests/unit/test_run_adopt.py -q --no-cov -k "manual or delegates"`:
+
+    E  Left contains 1 more item:  {'phase/3/code': 'pending'}
+    E  Right contains 1 more item: {'phase/3': 'manual'}
+
+Adoption wrote a member key for a phase the fan-out would never dispatch — the two writers disagreeing, which is exactly what spec §3.D.3 says must not happen.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-d1 created=2026-09-20T18:37:49 phase=5 -->
+### p5-d1 · discovery · The already-complete manual phase decision (tag alone, never completion), and what phase 6 inherits (phase 5)
+
+THE DECISION PHASE 5 OWED, and the test that pins it.
+
+The brief asked me to decide, deliberately, what the fan-out does with an
+already-complete manual phase — since review `r4-f1` established that the
+AUTHORING rule keys on *outstanding*, not on *manual*.
+
+**Decision: the runtime filter keys on `tag` alone. Completion never enters
+into it.** A `tag: manual` phase is recorded `phase/<n>: manual` whether it is
+an unticked trailing phase or a ticked front-loaded one.
+
+Three reasons, in the order they decided it:
+
+1. `done` would be a lie of a specific kind. `items` records what THIS RUN
+   did with each unit. A ticked front-loaded manual phase is complete because
+   the operator did it before the run started; writing `done` claims a
+   dispatch that never happened, which is the same class of false report the
+   whole PR exists to remove.
+2. It is what lets the two writers agree. `_advance_group` has tags (it reads
+   `plan_phase_tags`); `build_run_state` has the plan. If the marker depended
+   on completion, `advance` would have to re-parse phase state on every call
+   and the two would drift the moment one of them was cheaper about it.
+   Spec §3.D.3's requirement is *identical* markers, and a completion-free
+   predicate is the only cheap way to guarantee that.
+3. It loses nothing. The completion fact still lives where it belongs — in
+   the plan's own ticked steps, which `fr status` and the archive gate read.
+   The cursor is not a second place to store it.
+
+PINNED BY, one test per writer, both asserting the positive case rather than
+the absence of a brief:
+  - `tests/unit/test_run_cli.py::test_an_already_complete_manual_phase_is_still_recorded_manual`
+    — a ticked front-loaded manual phase 1 + agentic 2,3: the briefs are
+    exactly `phase/2 ×2, phase/3 ×2` and `items['phase/1'] == 'manual'`.
+  - `tests/unit/test_run_adopt.py::test_adoption_marks_a_complete_manual_phase_manual_too`
+    — the same shape through `build_run_state`, asserting the WHOLE items map.
+
+WHAT ELSE PHASE 6 INHERITS
+
+`fr.run.adopt.MANUAL_ITEM = "manual"` — one spelling, imported by `run_cmd`.
+Not a schema change: `StepRecord.items` values are free-form strings, so no
+artifact version bump is owed and `fr validate artifacts` passes (33 artifacts,
+all valid).
+
+`fr.run.adopt.plan_phase_tags(repo_root, plan_rel) -> dict[int, str]` is now
+the one plan-reading path; `plan_phase_numbers` delegates to it and returns
+EVERY phase whatever its tag (pinned by
+`test_plan_phase_numbers_delegates_to_the_tag_aware_reader`). It has no
+in-repo caller left — it stays because it is public API in `__all__`, and the
+delegation test is what keeps it honest rather than merely alive.
+
+`_group_phases` now returns `(agentic, manual)`, and that IS the filter's
+home — above `_advance_group`'s five flat head statements, as `p2-d1`
+instructed, because `expected` is what both #499 refusals read. The head is
+still flat; I added exactly one statement to it (the `items` merge) and no
+nesting.
+
+`_advance_group`'s shape, top to bottom, for the reviewer:
+  1. `_group_phases` -> (agentic, manual), fail-closed on a missing/unparseable plan
+  2. `expected = _expected_group_items(step, agentic)`
+  3. `items = {**(record.items or {}), **_manual_items(manual)}`   <- new
+  4. running-check -> `_already_running_refusal`, exit 2      (phase 2)
+  5. `--redispatch` with nothing running -> refusal, exit 2   (phase 2)
+  6. pick `pending`
+  7. `pending is None` -> persist the markers, complete, `_group_done_line`, return
+  8. `if record.state != "running": _manual_placement_preflight(...)`  <- new
+  9. resolve the member, snapshot, claim `items[pending] = "running"`, save
+ 10. `_print_member_dispatch(step, member, item, state)`       <- extracted
+
+The preflight fires ONCE, at group start (`record.state != "running"`), which
+is spec §3.D.2's wording literally ("before the first unit is dispatched"). An
+adopted run's group record is `pending`, so the path §3.D.2 exists for — a
+plan `self_review` never saw — is exactly the one it catches. It calls
+`fr.plan_ops._manual_placement_issues`, the authoring gate itself, not a
+re-implementation: that gives one definition of "trailing", one of
+"outstanding" and one message, which is stronger than importing
+`_trailing_manual_block` alone would have been.
+
+ONE DELIBERATE DEVIATION FROM THE PLAN'S WORDING. Plan step P5.T1.S1 asked the
+completion line to name phase 4 "as trailing manual". It does not use the word
+"trailing":
+
+    implement: done (12 members done; phase 7 `tag: manual`, never dispatched
+    — the plan's own steps and the PR are its record)
+
+Because after `r4-f1` a manual phase may legitimately be
+front-loaded-and-already-complete rather than trailing, and deciding which
+from inside the completion line would be a SECOND definition of "trailing"
+sitting beside `_trailing_manual_block` — the exact duplication phase 4 was
+careful to avoid. The line names the phase and says why it was skipped, which
+is what the requirement was for. `_group_done_line` is the one renderer, used
+by both places a group can complete (`_advance_group` and `_resolve_member`),
+so the count and the naming cannot drift between them.
+
+VERIFIED AGAINST THIS VERY PLAN, which is its own fixture (phase 7 is
+`[manual]`). Offline, read-only, without touching the orchestrator's cursor:
+`plan_phase_tags` -> `{1..6: agentic, 7: manual}`; agentic `[1..6]`; markers
+`{'phase/7': 'manual'}`; `expected` 12 units, not 14; `_manual_placement_issues`
+-> `[]`, so the preflight passes; `_trailing_manual_block` -> `{7}`. The live
+run's next `advance` will therefore write `phase/7: manual` and brief phase 6's
+units, never phase 7's.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f1 created=2026-09-20T18:38:03 phase=5 state=fixed -->
+### p5-f1 · finding [fixed] · The manual markers made fr run adopt's progress line count un-dispatchable work as outstanding (phase 5)
+
+MY defect, introduced by phase 5's own change and caught inside it — recorded
+because "the fix that reintroduces the bug one surface over" is the pattern
+this PR keeps finding (`r1-f1` did the same thing to the resolve hint).
+
+`fr run adopt` prints a progress line built from the fan-out's items map:
+
+    complete = [k for k, v in items.items() if v == "done"]
+    console.print(f"  {len(complete)}/{len(items)} {unit} complete")
+
+Once `build_run_state` started writing `phase/<n>: manual` into that map, the
+denominator grew. Observed, not reasoned about — adopting a 4-phase plan with
+2 complete and a trailing `[manual]` phase 4 printed:
+
+    2/4 phase members complete
+
+which says "two units of agentic work still to do". One is: nothing will ever
+dispatch phase 4. That is #496's own narrowing — a richer fact (this phase is
+not dispatchable) discarded at the point where it was load-bearing — moved
+into the summary line by the fix for #496.
+
+FIXED: the ratio counts only what will be dispatched, and the manual phases
+get their own line rather than being hidden in the arithmetic:
+
+    2/3 phase members complete
+    never dispatched (`tag: manual`): phase/4
+
+Pinned by
+`tests/unit/test_run_adopt.py::test_cli_adopt_counts_only_the_phases_that_will_be_dispatched`,
+which was confirmed failing (`2/4`) before the fix. `fr run status` needed no
+equivalent change: it prints every item as its own line already, so
+`phase/4: manual` shows up there with no arithmetic to distort.

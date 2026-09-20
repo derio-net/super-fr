@@ -2214,9 +2214,13 @@ rows:
       it rather than hiding a deliberate omission.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec 3.D.3. for_each: phase enumerates agentic phases only; the trailing
-      block is recorded as ''phase/<n>: manual'' in the group''s items map (free-form
-      values, so no schema change or artifact bump). Both writers change — advance and
-      fr.run.adopt.build_run_state — or a resumed run disagrees with a started one.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_adopt.py
+    status: ci
+    notes: 'No brief is built for a manual phase on any path; the cursor records phase/<n>:
+      manual so a deliberate omission stays visible; advance and adopt write it identically.
+      The marker keys on tag alone, never on completion, so an already-complete front-loaded
+      manual phase is recorded manual too — the two writers agree without either parsing
+      state.'

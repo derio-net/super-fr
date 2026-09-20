@@ -907,3 +907,87 @@ def test_adopt_of_an_all_complete_plan_lands_on_the_group_with_review_pending(
         "phase/1/code": "done",
         "phase/2/code": "done",
     }
+
+
+# --- #496: both writers of `items` record a manual phase identically -------
+
+
+def _with_manual_phase(plan_dir: Path, n: int) -> Path:
+    phase = plan_dir / f"{n:02d}.yaml"
+    phase.write_text(phase.read_text().replace("tag: agentic", "tag: manual"))
+    return plan_dir
+
+
+def test_adoption_records_a_manual_phase_as_manual_not_as_a_member(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """Spec §3.D.3: **both** writers of a group's item map change.
+
+    `build_run_state` reconstructs per-phase item state independently of
+    `advance`; if only `advance` learned about manual phases, a resumed run
+    would disagree with a started one about which phases the fan-out will
+    ever dispatch — and the disagreement would surface as a `phase/<n>/code`
+    key that `advance` refuses to pick up and `resolve` refuses to record.
+    """
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _with_manual_phase(_write_plan(repo, phases=3, complete=1), 3)
+
+    state = _adopt_grouped(repo, shipped, plan_dir)
+
+    assert state.steps["implement"].items == {
+        "phase/1/code": "done",
+        "phase/2/code": "pending",
+        "phase/3": "manual",
+    }
+
+
+def test_adoption_marks_a_complete_manual_phase_manual_too(tmp_path: Path, repo_root: Path) -> None:
+    """The same decision `advance` makes, for the same reason: the marker
+    keys on `tag` alone, never on completion. A ticked front-loaded manual
+    phase waits on nobody (review `r4-f1`) but is still not work this run
+    did, and keeping the predicate completion-free is what lets the two
+    writers agree without either parsing state."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _with_manual_phase(_write_plan(repo, phases=2, complete=1), 1)
+
+    state = _adopt_grouped(repo, shipped, plan_dir)
+
+    assert state.steps["implement"].items == {"phase/1": "manual", "phase/2/code": "pending"}
+
+
+def test_plan_phase_numbers_delegates_to_the_tag_aware_reader(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """One plan-reading path behind both questions (P5.T1.S3). `numbers` is
+    every phase whatever its tag — the fan-out filters the tags itself rather
+    than re-deriving which phases exist, which is the narrowing that produced
+    #496 in the first place."""
+    from fr.run.adopt import plan_phase_numbers, plan_phase_tags
+
+    repo, _ = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _with_manual_phase(_write_plan(repo, phases=3), 3)
+    rel = str(plan_dir.relative_to(repo))
+
+    assert plan_phase_tags(repo, rel) == {1: "agentic", 2: "agentic", 3: "manual"}
+    assert plan_phase_numbers(repo, rel) == [1, 2, 3]
+
+
+def test_cli_adopt_counts_only_the_phases_that_will_be_dispatched(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """ "2/4 phase members complete" over a plan whose 4th phase is `[manual]`
+    reads as two units of agentic work left. One is: the manual phase will
+    never be dispatched, so counting it as outstanding is the same narrowing
+    #496 is about, moved into the summary line. It is named instead."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _with_manual_phase(_write_plan(repo, phases=4, complete=2), 4)
+
+    result = _invoke(repo, shipped, ["run", "adopt", str(plan_dir), "--branch", BRANCH])
+
+    assert result.exit_code == 0, result.output
+    assert "2/3 phase members complete" in result.output, result.output
+    assert "phase/4" in result.output and "manual" in result.output, result.output
