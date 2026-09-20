@@ -2157,3 +2157,52 @@ rows:
       the session row''s model. That live claim stays with opencode-subagent-dispatch,
       deliberately left at skipped (its scope correction is already in its own notes,
       finding r-s1) and is this plan''s manual phase 4.'
+  - id: handoff-closed-entries-bounded
+    capability: fr-goal-cost
+    acceptance: A closed journal entry (fixed or refuted finding, resolution record)
+      contributes a constant amount to an executor handoff regardless of its body size,
+      including within dependency phases.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Measured before-state 2026-09-20: phase 6 of 2026-09-18-harness-parity-matrix
+      re-reads 26 fixed findings in full (37,556 chars of an 83,131-char handoff). Bar
+      is O(1) per closed entry, deliberately NOT non-monotonic growth — decisions and
+      discoveries from dependency phases carry forward value and must keep rendering.'
+  - id: handoff-entries-always-tagged
+    capability: fr-goal-cost
+    acceptance: A journal entry written during a phase is tagged to it, so no entry
+      renders in full in every handoff forever; a genuinely global entry stays expressible.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Untagged entries hit compose_handoff''s ''e.phase is None'' branch and render
+      full at every phase. Measured: 14 norefactor-* entries / 9.1k chars present in
+      phase 1''s handoff as well as phase 6''s. Known residual per spec A4: tagging
+      bounds them only outside dependency phases.'
+  - id: executor-context-discipline
+    capability: fr-goal-cost
+    acceptance: The executor contract forbids re-deriving what the handoff already states
+      and pasting verbatim tool output into the return, on every harness that mirrors
+      the agent.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Attacks the ~90% term the handoff bound cannot reach: cache reads accumulate
+      as context size summed over turns, so an executor''s own re-reads dominate. Mirrors
+      to the four .opencode/agent files; pinned by the existing token tripwire.'
+  - id: run-telemetry-measured-claude-code
+    capability: fr-goal-cost
+    acceptance: fr run status reports real per-phase token figures parsed from the Claude
+      Code transcript, and degrades loudly to a labeled estimate when it cannot.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Feasibility verified 2026-09-20 on a live transcript: message.usage carries
+      input/cache_creation/cache_read/output tokens, and isSidechain plus parentUuid
+      separate subagent turns. OpenCode and Hermes stay V1 estimates per d4 (follow-up
+      issue owed).'
