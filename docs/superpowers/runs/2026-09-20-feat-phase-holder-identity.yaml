@@ -1,4 +1,4 @@
-schema_version: 4
+schema_version: 5
 run: 2026-09-20-feat-phase-holder-identity
 workflow: fr-goal@1
 branch: feat/phase-holder-identity
@@ -29,174 +29,182 @@ steps:
   implement:
     state: done
     at: '2026-09-20T14:31:19+00:00'
-    items:
-      phase/1/implement-phase: done
-      phase/1/review-phase: done
-      phase/2/implement-phase: done
-      phase/2/review-phase: done
-      phase/3/implement-phase: done
-      phase/3/review-phase: done
-      phase/4/implement-phase: done
-      phase/4/review-phase: done
-      phase/5/implement-phase: done
-      phase/5/review-phase: done
-      phase/6/implement-phase: done
-      phase/6/review-phase: done
     members:
     - implement-phase
     - review-phase
-    dispatch:
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T11:41:03+00:00'
+          synthesized: true
+          estimate:
+            journal_entries: 3
+            journal_lines: 16
+            handoff_chars: 967
+            spec_bytes: 22783
+            plan_bytes: 30440
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T12:00:11+00:00'
+          synthesized: true
+          estimate:
+            journal_entries: 4
+            journal_lines: 21
+            handoff_chars: 1966
+            spec_bytes: 22783
+            plan_bytes: 32238
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T12:09:39+00:00'
+          synthesized: true
+          estimate:
+            journal_entries: 10
+            journal_lines: 51
+            handoff_chars: 8810
+            spec_bytes: 23207
+            plan_bytes: 32704
       phase/2/review-phase:
-      - dispatched: '2026-09-20T12:35:32+00:00'
-        returned: '2026-09-20T13:38:19+00:00'
-        outcome: abandoned
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T12:35:32+00:00'
+          returned: '2026-09-20T13:38:19+00:00'
+          outcome: abandoned
+          estimate:
+            journal_entries: 13
+            journal_lines: 93
+            handoff_chars: 13536
+            spec_bytes: 23207
+            plan_bytes: 32790
       phase/3/implement-phase:
-      - dispatched: '2026-09-20T12:35:34+00:00'
-        agent: a5dbd5f0e9bdf3362
-        agent_type: super-fr:fr-phase-executor
-        harness: claude-code
-        model: claude-sonnet-5
-        returned: '2026-09-20T13:38:19+00:00'
-        outcome: abandoned
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T12:35:34+00:00'
+          agent: a5dbd5f0e9bdf3362
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          returned: '2026-09-20T13:38:19+00:00'
+          outcome: abandoned
+          estimate:
+            journal_entries: 13
+            journal_lines: 93
+            handoff_chars: 6107
+            spec_bytes: 23207
+            plan_bytes: 32790
       phase/3/review-phase:
-      - dispatched: '2026-09-20T13:08:36+00:00'
-        model: claude-opus-5
-        returned: '2026-09-20T13:38:19+00:00'
-        outcome: abandoned
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T13:08:36+00:00'
+          model: claude-opus-5
+          returned: '2026-09-20T13:38:19+00:00'
+          outcome: abandoned
+          estimate:
+            journal_entries: 19
+            journal_lines: 156
+            handoff_chars: 13623
+            spec_bytes: 23207
+            plan_bytes: 33039
       phase/4/implement-phase:
-      - dispatched: '2026-09-20T13:08:53+00:00'
-        agent: a5b15f633d8225e2c
-        agent_type: super-fr:fr-phase-executor
-        harness: claude-code
-        model: claude-opus-5
-        returned: '2026-09-20T13:36:11+00:00'
-        outcome: done
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T13:08:53+00:00'
+          agent: a5b15f633d8225e2c
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5
+          returned: '2026-09-20T13:36:11+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 19
+            journal_lines: 156
+            handoff_chars: 9309
+            spec_bytes: 23207
+            plan_bytes: 33039
       phase/4/review-phase:
-      - dispatched: '2026-09-20T13:39:21+00:00'
-        model: claude-opus-5
-        returned: '2026-09-20T13:39:21+00:00'
-        outcome: done
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T13:39:21+00:00'
+          model: claude-opus-5
+          returned: '2026-09-20T13:39:21+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 30
+            journal_lines: 266
+            handoff_chars: 24427
+            spec_bytes: 23207
+            plan_bytes: 37929
       phase/5/implement-phase:
-      - dispatched: '2026-09-20T13:39:22+00:00'
-        agent: a182c94fe152e508c
-        agent_type: super-fr:fr-phase-executor
-        harness: claude-code
-        model: claude-sonnet-5
-        returned: '2026-09-20T14:05:43+00:00'
-        outcome: done
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T13:39:22+00:00'
+          agent: a182c94fe152e508c
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          returned: '2026-09-20T14:05:43+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 30
+            journal_lines: 266
+            handoff_chars: 17787
+            spec_bytes: 23207
+            plan_bytes: 37929
       phase/5/review-phase:
-      - dispatched: '2026-09-20T14:05:44+00:00'
-        harness: claude-code
-        model: claude-sonnet-5
-        returned: '2026-09-20T14:05:44+00:00'
-        outcome: done
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T14:05:44+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          returned: '2026-09-20T14:05:44+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 33
+            journal_lines: 337
+            handoff_chars: 23347
+            spec_bytes: 23207
+            plan_bytes: 38078
       phase/6/implement-phase:
-      - dispatched: '2026-09-20T14:05:45+00:00'
-        agent: a752dda378d1adbfb
-        agent_type: super-fr:fr-phase-executor
-        harness: claude-code
-        model: claude-opus-5
-        returned: '2026-09-20T14:31:18+00:00'
-        outcome: done
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T14:05:45+00:00'
+          agent: a752dda378d1adbfb
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5
+          returned: '2026-09-20T14:31:18+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 33
+            journal_lines: 337
+            handoff_chars: 10817
+            spec_bytes: 23207
+            plan_bytes: 38078
       phase/6/review-phase:
-      - dispatched: '2026-09-20T14:31:18+00:00'
-        harness: claude-code
-        model: claude-opus-5
-        returned: '2026-09-20T14:31:19+00:00'
-        outcome: done
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T14:31:18+00:00'
+          harness: claude-code
+          model: claude-opus-5
+          returned: '2026-09-20T14:31:19+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 43
+            journal_lines: 413
+            handoff_chars: 24101
+            spec_bytes: 23207
+            plan_bytes: 38290
   deliver:
     state: done
     at: '2026-09-20T14:32:58+00:00'
     emitted:
       pr: https://github.com/derio-net/super-fr/pull/508
-    dispatch:
+    units:
       step/deliver:
-      - dispatched: '2026-09-20T14:31:29+00:00'
-        harness: claude-code
-        returned: '2026-09-20T14:32:58+00:00'
-        outcome: done
-accounting:
-  phase/1/implement-phase:
-    at: '2026-09-20T11:41:03+00:00'
-    journal_entries: 3
-    journal_lines: 16
-    handoff_chars: 967
-    spec_bytes: 22783
-    plan_bytes: 30440
-  phase/1/review-phase:
-    at: '2026-09-20T12:00:11+00:00'
-    journal_entries: 4
-    journal_lines: 21
-    handoff_chars: 1966
-    spec_bytes: 22783
-    plan_bytes: 32238
-  phase/2/implement-phase:
-    at: '2026-09-20T12:09:39+00:00'
-    journal_entries: 10
-    journal_lines: 51
-    handoff_chars: 8810
-    spec_bytes: 23207
-    plan_bytes: 32704
-  phase/2/review-phase:
-    at: '2026-09-20T12:35:32+00:00'
-    journal_entries: 13
-    journal_lines: 93
-    handoff_chars: 13536
-    spec_bytes: 23207
-    plan_bytes: 32790
-  phase/3/implement-phase:
-    at: '2026-09-20T12:35:34+00:00'
-    journal_entries: 13
-    journal_lines: 93
-    handoff_chars: 6107
-    spec_bytes: 23207
-    plan_bytes: 32790
-  phase/3/review-phase:
-    at: '2026-09-20T13:08:36+00:00'
-    journal_entries: 19
-    journal_lines: 156
-    handoff_chars: 13623
-    spec_bytes: 23207
-    plan_bytes: 33039
-  phase/4/implement-phase:
-    at: '2026-09-20T13:08:53+00:00'
-    journal_entries: 19
-    journal_lines: 156
-    handoff_chars: 9309
-    spec_bytes: 23207
-    plan_bytes: 33039
-  phase/4/review-phase:
-    at: '2026-09-20T13:39:21+00:00'
-    journal_entries: 30
-    journal_lines: 266
-    handoff_chars: 24427
-    spec_bytes: 23207
-    plan_bytes: 37929
-  phase/5/implement-phase:
-    at: '2026-09-20T13:39:22+00:00'
-    journal_entries: 30
-    journal_lines: 266
-    handoff_chars: 17787
-    spec_bytes: 23207
-    plan_bytes: 37929
-  phase/5/review-phase:
-    at: '2026-09-20T14:05:44+00:00'
-    journal_entries: 33
-    journal_lines: 337
-    handoff_chars: 23347
-    spec_bytes: 23207
-    plan_bytes: 38078
-  phase/6/implement-phase:
-    at: '2026-09-20T14:05:45+00:00'
-    journal_entries: 33
-    journal_lines: 337
-    handoff_chars: 10817
-    spec_bytes: 23207
-    plan_bytes: 38078
-  phase/6/review-phase:
-    at: '2026-09-20T14:31:18+00:00'
-    journal_entries: 43
-    journal_lines: 413
-    handoff_chars: 24101
-    spec_bytes: 23207
-    plan_bytes: 38290
+        attempts:
+        - dispatched: '2026-09-20T14:31:29+00:00'
+          harness: claude-code
+          returned: '2026-09-20T14:32:58+00:00'
+          outcome: done

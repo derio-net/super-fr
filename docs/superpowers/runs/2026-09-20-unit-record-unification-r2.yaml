@@ -1,4 +1,4 @@
-schema_version: 4
+schema_version: 5
 run: 2026-09-20-unit-record-unification-r2
 workflow: fr-goal@1
 branch: feat/phase-holder-identity
@@ -20,80 +20,84 @@ steps:
   implement:
     state: running
     at: '2026-09-20T21:04:30+00:00'
-    items:
-      phase/1/implement-phase: done
-      phase/2/implement-phase: done
-      phase/3/implement-phase: running
-      phase/4/implement-phase: pending
-      phase/5/implement-phase: pending
-      phase/6/implement-phase: pending
-      phase/7/implement-phase: pending
-      phase/1/review-phase: done
-      phase/2/review-phase: done
     members:
     - implement-phase
     - review-phase
-    dispatch:
-      phase/1/review-phase:
-      - dispatched: '2026-09-20T20:31:58+00:00'
-        harness: claude-code
-        model: claude-opus-5
-        returned: '2026-09-20T20:32:10+00:00'
-        outcome: done
+    units:
+      phase/1/implement-phase:
+        state: done
       phase/2/implement-phase:
-      - dispatched: '2026-09-20T20:32:10+00:00'
-        agent: a91f8f64811e3a560
-        agent_type: super-fr:fr-phase-executor
-        harness: claude-code
-        model: claude-opus-5
-        returned: '2026-09-20T21:04:29+00:00'
-        outcome: done
-      phase/2/review-phase:
-      - dispatched: '2026-09-20T21:04:29+00:00'
-        harness: claude-code
-        model: claude-opus-5
-        returned: '2026-09-20T21:04:30+00:00'
-        outcome: done
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T20:32:10+00:00'
+          agent: a91f8f64811e3a560
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5
+          returned: '2026-09-20T21:04:29+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 14
+            journal_lines: 71
+            handoff_chars: 12726
+            spec_bytes: 35299
+            plan_bytes: 36971
+          measured:
+            input_tokens: 380
+            cache_creation_input_tokens: 423470
+            cache_read_input_tokens: 31260118
+            output_tokens: 105308
       phase/3/implement-phase:
-      - dispatched: '2026-09-20T21:04:30+00:00'
-        agent: a6003d674a7d2ef75
-        agent_type: super-fr:fr-phase-executor
-        harness: claude-code
-        model: claude-fable-5-1
+        state: running
+        attempts:
+        - dispatched: '2026-09-20T21:04:30+00:00'
+          agent: a6003d674a7d2ef75
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-fable-5-1
+          estimate:
+            journal_entries: 25
+            journal_lines: 197
+            handoff_chars: 20647
+            spec_bytes: 36567
+            plan_bytes: 37183
+      phase/4/implement-phase:
+        state: pending
+      phase/5/implement-phase:
+        state: pending
+      phase/6/implement-phase:
+        state: pending
+      phase/7/implement-phase:
+        state: pending
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T20:31:58+00:00'
+          harness: claude-code
+          model: claude-opus-5
+          returned: '2026-09-20T20:32:10+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 14
+            journal_lines: 71
+            handoff_chars: 12726
+            spec_bytes: 35299
+            plan_bytes: 36971
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T21:04:29+00:00'
+          harness: claude-code
+          model: claude-opus-5
+          returned: '2026-09-20T21:04:30+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 25
+            journal_lines: 197
+            handoff_chars: 30663
+            spec_bytes: 36567
+            plan_bytes: 37183
   journal-check:
     state: pending
   deliver:
     state: pending
-accounting:
-  phase/1/review-phase:
-    at: '2026-09-20T20:31:58+00:00'
-    journal_entries: 14
-    journal_lines: 71
-    handoff_chars: 12726
-    spec_bytes: 35299
-    plan_bytes: 36971
-  phase/2/implement-phase:
-    at: '2026-09-20T20:32:10+00:00'
-    journal_entries: 14
-    journal_lines: 71
-    handoff_chars: 12726
-    spec_bytes: 35299
-    plan_bytes: 36971
-    input_tokens: 380
-    cache_creation_input_tokens: 423470
-    cache_read_input_tokens: 31260118
-    output_tokens: 105308
-  phase/2/review-phase:
-    at: '2026-09-20T21:04:29+00:00'
-    journal_entries: 25
-    journal_lines: 197
-    handoff_chars: 30663
-    spec_bytes: 36567
-    plan_bytes: 37183
-  phase/3/implement-phase:
-    at: '2026-09-20T21:04:30+00:00'
-    journal_entries: 25
-    journal_lines: 197
-    handoff_chars: 20647
-    spec_bytes: 36567
-    plan_bytes: 37183
