@@ -292,6 +292,46 @@ def test_a_run_recording_per_phase_items_is_valid(tmp_path: Path) -> None:
     assert validate_repo(tmp_path).ok
 
 
+def test_a_run_recording_dispatch_is_valid(tmp_path: Path) -> None:
+    """`StepRecord.dispatch` is new in Phase 1 of dispatch-holder-identity on a
+    still-`extra=forbid` model — the validator must accept a well-formed one,
+    or `fr run advance`'s own output fails CI."""
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+        GOOD_RUN.replace(
+            "  implement:\n    state: running\n",
+            "  implement:\n    state: running\n"
+            "    dispatch:\n"
+            "      phase/1/implement-phase:\n"
+            "        - dispatched: '2019-03-04T00:00:00'\n"
+            "          agent_type: super-fr:fr-phase-executor\n",
+        ),
+    )
+    assert validate_repo(tmp_path).ok
+
+
+def test_a_run_with_malformed_dispatch_fails(tmp_path: Path) -> None:
+    """A bare mapping where a list of attempts belongs is a structural
+    problem, not a shape `RunState` accepts silently."""
+    seed_good_repo(tmp_path)
+    _w(
+        tmp_path,
+        "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+        GOOD_RUN.replace(
+            "  implement:\n    state: running\n",
+            "  implement:\n    state: running\n"
+            "    dispatch:\n"
+            "      phase/1/implement-phase:\n"
+            "        dispatched: '2019-03-04T00:00:00'\n",
+        ),
+    )
+    report = validate_repo(tmp_path)
+    assert not report.ok
+    assert "dispatch" in "\n".join(str(i) for i in report.issues)
+
+
 # --- 3. stamps: unknown fails, newer fails closed -------------------------
 
 

@@ -610,3 +610,71 @@ def test_one_failure_is_reported_once_not_twice(tmp_path: Path) -> None:
     assert len(report.failed) == 1, [f.error for f in report.failed]
     assert report.failed[0].path == meta
     assert [a.path for a in report.applied] == [meta], "the schema step still ran"
+
+
+# --- the run kind's 2 → 3 bump (dispatch-holder-identity, spec §4.D) -------
+#
+# `StepRecord.dispatch` is a shape change on the same `extra="forbid"` model
+# the 1→2 bump above already exercised, so these mirror that block's shape:
+# the registry moved, a migration reaches version 3 from EVERY earlier
+# version (including straight from 1, since a v1 cursor may never have been
+# migrated), and the migration is stamp-only.
+
+
+def test_the_run_kind_moved_to_version_three() -> None:
+    assert ARTIFACT_KINDS["run"].current_version == 3
+
+
+def test_the_run_kind_is_reachable_all_the_way_from_version_one_to_three() -> None:
+    chain = MIGRATIONS.chain("run", 1)
+    assert chain, "no registered migration chain carries a v1 run cursor forward"
+    assert chain[-1].to_version == ARTIFACT_KINDS["run"].current_version == 3
+    assert [m.to_version for m in chain] == [2, 3], (
+        "the chain must pass through 2 (gate provenance) on its way to 3 "
+        "(dispatch holder) — both migrations are registered, not just the new one"
+    )
+
+
+def test_migrating_a_v2_run_cursor_to_v3_stamps_it_and_rewrites_no_body(tmp_path: Path) -> None:
+    path = tmp_path / "docs" / "superpowers" / "runs" / "r1.yaml"
+    path.parent.mkdir(parents=True)
+    text = (
+        "schema_version: 2\nrun: r1\nworkflow: fr-goal@1\nbranch: b\n"
+        "started: '2026-09-20T09:00:00Z'\ncursor: implement\n"
+        "steps:\n  implement:\n    state: running\n"
+    )
+    path.write_text(text)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.ok, report.failed
+    assert path in report.changed_paths
+    after = path.read_text()
+    assert ARTIFACT_KINDS["run"].read_version(path) == 3
+    stripped = "\n".join(
+        line for line in after.splitlines() if not line.startswith("schema_version:")
+    )
+    before_stripped = "\n".join(
+        line for line in text.splitlines() if not line.startswith("schema_version:")
+    )
+    assert stripped.strip() == before_stripped.strip()
+
+
+def test_the_v3_migration_refuses_an_unreadable_cursor_and_still_migrates_the_rest(
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True)
+    broken = runs / "broken.yaml"
+    broken.write_text("schema_version: 2\nrun: broken\ncursor: a\n")  # missing required fields
+    healthy = runs / "healthy.yaml"
+    healthy.write_text(
+        "schema_version: 2\nrun: healthy\nworkflow: fr-goal@1\nbranch: b\n"
+        "started: '2026-09-20T09:00:00Z'\ncursor: a\nsteps:\n  a:\n    state: pending\n"
+    )
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert [f.path for f in report.failed] == [broken]
+    assert ARTIFACT_KINDS["run"].read_version(broken) == 2, "left unstamped, retried next run"
+    assert ARTIFACT_KINDS["run"].read_version(healthy) == 3

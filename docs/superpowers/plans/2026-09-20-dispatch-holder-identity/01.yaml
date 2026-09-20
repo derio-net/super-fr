@@ -105,38 +105,53 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:46:28+00:00'
+      note: 'RED: added tests to tests/unit/test_run_state.py; 10 failed (DispatchRecord
+        missing)'
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:46:47+00:00'
+      note: 'GREEN: DispatchRecord/DispatchOutcome + StepRecord.dispatch added to
+        fr/run/model.py; all 24 tests pass'
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:46:55+00:00'
+      note: 'REFACTOR: docstrings restate the fr-knows/reported seam per field; ruff
+        format/check + mypy clean'
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:56:39+00:00'
+      note: 'RED: added tests to test_migration_runner.py (4 failed: current_version==3,
+        chain reachable 1→3, v2→v3 stamp-only, refuse-unreadable) and test_validate_artifacts.py
+        (2 new tests passed immediately — RunState already accepts dispatch).'
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:51:32+00:00'
+      note: 'GREEN: run current_version 2→3, run_dispatch_holder.py migration modelled
+        on run_provenance.py, registered in fr/artifacts/__init__.py.'
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:51:38+00:00'
+      note: 'REFACTOR: docstring explains stamp-only rationale; ruff format/check
+        + mypy clean'
     P1.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:51:52+00:00'
+      note: 'Ran fr migrate artifacts (preview) then --yes: 3 run cursors migrated
+        (2026-09-19-feat-opencode-subagent-dispatch, 2026-09-20-feat-phase-holder-identity
+        — this run''s own cursor, 2026-09-20-fix-opencode-tier-model-reaches-dispatch),
+        stamp-only. fr validate artifacts: 33 checked, all valid. git status shows
+        only run cursors + the intended source/test changes touched.'
     P1.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T11:56:12+00:00'
+      note: 'Full gate green: pytest -q --basetemp=/tmp/sb (73s, foreground w/ explicit
+        long timeout, no background children) = 3303 passed/85 skipped/1 failed (pre-existing
+        env-only test_install_bridge_flag_writes_wrapper, journalled p1-preexisting-install-bridge);
+        ruff check clean; mypy clean over all 4 packages; fr acceptance check exit
+        0 (128 rows OK); fr validate artifacts: 33 checked, all valid.'
   completion:
-    at: null
+    at: '2026-09-20T11:56:50+00:00'
     note: null
     observed_prs: []

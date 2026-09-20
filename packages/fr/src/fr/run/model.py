@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 StepState = Literal["pending", "running", "done", "failed", "blocked"]
 """A step's lifecycle in run state — distinct from `fr.item_state.ItemState`
@@ -48,6 +48,95 @@ IMPLEMENTED_RUNS_REL = Path("docs") / "superpowers" / "implemented" / "runs"
 
 class RunStateError(Exception):
     """Raised for any structurally invalid run-state file."""
+
+
+DispatchOutcome = Literal["done", "failed", "abandoned"]
+"""How a dispatch ended, reported at `fr run resolve`/`claim --abandoned` time
+(spec `2026-09-20-dispatch-holder-identity-design.md` §4.A).
+
+`abandoned` is not a lifecycle state `StepState` also has — it describes the
+DISPATCH, not the step: §1.C found there is no way to retire a non-returning
+agent from the outside, so `abandoned` is the honest terminal state for "this
+dispatch is never coming back", recorded while the step itself goes back to
+`running` for a fresh attempt."""
+
+
+class DispatchRecord(BaseModel):
+    """One attempt to hold a unit — a phase member or a flat `kind: agent`
+    step — spanning from `advance`'s own dispatch act to `resolve`'s close.
+
+    Spec §3 draws the line this model exists to keep visible, and every field
+    below sits on one side of it:
+
+    - **fr knows it** — `dispatched`, fr's own timestamp of the act of
+      writing the brief. Nothing here can be wrong about this one, because fr
+      performed it.
+    - **fr derives it** — `agent_type` and `model`, computed from the step
+      definition and `fr models resolve` at the moment `advance` opens the
+      record.
+    - **reported, unverifiable** — `agent`, `harness`, `returned`, `outcome`.
+      The orchestrator claims what it dispatched and how it ended, the same
+      documented terms `AnsweredBy` above already uses for a gate: this is
+      visibility, not enforcement. An unreported `agent` is recorded as
+      absent, never guessed — the same reason `--answered-by` defaults to the
+      weaker claim rather than silently upgrading one nobody made.
+
+    A unit's list of these (`StepRecord.dispatch`, §4.B) is kept oldest
+    first and never overwritten: a failed unit that is retried, or
+    `--redispatch`ed over a lost agent, keeps every prior attempt, which is
+    the forensic trail #503 asks for."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dispatched: str
+    """ISO 8601 — fr's own act of writing the brief (`advance`). Never absent
+    on a record that exists: this is the one field fr always knows."""
+
+    agent: str | None = None
+    """The harness-reported agent/task id (`fr run claim --agent`). Absent
+    until claimed — an unclaimed dispatch is visible debt (`fr run check`),
+    not a guess at who is holding it."""
+
+    agent_type: str | None = None
+    """E.g. `super-fr:fr-phase-executor` — derived from the step's `agent:`
+    at dispatch time. `None` for an orchestrator-run `kind: agent` step
+    (`agent: null` in the manifest, spec §4.B.1): that is not a missing
+    value, it is `held by the orchestrator`."""
+
+    harness: str | None = None
+    """The harness the orchestrator reported dispatching on, one of
+    `fr.harness.model.HARNESSES`. Detected via
+    `fr.harness.detect.detect_harness` when `--harness` is not given — a
+    guess about the environment, not a claim about the agent — and left
+    absent rather than guessed when detection itself returns `None`. There is
+    no `"unknown"` member: inventing a fifth harness name to mean "we don't
+    know" would put a value here no parity row can ever match."""
+
+    model: str | None = None
+    """The resolved tier binding actually dispatched (`fr models resolve`),
+    derived at `advance` time like `agent_type`."""
+
+    returned: str | None = None
+    """ISO 8601, set at `fr run resolve` (or `claim --abandoned`) — the other
+    half of the dispatched/returned pair spec §1.D says `StepRecord.at` alone
+    cannot give."""
+
+    outcome: DispatchOutcome | None = None
+    """Set alongside `returned`. `None` exactly when `returned` is `None` —
+    the record is still open, and at most one such record may exist per unit
+    (`advance` refuses to open a second, spec §4.C)."""
+
+    @field_validator("harness")
+    @classmethod
+    def _check_harness(cls, value: str | None) -> str | None:
+        """Validated against `fr.harness.model.HARNESSES`, imported rather
+        than re-listed — the same discipline `fr.types.phase_tiers` documents
+        for a closed vocabulary owned by another module."""
+        from fr.harness.model import HARNESSES
+
+        if value is not None and value not in HARNESSES:
+            raise ValueError(f"harness {value!r} must be one of {HARNESSES}")
+        return value
 
 
 class StepRecord(BaseModel):
@@ -118,6 +207,28 @@ class StepRecord(BaseModel):
     for. Absent (`None`) on grouped steps of pre-existing run files, where
     the member check is skipped rather than guessed. Additive and optional,
     same versioning argument as `items` above.
+    """
+
+    dispatch: dict[str, list[DispatchRecord]] | None = None
+    """Every attempt to hold a unit of this step, oldest first (spec §4.B).
+
+    Keyed by the unit key — a grouped `for_each` member's key matches its
+    `items` entry (`phase/<n>/<member-id>`); a flat `kind: agent` step has no
+    `items` entry at all, so it is keyed `step/<step-id>` instead. The prefix
+    is not cosmetic: a repo-authored step id may itself contain a `/`
+    (`fr.workflow.check.check_workflow` does not forbid it), so without a
+    namespace the two key spaces are not provably disjoint.
+
+    The OPEN dispatch for a key, wherever this docstring or the CLI says it,
+    means the last element of that list when its `returned is None` — there
+    is at most one, because `advance` refuses to open a second (spec §4.C).
+
+    This is a **shape change** (`current_version=3` in
+    `fr.artifacts.registry`, spec §4.D): `StepRecord`/`RunState` are
+    `extra="forbid"`, so a released fr predating this field raises on a
+    cursor that carries it. Additive and optional regardless — absent means
+    exactly "no dispatch recorded for this step", true of every run file
+    written before this field existed.
     """
 
 

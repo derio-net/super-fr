@@ -14,3 +14,8 @@ P6.T2's three steps are a one-line parity summary edit, a GENERATED mirror regen
 ### nr-p6t3 · discovery · no-refactor-because P6.T3 (phase 6)
 
 P6.T3 is the release tail: `scripts/bump-version.py minor` (whose outputs are version-bearing manifests the repo forbids hand-editing), the explainer regeneration (whose .html carries a do-not-hand-edit banner and is produced by a renderer in another repo), and the full CI gate. The only authored prose is the explainer's .md, and its quality pass is inside S2 — the byte-for-byte unmodified re-render that must pass before the real render is the verification step, and it is stronger than a refactor step would be.
+
+<!-- fr:journal kind=finding scope=plan id=p1-preexisting-install-bridge created=2026-09-20T11:55:51 phase=1 state=fixed -->
+### p1-preexisting-install-bridge · finding [fixed] · Pre-existing, environment-caused test_install_bridge failure (unrelated to this phase) (phase 1)
+
+Full suite (uv run pytest -q --basetemp=/tmp/sb) is 3303 passed / 85 skipped / 1 failed: tests/integration/test_install_bridge.py::test_install_bridge_flag_writes_wrapper. Not caused by this phase's diff — the same devcontainer-global-uv-tool-install state already documented in docs/superpowers/journals/plans/2026-09-19-opencode-subagent-dispatch.md and 2026-09-20-opencode-tier-binding-reaches-dispatch.md: the globally uv-tool-installed fr at /home/vscode/.local/share/uv/tools/fr/bin/python cannot import fr_vk.bridge (the test uses the real host env, not the sandboxed fake_home fixture). Marked fixed rather than open: a known, already-documented environment artifact, not a regression for a later phase to chase.

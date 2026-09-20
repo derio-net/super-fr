@@ -224,3 +224,109 @@ def test_the_current_run_schema_version_comes_from_the_artifact_registry() -> No
     from fr.run.model import current_run_schema_version
 
     assert current_run_schema_version() == artifact_kind("run").current_version
+
+
+# --- Phase 1 (dispatch-holder-identity): DispatchRecord ---------------------
+#
+# spec `2026-09-20-dispatch-holder-identity-design.md` §4.A/§4.B. `dispatched`
+# is the one field fr writes itself (`advance` timestamps its own act);
+# everything else is either derived (`agent_type`, `model`) or a reported
+# claim (`agent`, `harness`, `returned`, `outcome`) — spec §3's seam.
+
+
+def test_dispatch_record_requires_dispatched_and_defaults_the_rest_to_none() -> None:
+    from fr.run.model import DispatchRecord
+
+    record = DispatchRecord(dispatched="2026-09-20T09:00:00Z")
+    assert record.dispatched == "2026-09-20T09:00:00Z"
+    assert record.agent is None
+    assert record.agent_type is None
+    assert record.harness is None
+    assert record.model is None
+    assert record.returned is None
+    assert record.outcome is None
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError, missing field
+        DispatchRecord()  # type: ignore[call-arg]
+
+
+def test_dispatch_record_is_frozen_and_closed_world() -> None:
+    from fr.run.model import DispatchRecord
+
+    record = DispatchRecord(dispatched="2026-09-20T09:00:00Z")
+    with pytest.raises(Exception):  # noqa: B017 — frozen
+        record.agent = "a1"  # type: ignore[misc]
+    with pytest.raises(Exception):  # noqa: B017 — extra="forbid"
+        DispatchRecord(dispatched="2026-09-20T09:00:00Z", bogus="x")  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("outcome", ["done", "failed", "abandoned"])
+def test_dispatch_record_outcome_accepts_every_documented_value(outcome: str) -> None:
+    from fr.run.model import DispatchRecord
+
+    record = DispatchRecord(dispatched="2026-09-20T09:00:00Z", outcome=outcome)  # type: ignore[arg-type]
+    assert record.outcome == outcome
+
+
+def test_dispatch_record_outcome_rejects_an_unrecognised_value() -> None:
+    from fr.run.model import DispatchRecord
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        DispatchRecord(dispatched="2026-09-20T09:00:00Z", outcome="cancelled")  # type: ignore[arg-type]
+
+
+def test_dispatch_record_harness_accepts_every_member_of_the_closed_harness_set() -> None:
+    from fr.harness.model import HARNESSES
+    from fr.run.model import DispatchRecord
+
+    for harness in HARNESSES:
+        record = DispatchRecord(dispatched="2026-09-20T09:00:00Z", harness=harness)
+        assert record.harness == harness
+
+
+def test_dispatch_record_harness_rejects_unknown() -> None:
+    from fr.run.model import DispatchRecord
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        DispatchRecord(dispatched="2026-09-20T09:00:00Z", harness="unknown")
+
+
+def test_step_record_dispatch_defaults_to_none_and_a_dispatchless_step_parses_unchanged() -> None:
+    text = """
+run: r
+workflow: fr-goal@1
+branch: b
+started: "2026-08-14T09:00:00Z"
+cursor: a
+steps:
+  a: {state: pending}
+"""
+    state = parse_run_state(text)
+    assert state.steps["a"].dispatch is None
+
+
+def test_a_run_state_carrying_dispatch_round_trips_and_omits_dispatch_when_none() -> None:
+    from fr.run.model import DispatchRecord
+
+    state = _sample_state()
+    held = DispatchRecord(
+        dispatched="2026-08-14T09:00:11Z",
+        agent="add889a7",
+        agent_type="super-fr:fr-phase-executor",
+        harness="claude-code",
+        model="claude-sonnet-5",
+    )
+    steps = dict(state.steps)
+    steps["implement"] = steps["implement"].model_copy(
+        update={"dispatch": {"phase/1/implement-phase": [held]}}
+    )
+    state = state.model_copy(update={"steps": steps})
+
+    text = dump_run_state(state)
+    assert "phase/1/implement-phase" in text
+    round_tripped = parse_run_state(text)
+    assert round_tripped == state
+    assert round_tripped.steps["implement"].dispatch == {"phase/1/implement-phase": [held]}
+
+    # a step with dispatch=None (the default) omits the key entirely
+    assert "dispatch" not in dump_run_state(_sample_state())

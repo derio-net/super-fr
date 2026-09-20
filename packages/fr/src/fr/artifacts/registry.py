@@ -354,7 +354,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # fr that predates it; the migration is
             # `fr.artifacts.run_provenance`, and `RunState.schema_version`
             # exists so the stamp it writes stays readable.
-            current_version=2,
+            # 3: `StepRecord.dispatch` — the dispatch-holder record (spec
+            # `2026-09-20-dispatch-holder-identity-design` §4.A/§4.D). Same
+            # shape-change reasoning; the migration is
+            # `fr.artifacts.run_dispatch_holder`.
+            current_version=3,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
