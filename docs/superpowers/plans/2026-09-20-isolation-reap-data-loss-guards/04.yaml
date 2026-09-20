@@ -100,10 +100,17 @@ state:
         --version both confirm. Explainers judgement journalled as p4-explainer-cannot-regenerate:
         fr-isolation.html is not falsified and is sourceless (known gap 1).'
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:58:36+00:00'
+      note: 'Full gate: sync-opencode/sync-hermes --check clean; ruff format/check
+        clean; mypy clean; fr validate artifacts clean (33 artifacts); fr acceptance
+        check clean (128 rows OK); pytest --no-cov: 1 failed, 3328 passed, 80 skipped
+        (baseline #463/#489, confirmed twice with different basetemps); full pytest
+        with coverage: same 1 failed/3328 passed/80 skipped, coverage 91.73% (gate
+        75%). One spurious failure seen only when --basetemp was under the long agent
+        scratchpad path (journal p4-basetemp-path-length-false-positive), not reproduced
+        with a short basetemp.'
   completion:
-    at: null
+    at: '2026-09-20T12:58:40+00:00'
     note: null
     observed_prs: []
