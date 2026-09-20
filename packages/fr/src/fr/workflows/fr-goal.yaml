@@ -25,6 +25,19 @@
 # by the cursor, not by prose. There is deliberately NO trailing single
 # `review` step — it is what the loop replaces. Runs started against the
 # flat shape hit manifest drift (by design) and start a new run.
+#
+# `journal-check` (spec §C, decision D3) re-checks that every locally-complete
+# phase actually got one, ONE MORE TIME, right before `deliver` — a whole-run
+# backstop for the per-phase loop above, not a duplicate of it. It is a `cli`
+# step, not a line added to `deliver`'s prose, because an obligation enforced
+# only by an instruction gets absorbed under load (#430); making it a step
+# means the run CURSOR refuses to advance past an owed review, gate closed
+# even if the orchestrating agent forgets or skips ahead. It sits strictly
+# between `implement` and `deliver` — after `deliver` the PR already exists,
+# so checking there would be too late to matter. Adding this step drifts
+# every run started against the pre-existing shape (`_check_step_drift`, by
+# design — see run_cmd.py); recover a stranded run with
+# `fr run adopt <plan-dir> --run-id <fresh>`.
 workflow: fr-goal
 schema: 1
 description: TDD feature delivery, goal to reviewed PR.
@@ -73,6 +86,11 @@ steps:
         skill: superpowers:requesting-code-review
         needs: [spec, plan, journal:plan]
         emits: [journal:plan]
+
+  - id: journal-check
+    kind: cli
+    needs: [plan]
+    run: fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews
 
   - id: deliver
     kind: agent
