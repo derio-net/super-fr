@@ -97,7 +97,10 @@ def test_migrating_a_v2_run_file_stamps_it_and_rewrites_no_body(tmp_path: Path) 
     kind = artifact_kind("run")
     assert kind.read_version(path) == kind.current_version
     after = path.read_text()
-    assert after.replace("schema_version: 3", "schema_version: 2") == before
+    # Derived, not hardcoded: this asserted `schema_version: 3` and broke the
+    # moment a later migration moved the kind to 4 — the stamp a full run
+    # lands on is `current_version`, whatever that is today.
+    assert after.replace(f"schema_version: {kind.current_version}", "schema_version: 2") == before
     state = parse_run_state(after)
     assert state.accounting is not None
     snap = state.accounting["phase/1/code"]

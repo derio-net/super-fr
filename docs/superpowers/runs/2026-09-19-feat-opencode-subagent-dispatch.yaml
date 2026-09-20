@@ -1,4 +1,4 @@
-schema_version: 3
+schema_version: 4
 run: 2026-09-19-feat-opencode-subagent-dispatch
 workflow: fr-goal@1
 branch: feat/opencode-subagent-dispatch

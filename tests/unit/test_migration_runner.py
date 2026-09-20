@@ -621,21 +621,35 @@ def test_one_failure_is_reported_once_not_twice(tmp_path: Path) -> None:
 # migrated), and the migration is stamp-only.
 
 
-def test_the_run_kind_moved_to_version_three() -> None:
-    assert ARTIFACT_KINDS["run"].current_version == 3
+def test_the_run_kind_moved_to_version_four() -> None:
+    assert ARTIFACT_KINDS["run"].current_version == 4
 
 
-def test_the_run_kind_is_reachable_all_the_way_from_version_one_to_three() -> None:
+def test_the_run_kind_is_reachable_all_the_way_from_version_one_to_four() -> None:
+    """Every registered migration is on ONE chain, in order.
+
+    The numbering here has history worth keeping: gh#506's telemetry migration
+    and this feature's dispatch-holder migration were BOTH written as 2 -> 3,
+    on parallel branches, neither aware of the other. A kind has exactly one
+    linear history, so the one that merged second stacked to 3 -> 4. Nothing
+    detected the collision — this assertion on the full chain is the closest
+    thing to a guard, which is why it names every hop rather than just the
+    endpoint.
+    """
     chain = MIGRATIONS.chain("run", 1)
     assert chain, "no registered migration chain carries a v1 run cursor forward"
-    assert chain[-1].to_version == ARTIFACT_KINDS["run"].current_version == 3
-    assert [m.to_version for m in chain] == [2, 3], (
-        "the chain must pass through 2 (gate provenance) on its way to 3 "
-        "(dispatch holder) — both migrations are registered, not just the new one"
+    assert chain[-1].to_version == ARTIFACT_KINDS["run"].current_version == 4
+    assert [m.to_version for m in chain] == [2, 3, 4], (
+        "the chain must pass through 2 (gate provenance) and 3 (telemetry) on its "
+        "way to 4 (dispatch holder) — every migration is registered, not just the new one"
     )
 
 
-def test_migrating_a_v2_run_cursor_to_v3_stamps_it_and_rewrites_no_body(tmp_path: Path) -> None:
+def test_migrating_a_v2_run_cursor_stamps_it_current_and_rewrites_no_body(
+    tmp_path: Path,
+) -> None:
+    """A v2 cursor rides the WHOLE chain, and every hop is stamp-only — so the
+    body is byte-identical at the end whatever `current_version` happens to be."""
     path = tmp_path / "docs" / "superpowers" / "runs" / "r1.yaml"
     path.parent.mkdir(parents=True)
     text = (
@@ -650,7 +664,7 @@ def test_migrating_a_v2_run_cursor_to_v3_stamps_it_and_rewrites_no_body(tmp_path
     assert report.ok, report.failed
     assert path in report.changed_paths
     after = path.read_text()
-    assert ARTIFACT_KINDS["run"].read_version(path) == 3
+    assert ARTIFACT_KINDS["run"].read_version(path) == ARTIFACT_KINDS["run"].current_version
     stripped = "\n".join(
         line for line in after.splitlines() if not line.startswith("schema_version:")
     )
@@ -660,7 +674,7 @@ def test_migrating_a_v2_run_cursor_to_v3_stamps_it_and_rewrites_no_body(tmp_path
     assert stripped.strip() == before_stripped.strip()
 
 
-def test_the_v3_migration_refuses_an_unreadable_cursor_and_still_migrates_the_rest(
+def test_the_dispatch_holder_migration_refuses_an_unreadable_cursor_and_migrates_the_rest(
     tmp_path: Path,
 ) -> None:
     runs = tmp_path / "docs" / "superpowers" / "runs"
@@ -677,4 +691,4 @@ def test_the_v3_migration_refuses_an_unreadable_cursor_and_still_migrates_the_re
 
     assert [f.path for f in report.failed] == [broken]
     assert ARTIFACT_KINDS["run"].read_version(broken) == 2, "left unstamped, retried next run"
-    assert ARTIFACT_KINDS["run"].read_version(healthy) == 3
+    assert ARTIFACT_KINDS["run"].read_version(healthy) == ARTIFACT_KINDS["run"].current_version
