@@ -72,7 +72,7 @@ incompatible `fr` from *executing* a plan, and `fr.parser.parse`'s own docstring
 says it "must never apply to a purely historical read" (`fr.spec.compute_status`
 already passes `False` for that reason). A precision measurement is exactly such
 a read. Enforcing it would drop 38 archived plans whose `fr_version` ceiling a
-4.x `fr` can never satisfy — 82 plans collapse to 44, 2,113 steps to 1,419 —
+4.x `fr` can never satisfy — 82 plans collapse to 44, 2,113 steps to 1,444 —
 and would couple the corpus floors to the next major bump, on which 14 further
 plans fall out. Only 3 folders remain unreadable (genuine `PhaseDoc` failures in
 frozen archives); 21 entries on disk are not folders at all.
@@ -403,10 +403,10 @@ prose; nothing deploys):
 4. **Fenced code is stripped, inline code is not** — a dispatch verb inside a
    ``` fence yields nothing; the backticked-agent form still errors.
 5. **Corpus regression (§4.A)** — zero errors across every agentic step of
-   every *parseable* plan folder in `docs/superpowers/plans/` and
-   `docs/superpowers/implemented/plans/`, **plus** the floor assertions
-   (≥ 30 plans parsed, ≥ 1,000 agentic steps scanned) that stop the test
-   degrading into a green no-op.
+   every plan folder in `docs/superpowers/plans/` and
+   `docs/superpowers/implemented/plans/`, **plus** the floor assertions —
+   ≥ 70 plans parsed, ≥ 1,800 agentic steps scanned, and ≥ 3 plans from
+   *each* root — that stop the test degrading into a green no-op.
 6. **`fr plan self-review` exits 1** on a plan carrying a dispatch step, and
    the message names both escapes.
 7. **Prose tokens** — `test_skill_tokens.py` asserts the executor contract in

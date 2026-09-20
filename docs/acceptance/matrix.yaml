@@ -2252,14 +2252,19 @@ rows:
     status: ci
     notes: 'Moved not-implemented → ci: the corpus harness now re-measures the SHIPPED
       detector over every plan folder this repo has written, on every PR. test_dispatch_lint_corpus.py::test_the_dispatch_gate_scores_zero_on_this_repos_own_plans
-      scores 0 over 82 plans / 2113 agentic steps (the brainstorm''s 43/1419 was an
-      active-roots count; the harness reads the archived roots too), ::test_the_patterns_score_zero_on_every_corpus_step_ticked_or_not
-      closes the gate''s ticked-step exemption — which covers the large majority of
-      the corpus — and ::test_the_corpus_was_actually_read floors plans and steps so
-      a silently-degraded reader cannot pass green on a corpus of zero. #428''s literal
-      pattern list scored 237 false positives on bare ''dispatch'' alone, 16.7% of steps
-      — super-fr is a repo about dispatch. Any future widening that would break super-fr''s
-      own plans now fails here, in CI, instead of in an operator''s run.'
+      scores 0 over 82 plans / 2113 agentic steps; ::test_the_patterns_score_zero_on_every_corpus_step_ticked_or_not
+      closes the gate''s ticked-step exemption, which covers the large majority of the
+      corpus; and ::test_the_corpus_was_actually_read floors plans, steps and per-root
+      coverage so a silently-degraded reader cannot pass green on a corpus of zero.
+      The brainstorm''s smaller 43 plans / 1444 steps figure was the same two roots
+      read with enforce_fr_version=True — the delta is the VERSION GATE, not root coverage
+      (38 archived plans carry an fr_version ceiling a 4.x fr can never satisfy; the
+      live root alone is only 5 plans / 134 steps). Stated because an earlier version
+      of this note said ''active-roots count'', which would send a future maintainer
+      to widen the wrong thing. #428''s literal pattern list scored 237 false positives
+      on bare ''dispatch'' alone, 16.7% of steps — super-fr is a repo about dispatch.
+      Any future widening that would break super-fr''s own plans now fails here, in
+      CI, instead of in an operator''s run.'
   - id: goal-executor-refuses-tick
     capability: fr-goal phase executor dispatch
     acceptance: A phase executor facing a dispatch step it has no tool for reports a

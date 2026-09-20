@@ -886,9 +886,10 @@ _MANUAL_VERB_RES = tuple(
 # records completion for work nobody performed as written (spec §2.E).
 #
 # Precision is the whole design problem: super-fr is a repo ABOUT dispatch.
-# A literal `\bdispatch\b` scores 292 hits across this repo's own plan
-# corpus and every one is a false positive (spec §2.D measured 237 on the
-# smaller enforcing read) — at error severity the gate would be switched
+# #428's literal proposal `\bdispatch(es|ed|ing)?\b` scores 292 hits across
+# this repo's own plan corpus (the bare stem alone scores 262) and every
+# one is a false positive (spec §2.D measured 237 on the smaller enforcing
+# read) — at error severity the gate would be switched
 # off within a week. Both patterns below score ZERO over all 2113 agentic
 # steps of that corpus, ticked and pending alike, pinned by
 # `tests/unit/test_dispatch_lint_corpus.py`.

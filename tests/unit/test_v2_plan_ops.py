@@ -1000,7 +1000,17 @@ def test_plan_self_review_cli_exits_1_and_names_both_escapes(tmp_path, monkeypat
     # whitespace-normalized output: a line break landing between "no" and
     # "Agent tool" is a rendering detail, not a missing token.
     flat = " ".join(result.output.split())
-    for token in ("no Agent tool", "task: deny", "[manual] phase", "#428"):
+    # BOTH escapes, as this test's name claims: the [manual] phase AND
+    # "name the outcome". The second is the half d1 called the thing that
+    # makes the lint actionable — a gate that errors without saying what to
+    # write instead is half a fix — so it must not be droppable in silence.
+    for token in (
+        "no Agent tool",
+        "task: deny",
+        "[manual] phase",
+        "Name the OUTCOME",
+        "#428",
+    ):
         assert token in flat, f"{token!r} missing from:\n{flat}"
     # The MATCHED TEXT, not the raw pattern — an author reading
     # `(?:dispatch|delegate to|...)` learns nothing about their own step.
