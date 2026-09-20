@@ -48,7 +48,22 @@ TOOL_VOCABULARY: dict[str, frozenset[str]] = {
             "MultiEdit",
         }
     ),
-    "opencode": frozenset({"tool.execute.before"}),
+    # OpenCode's dispatch tool (2026-09-19 opencode-subagent-dispatch spec
+    # §3.A/§3.D): input `{prompt, description, subagent_type, command}`, and
+    # it resolves the agent BY NAME afterwards — so the call carries NO
+    # model. That single fact is what forces one agent per tier instead of a
+    # model argument at dispatch time.
+    #
+    # Registered as the two-word prose form, not the bare tool id `task`.
+    # Spec §3.D claimed no bare `task` token existed in the skill trees; it
+    # did, on `origin/main` — fr-execute and fr-plan use `task` as fr's OWN
+    # plan noun (phase / task / step), and registering the id would fire on
+    # that in twelve places and in every future sentence about a plan task.
+    # A tripwire that flags the repo's own domain vocabulary gets appeased,
+    # not obeyed. BE HONEST ABOUT THE TRADE: a leak written as a bare `task`
+    # outside a scoped clause is NOT caught; "the task tool" — the way prose
+    # instructing a reader actually reads — is.
+    "opencode": frozenset({"tool.execute.before", "task tool"}),
     "hermes": frozenset({"delegate_task"}),
     "codex": frozenset(),
     "copilot-cli": frozenset(),

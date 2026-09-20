@@ -162,12 +162,10 @@ surfaces:
 
   - id: subagent-dispatch
     kind: interaction
-    summary: The pipeline's ability to hand a phase to a subagent for isolated execution.
+    summary: The pipeline's ability to hand a phase to a subagent for isolated execution. Dispatch is the default wherever a harness has a primitive, at roughly 7x the cost of running the phase inline; fr-goal §5's dispatch clause is the one home for the measured figures and the rule.
     harnesses:
       claude-code: {state: enforced}
-      opencode:
-        state: absent
-        scope_note: no isolation-argument dispatch primitive on OpenCode — fr-goal §5's documented fallback runs phases inline; correct behaviour, not a gap to fill
+      opencode: {state: enforced}
       hermes: {state: enforced}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}

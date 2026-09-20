@@ -43,7 +43,34 @@ def test_tool_vocabulary_covers_the_three_harnesses_with_tools_of_their_own() ->
         }
     )
     assert TOOL_VOCABULARY["hermes"] == frozenset({"delegate_task"})
-    assert TOOL_VOCABULARY["opencode"] == frozenset({"tool.execute.before"})
+    assert TOOL_VOCABULARY["opencode"] == frozenset({"tool.execute.before", "task tool"})
+
+
+def test_opencodes_dispatch_tool_is_in_the_vocabulary() -> None:
+    """fr-goal §5 now names OpenCode's dispatch tool (spec §3.D), so the
+    vocabulary has to know it — otherwise the mention rides byte-for-byte into
+    all three skill trees with nothing checking it stayed inside a scoped
+    clause.
+
+    Registered as the two-word prose form, NOT the bare tool id `task`. Spec
+    §3.D asserted "no bare `task` token exists in any of the three skill
+    trees today"; that is false and was false on `origin/main` — fr-execute
+    §64 and fr-plan §§37/66/68 use `task` as fr's own plan noun (phase / task
+    / step). Registering the bare id would fire on the repo's own domain
+    vocabulary, in twelve places at once and in every future sentence about a
+    plan task, which is a broken tripwire rather than a strict one. The
+    trade is stated in `TOOL_VOCABULARY`'s comment: a mention written as a
+    bare `task` outside a clause is NOT caught.
+
+    Still lowercase, and `scan_prose` is case-sensitive (`re.escape`, no
+    `IGNORECASE`), so this cannot collide with Claude Code's `Agent` nor with
+    a capitalised `Task`; the neighbouring
+    `test_no_tool_name_is_claimed_by_two_harnesses` guards the
+    two-harnesses-one-name case for free."""
+    assert "task tool" in TOOL_VOCABULARY["opencode"]
+    assert "task" not in TOOL_VOCABULARY["opencode"], (
+        "the bare tool id fires on fr's own plan noun — see the docstring"
+    )
 
 
 def test_no_tool_name_is_claimed_by_two_harnesses() -> None:
