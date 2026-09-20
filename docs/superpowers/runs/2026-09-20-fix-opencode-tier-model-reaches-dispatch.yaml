@@ -1,0 +1,22 @@
+schema_version: 2
+run: 2026-09-20-fix-opencode-tier-model-reaches-dispatch
+workflow: fr-goal@1
+branch: fix/opencode-tier-model-reaches-dispatch
+started: '2026-09-20T06:23:59+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: pending

@@ -2074,26 +2074,18 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
     status: skipped
-    notes: 'Phase 5 live-verified the claim, and the orchestrator re-verified it independently
-      from the session store. Run: opencode run --model opencode/nemotron-3.5-lightning-free
-      (a free model; opencode/north-mini-code-free, which this matrix previously cited,
-      is GONE from the live roster — journaled as p5-t1-model-gone), instructing a task-tool
-      dispatch to the fr-phase-executor subagent. Evidence is an opencode.db session
-      row with parent_id SET and agent=''fr-phase-executor'', titled by opencode itself
-      ''(@fr-phase-executor subagent)'' — the same shape as the 13 ''(@general subagent)''
-      rows in the recorded arm-A experiment, but with a NAMED custom agent. The child
-      carries a real assistant turn (reasoning + text parts), so it is not the parent
-      role-playing; cost/tokens_output read 0, which is free-tier accounting, not an
-      absent turn. CORRECTION to the original note: that dispatch ran in the fr-isolation
-      WORKTREE, against the committed .opencode/agent/ mirror in situ — not in a scratch
-      dir, as first recorded; session.directory and the assistant message''s path.cwd
-      both say so. Separately verified by the orchestrator: the shipped mirror copied
-      into a bare directory with no opencode.json and no super-fr install registers
-      all four agents as (subagent), which is Test Plan §5 item 1. Status is ''skipped''
-      rather than ''ci'' because reproducing it needs a live opencode binary and a model,
-      neither available in CI. Remaining debt: the post-merge full /fr-goal run on a
-      paid model (spec §5 item 5, plan phase 6), which exercises the skill prose driving
-      the dispatch rather than the primitive alone.'
+    notes: 'SCOPE CORRECTION (gh#498, spec 2026-09-20-opencode-tier-binding-reaches-dispatch
+      §3.C). This row''s evidence — a parented child session with agent=''fr-phase-executor''
+      and a real assistant turn — proves the rewritten fr-goal §5/§6 prose drove a genuine
+      dispatch. It does NOT prove tiering resolved: the two separate only if the session
+      row''s model is asserted against the phase tier''s binding, and it was not. The
+      row''s headline acceptance text should read ''...and the session row''s model
+      matches the phase tier''s binding''; there is no CLI verb that can edit a row''s
+      acceptance text (add refuses an existing id, set-status moves only status/levels/notes,
+      and hand-editing is forbidden), so the correction is recorded here and the tiering
+      claim now lives in its own row, opencode-tier-binding-reaches-dispatch. Follow-up
+      filed for an fr acceptance edit verb. Status unchanged at skipped: still real,
+      still not CI-reproducible without a live binary and model.'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
@@ -2131,3 +2123,17 @@ rows:
       removing only super-fr's own agent files. Unit-covered by test_install_copies_opencode_agents.py
       (opt-in gating, ordering, uninstall scope) and integration-covered by test_install_opencode_agents.py
       (test_install_delivers_four_agents_to_opencode_dir, test_uninstall_removes_only_super_fr_agents).
+  - id: opencode-tier-binding-reaches-dispatch
+    capability: OpenCode parity
+    acceptance: A tier→model binding the operator makes — including one answered mid-run,
+      and one that REPLACES an earlier binding — reaches the agent OpenCode actually
+      dispatches, rather than being frozen at whatever the last install.sh run resolved.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-opencode-tier-binding-reaches-dispatch-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec gh#498/§3.A. Two failure modes: unbound-then-bound loses the answer
+      silently; bound-then-rebound pins the model the operator moved away from (§1.1,
+      reproduced in a sandbox). Target: unit on the in-place materialiser incl. the
+      stale-binding regression, integration on both triggers (fr models set and install.sh),
+      plus the post-merge live run asserting the session row''s model.'
