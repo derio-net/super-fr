@@ -207,6 +207,61 @@ Mitigated by this being a recording, not a live demo — a bad take is re-record
 But that only works if the take is *checked*, which is why the criterion below
 is a gate and not a hope.
 
+## Tooling verification — asciinema in HyperFrames (2026-09-20)
+
+Tested rather than assumed, and the news is mixed.
+
+### The embed works
+
+`asciinema-player@3` from CDN, loading an **asciicast v3** file (what
+`asciinema 3.2.1` writes — worth checking, since the player's own docs are
+mostly written against v2):
+
+| call | result |
+|---|---|
+| `AsciinemaPlayer.create(...)` | loads and renders; terminal showed the real cast content |
+| `seek(2.0)` | `getCurrentTime()` → `2` |
+| `seek('50%')` | → `1.514` (duration ≈ 3.03 s) |
+
+So absolute and percentage seeking both work, which is all the annotation
+design needs. A HyperFrames slideshow is plain HTML, so the embed works by
+construction.
+
+One caveat found: `getDuration()` returned `undefined` immediately after
+create, while `seek('50%')` resolved correctly — the player knows the duration
+before it will report it. Read offsets in seconds, or wait for playback to
+start before trusting `getDuration()`.
+
+### But a slideshow cannot be rendered to video
+
+From the installed `slideshow` skill, emphasis its own:
+
+> **Do not `hyperframes render` a slideshow into a single MP4.** A deck is
+> authored as several top-level scene compositions … with **no master-root
+> composition**, so `render` resolves only the **first** composition and emits a
+> **silently truncated** MP4 (e.g. 6s of a 40-second deck). A linear main-line
+> export … is **deferred**.
+
+Supported outputs today are the **live `present` deck** and **per-slide
+`snapshot` stills**. This matters because the plan of record says we stay in
+brainstorming "until the video is rendered" — on this tool, for a slideshow,
+that artefact does not currently exist. Either the deliverable is the live deck,
+or the video comes from screen-recording a presented run, or a non-slideshow
+composition is authored separately for the linear export.
+
+Two further constraints from the same reference, relevant to the annotation
+design:
+
+- The composition runs inside the **player's iframe**; keypresses and pointer
+  events land on the parent page. Driving `seek()` from deck navigation is a
+  cross-frame call — same-origin, so workable, but not a same-document call.
+- Anything outside the GSAP seek path "must be self-driving". asciinema-player
+  has its own clock, so it qualifies — and self-driving is what we want here:
+  pause the deck on a slide, let the cast run, annotate over it.
+- The standalone harness is explicitly **"a temporary workaround"**; the durable
+  engine-hosted path (`hyperframes preview --slideshow`) has not shipped. Worth
+  knowing before building much on its exact shape.
+
 ## Recording acceptance — when a take is usable
 
 Checked before anything is torn down, because the evidence is perishable.
@@ -237,7 +292,20 @@ Checked before anything is torn down, because the evidence is perishable.
 5. **The merge request exists** on the operator's fork.
 6. **Annotation offsets were noted live**, not reconstructed afterwards.
 
-## Time budget (51–59 min)
+## Time budget — a working hypothesis, not a contract
+
+**Operator correction, 2026-09-20.** The beats below are a first sketch. Beats
+may be added before or after the run; this is the early creative stage and the
+shape is expected to move. Nothing here is a commitment, and a later beat that
+displaces one of these is a normal outcome, not a deviation.
+
+Two things follow. **We stay in `fr-brainstorming` at least until the video is
+rendered** — this is not a build with a spec to freeze. And **super-fr is not
+designed to deliver presentations**: the run cursor and pipeline are being used
+to keep *evidence* honest, not to drive a creative artefact. Do not let the
+machinery imply the deck is a deliverable it can gate.
+
+## Time budget (51–59 min, provisional)
 
 | # | Beat | Min |
 |---|---|---|
