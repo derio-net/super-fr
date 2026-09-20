@@ -244,7 +244,7 @@ ls "$CLONE"/docs/superpowers/specs/ "$CLONE"/docs/superpowers/plans/
 #    report agent, model and BOTH token counts back on that issue.
 #    `agent` must read fr-phase-executor-<tier>, not the bare base agent, and
 #    `model` must be the tier's model, not the session default — those are two
-#    separate claims and only `model` proves tiering (see gh-494 comment).
+#    separate claims and only `model` proves tiering (see gh-498).
 #    tokens_output = 0 on a paid model is a red flag worth a second look.
 sqlite3 -readonly "file:$DATA/opencode/opencode.db?mode=ro" "
   SELECT id, parent_id, agent, model, cost, tokens_input, tokens_output

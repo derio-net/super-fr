@@ -175,12 +175,13 @@ watches being made.
 `~/.config/fr/models.yaml`; nothing re-runs `install.sh` or the sync, so the
 installed agent still carries no `model:` and OpenCode falls back to the session
 model. The operator would be asked, would answer, and tiering would silently not
-happen — on camera, in a talk whose subject is rigour. Reported on
-[#494](https://github.com/derio-net/super-fr/issues/494). Claude Code is
+happen — on camera, in a talk whose subject is rigour. Filed as
+[#498](https://github.com/derio-net/super-fr/issues/498). Claude Code is
 unaffected, since it resolves the model at dispatch.
 
-**Decision: A for this recording**, unless #494's follow-up closes the loop
-first — in which case B is strictly better and should be preferred.
+**Decision: A for this recording**, unless [#498](https://github.com/derio-net/super-fr/issues/498)
+closes the loop first — in which case B is strictly better and should be
+preferred.
 
 Differentiating may also **defuse the cost objection**: the $7.59 figure was 13
 subagents all on one model, and putting mechanical phases on a cheap one is what
