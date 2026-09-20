@@ -1,0 +1,131 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — the in-place materialiser, including the stale-binding regression
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-tier-binding-reaches-dispatch
+  skeleton: true
+tasks:
+- number: 1
+  title: The materialiser, red to green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_opencode_agents_materialize.py for a new
+      module `fr.opencode_agents` that does not exist yet. Build the fixture
+      by SEEDING a config home from the repo's own committed
+      `.opencode/agent/*.md` mirror (copy the four files into
+      `tmp_path/"opencode"/"agent"`), never from agent content written inline in the test —
+      a constructed fixture would drift from what install.sh actually
+      delivers, and this whole defect is about the delivered file.
+      Assert `materialize_agents(config_home, models_cfg=...)`:
+      (a) with all three tiers bound, each tier file gains `model: <bound>`
+          on the line IMMEDIATELY after `mode: subagent`;
+      (b) THE STALE-BINDING REGRESSION, the reason this spec exists: start
+          from a tier file already carrying `model: <A>`, pass a config
+          binding that tier to `<B>`, and assert the file reads `<B>` and
+          contains exactly ONE `model:` line. This is spec §1.1;
+      (c) an unbound tier ends with NO `model:` key at all — never an empty
+          one, which OpenCode would try to resolve;
+      (d) the untiered base `fr-phase-executor.md` is never given a model,
+          whatever the config says;
+      (e) targets are DISCOVERED not named (spec-review r1): a seeded
+          `some-other-agent-hard.md` IS rewritten, and a file whose stem
+          ends in something that is not a tier (`foo-turbo.md`) is left
+          byte-identical. Do NOT hardcode the `fr-phase-executor` stem
+          anywhere in the module;
+      (f) it returns what it changed, and a MISSING agent dir or missing
+          files is a reported no-op, not an exception — an operator who
+          never opted into OpenCode delivery must not have `fr models set`
+          fail on them;
+      (g) nothing outside `<config_home>/opencode/agent/` is written.
+      Run pytest — fails, the module does not exist.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/opencode_agents.py. Public surface:
+      `default_config_home()` (derive it from the SAME `$XDG_CONFIG_HOME`
+      then `$HOME/.config` resolution `fr.models.default_models_path` uses —
+      factor that out if it reads cleanly, or mirror it with a comment
+      pointing at the original; do not invent a third resolution), and
+      `materialize_agents(config_home, *, models_cfg) -> list[Change]`.
+      Glob `<config_home>/opencode/agent/*.md`; for each file whose stem ends
+      `-<tier>` with tier in `fr.types.PHASE_TIERS`, rewrite in place: drop
+      every top-level `model:` line, then insert `model: <resolved>` directly
+      after the `mode: subagent` line when the tier resolves, and nothing
+      when it does not. Read the tier→model map from `models_cfg` keyed
+      `opencode` — take the already-loaded config as a parameter rather than
+      loading it inside, so the caller owns the repo>user resolution order and
+      this stays testable without touching real files. Return a small frozen
+      `Change` per file (path, tier, old model, new model) so both callers can
+      report rather than claim silently. Run the S1 tests — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: the insert-after-anchor rewrite is the same transformation
+      install.sh's awk performs today (phase 2 deletes that copy). Make sure
+      the Python is the readable one of the two — a single pass over lines
+      with the anchor named in a module constant, not a regex tangle — and
+      that the "exactly one model: line" invariant is structural rather than
+      incidental. Add a docstring naming the layout contract it depends on
+      (single-line quoted `description:`, then `mode: subagent`) and pointing
+      at the generator in scripts/sync-opencode.py that guarantees it, so the
+      coupling is discoverable from both ends. Re-run the unit suite.
+- number: 2
+  title: Skeleton smoke — a real binding reaches a real installed agent
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      SKELETON SMOKE, exercising the minimum runtime end to end but WITHOUT
+      touching the operator's real config: under a sandboxed
+      `XDG_CONFIG_HOME`, seed `<sandbox>/opencode/agent/` from the committed
+      mirror, write a `<sandbox>/fr/models.yaml` binding the three opencode
+      tiers, call the materialiser, then run
+      `env -C <sandbox-project> opencode agent list` with that
+      XDG_CONFIG_HOME and confirm the tier agents register AND that
+      `opencode agent list`'s resolved output reflects the bound models. If
+      the binary cannot show the model, fall back to asserting the file
+      content and say so plainly in the journal rather than implying the
+      binary confirmed it. Journal the result (`fr journal add --scope plan
+      --kind discovery`): model ids and agent names only, no absolute home
+      paths, per .claude/rules/third-party-privacy.md.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      `uv run ruff format packages/ tests/ scripts/`;
+      `uv run ruff check packages/ tests/ scripts/`;
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src
+      packages/fr-cncd/src`; `uv run pytest -q --no-cov --basetemp=/tmp/sb`.
+      All green except the one known pre-existing failure
+      (test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable,
+      issue #463/#489).
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

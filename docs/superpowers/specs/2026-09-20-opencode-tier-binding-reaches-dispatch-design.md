@@ -213,3 +213,4 @@ technical fact being reported.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-09-20-opencode-tier-binding-reaches-dispatch | `derio-net/super-fr` | `2026-09-20-opencode-tier-binding-reaches-dispatch` | — |
