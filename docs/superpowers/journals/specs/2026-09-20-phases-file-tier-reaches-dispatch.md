@@ -39,3 +39,18 @@ tier: from_phase in the shipped manifest is a policy sentinel nothing in fr reso
 ### disc3 · discovery · Matrix row fr-goal-phase-tiering reads ci for a capability broken upstream of its tests
 
 The row claims 'fr-plan annotates each phase with a tier; the orchestrator dispatches that phase's subagent at the mapped model' at status: ci. Its unit levels pin PhaseHeader.tier and fr models resolve in ISOLATION; nothing pins that a planner's tier reaches a plan, and until this spec ships it cannot. Same pattern #498 named. Corrected in this PR.
+
+<!-- fr:journal kind=review scope=spec id=r1 created=2026-09-20T13:31:10 -->
+### r1 · review · Spec-review: an invalid tier would strand a half-built plan folder
+
+The first draft said an invalid tier string 'is rejected by PhaseHeader's Literal at the post-write re-parse, the same path every other bad header value takes'. That is the path, and it is the WRONG one — create()'s pre-flight loop exists precisely because the post-write re-parse strands the folder and blocks the corrected re-run (#133). The loop's own comment states the doctrine. Fixed: tier validation joins the pre-flight loop beside the ps.number < 1 check, and Test Plan item 1 now asserts no folder is left on disk.
+
+<!-- fr:journal kind=review scope=spec id=r2 created=2026-09-20T13:31:11 -->
+### r2 · review · Spec-review: two symbol names were wrong
+
+Verified every named symbol against the worktree. Two were wrong: the group-brief builder is _build_brief (run_cmd.py:571), not _build_step_brief; and the closed tier vocabulary is exported as fr.types.PHASE_TIERS (types.py:168), the form fr.opencode_agents already imports, not the phase_tiers() function it is computed from. Both corrected. Everything else checked out: plan_ops.py:103 PhaseSpec, plan_cmd.py:160 ingestion, run_cmd.py:628 member-brief tier fallback, _acceptance_link_issues' 3.7.0 probe, _skeleton_issues, plan_phase_numbers (run/adopt.py:217), scripts/sync-opencode.py + its tripwire, fr plan edit being state-only, DEFAULT_FR_VERSION '>=3.0.0,<5.0.0', and that only severity=='error' affects the exit code.
+
+<!-- fr:journal kind=review scope=spec id=r3 created=2026-09-20T13:31:11 -->
+### r3 · review · Spec-review: confirmed adding resolved_tier breaks no existing test
+
+test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields (test_run_cli.py:920) asserts set(brief) == Step.model_fields - {id,run} | {run,workflow,step}, but it drives a FLAT agent step, so it exercises _build_brief and not _build_member_brief. No member-brief key-set test exists; the only member assertions are on individual keys (test_run_cli.py:1864, test_fr_goal_shape.py:392). The additive key is therefore safe, and D5's reason for choosing it over in-place resolution holds.

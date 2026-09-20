@@ -199,9 +199,17 @@ Emission position follows `acceptance`/`skeleton` (appended after
 is cosmetic — `PhaseHeader` parses either — and matching the existing emitter
 keeps `_build_phase_doc` one consistent rule instead of two.
 
-`plan_cmd.py`'s ingestion passes `tier=p.get("tier")`. An invalid tier string
-is rejected by `PhaseHeader`'s `Literal` at the post-write re-parse, the same
-path every other bad header value takes.
+`plan_cmd.py`'s ingestion passes `tier=p.get("tier")`.
+
+An invalid tier string must be rejected in `create()`'s **pre-flight loop**,
+beside the existing `ps.number < 1` check — not left to `PhaseHeader`'s
+`Literal` at the post-write re-parse. The module already states the doctrine
+in that loop's comment: *"validate every external precondition BEFORE mutating
+the filesystem"*, because the schema gate *"would only reject at the post-write
+re-parse, stranding the folder"*. A typo'd `tier: hrad` would otherwise leave a
+half-built plan folder behind and block the corrected re-run, which is #133's
+failure mode exactly. This was missed in the first draft of this spec and
+caught at spec-review.
 
 The `--phases-file` docstring currently documents `skeleton` but neither
 `acceptance` nor `tier`; it gains both.
@@ -218,8 +226,8 @@ test — which is the point, since the whitelist is what drifted.
 The skill's phase-authoring rules gain a tier clause: every agentic phase
 declares a `tier` (`mechanical | standard | hard`); manual phases do not (they
 are never dispatched to a model). The vocabulary is derived from
-`fr.types.phase_tiers()` rather than restated, consistent with how the closed
-set is already sourced elsewhere.
+`fr.types.PHASE_TIERS` rather than restated, consistent with how
+`fr.opencode_agents` already sources the closed set.
 
 ### D. Self-review gates (D2)
 
@@ -234,7 +242,7 @@ constraints).
 `_advance_group` already computes `phase_n` and already parses the plan for
 `_accounting_snapshot`, so reading the phase's tier costs nothing new.
 `_build_member_brief` takes the resolved tier as a parameter and emits it as
-`resolved_tier`. The group brief (`_build_step_brief`) is untouched.
+`resolved_tier`. The group brief (`_build_brief`) is untouched.
 
 ### F. Matrix (goal 6)
 
@@ -249,7 +257,9 @@ constraints).
 ## Test Plan
 
 1. **Unit — `tier` round-trips `--phases-file`**, and is omitted from the dump
-   when unset (byte-stability for pre-tier plans).
+   when unset (byte-stability for pre-tier plans). An invalid tier value is
+   refused by the pre-flight loop with a non-zero exit and **no plan folder
+   left on disk** — the stranding case, asserted directly.
 2. **Unit — class-level**: every optional `PhaseHeader` field survives
    `--phases-file`, derived from `model_fields`.
 3. **Unit — self-review**: the floor probe warns on an under-floored constraint
