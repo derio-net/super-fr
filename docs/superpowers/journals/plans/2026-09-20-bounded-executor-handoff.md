@@ -175,3 +175,33 @@ Every fr journal add call I made this phase already carried --phase 3, so the ne
 ### p3-hermes-mirror-gap · finding [open] · AGENTS.md's canonical/generated-mirror section never mentions scripts/sync-hermes.py or .hermes/, even though a tripwire enforces it (phase 3)
 
 Editing plugins/super-fr/skills/fr-execute/SKILL.md (canonical) and running scripts/sync-opencode.py (the mirror step AGENTS.md's 'Skills/rules: canonical source vs. generated mirrors' section documents, and the only one this phase's own plan step P3.T2.S1 names) left .hermes/skills/fr/fr-execute/SKILL.md stale, caught only by running the FULL pytest suite: tests/unit/test_tripwire_hermes_skills_sync.py::test_mirror_has_no_drift failed. AGENTS.md's mirror section (grep -n hermes AGENTS.md: three hits, none in that section) documents .opencode/ generation via scripts/sync-opencode.py but says nothing about scripts/sync-hermes.py or .hermes/skills+.hermes/SOUL.d as a third mirror needing the same treatment — an executor following that section alone (as I did) ships stale Hermes prose. Fixed here (scripts/sync-hermes.py run, .hermes/skills/fr/fr-execute/SKILL.md regenerated, tripwire green), but AGENTS.md's own doc gap is unaddressed and out of this phase's scope — recommend a follow-up adding sync-hermes.py to that section alongside sync-opencode.py.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i1 created=2026-09-20T16:05:53 phase=3 state=fixed -->
+### r3-i1 · finding [fixed] · The flagship test passed only at 80 columns (phase 3) (phase 3)
+
+The three consequence assertions matched rich's soft-wrapped stderr, so the wrap landed inside the asserted phrases at other widths. Reproduced before fixing: COLUMNS=70 turned test_neither_phase_nor_global_is_refused_naming_the_consequence red with nothing wrong in the code. This is the rich mid-phrase wrapping scar the repo already carries (#489, and the same idiom already in test_v2_pickup.py and test_plan_acceptance_links.py with the reason in the comment). FIXED by normalising whitespace first, which also strengthens the assertion: it now pins the whole phrase 'renders in full in every handoff, at every phase' rather than three fragments that could each match by coincidence. Verified green at COLUMNS 70/80/90/120.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i2 created=2026-09-20T16:05:54 phase=3 state=fixed -->
+### r3-i2 · finding [fixed] · fr's own re-open advice told agents to run a command that now exits 2 (phase 3) (phase 3)
+
+journal_cmd.py's --state validation error suggests 're-open a finding with fr journal add --resolves <id> --state open'. The phase fixed the analogous suggestion in plan_ops.py but not this one, inside the very file it was editing. Failure path: fr journal resolve --state open is refused, points the agent at fr journal add, which for --scope plan now exits 2 — two refusals and no way forward, on the re-open path fr-goal section 6 names explicitly. FIXED by appending --phase N to the suggested command.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i3 created=2026-09-20T16:05:54 phase=3 state=fixed -->
+### r3-i3 · finding [fixed] · The acceptance row claimed prose coverage no test provided (phase 3) (phase 3)
+
+handoff-entries-always-tagged flipped to ci with notes asserting 'root-cause prose (fr-phase-executor.md + fr-execute skill, mirrored) fixed in the same phase'. Nothing tested that: test_phase_executor_agent.py asserted only 'fr journal' in body. So the prose that CAUSED the untagged entries could be reverted by one length-trimming edit with all 3318 tests green and the row still ci — in a repo whose stated convention is that standing conventions are enforced by tests, not prose. FIXED with test_the_journal_example_carries_the_phase_flag pinning '--phase N' in the canonical agent file; the four mirrors are already covered by the sync tripwire.
+
+<!-- fr:journal kind=finding scope=plan id=r3-i4m1 created=2026-09-20T16:05:54 phase=3 state=fixed -->
+### r3-i4m1 · finding [fixed] · Two more assertions that could not fail, one of them mine (phase 3) (phase 3)
+
+I4: test_phase_and_global_together_is_refused_as_contradictory asserted only exit_code == 2. Proved vacuous by mutation — replacing the whole message with 'nope' left all 40 tests green, the exact failure its sibling's own comment warns about. FIXED with a normalised assertion on the message. M1: --global outside plan scope was a silent no-op, so --scope spec --phase 3 --global wrote a phase-3-tagged entry while the operator asked for a global one; now refused with a message naming the flag as plan-only. Writing that test I made the same mistake a third time: I omitted _add's root argument, the command failed as a usage error, exit code was 2 anyway, and the exit-code assertion passed. Only the substance assertion caught it — a live demonstration, inside the fix for it, of why the exit-code-only assertion was worth finding.
+
+<!-- fr:journal kind=finding scope=plan id=p3-hermes-mirror-gap-resolved created=2026-09-20T16:05:55 state=fixed resolves=p3-hermes-mirror-gap -->
+### p3-hermes-mirror-gap-resolved · finding [fixed] · resolves p3-hermes-mirror-gap: AGENTS.md's canonical/generated-mirror section never mentions scripts/sync-hermes.py or .hermes/, even though a tripwire enforces it
+
+FIXED rather than left for a follow-up. AGENTS.md's 'canonical source vs. generated mirrors' section documented scripts/sync-opencode.py and never mentioned scripts/sync-hermes.py or .hermes/, though test_tripwire_hermes_skills_sync.py enforces it. An agent following AGENTS.md exactly would edit a canonical skill, run sync-opencode, pass every documented check and ship a stale Hermes mirror — which is how phase 3 found it, via the full suite rather than the documented gate list. The section now names the third tree, its script and its tripwire, and says to run both scripts. This is the same class as the defect the PR is about: the gap was in the instructions the next agent inherits, not in anyone's care.
+
+<!-- fr:journal kind=discovery scope=plan id=r3-m2-correction created=2026-09-20T16:05:55 phase=3 -->
+### r3-m2-correction · discovery · Correcting p3-self-check-level-ref: matrix refs DO support a precise anchor (phase 3)
+
+The phase-3 entry p3-self-check-level-ref concluded 'the next --level caller passes a bare repo:path, not a pytest node-id'. That is the wrong lesson. fr.acceptance.model.split_ref partitions on '#', and existing rows use the form <path>#TestClass::test_name. The failure was passing '::' with no '#', not that precision is unsupported. Recorded as a correction rather than by editing the original entry, because the journal is an append-only log — and left in place because a future reader hitting the same error will find both.

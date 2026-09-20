@@ -203,9 +203,14 @@ class TestAddRequiresPhaseOrGlobal:
         assert res.exit_code == 2, res.output
         # The consequence, not just the flag name — a test asserting only on
         # exit code would pass against a message that says nothing.
-        assert "renders in full" in res.output
-        assert "every handoff" in res.output
-        assert "every phase" in res.output
+        #
+        # Normalize whitespace first: rich soft-wraps stderr to the terminal
+        # width, so matching raw output pins the assertion to an 80-column
+        # terminal and goes red on any shell that exports COLUMNS. Verified:
+        # at COLUMNS=70 this test failed before normalizing. Same idiom and
+        # same reason as test_v2_pickup.py and test_plan_acceptance_links.py.
+        flat = " ".join(res.output.split())
+        assert "renders in full in every handoff, at every phase" in flat
         assert not _journal_file(root, "S").exists()
 
     def test_global_alone_succeeds_and_writes_an_untagged_entry(
@@ -277,7 +282,35 @@ class TestAddRequiresPhaseOrGlobal:
             "--global",
         )
         assert res.exit_code == 2, res.output
+        # Substance, not just exit code — the sibling test above sets that bar
+        # and this one used to fall short of it: replacing the whole message
+        # body with "nope" left every test in this file green.
+        flat = " ".join(res.output.split())
+        assert "--phase and --global are contradictory" in flat
         assert not _journal_file(root, "S").exists()
+
+    def test_global_is_refused_outside_plan_scope(self, tmp_path: Path, monkeypatch) -> None:
+        """`--global` used to be a silent no-op on spec/debug, so
+        `--phase 3 --global` wrote a phase-3-tagged entry while the operator
+        had asked for a global one. A plan-only flag that cannot apply is
+        refused rather than ignored."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "spec",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "t",
+            "--global",
+        )
+        assert res.exit_code == 2, res.output
+        flat = " ".join(res.output.split())
+        assert "--global applies to --scope plan only" in flat
 
     def test_spec_scope_needs_neither_flag(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)

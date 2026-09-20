@@ -95,6 +95,16 @@ def add(
     # `e.phase is None` branch and renders in full at EVERY phase forever —
     # measured cost: 16 untagged discoveries / 13,281 chars at phase 6 of a
     # real journal. Spec and debug journals have no phases and are untouched.
+    # Checked OUTSIDE the plan guard: on spec/debug `--global` used to be a
+    # silent no-op, so `--phase 3 --global` on a spec journal wrote a
+    # phase-3-tagged entry while the operator had asked for a global one.
+    # Refusing a plan-only flag where it cannot apply beats honouring neither.
+    if is_global and scope != "plan":
+        err_console.print(
+            "[red]--global applies to --scope plan only[/red] — spec and debug "
+            "journals have no phases, so every entry in them is already global"
+        )
+        raise typer.Exit(2)
     if scope == "plan":
         if phase is None and not is_global:
             err_console.print(
@@ -214,7 +224,7 @@ def resolve(
     if state not in RESOLUTION_STATES:
         err_console.print(
             f"[red]--state must be one of {' | '.join(RESOLUTION_STATES)} (got {state!r})[/red] "
-            "— re-open a finding with `fr journal add --resolves <id> --state open`"
+            "— re-open a finding with `fr journal add --resolves <id> --state open --phase N`"
         )
         raise typer.Exit(2)
     try:
