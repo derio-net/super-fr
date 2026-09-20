@@ -2172,16 +2172,18 @@ rows:
       discoveries from dependency phases carry forward value and must keep rendering.'
   - id: handoff-entries-always-tagged
     capability: fr-goal-cost
-    acceptance: A journal entry written during a phase is tagged to it, so no entry
-      renders in full in every handoff forever; a genuinely global entry stays expressible.
+    acceptance: Writing a plan-scope journal entry forces an explicit choice between
+      a phase tag and `--global`, so no entry renders in full in every handoff by accident.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
     levels: {}
     status: not-implemented
-    notes: 'Untagged entries hit compose_handoff''s ''e.phase is None'' branch and render
-      full at every phase. Measured: 14 norefactor-* entries / 9.1k chars present in
-      phase 1''s handoff as well as phase 6''s. Known residual per spec A4: tagging
-      bounds them only outside dependency phases.'
+    notes: 'Spec-review revised the mechanism: fr journal add --scope plan requires
+      --phase N or an explicit --global (defaulting from a plan cursor was refuted —
+      load_run_state needs a run id, no current-run resolver exists, and three runs
+      are live on disk). Root cause verified in shipped prose: the executor contract''s
+      own example omits --phase, in the canonical agent and all four .opencode/agent
+      mirrors.'
   - id: executor-context-discipline
     capability: fr-goal-cost
     acceptance: The executor contract forbids re-deriving what the handoff already states

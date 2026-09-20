@@ -188,14 +188,31 @@ never "closed" — it still constrains the phase that depends on it — and a
 discovery's whole purpose is that a trap is paid for once. Only findings have a
 lifecycle that makes them historical.
 
-**A2. Untagged entries stop being unbounded.** `fr journal add` learns to
-default `--phase` from the plan cursor when one is resolvable, so an executor
-that omits it still produces a tagged entry; `fr-execute` and the executor
-contract name `--phase` explicitly for the `no-refactor-because` case (d3).
-Genuinely global entries remain expressible by passing no phase — the escape
-stays, it just stops being the accidental default. Existing untagged entries in
-live journals are unaffected (no migration: the journal artifact shape does not
-change, only what new writes carry).
+**A2. Untagged entries stop being unbounded — by making the choice explicit,
+not by guessing.** The first draft proposed defaulting `--phase` from "the plan
+cursor". Spec-review refuted it: `load_run_state` requires a run id, there is no
+current-run resolver, and this repo currently has three live runs under
+`docs/superpowers/runs/`, so there is no unambiguous cursor to read.
+
+Instead, `fr journal add --scope plan` requires **either** `--phase N` **or** an
+explicit `--global`. Passing neither is an error naming the consequence ("an
+untagged entry renders in full in every handoff, at every phase"). Explicit
+beats defaulted here: a global plan-scope entry is legitimate but rare, and the
+current failure mode is that omitting the flag is both the easiest path and the
+expensive one.
+
+The root cause is verified in the shipped prose, not inferred: the executor
+contract's own example reads `fr journal add --scope plan --slug <plan-slug>
+--kind discovery|finding …` with no `--phase` — in the canonical agent and all
+four `.opencode/agent/` mirrors. Those five lines gain `--phase N` in this PR
+(the mirrors via `scripts/sync-opencode.py`, never by hand).
+
+Scope of the CLI change: `--scope plan` only. Spec and debug journals have no
+phases and are untouched, and `fr journal resolve` keeps its own path. The two
+shipped callers are the executor contract and `fr-execute`, both updated here.
+Existing untagged entries in live journals are unaffected — the journal artifact
+shape does not change, only what new writes are required to carry, so no
+migration is owed.
 
 **A3. The measurement is the test — and the bar is the true property, not a
 flattering one.** The first draft of this spec asserted that handoff size stops
@@ -339,9 +356,9 @@ Unit (`tests/unit`):
   journal whose closed findings carry deliberately large bodies; growing those
   bodies must not grow the handoff (the assertion that fails before this change).
   A second case pins the ceiling on a finding-dominated journal.
-- `fr journal add` phase defaulting — an entry written with no `--phase` under a
-  resolvable plan cursor is tagged; passing no phase explicitly still yields a
-  global entry.
+- `fr journal add --scope plan` requires `--phase N` or `--global`; passing
+  neither is an error naming the consequence; `--global` still yields an
+  untagged entry; spec and debug scopes are unaffected.
 - Contract tripwires — the sixth norm present in the canonical agent and all
   four `.opencode/agent/` mirrors; the #461 norm asserted in the same place (§D).
 - Telemetry — usage summed per unit from a fixture transcript; sidechain records
@@ -370,6 +387,6 @@ Operator-driven, post-merge:
 | id | capability | acceptance | level |
 |---|---|---|---|
 | `handoff-closed-entries-bounded` | fr-goal-cost | A closed journal entry (fixed or refuted finding, resolution record) contributes a constant amount to an executor handoff regardless of its body size, including within dependency phases. | unit |
-| `handoff-entries-always-tagged` | fr-goal-cost | A journal entry written during a phase is tagged to it, so no entry rides in full in every handoff forever; a global entry stays expressible. | unit |
+| `handoff-entries-always-tagged` | fr-goal-cost | Writing a plan-scope journal entry forces an explicit choice between a phase tag and `--global`, so no entry renders in full in every handoff by accident. | unit |
 | `executor-context-discipline` | fr-goal-cost | The executor contract forbids re-deriving what the handoff states and pasting verbatim tool output into the return, on every harness that mirrors the agent. | unit + tripwire |
 | `run-telemetry-measured-claude-code` | fr-goal-cost | `fr run status` reports real per-phase token figures parsed from the Claude Code transcript, and degrades loudly to a labeled estimate when it cannot. | unit |
