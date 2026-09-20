@@ -376,6 +376,12 @@ def accounted_keys(state: RunState) -> tuple[str, ...]:
     )
 
 
+# --- per-unit cost readers: TEST SEAM ONLY -------------------------------
+# `estimate_of`, `measured_of`, `estimated_at` and `accounted_keys` answer for a
+# unit's LAST attempt. Production code must iterate attempts instead — a per-unit
+# read is the exact shape of the defect that discarded an abandoned attempt's
+# cost. `tests/unit/test_tripwire_per_unit_cost_reads.py` fails on a new caller
+# anywhere under `packages/*/src`.
 def estimate_of(state: RunState, key: str) -> ContextEstimate | None:
     """What fr assembled for `key` — the V1 sizes — or `None` if unrecorded."""
     last = _last_attempt(state, key)

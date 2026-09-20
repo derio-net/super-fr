@@ -392,3 +392,16 @@ Verified with a grep that can fail (`grep -rn "units\.<name>(" packages/*/src`, 
 They are NOT dead the way `with_units_carried_forward` was, which is why I flagged rather than deleted: `tests/unit/test_run_cli.py`'s `_Snapshot`/`_accounting` helpers read a unit's cost through them instead of through the storage — precisely the seam `fr/run/units.py` exists to offer — and `tests/unit/test_run_units_access.py` covers them directly. Deleting them would push those tests onto `.attempts[-1].estimate` and put shape knowledge back into the test file the v5 flip took it out of.
 
 **What review should decide:** keep them as the sanctioned per-unit read (accepting a public surface with no production caller), or delete them and give the tests a different reader. Noted in `fr/run/units.py`'s cost-section comment too, so the question is visible at the code and not only here.
+
+<!-- fr:journal kind=review scope=plan id=rev-p4 created=2026-09-21T00:46:02 phase=4 -->
+### rev-p4 · review · Phase 4 reviewed: per-attempt cost verified live and by mutation; per-unit readers fenced by a tripwire (phase 4)
+
+Phase 4 reviewed against spec 4.D and 4.D.1. No findings against the executor's work; one review decision made.
+
+VERIFIED LIVE on this run's own v5 cursor: fr run status renders, under phase/3/implement-phase, the holder line, then its estimate (~23,599 tok est), then its measurement (56,092,764 tok billed) — identity and cost on the same attempt, which is the split gh#464 and gh#503 left between them. Totals now read 'measured total … over 2 of 6 dispatched attempts', the denominator being attempts rather than units so a redispatched unit cannot inflate coverage.
+
+MUTATION-VERIFIED independently, printing whether the mutation applied (True): removing the same-session gate from select_for_attempt fails exactly three tests, including the operator's cross-host scenario (a window spanning another session's open attempt that contains exactly one unrelated subagent of THIS session). Restored byte-identical.
+
+Two executor observations worth keeping: its first cross-session test PASSED under the mutation that removed the session gate, because a second defence (the recorded-session directory lookup) had already refused — a test named for one mechanism and defended by another; it now asserts both layers. And test_resolve_records_measured_tokens_for_the_unit_it_closes had been inheriting the operator's real CLAUDE_CODE_SESSION_ID through the bare invoke helper — the ambient-environment defect a third time (f11 was the first).
+
+REVIEW DECISION (the executor flagged it as owed): units.estimate_of / measured_of / estimated_at / accounted_keys have zero callers under src, and 24 references across four test files including gh#514's migration tests. NOT deleted — that is churn with regression risk for no behaviour gain. But not left as ordinary API either: a per-unit cost read answers for the LAST attempt only, which is the exact shape of the defect this phase fixed, and for a never-redispatched unit the two readings agree, so no other test would notice a new caller. Added tests/unit/test_tripwire_per_unit_cost_reads.py: production code must read cost per attempt. It carries its own positive control, because twice on this branch a verification silently matched nothing and read as a pass.
